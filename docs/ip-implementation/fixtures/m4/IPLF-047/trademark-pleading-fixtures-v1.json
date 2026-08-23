@@ -1,0 +1,446 @@
+{
+  "schema_version": "caseops.ip-pleading-legal-fixtures/v1",
+  "pack_id": "IPLF-047-TRADEMARK-PLEADING",
+  "version": "1.0.0",
+  "title": "Indian trademark opposition pleading candidate fixtures",
+  "data_classification": "synthetic_anonymized",
+  "legal_content_status": "candidate_unapproved",
+  "authoritative_activation_allowed": false,
+  "content_sha256": "107488783be379704352738b3a519a1442df60303cef1ae8b023b007a75a4dc9",
+  "official_sources": [
+    {
+      "id": "IPINDIA-TM-RULES-2017",
+      "label": "Trade Marks Rules, 2017",
+      "url": "https://www.ipindia.gov.in/frontend/pdf/trade-mark/act/1_69_1_Trade_Marks_Rules_2017.pdf",
+      "retrieved_at": "2026-08-24T03:15:00+05:30",
+      "sha256": "b858aa6874a4373be03b1ee3a7a926f9f7b79dc7a15dbffdc2109cf6c3a33e92",
+      "review_status": "engineering_snapshot_pending_lawyer_review"
+    },
+    {
+      "id": "IPINDIA-FORM-TM-O",
+      "label": "Form TM-O",
+      "url": "https://ipindia.gov.in/frontend/pdf/trade-mark/Form-and-Fees/FORM-TM-O.pdf",
+      "retrieved_at": "2026-08-24T03:15:00+05:30",
+      "sha256": "53bf746b11606f59ba9b3f4797859abc029c4450cb90bb0fce166ff5313f5a11",
+      "review_status": "engineering_snapshot_pending_lawyer_review"
+    }
+  ],
+  "approval": {
+    "status": "pending_lawyer_review",
+    "proposed_by": "CaseOps Engineering",
+    "proposed_at": "2026-08-24T03:15:00+05:30",
+    "reviewed_by": null,
+    "legal_approved_by": null,
+    "approved_at": null,
+    "source_review_completed_at": null,
+    "approved_content_sha256": null,
+    "notes": "Engineering candidate only. This is not legal advice, legal approval, Registry acceptance, or authority to file."
+  },
+  "fixtures": [
+    {
+      "id": "IP-PLEADING-GOLDEN-001",
+      "version": 1,
+      "title": "Opponent notice normal lifecycle",
+      "category": "positive",
+      "data_classification": "synthetic_anonymized",
+      "legal_content_status": "candidate_unapproved",
+      "content_sha256": "436228b647c195824c5b114c5ff980e7bb5e1644b220bf8fc68836e4643080f6",
+      "scope": {
+        "jurisdiction": "IN",
+        "office": "Trade Marks Registry Delhi",
+        "proceeding_kind": "opposition",
+        "represented_side": "opponent",
+        "stage": "draft",
+        "template_keys": ["trademark_opposition_notice"]
+      },
+      "source_refs": ["IPINDIA-TM-RULES-2017", "IPINDIA-FORM-TM-O"],
+      "requirement_ids": [
+        "IP-DRAFT-01",
+        "IP-DRAFT-02",
+        "IP-DRAFT-03",
+        "IP-DRAFT-04",
+        "IP-DRAFT-05",
+        "IP-DRAFT-06",
+        "IP-DRAFT-07",
+        "IP-DRAFT-08",
+        "IP-DRAFT-09",
+        "IP-DRAFT-10"
+      ],
+      "journey_path_ids": ["UJ-24-NORMAL"],
+      "synthetic_inputs": {
+        "application_number": "TM-APP-GOLDEN-001",
+        "mark": "GOLDEN NOTICE ONE",
+        "classes": [45],
+        "verified_authority": "2026 SCC OnLine Del 450"
+      },
+      "expected_software_behavior": {
+        "generation_atomic": true,
+        "validation_blockers": [],
+        "immutable_revision_comparison": true,
+        "review_actions": ["edit", "submit", "request_changes", "submit", "approve", "finalize"],
+        "export_content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      },
+      "expected_legal_outcome": null,
+      "automation_test_refs": [
+        "apps/api/tests/test_ip_pleading_drafting.py::test_ip_pleading_normal_journey_freezes_manifests_and_exports"
+      ],
+      "approval": {
+        "status": "pending_lawyer_review",
+        "proposed_by": "CaseOps Engineering",
+        "proposed_at": "2026-08-24T03:15:00+05:30",
+        "reviewed_by": null,
+        "legal_approved_by": null,
+        "approved_at": null,
+        "source_review_completed_at": null,
+        "approved_content_sha256": null
+      }
+    },
+    {
+      "id": "IP-PLEADING-GOLDEN-002",
+      "version": 1,
+      "title": "Conflicting current application identifiers fail closed",
+      "category": "negative",
+      "data_classification": "synthetic_anonymized",
+      "legal_content_status": "candidate_unapproved",
+      "content_sha256": "0cf0038e0f6e1d8897d13ea75b73cd6f85e25e165f84d638ee4af2750ec8faef",
+      "scope": {
+        "jurisdiction": "IN",
+        "office": "Trade Marks Registry Delhi",
+        "proceeding_kind": "opposition",
+        "represented_side": "opponent",
+        "stage": "draft",
+        "template_keys": ["trademark_opposition_notice"]
+      },
+      "source_refs": ["IPINDIA-TM-RULES-2017", "IPINDIA-FORM-TM-O"],
+      "requirement_ids": ["IP-DRAFT-02", "IP-DRAFT-03", "IP-DRAFT-04"],
+      "journey_path_ids": ["UJ-24-EXC-01"],
+      "synthetic_inputs": {
+        "application_numbers": ["TM-APP-GOLDEN-002-A", "TM-APP-GOLDEN-002-B"]
+      },
+      "expected_software_behavior": {
+        "http_status": 422,
+        "finding_codes": ["context.identifier_conflict"],
+        "draft_version_count": 0,
+        "model_run_count": 0
+      },
+      "expected_legal_outcome": null,
+      "automation_test_refs": [
+        "apps/api/tests/test_ip_pleading_drafting.py::test_ip_pleading_generation_blocks_conflicting_application_numbers"
+      ],
+      "approval": {
+        "status": "pending_lawyer_review",
+        "proposed_by": "CaseOps Engineering",
+        "proposed_at": "2026-08-24T03:15:00+05:30",
+        "reviewed_by": null,
+        "legal_approved_by": null,
+        "approved_at": null,
+        "source_review_completed_at": null,
+        "approved_content_sha256": null
+      }
+    },
+    {
+      "id": "IP-PLEADING-GOLDEN-003",
+      "version": 1,
+      "title": "Conflicting event dates require lawyer warning",
+      "category": "boundary",
+      "data_classification": "synthetic_anonymized",
+      "legal_content_status": "candidate_unapproved",
+      "content_sha256": "8a97e1a5c45bd8b6feb331f8a16e2a28dc88da107af29c06a46028399f382783",
+      "scope": {
+        "jurisdiction": "IN",
+        "office": "Trade Marks Registry Delhi",
+        "proceeding_kind": "opposition",
+        "represented_side": "opponent",
+        "stage": "draft",
+        "template_keys": ["trademark_opposition_notice"]
+      },
+      "source_refs": ["IPINDIA-TM-RULES-2017"],
+      "requirement_ids": ["IP-DRAFT-02", "IP-DRAFT-03"],
+      "journey_path_ids": ["UJ-24-EXC-01"],
+      "synthetic_inputs": {
+        "context_manifest": {
+          "identifiers": [
+            {"kind": "application", "value": "TM-APP-GOLDEN-003"}
+          ],
+          "events": [
+            {
+              "kind": "journal_publication",
+              "source_reference": "journal:golden-003",
+              "effective_at": "2026-08-01T00:00:00+00:00"
+            },
+            {
+              "kind": "journal_publication",
+              "source_reference": "journal:golden-003",
+              "effective_at": "2026-08-02T00:00:00+00:00"
+            }
+          ]
+        }
+      },
+      "expected_software_behavior": {
+        "blocker_codes": [],
+        "warning_codes": ["context.date_conflict"]
+      },
+      "expected_legal_outcome": null,
+      "automation_test_refs": [
+        "apps/api/tests/test_ip_pleading_legal_fixture_pack.py::test_candidate_date_conflict_fixture_uses_canonical_validator"
+      ],
+      "approval": {
+        "status": "pending_lawyer_review",
+        "proposed_by": "CaseOps Engineering",
+        "proposed_at": "2026-08-24T03:15:00+05:30",
+        "reviewed_by": null,
+        "legal_approved_by": null,
+        "approved_at": null,
+        "source_review_completed_at": null,
+        "approved_content_sha256": null
+      }
+    },
+    {
+      "id": "IP-PLEADING-GOLDEN-004",
+      "version": 1,
+      "title": "Frozen source loss invalidates approval",
+      "category": "negative",
+      "data_classification": "synthetic_anonymized",
+      "legal_content_status": "candidate_unapproved",
+      "content_sha256": "4a3d478258716de8643afa257fd15c157c9d6ea4075874402f497e6892e8ac0c",
+      "scope": {
+        "jurisdiction": "IN",
+        "office": "Trade Marks Registry Delhi",
+        "proceeding_kind": "opposition",
+        "represented_side": "opponent",
+        "stage": "draft",
+        "template_keys": ["trademark_opposition_notice"]
+      },
+      "source_refs": ["IPINDIA-TM-RULES-2017", "IPINDIA-FORM-TM-O"],
+      "requirement_ids": ["IP-DRAFT-02", "IP-DRAFT-07", "IP-DRAFT-08"],
+      "journey_path_ids": ["UJ-24-EXC-02"],
+      "synthetic_inputs": {
+        "lost_document_version_id": "00000000-0000-0000-0000-000000000047"
+      },
+      "expected_software_behavior": {
+        "finding_codes": ["source.version_lost"],
+        "approval_http_status": 422
+      },
+      "expected_legal_outcome": null,
+      "automation_test_refs": [
+        "apps/api/tests/test_ip_pleading_drafting.py::test_ip_pleading_source_loss_invalidates_approval"
+      ],
+      "approval": {
+        "status": "pending_lawyer_review",
+        "proposed_by": "CaseOps Engineering",
+        "proposed_at": "2026-08-24T03:15:00+05:30",
+        "reviewed_by": null,
+        "legal_approved_by": null,
+        "approved_at": null,
+        "source_review_completed_at": null,
+        "approved_content_sha256": null
+      }
+    },
+    {
+      "id": "IP-PLEADING-GOLDEN-005",
+      "version": 1,
+      "title": "Model provider failure preserves atomic inputs",
+      "category": "negative",
+      "data_classification": "synthetic_anonymized",
+      "legal_content_status": "candidate_unapproved",
+      "content_sha256": "fcb0f6740bbf2043c74e9d1f01abc9094c8677cc7b0a667d7a2bd6e7dbe00134",
+      "scope": {
+        "jurisdiction": "IN",
+        "office": "Trade Marks Registry Delhi",
+        "proceeding_kind": "opposition",
+        "represented_side": "opponent",
+        "stage": "draft",
+        "template_keys": ["trademark_opposition_notice"]
+      },
+      "source_refs": ["IPINDIA-TM-RULES-2017", "IPINDIA-FORM-TM-O"],
+      "requirement_ids": ["IP-DRAFT-02", "IP-DRAFT-04", "IP-DRAFT-06"],
+      "journey_path_ids": ["UJ-24-EXC-03"],
+      "synthetic_inputs": {"provider_outcome": "controlled_failure"},
+      "expected_software_behavior": {
+        "http_status": 422,
+        "draft_version_count": 0,
+        "model_run_count": 0
+      },
+      "expected_legal_outcome": null,
+      "automation_test_refs": [
+        "apps/api/tests/test_ip_pleading_drafting.py::test_ip_pleading_provider_failure_is_atomic"
+      ],
+      "approval": {
+        "status": "pending_lawyer_review",
+        "proposed_by": "CaseOps Engineering",
+        "proposed_at": "2026-08-24T03:15:00+05:30",
+        "reviewed_by": null,
+        "legal_approved_by": null,
+        "approved_at": null,
+        "source_review_completed_at": null,
+        "approved_content_sha256": null
+      }
+    },
+    {
+      "id": "IP-PLEADING-GOLDEN-006",
+      "version": 1,
+      "title": "Template side stage and jurisdiction matrix",
+      "category": "boundary",
+      "data_classification": "synthetic_anonymized",
+      "legal_content_status": "candidate_unapproved",
+      "content_sha256": "72d01a2c448e7f9fb2a2a7fb2d6ed2090ed52df7167ac5304e59f910702b9c62",
+      "scope": {
+        "jurisdiction": "IN",
+        "office": "Trade Marks Registry Delhi",
+        "proceeding_kind": "opposition",
+        "represented_side": "mixed_fixture_matrix",
+        "stage": "stage_specific_matrix",
+        "template_keys": [
+          "trademark_opposition_notice",
+          "trademark_counterstatement",
+          "trademark_opponent_evidence",
+          "trademark_applicant_evidence",
+          "trademark_reply_evidence"
+        ]
+      },
+      "source_refs": ["IPINDIA-TM-RULES-2017", "IPINDIA-FORM-TM-O"],
+      "requirement_ids": ["IP-DRAFT-01", "IP-DRAFT-08", "IP-DRAFT-09"],
+      "journey_path_ids": ["UJ-24-NORMAL"],
+      "synthetic_inputs": {
+        "expected_matrix": {
+          "trademark_opposition_notice": {"sides": ["opponent"], "stages": ["draft"]},
+          "trademark_counterstatement": {
+            "sides": ["applicant"],
+            "stages": ["counterstatement_due", "service_pending"]
+          },
+          "trademark_opponent_evidence": {
+            "sides": ["opponent"],
+            "stages": ["opponent_evidence_due"]
+          },
+          "trademark_applicant_evidence": {
+            "sides": ["applicant"],
+            "stages": ["applicant_evidence_due"]
+          },
+          "trademark_reply_evidence": {
+            "sides": ["opponent"],
+            "stages": ["reply_evidence_due"]
+          }
+        }
+      },
+      "expected_software_behavior": {
+        "format_profile": "india-trade-marks-registry-v1",
+        "incompatible_http_status": 409,
+        "incompatible_creation_is_atomic": true
+      },
+      "expected_legal_outcome": null,
+      "automation_test_refs": [
+        "apps/api/tests/test_ip_pleading_legal_fixture_pack.py::test_candidate_template_matrix_matches_canonical_catalog",
+        "apps/api/tests/test_ip_pleading_drafting.py::test_ip_pleading_rejects_template_incompatible_with_side_and_stage"
+      ],
+      "approval": {
+        "status": "pending_lawyer_review",
+        "proposed_by": "CaseOps Engineering",
+        "proposed_at": "2026-08-24T03:15:00+05:30",
+        "reviewed_by": null,
+        "legal_approved_by": null,
+        "approved_at": null,
+        "source_review_completed_at": null,
+        "approved_content_sha256": null
+      }
+    },
+    {
+      "id": "IP-PLEADING-GOLDEN-007",
+      "version": 1,
+      "title": "Placeholder exhibit correction filing and service",
+      "category": "negative",
+      "data_classification": "synthetic_anonymized",
+      "legal_content_status": "candidate_unapproved",
+      "content_sha256": "d0bd2e3aac676fcd9977ce7b1b53f2c1e823c8605b189fe8de67217febc351c7",
+      "scope": {
+        "jurisdiction": "IN",
+        "office": "Trade Marks Registry Delhi",
+        "proceeding_kind": "opposition",
+        "represented_side": "opponent",
+        "stage": "draft",
+        "template_keys": ["trademark_opposition_notice"]
+      },
+      "source_refs": ["IPINDIA-TM-RULES-2017", "IPINDIA-FORM-TM-O"],
+      "requirement_ids": [
+        "IP-DRAFT-03",
+        "IP-DRAFT-05",
+        "IP-DRAFT-06",
+        "IP-DRAFT-07",
+        "IP-DRAFT-09"
+      ],
+      "journey_path_ids": ["UJ-24-NORMAL"],
+      "synthetic_inputs": {
+        "invalid_suffix": "Filing date: [DATE]. See Annexure A.",
+        "corrected_suffix": "Filing date: 24 August 2026."
+      },
+      "expected_software_behavior": {
+        "initial_finding_codes": ["placeholder.unresolved", "exhibit.unmapped_reference"],
+        "initial_approval_http_status": 422,
+        "corrected_blocker_count": 0,
+        "bundle_entries": [
+          "internal/generation-manifest.json",
+          "internal/filing-checklist.json",
+          "filed-document/*.docx"
+        ],
+        "terminal_status": "served"
+      },
+      "expected_legal_outcome": null,
+      "automation_test_refs": [
+        "apps/api/tests/test_ip_pleading_drafting.py::test_ip_pleading_validation_compare_bundle_and_service_lifecycle"
+      ],
+      "approval": {
+        "status": "pending_lawyer_review",
+        "proposed_by": "CaseOps Engineering",
+        "proposed_at": "2026-08-24T03:15:00+05:30",
+        "reviewed_by": null,
+        "legal_approved_by": null,
+        "approved_at": null,
+        "source_review_completed_at": null,
+        "approved_content_sha256": null
+      }
+    },
+    {
+      "id": "IP-PLEADING-GOLDEN-008",
+      "version": 1,
+      "title": "Rejected filing and corrected refiling preserve history",
+      "category": "boundary",
+      "data_classification": "synthetic_anonymized",
+      "legal_content_status": "candidate_unapproved",
+      "content_sha256": "a6622be4a57c13e7ae209ddd4adf82937d39f27637ba4ae6c2ebb28f184a67ac",
+      "scope": {
+        "jurisdiction": "IN",
+        "office": "Trade Marks Registry Delhi",
+        "proceeding_kind": "opposition",
+        "represented_side": "opponent",
+        "stage": "draft",
+        "template_keys": ["trademark_opposition_notice"]
+      },
+      "source_refs": ["IPINDIA-TM-RULES-2017", "IPINDIA-FORM-TM-O"],
+      "requirement_ids": ["IP-DRAFT-05", "IP-DRAFT-06", "IP-DRAFT-07", "IP-DRAFT-10"],
+      "journey_path_ids": ["UJ-24-NORMAL"],
+      "synthetic_inputs": {
+        "file_reference": "TM-O/GOLDEN-008/FILED-1",
+        "rejection_reference": "TM-O/GOLDEN-008/REJECTED-1",
+        "correction": "Corrected filing particular."
+      },
+      "expected_software_behavior": {
+        "status_after_rejection": "filing_rejected",
+        "correction_creates_new_version": true,
+        "original_file_event_version_is_immutable": true
+      },
+      "expected_legal_outcome": null,
+      "automation_test_refs": [
+        "apps/api/tests/test_ip_pleading_drafting.py::test_ip_pleading_rejected_filing_preserves_original_filed_revision"
+      ],
+      "approval": {
+        "status": "pending_lawyer_review",
+        "proposed_by": "CaseOps Engineering",
+        "proposed_at": "2026-08-24T03:15:00+05:30",
+        "reviewed_by": null,
+        "legal_approved_by": null,
+        "approved_at": null,
+        "source_review_completed_at": null,
+        "approved_content_sha256": null
+      }
+    }
+  ]
+}

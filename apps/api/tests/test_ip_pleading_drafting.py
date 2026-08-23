@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import zipfile
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -16,6 +17,21 @@ from tests.test_auth_company import auth_headers
 from tests.test_drafting_studio import _seed_authority
 from tests.test_ip_opposition_opponent_workflow import _fixture
 from tests.test_ip_record_workflow import _docket
+
+_FIXTURE_PACK_PATH = (
+    Path(__file__).resolve().parents[3]
+    / "docs"
+    / "ip-implementation"
+    / "fixtures"
+    / "m4"
+    / "IPLF-047"
+    / "trademark-pleading-fixtures-v1.json"
+)
+
+
+def _legal_fixture(fixture_id: str) -> dict:
+    pack = json.loads(_FIXTURE_PACK_PATH.read_text(encoding="utf-8"))
+    return next(row for row in pack["fixtures"] if row["id"] == fixture_id)
 
 IP_PLEADING_ROUTE_CONTRACTS = {
     ("get", "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/pleading-templates"),
@@ -124,6 +140,8 @@ def _generate_grounded_notice(
 def test_ip_pleading_normal_journey_freezes_manifests_and_exports(
     client: TestClient,
 ) -> None:
+    fixture = _legal_fixture("IP-PLEADING-GOLDEN-001")
+    expected = fixture["expected_software_behavior"]
     bootstrap, _matter, docket, proceeding = _fixture(client)
     headers = auth_headers(str(bootstrap["access_token"]))
     base = _base(docket, proceeding)
@@ -214,13 +232,8 @@ def test_ip_pleading_normal_journey_freezes_manifests_and_exports(
     )
     assert finalized.status_code == 200, finalized.text
     assert finalized.json()["status"] == "finalized"
-    assert [row["action"] for row in finalized.json()["reviews"]] == [
-        "edit",
-        "submit",
-        "request_changes",
-        "submit",
-        "approve",
-        "finalize",
+    assert [row["action"] for row in finalized.json()["reviews"]] == expected[
+        "review_actions"
     ]
 
     exported = client.get(
@@ -229,7 +242,7 @@ def test_ip_pleading_normal_journey_freezes_manifests_and_exports(
     )
     assert exported.status_code == 200, exported.text
     assert exported.content.startswith(b"PK")
-    assert "application/vnd.openxmlformats" in exported.headers["content-type"]
+    assert expected["export_content_type"] in exported.headers["content-type"]
 
 
 def test_ip_pleading_route_contracts_are_published(client: TestClient) -> None:
@@ -245,6 +258,7 @@ def test_ip_pleading_route_contracts_are_published(client: TestClient) -> None:
 def test_ip_pleading_rejects_template_incompatible_with_side_and_stage(
     client: TestClient,
 ) -> None:
+    fixture = _legal_fixture("IP-PLEADING-GOLDEN-006")
     bootstrap, _matter, docket, proceeding = _fixture(client)
     response = client.post(
         f"{_base(docket, proceeding)}/drafts",
@@ -254,7 +268,9 @@ def test_ip_pleading_rejects_template_incompatible_with_side_and_stage(
             "template_key": "trademark_counterstatement",
         },
     )
-    assert response.status_code == 409
+    assert response.status_code == fixture["expected_software_behavior"][
+        "incompatible_http_status"
+    ]
     assert "incompatible" in response.json()["detail"]
 
     with get_session_factory()() as session:
@@ -268,6 +284,8 @@ def test_ip_pleading_provider_failure_is_atomic(
     client: TestClient,
     monkeypatch,
 ) -> None:
+    fixture = _legal_fixture("IP-PLEADING-GOLDEN-005")
+    expected = fixture["expected_software_behavior"]
     bootstrap, _matter, docket, proceeding = _fixture(client)
     draft = _create_notice_draft(
         client,
@@ -292,7 +310,7 @@ def test_ip_pleading_provider_failure_is_atomic(
         headers=auth_headers(str(bootstrap["access_token"])),
         json={},
     )
-    assert response.status_code == 422, response.text
+    assert response.status_code == expected["http_status"], response.text
 
     with get_session_factory()() as session:
         row = session.get(Draft, draft["id"])
@@ -302,13 +320,13 @@ def test_ip_pleading_provider_failure_is_atomic(
             session.scalar(
                 select(func.count(DraftVersion.id)).where(DraftVersion.draft_id == draft["id"])
             )
-            == 0
+            == expected["draft_version_count"]
         )
         assert (
             session.scalar(
                 select(func.count(ModelRun.id)).where(ModelRun.ip_docket_id == docket["id"])
             )
-            == 0
+            == expected["model_run_count"]
         )
 
 
@@ -336,6 +354,8 @@ def test_ip_pleading_database_rejects_cross_docket_proceeding_target(
 def test_ip_pleading_validation_compare_bundle_and_service_lifecycle(
     client: TestClient,
 ) -> None:
+    fixture = _legal_fixture("IP-PLEADING-GOLDEN-007")
+    expected = fixture["expected_software_behavior"]
     bootstrap, _matter, docket, proceeding = _fixture(client)
     headers = auth_headers(str(bootstrap["access_token"]))
     base = _base(docket, proceeding)
@@ -360,8 +380,9 @@ def test_ip_pleading_validation_compare_bundle_and_service_lifecycle(
     report = validation.json()
     assert report["can_approve"] is False
     assert report["placeholder_count"] == 1
-    assert "placeholder.unresolved" in {row["code"] for row in report["findings"]}
-    assert "exhibit.unmapped_reference" in {row["code"] for row in report["findings"]}
+    assert set(expected["initial_finding_codes"]) <= {
+        row["code"] for row in report["findings"]
+    }
 
     submitted = client.post(
         f"{base}/drafts/{draft_id}/submit",
@@ -374,7 +395,7 @@ def test_ip_pleading_validation_compare_bundle_and_service_lifecycle(
         headers=headers,
         json={"notes": "This must fail closed."},
     )
-    assert blocked_approval.status_code == 422
+    assert blocked_approval.status_code == expected["initial_approval_http_status"]
     assert "placeholder.unresolved" in blocked_approval.text
 
     corrected_body = placeholder_body.replace("[DATE]", "24 August 2026").replace(
@@ -439,13 +460,15 @@ def test_ip_pleading_validation_compare_bundle_and_service_lifecycle(
         },
     )
     assert served.status_code == 200, served.text
-    assert served.json()["status"] == "served"
+    assert served.json()["status"] == expected["terminal_status"]
     assert served.json()["reviews"][-1]["metadata"]["method"] == "registered-post"
 
 
 def test_ip_pleading_rejected_filing_preserves_original_filed_revision(
     client: TestClient,
 ) -> None:
+    fixture = _legal_fixture("IP-PLEADING-GOLDEN-008")
+    expected = fixture["expected_software_behavior"]
     bootstrap, _matter, docket, proceeding = _fixture(client)
     headers = auth_headers(str(bootstrap["access_token"]))
     base = _base(docket, proceeding)
@@ -477,7 +500,7 @@ def test_ip_pleading_rejected_filing_preserves_original_filed_revision(
         json={"reference": "TM-O/REJECTION/1", "notes": "Registry correction required."},
     )
     assert rejected.status_code == 200, rejected.text
-    assert rejected.json()["status"] == "filing_rejected"
+    assert rejected.json()["status"] == expected["status_after_rejection"]
     corrected = client.patch(
         f"{base}/drafts/{draft_id}",
         headers=headers,
@@ -491,6 +514,8 @@ def test_ip_pleading_rejected_filing_preserves_original_filed_revision(
 
 
 def test_ip_pleading_source_loss_invalidates_approval(client: TestClient) -> None:
+    fixture = _legal_fixture("IP-PLEADING-GOLDEN-004")
+    expected = fixture["expected_software_behavior"]
     bootstrap, _matter, docket, proceeding = _fixture(client)
     headers = auth_headers(str(bootstrap["access_token"]))
     base = _base(docket, proceeding)
@@ -516,7 +541,9 @@ def test_ip_pleading_source_loss_invalidates_approval(client: TestClient) -> Non
         session.commit()
     validation = client.get(f"{base}/drafts/{draft_id}/validate", headers=headers)
     assert validation.status_code == 200, validation.text
-    assert "source.version_lost" in {row["code"] for row in validation.json()["findings"]}
+    assert set(expected["finding_codes"]) <= {
+        row["code"] for row in validation.json()["findings"]
+    }
     submitted = client.post(
         f"{base}/drafts/{draft_id}/submit",
         headers=headers,
@@ -528,13 +555,15 @@ def test_ip_pleading_source_loss_invalidates_approval(client: TestClient) -> Non
         headers=headers,
         json={"notes": "Must fail."},
     )
-    assert approval.status_code == 422
+    assert approval.status_code == expected["approval_http_status"]
     assert "source.version_lost" in approval.text
 
 
 def test_ip_pleading_generation_blocks_conflicting_application_numbers(
     client: TestClient,
 ) -> None:
+    fixture = _legal_fixture("IP-PLEADING-GOLDEN-002")
+    expected = fixture["expected_software_behavior"]
     bootstrap, _matter, docket, proceeding = _fixture(client)
     headers = auth_headers(str(bootstrap["access_token"]))
     second_number = client.post(
@@ -565,7 +594,7 @@ def test_ip_pleading_generation_blocks_conflicting_application_numbers(
         headers=headers,
         json={},
     )
-    assert generated.status_code == 422
+    assert generated.status_code == expected["http_status"]
     assert "context.identifier_conflict" in generated.text
     with get_session_factory()() as session:
         row = session.get(Draft, draft["id"])

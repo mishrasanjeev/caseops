@@ -55,6 +55,9 @@ jobs:
           uv --directory apps/api run python ../../scripts/migration_preflight.py check-change --base origin/main
           uv --directory apps/api run python ../../scripts/ip_m2_ownership_audit.py validate
 
+      - name: Validate trademark pleading legal-fixture contract
+        run: uv --directory apps/api run python ../../scripts/run_ip_pleading_legal_fixtures.py
+
       - name: Validate IP research golden-query contract
         run: uv --directory apps/api run python ../../scripts/run_ip_golden_queries.py
 
