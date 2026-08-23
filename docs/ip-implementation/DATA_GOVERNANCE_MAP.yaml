@@ -23958,10 +23958,10 @@
       }
     }
   ],
-  "schema_fingerprint": "64dc148cf4c89281a52ccf7c509f77c19bc4a89692caa1c1490ff7b801919720",
+  "schema_fingerprint": "4be086688adf7a54d68a40c4273ae46bef85e76dcab0f5599ce3f663c287ed1c",
   "index_inventory": {
     "orm_index_count": 1213,
-    "orm_index_fingerprint": "b1a694bd0a664196776abf0c00b4929f9db6fa38203f0ccfb158eb23f5c50edd",
+    "orm_index_fingerprint": "3bf4ad80ff4986a5aa41ec1b4d36f8970ad0ea678af9fe29536790011456223b",
     "migration_index_count": 546,
     "migration_index_fingerprint": "655994e2cc8eeeca5cb999ec1cf2eb7c7aaf5e6cdde3bf6710e86c4c4e7472f0",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."

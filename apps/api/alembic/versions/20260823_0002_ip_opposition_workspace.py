@@ -109,8 +109,8 @@ def upgrade() -> None:
             ondelete="CASCADE",
         )
         batch.create_index(
-            "ix_ip_parties_company_proceeding",
-            ["company_id", "proceeding_id"],
+            "ix_ip_parties_proceeding_company",
+            ["proceeding_id", "company_id"],
         )
     _install_event_guard(bind, profile_aware=True)
 
@@ -134,7 +134,7 @@ def downgrade() -> None:
             "the IPLF-040B contract"
         )
     with op.batch_alter_table("ip_parties_and_roles") as batch:
-        batch.drop_index("ix_ip_parties_company_proceeding")
+        batch.drop_index("ix_ip_parties_proceeding_company")
         batch.drop_constraint("fk_ip_party_proceeding_company", type_="foreignkey")
         batch.drop_column("proceeding_id")
     _install_event_guard(bind, profile_aware=False)

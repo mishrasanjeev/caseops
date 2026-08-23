@@ -63,9 +63,14 @@ def test_workspace_migration_is_reversible_when_empty(
     engine = create_engine(database_url, future=True)
     try:
         inspector = inspect(engine)
-        assert "ix_ip_parties_company_proceeding" in {
-            row["name"] for row in inspector.get_indexes("ip_parties_and_roles")
+        party_indexes = {
+            row["name"]: row["column_names"]
+            for row in inspector.get_indexes("ip_parties_and_roles")
         }
+        assert party_indexes["ix_ip_parties_proceeding_company"] == [
+            "proceeding_id",
+            "company_id",
+        ]
         foreign_keys = inspector.get_foreign_keys("ip_parties_and_roles")
         assert any(
             row["referred_table"] == "ip_proceedings"

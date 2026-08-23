@@ -14819,7 +14819,7 @@ class IpPartyAndRole(Base):
             name="ck_ip_party_effective_range",
         ),
         Index("ix_ip_parties_company_docket", "company_id", "docket_id"),
-        Index("ix_ip_parties_company_proceeding", "company_id", "proceeding_id"),
+        Index("ix_ip_parties_proceeding_company", "proceeding_id", "company_id"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
