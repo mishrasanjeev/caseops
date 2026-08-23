@@ -24,7 +24,7 @@ from caseops_api.governance.types import ReviewedDataClass
 PROJECTION_SCHEMA_VERSION = 1
 
 # Fingerprints of the exact artifacts this projection was rendered from.
-MAP_DOCUMENT_FINGERPRINT = "f863b492b9745f9a72080772c2bb384d12c1d403a64c84881bd1fc92649709f0"
+MAP_DOCUMENT_FINGERPRINT = "f8d428a4d3f1992a9ceaa4cbf463990bb9adedfba69bb6edc1f2c53776c941d3"
 MAP_SCHEMA_FINGERPRINT = "4be086688adf7a54d68a40c4273ae46bef85e76dcab0f5599ce3f663c287ed1c"
 REGISTRY_028A_FINGERPRINT = "dd3c30cf69a9b498cea3820acb485a0368a72bf6d9348c2f0d430b5efa99802d"
 REGISTRY_027A_FINGERPRINT = "10b97a818b23d4fae8fe7f54b63edb50b0e04c16778cf0e646ef907f40e1ad96"
@@ -33,7 +33,7 @@ REGISTRY_027A_FINGERPRINT = "10b97a818b23d4fae8fe7f54b63edb50b0e04c16778cf0e646e
 # than answering from a projection that no longer describes it.
 ORM_SCHEMA_FINGERPRINT = "fedf7ebfbc9090c7d228f42b2b5e309db1f647c41230bc586e2a190b990c744a"
 
-PROJECTION_ID = "d7e741e13151bef2613a1b731160764d5ab92712360d2cdb165629a19043635f"
+PROJECTION_ID = "95e3388e2bf002e51ad95c14e9a11c33d56b3990aacb55e6ce19df540ba651a6"
 
 # Every SQL table the repository-wide map inventories. Membership here is what
 # separates "inventoried but never reviewed" from "no such data class", which
