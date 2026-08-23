@@ -166,3 +166,26 @@ automation flag is enabled by merging this slice.
 
 Local evidence is recorded in
 `docs/ip-implementation/evidence/m2/IPLF-021B/release-2026-08-07.md`.
+
+## IPLF-040A opposition extension
+
+`20260823_0001` extends the existing proceeding owner; it does not introduce a
+parallel opposition record. Every opposition starts in `draft`, records its
+intake origin and applicant/opponent stage-template version, and may explicitly
+remain pending Registry number allocation. A supplied number is written in the
+same transaction to `ip_identifiers.proceeding_id` and can never become the
+linked application's application number.
+
+The proceeding cannot leave `draft` until it has both a linked application and
+a confirmed current opposition number. Accepted changes use the canonical PRD
+Section 12.2 stages, expected proceeding version, evidence, reason, and the
+existing `ip_docket_events` timeline. Exceptional changes require authority;
+closure additionally requires outcome, effective date, source, evidence, and
+authorized confirmation. The dedicated transition route requires `ip:approve`,
+and the generic event route applies the same guard so it is not a bypass.
+
+Only marked opposition-stage events receive the new database append-only
+trigger. Existing docket lifecycle events retain their established in-transaction
+finalization before commit. Full applicant/opponent workspaces, pleadings,
+service, evidence packages, deadlines, hearings, orders, appeals, reporting,
+and UJ-12/UJ-13 browser proof remain owned by `IPLF-040B` and later M4 slices.

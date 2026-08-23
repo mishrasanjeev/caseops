@@ -11759,6 +11759,11 @@
           "sql_type": "VARCHAR(80)",
           "nullable": false
         },
+        "origin_kind": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(32)",
+          "nullable": false
+        },
         "proceeding_kind": {
           "category_id": "domain_attribute",
           "sql_type": "VARCHAR(40)",
@@ -11769,9 +11774,19 @@
           "sql_type": "VARCHAR(24)",
           "nullable": false
         },
+        "source_pending_identifier_allocation": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "BOOLEAN",
+          "nullable": false
+        },
         "stage": {
           "category_id": "domain_attribute",
           "sql_type": "VARCHAR(40)",
+          "nullable": false
+        },
+        "stage_template_version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "VARCHAR(80)",
           "nullable": false
         },
         "updated_at": {
@@ -23938,7 +23953,7 @@
       }
     }
   ],
-  "schema_fingerprint": "a07b3b4ab8ab031fc449700b9d10ed19b0d7618f4695cfbcf8e8dc6b5891c3ec",
+  "schema_fingerprint": "6ebd03bcfdc5a064136545ebd054c93b2d057c54e887cfccdff25cca5225a066",
   "index_inventory": {
     "orm_index_count": 1212,
     "orm_index_fingerprint": "c163d394f36a6ed0dcb649cecfb7f1566fcb74d671dada4b5569daf7da454db4",

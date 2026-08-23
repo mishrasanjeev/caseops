@@ -179,7 +179,7 @@ def test_identifier_workflow_preserves_types_history_search_and_duplicates(
             "side": "applicant",
             "office": "Trade Marks Registry Mumbai",
             "jurisdiction": "IN",
-            "stage": "notice",
+            "stage": "draft",
         },
     )
     assert proceeding.status_code == 201, proceeding.text

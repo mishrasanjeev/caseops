@@ -198,7 +198,7 @@ test("IPLF-031B completes manual identity and duplicate exception paths", async 
         side: "applicant",
         office: "IP India",
         jurisdiction: "IN",
-        stage: "evidence",
+        stage: "draft",
       },
     },
   );

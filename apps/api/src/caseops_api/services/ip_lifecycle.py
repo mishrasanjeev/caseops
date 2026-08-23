@@ -506,6 +506,10 @@ def preview_ip_docket_event(
         and row.application_id == payload.application_id
         and row.proceeding_id == payload.proceeding_id
         and row.effective_at.date() == payload.effective_at.date()
+        and (
+            payload.proceeding_id is None
+            or row.resulting_stage == payload.resulting_stage
+        )
         and row.candidate_status != "rejected"
         and row.id != payload.supersedes_event_id
     ]
@@ -541,6 +545,7 @@ def _append_locked_event(
     context: SessionContext,
     docket: IpDocketRecord,
     payload: IpDocketEventCreateRequest,
+    resulting_lifecycle_version: int | None = None,
 ) -> IpDocketEvent:
     if docket.lifecycle_version != payload.expected_lifecycle_version:
         raise HTTPException(status_code=409, detail="IP lifecycle version changed; reload.")
@@ -579,6 +584,10 @@ def _append_locked_event(
         and row.application_id == payload.application_id
         and row.proceeding_id == payload.proceeding_id
         and row.effective_at.date() == payload.effective_at.date()
+        and (
+            payload.proceeding_id is None
+            or row.resulting_stage == payload.resulting_stage
+        )
         and row.candidate_status != "rejected"
         and row.id != payload.supersedes_event_id
     ]
@@ -652,7 +661,11 @@ def _append_locked_event(
                 status_code=422,
                 detail="New registry events must remain candidates until reconciled.",
             )
-    proposed_phase = payload.after_phase or EVENT_PHASES.get(payload.event_kind)
+    proposed_phase = (
+        payload.after_phase
+        or (payload.resulting_stage if proceeding is not None else None)
+        or EVENT_PHASES.get(payload.event_kind)
+    )
     before_phase = payload.before_phase
     phase_effect_is_accepted = not (
         payload.source == "registry"
@@ -700,6 +713,34 @@ def _append_locked_event(
     elif proceeding is not None:
         before_phase = proceeding.stage
         if proposed_phase is not None and apply_phase:
+            if proceeding.proceeding_kind == "opposition":
+                from caseops_api.services.ip_oppositions import (
+                    validate_opposition_stage_event,
+                )
+
+                validate_opposition_stage_event(
+                    session,
+                    proceeding=proceeding,
+                    to_stage=proposed_phase,
+                    transition_kind=str(
+                        payload.payload.get("transition_kind", "normal")
+                    ),
+                    expected_proceeding_version=payload.payload.get(
+                        "expected_proceeding_version"
+                    ),
+                    authority_reference=payload.payload.get("authority_reference"),
+                    reason=payload.reason,
+                    source_reference=payload.source_reference,
+                    evidence_refs=payload.evidence_refs,
+                    document_refs=payload.document_refs,
+                    outcome=payload.payload.get("outcome"),
+                    outcome_effective_date=payload.payload.get(
+                        "outcome_effective_date"
+                    ),
+                    authorized_confirmation=payload.payload.get(
+                        "authorized_confirmation"
+                    ),
+                )
             proceeding.stage = proposed_phase
             proceeding.version += 1
             proceeding.updated_at = datetime.now(UTC)
@@ -761,6 +802,7 @@ def _append_locked_event(
         resulting_deadline_refs_json=payload.resulting_deadline_refs,
         before_phase=before_phase,
         after_phase=proposed_phase,
+        resulting_lifecycle_version=resulting_lifecycle_version,
         candidate_status=payload.candidate_status,
         supersedes_event_id=payload.supersedes_event_id,
         correction_reason=payload.correction_reason,
@@ -1536,6 +1578,7 @@ def transition_ip_docket_lifecycle(
             context=context,
             docket=docket,
             payload=event_payload,
+            resulting_lifecycle_version=next_version,
         )
     else:
         next_sequence = (
@@ -1563,17 +1606,12 @@ def transition_ip_docket_lifecycle(
             resulting_deadline_refs_json=[],
             before_phase=before_status,
             after_phase=payload.to_status,
+            resulting_lifecycle_version=next_version,
             candidate_status="confirmed",
             payload_json=event_payload.payload,
         )
         session.add(event)
         session.flush()
-
-    # Every lifecycle event has a durable version identity. Docket-owned
-    # operational children use this tuple as their neutralization provenance,
-    # so persist it before acquiring or mutating any child row.
-    event.resulting_lifecycle_version = next_version
-    session.flush()
 
     neutralized_at = datetime.now(UTC)
     live_legal_deadlines = _lock_live_legal_deadlines_for_lifecycle(

@@ -170,6 +170,8 @@ from caseops_api.schemas.ip_records import (
     IpIdentifierCreate,
     IpIdentifierMutationResponse,
     IpIdentifierResponse,
+    IpOppositionStageTransitionRequest,
+    IpOppositionStageTransitionResponse,
     IpProceedingCreateRequest,
     IpProceedingResponse,
     IpWorkspaceConfigurationStatusResponse,
@@ -322,6 +324,7 @@ from caseops_api.services.ip_operations import (
     sign_off_ip_control_review,
     verify_ip_deadline_incident,
 )
+from caseops_api.services.ip_oppositions import transition_opposition_stage
 from caseops_api.services.ip_portfolio import (
     list_ip_portfolio,
     list_ip_portfolio_families,
@@ -2381,6 +2384,30 @@ async def post_ip_proceeding(
             docket_id=docket_id,
             payload=payload,
         )
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/proceedings/{proceeding_id}/stage",
+    response_model=IpOppositionStageTransitionResponse,
+)
+async def post_ip_opposition_stage_transition(
+    docket_id: str,
+    proceeding_id: str,
+    payload: IpOppositionStageTransitionRequest,
+    context: IpReviewer,
+    session: DbSession,
+) -> IpOppositionStageTransitionResponse:
+    proceeding, event = transition_opposition_stage(
+        session,
+        context=context,
+        docket_id=docket_id,
+        proceeding_id=proceeding_id,
+        payload=payload,
+    )
+    return IpOppositionStageTransitionResponse(
+        proceeding=IpProceedingResponse.model_validate(proceeding),
+        event=IpDocketEventResponse.model_validate(event),
     )
 
 

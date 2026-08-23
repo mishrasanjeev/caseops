@@ -124,7 +124,7 @@ def _rich_portfolio_fixture(client: TestClient) -> tuple[dict[str, str], dict, d
             "side": "applicant",
             "office": "Trade Marks Registry Mumbai",
             "jurisdiction": "IN",
-            "stage": "evidence",
+            "stage": "draft",
         },
     )
     assert proceeding_response.status_code == 201, proceeding_response.text
