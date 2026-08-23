@@ -13,6 +13,38 @@ from tests.test_drafting_studio import _seed_authority
 from tests.test_ip_opposition_opponent_workflow import _fixture
 from tests.test_ip_record_workflow import _docket
 
+IP_PLEADING_ROUTE_CONTRACTS = {
+    ("get", "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/pleading-templates"),
+    ("get", "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts"),
+    ("post", "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts"),
+    ("get", "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}"),
+    ("patch", "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}"),
+    (
+        "post",
+        "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/generate",
+    ),
+    (
+        "post",
+        "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/submit",
+    ),
+    (
+        "post",
+        "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/request-changes",
+    ),
+    (
+        "post",
+        "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/approve",
+    ),
+    (
+        "post",
+        "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/finalize",
+    ),
+    (
+        "get",
+        "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/export.docx",
+    ),
+}
+
 
 def _base(docket: dict, proceeding: dict) -> str:
     return f"/api/ip/dockets/{docket['id']}/proceedings/{proceeding['id']}"
@@ -60,6 +92,13 @@ def test_ip_pleading_normal_journey_freezes_manifests_and_exports(
     assert draft["ip_docket_id"] == docket["id"]
     assert draft["ip_proceeding_id"] == proceeding["id"]
 
+    listed = client.get(f"{base}/drafts", headers=headers)
+    assert listed.status_code == 200, listed.text
+    assert [row["id"] for row in listed.json()["drafts"]] == [draft["id"]]
+    loaded = client.get(f"{base}/drafts/{draft['id']}", headers=headers)
+    assert loaded.status_code == 200, loaded.text
+    assert loaded.json()["id"] == draft["id"]
+
     citation = "2026 SCC OnLine Del 450"
     _seed_authority(neutral_citation=citation)
     generated = client.post(
@@ -99,6 +138,18 @@ def test_ip_pleading_normal_journey_freezes_manifests_and_exports(
         json={"notes": "Ready for partner review."},
     )
     assert submitted.status_code == 200, submitted.text
+    changes_requested = client.post(
+        f"{base}/drafts/{draft['id']}/request-changes",
+        headers=headers,
+        json={"notes": "Clarify the confirmed use date before approval."},
+    )
+    assert changes_requested.status_code == 200, changes_requested.text
+    resubmitted = client.post(
+        f"{base}/drafts/{draft['id']}/submit",
+        headers=headers,
+        json={"notes": "Clarification reviewed and retained."},
+    )
+    assert resubmitted.status_code == 200, resubmitted.text
     approved = client.post(
         f"{base}/drafts/{draft['id']}/approve",
         headers=headers,
@@ -115,6 +166,8 @@ def test_ip_pleading_normal_journey_freezes_manifests_and_exports(
     assert [row["action"] for row in finalized.json()["reviews"]] == [
         "edit",
         "submit",
+        "request_changes",
+        "submit",
         "approve",
         "finalize",
     ]
@@ -126,6 +179,16 @@ def test_ip_pleading_normal_journey_freezes_manifests_and_exports(
     assert exported.status_code == 200, exported.text
     assert exported.content.startswith(b"PK")
     assert "application/vnd.openxmlformats" in exported.headers["content-type"]
+
+
+def test_ip_pleading_route_contracts_are_published(client: TestClient) -> None:
+    paths = client.get("/openapi.json").json()["paths"]
+    missing = [
+        f"{method.upper()} {path}"
+        for method, path in sorted(IP_PLEADING_ROUTE_CONTRACTS)
+        if method not in paths.get(path, {})
+    ]
+    assert not missing
 
 
 def test_ip_pleading_rejects_template_incompatible_with_side_and_stage(

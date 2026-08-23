@@ -12560,6 +12560,8 @@
       "test_refs": [
         "apps/api/tests/test_ip_pleading_drafting.py",
         "apps/api/tests/test_drafting_studio.py",
+        "apps/api/tests/test_appeal_strength.py",
+        "apps/api/tests/test_matter_statute_references.py",
         "apps/api/tests/test_migration_order.py"
       ],
       "evidence_refs": [
@@ -12658,6 +12660,8 @@
       ],
       "test_refs": [
         "apps/api/tests/test_ip_pleading_drafting.py",
+        "apps/api/tests/test_role_guards.py",
+        "apps/api/tests/test_route_coverage_matrix.py",
         "apps/web/components/ip/IpPleadingWorkspace.test.tsx",
         "apps/web/components/ip/IpOppositionWorkspace.test.tsx",
         "IPLF-UJ-24-EXC-03:apps/api/tests/test_ip_pleading_drafting.py",

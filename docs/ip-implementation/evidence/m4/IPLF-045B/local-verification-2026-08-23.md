@@ -43,6 +43,15 @@ No human legal/provider/UAT acceptance is inferred.
 - CI correction run: 9 tests passed across the exact foreign-key leading-index
   gate, IPLF-045 journey tests, and migration-order validation after adding
   dedicated docket-target indexes to both new composite-FK owners.
+- Broad compatibility correction run: 58 tests passed across legacy
+  Matter-draft ORM writes, the live mutating-route role/capability audit,
+  IPLF-045 journeys, and the existing drafting studio. Matter-only ORM writers
+  now receive the same derived company bridge as mixed-revision PostgreSQL
+  writers, and the audit explicitly recognizes dual-capability dependencies.
+- Final route and compatibility correction run: 21 tests passed, including
+  every published pleading route/method contract, the repository route-coverage
+  matrix, request-changes and resubmission, legacy statute-aware draft writes,
+  the role audit, and appeal-strength compatibility.
 - Existing drafting regression run before final integration: 44 passed.
 
 ## Boundaries

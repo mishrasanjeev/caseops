@@ -22,11 +22,14 @@ from sqlalchemy import (
     Text,
     Time,
     UniqueConstraint,
+    event,
     false,
+    select,
     text,
     true,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.engine import Connection
+from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship
 
 from caseops_api.db.base import Base
 
@@ -11137,6 +11140,20 @@ class Draft(Base):
         cascade="all, delete-orphan",
         order_by="DraftReview.created_at",
     )
+
+
+@event.listens_for(Draft, "before_insert")
+def _populate_legacy_draft_company(
+    _mapper: Mapper[Draft],
+    connection: Connection,
+    target: Draft,
+) -> None:
+    """Keep Matter-only ORM writers compatible during the additive rollout."""
+    if target.company_id is not None or target.matter_id is None:
+        return
+    target.company_id = connection.execute(
+        select(Matter.company_id).where(Matter.id == target.matter_id)
+    ).scalar_one_or_none()
 
 
 class DraftingDataExtractionField(Base):
