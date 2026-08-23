@@ -2250,11 +2250,13 @@
         "IPLF-046A",
         "IPLF-046B"
       ],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-046B/local-2026-08-24.md"
+      ],
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -12751,22 +12753,47 @@
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260824_0001_draft_lifecycle_metadata.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/services/drafting.py",
+        "apps/api/src/caseops_api/services/ip_draft_validation.py"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_pleading_drafting.py",
+        "apps/api/tests/test_migration_order.py",
+        "apps/api/tests/test_role_guards.py",
+        "apps/api/tests/test_route_coverage_matrix.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-046B/local-2026-08-24.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m4/IPLF-046B/local-2026-08-24.md",
+          "revision": "470ddcd304d52ed0b7c74b03d0e3cf0224a4ea3f",
+          "environment": "local SQLite API, production Next.js build, Chromium E2E, and repository governance validators",
+          "fixtures": "synthetic tenant, manual trademark application, opposition proceeding, confirmed identifiers, seeded authority, immutable draft revisions, filing rejection, corrected filing, and service event",
+          "assertions": "deterministic validation, approval/filing gates, immutable lifecycle metadata, migration head, role/route/OpenAPI compatibility, and governance projection",
+          "result": "passed",
+          "recorded_at": "2026-08-24T02:15:32+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Pass exact-head PR CI, merge to main, deploy the exact main revision, and record deployed production acceptance before changing release_status."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Additive draft_reviews.metadata_json stores structured filing and service event metadata; existing review rows retain an empty object and immutable draft versions remain canonical."
       ],
-      "documentation_impact": [],
+      "documentation_impact": [
+        "docs/ip-implementation/IP_TRADEMARK_PLEADING_WORKFLOW.md",
+        "docs/ip-implementation/evidence/m4/IPLF-046B/local-2026-08-24.md"
+      ],
       "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "administrative_exception": {
@@ -12824,27 +12851,53 @@
       "dependencies": [
         "IPLF-046A"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-24-EXC-01",
-        "planned:IPLF-UJ-24-EXC-02",
-        "planned:IPLF-UJ-24-EXC-03",
-        "planned:IPLF-UJ-24-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/api/src/caseops_api/services/ip_draft_exports.py",
+        "apps/web/components/ip/IpPleadingWorkspace.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/lib/api/schemas.ts"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_pleading_drafting.py",
+        "apps/web/components/ip/IpPleadingWorkspace.test.tsx",
+        "tests/e2e/iplf-046b-pleading-validation-2026-08-24.spec.ts",
+        "IPLF-UJ-24-EXC-01:apps/api/tests/test_ip_pleading_drafting.py",
+        "IPLF-UJ-24-EXC-02:apps/api/tests/test_ip_pleading_drafting.py",
+        "IPLF-UJ-24-EXC-03:apps/api/tests/test_ip_pleading_drafting.py",
+        "IPLF-UJ-24-NORMAL:tests/e2e/iplf-046b-pleading-validation-2026-08-24.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-046B/local-2026-08-24.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m4/IPLF-046B/local-2026-08-24.md",
+          "revision": "470ddcd304d52ed0b7c74b03d0e3cf0224a4ea3f",
+          "environment": "local SQLite API, production Next.js build, Chromium E2E, and repository governance validators",
+          "fixtures": "synthetic tenant, manual trademark application, opposition proceeding, confirmed identifiers, seeded authority, immutable draft revisions, filing rejection, corrected filing, and service event",
+          "assertions": "UJ-24 normal and exception paths, visible validation/comparison, filing bundle, rejected correction, refiling, service, and append-only history",
+          "result": "passed",
+          "recorded_at": "2026-08-24T02:15:32+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Pass exact-head PR CI, merge to main, deploy the exact main revision, and record deployed production acceptance before changing release_status; then proceed to IPLF-047 without inferring legal-SME approval."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Filing, rejection, and service append structured DraftReview events against immutable versions; rejected corrections create a new DraftVersion and never rewrite the filed artifact."
       ],
-      "documentation_impact": [],
+      "documentation_impact": [
+        "apps/web/app/guide/page.tsx",
+        "apps/web/app/law-firms/page.tsx",
+        "docs/ip-implementation/IP_TRADEMARK_PLEADING_WORKFLOW.md",
+        "docs/ip-implementation/evidence/m4/IPLF-046B/local-2026-08-24.md"
+      ],
       "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "not_required_approval": {
@@ -45273,14 +45326,18 @@
         "IP-DRAFT-10"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-24-EXC-01",
-        "planned:IPLF-UJ-24-EXC-02",
-        "planned:IPLF-UJ-24-EXC-03",
-        "planned:IPLF-UJ-24-NORMAL"
+        "IPLF-UJ-24-EXC-01:apps/api/tests/test_ip_pleading_drafting.py",
+        "IPLF-UJ-24-EXC-02:apps/api/tests/test_ip_pleading_drafting.py",
+        "IPLF-UJ-24-EXC-03:apps/api/tests/test_ip_pleading_drafting.py",
+        "IPLF-UJ-24-NORMAL:tests/e2e/iplf-046b-pleading-validation-2026-08-24.spec.ts"
       ],
-      "evidence_refs": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-045B/local-verification-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-045B/release-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-046B/local-2026-08-24.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -53329,11 +53386,15 @@
         "IP-DRAFT-10"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-24-NORMAL"
+        "IPLF-UJ-24-NORMAL:tests/e2e/iplf-046b-pleading-validation-2026-08-24.spec.ts"
       ],
-      "evidence_refs": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-045B/local-verification-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-045B/release-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-046B/local-2026-08-24.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -53369,11 +53430,15 @@
         "IP-DRAFT-10"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-24-EXC-01"
+        "IPLF-UJ-24-EXC-01:apps/api/tests/test_ip_pleading_drafting.py"
       ],
-      "evidence_refs": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-045B/local-verification-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-045B/release-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-046B/local-2026-08-24.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -53409,11 +53474,15 @@
         "IP-DRAFT-10"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-24-EXC-02"
+        "IPLF-UJ-24-EXC-02:apps/api/tests/test_ip_pleading_drafting.py"
       ],
-      "evidence_refs": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-045B/local-verification-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-045B/release-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-046B/local-2026-08-24.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -53449,11 +53518,15 @@
         "IP-DRAFT-10"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-24-EXC-03"
+        "IPLF-UJ-24-EXC-03:apps/api/tests/test_ip_pleading_drafting.py"
       ],
-      "evidence_refs": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-045B/local-verification-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-045B/release-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-046B/local-2026-08-24.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
