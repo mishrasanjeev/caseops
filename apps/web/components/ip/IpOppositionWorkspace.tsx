@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { IpOppositionApplicantWorkflow } from "@/components/ip/IpOppositionApplicantWorkflow";
 import { IpOppositionOpponentWorkflow } from "@/components/ip/IpOppositionOpponentWorkflow";
 import { IpOppositionSharedWorkflow } from "@/components/ip/IpOppositionSharedWorkflow";
+import { IpPleadingWorkspace } from "@/components/ip/IpPleadingWorkspace";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
   createIpOppositionProceeding,
@@ -93,11 +94,21 @@ export function IpOppositionWorkspace({
   docket,
   canWrite,
   canReview,
+  canCreateDraft = false,
+  canEditDraft = false,
+  canGenerateDraft = false,
+  canReviewDraft = false,
+  canFinalizeDraft = false,
   currentMembershipId,
 }: {
   docket: IpDocket;
   canWrite: boolean;
   canReview: boolean;
+  canCreateDraft?: boolean;
+  canEditDraft?: boolean;
+  canGenerateDraft?: boolean;
+  canReviewDraft?: boolean;
+  canFinalizeDraft?: boolean;
   currentMembershipId: string | null;
 }) {
   const queryClient = useQueryClient();
@@ -395,6 +406,16 @@ export function IpOppositionWorkspace({
             {workspace.data.proceeding.side === "applicant" && workspace.data.profile ? <IpOppositionApplicantWorkflow docket={docket} workspace={workspace.data} canReview={canReview} currentMembershipId={currentMembershipId} /> : null}
             {workspace.data.proceeding.side === "opponent" && workspace.data.profile ? <IpOppositionOpponentWorkflow docket={docket} workspace={workspace.data} canReview={canReview} currentMembershipId={currentMembershipId} /> : null}
             {workspace.data.profile ? <IpOppositionSharedWorkflow docket={docket} workspace={workspace.data} canReview={canReview} currentMembershipId={currentMembershipId} /> : null}
+
+            <IpPleadingWorkspace
+              docketId={docket.id}
+              proceedingId={workspace.data.proceeding.id}
+              canCreate={canWrite && canCreateDraft}
+              canEdit={canWrite && canEditDraft}
+              canGenerate={canWrite && canGenerateDraft}
+              canReview={canReview && canReviewDraft}
+              canFinalize={canReview && canFinalizeDraft}
+            />
 
             <form data-testid="ip-opposition-stage-form" className="grid min-w-0 gap-3 border-t border-[var(--color-line)] pt-4 md:grid-cols-2 xl:grid-cols-4" onSubmit={(event) => { event.preventDefault(); if (transitionInput) transition.mutate(transitionInput); }}>
               <div className="md:col-span-2 xl:col-span-4"><h4 className="flex items-center gap-2 font-semibold"><Scale className="h-4 w-4" /> Stage transition</h4></div>

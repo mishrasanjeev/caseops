@@ -41,6 +41,10 @@ vi.mock("@/components/ip/IpOppositionSharedWorkflow", () => ({
   IpOppositionSharedWorkflow: () => <div data-testid="shared-workflow-stub" />,
 }));
 
+vi.mock("@/components/ip/IpPleadingWorkspace", () => ({
+  IpPleadingWorkspace: () => <div data-testid="pleading-workspace-stub" />,
+}));
+
 import { IpOppositionWorkspace } from "@/components/ip/IpOppositionWorkspace";
 
 function withClient(children: ReactNode) {

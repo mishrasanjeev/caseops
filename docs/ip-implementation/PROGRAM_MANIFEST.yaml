@@ -2211,11 +2211,13 @@
         "IPLF-045A",
         "IPLF-045B"
       ],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-045B/local-verification-2026-08-23.md"
+      ],
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -12549,22 +12551,48 @@
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260823_0004_drafting_target_generalization.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/services/drafting.py",
+        "apps/api/src/caseops_api/services/drafting_targets.py"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_pleading_drafting.py",
+        "apps/api/tests/test_drafting_studio.py",
+        "apps/api/tests/test_appeal_strength.py",
+        "apps/api/tests/test_matter_statute_references.py",
+        "apps/api/tests/test_migration_order.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-045B/local-verification-2026-08-23.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m4/IPLF-045B/local-verification-2026-08-23.md",
+          "revision": "71d61b334dd8a7716ea0ec20b07f2d032021ff50",
+          "environment": "local SQLite API and Alembic tests plus generated OpenAPI, Next.js typecheck, Vitest, production build, and focused drafting regressions",
+          "fixtures": "deterministic synthetic trademark opposition docket, exact proceeding, confirmed identifiers, parties, events, deadlines, approved source document version, incompatible template, model-provider failure, and cross-docket target; no live filing or legal approval",
+          "assertions": "canonical generalized drafting ownership, tenant and docket target fences, immutable context/source manifests, compatible template selection, atomic generation failure, immutable lawyer edits, review transitions, verified-citation approval gate, DOCX export, OpenAPI generation, and responsive pleading workspace",
+          "result": "passed",
+          "recorded_at": "2026-08-23T23:16:00+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Open the exact-head PR, require the full CI/security matrix, merge with a head-SHA fence, deploy the resulting main SHA, and append exact production acceptance."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Additive target columns and immutable manifest fields; existing Matter drafts are backfilled in place and remain on the canonical writer."
       ],
-      "documentation_impact": [],
+      "documentation_impact": [
+        "docs/ip-implementation/IP_TRADEMARK_PLEADING_WORKFLOW.md",
+        "docs/ip-implementation/evidence/m4/IPLF-045B/local-verification-2026-08-23.md"
+      ],
       "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "administrative_exception": {
@@ -12622,27 +12650,52 @@
       "dependencies": [
         "IPLF-045A"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-24-EXC-01",
-        "planned:IPLF-UJ-24-EXC-02",
-        "planned:IPLF-UJ-24-EXC-03",
-        "planned:IPLF-UJ-24-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/api/src/caseops_api/schemas/drafts.py",
+        "apps/web/components/ip/IpPleadingWorkspace.tsx",
+        "apps/web/components/ip/IpOppositionWorkspace.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/lib/api/schemas.ts"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_pleading_drafting.py",
+        "apps/api/tests/test_role_guards.py",
+        "apps/api/tests/test_route_coverage_matrix.py",
+        "apps/web/components/ip/IpPleadingWorkspace.test.tsx",
+        "apps/web/components/ip/IpOppositionWorkspace.test.tsx",
+        "IPLF-UJ-24-EXC-03:apps/api/tests/test_ip_pleading_drafting.py",
+        "IPLF-UJ-24-NORMAL:apps/api/tests/test_ip_pleading_drafting.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-045B/local-verification-2026-08-23.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m4/IPLF-045B/local-verification-2026-08-23.md",
+          "revision": "71d61b334dd8a7716ea0ec20b07f2d032021ff50",
+          "environment": "local SQLite API and Alembic tests plus generated OpenAPI, Next.js typecheck, Vitest, production build, and focused drafting regressions",
+          "fixtures": "deterministic synthetic trademark opposition docket, exact proceeding, confirmed identifiers, parties, events, deadlines, approved source document version, incompatible template, model-provider failure, and cross-docket target; no live filing or legal approval",
+          "assertions": "canonical generalized drafting ownership, tenant and docket target fences, immutable context/source manifests, compatible template selection, atomic generation failure, immutable lawyer edits, review transitions, verified-citation approval gate, DOCX export, OpenAPI generation, and responsive pleading workspace",
+          "result": "passed",
+          "recorded_at": "2026-08-23T23:16:00+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Open the exact-head PR, require the full CI/security matrix, merge with a head-SHA fence, deploy the resulting main SHA, and append exact production acceptance. IPLF-046 and IPLF-047 remain independently pending."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Trademark pleading drafts and immutable revisions use the generalized canonical drafting records; no filing or registry-side mutation is enabled."
       ],
-      "documentation_impact": [],
+      "documentation_impact": [
+        "docs/ip-implementation/IP_TRADEMARK_PLEADING_WORKFLOW.md",
+        "docs/ip-implementation/evidence/m4/IPLF-045B/local-verification-2026-08-23.md"
+      ],
       "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "not_required_approval": {
@@ -25526,7 +25579,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -25562,7 +25615,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -25598,7 +25651,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -25634,7 +25687,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -25670,7 +25723,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -25706,7 +25759,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -25742,7 +25795,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -25778,7 +25831,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -25814,7 +25867,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -25850,7 +25903,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -45203,7 +45256,7 @@
         "planned:IPLF-UJ-24-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -53256,7 +53309,7 @@
         "planned:IPLF-UJ-24-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -53296,7 +53349,7 @@
         "planned:IPLF-UJ-24-EXC-01"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -53336,7 +53389,7 @@
         "planned:IPLF-UJ-24-EXC-02"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -53376,7 +53429,7 @@
         "planned:IPLF-UJ-24-EXC-03"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",

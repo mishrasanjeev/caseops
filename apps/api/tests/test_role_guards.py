@@ -14,7 +14,11 @@ import inspect
 import pytest
 from fastapi.routing import APIRoute
 
-from caseops_api.api.dependencies import require_capability, require_role
+from caseops_api.api.dependencies import (
+    require_all_capabilities,
+    require_capability,
+    require_role,
+)
 from caseops_api.main import create_application
 
 MUTATING_METHODS = {"POST", "PATCH", "PUT", "DELETE"}
@@ -134,6 +138,7 @@ def _is_guarded(route: APIRoute) -> bool:
             freevars = call.__code__.co_freevars or ()
             if (
                 "allowed" in freevars
+                or "capabilities" in freevars
                 or "roles" in freevars
                 or "platform_capability" in freevars
             ):
@@ -196,6 +201,12 @@ def test_guard_detection_recognises_require_capability():
     # closure shape directly: the inner _dep captures 'roles'.
     assert guard.__name__ == "_dep"
     assert "roles" in guard.__code__.co_freevars
+
+
+def test_guard_detection_recognises_require_all_capabilities():
+    guard = require_all_capabilities("ip:write", "drafts:create")
+    assert guard.__name__ == "_dep"
+    assert "capabilities" in guard.__code__.co_freevars
 
 
 def test_guard_detection_recognises_require_role():

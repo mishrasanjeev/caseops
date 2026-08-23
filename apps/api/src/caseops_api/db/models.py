@@ -22,11 +22,14 @@ from sqlalchemy import (
     Text,
     Time,
     UniqueConstraint,
+    event,
     false,
+    select,
     text,
     true,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.engine import Connection
+from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship
 
 from caseops_api.db.base import Base
 
@@ -1961,12 +1964,8 @@ class MatterTask(Base):
     neutralized_by_ip_lifecycle_event_id: Mapped[str | None] = mapped_column(
         String(36), nullable=True
     )
-    neutralized_by_ip_lifecycle_version: Mapped[int | None] = mapped_column(
-        Integer, nullable=True
-    )
-    neutralized_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    neutralized_by_ip_lifecycle_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    neutralized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -1979,9 +1978,7 @@ class MatterTask(Base):
         nullable=False,
     )
 
-    matter: Mapped[Matter | None] = relationship(
-        back_populates="tasks", foreign_keys=[matter_id]
-    )
+    matter: Mapped[Matter | None] = relationship(back_populates="tasks", foreign_keys=[matter_id])
     created_by_membership: Mapped[CompanyMembership | None] = relationship(
         back_populates="created_tasks",
         foreign_keys=[created_by_membership_id],
@@ -2146,9 +2143,7 @@ class MatterHearing(Base):
     hearing_mode: Mapped[str | None] = mapped_column(String(32), nullable=True)
     location_text: Mapped[str | None] = mapped_column(String(500), nullable=True)
     meeting_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
-    attendee_membership_ids_json: Mapped[list[str] | None] = mapped_column(
-        JSON, nullable=True
-    )
+    attendee_membership_ids_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     source: Mapped[str] = mapped_column(String(40), nullable=False, default="manual")
     source_ref_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
     source_ref_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
@@ -2173,12 +2168,8 @@ class MatterHearing(Base):
     neutralized_by_ip_lifecycle_event_id: Mapped[str | None] = mapped_column(
         String(36), nullable=True
     )
-    neutralized_by_ip_lifecycle_version: Mapped[int | None] = mapped_column(
-        Integer, nullable=True
-    )
-    neutralized_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    neutralized_by_ip_lifecycle_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    neutralized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -2554,12 +2545,8 @@ class HearingReminder(Base):
     neutralized_by_ip_lifecycle_event_id: Mapped[str | None] = mapped_column(
         String(36), nullable=True
     )
-    neutralized_by_ip_lifecycle_version: Mapped[int | None] = mapped_column(
-        Integer, nullable=True
-    )
-    neutralized_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    neutralized_by_ip_lifecycle_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    neutralized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -2987,27 +2974,17 @@ class CalendarEventSync(Base):
         ),
         nullable=True,
     )
-    reconciliation_snapshot_sha256: Mapped[str | None] = mapped_column(
-        String(64), nullable=True
-    )
-    reconciliation_provider_revision: Mapped[str | None] = mapped_column(
-        String(500), nullable=True
-    )
+    reconciliation_snapshot_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    reconciliation_provider_revision: Mapped[str | None] = mapped_column(String(500), nullable=True)
     durable_last_attempt_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     neutralized_by_ip_lifecycle_event_id: Mapped[str | None] = mapped_column(
         String(36), nullable=True
     )
-    neutralized_ip_docket_id: Mapped[str | None] = mapped_column(
-        String(36), nullable=True
-    )
-    neutralized_by_ip_lifecycle_version: Mapped[int | None] = mapped_column(
-        Integer, nullable=True
-    )
-    neutralized_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    neutralized_ip_docket_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    neutralized_by_ip_lifecycle_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    neutralized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -4213,12 +4190,8 @@ class NotificationDeliveryIntent(Base):
     neutralized_by_ip_lifecycle_event_id: Mapped[str | None] = mapped_column(
         String(36), nullable=True
     )
-    neutralized_by_ip_lifecycle_version: Mapped[int | None] = mapped_column(
-        Integer, nullable=True
-    )
-    neutralized_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    neutralized_by_ip_lifecycle_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    neutralized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -5639,12 +5612,8 @@ class MatterNextHearingSuggestion(Base):
     neutralized_by_ip_lifecycle_event_id: Mapped[str | None] = mapped_column(
         String(36), nullable=True
     )
-    neutralized_by_ip_lifecycle_version: Mapped[int | None] = mapped_column(
-        Integer, nullable=True
-    )
-    neutralized_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    neutralized_by_ip_lifecycle_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    neutralized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -10270,6 +10239,28 @@ class ModelRun(Base):
     """Auditable record of every LLM / embedding call made on behalf of a tenant."""
 
     __tablename__ = "model_runs"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["ip_docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_model_run_ip_docket_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["ip_proceeding_id", "company_id", "ip_docket_id"],
+            ["ip_proceedings.id", "ip_proceedings.company_id", "ip_proceedings.docket_id"],
+            name="fk_model_run_ip_proceeding_target",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "matter_id IS NULL OR ip_docket_id IS NULL",
+            name="ck_model_run_single_legal_target",
+        ),
+        CheckConstraint(
+            "ip_proceeding_id IS NULL OR ip_docket_id IS NOT NULL",
+            name="ck_model_run_ip_proceeding_requires_docket",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str | None] = mapped_column(
@@ -10279,6 +10270,16 @@ class ModelRun(Base):
     )
     matter_id: Mapped[str | None] = mapped_column(
         ForeignKey("matters.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    ip_docket_id: Mapped[str | None] = mapped_column(
+        String(36),
+        nullable=True,
+        index=True,
+    )
+    ip_proceeding_id: Mapped[str | None] = mapped_column(
+        String(36),
         nullable=True,
         index=True,
     )
@@ -11054,18 +11055,54 @@ class DraftingDataConfidenceBand(StrEnum):
 
 
 class Draft(Base):
-    """A long-lived legal document draft. The matter is the tenant
-    boundary; versions roll forward; status advances through a strict
-    state machine enforced by the service layer."""
+    """A long-lived legal document draft with exactly one tenant target."""
 
     __tablename__ = "drafts"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["matter_id", "company_id"],
+            ["matters.id", "matters.company_id"],
+            name="fk_draft_matter_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["ip_docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_draft_ip_docket_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["ip_proceeding_id", "company_id", "ip_docket_id"],
+            ["ip_proceedings.id", "ip_proceedings.company_id", "ip_proceedings.docket_id"],
+            name="fk_draft_ip_proceeding_target",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "(matter_id IS NOT NULL AND ip_docket_id IS NULL AND "
+            "ip_proceeding_id IS NULL) OR "
+            "(matter_id IS NULL AND ip_docket_id IS NOT NULL)",
+            name="ck_draft_exactly_one_target",
+        ),
+        CheckConstraint(
+            "ip_proceeding_id IS NULL OR ip_docket_id IS NOT NULL",
+            name="ck_draft_ip_proceeding_requires_docket",
+        ),
+        Index("ix_drafts_company_ip_docket", "company_id", "ip_docket_id"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
-    matter_id: Mapped[str] = mapped_column(
-        ForeignKey("matters.id", ondelete="CASCADE"),
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
+    matter_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matters.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    ip_docket_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    ip_proceeding_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     created_by_membership_id: Mapped[str | None] = mapped_column(
         ForeignKey("company_memberships.id", ondelete="SET NULL"),
         nullable=True,
@@ -11105,6 +11142,20 @@ class Draft(Base):
     )
 
 
+@event.listens_for(Draft, "before_insert")
+def _populate_legacy_draft_company(
+    _mapper: Mapper[Draft],
+    connection: Connection,
+    target: Draft,
+) -> None:
+    """Keep Matter-only ORM writers compatible during the additive rollout."""
+    if target.company_id is not None or target.matter_id is None:
+        return
+    target.company_id = connection.execute(
+        select(Matter.company_id).where(Matter.id == target.matter_id)
+    ).scalar_one_or_none()
+
+
 class DraftingDataExtractionField(Base):
     """Matter-scoped, lawyer-reviewable facts proposed from uploaded documents.
 
@@ -11114,6 +11165,43 @@ class DraftingDataExtractionField(Base):
     """
 
     __tablename__ = "drafting_data_extraction_fields"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["ip_docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_drafting_data_ip_docket_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["source_ip_document_version_id", "company_id", "source_ip_document_id"],
+            [
+                "ip_document_versions.id",
+                "ip_document_versions.company_id",
+                "ip_document_versions.document_id",
+            ],
+            name="fk_drafting_data_ip_document_version_company",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "(matter_id IS NOT NULL AND ip_docket_id IS NULL) OR "
+            "(matter_id IS NULL AND ip_docket_id IS NOT NULL)",
+            name="ck_drafting_data_exactly_one_target",
+        ),
+        CheckConstraint(
+            "source_attachment_id IS NULL OR source_ip_document_version_id IS NULL",
+            name="ck_drafting_data_single_source",
+        ),
+        CheckConstraint(
+            "(source_ip_document_version_id IS NULL AND source_ip_document_id IS NULL) OR "
+            "(source_ip_document_version_id IS NOT NULL AND source_ip_document_id IS NOT NULL)",
+            name="ck_drafting_data_ip_source_complete",
+        ),
+        Index(
+            "ix_drafting_data_company_ip_docket",
+            "company_id",
+            "ip_docket_id",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
@@ -11121,15 +11209,20 @@ class DraftingDataExtractionField(Base):
         nullable=False,
         index=True,
     )
-    matter_id: Mapped[str] = mapped_column(
+    matter_id: Mapped[str | None] = mapped_column(
         ForeignKey("matters.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
+    ip_docket_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     source_attachment_id: Mapped[str | None] = mapped_column(
         ForeignKey("matter_attachments.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
+    )
+    source_ip_document_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    source_ip_document_version_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
     )
     created_by_membership_id: Mapped[str | None] = mapped_column(
         ForeignKey("company_memberships.id", ondelete="SET NULL"),
@@ -11178,7 +11271,7 @@ class DraftingDataExtractionField(Base):
     )
 
     company: Mapped[Company] = relationship()
-    matter: Mapped[Matter] = relationship(back_populates="drafting_data_fields")
+    matter: Mapped[Matter | None] = relationship(back_populates="drafting_data_fields")
     source_attachment: Mapped[MatterAttachment | None] = relationship()
     created_by_membership: Mapped[CompanyMembership | None] = relationship(
         foreign_keys=[created_by_membership_id],
@@ -11211,6 +11304,9 @@ class DraftVersion(Base):
     # Stored as JSON text on both Postgres and SQLite so the model
     # doesn't diverge between test and prod engines.
     citations_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    template_manifest_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    context_manifest_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    source_manifest_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     verified_citation_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -11626,12 +11722,10 @@ class EthicalWall(Base):
             "excluded_team_id",
             unique=True,
             sqlite_where=text(
-                "revoked_at IS NULL AND ip_docket_id IS NOT NULL "
-                "AND excluded_team_id IS NOT NULL"
+                "revoked_at IS NULL AND ip_docket_id IS NOT NULL AND excluded_team_id IS NOT NULL"
             ),
             postgresql_where=text(
-                "revoked_at IS NULL AND ip_docket_id IS NOT NULL "
-                "AND excluded_team_id IS NOT NULL"
+                "revoked_at IS NULL AND ip_docket_id IS NOT NULL AND excluded_team_id IS NOT NULL"
             ),
         ),
     )
@@ -12641,12 +12735,8 @@ class MatterDeadline(Base):
     neutralized_by_ip_lifecycle_event_id: Mapped[str | None] = mapped_column(
         String(36), nullable=True
     )
-    neutralized_by_ip_lifecycle_version: Mapped[int | None] = mapped_column(
-        Integer, nullable=True
-    )
-    neutralized_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    neutralized_by_ip_lifecycle_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    neutralized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class TenantAIPolicy(Base):
@@ -13495,8 +13585,7 @@ class ApiIdempotencyRecord(Base):
             name="ck_api_idempotency_actor_scope_kind",
         ),
         CheckConstraint(
-            "actor_membership_id IS NULL OR "
-            "actor_scope = 'membership:' || actor_membership_id",
+            "actor_membership_id IS NULL OR actor_scope = 'membership:' || actor_membership_id",
             name="ck_api_idempotency_actor_scope_membership",
         ),
     )
@@ -13547,9 +13636,7 @@ class DomainOutboxEvent(Base):
     __tablename__ = "domain_outbox_events"
     __table_args__ = (
         UniqueConstraint("id", "company_id", name="uq_domain_outbox_id_company"),
-        UniqueConstraint(
-            "company_id", "event_key", name="uq_domain_outbox_company_event_key"
-        ),
+        UniqueConstraint("company_id", "event_key", name="uq_domain_outbox_company_event_key"),
         Index(
             "ix_domain_outbox_claim",
             "state",
@@ -13583,8 +13670,7 @@ class DomainOutboxEvent(Base):
             "correlation_id",
         ),
         CheckConstraint(
-            "state IN ('queued', 'processing', 'retry_scheduled', "
-            "'succeeded', 'dead_letter')",
+            "state IN ('queued', 'processing', 'retry_scheduled', 'succeeded', 'dead_letter')",
             name="ck_domain_outbox_state",
         ),
         CheckConstraint(
@@ -13679,14 +13765,10 @@ class DomainOutboxEvent(Base):
     payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     payload_json: Mapped[dict] = mapped_column(JSON, nullable=False)
     expected_consumers_json: Mapped[list[str]] = mapped_column(JSON, nullable=False)
-    state: Mapped[str] = mapped_column(
-        String(24), nullable=False, default=DomainOutboxState.QUEUED
-    )
+    state: Mapped[str] = mapped_column(String(24), nullable=False, default=DomainOutboxState.QUEUED)
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
-    next_attempt_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     lease_owner: Mapped[str | None] = mapped_column(String(120), nullable=True)
     lease_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
     lease_expires_at: Mapped[datetime | None] = mapped_column(
@@ -13832,21 +13914,15 @@ class IpWorkflowDefinition(Base):
 
     __tablename__ = "ip_workflow_definitions"
     __table_args__ = (
-        UniqueConstraint(
-            "id", "company_id", name="uq_ip_workflow_definition_id_company"
-        ),
-        UniqueConstraint(
-            "company_id", "key", name="uq_ip_workflow_definition_company_key"
-        ),
+        UniqueConstraint("id", "company_id", name="uq_ip_workflow_definition_id_company"),
+        UniqueConstraint("company_id", "key", name="uq_ip_workflow_definition_company_key"),
         CheckConstraint(
             "aggregate_type = 'ip_docket_record'",
             name="ck_ip_workflow_definition_aggregate_type",
         ),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
         ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False, index=True
     )
@@ -13863,9 +13939,7 @@ class IpWorkflowDefinition(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )
-    retired_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class IpWorkflowVersion(Base):
@@ -13915,9 +13989,7 @@ class IpWorkflowVersion(Base):
             name="uq_ip_workflow_version_pin",
         ),
         CheckConstraint("version > 0", name="ck_ip_workflow_version_positive"),
-        CheckConstraint(
-            "schema_version > 0", name="ck_ip_workflow_schema_version_positive"
-        ),
+        CheckConstraint("schema_version > 0", name="ck_ip_workflow_schema_version_positive"),
         CheckConstraint(
             "status IN ('candidate', 'approved', 'active', 'retired', 'disabled')",
             name="ck_ip_workflow_version_status",
@@ -14006,9 +14078,7 @@ class IpWorkflowVersion(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(String(36), nullable=False)
     definition_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -14020,74 +14090,36 @@ class IpWorkflowVersion(Base):
     source_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     engine_compatibility: Mapped[str] = mapped_column(String(80), nullable=False)
-    effective_from: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    effective_until: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    proposed_by_membership_id: Mapped[str | None] = mapped_column(
-        String(36), nullable=True
-    )
-    proposed_by_membership_company_id: Mapped[str | None] = mapped_column(
-        String(36), nullable=True
-    )
-    proposer_membership_id_snapshot: Mapped[str | None] = mapped_column(
-        String(36), nullable=True
-    )
-    proposer_user_id_snapshot: Mapped[str | None] = mapped_column(
-        String(36), nullable=True
-    )
+    effective_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    effective_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    proposed_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    proposed_by_membership_company_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    proposer_membership_id_snapshot: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    proposer_user_id_snapshot: Mapped[str | None] = mapped_column(String(36), nullable=True)
     proposer_label_snapshot: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    proposer_authority_snapshot_json: Mapped[dict | None] = mapped_column(
-        JSON, nullable=True
-    )
-    reviewed_by_membership_id: Mapped[str | None] = mapped_column(
-        String(36), nullable=True
-    )
-    reviewed_by_membership_company_id: Mapped[str | None] = mapped_column(
-        String(36), nullable=True
-    )
-    reviewer_membership_id_snapshot: Mapped[str | None] = mapped_column(
-        String(36), nullable=True
-    )
-    reviewer_user_id_snapshot: Mapped[str | None] = mapped_column(
-        String(36), nullable=True
-    )
+    proposer_authority_snapshot_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    reviewed_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    reviewed_by_membership_company_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    reviewer_membership_id_snapshot: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    reviewer_user_id_snapshot: Mapped[str | None] = mapped_column(String(36), nullable=True)
     reviewer_label_snapshot: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    reviewer_authority_snapshot_json: Mapped[dict | None] = mapped_column(
-        JSON, nullable=True
-    )
-    legal_approved_by_membership_id: Mapped[str | None] = mapped_column(
-        String(36), nullable=True
-    )
+    reviewer_authority_snapshot_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    legal_approved_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     legal_approved_by_membership_company_id: Mapped[str | None] = mapped_column(
         String(36), nullable=True
     )
     legal_approver_membership_id_snapshot: Mapped[str | None] = mapped_column(
         String(36), nullable=True
     )
-    legal_approver_user_id_snapshot: Mapped[str | None] = mapped_column(
-        String(36), nullable=True
-    )
-    legal_approver_label_snapshot: Mapped[str | None] = mapped_column(
-        String(255), nullable=True
-    )
-    legal_approver_authority_snapshot_json: Mapped[dict | None] = mapped_column(
-        JSON, nullable=True
-    )
+    legal_approver_user_id_snapshot: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    legal_approver_label_snapshot: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    legal_approver_authority_snapshot_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     fixtures_passed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    approved_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    activated_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    retired_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
@@ -14126,8 +14158,7 @@ class IpPortfolioSavedView(Base):
         Index("ix_ip_portfolio_views_membership", "membership_id"),
         Index("ix_ip_portfolio_views_team", "team_id"),
         CheckConstraint(
-            "(scope = 'personal' AND team_id IS NULL) OR "
-            "(scope = 'team' AND team_id IS NOT NULL)",
+            "(scope = 'personal' AND team_id IS NULL) OR (scope = 'team' AND team_id IS NOT NULL)",
             name="ck_ip_portfolio_view_scope_owner",
         ),
     )
@@ -14315,12 +14346,8 @@ class IpDocketRecord(Base):
     workflow_definition_id: Mapped[str | None] = mapped_column(
         String(36), nullable=True, index=True
     )
-    workflow_version_id: Mapped[str | None] = mapped_column(
-        String(36), nullable=True, index=True
-    )
-    workflow_version_number: Mapped[int | None] = mapped_column(
-        Integer, nullable=True, index=True
-    )
+    workflow_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    workflow_version_number: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     archived_by_matter_disposal: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
@@ -14469,9 +14496,7 @@ class IpDocketEvent(Base):
     )
     before_phase: Mapped[str | None] = mapped_column(String(64), nullable=True)
     after_phase: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    resulting_lifecycle_version: Mapped[int | None] = mapped_column(
-        Integer, nullable=True
-    )
+    resulting_lifecycle_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     candidate_status: Mapped[str] = mapped_column(
         String(24), nullable=False, default="confirmed", server_default="confirmed"
     )
@@ -14530,9 +14555,7 @@ class IpMatterLink(Base):
             "company_id",
             "docket_id",
             unique=True,
-            postgresql_where=text(
-                "retired_at IS NULL AND relation_role = 'operational'"
-            ),
+            postgresql_where=text("retired_at IS NULL AND relation_role = 'operational'"),
             sqlite_where=text("retired_at IS NULL AND relation_role = 'operational'"),
         ),
         Index(
@@ -14752,10 +14775,15 @@ class IpProceeding(Base):
             ondelete="RESTRICT",
         ),
         UniqueConstraint("id", "company_id", name="uq_ip_proceeding_id_company"),
+        UniqueConstraint(
+            "id",
+            "company_id",
+            "docket_id",
+            name="uq_ip_proceeding_id_company_docket",
+        ),
         Index("ix_ip_proceedings_company_kind", "company_id", "proceeding_kind"),
         CheckConstraint(
-            "origin_kind IN ('linked_application', 'registry_event', 'watch_hit', "
-            "'manual_intake')",
+            "origin_kind IN ('linked_application', 'registry_event', 'watch_hit', 'manual_intake')",
             name="ck_ip_proceeding_origin_kind",
         ),
         CheckConstraint(
@@ -15153,9 +15181,7 @@ class IpDocumentTaxonomyAlias(Base):
             name="fk_ip_doc_taxonomy_alias_creator_company",
             ondelete="RESTRICT",
         ),
-        UniqueConstraint(
-            "company_id", "normalized_alias", name="uq_ip_doc_taxonomy_alias_company"
-        ),
+        UniqueConstraint("company_id", "normalized_alias", name="uq_ip_doc_taxonomy_alias_company"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -15247,16 +15273,13 @@ class IpDocumentVersion(Base):
         UniqueConstraint("storage_key", name="uq_ip_document_version_storage_key"),
         CheckConstraint("version > 0", name="ck_ip_document_version_positive"),
         CheckConstraint("size_bytes >= 0", name="ck_ip_document_version_size_nonnegative"),
-        CheckConstraint(
-            "length(sha256_hex) = 64", name="ck_ip_document_version_sha256_length"
-        ),
+        CheckConstraint("length(sha256_hex) = 64", name="ck_ip_document_version_sha256_length"),
         CheckConstraint(
             "extracted_char_count >= 0",
             name="ck_ip_document_version_extracted_chars_nonnegative",
         ),
         CheckConstraint(
-            "ocr_quality_score IS NULL OR "
-            "(ocr_quality_score >= 0 AND ocr_quality_score <= 1)",
+            "ocr_quality_score IS NULL OR (ocr_quality_score >= 0 AND ocr_quality_score <= 1)",
             name="ck_ip_document_version_ocr_quality_range",
         ),
         CheckConstraint(
@@ -15593,16 +15616,12 @@ class IpDeadlineCoverage(Base):
     pending_replacement_membership_id: Mapped[str | None] = mapped_column(
         ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    replacement_decision: Mapped[str] = mapped_column(
-        String(16), nullable=False, default="none"
-    )
+    replacement_decision: Mapped[str] = mapped_column(String(16), nullable=False, default="none")
     replacement_decided_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     replacement_decision_reason: Mapped[str | None] = mapped_column(String(2000), nullable=True)
-    emergency_until: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    emergency_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     emergency_escalation_membership_id: Mapped[str | None] = mapped_column(
         ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
     )
@@ -15691,9 +15710,7 @@ class IpDeadlineIncident(Base):
         default="0000000000000000000000000000000000000000000000000000000000000000",
         server_default="0000000000000000000000000000000000000000000000000000000000000000",
     )
-    defect_scope: Mapped[str] = mapped_column(
-        String(24), nullable=False, default="record_specific"
-    )
+    defect_scope: Mapped[str] = mapped_column(String(24), nullable=False, default="record_specific")
     defect_fingerprint_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     containment: Mapped[str | None] = mapped_column(Text, nullable=True)
     correction_deadline_id: Mapped[str | None] = mapped_column(
@@ -15714,9 +15731,7 @@ class IpDeadlineIncident(Base):
     prevention_verified_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    resolution_evidence_reference: Mapped[str | None] = mapped_column(
-        String(500), nullable=True
-    )
+    resolution_evidence_reference: Mapped[str | None] = mapped_column(String(500), nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     resolved_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -16102,9 +16117,7 @@ class IpCostItem(Base):
     rate_confidential: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     fx_rate: Mapped[Decimal | None] = mapped_column(Numeric(20, 10), nullable=True)
     fx_rate_source: Mapped[str | None] = mapped_column(String(120), nullable=True)
-    fx_converted_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    fx_converted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     base_amount_minor: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     base_currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
     evidence_reference: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -16560,12 +16573,8 @@ class IpRenewalTerm(Base):
             "grace_deadline_id",
             "company_id",
         ),
-        Index(
-            "ix_ip_renewal_terms_fee_cost_item_id", "fee_cost_item_id", "company_id"
-        ),
-        Index(
-            "ix_ip_renewal_terms_filing_event_id", "filing_event_id", "company_id"
-        ),
+        Index("ix_ip_renewal_terms_fee_cost_item_id", "fee_cost_item_id", "company_id"),
+        Index("ix_ip_renewal_terms_filing_event_id", "filing_event_id", "company_id"),
         Index(
             "ix_ip_renewal_terms_acceptance_event_id",
             "acceptance_event_id",
@@ -16606,12 +16615,8 @@ class IpRenewalTerm(Base):
     filing_initiated_reference: Mapped[str | None] = mapped_column(String(500), nullable=True)
     filing_event_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     acceptance_event_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    certificate_document_id: Mapped[str | None] = mapped_column(
-        String(36), nullable=True
-    )
-    next_term_deadline_id: Mapped[str | None] = mapped_column(
-        String(36), nullable=True
-    )
+    certificate_document_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    next_term_deadline_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     state: Mapped[str] = mapped_column(String(24), nullable=False, default="due")
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -16682,8 +16687,7 @@ class IpClientInstruction(Base):
             name="ck_ip_client_instruction_decision",
         ),
         CheckConstraint(
-            "status IN ('pending', 'accepted', 'rejected', 'clarification_required', "
-            "'superseded')",
+            "status IN ('pending', 'accepted', 'rejected', 'clarification_required', 'superseded')",
             name="ck_ip_client_instruction_status",
         ),
         CheckConstraint(
@@ -16755,13 +16759,9 @@ class IpClientInstruction(Base):
     evidence_refs_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    acknowledged_by_membership_id: Mapped[str | None] = mapped_column(
-        String(36), nullable=True
-    )
+    acknowledged_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     acknowledgement_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-    supersedes_instruction_id: Mapped[str | None] = mapped_column(
-        String(36), nullable=True
-    )
+    supersedes_instruction_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     resulting_event_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -16881,9 +16881,7 @@ class DataRetentionPolicy(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
         ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False, index=True
     )
@@ -16993,9 +16991,7 @@ class DataRetentionPolicyVersion(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     policy_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -17017,14 +17013,10 @@ class DataRetentionPolicyVersion(Base):
     subprocessor: Mapped[str | None] = mapped_column(String(255), nullable=True)
     policy_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     proposed_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    proposed_by_membership_company_id: Mapped[str | None] = mapped_column(
-        String(36), nullable=True
-    )
+    proposed_by_membership_company_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     proposer_label_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
     reviewed_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    reviewed_by_membership_company_id: Mapped[str | None] = mapped_column(
-        String(36), nullable=True
-    )
+    reviewed_by_membership_company_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     reviewer_label_snapshot: Mapped[str | None] = mapped_column(String(255), nullable=True)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -17067,8 +17059,7 @@ class LegalHold(Base):
             name="ck_legal_hold_activation_approval",
         ),
         CheckConstraint(
-            "(status = 'released' AND released_at IS NOT NULL) OR "
-            "status <> 'released'",
+            "(status = 'released' AND released_at IS NOT NULL) OR status <> 'released'",
             name="ck_legal_hold_release_state",
         ),
         CheckConstraint(
@@ -17103,9 +17094,7 @@ class LegalHold(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
         ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False, index=True
     )
@@ -17113,18 +17102,12 @@ class LegalHold(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     authority_reference: Mapped[str] = mapped_column(String(512), nullable=False)
     reason_redacted: Mapped[str | None] = mapped_column(Text, nullable=True)
-    status: Mapped[str] = mapped_column(
-        String(16), nullable=False, default=LegalHoldStatus.DRAFT
-    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default=LegalHoldStatus.DRAFT)
     created_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    created_by_membership_company_id: Mapped[str | None] = mapped_column(
-        String(36), nullable=True
-    )
+    created_by_membership_company_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     creator_label_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
     approved_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    approved_by_membership_company_id: Mapped[str | None] = mapped_column(
-        String(36), nullable=True
-    )
+    approved_by_membership_company_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     approver_label_snapshot: Mapped[str | None] = mapped_column(String(255), nullable=True)
     activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -17169,9 +17152,7 @@ class LegalHoldItem(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     legal_hold_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     data_class_id: Mapped[str] = mapped_column(String(160), nullable=False)
@@ -17328,9 +17309,7 @@ class TenantDataOperation(Base):
         ),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
         ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False, index=True
     )
@@ -17354,9 +17333,7 @@ class TenantDataOperation(Base):
     )
     requester_label_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
     approved_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    approved_by_membership_company_id: Mapped[str | None] = mapped_column(
-        String(36), nullable=True
-    )
+    approved_by_membership_company_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     approver_label_snapshot: Mapped[str | None] = mapped_column(String(255), nullable=True)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     dry_run_completed_at: Mapped[datetime | None] = mapped_column(
@@ -17419,8 +17396,7 @@ class TenantDataOperationItem(Base):
             name="ck_tenant_data_operation_item_never_execute",
         ),
         CheckConstraint(
-            "(item_status = 'held' AND legal_hold_id IS NOT NULL) OR "
-            "item_status <> 'held'",
+            "(item_status = 'held' AND legal_hold_id IS NOT NULL) OR item_status <> 'held'",
             name="ck_tenant_data_operation_item_hold_evidence",
         ),
         Index(
@@ -17432,9 +17408,7 @@ class TenantDataOperationItem(Base):
         Index("ix_tenant_data_operation_items_legal_hold_id", "legal_hold_id"),
     )
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     operation_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     data_class_id: Mapped[str] = mapped_column(String(160), nullable=False)
@@ -17662,9 +17636,7 @@ class IpDocketControlReview(Base):
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     filters_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     freshness_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
-    completeness_status: Mapped[str] = mapped_column(
-        String(16), nullable=False, default="complete"
-    )
+    completeness_status: Mapped[str] = mapped_column(String(16), nullable=False, default="complete")
     incompleteness_reasons_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     mandatory_exception_ids_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     query_version: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -17676,17 +17648,13 @@ class IpDocketControlReview(Base):
     required_sample_size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     predecessor_review_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     delta_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
-    export_status: Mapped[str] = mapped_column(
-        String(16), nullable=False, default="not_requested"
-    )
+    export_status: Mapped[str] = mapped_column(String(16), nullable=False, default="not_requested")
     export_error_redacted: Mapped[str | None] = mapped_column(String(500), nullable=True)
     signed_off_by_membership_id: Mapped[str | None] = mapped_column(
         ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
     )
     signer_label_snapshot: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    signed_off_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    signed_off_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_by_membership_id: Mapped[str | None] = mapped_column(
         ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True

@@ -127,6 +127,11 @@ export default function IpDocketPage() {
   const canUploadDocuments = useCapability("documents:upload");
   const canManageDocuments = useCapability("documents:manage");
   const canReview = useCapability("ip:approve");
+  const canCreateDraft = useCapability("drafts:create");
+  const canEditDraft = useCapability("drafts:edit");
+  const canGenerateDraft = useCapability("drafts:generate");
+  const canReviewDraft = useCapability("drafts:review");
+  const canFinalizeDraft = useCapability("drafts:finalize");
   const canProposeRules = useCapability("ip:rules_propose");
   const canActivateRules = useCapability("ip:rules_activate");
   const canFinance = useCapability("ip:fees_manage");
@@ -322,6 +327,11 @@ export default function IpDocketPage() {
               docket={selected}
               canWrite={canWrite}
               canReview={canReview}
+              canCreateDraft={canCreateDraft}
+              canEditDraft={canEditDraft}
+              canGenerateDraft={canGenerateDraft}
+              canReviewDraft={canReviewDraft}
+              canFinalizeDraft={canFinalizeDraft}
               canFinance={canFinance}
               canProposeRules={canProposeRules}
               canActivateRules={canActivateRules}
@@ -1264,6 +1274,11 @@ function DocketWorkspace({
   docket,
   canWrite,
   canReview,
+  canCreateDraft,
+  canEditDraft,
+  canGenerateDraft,
+  canReviewDraft,
+  canFinalizeDraft,
   canFinance,
   canProposeRules,
   canActivateRules,
@@ -1274,6 +1289,11 @@ function DocketWorkspace({
   docket: IpDocket;
   canWrite: boolean;
   canReview: boolean;
+  canCreateDraft: boolean;
+  canEditDraft: boolean;
+  canGenerateDraft: boolean;
+  canReviewDraft: boolean;
+  canFinalizeDraft: boolean;
   canFinance: boolean;
   canProposeRules: boolean;
   canActivateRules: boolean;
@@ -1310,6 +1330,11 @@ function DocketWorkspace({
           docket={docket}
           canWrite={canWrite}
           canReview={canReview}
+          canCreateDraft={canCreateDraft}
+          canEditDraft={canEditDraft}
+          canGenerateDraft={canGenerateDraft}
+          canReviewDraft={canReviewDraft}
+          canFinalizeDraft={canFinalizeDraft}
           currentMembershipId={currentMembershipId}
         />
         {canManageAccess ? (

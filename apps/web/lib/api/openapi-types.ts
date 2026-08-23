@@ -5251,6 +5251,144 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Pleading Drafts */
+        get: operations["get_ip_pleading_drafts_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts_get"];
+        put?: never;
+        /** Post Ip Pleading Draft */
+        post: operations["post_ip_pleading_draft_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Pleading Draft */
+        get: operations["get_ip_pleading_draft_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Ip Pleading Draft */
+        patch: operations["patch_ip_pleading_draft_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__patch"];
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Pleading Draft Approval */
+        post: operations["post_ip_pleading_draft_approval_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/export.docx": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Ip Pleading Draft Docx */
+        get: operations["download_ip_pleading_draft_docx_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__export_docx_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/finalize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Pleading Draft Finalization */
+        post: operations["post_ip_pleading_draft_finalization_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__finalize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Pleading Draft Generation */
+        post: operations["post_ip_pleading_draft_generation_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__generate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/request-changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Pleading Draft Changes Request */
+        post: operations["post_ip_pleading_draft_changes_request_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__request_changes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Pleading Draft Submission */
+        post: operations["post_ip_pleading_draft_submission_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__submit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/opponent-actions": {
         parameters: {
             query?: never;
@@ -5347,6 +5485,23 @@ export interface paths {
         get: operations["get_ip_opposition_workspace_api_ip_dockets__docket_id__proceedings__proceeding_id__opposition_workspace_get"];
         /** Put Ip Opposition Workspace */
         put: operations["put_ip_opposition_workspace_api_ip_dockets__docket_id__proceedings__proceeding_id__opposition_workspace_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/pleading-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Pleading Templates */
+        get: operations["get_ip_pleading_templates_api_ip_dockets__docket_id__proceedings__proceeding_id__pleading_templates_get"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -16495,6 +16650,8 @@ export interface components {
         };
         /** DraftRecord */
         DraftRecord: {
+            /** Company Id */
+            company_id: string;
             /**
              * Created At
              * Format: date-time
@@ -16511,8 +16668,12 @@ export interface components {
             draft_type: "brief" | "notice" | "reply" | "memo" | "other";
             /** Id */
             id: string;
+            /** Ip Docket Id */
+            ip_docket_id: string | null;
+            /** Ip Proceeding Id */
+            ip_proceeding_id: string | null;
             /** Matter Id */
-            matter_id: string;
+            matter_id: string | null;
             /** Review Required */
             review_required: boolean;
             /** Reviews */
@@ -16611,6 +16772,10 @@ export interface components {
             body: string;
             /** Citations */
             citations: string[];
+            /** Context Manifest */
+            context_manifest: {
+                [key: string]: unknown;
+            };
             /**
              * Created At
              * Format: date-time
@@ -16626,8 +16791,16 @@ export interface components {
             model_run_id: string | null;
             /** Revision */
             revision: number;
+            /** Source Manifest */
+            source_manifest: {
+                [key: string]: unknown;
+            }[];
             /** Summary */
             summary: string | null;
+            /** Template Manifest */
+            template_manifest: {
+                [key: string]: unknown;
+            };
             /** Verified Citation Count */
             verified_citation_count: number;
         };
@@ -23758,6 +23931,44 @@ export interface components {
             source_notice_reference?: string | null;
             /** Source Reference */
             source_reference?: string | null;
+        };
+        /** IpPleadingDraftCreateRequest */
+        IpPleadingDraftCreateRequest: {
+            /** Facts */
+            facts?: {
+                [key: string]: unknown;
+            } | null;
+            /** Template Key */
+            template_key: string;
+            /** Title */
+            title: string;
+        };
+        /** IpPleadingTemplateListResponse */
+        IpPleadingTemplateListResponse: {
+            /** Templates */
+            templates: components["schemas"]["IpPleadingTemplateRecord"][];
+        };
+        /** IpPleadingTemplateRecord */
+        IpPleadingTemplateRecord: {
+            /** Allowed Sides */
+            allowed_sides: string[];
+            /** Allowed Stages */
+            allowed_stages: string[];
+            /**
+             * Draft Type
+             * @enum {string}
+             */
+            draft_type: "brief" | "notice" | "reply" | "memo" | "other";
+            /** Format Profile */
+            format_profile: string;
+            /** Jurisdictions */
+            jurisdictions: string[];
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Version */
+            version: string;
         };
         /**
          * IpPortfolioCounts
@@ -46945,6 +47156,362 @@ export interface operations {
             };
         };
     };
+    get_ip_pleading_drafts_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_pleading_draft_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpPleadingDraftCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_pleading_draft_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                draft_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_ip_pleading_draft_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                draft_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftEditRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_pleading_draft_approval_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                draft_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_ip_pleading_draft_docx_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__export_docx_get: {
+        parameters: {
+            query?: {
+                version_id?: string | null;
+            };
+            header?: never;
+            path: {
+                docket_id: string;
+                draft_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_pleading_draft_finalization_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__finalize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                draft_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_pleading_draft_generation_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__generate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                draft_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftGenerateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_pleading_draft_changes_request_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__request_changes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                draft_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_pleading_draft_submission_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__submit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                draft_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_ip_opposition_opponent_action_api_ip_dockets__docket_id__proceedings__proceeding_id__opponent_actions_post: {
         parameters: {
             query?: never;
@@ -47172,6 +47739,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpOppositionWorkspaceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_pleading_templates_api_ip_dockets__docket_id__proceedings__proceeding_id__pleading_templates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpPleadingTemplateListResponse"];
                 };
             };
             /** @description Validation Error */

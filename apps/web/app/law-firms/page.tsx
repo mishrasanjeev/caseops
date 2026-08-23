@@ -7,6 +7,7 @@ import {
   Building2,
   Clock3,
   FileChartColumn,
+  FileSignature,
   FileText,
   Gavel,
   Landmark,
@@ -112,6 +113,11 @@ const platformMoves = [
     icon: PanelsTopLeft,
     title: "Trademark portfolio",
     body: "Search distinct application and opposition numbers. Run applicant and opponent TM-O work, Rules 45-47 evidence packages, governed extensions, shared hearing preparation, orders, compliance directions and order-linked appeals with source evidence, immutable history and dual deadline ownership.",
+  },
+  {
+    icon: FileSignature,
+    title: "Trademark pleading studio",
+    body: "Draft opposition notices, counterstatements and evidence affidavits from side-and-stage-aware templates. Every revision freezes the registry context, linked document-version hashes, model and prompt identity, then stays under partner review through approval, finalization and DOCX export.",
   },
   {
     icon: Link2,
