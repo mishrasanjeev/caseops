@@ -1193,9 +1193,9 @@ def test_matter_disposal_wins_bulk_ip_coverage_reassignment_race(
     pg_engine,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Bulk reassignment waits on Matter, then sees neutralized children."""
+    """Bulk reassignment sees cancelled Matter work without mutating IP cover."""
 
-    from caseops_api.db.models import IpDeadlineCoverage, Matter
+    from caseops_api.db.models import IpDeadlineCoverage, Matter, MatterDeadline
     from caseops_api.schemas.ip_operations import IpCoverageBulkReassignRequest
     from caseops_api.schemas.matters import MatterLifecycleStatusRequest
     from caseops_api.services import matters as matter_service
@@ -1283,9 +1283,11 @@ def test_matter_disposal_wins_bulk_ip_coverage_reassignment_race(
     assert transfer_result.coverage_ids == []
     with Session(pg_engine) as session:
         coverage = session.get(IpDeadlineCoverage, fixture["coverage_id"])
+        deadline = session.get(MatterDeadline, fixture["deadline_id"])
         assert coverage is not None
-        assert coverage.coverage_status == "inactive_lifecycle"
-        assert coverage.calendar_projection_status == "inactive_lifecycle"
+        assert deadline is not None and deadline.status == "cancelled"
+        assert coverage.coverage_status == "accepted"
+        assert coverage.calendar_projection_status == "pending"
         assert coverage.responsible_membership_id == fixture["owner_id"]
         assert coverage.pending_replacement_membership_id is None
         assert coverage.replacement_decision == "none"
@@ -1296,11 +1298,11 @@ def test_matter_disposal_wins_ip_coverage_proposal_race(
     pg_engine,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A proposal waits on Matter and rejects its now-stale preview."""
+    """A proposal rejects a stale preview while preserving independent IP cover."""
 
     from fastapi import HTTPException
 
-    from caseops_api.db.models import IpDeadlineCoverage, Matter
+    from caseops_api.db.models import IpDeadlineCoverage, Matter, MatterDeadline
     from caseops_api.schemas.ip_operations import (
         IpCoverageReassignPreviewRequest,
         IpCoverageReassignProposeRequest,
@@ -1416,9 +1418,11 @@ def test_matter_disposal_wins_ip_coverage_proposal_race(
     assert proposal_detail["code"] == "ip_coverage_preview_stale"
     with Session(pg_engine) as session:
         coverage = session.get(IpDeadlineCoverage, fixture["coverage_id"])
+        deadline = session.get(MatterDeadline, fixture["deadline_id"])
         assert coverage is not None
-        assert coverage.coverage_status == "inactive_lifecycle"
-        assert coverage.calendar_projection_status == "inactive_lifecycle"
+        assert deadline is not None and deadline.status == "cancelled"
+        assert coverage.coverage_status == "accepted"
+        assert coverage.calendar_projection_status == "pending"
         assert coverage.responsible_membership_id == fixture["owner_id"]
         assert coverage.pending_replacement_membership_id is None
         assert coverage.replacement_decision == "none"
