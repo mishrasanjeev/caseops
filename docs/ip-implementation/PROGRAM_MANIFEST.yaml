@@ -2147,11 +2147,13 @@
         "IPLF-043A",
         "IPLF-043B"
       ],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md"
+      ],
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -12091,8 +12093,8 @@
       "source_kind": "derived",
       "scope_source": "IPLF-043",
       "primary_behavior": "Foundation, ownership, and backend contract",
-      "migration_boundary": "Additive expand/backfill/verify/switch boundary when persistence changes; otherwise explicitly no schema change.",
-      "release_boundary": "Compatible slices may share one exact integrated candidate, CI matrix, staged rollout, rollback plan, and dated deployed acceptance; this row remains a traceability and activation unit, not a mandatory separate release.",
+      "migration_boundary": "No schema change. Extend existing ip_docket_events, ip_deadlines, matter_hearings/reminders, ip_proceedings, ip_identifiers, Matter access, responsibility, notification, and audit owners; do not add parallel evidence, hearing, order, appeal, or deadline stores.",
+      "release_boundary": "Pass shared-opposition schema/API/canonical-owner coverage, complete opposition and OpenAPI regressions, full web/typecheck/build, and applicant/opponent/shared browser journeys; then require hosted CI/security/CodeQL, exact-main CI, exact-revision deployment, and dated production identity/health proof before release verification.",
       "requirement_ids": [],
       "journey_path_ids": [],
       "ownership": [
@@ -12104,23 +12106,64 @@
           "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
         }
       ],
-      "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "dependencies": [
+        "IPLF-042B"
+      ],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/schemas/ip_oppositions.py",
+        "apps/api/src/caseops_api/schemas/ip_lifecycle.py",
+        "apps/api/src/caseops_api/services/ip_opposition_shared.py",
+        "apps/api/src/caseops_api/services/ip_oppositions.py",
+        "apps/api/src/caseops_api/services/ip_deadline_workflow.py",
+        "apps/api/src/caseops_api/services/ip_lifecycle.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/web/lib/api/openapi-types.ts"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_opposition_shared_workflow.py",
+        "apps/api/tests/test_ip_opposition_foundation.py",
+        "apps/api/tests/test_ip_opposition_applicant_workflow.py",
+        "apps/api/tests/test_ip_opposition_opponent_workflow.py",
+        "apps/api/tests/test_openapi_quality.py",
+        "apps/api/tests/test_route_coverage_matrix.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md",
+          "revision": "880987323eefac24978e5dc6b5506a17d9ec2b78",
+          "environment": "local SQLite API tests plus fresh API/web Playwright servers and production web build",
+          "fixtures": "deterministic synthetic applicant/opponent opposition, governed deadlines, distinct legal/reviewer identities, Rules 45/46/47 and further-evidence packages, shared hearing/reminders, sourced order, separate appeal proceeding and identifier; no live filing or fabricated production legal fact",
+          "assertions": "canonical owner composition, atomic deadline replacement, evidence package completeness, leave matching, hearing preparation and notes, order and appeal linkage, progression gates, provenance, duplicate correction, backdated review, capability and tenant isolation",
+          "result": "passed",
+          "recorded_at": "2026-08-23T17:01:34+05:30"
+        }
+      ],
       "approvals": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-043A-HOSTED-RELEASE",
+          "state": "open",
+          "summary": "Local backend and integrated proof passed on implementation revision 88098732; hosted exact-head CI, exact-main CI, deployment, and dated production identity/health verification remain pending."
+        }
+      ],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Open the exact-candidate PR, require CI/security/CodeQL, merge only that green head, verify exact main, deploy one immutable revision, and record dated production identity/health evidence.",
+        "Proceed independently to IPLF-044 for Matter linkage and synchronized but independent lifecycle display."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Adds typed opposition_shared_action facts to existing append-only ip_docket_events and extends deadlines only through the existing atomic ip_deadlines override writer.",
+        "Schedules hearings/reminders through existing matter_hearings and reminder owners and links appeals only to existing separately identified ip_proceedings or access-visible Matters; no migration or backfill is required."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        "docs/ip-implementation/IP_CORE_RECORD_MODEL.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md"
+      ],
+      "allocation_review": "2026-08-23 duplicate-work review confirms the backend extends IPLF-040 through IPLF-042's proceeding/event aggregate and the existing governed deadline, hearing/reminder, identifier, Matter access, responsibility, notification, and audit owners. Direct IPLF-043 behavior covers IP-OPP-05, IP-OPP-06, IP-OPP-10, IP-OPP-11, IP-OPP-12, IP-OPP-13, and IP-OPP-19 without reimplementing applicant/opponent pleadings. Multi-class partial outcomes, translation, adjournment detail, nonappearance, security for costs, and downstream disposition remain IPLF-048 scope.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "administrative_exception": {
@@ -12146,8 +12189,8 @@
       "source_kind": "derived",
       "scope_source": "IPLF-043",
       "primary_behavior": "User workflow, exceptions, and release proof",
-      "migration_boundary": "Additive expand/backfill/verify/switch boundary when persistence changes; otherwise explicitly no schema change.",
-      "release_boundary": "Compatible slices may share one exact integrated candidate, CI matrix, staged rollout, rollback plan, and dated deployed acceptance; this row remains a traceability and activation unit, not a mandatory separate release.",
+      "migration_boundary": "No schema change. The integrated workspace calls IPLF-043A and existing deadline, hearing/reminder, proceeding, identifier, Matter access, responsibility, notification, document-reference, and audit owners.",
+      "release_boundary": "Pass shared component/workspace regressions, full web/typecheck/build, and real API/web/database hearing-to-order-to-appeal flow at desktop/mobile; then require hosted CI/security/CodeQL, exact-main CI, exact-revision deployment, and dated production proof.",
       "requirement_ids": [
         "IP-OPP-01",
         "IP-OPP-02",
@@ -12187,22 +12230,68 @@
       "dependencies": [
         "IPLF-043A"
       ],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "apps/web/components/ip/IpOppositionSharedWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionWorkspace.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/lib/api/openapi-types.ts",
+        "apps/web/app/guide/page.tsx",
+        "apps/web/app/law-firms/page.tsx",
+        "apps/web/app/llms.txt/route.ts",
+        "apps/web/app/llms-full.txt/route.ts",
+        "apps/api/src/caseops_api/services/ip_opposition_shared.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_opposition_shared_workflow.py::test_deadline_extension_is_atomic_and_preserves_canonical_history",
+        "apps/api/tests/test_ip_opposition_shared_workflow.py::test_evidence_packages_enforce_side_stage_version_and_further_evidence_leave",
+        "apps/api/tests/test_ip_opposition_shared_workflow.py::test_hearing_order_and_appeal_use_shared_records_and_gate_stages",
+        "apps/api/tests/test_ip_opposition_shared_workflow.py::test_shared_workflow_is_tenant_scoped_and_does_not_leak_existence",
+        "apps/web/components/ip/IpOppositionSharedWorkflow.test.tsx",
+        "apps/web/components/ip/IpOppositionWorkspace.test.tsx",
+        "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md",
+          "revision": "880987323eefac24978e5dc6b5506a17d9ec2b78",
+          "environment": "local SQLite API tests plus fresh API/web Playwright servers at desktop and mobile viewports",
+          "fixtures": "deterministic synthetic applicant/opponent opposition, active legal deadline, distinct legal/reviewer actors, complete evidence packages, shared hearing/reminders, preparation and notes, sourced order, separate appeal proceeding and identifier; no live filing or fabricated production legal fact",
+          "assertions": "atomic extension, complete evidence and leave gates, durable hearing reminders, preparation and post-hearing state guidance, order and appeal linkage, responsive UI, API data, capability and tenant isolation",
+          "result": "passed",
+          "recorded_at": "2026-08-23T17:01:34+05:30"
+        }
+      ],
       "approvals": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-043B-HOSTED-RELEASE",
+          "state": "open",
+          "summary": "The local API/UI/browser journey passed on implementation revision 88098732; hosted exact-head CI, exact-main CI, deployment, and dated production identity/health verification remain pending."
+        }
+      ],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Open the exact-candidate PR, require every hosted gate, merge only the verified head, verify exact main, deploy one immutable revision, and record production identity/health evidence.",
+        "Continue IPLF-044 next; retain multi-class partial outcomes, translation, adjournment detail, nonappearance, security for costs, and downstream disposition under IPLF-048."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "The UI writes only through IPLF-043A and existing hearing/reminder, deadline override, proceeding, identifier, Matter access, responsibility, notification, document-reference, and audit APIs.",
+        "Registry-derived facts remain on the candidate/reconciliation path; counsel-confirmed shared actions retain required source, evidence, documents, reason, responsible membership, and authorization."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        "apps/web/app/guide/page.tsx",
+        "apps/web/app/law-firms/page.tsx",
+        "apps/web/app/llms.txt/route.ts",
+        "apps/web/app/llms-full.txt/route.ts",
+        "docs/ip-implementation/IP_CORE_RECORD_MODEL.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md"
+      ],
+      "allocation_review": "2026-08-23 review confirms IPLF-043 directly completes the shared extension, Rules 45/46/47 and leave-gated further-evidence package, hearing preparation/note, sourced order, separate appeal-link, and evidence-backed closure contribution for IP-OPP-05, IP-OPP-06, IP-OPP-10, IP-OPP-11, IP-OPP-12, IP-OPP-13, and IP-OPP-19. Reciprocal IP-OPP-01 through IP-OPP-24 allocation is retained for manifest integrity, but applicant/opponent pleading work remains owned by IPLF-040 through IPLF-042 and detailed later exceptions remain IPLF-048/IPLF-049; this row does not duplicate or newly claim them.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "administrative_exception": {
