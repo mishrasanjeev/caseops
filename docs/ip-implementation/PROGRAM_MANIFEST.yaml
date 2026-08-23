@@ -12354,6 +12354,8 @@
         "apps/api/tests/test_ip_prd_slices.py::test_ip_matter_links_omit_inaccessible_side_without_link_metadata_leak",
         "apps/api/tests/test_matter_timeline.py",
         "apps/api/tests/test_ip_lifecycle_service.py",
+        "apps/api/tests/test_postgres_validation.py::test_matter_disposal_wins_bulk_ip_coverage_reassignment_race",
+        "apps/api/tests/test_postgres_validation.py::test_matter_disposal_wins_ip_coverage_proposal_race",
         "apps/api/tests/test_route_coverage_matrix.py",
         "apps/api/tests/test_openapi_quality.py",
         "apps/api/tests/test_ip_data_governance_map.py"
@@ -12364,7 +12366,7 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m4/IPLF-044/local-2026-08-23.md",
-          "revision": "3c94a564ca4e88bc81a414efa286d5d604612a15",
+          "revision": "d6a6d7b049814e0d8a783f55e5654c5219850f09",
           "environment": "local SQLite API and Alembic tests plus generated OpenAPI and data-governance validation",
           "fixtures": "deterministic synthetic active/disposed Matters, unrestricted and restricted IP dockets, operational and advisory relationships, pre-link and in-window IP events, cross-membership access, migration backfill and retained-history downgrade; no live legal or production fact",
           "assertions": "effective history, one operational Matter, separate retirement rationale, lifecycle independence, temporal timeline pagination, two-sided access non-disclosure, tenant foreign keys, migration round trip/refusal, route and OpenAPI coverage",
@@ -12377,7 +12379,7 @@
         {
           "id": "IPLF-044A-HOSTED-RELEASE",
           "state": "open",
-          "summary": "Local backend and migration proof passed on candidate revision 3c94a564; hosted exact-head CI, exact-main CI, deployment, and dated production identity/health verification remain pending."
+          "summary": "Local backend, PostgreSQL 17 lifecycle-race, and migration proof passed on candidate revision d6a6d7b0; hosted exact-head CI, exact-main CI, deployment, and dated production identity/health verification remain pending."
         }
       ],
       "next_actions": [
@@ -12463,7 +12465,7 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m4/IPLF-044/local-2026-08-23.md",
-          "revision": "3c94a564ca4e88bc81a414efa286d5d604612a15",
+          "revision": "d6a6d7b049814e0d8a783f55e5654c5219850f09",
           "environment": "local production Next.js build plus fresh SQLite API and web Playwright servers at desktop and 390px viewports",
           "fixtures": "deterministic synthetic operational and litigation Matters, manually created trademark application, system operational relationship, UI-created litigation relationship, Registry candidate event and UI retirement; no live filing or fabricated production legal fact",
           "assertions": "searchable relationship creation, independent side-by-side lifecycle display, Matter-side IP navigation, effective source-linked timeline composition, retirement persistence and counts, responsive no-overflow layout",
@@ -12476,7 +12478,7 @@
         {
           "id": "IPLF-044B-HOSTED-RELEASE",
           "state": "open",
-          "summary": "The local API/UI/browser journey passed on candidate revision 3c94a564; hosted exact-head CI, exact-main CI, deployment, and dated production identity/health verification remain pending."
+          "summary": "The local API/UI/browser journey and PostgreSQL 17 lifecycle-race proof passed on candidate revision d6a6d7b0; hosted exact-head CI, exact-main CI, deployment, and dated production identity/health verification remain pending."
         }
       ],
       "next_actions": [
