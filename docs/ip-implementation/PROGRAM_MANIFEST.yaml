@@ -2174,10 +2174,11 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "not_required",
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m4/IPLF-044/local-2026-08-23.md"
+        "docs/ip-implementation/evidence/m4/IPLF-044/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-044/release-2026-08-23.md"
       ],
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
@@ -12362,7 +12363,8 @@
         "apps/api/tests/test_ip_data_governance_map.py"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m4/IPLF-044/local-2026-08-23.md"
+        "docs/ip-implementation/evidence/m4/IPLF-044/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-044/release-2026-08-23.md"
       ],
       "evidence_metadata": [
         {
@@ -12373,19 +12375,22 @@
           "assertions": "effective history, one operational Matter, separate retirement rationale, lifecycle independence, temporal timeline pagination, two-sided access non-disclosure, tenant foreign keys, migration round trip/refusal, route and OpenAPI coverage",
           "result": "passed",
           "recorded_at": "2026-08-23T18:46:31+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m4/IPLF-044/release-2026-08-23.md",
+          "revision": "351fc72a8247703b7ca3a496e0bf07f7738905d7",
+          "environment": "hosted exact-head and exact-main CI plus immutable Cloud Run production deployment and exact-release Playwright acceptance",
+          "fixtures": "dedicated production QA tenant, RAM regression data, A0 lifecycle fixture, and notice fixture; renewal legal-rule IDs remained unconfigured and were not fabricated",
+          "assertions": "CI, Security, CodeQL, migration, image identity, scheduler reconciliation, production health, RAM batch, Matter/IP lifecycle preservation, notice workflow, and fail-closed renewal preflight",
+          "result": "passed",
+          "recorded_at": "2026-08-23T21:40:00+05:30"
         }
       ],
       "approvals": [],
-      "blockers": [
-        {
-          "id": "IPLF-044A-HOSTED-RELEASE",
-          "state": "open",
-          "summary": "Local backend, PostgreSQL 17 lifecycle-race, Today-view regression, and migration proof passed on candidate revision b1433276; hosted exact-head CI, exact-main CI, deployment, and dated production identity/health verification remain pending."
-        }
-      ],
+      "blockers": [],
       "next_actions": [
-        "Open the exact-candidate PR, require CI/security/CodeQL, merge only that green head, verify exact main, deploy one immutable revision, and record dated production identity/health evidence.",
-        "Proceed to IPLF-045 only after the IPLF-044 hosted merge gate is satisfied."
+        "Proceed to IPLF-045 without introducing a parallel drafting engine.",
+        "Keep the independent IPLF-037B legal-rule fixture activation blocker visible until four genuine approved production IDs exist."
       ],
       "data_impact": [
         "Adds ip_matter_links as the relationship-history owner and backfills each existing non-null ip_docket_records.matter_id as a deterministic migration-sourced operational relationship without changing either parent.",
@@ -12399,7 +12404,7 @@
       "allocation_review": "2026-08-23 duplicate-work review confirms ip_matter_links owns only effective relationship history. IP dockets and Matters retain independent lifecycle writers; Matter timeline reads IP events by reference; no task, deadline, hearing, document, notification, billing, opposition, audit, or activity owner is duplicated.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "not_required",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
@@ -12461,7 +12466,8 @@
         "apps/api/tests/test_ip_prd_slices.py::test_ip_matter_links_omit_inaccessible_side_without_link_metadata_leak"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m4/IPLF-044/local-2026-08-23.md"
+        "docs/ip-implementation/evidence/m4/IPLF-044/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-044/release-2026-08-23.md"
       ],
       "evidence_metadata": [
         {
@@ -12472,19 +12478,22 @@
           "assertions": "searchable relationship creation, independent side-by-side lifecycle display, Matter-side IP navigation, effective source-linked timeline composition, retirement persistence and counts, responsive no-overflow layout",
           "result": "passed",
           "recorded_at": "2026-08-23T18:46:31+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m4/IPLF-044/release-2026-08-23.md",
+          "revision": "351fc72a8247703b7ca3a496e0bf07f7738905d7",
+          "environment": "hosted exact-head and exact-main CI plus immutable Cloud Run production deployment and exact-release Playwright acceptance",
+          "fixtures": "dedicated production QA tenant, RAM regression data, A0 lifecycle fixture, and notice fixture; renewal legal-rule IDs remained unconfigured and were not fabricated",
+          "assertions": "CI, Security, CodeQL, image identity, production health, RAM batch, Matter/IP lifecycle preservation, notice workflow, responsive hearing cache update, and fail-closed renewal preflight",
+          "result": "passed",
+          "recorded_at": "2026-08-23T21:40:00+05:30"
         }
       ],
       "approvals": [],
-      "blockers": [
-        {
-          "id": "IPLF-044B-HOSTED-RELEASE",
-          "state": "open",
-          "summary": "The local API/UI/browser journey, Today-view regression, and PostgreSQL 17 lifecycle-race proof passed on candidate revision b1433276; hosted exact-head CI, exact-main CI, deployment, and dated production identity/health verification remain pending."
-        }
-      ],
+      "blockers": [],
       "next_actions": [
-        "Open the exact-candidate PR, require every hosted gate, merge only the verified head, verify exact main, deploy one immutable revision, and record production identity/health evidence.",
-        "Continue IPLF-045 next without introducing a parallel drafting engine."
+        "Continue IPLF-045 next without introducing a parallel drafting engine.",
+        "Keep the independent IPLF-037B legal-rule fixture activation blocker visible until four genuine approved production IDs exist."
       ],
       "data_impact": [
         "The UI writes only through IPLF-044A and reads existing Matter and IP lifecycle owners side by side; timeline events remain source references and are never copied to matter_activities.",
@@ -12501,7 +12510,7 @@
       "allocation_review": "2026-08-23 workflow review confirms this slice exposes IPLF-044A through existing IP and Matter workspaces and the existing Matter timeline. It adds no parallel lifecycle, activity, task, deadline, hearing, document, notification, billing, opposition, access, or audit writer.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "not_required",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
