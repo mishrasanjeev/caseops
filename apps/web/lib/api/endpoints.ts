@@ -8799,6 +8799,28 @@ export type IpOppositionWorkspace = {
   readiness_gaps: string[];
 };
 
+export type IpOppositionApplicantWorkflow = {
+  proceeding_id: string;
+  represented_side: "applicant";
+  opposition_number_status: "confirmed" | "pending_allocation";
+  applicant_actions: IpDocketEvent[];
+  deadlines: Array<{
+    workflow_stage: "counterstatement_due" | "applicant_evidence_due";
+    deadline: IpLegalDeadline;
+  }>;
+  next_required_action:
+    | "record_opposition_number"
+    | "propose_counterstatement_deadline"
+    | "confirm_counterstatement_deadline"
+    | "advance_to_counterstatement_due"
+    | "file_counterstatement"
+    | "record_counterstatement_service"
+    | "propose_applicant_evidence_deadline"
+    | "confirm_applicant_evidence_deadline"
+    | "record_applicant_evidence_decision"
+    | "await_opponent_or_later_stage";
+};
+
 export type IpDocketEvent = {
   id: string;
   company_id: string;
@@ -10438,6 +10460,113 @@ export async function fetchIpOppositionWorkspace(input: {
 }): Promise<IpOppositionWorkspace> {
   return apiRequest(
     `/api/ip/dockets/${encodeURIComponent(input.docketId)}/proceedings/${encodeURIComponent(input.proceedingId)}/opposition-workspace`,
+  );
+}
+
+export async function fetchIpOppositionApplicantWorkflow(input: {
+  docketId: string;
+  proceedingId: string;
+}): Promise<IpOppositionApplicantWorkflow> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/proceedings/${encodeURIComponent(input.proceedingId)}/applicant-workflow`,
+  );
+}
+
+export async function createIpOppositionIdentifier(input: {
+  docketId: string;
+  proceedingId: string;
+  rawValue: string;
+  office: string;
+  jurisdiction: string;
+  source: string;
+  effectiveFrom: string;
+}): Promise<{ identifier: IpIdentifier; duplicate_candidates: IpIdentifier[] }> {
+  return apiRequest(`/api/ip/dockets/${encodeURIComponent(input.docketId)}/identifiers`, {
+    method: "POST",
+    body: {
+      identifier_kind: "opposition",
+      raw_value: input.rawValue,
+      office: input.office,
+      jurisdiction: input.jurisdiction,
+      source: input.source,
+      effective_from: input.effectiveFrom,
+      is_primary: true,
+      proceeding_id: input.proceedingId,
+    },
+  });
+}
+
+export async function proposeIpOppositionApplicantDeadline(input: {
+  docketId: string;
+  proceedingId: string;
+  workflowStage: "counterstatement_due" | "applicant_evidence_due";
+  triggerEventId: string;
+  ruleVersionId: string;
+  calendarVersionId: string;
+  baseDate: string | null;
+  certainty: "certain" | "uncertain" | "conflicting" | "unknown";
+}): Promise<IpOppositionApplicantWorkflow["deadlines"][number]> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/proceedings/${encodeURIComponent(input.proceedingId)}/applicant-deadlines`,
+    {
+      method: "POST",
+      body: {
+        workflow_stage: input.workflowStage,
+        trigger_event_id: input.triggerEventId,
+        rule_version_id: input.ruleVersionId,
+        calendar_version_id: input.calendarVersionId,
+        base_date: input.baseDate,
+        base_date_certainty: input.certainty,
+        date_precision: "date",
+        is_critical: true,
+      },
+    },
+  );
+}
+
+export async function recordIpOppositionApplicantAction(input: {
+  docketId: string;
+  proceedingId: string;
+  lifecycleVersion: number;
+  proceedingVersion: number;
+  responsibleMembershipId: string;
+  actionKind:
+    | "counterstatement_filed"
+    | "counterstatement_served"
+    | "applicant_evidence_decision";
+  sourceReference: string;
+  effectiveAt: string;
+  reason: string;
+  filingReference?: string | null;
+  filedOn?: string | null;
+  verification?: Record<string, unknown> | null;
+  service?: Record<string, unknown> | null;
+  evidenceElection?: "file_evidence" | "rely_on_pleaded_facts" | null;
+  evidenceRefs?: string[];
+  documentRefs?: string[];
+}): Promise<IpOppositionApplicantWorkflow> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/proceedings/${encodeURIComponent(input.proceedingId)}/applicant-actions`,
+    {
+      method: "POST",
+      body: {
+        expected_lifecycle_version: input.lifecycleVersion,
+        expected_proceeding_version: input.proceedingVersion,
+        action_kind: input.actionKind,
+        source: "manual",
+        source_reference: input.sourceReference,
+        effective_at: input.effectiveAt,
+        responsible_membership_id: input.responsibleMembershipId,
+        reason: input.reason,
+        filing_reference: input.filingReference ?? null,
+        filed_on: input.filedOn ?? null,
+        verification: input.verification ?? null,
+        service: input.service ?? null,
+        evidence_election: input.evidenceElection ?? null,
+        evidence_refs: input.evidenceRefs ?? [],
+        document_refs: input.documentRefs ?? [],
+      },
+    },
   );
 }
 

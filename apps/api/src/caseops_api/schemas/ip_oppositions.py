@@ -5,6 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from caseops_api.schemas.ip_deadlines import IpDeadlineRecord
 from caseops_api.schemas.ip_lifecycle import IpDocketEventResponse
 from caseops_api.schemas.ip_records import IpIdentifierResponse, IpProceedingResponse
 
@@ -117,9 +118,10 @@ class IpOppositionWorkspaceUpsertRequest(BaseModel):
         ]
         if len(scope_keys) != len(set(scope_keys)):
             raise ValueError("Duplicate challenged class segments are not allowed.")
-        if self.client_instruction_state == "confirmed" and not (
-            self.client_instruction_reference or ""
-        ).strip():
+        if (
+            self.client_instruction_state == "confirmed"
+            and not (self.client_instruction_reference or "").strip()
+        ):
             raise ValueError("Confirmed client instruction requires a reference.")
         return self
 
@@ -151,3 +153,104 @@ class IpOppositionWorkspaceResponse(BaseModel):
     stage_events: list[IpDocketEventResponse]
     ready_for_stage_progression: bool
     readiness_gaps: list[str]
+
+
+class IpOppositionPleadingVerification(BaseModel):
+    signatory: str = Field(min_length=2, max_length=255)
+    authority: str = Field(min_length=2, max_length=500)
+    place: str = Field(min_length=2, max_length=255)
+    verified_on: date
+    verified_paragraph_ranges: list[str] = Field(min_length=1, max_length=100)
+    knowledge_basis: str = Field(min_length=5, max_length=2000)
+    signed_document_ref: str = Field(min_length=2, max_length=500)
+
+
+class IpOppositionApplicantActionRequest(BaseModel):
+    expected_lifecycle_version: int = Field(ge=0)
+    expected_proceeding_version: int = Field(ge=1)
+    action_kind: Literal[
+        "counterstatement_filed",
+        "counterstatement_served",
+        "applicant_evidence_decision",
+    ]
+    source: Literal["manual", "registry", "integration", "system"]
+    source_reference: str = Field(min_length=2, max_length=255)
+    effective_at: datetime
+    responsible_membership_id: str
+    reason: str = Field(min_length=5, max_length=2000)
+    filing_reference: str | None = Field(default=None, max_length=500)
+    filed_on: date | None = None
+    evidence_election: Literal["file_evidence", "rely_on_pleaded_facts"] | None = None
+    verification: IpOppositionPleadingVerification | None = None
+    service: IpOppositionServiceFact | None = None
+    evidence_refs: list[str] = Field(default_factory=list, max_length=100)
+    document_refs: list[str] = Field(default_factory=list, max_length=100)
+
+    @model_validator(mode="after")
+    def validate_applicant_action(self) -> IpOppositionApplicantActionRequest:
+        if self.effective_at.utcoffset() is None:
+            raise ValueError("Applicant action time must include a timezone.")
+        if self.action_kind == "counterstatement_filed":
+            if not all(
+                (
+                    (self.filing_reference or "").strip(),
+                    self.filed_on,
+                    self.verification,
+                    self.document_refs,
+                    self.evidence_refs,
+                )
+            ):
+                raise ValueError(
+                    "A filed counterstatement requires filing facts, signed verification, "
+                    "the final document, and filing evidence."
+                )
+        elif self.action_kind == "counterstatement_served":
+            if self.service is None:
+                raise ValueError("Counterstatement service requires complete service facts.")
+        elif self.evidence_election is None:
+            raise ValueError(
+                "Applicant evidence requires an explicit filing or pleaded-facts election."
+            )
+        if self.action_kind != "applicant_evidence_decision" and self.evidence_election:
+            raise ValueError("An evidence election is only valid for applicant evidence.")
+        if self.evidence_election == "file_evidence" and not (
+            self.document_refs and self.evidence_refs
+        ):
+            raise ValueError("Filed applicant evidence requires document and filing evidence.")
+        return self
+
+
+class IpOppositionApplicantDeadlineProposalRequest(BaseModel):
+    workflow_stage: Literal["counterstatement_due", "applicant_evidence_due"]
+    trigger_event_id: str
+    rule_version_id: str
+    calendar_version_id: str
+    base_date: date | None
+    base_date_certainty: Literal["certain", "uncertain", "conflicting", "unknown"]
+    date_precision: Literal["unknown", "date", "datetime", "session"] = "date"
+    is_critical: bool = True
+
+
+class IpOppositionApplicantDeadlineRecord(BaseModel):
+    workflow_stage: Literal["counterstatement_due", "applicant_evidence_due"]
+    deadline: IpDeadlineRecord
+
+
+class IpOppositionApplicantWorkflowResponse(BaseModel):
+    proceeding_id: str
+    represented_side: Literal["applicant"]
+    opposition_number_status: Literal["confirmed", "pending_allocation"]
+    applicant_actions: list[IpDocketEventResponse]
+    deadlines: list[IpOppositionApplicantDeadlineRecord]
+    next_required_action: Literal[
+        "record_opposition_number",
+        "propose_counterstatement_deadline",
+        "confirm_counterstatement_deadline",
+        "advance_to_counterstatement_due",
+        "file_counterstatement",
+        "record_counterstatement_service",
+        "propose_applicant_evidence_deadline",
+        "confirm_applicant_evidence_deadline",
+        "record_applicant_evidence_decision",
+        "await_opponent_or_later_stage",
+    ]

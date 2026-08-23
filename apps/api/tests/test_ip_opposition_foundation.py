@@ -390,6 +390,7 @@ def test_exception_and_closure_paths_require_authority_and_complete_evidence(
             to_stage="counterstatement_due",
             transition_kind="skipped",
             authority_reference="order:registry:skip-service",
+            authorized_confirmation="membership:reviewer:fixture",
         ),
     )
     assert skipped.status_code == 200, skipped.text

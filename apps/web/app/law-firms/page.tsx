@@ -110,7 +110,7 @@ const platformMoves = [
   {
     icon: PanelsTopLeft,
     title: "Trademark portfolio",
-    body: "Search exact application and opposition numbers, group independent filings by mark or canonical client, and manage source-backed prosecution events, corrections and registry reconciliation from a permission-scoped workspace.",
+    body: "Search distinct application and opposition numbers, then run applicant-side opposition work from pending Registry allocation through governed counterstatement and Rule 46 deadlines, signed TM-O evidence, service, dual ownership and explicit evidence election.",
   },
   {
     icon: Clock3,

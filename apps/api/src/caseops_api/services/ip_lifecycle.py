@@ -510,6 +510,10 @@ def preview_ip_docket_event(
             payload.proceeding_id is None
             or row.resulting_stage == payload.resulting_stage
         )
+        and (
+            payload.event_kind != "opposition_applicant_action"
+            or row.payload_json.get("action_kind") == payload.payload.get("action_kind")
+        )
         and row.candidate_status != "rejected"
         and row.id != payload.supersedes_event_id
     ]
@@ -589,6 +593,10 @@ def _append_locked_event(
         and (
             payload.proceeding_id is None
             or row.resulting_stage == payload.resulting_stage
+        )
+        and (
+            payload.event_kind != "opposition_applicant_action"
+            or row.payload_json.get("action_kind") == payload.payload.get("action_kind")
         )
         and row.candidate_status != "rejected"
         and row.id != payload.supersedes_event_id

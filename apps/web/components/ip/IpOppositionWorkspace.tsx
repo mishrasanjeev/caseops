@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/Label";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Textarea } from "@/components/ui/Textarea";
+import { IpOppositionApplicantWorkflow } from "@/components/ip/IpOppositionApplicantWorkflow";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
   createIpOppositionProceeding,
@@ -138,6 +139,7 @@ export function IpOppositionWorkspace({
 
   const refreshCore = () => queryClient.invalidateQueries({ queryKey: ["ip", "core-records", docket.id] });
   const refreshWorkspace = () => queryClient.invalidateQueries({ queryKey: ["ip", "opposition-workspace", docket.id, selectedId] });
+  const refreshApplicantWorkflow = () => queryClient.invalidateQueries({ queryKey: ["ip", "opposition-applicant-workflow", docket.id, selectedId] });
   const create = useMutation({
     mutationFn: createIpOppositionProceeding,
     onSuccess: async (row) => {
@@ -275,7 +277,7 @@ export function IpOppositionWorkspace({
     onSuccess: async () => {
       toast.success("Opposition stage updated.");
       setTransitionReason("");
-      await Promise.all([refreshCore(), refreshWorkspace()]);
+      await Promise.all([refreshCore(), refreshWorkspace(), refreshApplicantWorkflow()]);
     },
     onError: (error) => toast.error(apiErrorMessage(error, "Could not update the opposition stage.")),
   });
@@ -380,6 +382,8 @@ export function IpOppositionWorkspace({
               <Button className="w-full sm:w-auto sm:self-start" type="submit" disabled={!canReview || !currentMembershipId || ruleVersion.trim().length < 2 || forum.trim().length < 2 || profileReason.trim().length < 5 || save.isPending}><Save className="h-4 w-4" /> {profile ? "Save profile revision" : "Confirm opposition profile"}</Button>
             </form>
 
+            {workspace.data.proceeding.side === "applicant" && workspace.data.profile ? <IpOppositionApplicantWorkflow docket={docket} workspace={workspace.data} canReview={canReview} currentMembershipId={currentMembershipId} /> : null}
+
             <form data-testid="ip-opposition-stage-form" className="grid min-w-0 gap-3 border-t border-[var(--color-line)] pt-4 md:grid-cols-2 xl:grid-cols-4" onSubmit={(event) => { event.preventDefault(); if (transitionInput) transition.mutate(transitionInput); }}>
               <div className="md:col-span-2 xl:col-span-4"><h4 className="flex items-center gap-2 font-semibold"><Scale className="h-4 w-4" /> Stage transition</h4></div>
               <Field label="Next stage"><select className={SELECT_CLASS} value={toStage} onChange={(event) => setToStage(event.target.value)}>{["notice_filed", "service_pending", "counterstatement_due", "counterstatement_filed", "opponent_evidence_due", "opponent_evidence_filed", "applicant_evidence_due", "applicant_evidence_filed", "reply_evidence_due", "reply_evidence_filed", "hearing_pending", "hearing_scheduled", "reserved_for_order", "decided", "appeal_pending", "appealed", "withdrawn", "closed"].map((value) => <option key={value} value={value}>{readable(value)}</option>)}</select></Field>
@@ -387,9 +391,9 @@ export function IpOppositionWorkspace({
               <Field label="Source reference"><Input value={transitionSourceRef} onChange={(event) => setTransitionSourceRef(event.target.value)} /></Field>
               <Field label="Evidence references"><Input value={transitionEvidence} onChange={(event) => setTransitionEvidence(event.target.value)} /></Field>
               <Field label="Reason"><Textarea value={transitionReason} onChange={(event) => setTransitionReason(event.target.value)} /></Field>
-              {transitionKind !== "normal" ? <Field label="Authority reference"><Input value={authorityRef} onChange={(event) => setAuthorityRef(event.target.value)} /></Field> : null}
-              {toStage === "closed" ? <><Field label="Outcome"><Input value={outcome} onChange={(event) => setOutcome(event.target.value)} /></Field><Field label="Outcome date"><Input type="date" value={outcomeDate} onChange={(event) => setOutcomeDate(event.target.value)} /></Field><Field label="Authorized confirmation"><Input value={authorizedConfirmation} onChange={(event) => setAuthorizedConfirmation(event.target.value)} /></Field></> : null}
-              <div className="flex items-end"><Button className="w-full" type="submit" disabled={!canReview || !workspace.data.ready_for_stage_progression || transitionReason.trim().length < 5 || transition.isPending}><ArrowRight className="h-4 w-4" /> Apply stage</Button></div>
+              {transitionKind !== "normal" ? <><Field label="Authority reference"><Input value={authorityRef} onChange={(event) => setAuthorityRef(event.target.value)} /></Field><Field label="Authorized confirmation"><Input value={authorizedConfirmation} onChange={(event) => setAuthorizedConfirmation(event.target.value)} /></Field></> : null}
+              {toStage === "closed" ? <><Field label="Outcome"><Input value={outcome} onChange={(event) => setOutcome(event.target.value)} /></Field><Field label="Outcome date"><Input type="date" value={outcomeDate} onChange={(event) => setOutcomeDate(event.target.value)} /></Field>{transitionKind === "normal" ? <Field label="Authorized confirmation"><Input value={authorizedConfirmation} onChange={(event) => setAuthorizedConfirmation(event.target.value)} /></Field> : null}</> : null}
+              <div className="flex items-end"><Button className="w-full" type="submit" disabled={!canReview || !workspace.data.ready_for_stage_progression || transitionReason.trim().length < 5 || (transitionKind !== "normal" && (!transitionSourceRef.trim() || !transitionEvidence.trim() || !authorityRef.trim() || !authorizedConfirmation.trim())) || (toStage === "closed" && (!outcome.trim() || !outcomeDate || !transitionSourceRef.trim() || !transitionEvidence.trim() || !authorizedConfirmation.trim())) || transition.isPending}><ArrowRight className="h-4 w-4" /> Apply stage</Button></div>
             </form>
 
             {workspace.data.stage_events.length ? <section className="border-t border-[var(--color-line)] pt-4"><h4 className="font-semibold">Stage history</h4><ol className="mt-2 space-y-2">{[...workspace.data.stage_events].reverse().map((event) => <li key={event.id} className="min-w-0 rounded-md bg-[var(--color-bg-2)] p-3 text-sm"><strong>{readable(event.before_phase ?? "intake")} → {readable(event.after_phase ?? event.resulting_stage ?? "recorded")}</strong><div className="break-words text-xs text-[var(--color-mute)]">{new Date(event.effective_at).toLocaleString()} · {event.reason}</div></li>)}</ol></section> : null}

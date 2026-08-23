@@ -146,6 +146,10 @@ from caseops_api.schemas.ip_operations import (
     ManualTrademarkApplicationCreateResponse,
 )
 from caseops_api.schemas.ip_oppositions import (
+    IpOppositionApplicantActionRequest,
+    IpOppositionApplicantDeadlineProposalRequest,
+    IpOppositionApplicantDeadlineRecord,
+    IpOppositionApplicantWorkflowResponse,
     IpOppositionWorkspaceResponse,
     IpOppositionWorkspaceUpsertRequest,
 )
@@ -327,6 +331,11 @@ from caseops_api.services.ip_operations import (
     save_ip_docket_queue,
     sign_off_ip_control_review,
     verify_ip_deadline_incident,
+)
+from caseops_api.services.ip_opposition_applicant import (
+    get_applicant_workflow,
+    propose_applicant_deadline,
+    record_applicant_action,
 )
 from caseops_api.services.ip_opposition_workspace import (
     get_opposition_workspace,
@@ -2449,6 +2458,66 @@ async def put_ip_opposition_workspace(
     session: DbSession,
 ) -> IpOppositionWorkspaceResponse:
     return save_opposition_workspace(
+        session,
+        context=context,
+        docket_id=docket_id,
+        proceeding_id=proceeding_id,
+        payload=payload,
+    )
+
+
+@router.get(
+    "/dockets/{docket_id}/proceedings/{proceeding_id}/applicant-workflow",
+    response_model=IpOppositionApplicantWorkflowResponse,
+)
+async def get_ip_opposition_applicant_workflow(
+    docket_id: str,
+    proceeding_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> IpOppositionApplicantWorkflowResponse:
+    return get_applicant_workflow(
+        session,
+        context=context,
+        docket_id=docket_id,
+        proceeding_id=proceeding_id,
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/proceedings/{proceeding_id}/applicant-actions",
+    response_model=IpOppositionApplicantWorkflowResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def post_ip_opposition_applicant_action(
+    docket_id: str,
+    proceeding_id: str,
+    payload: IpOppositionApplicantActionRequest,
+    context: IpReviewer,
+    session: DbSession,
+) -> IpOppositionApplicantWorkflowResponse:
+    return record_applicant_action(
+        session,
+        context=context,
+        docket_id=docket_id,
+        proceeding_id=proceeding_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/proceedings/{proceeding_id}/applicant-deadlines",
+    response_model=IpOppositionApplicantDeadlineRecord,
+    status_code=status.HTTP_201_CREATED,
+)
+def post_ip_opposition_applicant_deadline(
+    docket_id: str,
+    proceeding_id: str,
+    payload: IpOppositionApplicantDeadlineProposalRequest,
+    context: IpReviewer,
+    session: DbSession,
+) -> IpOppositionApplicantDeadlineRecord:
+    return propose_applicant_deadline(
         session,
         context=context,
         docket_id=docket_id,
