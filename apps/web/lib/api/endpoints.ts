@@ -8449,6 +8449,53 @@ export type IpDocket = {
   updated_at: string;
 };
 
+export type IpMatterRelationRole =
+  | "operational"
+  | "litigation"
+  | "advisory"
+  | "appeal"
+  | "enforcement"
+  | "billing"
+  | "other";
+
+export type IpMatterLink = {
+  id: string;
+  company_id: string;
+  docket_id: string;
+  matter_id: string;
+  relation_role: IpMatterRelationRole;
+  effective_from: string;
+  retired_at: string | null;
+  source: "manual" | "system" | "migration";
+  source_reference: string | null;
+  reason: string;
+  retirement_reason: string | null;
+  created_by_membership_id: string | null;
+  retired_by_membership_id: string | null;
+  access_mismatch_warning: boolean;
+  lifecycle: {
+    matter_id: string;
+    matter_code: string;
+    matter_title: string;
+    matter_status: string;
+    matter_is_active: boolean;
+    docket_id: string;
+    docket_title: string;
+    docket_status: string;
+    docket_is_active: boolean;
+  };
+  created_at: string;
+  updated_at: string;
+};
+
+export type IpMatterLinkList = {
+  links: IpMatterLink[];
+  count: number;
+  active_count: number;
+  docket_id?: string;
+  matter_id?: string;
+};
+
 export type IpRenewalState =
   | "due"
   | "instructed"
@@ -9965,6 +10012,61 @@ export async function fetchIpDockets(): Promise<{ dockets: IpDocket[]; count: nu
 
 export async function fetchIpDocket(docketId: string): Promise<IpDocket> {
   return apiRequest(`/api/ip/dockets/${encodeURIComponent(docketId)}`);
+}
+
+export async function fetchIpDocketMatterLinks(
+  docketId: string,
+): Promise<IpMatterLinkList> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(docketId)}/matter-links`,
+  );
+}
+
+export async function fetchMatterIpLinks(matterId: string): Promise<IpMatterLinkList> {
+  return apiRequest(`/api/matters/${encodeURIComponent(matterId)}/ip-links`);
+}
+
+export async function createIpDocketMatterLink(input: {
+  docketId: string;
+  matterId: string;
+  relationRole: IpMatterRelationRole;
+  reason: string;
+  sourceReference?: string | null;
+  expectedDocketUpdatedAt: string;
+}): Promise<IpMatterLink> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/matter-links`,
+    {
+      method: "POST",
+      body: {
+        matter_id: input.matterId,
+        relation_role: input.relationRole,
+        reason: input.reason,
+        source_reference: input.sourceReference ?? null,
+        expected_docket_updated_at: input.expectedDocketUpdatedAt,
+      },
+    },
+  );
+}
+
+export async function retireIpDocketMatterLink(input: {
+  docketId: string;
+  linkId: string;
+  reason: string;
+  expectedLinkUpdatedAt: string;
+  expectedDocketUpdatedAt: string;
+}): Promise<{ link: IpMatterLink; operational_pointer_cleared: boolean }> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/matter-links/${encodeURIComponent(input.linkId)}/retire`,
+    {
+      method: "POST",
+      body: {
+        reason: input.reason,
+        expected_link_updated_at: input.expectedLinkUpdatedAt,
+        expected_docket_updated_at: input.expectedDocketUpdatedAt,
+      },
+    },
+  );
 }
 
 export async function fetchIpRenewalPortfolio(): Promise<IpRenewalPortfolio> {

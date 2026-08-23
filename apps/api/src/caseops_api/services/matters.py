@@ -25,10 +25,7 @@ from caseops_api.db.models import (
     ForumCatalogEntry,
     HearingReminder,
     HearingReminderStatus,
-    IpDeadlineCoverage,
-    IpDocketEvent,
     IpDocketRecord,
-    IpRelatedRightObligation,
     Matter,
     MatterActivity,
     MatterAttachment,
@@ -2787,23 +2784,9 @@ def _neutralize_disposed_matter_operations(
     matter: Matter,
 ) -> dict[str, int]:
     now = utcnow()
-    # Matter is already locked by the lifecycle command. Acquire every linked
-    # IP child in the shared hierarchy before any operational deadline, then
-    # lock coverage only after all deadlines below. This keeps disposal aligned
-    # with coverage writes: Matter -> docket -> MatterDeadline -> coverage.
-    ip_dockets = list(
-        session.scalars(
-            select(IpDocketRecord)
-            .where(
-                IpDocketRecord.company_id == context.company.id,
-                IpDocketRecord.matter_id == matter.id,
-                IpDocketRecord.archived_by_matter_disposal.is_(False),
-            )
-            .order_by(IpDocketRecord.id)
-            .with_for_update(of=IpDocketRecord)
-            .execution_options(populate_existing=True)
-        )
-    )
+    # Matter and IP records own independent lifecycles. A Matter disposal may
+    # neutralize Matter-owned work, but must never archive a linked IP record,
+    # append an IP lifecycle event, or cancel IP-owned cover/obligations.
     open_hearings = list(
         session.scalars(
             select(MatterHearing).where(
@@ -2949,88 +2932,6 @@ def _neutralize_disposed_matter_operations(
         suggestion.decided_by_membership_id = context.membership.id
         suggestion.decided_at = now
 
-    neutralized_ip_coverages = 0
-    neutralized_ip_obligations = 0
-    for docket in ip_dockets:
-        next_sequence = (
-            session.scalar(
-                select(func.max(IpDocketEvent.sequence)).where(
-                    IpDocketEvent.company_id == docket.company_id,
-                    IpDocketEvent.docket_id == docket.id,
-                )
-            )
-            or 0
-        ) + 1
-        session.add(
-            IpDocketEvent(
-                company_id=docket.company_id,
-                docket_id=docket.id,
-                sequence=next_sequence,
-                event_kind="lifecycle_transition",
-                source="system",
-                source_reference=f"matter:{matter.id}",
-                effective_at=now,
-                entered_at=now,
-                responsible_membership_id=context.membership.id,
-                entered_by_membership_id=context.membership.id,
-                reason="Parent Matter disposed.",
-                evidence_refs_json=[f"matter:{matter.id}"],
-                document_refs_json=[],
-                resulting_deadline_refs_json=[],
-                before_phase=docket.status,
-                after_phase="archived",
-                candidate_status="confirmed",
-                payload_json={"matter_lifecycle_version": matter.lifecycle_version + 1},
-            )
-        )
-        docket.status = "archived"
-        docket.is_active = False
-        docket.lifecycle_version += 1
-        docket.lifecycle_effective_at = now
-        docket.lifecycle_reason = "Parent Matter disposed."
-        docket.lifecycle_outcome = "archived_with_parent"
-        docket.lifecycle_source = "matter_lifecycle"
-        docket.lifecycle_evidence_ref = f"matter:{matter.id}"
-        docket.archived_by_matter_disposal = True
-        docket.updated_at = now
-
-        coverages = list(
-            session.scalars(
-                select(IpDeadlineCoverage)
-                .where(
-                    IpDeadlineCoverage.company_id == docket.company_id,
-                    IpDeadlineCoverage.docket_id == docket.id,
-                    IpDeadlineCoverage.coverage_status.notin_(
-                        ("inactive_lifecycle", "completed")
-                    ),
-                )
-                .order_by(IpDeadlineCoverage.id)
-                .with_for_update(of=IpDeadlineCoverage)
-                .execution_options(populate_existing=True)
-            )
-        )
-        for coverage in coverages:
-            coverage.coverage_status = "inactive_lifecycle"
-            coverage.calendar_projection_status = "inactive_lifecycle"
-            coverage.updated_at = now
-        neutralized_ip_coverages += len(coverages)
-
-        obligations = list(
-            session.scalars(
-                select(IpRelatedRightObligation).where(
-                    IpRelatedRightObligation.company_id == docket.company_id,
-                    IpRelatedRightObligation.docket_id == docket.id,
-                    IpRelatedRightObligation.status.notin_(
-                        ("completed", "cancelled_lifecycle")
-                    ),
-                )
-            )
-        )
-        for obligation in obligations:
-            obligation.status = "cancelled_lifecycle"
-            obligation.updated_at = now
-        neutralized_ip_obligations += len(obligations)
-
     # Include children neutralized by an earlier disposal or the upgrade-time
     # legacy-data repair, not only rows cancelled in this invocation. Otherwise
     # a migrated child can stay cancelled in CaseOps while its old provider
@@ -3134,9 +3035,9 @@ def _neutralize_disposed_matter_operations(
         "cancelled_court_sync_jobs": len(court_sync_jobs),
         "blocked_notification_deliveries": len(delivery_intents),
         "rejected_next_hearing_suggestions": len(suggestions),
-        "archived_ip_dockets": len(ip_dockets),
-        "neutralized_ip_coverages": neutralized_ip_coverages,
-        "neutralized_ip_obligations": neutralized_ip_obligations,
+        "archived_ip_dockets": 0,
+        "neutralized_ip_coverages": 0,
+        "neutralized_ip_obligations": 0,
     }
 
 

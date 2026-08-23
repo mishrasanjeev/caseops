@@ -117,8 +117,9 @@ def _authorized_lifecycle_docket(
     docket = session.scalar(statement) if not for_update else None
     locked_matter: Matter | None = None
     if discovered_parent is not None and discovered_parent.matter_id:
-        # Matter is the access/lifecycle parent. Lock it before the IP child
-        # so Matter disposal and direct IP transitions share one lock order.
+        # Stabilize the compatibility pointer before the IP child. Matter and
+        # IP lifecycles remain independent; this is a lock-order guarantee,
+        # not lifecycle ownership.
         locked_matter = session.scalar(
             select(Matter)
             .where(
@@ -165,20 +166,6 @@ def _authorized_lifecycle_docket(
                 detail="The IP docket parent changed; retry the operation.",
             )
     assert_ip_docket_access(session, context=context, docket=docket)
-    if docket.matter_id:
-        matter = locked_matter or session.scalar(
-            select(Matter).where(
-                Matter.id == docket.matter_id,
-                Matter.company_id == context.company.id,
-            )
-        )
-        if matter is None:
-            raise HTTPException(status_code=404, detail="IP docket record not found.")
-        if not matter.is_active:
-            raise HTTPException(
-                status_code=409,
-                detail="The linked Matter is terminal; its dedicated lifecycle owns reopening.",
-            )
     return docket
 
 

@@ -371,6 +371,7 @@ export const matterTimelineItem = z.object({
     "deadline",
     "task",
     "activity",
+    "ip_event",
   ]),
   event_date: z.string(),
   event_time: z.string().nullable().optional(),
@@ -383,6 +384,7 @@ export const matterTimelineItem = z.object({
   links: z.object({
     matter: z.string(),
     document: z.string().nullable().optional(),
+    ip_docket: z.string().nullable().optional(),
   }),
   order_kind: z.string().nullable().optional(),
   is_interim_order: z.boolean().optional().default(false),

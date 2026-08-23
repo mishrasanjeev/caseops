@@ -328,3 +328,32 @@ which requires source, evidence, authority, and authorized confirmation and
 does not close the linked Matter. Multi-class partial outcomes, translation,
 adjournment detail, nonappearance, security for costs, and downstream
 application disposition remain assigned to later slices.
+
+## IPLF-044 Matter linkage and independent lifecycle display
+
+`20260823_0003` adds `ip_matter_links` as an effective-dated relationship
+history between the existing IP docket and Matter owners. It does not replace
+either aggregate. Existing `ip_docket_records.matter_id` values are backfilled
+as deterministic active `operational` relationships and remain a compatibility
+pointer for the one operational Matter. Additional `litigation`, `advisory`,
+`appeal`, `enforcement`, `billing`, and `other` roles are reference-only.
+
+Relationship writes require access to both records, the `ip:write` capability,
+the current docket timestamp, a reason, tenant-matched foreign keys, and
+Matter-before-docket lock order. Active duplicates are rejected. Retirement is
+an append-preserving state change with its own actor, time, reason, and link
+version fence; only retirement of the active operational relationship clears
+the compatibility pointer. A downgrade refuses once governed manual or retired
+history exists.
+
+Each authorized read returns the two lifecycle states side by side and flags a
+different effective access policy. Readers without access to either side receive
+no relationship row, count, or hidden identifier. Matter timelines compose
+accessible `ip_docket_events` through each relationship's effective interval and
+link back to the source IP docket; they do not copy an event into
+`matter_activities`.
+
+Matter disposal and reopen no longer archive, cancel, close, or resurrect the
+linked IP docket, coverage, obligations, or events. IP lifecycle operations do
+not change the linked Matter. Shared task, deadline, hearing, document,
+notification, billing, opposition, and audit owners remain unchanged.

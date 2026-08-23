@@ -94,6 +94,7 @@ MatterTimelineEventTypeLiteral = Literal[
     "deadline",
     "task",
     "activity",
+    "ip_event",
 ]
 _CLAIM_CURRENCY_PATTERN = re.compile(r"^[A-Z]{3}$")
 MATTER_CODE_PATTERN = re.compile(r"^[A-Z0-9](?:[A-Z0-9-]*[A-Z0-9])$")
@@ -906,6 +907,7 @@ class MatterCourtOrderCreateRequest(BaseModel):
 class MatterTimelineLinkRecord(BaseModel):
     matter: str
     document: str | None = None
+    ip_docket: str | None = None
 
 
 class MatterTimelineItemRecord(BaseModel):

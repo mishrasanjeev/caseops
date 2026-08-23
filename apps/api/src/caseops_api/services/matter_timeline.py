@@ -16,6 +16,9 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
+    IpDocketEvent,
+    IpDocketRecord,
+    IpMatterLink,
     Matter,
     MatterActivity,
     MatterAttachment,
@@ -32,7 +35,7 @@ from caseops_api.schemas.matters import (
     MatterTimelineLinkRecord,
     MatterTimelineResponse,
 )
-from caseops_api.services.matter_access import assert_access
+from caseops_api.services.matter_access import assert_access, can_access_ip_docket
 from caseops_api.services.session_context import SessionContext
 
 TimelineEventKind = Literal[
@@ -42,6 +45,7 @@ TimelineEventKind = Literal[
     "deadline",
     "task",
     "activity",
+    "ip_event",
 ]
 TimelineSort = Literal["asc", "desc"]
 
@@ -54,6 +58,7 @@ ALL_TIMELINE_TYPES: set[str] = {
     "deadline",
     "task",
     "activity",
+    "ip_event",
 }
 
 
@@ -156,6 +161,7 @@ def build_matter_timeline(
     event_types: set[TimelineEventKind] | None = None,
     include_activity: bool = False,
     source_limit: int | None = TIMELINE_MAX_SOURCE_EVENTS,
+    context: SessionContext | None = None,
 ) -> MatterTimeline:
     """Pure builder. Callers supply the Matter after tenancy/access
     enforcement."""
@@ -229,6 +235,18 @@ def build_matter_timeline(
                 source_limit=per_source_limit,
             )
         )
+    if context is not None and "ip_event" in active_types:
+        events.extend(
+            _events_from_ip_links(
+                session=session,
+                context=context,
+                matter_id=matter.id,
+                sort=sort,
+                from_date=from_date,
+                to_date=to_date,
+                source_limit=per_source_limit,
+            )
+        )
 
     if from_date is not None:
         events = [event for event in events if event.event_date >= from_date]
@@ -242,6 +260,7 @@ def build_matter_timeline(
         "deadline": 3,
         "task": 4,
         "activity": 5,
+        "ip_event": 6,
     }
     events.sort(
         key=lambda e: (
@@ -293,7 +312,126 @@ def build_matter_timeline_by_id(
         event_types=event_types,
         include_activity=True,
         source_limit=source_limit,
+        context=context,
     )
+
+
+def _events_from_ip_links(
+    *,
+    session: Session,
+    context: SessionContext,
+    matter_id: str,
+    sort: TimelineSort,
+    from_date: date | None,
+    to_date: date | None,
+    source_limit: int,
+) -> list[TimelineEvent]:
+    links = list(
+        session.scalars(
+            select(IpMatterLink)
+            .where(
+                IpMatterLink.company_id == context.company.id,
+                IpMatterLink.matter_id == matter_id,
+            )
+            .order_by(IpMatterLink.effective_from, IpMatterLink.id)
+        )
+    )
+    if not links:
+        return []
+    dockets = {
+        docket.id: docket
+        for docket in session.scalars(
+            select(IpDocketRecord).where(
+                IpDocketRecord.company_id == context.company.id,
+                IpDocketRecord.id.in_({link.docket_id for link in links}),
+            )
+        )
+        if can_access_ip_docket(session, context=context, docket=docket)
+    }
+    if not dockets:
+        return []
+    links_by_docket: dict[str, list[IpMatterLink]] = {}
+    for link in links:
+        if link.docket_id in dockets:
+            links_by_docket.setdefault(link.docket_id, []).append(link)
+    stmt = select(IpDocketEvent).where(
+        IpDocketEvent.company_id == context.company.id,
+        IpDocketEvent.docket_id.in_(set(dockets)),
+        or_(
+            *[
+                and_(
+                    IpDocketEvent.docket_id == link.docket_id,
+                    IpDocketEvent.effective_at >= link.effective_from,
+                    *(
+                        [IpDocketEvent.effective_at <= link.retired_at]
+                        if link.retired_at is not None
+                        else []
+                    ),
+                )
+                for link in links
+                if link.docket_id in dockets
+            ]
+        ),
+    )
+    if from_date is not None:
+        stmt = stmt.where(IpDocketEvent.effective_at >= _start_of_day(from_date))
+    if to_date is not None:
+        stmt = stmt.where(IpDocketEvent.effective_at <= _end_of_day(to_date))
+    date_order = (
+        IpDocketEvent.effective_at.desc()
+        if sort == "desc"
+        else IpDocketEvent.effective_at.asc()
+    )
+    rows = list(
+        session.scalars(
+            stmt.order_by(date_order, IpDocketEvent.id).limit(source_limit)
+        )
+    )
+    out: list[TimelineEvent] = []
+    for row in rows:
+        effective_at = row.effective_at
+        matching_links = [
+            link
+            for link in links_by_docket.get(row.docket_id, [])
+            if _aware_datetime(link.effective_from) <= _aware_datetime(effective_at)
+            and (
+                link.retired_at is None
+                or _aware_datetime(effective_at) <= _aware_datetime(link.retired_at)
+            )
+        ]
+        if not matching_links:
+            continue
+        docket = dockets[row.docket_id]
+        roles = sorted({link.relation_role for link in matching_links})
+        transition = (
+            f"{row.before_phase or 'unrecorded'} to {row.after_phase}"
+            if row.after_phase
+            else row.event_kind.replace("_", " ")
+        )
+        out.append(
+            TimelineEvent(
+                event_date=effective_at.date(),
+                event_time=effective_at,
+                kind="ip_event",
+                title=f"{docket.title}: {transition}",
+                summary=row.reason,
+                status=row.candidate_status,
+                source_ref_id=row.id,
+                source_type="ip_docket_event",
+                badges=[row.event_kind, *roles],
+                extra={
+                    "ip_docket_id": docket.id,
+                    "ip_docket_status": docket.status,
+                    "relation_roles": ",".join(roles),
+                    "event_kind": row.event_kind,
+                },
+            )
+        )
+    return out
+
+
+def _aware_datetime(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
 def _events_from_hearings(
@@ -704,6 +842,12 @@ def _event_to_record(matter_id: str, event: TimelineEvent) -> MatterTimelineItem
         else None
     )
     source_id = event.source_ref_id
+    ip_docket_id = event.extra.get("ip_docket_id")
+    ip_docket_href = (
+        f"/app/ip?docket={ip_docket_id}"
+        if isinstance(ip_docket_id, str) and ip_docket_id
+        else None
+    )
     return MatterTimelineItemRecord(
         id=f"{event.kind}:{source_id or event.event_date.isoformat()}",
         event_type=event.kind,
@@ -718,6 +862,7 @@ def _event_to_record(matter_id: str, event: TimelineEvent) -> MatterTimelineItem
         links=MatterTimelineLinkRecord(
             matter=f"/app/matters/{matter_id}",
             document=document_href,
+            ip_docket=ip_docket_href,
         ),
         order_kind=event.order_kind,
         is_interim_order=event.is_interim_order,

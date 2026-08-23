@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/Button";
 import { IpAccessWorkspace } from "@/components/ip/IpAccessWorkspace";
 import { IpDocumentWorkspace } from "@/components/ip/IpDocumentWorkspace";
 import { IpOppositionWorkspace } from "@/components/ip/IpOppositionWorkspace";
+import { IpMatterLinksPanel } from "@/components/ip/IpMatterLinksPanel";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -1314,6 +1315,7 @@ function DocketWorkspace({
         {canManageAccess ? (
           <IpAccessWorkspace docket={docket} onChanged={onChanged} />
         ) : null}
+        <IpMatterLinksPanel docket={docket} canWrite={canWrite} onChanged={onChanged} />
         <HearingWorkflowCard
           docket={docket}
           enabled={canWrite}

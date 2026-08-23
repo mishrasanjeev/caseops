@@ -10,6 +10,7 @@ import {
   FileText,
   Gavel,
   Landmark,
+  Link2,
   Lock,
   PanelsTopLeft,
   Scale,
@@ -111,6 +112,11 @@ const platformMoves = [
     icon: PanelsTopLeft,
     title: "Trademark portfolio",
     body: "Search distinct application and opposition numbers. Run applicant and opponent TM-O work, Rules 45-47 evidence packages, governed extensions, shared hearing preparation, orders, compliance directions and order-linked appeals with source evidence, immutable history and dual deadline ownership.",
+  },
+  {
+    icon: Link2,
+    title: "IP and Matter relationships",
+    body: "Link one IP docket to operational, litigation, advisory, appeal, enforcement or billing Matters with effective-dated history. Each workspace shows both lifecycle states, access-policy mismatches and source-linked IP events without closing or copying the other record.",
   },
   {
     icon: Clock3,

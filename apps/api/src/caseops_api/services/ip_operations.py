@@ -31,6 +31,7 @@ from caseops_api.db.models import (
     IpDocketRecord,
     IpEvidenceCandidate,
     IpIncidentKillSwitch,
+    IpMatterLink,
     IpRelatedRightObligation,
     IpTitleInterest,
     IpTrademarkParticularVersion,
@@ -142,7 +143,6 @@ from caseops_api.services.matter_access import (
     visible_ip_dockets_filter,
 )
 from caseops_api.services.matter_operational_guard import (
-    MatterNotOperationalError,
     assert_operational_matter,
     matter_is_operational,
 )
@@ -258,8 +258,9 @@ def _docket_or_404(
     docket = session.scalar(statement) if not for_update else None
     locked_matter: Matter | None = None
     if discovered_parent is not None and discovered_parent.matter_id:
-        # Matter is the lifecycle parent. Match Matter disposal and the IP
-        # lifecycle service's lock order before locking the docket child.
+        # Stabilize the compatibility pointer before the docket lock. The
+        # Matter is not the IP lifecycle parent; this lock only prevents a
+        # concurrent operational relink from changing the target mid-write.
         locked_matter = session.scalar(
             select(Matter)
             .where(
@@ -287,14 +288,6 @@ def _docket_or_404(
     if docket.archived_by_matter_disposal or not docket.is_active:
         raise HTTPException(status_code=404, detail="IP docket record not found.")
     assert_ip_docket_access(session, context=context, docket=docket)
-    if docket.matter_id:
-        matter = locked_matter or session.get(Matter, docket.matter_id)
-        if matter is None:
-            raise HTTPException(status_code=404, detail="IP docket record not found.")
-        try:
-            assert_operational_matter(session, matter=matter)
-        except MatterNotOperationalError as exc:
-            raise HTTPException(status_code=404, detail="IP docket record not found.") from exc
     return docket
 
 
@@ -411,15 +404,6 @@ def _lock_ip_dockets_in_stable_order(
         if docket.archived_by_matter_disposal or not docket.is_active:
             raise HTTPException(status_code=404, detail="IP docket record not found.")
         assert_ip_docket_access(session, context=context, docket=docket)
-        if docket.matter_id:
-            matter = matters_by_id[docket.matter_id]
-            try:
-                assert_operational_matter(session, matter=matter)
-            except MatterNotOperationalError as exc:
-                raise HTTPException(
-                    status_code=404,
-                    detail="IP docket record not found.",
-                ) from exc
     return dockets_by_id
 
 
@@ -743,6 +727,20 @@ def create_ip_docket(
         context=context,
         docket=docket,
     )
+    if linked_matter is not None:
+        session.add(
+            IpMatterLink(
+                company_id=context.company.id,
+                docket_id=docket.id,
+                matter_id=linked_matter.id,
+                relation_role="operational",
+                effective_from=docket.created_at,
+                source="system",
+                source_reference=f"ip_docket_records:{docket.id}:matter_id",
+                reason="Created with the IP docket's operational Matter reference.",
+                created_by_membership_id=context.membership.id,
+            )
+        )
     if docket.restricted:
         for membership_id in sorted(candidate_role_ids - {context.membership.id}):
             session.add(
@@ -893,14 +891,6 @@ def list_ip_dockets(session: Session, *, context: SessionContext) -> IpDocketLis
     for row in rows:
         if row.archived_by_matter_disposal or not row.is_active:
             continue
-        if row.matter_id:
-            matter = session.get(Matter, row.matter_id)
-            if matter is None:
-                continue
-            try:
-                assert_operational_matter(session, matter=matter)
-            except MatterNotOperationalError:
-                continue
         visible.append(
             _serialize_docket(
                 session,
