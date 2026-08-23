@@ -167,7 +167,7 @@
       "status": "inventory_registered_runtime_policy_unapproved",
       "id": "document-object-prefix-and-version",
       "kind": "object_prefix_version",
-      "purpose": "Logical matter/contract attachment objects and any configured GCS object versions under the company-scoped storage-key namespace.",
+      "purpose": "Logical matter/contract attachment objects and any configured GCS object versions under the company-scoped storage-key namespace. New object names use the immutable attachment identifier plus a bounded extension so local materialization remains portable; the sanitized display filename remains in the registered SQL attachment record, and previously issued storage keys remain readable.",
       "sensitivity": "privileged_or_confidential",
       "source_licence_limits": "Client and licensed-source bytes must not be exported, replicated, or deleted outside approved source/contract and legal-hold rules.",
       "implementation_refs": [
