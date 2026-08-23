@@ -1370,8 +1370,9 @@ function HearingWorkflowCard({
   currentMembershipId: string | null;
 }) {
   const queryClient = useQueryClient();
+  const hearingQueryKey = ["ip", "hearings", docket.id] as const;
   const hearings = useQuery({
-    queryKey: ["ip", "hearings", docket.id],
+    queryKey: hearingQueryKey,
     queryFn: () => fetchIpSharedHearings(docket.id),
   });
   const connections = useQuery({
@@ -1410,7 +1411,17 @@ function HearingWorkflowCard({
   const recipientIds = currentMembershipId ? [currentMembershipId] : [];
 
   const refresh = () =>
-    queryClient.invalidateQueries({ queryKey: ["ip", "hearings", docket.id] });
+    queryClient.invalidateQueries({ queryKey: hearingQueryKey });
+  const cacheHearing = (hearing: IpSharedHearing) =>
+    queryClient.setQueryData<{ docket_id: string; hearings: IpSharedHearing[] }>(
+      hearingQueryKey,
+      (current) => ({
+        docket_id: docket.id,
+        hearings: current?.hearings.some((row) => row.id === hearing.id)
+          ? current.hearings.map((row) => (row.id === hearing.id ? hearing : row))
+          : [hearing, ...(current?.hearings ?? [])],
+      }),
+    );
   const create = useMutation({
     mutationFn: () =>
       createIpSharedHearing({
@@ -1432,10 +1443,10 @@ function HearingWorkflowCard({
         reminderChannels,
         reminderRecipientMembershipIds: recipientIds,
       }),
-    onSuccess: async () => {
+    onSuccess: (hearing) => {
+      cacheHearing(hearing);
       setPreviewing(false);
       toast.success("Hearing and idempotent reminders scheduled.");
-      await refresh();
     },
     onError: (error) => toast.error(apiErrorMessage(error, "Could not schedule hearing.")),
   });
@@ -1448,14 +1459,14 @@ function HearingWorkflowCard({
       sessionLabel?: string | null;
       status?: "scheduled" | "completed" | "adjourned" | "cancelled";
     }) => updateIpSharedHearing({ docketId: docket.id, ...input }),
-    onSuccess: async (_data, variables) => {
+    onSuccess: (hearing, variables) => {
+      cacheHearing(hearing);
       setConfirmationTimes((current) => {
         const next = { ...current };
         delete next[variables.hearingId];
         return next;
       });
       toast.success("Hearing updated; dependent reminders were superseded.");
-      await refresh();
     },
     onError: (error) => toast.error(apiErrorMessage(error, "Could not update hearing.")),
   });

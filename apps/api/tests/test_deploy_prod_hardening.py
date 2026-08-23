@@ -75,7 +75,9 @@ def test_a0_production_acceptance_is_an_isolated_verify_only_gate() -> None:
         "steps.prod-playwright-prerequisites.outputs.ready == 'true'"
     )
     assert "id: prod-playwright-prerequisites" in workflow
-    assert workflow.count(prerequisite_gate) == 3
+    # A0, renewal preflight, renewal acceptance, and Notice remain visible
+    # independently after the broad RAM batch.
+    assert workflow.count(prerequisite_gate) == 4
     assert "CASEOPS_IP_A0_PROD_MODE: verify" in workflow
     assert (
         "npx playwright test --config=playwright.ip-a0-prod.config.ts --reporter=list" in workflow
@@ -164,6 +166,7 @@ def test_renewal_production_acceptance_is_exact_release_and_fail_closed() -> Non
     spec = _read_repo_text("tests/e2e/iplf-037b-renewal-2026-08-22-prod.spec.ts")
 
     assert "Run IPLF-037B renewal acceptance" in workflow
+    assert "Check IPLF-037B renewal acceptance configuration" in workflow
     assert "playwright.ip-renewal-prod.config.ts" in workflow
     assert 'required("CASEOPS_EXPECTED_RELEASE_SHA")' in spec
     assert 'required("CASEOPS_IP_QA_PASSWORD")' in spec
@@ -175,6 +178,10 @@ def test_renewal_production_acceptance_is_exact_release_and_fail_closed() -> Non
     ):
         assert fixture_id in workflow
         assert fixture_id in spec
+    assert 'if [[ "$configured" -eq 0 ]]' in workflow
+    assert 'elif [[ "$configured" -ne 4 ]]' in workflow
+    assert "the external legal-governance activation blocker remains open" in workflow
+    assert "steps.renewal-prerequisites.outputs.configured == 'true'" in workflow
     assert 'const WEB = "https://caseops.ai"' in spec
     assert 'const API = "https://api.caseops.ai"' in spec
     assert 'const SLUG = "caseops-ip-qa"' in spec

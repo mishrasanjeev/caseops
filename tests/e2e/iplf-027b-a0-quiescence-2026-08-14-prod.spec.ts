@@ -905,6 +905,13 @@ async function disposeSyntheticMatter(
   docketIds: string[],
 ): Promise<void> {
   let current = await readMatter(api, ownerToken, matterId);
+  const independentDocketWorkspaces = new Map<string, DeadlineWorkspace>();
+  for (const docketId of docketIds) {
+    independentDocketWorkspaces.set(
+      docketId,
+      await loadWorkspace(api, ownerToken, docketId),
+    );
+  }
   expect(current.company_id).toBe(expectedCompanyId);
   expect(
     isReservedSyntheticMatter(current),
@@ -948,14 +955,13 @@ async function disposeSyntheticMatter(
     lifecycle_version: current.lifecycle_version,
   });
   for (const docketId of docketIds) {
-    const workspace = await api.get(
-      `${PROD_API_BASE_URL}/api/ip/dockets/${docketId}/deadline-workspace`,
-      { headers: authHeaders(ownerToken) },
-    );
+    const workspace = await loadWorkspace(api, ownerToken, docketId);
     expect(
-      workspace.status(),
-      `Disposed Matter child docket ${docketId} must be non-operational.`,
-    ).toBe(404);
+      workspace,
+      `Disposed Matter must preserve independently governed IP docket ${docketId}.`,
+    ).toEqual(
+      independentDocketWorkspaces.get(docketId),
+    );
   }
 }
 

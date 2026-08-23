@@ -567,6 +567,46 @@ describe("IpDocketPage", () => {
         sessionLabel: null,
       }),
     );
+    await waitFor(() =>
+      expect(within(workflow).queryByText(/Time confirmation pending/)).not.toBeInTheDocument(),
+    );
+    expect(fetchIpSharedHearingsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders created reminder delivery from the mutation without a list refetch", async () => {
+    const returned = unknownTimeHearing();
+    const currentReminder = returned.reminders[1];
+    const created = {
+      ...returned,
+      purpose: "Hearing",
+      reminders: [
+        { ...currentReminder, id: "reminder-email", channel: "email" as const },
+        { ...currentReminder, id: "reminder-in-app", channel: "in_app" as const },
+      ],
+    };
+    fetchIpDocketsMock.mockResolvedValue({ dockets: [activeDocket()], count: 1 });
+    createIpSharedHearingMock.mockResolvedValue(created);
+
+    render(withClient(<IpDocketPage />));
+
+    const workflow = await screen.findByTestId("ip-hearing-workflow");
+    await waitFor(() => expect(fetchIpSharedHearingsMock).toHaveBeenCalledTimes(1));
+    fireEvent.click(within(workflow).getByRole("button", {
+      name: "Preview recipients and policy",
+    }));
+    fireEvent.click(within(workflow).getByRole("button", {
+      name: "Confirm hearing and reminders",
+    }));
+
+    await waitFor(() => expect(createIpSharedHearingMock).toHaveBeenCalledTimes(1));
+    const delivery = await within(workflow).findByLabelText("Reminder delivery for Hearing");
+    expect(within(delivery).getByText("email").parentElement).toHaveTextContent(
+      "email · queued",
+    );
+    expect(within(delivery).getByText("in_app").parentElement).toHaveTextContent(
+      "in_app · queued",
+    );
+    expect(fetchIpSharedHearingsMock).toHaveBeenCalledTimes(1);
   });
 
   it("keeps typed numbers separate and resolves duplicates on narrow mobile", async () => {
