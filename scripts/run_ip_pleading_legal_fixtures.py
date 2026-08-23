@@ -44,6 +44,7 @@ REQUIRED_TEMPLATES = {
     "trademark_reply_evidence",
 }
 ALLOWED_APPROVAL_STATUSES = {"pending_lawyer_review", "approved", "retired"}
+ALLOWED_LEGAL_CONTENT_STATUSES = {"candidate_unapproved", "approved", "retired"}
 SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 HTTPS_RE = re.compile(r"^https://", re.IGNORECASE)
 
@@ -139,8 +140,20 @@ def validate_pack(pack: object, *, require_approved: bool = False) -> list[str]:
         errors.append("pack_id must be an IPLF-047 identifier")
     if not re.fullmatch(r"\d+\.\d+\.\d+", str(pack.get("version") or "")):
         errors.append("version must use semantic versioning")
-    if pack.get("authoritative_activation_allowed") is not False:
-        errors.append("committed candidate pack must deny authoritative activation")
+    pack_approval = pack.get("approval")
+    pack_approval_status = (
+        pack_approval.get("status") if isinstance(pack_approval, dict) else None
+    )
+    legal_content_status = pack.get("legal_content_status")
+    if legal_content_status not in ALLOWED_LEGAL_CONTENT_STATUSES:
+        errors.append("legal_content_status is invalid")
+    if pack_approval_status == "approved":
+        if legal_content_status != "approved":
+            errors.append("approved pack must have approved legal content")
+        if pack.get("authoritative_activation_allowed") is not True:
+            errors.append("approved pack must allow authoritative activation")
+    elif pack.get("authoritative_activation_allowed") is not False:
+        errors.append("unapproved or retired pack must deny authoritative activation")
 
     sources = pack.get("official_sources")
     if not isinstance(sources, list) or not sources:
@@ -162,6 +175,8 @@ def validate_pack(pack: object, *, require_approved: bool = False) -> list[str]:
             errors.append(f"{path}.sha256 must be an exact SHA-256")
         if not source.get("retrieved_at"):
             errors.append(f"{path}.retrieved_at is required")
+        if pack_approval_status == "approved" and source.get("review_status") != "lawyer_reviewed":
+            errors.append(f"{path}.review_status must be lawyer_reviewed")
 
     fixtures = pack.get("fixtures")
     if not isinstance(fixtures, list) or not fixtures:
@@ -191,8 +206,19 @@ def validate_pack(pack: object, *, require_approved: bool = False) -> list[str]:
         categories.add(category)
         if fixture.get("data_classification") != "synthetic_anonymized":
             errors.append(f"{path} must remain synthetic_anonymized")
-        if fixture.get("legal_content_status") != "candidate_unapproved":
-            errors.append(f"{path} must remain candidate_unapproved in source control")
+        fixture_approval = fixture.get("approval")
+        fixture_approval_status = (
+            fixture_approval.get("status")
+            if isinstance(fixture_approval, dict)
+            else None
+        )
+        fixture_legal_status = fixture.get("legal_content_status")
+        if fixture_legal_status not in ALLOWED_LEGAL_CONTENT_STATUSES:
+            errors.append(f"{path}.legal_content_status is invalid")
+        if fixture_approval_status == "approved" and fixture_legal_status != "approved":
+            errors.append(f"{path} approved fixture must have approved legal content")
+        if fixture_approval_status != "approved" and fixture_legal_status == "approved":
+            errors.append(f"{path} unapproved fixture cannot have approved legal content")
 
         scope = fixture.get("scope")
         if not isinstance(scope, dict):
@@ -228,7 +254,13 @@ def validate_pack(pack: object, *, require_approved: bool = False) -> list[str]:
         expected = fixture.get("expected_software_behavior")
         if not isinstance(expected, dict) or not expected:
             errors.append(f"{path}.expected_software_behavior must be non-empty")
-        if fixture.get("expected_legal_outcome") is not None:
+        expected_legal_outcome = fixture.get("expected_legal_outcome")
+        if fixture_approval_status == "approved":
+            if expected_legal_outcome in (None, "", [], {}):
+                errors.append(
+                    f"{path}.expected_legal_outcome is required after SME approval"
+                )
+        elif expected_legal_outcome is not None:
             errors.append(f"{path}.expected_legal_outcome must stay null before SME approval")
 
         calculated_hash = fixture_content_sha256(fixture)
@@ -278,6 +310,8 @@ def validate_pack(pack: object, *, require_approved: bool = False) -> list[str]:
             require_approved=require_approved,
         )
     )
+    if pack_approval_status == "approved" and approved_count != len(fixtures):
+        errors.append("approved pack requires every fixture to be approved")
     if require_approved and approved_count != len(fixtures):
         errors.append(f"only {approved_count}/{len(fixtures)} fixtures are approved")
     return errors

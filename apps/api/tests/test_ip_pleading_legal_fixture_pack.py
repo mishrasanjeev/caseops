@@ -71,6 +71,45 @@ def test_candidate_pack_hashes_detect_content_and_approval_tampering() -> None:
     assert "pack.approval hash does not match immutable content" in forged_errors
 
 
+def test_exact_hash_approved_pack_can_pass_authoritative_gate() -> None:
+    pack = copy.deepcopy(_pack())
+    pack["legal_content_status"] = "approved"
+    pack["authoritative_activation_allowed"] = True
+    for source in pack["official_sources"]:
+        source["review_status"] = "lawyer_reviewed"
+    for fixture in pack["fixtures"]:
+        fixture["legal_content_status"] = "approved"
+        fixture["expected_legal_outcome"] = {
+            "reviewed_result": "Qualified legal SME supplied expectation"
+        }
+        fixture["content_sha256"] = ip_pleading_legal_fixtures.fixture_content_sha256(
+            fixture
+        )
+        fixture["approval"].update(
+            {
+                "status": "approved",
+                "reviewed_by": "independent-reviewer",
+                "legal_approved_by": "qualified-legal-sme",
+                "approved_at": "2026-08-24T04:00:00+05:30",
+                "source_review_completed_at": "2026-08-24T03:59:00+05:30",
+                "approved_content_sha256": fixture["content_sha256"],
+            }
+        )
+    pack["content_sha256"] = ip_pleading_legal_fixtures.pack_content_sha256(pack)
+    pack["approval"].update(
+        {
+            "status": "approved",
+            "reviewed_by": "independent-reviewer",
+            "legal_approved_by": "qualified-legal-sme",
+            "approved_at": "2026-08-24T04:00:00+05:30",
+            "source_review_completed_at": "2026-08-24T03:59:00+05:30",
+            "approved_content_sha256": pack["content_sha256"],
+        }
+    )
+
+    assert ip_pleading_legal_fixtures.validate_pack(pack, require_approved=True) == []
+
+
 def test_candidate_date_conflict_fixture_uses_canonical_validator() -> None:
     fixture = _fixture("IP-PLEADING-GOLDEN-003")
     context = fixture["synthetic_inputs"]["context_manifest"]
