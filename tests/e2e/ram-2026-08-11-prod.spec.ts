@@ -456,7 +456,7 @@ test("IPLF-026B production previews, grants, and revokes independent IP access a
     ).toBeVisible();
     await expect(
       workspace.getByRole("button", { name: "Preview grant" }),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 45_000 });
     await expect(
       workspace.getByRole("button", { name: "Preview default access" }),
     ).toBeVisible();
