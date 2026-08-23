@@ -17,6 +17,20 @@ from tests.test_ip_deadline_workflow import (
 from tests.test_ip_opposition_foundation import _complete_workspace, _transition
 from tests.test_ip_record_workflow import _application, _asset, _particulars
 
+_APPLICANT_WORKFLOW_ROUTE = (
+    "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/applicant-workflow"
+)
+_APPLICANT_ACTIONS_ROUTE = (
+    "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/applicant-actions"
+)
+_APPLICANT_DEADLINES_ROUTE = (
+    "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/applicant-deadlines"
+)
+
+
+def _applicant_route(template: str, *, docket_id: str, proceeding_id: str) -> str:
+    return template.format(docket_id=docket_id, proceeding_id=proceeding_id)
+
 
 @pytest.fixture(autouse=True)
 def _enable_rule_governance(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -202,8 +216,11 @@ def _propose_and_confirm(
 ) -> dict:
     headers = auth_headers(str(bootstrap["access_token"]))
     proposal = client.post(
-        f"/api/ip/dockets/{docket['id']}/proceedings/{proceeding_id}"
-        "/applicant-deadlines",
+        _applicant_route(
+            _APPLICANT_DEADLINES_ROUTE,
+            docket_id=docket["id"],
+            proceeding_id=proceeding_id,
+        ),
         headers=headers,
         json={
             "workflow_stage": workflow_stage,
@@ -235,8 +252,11 @@ def _propose_and_confirm(
 def test_uj12_exc01_pending_opposition_number_is_explicit(client: TestClient) -> None:
     bootstrap, _, docket, proceeding = _fixture(client, with_number=False)
     response = client.get(
-        f"/api/ip/dockets/{docket['id']}/proceedings/{proceeding['id']}"
-        "/applicant-workflow",
+        _applicant_route(
+            _APPLICANT_WORKFLOW_ROUTE,
+            docket_id=docket["id"],
+            proceeding_id=proceeding["id"],
+        ),
         headers=auth_headers(str(bootstrap["access_token"])),
     )
     assert response.status_code == 200, response.text
@@ -275,8 +295,11 @@ def test_uj12_normal_runs_confirmed_deadlines_and_applicant_work_product(
     )
     assert counter_deadline["matter_deadline_id"] is not None
     before_stage_progression = client.get(
-        f"/api/ip/dockets/{docket['id']}/proceedings/{proceeding['id']}"
-        "/applicant-workflow",
+        _applicant_route(
+            _APPLICANT_WORKFLOW_ROUTE,
+            docket_id=docket["id"],
+            proceeding_id=proceeding["id"],
+        ),
         headers=headers,
     )
     assert before_stage_progression.status_code == 200
@@ -323,8 +346,11 @@ def test_uj12_normal_runs_confirmed_deadlines_and_applicant_work_product(
     )
 
     filed = client.post(
-        f"/api/ip/dockets/{docket['id']}/proceedings/{proceeding['id']}"
-        "/applicant-actions",
+        _applicant_route(
+            _APPLICANT_ACTIONS_ROUTE,
+            docket_id=docket["id"],
+            proceeding_id=proceeding["id"],
+        ),
         headers=headers,
         json={
             "expected_lifecycle_version": 0,
@@ -363,8 +389,11 @@ def test_uj12_normal_runs_confirmed_deadlines_and_applicant_work_product(
         to_stage="counterstatement_filed",
     )
     served = client.post(
-        f"/api/ip/dockets/{docket['id']}/proceedings/{proceeding['id']}"
-        "/applicant-actions",
+        _applicant_route(
+            _APPLICANT_ACTIONS_ROUTE,
+            docket_id=docket["id"],
+            proceeding_id=proceeding["id"],
+        ),
         headers=headers,
         json={
             "expected_lifecycle_version": 0,
@@ -433,8 +462,11 @@ def test_uj12_normal_runs_confirmed_deadlines_and_applicant_work_product(
         backup_id=evidence_backup,
     )
     election = client.post(
-        f"/api/ip/dockets/{docket['id']}/proceedings/{proceeding['id']}"
-        "/applicant-actions",
+        _applicant_route(
+            _APPLICANT_ACTIONS_ROUTE,
+            docket_id=docket["id"],
+            proceeding_id=proceeding["id"],
+        ),
         headers=headers,
         json={
             "expected_lifecycle_version": 0,
@@ -459,8 +491,11 @@ def test_uj12_normal_runs_confirmed_deadlines_and_applicant_work_product(
         to_stage="applicant_evidence_filed",
     )
     workflow = client.get(
-        f"/api/ip/dockets/{docket['id']}/proceedings/{proceeding['id']}"
-        "/applicant-workflow",
+        _applicant_route(
+            _APPLICANT_WORKFLOW_ROUTE,
+            docket_id=docket["id"],
+            proceeding_id=proceeding["id"],
+        ),
         headers=headers,
     )
     assert workflow.status_code == 200, workflow.text
@@ -566,14 +601,19 @@ def test_applicant_workflow_enforces_capability_and_tenant_boundaries(
     assert login.status_code == 200, login.text
     client.cookies.clear()
     member_headers = auth_headers(str(login.json()["access_token"]))
-    workflow_url = (
-        f"/api/ip/dockets/{docket['id']}/proceedings/{proceeding['id']}"
-        "/applicant-workflow"
+    workflow_url = _applicant_route(
+        _APPLICANT_WORKFLOW_ROUTE,
+        docket_id=docket["id"],
+        proceeding_id=proceeding["id"],
     )
     readable = client.get(workflow_url, headers=member_headers)
     assert readable.status_code == 200, readable.text
     denied = client.post(
-        workflow_url.replace("/applicant-workflow", "/applicant-deadlines"),
+        _applicant_route(
+            _APPLICANT_DEADLINES_ROUTE,
+            docket_id=docket["id"],
+            proceeding_id=proceeding["id"],
+        ),
         headers=member_headers,
         json={
             "workflow_stage": "counterstatement_due",
