@@ -12344,6 +12344,7 @@
         "apps/api/src/caseops_api/services/ip_lifecycle.py",
         "apps/api/src/caseops_api/api/routes/ip_operations.py",
         "apps/api/src/caseops_api/api/routes/matters.py",
+        "apps/api/src/caseops_api/governance/generated_data_class_projection.py",
         "apps/web/lib/api/openapi-types.ts"
       ],
       "test_refs": [
@@ -12363,7 +12364,7 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m4/IPLF-044/local-2026-08-23.md",
-          "revision": "a9c9962450ec8c7eb0dbd026ad2152002fccec45",
+          "revision": "3c94a564ca4e88bc81a414efa286d5d604612a15",
           "environment": "local SQLite API and Alembic tests plus generated OpenAPI and data-governance validation",
           "fixtures": "deterministic synthetic active/disposed Matters, unrestricted and restricted IP dockets, operational and advisory relationships, pre-link and in-window IP events, cross-membership access, migration backfill and retained-history downgrade; no live legal or production fact",
           "assertions": "effective history, one operational Matter, separate retirement rationale, lifecycle independence, temporal timeline pagination, two-sided access non-disclosure, tenant foreign keys, migration round trip/refusal, route and OpenAPI coverage",
@@ -12376,7 +12377,7 @@
         {
           "id": "IPLF-044A-HOSTED-RELEASE",
           "state": "open",
-          "summary": "Local backend and migration proof passed on implementation revision a9c99624; hosted exact-head CI, exact-main CI, deployment, and dated production identity/health verification remain pending."
+          "summary": "Local backend and migration proof passed on candidate revision 3c94a564; hosted exact-head CI, exact-main CI, deployment, and dated production identity/health verification remain pending."
         }
       ],
       "next_actions": [
@@ -12462,7 +12463,7 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m4/IPLF-044/local-2026-08-23.md",
-          "revision": "a9c9962450ec8c7eb0dbd026ad2152002fccec45",
+          "revision": "3c94a564ca4e88bc81a414efa286d5d604612a15",
           "environment": "local production Next.js build plus fresh SQLite API and web Playwright servers at desktop and 390px viewports",
           "fixtures": "deterministic synthetic operational and litigation Matters, manually created trademark application, system operational relationship, UI-created litigation relationship, Registry candidate event and UI retirement; no live filing or fabricated production legal fact",
           "assertions": "searchable relationship creation, independent side-by-side lifecycle display, Matter-side IP navigation, effective source-linked timeline composition, retirement persistence and counts, responsive no-overflow layout",
@@ -12475,7 +12476,7 @@
         {
           "id": "IPLF-044B-HOSTED-RELEASE",
           "state": "open",
-          "summary": "The local API/UI/browser journey passed on implementation revision a9c99624; hosted exact-head CI, exact-main CI, deployment, and dated production identity/health verification remain pending."
+          "summary": "The local API/UI/browser journey passed on candidate revision 3c94a564; hosted exact-head CI, exact-main CI, deployment, and dated production identity/health verification remain pending."
         }
       ],
       "next_actions": [
