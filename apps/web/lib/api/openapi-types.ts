@@ -5165,6 +5165,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/applicant-actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Opposition Applicant Action */
+        post: operations["post_ip_opposition_applicant_action_api_ip_dockets__docket_id__proceedings__proceeding_id__applicant_actions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/applicant-deadlines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Opposition Applicant Deadline */
+        post: operations["post_ip_opposition_applicant_deadline_api_ip_dockets__docket_id__proceedings__proceeding_id__applicant_deadlines_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/applicant-workflow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Opposition Applicant Workflow */
+        get: operations["get_ip_opposition_applicant_workflow_api_ip_dockets__docket_id__proceedings__proceeding_id__applicant_workflow_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/opposition-workspace": {
         parameters: {
             query?: never;
@@ -21036,7 +21087,7 @@ export interface components {
              * Event Kind
              * @enum {string}
              */
-            event_kind: "filing" | "formalities" | "examination_report" | "response" | "show_cause_hearing" | "acceptance" | "publication" | "registration" | "renewal" | "refusal" | "abandonment" | "restoration" | "lifecycle_transition" | "opposition_profile";
+            event_kind: "filing" | "formalities" | "examination_report" | "response" | "show_cause_hearing" | "acceptance" | "publication" | "registration" | "renewal" | "refusal" | "abandonment" | "restoration" | "lifecycle_transition" | "opposition_profile" | "opposition_applicant_action";
             /** Evidence Refs */
             evidence_refs?: string[];
             /** Expected Application Version */
@@ -22735,6 +22786,111 @@ export interface components {
             /** Title */
             title?: string | null;
         };
+        /** IpOppositionApplicantActionRequest */
+        IpOppositionApplicantActionRequest: {
+            /**
+             * Action Kind
+             * @enum {string}
+             */
+            action_kind: "counterstatement_filed" | "counterstatement_served" | "applicant_evidence_decision";
+            /** Document Refs */
+            document_refs?: string[];
+            /**
+             * Effective At
+             * Format: date-time
+             */
+            effective_at: string;
+            /** Evidence Election */
+            evidence_election?: ("file_evidence" | "rely_on_pleaded_facts") | null;
+            /** Evidence Refs */
+            evidence_refs?: string[];
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version: number;
+            /** Expected Proceeding Version */
+            expected_proceeding_version: number;
+            /** Filed On */
+            filed_on?: string | null;
+            /** Filing Reference */
+            filing_reference?: string | null;
+            /** Reason */
+            reason: string;
+            /** Responsible Membership Id */
+            responsible_membership_id: string;
+            service?: components["schemas"]["IpOppositionServiceFact"] | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "manual" | "registry" | "integration" | "system";
+            /** Source Reference */
+            source_reference: string;
+            verification?: components["schemas"]["IpOppositionPleadingVerification"] | null;
+        };
+        /** IpOppositionApplicantDeadlineProposalRequest */
+        IpOppositionApplicantDeadlineProposalRequest: {
+            /** Base Date */
+            base_date: string | null;
+            /**
+             * Base Date Certainty
+             * @enum {string}
+             */
+            base_date_certainty: "certain" | "uncertain" | "conflicting" | "unknown";
+            /** Calendar Version Id */
+            calendar_version_id: string;
+            /**
+             * Date Precision
+             * @default date
+             * @enum {string}
+             */
+            date_precision: "unknown" | "date" | "datetime" | "session";
+            /**
+             * Is Critical
+             * @default true
+             */
+            is_critical: boolean;
+            /** Rule Version Id */
+            rule_version_id: string;
+            /** Trigger Event Id */
+            trigger_event_id: string;
+            /**
+             * Workflow Stage
+             * @enum {string}
+             */
+            workflow_stage: "counterstatement_due" | "applicant_evidence_due";
+        };
+        /** IpOppositionApplicantDeadlineRecord */
+        IpOppositionApplicantDeadlineRecord: {
+            deadline: components["schemas"]["IpDeadlineRecord"];
+            /**
+             * Workflow Stage
+             * @enum {string}
+             */
+            workflow_stage: "counterstatement_due" | "applicant_evidence_due";
+        };
+        /** IpOppositionApplicantWorkflowResponse */
+        IpOppositionApplicantWorkflowResponse: {
+            /** Applicant Actions */
+            applicant_actions: components["schemas"]["IpDocketEventResponse"][];
+            /** Deadlines */
+            deadlines: components["schemas"]["IpOppositionApplicantDeadlineRecord"][];
+            /**
+             * Next Required Action
+             * @enum {string}
+             */
+            next_required_action: "record_opposition_number" | "propose_counterstatement_deadline" | "confirm_counterstatement_deadline" | "advance_to_counterstatement_due" | "file_counterstatement" | "record_counterstatement_service" | "propose_applicant_evidence_deadline" | "confirm_applicant_evidence_deadline" | "record_applicant_evidence_decision" | "await_opponent_or_later_stage";
+            /**
+             * Opposition Number Status
+             * @enum {string}
+             */
+            opposition_number_status: "confirmed" | "pending_allocation";
+            /** Proceeding Id */
+            proceeding_id: string;
+            /**
+             * Represented Side
+             * @constant
+             */
+            represented_side: "applicant";
+        };
         /** IpOppositionGround */
         IpOppositionGround: {
             /**
@@ -22800,6 +22956,26 @@ export interface components {
             role: "applicant" | "opponent" | "agent" | "counsel";
             /** Source */
             source: string;
+        };
+        /** IpOppositionPleadingVerification */
+        IpOppositionPleadingVerification: {
+            /** Authority */
+            authority: string;
+            /** Knowledge Basis */
+            knowledge_basis: string;
+            /** Place */
+            place: string;
+            /** Signatory */
+            signatory: string;
+            /** Signed Document Ref */
+            signed_document_ref: string;
+            /**
+             * Verified On
+             * Format: date
+             */
+            verified_on: string;
+            /** Verified Paragraph Ranges */
+            verified_paragraph_ranges: string[];
         };
         /** IpOppositionProfile */
         IpOppositionProfile: {
@@ -45942,6 +46118,110 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpProceedingResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_opposition_applicant_action_api_ip_dockets__docket_id__proceedings__proceeding_id__applicant_actions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpOppositionApplicantActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpOppositionApplicantWorkflowResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_opposition_applicant_deadline_api_ip_dockets__docket_id__proceedings__proceeding_id__applicant_deadlines_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpOppositionApplicantDeadlineProposalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpOppositionApplicantDeadlineRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_opposition_applicant_workflow_api_ip_dockets__docket_id__proceedings__proceeding_id__applicant_workflow_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpOppositionApplicantWorkflowResponse"];
                 };
             };
             /** @description Validation Error */

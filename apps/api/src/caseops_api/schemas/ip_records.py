@@ -171,6 +171,13 @@ class IpOppositionStageTransitionRequest(BaseModel):
             raise ValueError(
                 "Skipped, waived, extended, or superseded stages require authority."
             )
+        if self.transition_kind != "normal":
+            if not (self.source_reference or "").strip():
+                raise ValueError("Exceptional opposition stages require a source reference.")
+            if not (self.evidence_refs or self.document_refs):
+                raise ValueError("Exceptional opposition stages require source evidence.")
+            if not (self.authorized_confirmation or "").strip():
+                raise ValueError("Exceptional opposition stages require authorized confirmation.")
         if self.to_stage == "closed":
             if not all(
                 (

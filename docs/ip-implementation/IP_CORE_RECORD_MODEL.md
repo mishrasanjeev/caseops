@@ -220,3 +220,37 @@ calculation, hearing/order/appeal handling, downstream application-disposition
 review, translations, adjournments, security for costs, Madrid designations, and
 complete UJ-12/UJ-13 acceptance remain assigned to the later M4 slices; this
 workspace does not claim or duplicate them.
+
+## IPLF-041 applicant opposition workflow
+
+IPLF-041 extends the IPLF-040 proceeding aggregate without adding a second
+opposition, deadline, document, notification, or Matter owner. Applicant work
+product is appended to `ip_docket_events` as typed
+`opposition_applicant_action` facts. Counterstatement and applicant-evidence
+dates are proposed and confirmed through the existing governed `ip_deadlines`
+service and its Matter deadline, responsibility, reminder, calendar, and audit
+projections.
+
+The applicant workflow keeps pending opposition-number allocation explicit and
+selects only an active rule whose immutable rule-set scope is exactly
+`opposition` / `applicant` / `counterstatement_due` or
+`applicant_evidence_due`. Critical confirmation requires the existing
+operational Matter boundary and distinct primary/backup responsibility. A
+counterstatement filing records its filing reference/date, final signed
+document, filing evidence, and verification facts: signatory, authority,
+place/date, verified paragraph ranges, knowledge basis, and signed-document
+reference. Service is a separate fact. Rule 46 requires an explicit
+`file_evidence` or `rely_on_pleaded_facts` election; absence is not an election.
+
+Normal entry into `counterstatement_filed` and `applicant_evidence_filed` is
+blocked until the corresponding work product exists. Exceptional opposition
+transitions require source, evidence, authority, and authorized confirmation.
+Withdrawal changes only the proceeding stage and preserves the linked Matter.
+Applicant-action writes compose their response before commit so a failed
+response cannot leave a committed legal event.
+
+This slice proves the applicant counterstatement and Rule 46 path, pending
+number handling, sourced extension control, and linked-Matter preservation.
+Rules 47, further-evidence leave, hearing, order, appeal, settlement detail,
+translations, security for costs, and downstream application disposition remain
+with IPLF-043 and later allocated slices.

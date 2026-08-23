@@ -152,6 +152,30 @@ def validate_opposition_stage_event(
             status_code=422,
             detail="Exceptional opposition transitions require authority.",
         )
+    if transition_kind != "normal" and not all(
+        (
+            (source_reference or "").strip(),
+            list(evidence_refs) or list(document_refs),
+            str(authorized_confirmation or "").strip(),
+        )
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Exceptional opposition transitions require source, evidence, "
+                "authority, and authorized confirmation."
+            ),
+        )
+    if transition_kind == "normal":
+        from caseops_api.services.ip_opposition_applicant import (
+            assert_applicant_stage_prerequisites,
+        )
+
+        assert_applicant_stage_prerequisites(
+            session,
+            proceeding=proceeding,
+            to_stage=to_stage,
+        )
     if to_stage == "closed" and not all(
         (
             str(outcome or "").strip(),

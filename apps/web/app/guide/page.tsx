@@ -690,6 +690,45 @@ export default function GuidePage() {
                     </li>
                   </ul>
                   <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
+                    Applicant opposition docketing
+                  </h3>
+                  <p>
+                    In the opposition workspace, confirm the applicant profile and source
+                    notice first. A pending Registry opposition number remains visible and
+                    must be recorded separately from the application number before stage
+                    progression.
+                  </p>
+                  <Steps
+                    items={[
+                      <>
+                        Select the exact active applicant-side rule and working calendar,
+                        enter the trigger date and certainty, then propose the
+                        counterstatement deadline.
+                      </>,
+                      <>
+                        Confirm the calculated deadline with distinct primary and backup
+                        membership owners. The linked operational Matter is required before
+                        confirmation.
+                      </>,
+                      <>
+                        At the counterstatement stage, record the TM-O filing reference,
+                        final signed document, filing evidence, signatory, authority,
+                        verification place/date, paragraph ranges, and knowledge basis.
+                      </>,
+                      <>
+                        Record service separately. At the applicant-evidence stage, propose
+                        and confirm the Rule 46 deadline and explicitly choose either filed
+                        evidence or reliance on pleaded facts; no action is never treated as
+                        an election.
+                      </>,
+                    ]}
+                  />
+                  <Callout tone="warn" title="Exceptions remain evidence-backed">
+                    An extension, waiver, skipped stage, supersession, or closure requires
+                    its source, evidence, authority, and authorized confirmation. Withdrawing
+                    the opposition does not close the linked Matter.
+                  </Callout>
+                  <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
                     Trademark renewals
                   </h3>
                   <p>
