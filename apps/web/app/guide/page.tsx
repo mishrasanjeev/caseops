@@ -764,10 +764,45 @@ export default function GuidePage() {
                       </>,
                     ]}
                   />
-                  <Callout tone="warn" title="Later opposition stages remain bounded">
-                    Further-evidence leave, hearing, order, appeal, settlement, translation,
-                    security-for-costs, and downstream application disposition are not part
-                    of this opponent docketing workflow.
+                  <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
+                    Shared evidence, hearing, order, and appeal work
+                  </h3>
+                  <Steps
+                    items={[
+                      <>
+                        Record the filed Rule 45, Rule 46, or Rule 47 affidavit package with
+                        its exhibits, index, verification, relied-on documents, filing receipt,
+                        and service evidence. Further evidence stays blocked until the matching
+                        leave or order is recorded.
+                      </>,
+                      <>
+                        Schedule the canonical shared hearing with responsible attendance and
+                        reminders. Link the cause list, issue checklist, evidence bundle,
+                        authorities, written submissions, and post-hearing note to that hearing.
+                      </>,
+                      <>
+                        Record an authorized deadline extension as a replacement of the
+                        confirmed legal deadline. The original calculation and responsibility
+                        history remain available; the replacement receives fresh ownership and
+                        reminders.
+                      </>,
+                      <>
+                        Record the operative order, affected application and opposition,
+                        costs, compliance directions, appeal review, and final order document.
+                        A later appeal must link that order to a separate appeal proceeding and
+                        appeal identifier, or to an accessible Matter.
+                      </>,
+                      <>
+                        Use the evidence-backed stage transition for withdrawal, settlement
+                        closure, waiver, abandonment, or other exceptional outcomes. Closing an
+                        opposition does not close its linked Matter.
+                      </>,
+                    ]}
+                  />
+                  <Callout tone="warn" title="Specialist details remain bounded">
+                    Multi-class partial outcomes, translation workflow, adjournment detail,
+                    nonappearance, security for costs, and downstream application disposition
+                    remain separately controlled work.
                   </Callout>
                   <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
                     Trademark renewals

@@ -112,6 +112,8 @@ vi.mock("@/lib/api/endpoints", () => ({
   fetchIpCoreRecords: fetchIpCoreRecordsMock,
   createIpOppositionProceeding: vi.fn(),
   fetchIpOppositionWorkspace: vi.fn(),
+  fetchIpOppositionSharedWorkflow: vi.fn(),
+  recordIpOppositionSharedAction: vi.fn(),
   saveIpOppositionWorkspace: vi.fn(),
   transitionIpOppositionStage: vi.fn(),
   fetchIpProsecutionWorkspace: fetchIpProsecutionWorkspaceMock,

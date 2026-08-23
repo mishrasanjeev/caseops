@@ -130,7 +130,10 @@ Every public claim is classified as one of: live, review-first, provider-gated, 
 - Application and opposition identifiers remain separate, including explicit pending Registry allocation
 - Applicant work covers governed counterstatement and Rule 46 decisions; opponent work covers governed notice filing/correction, separate service, Rule 45 and Rule 47 decisions
 - Critical opposition deadlines require distinct primary and backup owners, while rejected filings and missing client instruction create shared corrective or escalation work without falsely advancing the legal stage
-- Hearing, order, appeal, settlement, translation, security-for-costs, and downstream disposition remain separate later-stage workflows
+- Shared work records complete Rules 45-47 affidavit packages and further evidence only after matching leave or order; it extends a confirmed legal deadline by superseding rather than overwriting it
+- Hearing preparation and post-hearing notes link the canonical shared hearing, while an opposition order records affected records, costs, compliance directions, appeal review, and the final document
+- An appeal link preserves the original opposition order and points to a separate appeal proceeding plus appeal identifier, or to an accessible Matter
+- Withdrawal and settlement closure use the evidence-backed opposition stage history; translation, security-for-costs, multi-class partial outcomes, and downstream disposition remain separate later slices
 
 ### 8. Contracts and outside counsel
 

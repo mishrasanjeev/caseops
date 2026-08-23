@@ -29,7 +29,7 @@ const body = `# CaseOps - Indian legal operating system
 - **Drafting**: bail applications, quashing petitions, civil reviews, arbitration submissions, and more with no invented facts, no invented authorities, and statute-guidance-aware BNS vs BNSS
 - **Hearing prep**: structured packs with chronology, last order, pending compliance, issues, opposition points, authority cards, and oral-submission notes
 - **Research**: shared public authority corpus, structured extraction, reranking, and tenant-private workspace notebook entries
-- **Trademark oppositions**: distinct application/opposition identifiers plus governed applicant Rule 46 and opponent notice, filing-correction, service, Rule 45 and Rule 47 work with signed evidence and dual deadline ownership
+- **Trademark oppositions**: distinct application/opposition identifiers, applicant and opponent TM-O work, Rules 45-47 affidavit packages, authorized deadline replacement, shared hearing preparation, sourced orders, compliance directions, and order-linked appeal records
 - **Outside counsel**: panel profiles, matter assignments, budgets/fee arrangements, spend logging, and payment state where supported
 - **Matter billing**: law-firm billing profiles, rates, fixed fees, milestones, expenses, retainers/advances, firm/client GST fields, place of supply, SAC/HSN/service classification, CGST/SGST/IGST split, TDS adjustments, amount paid/outstanding, and server-rendered invoice PDFs
 - **Access recovery**: /sign-in links to /account/forgot-password for anti-enumeration reset requests; reset completion uses single-use 60-minute links and never emails raw passwords

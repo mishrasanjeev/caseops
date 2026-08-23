@@ -5267,6 +5267,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/opposition-shared-actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Opposition Shared Action */
+        post: operations["post_ip_opposition_shared_action_api_ip_dockets__docket_id__proceedings__proceeding_id__opposition_shared_actions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/opposition-shared-workflow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Opposition Shared Workflow */
+        get: operations["get_ip_opposition_shared_workflow_api_ip_dockets__docket_id__proceedings__proceeding_id__opposition_shared_workflow_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/opposition-workspace": {
         parameters: {
             query?: never;
@@ -21138,7 +21172,7 @@ export interface components {
              * Event Kind
              * @enum {string}
              */
-            event_kind: "filing" | "formalities" | "examination_report" | "response" | "show_cause_hearing" | "acceptance" | "publication" | "registration" | "renewal" | "refusal" | "abandonment" | "restoration" | "lifecycle_transition" | "opposition_profile" | "opposition_applicant_action" | "opposition_opponent_action";
+            event_kind: "filing" | "formalities" | "examination_report" | "response" | "show_cause_hearing" | "acceptance" | "publication" | "registration" | "renewal" | "refusal" | "abandonment" | "restoration" | "lifecycle_transition" | "opposition_profile" | "opposition_applicant_action" | "opposition_opponent_action" | "opposition_shared_action";
             /** Evidence Refs */
             evidence_refs?: string[];
             /** Expected Application Version */
@@ -22837,6 +22871,20 @@ export interface components {
             /** Title */
             title?: string | null;
         };
+        /** IpOppositionAppealLink */
+        IpOppositionAppealLink: {
+            /** Appeal Identifier */
+            appeal_identifier: string;
+            /** Order Event Id */
+            order_event_id: string;
+            /** Target Id */
+            target_id: string;
+            /**
+             * Target Kind
+             * @enum {string}
+             */
+            target_kind: "appeal_proceeding" | "matter";
+        };
         /** IpOppositionApplicantActionRequest */
         IpOppositionApplicantActionRequest: {
             /**
@@ -22942,6 +22990,77 @@ export interface components {
              */
             represented_side: "applicant";
         };
+        /** IpOppositionComplianceDirection */
+        IpOppositionComplianceDirection: {
+            /** Direction */
+            direction: string;
+            /**
+             * Due On
+             * Format: date
+             */
+            due_on: string;
+        };
+        /** IpOppositionDeadlineExtension */
+        IpOppositionDeadlineExtension: {
+            /** Deadline Id */
+            deadline_id: string;
+            /** Expected Deadline Version */
+            expected_deadline_version: number;
+            /** Internal Target On */
+            internal_target_on?: string | null;
+            /**
+             * New Result On
+             * Format: date
+             */
+            new_result_on: string;
+            /** Reminder Offsets Days */
+            reminder_offsets_days?: number[];
+            /** Responsibilities */
+            responsibilities: components["schemas"]["IpResponsibilityInput"][];
+        };
+        /** IpOppositionEvidencePackage */
+        IpOppositionEvidencePackage: {
+            /** Affidavit Deponent */
+            affidavit_deponent: string;
+            /** Affidavit Document Ref */
+            affidavit_document_ref: string;
+            /** Exhibit Document Refs */
+            exhibit_document_refs: string[];
+            /**
+             * Filed On
+             * Format: date
+             */
+            filed_on: string;
+            /** Filing Reference */
+            filing_reference: string;
+            /** Index Document Ref */
+            index_document_ref: string;
+            /** Leave Or Order Reference */
+            leave_or_order_reference?: string | null;
+            /**
+             * Package Kind
+             * @enum {string}
+             */
+            package_kind: "rule_45" | "rule_46" | "rule_47" | "further_evidence";
+            /** Package Version */
+            package_version: number;
+            /** Relied On Document Refs */
+            relied_on_document_refs: string[];
+            service: components["schemas"]["IpOppositionServiceFact"];
+            verification: components["schemas"]["IpOppositionPleadingVerification"];
+        };
+        /** IpOppositionFurtherEvidenceLeave */
+        IpOppositionFurtherEvidenceLeave: {
+            /**
+             * Granted On
+             * Format: date
+             */
+            granted_on: string;
+            /** Leave Or Order Reference */
+            leave_or_order_reference: string;
+            /** Permitted Scope */
+            permitted_scope: string;
+        };
         /** IpOppositionGround */
         IpOppositionGround: {
             /**
@@ -22957,6 +23076,27 @@ export interface components {
             classification_source: "manual" | "ai_assisted";
             /** Lawyer Detail */
             lawyer_detail: string;
+        };
+        /** IpOppositionHearingPreparation */
+        IpOppositionHearingPreparation: {
+            /** Attendance Membership Ids */
+            attendance_membership_ids: string[];
+            /** Authority Refs */
+            authority_refs: string[];
+            /** Cause List Source */
+            cause_list_source: string;
+            /** Checklist Items */
+            checklist_items: string[];
+            /** Evidence Document Refs */
+            evidence_document_refs: string[];
+            /** Issues */
+            issues: string[];
+            /** Post Hearing Notes */
+            post_hearing_notes?: string | null;
+            /** Shared Hearing Id */
+            shared_hearing_id: string;
+            /** Written Submission Document Refs */
+            written_submission_document_refs?: string[];
         };
         /** IpOppositionNumberCreate */
         IpOppositionNumberCreate: {
@@ -23095,6 +23235,26 @@ export interface components {
              */
             represented_side: "opponent";
         };
+        /** IpOppositionOrderDetails */
+        IpOppositionOrderDetails: {
+            /** Affected Application Id */
+            affected_application_id: string;
+            /** Affected Proceeding Id */
+            affected_proceeding_id: string;
+            /**
+             * Appeal Review
+             * @enum {string}
+             */
+            appeal_review: "required" | "not_required" | "pending";
+            /** Compliance Directions */
+            compliance_directions?: components["schemas"]["IpOppositionComplianceDirection"][];
+            /** Costs And Directions */
+            costs_and_directions?: string[];
+            /** Operative Result */
+            operative_result: string;
+            /** Order Document Ref */
+            order_document_ref: string;
+        };
         /** IpOppositionPartyInput */
         IpOppositionPartyInput: {
             /** Party Name */
@@ -23205,6 +23365,91 @@ export interface components {
              * @default false
              */
             starts_response_period: boolean;
+        };
+        /** IpOppositionSharedActionRequest */
+        IpOppositionSharedActionRequest: {
+            /** Acknowledged Exception Codes */
+            acknowledged_exception_codes?: string[];
+            /**
+             * Action Kind
+             * @enum {string}
+             */
+            action_kind: "deadline_extended" | "further_evidence_leave_recorded" | "evidence_package_recorded" | "hearing_preparation_recorded" | "post_hearing_note_recorded" | "order_recorded" | "appeal_linked";
+            appeal_link?: components["schemas"]["IpOppositionAppealLink"] | null;
+            /** Authorized Confirmation */
+            authorized_confirmation: string;
+            deadline_extension?: components["schemas"]["IpOppositionDeadlineExtension"] | null;
+            /** Document Refs */
+            document_refs?: string[];
+            /**
+             * Effective At
+             * Format: date-time
+             */
+            effective_at: string;
+            evidence_package?: components["schemas"]["IpOppositionEvidencePackage"] | null;
+            /** Evidence Refs */
+            evidence_refs: string[];
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version: number;
+            /** Expected Proceeding Version */
+            expected_proceeding_version: number;
+            further_evidence_leave?: components["schemas"]["IpOppositionFurtherEvidenceLeave"] | null;
+            hearing_preparation?: components["schemas"]["IpOppositionHearingPreparation"] | null;
+            order_details?: components["schemas"]["IpOppositionOrderDetails"] | null;
+            /** Reason */
+            reason: string;
+            /** Responsible Membership Id */
+            responsible_membership_id: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "manual" | "integration" | "system";
+            /** Source Reference */
+            source_reference: string;
+            /** Supersedes Action Event Id */
+            supersedes_action_event_id?: string | null;
+        };
+        /** IpOppositionSharedHearingRecord */
+        IpOppositionSharedHearingRecord: {
+            /** Forum Name */
+            forum_name: string;
+            /**
+             * Hearing On
+             * Format: date
+             */
+            hearing_on: string;
+            /** Id */
+            id: string;
+            /** Purpose */
+            purpose: string;
+            /** Status */
+            status: string;
+            /** Time Status */
+            time_status: string;
+        };
+        /** IpOppositionSharedWorkflowResponse */
+        IpOppositionSharedWorkflowResponse: {
+            /** Active Deadlines */
+            active_deadlines: components["schemas"]["IpDeadlineRecord"][];
+            /** Current Stage */
+            current_stage: string;
+            /**
+             * Next Required Action
+             * @enum {string}
+             */
+            next_required_action: "complete_role_workflow" | "record_evidence_package" | "advance_to_hearing" | "schedule_hearing" | "record_hearing_preparation" | "await_hearing" | "record_post_hearing_note" | "advance_to_order" | "record_order" | "review_appeal_or_close" | "link_appeal" | "complete_appeal_or_close" | "closed";
+            /** Proceeding Id */
+            proceeding_id: string;
+            /**
+             * Represented Side
+             * @enum {string}
+             */
+            represented_side: "applicant" | "opponent";
+            /** Shared Actions */
+            shared_actions: components["schemas"]["IpDocketEventResponse"][];
+            /** Shared Hearings */
+            shared_hearings: components["schemas"]["IpOppositionSharedHearingRecord"][];
         };
         /** IpOppositionStageTransitionRequest */
         IpOppositionStageTransitionRequest: {
@@ -46497,6 +46742,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpOppositionOpponentWorkflowResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_opposition_shared_action_api_ip_dockets__docket_id__proceedings__proceeding_id__opposition_shared_actions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpOppositionSharedActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpOppositionSharedWorkflowResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_opposition_shared_workflow_api_ip_dockets__docket_id__proceedings__proceeding_id__opposition_shared_workflow_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpOppositionSharedWorkflowResponse"];
                 };
             };
             /** @description Validation Error */

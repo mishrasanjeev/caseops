@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from caseops_api.schemas.ip_deadlines import IpDeadlineRecord
+from caseops_api.schemas.ip_deadlines import IpDeadlineRecord, IpResponsibilityInput
 from caseops_api.schemas.ip_lifecycle import IpDocketEventResponse
 from caseops_api.schemas.ip_records import IpIdentifierResponse, IpProceedingResponse
 
@@ -417,4 +417,187 @@ class IpOppositionOpponentWorkflowResponse(BaseModel):
         "confirm_reply_evidence_deadline",
         "record_reply_evidence_decision",
         "await_hearing_or_later_stage",
+    ]
+
+
+class IpOppositionEvidencePackage(BaseModel):
+    package_kind: Literal["rule_45", "rule_46", "rule_47", "further_evidence"]
+    package_version: int = Field(ge=1)
+    affidavit_deponent: str = Field(min_length=2, max_length=255)
+    affidavit_document_ref: str = Field(min_length=2, max_length=500)
+    exhibit_document_refs: list[str] = Field(min_length=1, max_length=100)
+    index_document_ref: str = Field(min_length=2, max_length=500)
+    verification: IpOppositionPleadingVerification
+    relied_on_document_refs: list[str] = Field(min_length=1, max_length=100)
+    filing_reference: str = Field(min_length=2, max_length=500)
+    filed_on: date
+    service: IpOppositionServiceFact
+    leave_or_order_reference: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_further_evidence(self) -> IpOppositionEvidencePackage:
+        if self.package_kind == "further_evidence" and not (
+            self.leave_or_order_reference or ""
+        ).strip():
+            raise ValueError("Further evidence requires its leave or order reference.")
+        if self.package_kind != "further_evidence" and self.leave_or_order_reference:
+            raise ValueError("Leave or order is only recorded for further evidence.")
+        return self
+
+
+class IpOppositionFurtherEvidenceLeave(BaseModel):
+    leave_or_order_reference: str = Field(min_length=2, max_length=500)
+    permitted_scope: str = Field(min_length=5, max_length=4000)
+    granted_on: date
+
+
+class IpOppositionHearingPreparation(BaseModel):
+    shared_hearing_id: str
+    checklist_items: list[str] = Field(min_length=1, max_length=100)
+    issues: list[str] = Field(min_length=1, max_length=100)
+    evidence_document_refs: list[str] = Field(min_length=1, max_length=100)
+    authority_refs: list[str] = Field(min_length=1, max_length=100)
+    written_submission_document_refs: list[str] = Field(default_factory=list, max_length=100)
+    attendance_membership_ids: list[str] = Field(min_length=1, max_length=100)
+    cause_list_source: str = Field(min_length=2, max_length=500)
+    post_hearing_notes: str | None = Field(default=None, max_length=10000)
+
+
+class IpOppositionComplianceDirection(BaseModel):
+    direction: str = Field(min_length=2, max_length=2000)
+    due_on: date
+
+
+class IpOppositionOrderDetails(BaseModel):
+    operative_result: str = Field(min_length=5, max_length=4000)
+    affected_application_id: str
+    affected_proceeding_id: str
+    costs_and_directions: list[str] = Field(default_factory=list, max_length=100)
+    compliance_directions: list[IpOppositionComplianceDirection] = Field(
+        default_factory=list, max_length=100
+    )
+    appeal_review: Literal["required", "not_required", "pending"]
+    order_document_ref: str = Field(min_length=2, max_length=500)
+
+
+class IpOppositionAppealLink(BaseModel):
+    target_kind: Literal["appeal_proceeding", "matter"]
+    target_id: str
+    appeal_identifier: str = Field(min_length=2, max_length=255)
+    order_event_id: str
+
+
+class IpOppositionDeadlineExtension(BaseModel):
+    deadline_id: str
+    expected_deadline_version: int = Field(ge=1)
+    new_result_on: date
+    responsibilities: list[IpResponsibilityInput] = Field(min_length=1)
+    internal_target_on: date | None = None
+    reminder_offsets_days: list[int] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_reminders(self) -> IpOppositionDeadlineExtension:
+        if len(self.reminder_offsets_days) != len(set(self.reminder_offsets_days)):
+            raise ValueError("Reminder offsets cannot contain duplicates.")
+        if any(offset < 0 or offset > 3650 for offset in self.reminder_offsets_days):
+            raise ValueError("Reminder offsets must be between 0 and 3650 days.")
+        return self
+
+
+class IpOppositionSharedActionRequest(BaseModel):
+    expected_lifecycle_version: int = Field(ge=0)
+    expected_proceeding_version: int = Field(ge=1)
+    action_kind: Literal[
+        "deadline_extended",
+        "further_evidence_leave_recorded",
+        "evidence_package_recorded",
+        "hearing_preparation_recorded",
+        "post_hearing_note_recorded",
+        "order_recorded",
+        "appeal_linked",
+    ]
+    source: Literal["manual", "integration", "system"]
+    source_reference: str = Field(min_length=2, max_length=255)
+    effective_at: datetime
+    responsible_membership_id: str
+    reason: str = Field(min_length=5, max_length=2000)
+    authorized_confirmation: str = Field(min_length=2, max_length=500)
+    evidence_refs: list[str] = Field(min_length=1, max_length=100)
+    document_refs: list[str] = Field(default_factory=list, max_length=100)
+    acknowledged_exception_codes: list[str] = Field(default_factory=list, max_length=100)
+    supersedes_action_event_id: str | None = None
+    deadline_extension: IpOppositionDeadlineExtension | None = None
+    further_evidence_leave: IpOppositionFurtherEvidenceLeave | None = None
+    evidence_package: IpOppositionEvidencePackage | None = None
+    hearing_preparation: IpOppositionHearingPreparation | None = None
+    order_details: IpOppositionOrderDetails | None = None
+    appeal_link: IpOppositionAppealLink | None = None
+
+    @model_validator(mode="after")
+    def validate_shared_action(self) -> IpOppositionSharedActionRequest:
+        if self.effective_at.utcoffset() is None:
+            raise ValueError("Shared opposition action time must include a timezone.")
+        required_field = {
+            "deadline_extended": "deadline_extension",
+            "further_evidence_leave_recorded": "further_evidence_leave",
+            "evidence_package_recorded": "evidence_package",
+            "hearing_preparation_recorded": "hearing_preparation",
+            "post_hearing_note_recorded": "hearing_preparation",
+            "order_recorded": "order_details",
+            "appeal_linked": "appeal_link",
+        }[self.action_kind]
+        detail_fields = {
+            "deadline_extension": self.deadline_extension,
+            "further_evidence_leave": self.further_evidence_leave,
+            "evidence_package": self.evidence_package,
+            "hearing_preparation": self.hearing_preparation,
+            "order_details": self.order_details,
+            "appeal_link": self.appeal_link,
+        }
+        if detail_fields[required_field] is None:
+            raise ValueError(f"{self.action_kind.replace('_', ' ')} requires {required_field}.")
+        unexpected = [
+            field_name
+            for field_name, value in detail_fields.items()
+            if field_name != required_field and value is not None
+        ]
+        if unexpected:
+            raise ValueError("Shared opposition action contains unrelated detail fields.")
+        if self.action_kind == "post_hearing_note_recorded" and not (
+            self.hearing_preparation and self.hearing_preparation.post_hearing_notes
+        ):
+            raise ValueError("A post-hearing action requires post-hearing notes.")
+        return self
+
+
+class IpOppositionSharedHearingRecord(BaseModel):
+    id: str
+    hearing_on: date
+    time_status: str
+    forum_name: str
+    purpose: str
+    status: str
+
+
+class IpOppositionSharedWorkflowResponse(BaseModel):
+    proceeding_id: str
+    represented_side: Literal["applicant", "opponent"]
+    current_stage: str
+    shared_actions: list[IpDocketEventResponse]
+    active_deadlines: list[IpDeadlineRecord]
+    shared_hearings: list[IpOppositionSharedHearingRecord]
+    next_required_action: Literal[
+        "complete_role_workflow",
+        "record_evidence_package",
+        "advance_to_hearing",
+        "schedule_hearing",
+        "record_hearing_preparation",
+        "await_hearing",
+        "record_post_hearing_note",
+        "advance_to_order",
+        "record_order",
+        "review_appeal_or_close",
+        "link_appeal",
+        "complete_appeal_or_close",
+        "closed",
     ]

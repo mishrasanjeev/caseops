@@ -511,6 +511,8 @@ def preview_ip_docket_event(
             or row.resulting_stage == payload.resulting_stage
         )
         and (
+            payload.event_kind == "opposition_shared_action"
+            or
             payload.event_kind
             not in {"opposition_applicant_action", "opposition_opponent_action"}
             or row.payload_json.get("action_kind") == payload.payload.get("action_kind")
@@ -519,6 +521,8 @@ def preview_ip_docket_event(
         and row.id != payload.supersedes_event_id
     ]
     if payload.event_kind == "opposition_profile" and payload.supersedes_event_id:
+        duplicate_ids = []
+    if payload.event_kind == "opposition_shared_action":
         duplicate_ids = []
     latest_effective = max((_as_utc(row.effective_at) for row in rows), default=None)
     backdated = (
@@ -596,6 +600,8 @@ def _append_locked_event(
             or row.resulting_stage == payload.resulting_stage
         )
         and (
+            payload.event_kind == "opposition_shared_action"
+            or
             payload.event_kind
             not in {"opposition_applicant_action", "opposition_opponent_action"}
             or row.payload_json.get("action_kind") == payload.payload.get("action_kind")
@@ -604,6 +610,8 @@ def _append_locked_event(
         and row.id != payload.supersedes_event_id
     ]
     if payload.event_kind == "opposition_profile" and payload.supersedes_event_id:
+        duplicate_ids = []
+    if payload.event_kind == "opposition_shared_action":
         duplicate_ids = []
     unresolved_confirmed_duplicate = (
         duplicate_ids

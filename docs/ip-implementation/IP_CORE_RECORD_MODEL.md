@@ -287,3 +287,44 @@ Normal stage entry into `notice_filed`, `opponent_evidence_filed`, and
 exists. Shared further-evidence leave, extensions, hearing, order, appeal,
 settlement, translations, security for costs, and downstream application
 disposition remain allocated to IPLF-043 and later slices.
+
+## IPLF-043 shared opposition resolution workflow
+
+IPLF-043 extends the same opposition aggregate without a migration or a second
+evidence, hearing, deadline, order, appeal, Matter, document, or audit owner.
+Typed `opposition_shared_action` facts live in append-only `ip_docket_events`.
+Each fact has a stable legal-action identity, source, effective time,
+responsible lawyer, confirmation, evidence, documents, and correction lineage.
+
+Rules 45, 46, and 47 evidence packages record affidavit, exhibit, index,
+verification, relied-on-document, filing, and service facts. Side and stage are
+checked against the represented opposition. Further evidence additionally
+requires a previously recorded matching leave or order. Same package versions
+cannot be silently duplicated; corrections supersede a same-kind prior event.
+
+An authorized extension delegates to the governed `ip_deadlines` override
+writer in the same transaction. The prior deadline becomes superseded, the
+replacement retains calculation lineage, and fresh primary/backup ownership
+and reminders are applied. If the legal event append fails, the deadline change
+rolls back too.
+
+Hearing work points to the canonical shared `MatterHearing` record for the IP
+docket. Preparation captures the issue checklist, evidence, authorities,
+written submissions, attendance, and cause-list source. Post-hearing notes
+require that hearing to be completed. Normal progression to
+`reserved_for_order` is blocked until preparation exists.
+
+An order can be recorded only at `reserved_for_order`, after hearing
+preparation, and must identify the affected application and opposition. It
+captures the operative result, costs, compliance directions, appeal review,
+and final order document. Normal progression to `decided` requires that order.
+An appeal link then preserves the order event while linking either a separate
+appeal proceeding with a current appeal identifier or an access-visible Matter;
+normal progression to `appealed` requires that link.
+
+Withdrawal, waiver, abandonment, settlement closure, and other exceptional
+stage decisions continue through the existing opposition transition writer,
+which requires source, evidence, authority, and authorized confirmation and
+does not close the linked Matter. Multi-class partial outcomes, translation,
+adjournment detail, nonappearance, security for costs, and downstream
+application disposition remain assigned to later slices.
