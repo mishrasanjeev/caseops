@@ -129,6 +129,7 @@ def upgrade() -> None:
         )
         batch.create_index("ix_drafts_company_id", ["company_id"])
         batch.create_index("ix_drafts_company_ip_docket", ["company_id", "ip_docket_id"])
+        batch.create_index("ix_drafts_ip_docket_id", ["ip_docket_id"])
         batch.create_index("ix_drafts_ip_proceeding_id", ["ip_proceeding_id"])
 
     with op.batch_alter_table("model_runs") as batch:
@@ -193,6 +194,7 @@ def upgrade() -> None:
             "(source_ip_document_version_id IS NOT NULL AND source_ip_document_id IS NOT NULL)",
         )
         batch.create_index("ix_drafting_data_company_ip_docket", ["company_id", "ip_docket_id"])
+        batch.create_index("ix_drafting_data_ip_docket_id", ["ip_docket_id"])
         batch.create_index("ix_drafting_data_source_ip_document_id", ["source_ip_document_id"])
         batch.create_index(
             "ix_drafting_data_source_ip_document_version_id",
@@ -244,6 +246,7 @@ def downgrade() -> None:
     with op.batch_alter_table("drafting_data_extraction_fields") as batch:
         batch.drop_index("ix_drafting_data_source_ip_document_version_id")
         batch.drop_index("ix_drafting_data_source_ip_document_id")
+        batch.drop_index("ix_drafting_data_ip_docket_id")
         batch.drop_index("ix_drafting_data_company_ip_docket")
         batch.drop_constraint("ck_drafting_data_ip_source_complete", type_="check")
         batch.drop_constraint("ck_drafting_data_single_source", type_="check")
@@ -270,6 +273,7 @@ def downgrade() -> None:
         op.execute("DROP FUNCTION IF EXISTS populate_draft_company_from_matter()")
     with op.batch_alter_table("drafts") as batch:
         batch.drop_index("ix_drafts_ip_proceeding_id")
+        batch.drop_index("ix_drafts_ip_docket_id")
         batch.drop_index("ix_drafts_company_ip_docket")
         batch.drop_index("ix_drafts_company_id")
         batch.drop_constraint("ck_draft_ip_proceeding_requires_docket", type_="check")

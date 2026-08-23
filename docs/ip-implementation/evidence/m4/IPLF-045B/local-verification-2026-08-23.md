@@ -40,6 +40,9 @@ No human legal/provider/UAT acceptance is inferred.
 - Final focused API run: 4 IPLF-045 tests passed, including normal lifecycle,
   incompatible template atomicity, provider-failure atomicity, and the
   database cross-docket target fence.
+- CI correction run: 9 tests passed across the exact foreign-key leading-index
+  gate, IPLF-045 journey tests, and migration-order validation after adding
+  dedicated docket-target indexes to both new composite-FK owners.
 - Existing drafting regression run before final integration: 44 passed.
 
 ## Boundaries

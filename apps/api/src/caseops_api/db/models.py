@@ -11098,7 +11098,7 @@ class Draft(Base):
         nullable=True,
         index=True,
     )
-    ip_docket_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    ip_docket_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     ip_proceeding_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     created_by_membership_id: Mapped[str | None] = mapped_column(
         ForeignKey("company_memberships.id", ondelete="SET NULL"),
@@ -11197,7 +11197,7 @@ class DraftingDataExtractionField(Base):
         nullable=True,
         index=True,
     )
-    ip_docket_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    ip_docket_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     source_attachment_id: Mapped[str | None] = mapped_column(
         ForeignKey("matter_attachments.id", ondelete="SET NULL"),
         nullable=True,
