@@ -90,6 +90,19 @@ describe("MatterTimelinePage", () => {
           metadata: { bench_name: "Division Bench" },
         },
         {
+          id: "ip_event:ipe1",
+          event_type: "ip_event",
+          event_date: "2026-05-05",
+          title: "CASEOPS: filed to examined",
+          summary: "Registry examination report received.",
+          status: "confirmed",
+          source_type: "ip_docket_event",
+          source_id: "ipe1",
+          badges: ["official_action", "litigation"],
+          links: { matter: "/app/matters/m1", ip_docket: "/app/ip?docket=ip1" },
+          metadata: { ip_docket_id: "ip1" },
+        },
+        {
           id: "document:a1",
           event_type: "document",
           event_date: "2026-05-04",
@@ -131,6 +144,11 @@ describe("MatterTimelinePage", () => {
     expect(screen.getByText("Order / judgment")).toBeInTheDocument();
     expect(screen.getByText("Orders")).toBeInTheDocument();
     expect(screen.getByText("Seq 40")).toBeInTheDocument();
+    expect(screen.getByText("CASEOPS: filed to examined")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open IP record" })).toHaveAttribute(
+      "href",
+      "/app/ip?docket=ip1",
+    );
   });
 
   it("requests latest-first sorting when the sort toggle changes", async () => {

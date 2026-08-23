@@ -14485,6 +14485,115 @@ class IpDocketEvent(Base):
     )
 
 
+class IpMatterLink(Base):
+    """Effective-dated reference between independently owned IP and Matter lifecycles."""
+
+    __tablename__ = "ip_matter_links"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_matter_link_docket_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["matter_id", "company_id"],
+            ["matters.id", "matters.company_id"],
+            name="fk_ip_matter_link_matter_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_matter_link_creator_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["retired_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_matter_link_retirer_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_ip_matter_link_id_company"),
+        Index(
+            "uq_ip_matter_links_active_role",
+            "company_id",
+            "docket_id",
+            "matter_id",
+            "relation_role",
+            unique=True,
+            postgresql_where=text("retired_at IS NULL"),
+            sqlite_where=text("retired_at IS NULL"),
+        ),
+        Index(
+            "uq_ip_matter_links_active_operational",
+            "company_id",
+            "docket_id",
+            unique=True,
+            postgresql_where=text(
+                "retired_at IS NULL AND relation_role = 'operational'"
+            ),
+            sqlite_where=text("retired_at IS NULL AND relation_role = 'operational'"),
+        ),
+        Index(
+            "ix_ip_matter_links_company_docket_effective",
+            "company_id",
+            "docket_id",
+            "effective_from",
+        ),
+        Index(
+            "ix_ip_matter_links_company_matter_effective",
+            "company_id",
+            "matter_id",
+            "effective_from",
+        ),
+        CheckConstraint(
+            "relation_role IN ('operational', 'litigation', 'advisory', 'appeal', "
+            "'enforcement', 'billing', 'other')",
+            name="ck_ip_matter_link_relation_role",
+        ),
+        CheckConstraint(
+            "source IN ('manual', 'system', 'migration')",
+            name="ck_ip_matter_link_source",
+        ),
+        CheckConstraint(
+            "retired_at IS NULL OR retired_at >= effective_from",
+            name="ck_ip_matter_link_effective_range",
+        ),
+        CheckConstraint(
+            "(retired_at IS NULL AND retired_by_membership_id IS NULL AND "
+            "retirement_reason IS NULL) OR "
+            "(retired_at IS NOT NULL AND retired_by_membership_id IS NOT NULL AND "
+            "retirement_reason IS NOT NULL)",
+            name="ck_ip_matter_link_retirement_contract",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    matter_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    relation_role: Mapped[str] = mapped_column(String(32), nullable=False)
+    effective_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    source: Mapped[str] = mapped_column(String(24), nullable=False)
+    source_reference: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    retirement_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by_membership_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    retired_by_membership_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
 class IpAsset(Base):
     __tablename__ = "ip_assets"
     __table_args__ = (

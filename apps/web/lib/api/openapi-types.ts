@@ -5131,6 +5131,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/dockets/{docket_id}/matter-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Docket Matter Links */
+        get: operations["get_ip_docket_matter_links_api_ip_dockets__docket_id__matter_links_get"];
+        put?: never;
+        /** Post Ip Docket Matter Link */
+        post: operations["post_ip_docket_matter_link_api_ip_dockets__docket_id__matter_links_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/matter-links/{link_id}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Docket Matter Link Retirement */
+        post: operations["post_ip_docket_matter_link_retirement_api_ip_dockets__docket_id__matter_links__link_id__retire_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/dockets/{docket_id}/notice-links": {
         parameters: {
             query?: never;
@@ -7986,6 +8021,23 @@ export interface paths {
         };
         /** Download a server-rendered matter invoice PDF */
         get: operations["download_current_company_matter_invoice_pdf_api_matters__matter_id__invoices__invoice_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/{matter_id}/ip-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List independently governed IP records linked to a Matter */
+        get: operations["get_current_company_matter_ip_links_api_matters__matter_id__ip_links_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -21315,6 +21367,17 @@ export interface components {
             /** Dockets */
             dockets: components["schemas"]["IpDocketRecordResponse"][];
         };
+        /** IpDocketMatterLinkListResponse */
+        IpDocketMatterLinkListResponse: {
+            /** Active Count */
+            active_count: number;
+            /** Count */
+            count: number;
+            /** Docket Id */
+            docket_id: string;
+            /** Links */
+            links: components["schemas"]["IpMatterLinkRecord"][];
+        };
         /** IpDocketQueueListResponse */
         IpDocketQueueListResponse: {
             /** Queues */
@@ -22613,6 +22676,122 @@ export interface components {
             status: string;
             /** Successor Docket Id */
             successor_docket_id: string | null;
+        };
+        /** IpMatterLifecycleRecord */
+        IpMatterLifecycleRecord: {
+            /** Docket Id */
+            docket_id: string;
+            /** Docket Is Active */
+            docket_is_active: boolean;
+            /** Docket Status */
+            docket_status: string;
+            /** Docket Title */
+            docket_title: string;
+            /** Matter Code */
+            matter_code: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Matter Is Active */
+            matter_is_active: boolean;
+            /** Matter Status */
+            matter_status: string;
+            /** Matter Title */
+            matter_title: string;
+        };
+        /** IpMatterLinkCreateRequest */
+        IpMatterLinkCreateRequest: {
+            /** Effective From */
+            effective_from?: string | null;
+            /**
+             * Expected Docket Updated At
+             * Format: date-time
+             */
+            expected_docket_updated_at: string;
+            /** Matter Id */
+            matter_id: string;
+            /** Reason */
+            reason: string;
+            /**
+             * Relation Role
+             * @enum {string}
+             */
+            relation_role: "operational" | "litigation" | "advisory" | "appeal" | "enforcement" | "billing" | "other";
+            /** Source Reference */
+            source_reference?: string | null;
+        };
+        /** IpMatterLinkRecord */
+        IpMatterLinkRecord: {
+            /** Access Mismatch Warning */
+            access_mismatch_warning: boolean;
+            /** Company Id */
+            company_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Membership Id */
+            created_by_membership_id: string | null;
+            /** Docket Id */
+            docket_id: string;
+            /**
+             * Effective From
+             * Format: date-time
+             */
+            effective_from: string;
+            /** Id */
+            id: string;
+            lifecycle: components["schemas"]["IpMatterLifecycleRecord"];
+            /** Matter Id */
+            matter_id: string;
+            /** Reason */
+            reason: string;
+            /**
+             * Relation Role
+             * @enum {string}
+             */
+            relation_role: "operational" | "litigation" | "advisory" | "appeal" | "enforcement" | "billing" | "other";
+            /** Retired At */
+            retired_at: string | null;
+            /** Retired By Membership Id */
+            retired_by_membership_id: string | null;
+            /** Retirement Reason */
+            retirement_reason: string | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "manual" | "system" | "migration";
+            /** Source Reference */
+            source_reference: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** IpMatterLinkRetireRequest */
+        IpMatterLinkRetireRequest: {
+            /**
+             * Expected Docket Updated At
+             * Format: date-time
+             */
+            expected_docket_updated_at: string;
+            /**
+             * Expected Link Updated At
+             * Format: date-time
+             */
+            expected_link_updated_at: string;
+            /** Reason */
+            reason: string;
+            /** Retired At */
+            retired_at?: string | null;
+        };
+        /** IpMatterLinkRetireResponse */
+        IpMatterLinkRetireResponse: {
+            link: components["schemas"]["IpMatterLinkRecord"];
+            /** Operational Pointer Cleared */
+            operational_pointer_cleared: boolean;
         };
         /** IpNoticeLinkCreateRequest */
         IpNoticeLinkCreateRequest: {
@@ -29054,6 +29233,17 @@ export interface components {
              */
             status: "valid" | "invalid" | "duplicate" | "created" | "failed";
         };
+        /** MatterIpLinkListResponse */
+        MatterIpLinkListResponse: {
+            /** Active Count */
+            active_count: number;
+            /** Count */
+            count: number;
+            /** Links */
+            links: components["schemas"]["IpMatterLinkRecord"][];
+            /** Matter Id */
+            matter_id: string;
+        };
         /**
          * MatterLifecycleStatusRequest
          * @description Explicit terminal lifecycle transition with compare-and-swap guards.
@@ -29742,7 +29932,7 @@ export interface components {
              * Event Type
              * @enum {string}
              */
-            event_type: "hearing" | "court_order" | "document" | "deadline" | "task" | "activity";
+            event_type: "hearing" | "court_order" | "document" | "deadline" | "task" | "activity" | "ip_event";
             /** Id */
             id: string;
             /**
@@ -29778,6 +29968,8 @@ export interface components {
         MatterTimelineLinkRecord: {
             /** Document */
             document?: string | null;
+            /** Ip Docket */
+            ip_docket?: string | null;
             /** Matter */
             matter: string;
         };
@@ -46477,6 +46669,108 @@ export interface operations {
             };
         };
     };
+    get_ip_docket_matter_links_api_ip_dockets__docket_id__matter_links_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocketMatterLinkListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_docket_matter_link_api_ip_dockets__docket_id__matter_links_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpMatterLinkCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpMatterLinkRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_docket_matter_link_retirement_api_ip_dockets__docket_id__matter_links__link_id__retire_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                link_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpMatterLinkRetireRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpMatterLinkRetireResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_ip_notice_link_api_ip_dockets__docket_id__notice_links_post: {
         parameters: {
             query?: never;
@@ -52503,6 +52797,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_current_company_matter_ip_links_api_matters__matter_id__ip_links_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterIpLinkListResponse"];
                 };
             };
             /** @description Validation Error */

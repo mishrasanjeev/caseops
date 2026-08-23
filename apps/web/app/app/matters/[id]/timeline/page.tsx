@@ -6,9 +6,11 @@ import {
   CheckCircle2,
   ClipboardList,
   FileText,
+  Fingerprint,
   Gavel,
   ScrollText,
 } from "lucide-react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
@@ -45,6 +47,7 @@ const EVENT_TYPES = [
   ["deadline", "Deadlines"],
   ["task", "Tasks"],
   ["activity", "Activity"],
+  ["ip_event", "IP events"],
 ] as const;
 
 const EVENT_LABELS: Record<string, string> = {
@@ -54,6 +57,7 @@ const EVENT_LABELS: Record<string, string> = {
   deadline: "Deadline",
   task: "Task",
   activity: "Activity",
+  ip_event: "IP event",
 };
 
 const DOCUMENT_TYPE_LABELS: Record<string, string> = {
@@ -115,6 +119,7 @@ function eventIcon(type: string) {
   if (type === "document") return FileText;
   if (type === "deadline") return CalendarDays;
   if (type === "task") return ClipboardList;
+  if (type === "ip_event") return Fingerprint;
   return CheckCircle2;
 }
 
@@ -153,7 +158,7 @@ export default function MatterTimelinePage() {
           <div>
             <CardTitle>Matter timeline</CardTitle>
             <CardDescription>
-              Hearings, orders, documents, deadlines, tasks, and material activity.
+              Hearings, orders, documents, deadlines, tasks, IP events, and material activity.
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -196,7 +201,7 @@ export default function MatterTimelinePage() {
             <EmptyState
               icon={ScrollText}
               title="No timeline events"
-              description="Events appear here as hearings, orders, documents, deadlines, tasks, and activity are added."
+              description="Events appear here as hearings, orders, documents, deadlines, tasks, IP events, and activity are added."
             />
           ) : (
             <ol className="flex flex-col gap-3">
@@ -316,6 +321,14 @@ function TimelineRow({ item }: { item: MatterTimelineItem }) {
             >
               Linked document
             </a>
+          ) : null}
+          {item.links.ip_docket ? (
+            <Link
+              href={item.links.ip_docket}
+              className="font-medium text-[var(--color-brand-700)] hover:underline"
+            >
+              Open IP record
+            </Link>
           ) : null}
         </div>
       </div>

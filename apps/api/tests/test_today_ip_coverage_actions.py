@@ -358,10 +358,10 @@ def test_today_ip_05_coverage_queries_are_bounded_and_do_not_call_access_per_row
     assert all(" limit " in statement for statement in coverage_queries)
 
 
-def test_today_ip_06_matter_disposal_suppresses_and_cannot_resurrect_coverage(
+def test_today_ip_06_matter_disposal_suppresses_actions_without_mutating_coverage(
     client: TestClient,
 ) -> None:
-    """Disposed operational children remain historical after a Matter reopen."""
+    """Matter disposal hides cancelled work while IP coverage stays independent."""
 
     seeded = _setup(client)
     matter = seeded["matter"]
@@ -418,8 +418,8 @@ def test_today_ip_06_matter_disposal_suppresses_and_cannot_resurrect_coverage(
     with get_session_factory()() as session:
         coverage = session.get(IpDeadlineCoverage, seeded["coverage_id"])
         assert coverage is not None
-        assert coverage.coverage_status == "inactive_lifecycle"
-        assert coverage.calendar_projection_status == "inactive_lifecycle"
+        assert coverage.coverage_status == "pending"
+        assert coverage.calendar_projection_status == "projected"
         assert coverage.accepted_at is None
         assert coverage.responsible_membership_id == seeded["owner_id"]
 

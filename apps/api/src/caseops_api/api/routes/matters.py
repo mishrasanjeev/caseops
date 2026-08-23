@@ -73,6 +73,7 @@ from caseops_api.schemas.hearing_packs import (
     HearingPackGenerateRequest,
     HearingPackRecord,
 )
+from caseops_api.schemas.ip_matter_links import MatterIpLinkListResponse
 from caseops_api.schemas.legal_knowledge_graph import LegalKnowledgeGraphResponse
 from caseops_api.schemas.litigation_intelligence import (
     LitigationIntelligenceReviewMutationRequest,
@@ -207,6 +208,7 @@ from caseops_api.services.hearing_packs import (
 from caseops_api.services.hearing_reminders import (
     list_reminders_for_matter,
 )
+from caseops_api.services.ip_matter_links import list_matter_ip_links
 from caseops_api.services.matter_access import (
     add_access_grant,
     add_ethical_wall,
@@ -921,6 +923,19 @@ async def get_current_company_matter_timeline(
         source_limit=timeline_source_limit(limit=limit, cursor=cursor),
     )
     return timeline_response(timeline, limit=limit, cursor=cursor)
+
+
+@router.get(
+    "/{matter_id}/ip-links",
+    response_model=MatterIpLinkListResponse,
+    summary="List independently governed IP records linked to a Matter",
+)
+async def get_current_company_matter_ip_links(
+    matter_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> MatterIpLinkListResponse:
+    return list_matter_ip_links(session, context=context, matter_id=matter_id)
 
 
 @router.get(

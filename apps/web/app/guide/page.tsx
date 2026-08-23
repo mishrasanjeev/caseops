@@ -690,6 +690,39 @@ export default function GuidePage() {
                     </li>
                   </ul>
                   <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
+                    IP and Matter relationships
+                  </h3>
+                  <p>
+                    An IP docket can reference more than one accessible Matter. Open the
+                    docket&apos;s <strong>Matter relationships</strong> panel to add an
+                    operational, litigation, advisory, appeal, enforcement, billing, or
+                    other role with a written reason. Creating an IP docket with a Matter
+                    creates its operational relationship automatically.
+                  </p>
+                  <ul className="mt-4 space-y-2 text-[15px]">
+                    <li>
+                      Each relationship keeps an effective date and retirement history.
+                      Retire a relationship instead of deleting it; retiring the operational
+                      role also clears the compatibility Matter pointer.
+                    </li>
+                    <li>
+                      The relationship panel shows the Matter and IP lifecycle states side
+                      by side. Disposing or reopening a Matter does not archive, close, or
+                      reopen the IP docket, and an IP lifecycle change does not change the
+                      Matter status.
+                    </li>
+                    <li>
+                      Accessible IP legal events appear in the linked Matter timeline by
+                      reference and open the source IP record. CaseOps does not create a
+                      duplicate Matter activity for the event.
+                    </li>
+                    <li>
+                      If the two records have different access policies, authorized users
+                      see a warning. A user who cannot access both sides sees no relationship
+                      metadata, count, or hidden record identity.
+                    </li>
+                  </ul>
+                  <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
                     Applicant opposition docketing
                   </h3>
                   <p>

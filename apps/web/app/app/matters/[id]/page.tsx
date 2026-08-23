@@ -21,6 +21,7 @@ import { MatterForumCard } from "@/components/matters/MatterForumCard";
 import { NextActionCard } from "@/components/matters/NextActionCard";
 import { OrderBadges } from "@/components/matters/OrderBadges";
 import { ScheduleHearingDialog } from "@/components/matters/ScheduleHearingDialog";
+import { MatterIpLinksPanel } from "@/components/ip/IpMatterLinksPanel";
 import {
   Card,
   CardContent,
@@ -278,6 +279,8 @@ export default function MatterOverviewPage() {
       <div className="lg:col-span-3">
         <NextActionCard matterId={data.matter.id} />
       </div>
+
+      <MatterIpLinksPanel matterId={data.matter.id} />
 
       <Card className="lg:col-span-2">
         <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">

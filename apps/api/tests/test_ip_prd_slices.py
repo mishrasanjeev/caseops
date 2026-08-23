@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -16,7 +16,9 @@ from caseops_api.db.models import (
     CompanyNoticeMatterLink,
     InAppNotification,
     IpDeadlineCoverage,
+    IpDocketEvent,
     IpDocketRecord,
+    IpMatterLink,
     MatterAccessGrant,
     MatterAttachment,
     MatterTimeEntry,
@@ -696,7 +698,7 @@ def test_ip_remaining_operations_end_to_end(
         )
 
 
-def test_matter_disposal_archives_ip_docket_without_reopening_resurrection(
+def test_matter_disposal_preserves_independent_ip_docket_lifecycle(
     client: TestClient,
 ) -> None:
     bootstrap = bootstrap_company(client)
@@ -729,15 +731,21 @@ def test_matter_disposal_archives_ip_docket_without_reopening_resurrection(
     )
     assert disposed.status_code == 200, disposed.text
     assert disposed.json()["status"] == "disposed"
-    assert client.get("/api/ip/dockets", headers=headers).json()["count"] == 0
-    assert client.get(f"/api/ip/dockets/{docket_id}", headers=headers).status_code == 404
-    rejected_write = client.post(
+    listed = client.get("/api/ip/dockets", headers=headers)
+    assert listed.status_code == 200
+    assert listed.json()["count"] == 1
+    preserved = client.get(f"/api/ip/dockets/{docket_id}", headers=headers)
+    assert preserved.status_code == 200
+    assert preserved.json()["status"] == created.json()["status"]
+    assert preserved.json()["lifecycle_version"] == created.json()["lifecycle_version"]
+    independent_write = client.post(
         f"/api/ip/dockets/{docket_id}/versions",
         headers=headers,
-        json=_particulars(mark="MUST NOT WRITE")
+        json=_particulars(mark="INDEPENDENT")
         | {"expected_current_version": 1, "finalize": True},
     )
-    assert rejected_write.status_code == 404
+    assert independent_write.status_code == 200, independent_write.text
+    assert independent_write.json()["current_version"] == 2
 
     reopened = client.patch(
         f"/api/matters/{matter['id']}/lifecycle/status",
@@ -751,8 +759,8 @@ def test_matter_disposal_archives_ip_docket_without_reopening_resurrection(
     )
     assert reopened.status_code == 200, reopened.text
     assert reopened.json()["status"] == "intake"
-    assert client.get("/api/ip/dockets", headers=headers).json()["count"] == 0
-    assert client.get(f"/api/ip/dockets/{docket_id}", headers=headers).status_code == 404
+    assert client.get("/api/ip/dockets", headers=headers).json()["count"] == 1
+    assert client.get(f"/api/ip/dockets/{docket_id}", headers=headers).status_code == 200
     reloaded = client.get(f"/api/matters/{matter['id']}", headers=headers)
     assert reloaded.status_code == 200
     assert reloaded.json()["status"] == "intake"
@@ -760,8 +768,240 @@ def test_matter_disposal_archives_ip_docket_without_reopening_resurrection(
     with get_session_factory()() as session:
         docket = session.get(IpDocketRecord, docket_id)
         assert docket is not None
-        assert docket.status == "archived"
-        assert docket.archived_by_matter_disposal is True
+        assert docket.status == independent_write.json()["status"]
+        assert docket.archived_by_matter_disposal is False
+
+
+def test_ip_matter_links_are_effective_dated_many_to_many_and_timeline_is_referenced(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    headers = auth_headers(token)
+    operational_matter = _mk_matter(client, token, "IP-LINK-OPS-001")
+    advisory_matter = _mk_matter(client, token, "IP-LINK-ADV-001")
+    created = client.post(
+        "/api/ip/dockets",
+        headers=headers,
+        json={
+            "title": "Many-to-many mark",
+            "matter_id": operational_matter["id"],
+            "primary_identifier": "TM-LINK-001",
+            "restricted": False,
+            "particulars": _particulars(mark="LINKED"),
+        },
+    )
+    assert created.status_code == 201, created.text
+    docket = created.json()
+
+    initial_links = client.get(
+        f"/api/ip/dockets/{docket['id']}/matter-links", headers=headers
+    )
+    assert initial_links.status_code == 200, initial_links.text
+    assert initial_links.json()["active_count"] == 1
+    assert initial_links.json()["links"][0]["relation_role"] == "operational"
+
+    advisory = client.post(
+        f"/api/ip/dockets/{docket['id']}/matter-links",
+        headers=headers,
+        json={
+            "matter_id": advisory_matter["id"],
+            "relation_role": "advisory",
+            "source_reference": "engagement:advisory-001",
+            "reason": "Advice on a related trademark filing strategy.",
+            "expected_docket_updated_at": docket["updated_at"],
+        },
+    )
+    assert advisory.status_code == 201, advisory.text
+    advisory_link = advisory.json()
+    assert advisory_link["lifecycle"]["matter_status"] == advisory_matter["status"]
+    assert advisory_link["lifecycle"]["docket_status"] == docket["status"]
+
+    duplicate = client.post(
+        f"/api/ip/dockets/{docket['id']}/matter-links",
+        headers=headers,
+        json={
+            "matter_id": advisory_matter["id"],
+            "relation_role": "advisory",
+            "reason": "Duplicate active advisory relationship should fail.",
+            "expected_docket_updated_at": client.get(
+                f"/api/ip/dockets/{docket['id']}", headers=headers
+            ).json()["updated_at"],
+        },
+    )
+    assert duplicate.status_code == 409
+    assert duplicate.json()["code"] == "ip_matter_link_duplicate", duplicate.text
+    assert duplicate.json()["detail"] == "That active Matter link already exists."
+
+    second_operational = client.post(
+        f"/api/ip/dockets/{docket['id']}/matter-links",
+        headers=headers,
+        json={
+            "matter_id": advisory_matter["id"],
+            "relation_role": "operational",
+            "reason": "A second operational relationship must be rejected.",
+            "expected_docket_updated_at": client.get(
+                f"/api/ip/dockets/{docket['id']}", headers=headers
+            ).json()["updated_at"],
+        },
+    )
+    assert second_operational.status_code == 409, second_operational.text
+    assert second_operational.json()["code"] == "ip_operational_matter_exists"
+
+    with get_session_factory()() as session:
+        membership = session.get(CompanyMembership, bootstrap["membership"]["id"])
+        assert membership is not None
+        link_effective_from = datetime.fromisoformat(advisory_link["effective_from"])
+        session.add(
+            IpDocketEvent(
+                company_id=membership.company_id,
+                docket_id=docket["id"],
+                sequence=1,
+                event_kind="formalities",
+                source="registry",
+                source_reference="registry:before-link-001",
+                effective_at=link_effective_from - timedelta(days=1),
+                responsible_membership_id=membership.id,
+                entered_by_membership_id=membership.id,
+                reason="This event predates the advisory relationship.",
+                evidence_refs_json=["registry:before-link-001"],
+                document_refs_json=[],
+                resulting_deadline_refs_json=[],
+                candidate_status="candidate",
+                payload_json={},
+            )
+        )
+        event = IpDocketEvent(
+            company_id=membership.company_id,
+            docket_id=docket["id"],
+            sequence=2,
+            event_kind="official_action",
+            source="registry",
+            source_reference="registry:action-001",
+            effective_at=datetime.now(UTC),
+            responsible_membership_id=membership.id,
+            entered_by_membership_id=membership.id,
+            reason="Registry examination report received.",
+            evidence_refs_json=["registry:action-001"],
+            document_refs_json=[],
+            resulting_deadline_refs_json=[],
+            candidate_status="confirmed",
+            payload_json={},
+        )
+        session.add(event)
+        session.commit()
+        event_id = event.id
+
+    timeline = client.get(
+        f"/api/matters/{advisory_matter['id']}/timeline",
+        headers=headers,
+        params={"types": "ip_event", "sort": "asc", "limit": 1},
+    )
+    assert timeline.status_code == 200, timeline.text
+    assert len(timeline.json()["items"]) == 1
+    timeline_event = timeline.json()["items"][0]
+    assert timeline_event["source_id"] == event_id
+    assert timeline_event["source_type"] == "ip_docket_event"
+    assert timeline_event["links"]["ip_docket"] == f"/app/ip?docket={docket['id']}"
+    with get_session_factory()() as session:
+        # Timeline composition is by reference; it never creates a Matter activity copy.
+        assert session.get(IpDocketEvent, event_id) is not None
+        assert session.scalar(
+            select(IpMatterLink).where(IpMatterLink.id == advisory_link["id"])
+        ) is not None
+
+    refreshed_docket = client.get(
+        f"/api/ip/dockets/{docket['id']}", headers=headers
+    ).json()
+    retired = client.post(
+        f"/api/ip/dockets/{docket['id']}/matter-links/{advisory_link['id']}/retire",
+        headers=headers,
+        json={
+            "reason": "The advisory engagement has concluded.",
+            "expected_link_updated_at": advisory_link["updated_at"],
+            "expected_docket_updated_at": refreshed_docket["updated_at"],
+        },
+    )
+    assert retired.status_code == 200, retired.text
+    assert retired.json()["link"]["retired_at"] is not None
+    assert retired.json()["link"]["reason"] == advisory_link["reason"]
+    assert (
+        retired.json()["link"]["retirement_reason"]
+        == "The advisory engagement has concluded."
+    )
+    assert retired.json()["operational_pointer_cleared"] is False
+
+
+def test_ip_matter_links_omit_inaccessible_side_without_link_metadata_leak(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    owner_token = str(bootstrap["access_token"])
+    owner_headers = auth_headers(owner_token)
+    create_member = client.post(
+        "/api/companies/current/users",
+        headers=owner_headers,
+        json={
+            "full_name": "IP Docket Reader",
+            "email": "ip-reader@asterlegal.in",
+            "role": "admin",
+            "password": "MemberPass123!",
+        },
+    )
+    assert create_member.status_code == 200, create_member.text
+    login = client.post(
+        "/api/auth/login",
+        json={
+            "company_slug": "aster-legal",
+            "email": "ip-reader@asterlegal.in",
+            "password": "MemberPass123!",
+        },
+    )
+    assert login.status_code == 200, login.text
+    member_headers = auth_headers(str(login.json()["access_token"]))
+    matter = _mk_matter(client, owner_token, "IP-LINK-WALLED-001")
+    created = client.post(
+        "/api/ip/dockets",
+        headers=owner_headers,
+        json={
+            "title": "Visible IP, restricted Matter",
+            "matter_id": matter["id"],
+            "primary_identifier": "TM-LINK-WALLED-001",
+            "restricted": False,
+            "particulars": _particulars(mark="WALLED"),
+        },
+    )
+    assert created.status_code == 201, created.text
+    docket_id = created.json()["id"]
+    restricted = client.post(
+        f"/api/matters/{matter['id']}/access/restricted",
+        headers=owner_headers,
+        json={"restricted": True},
+    )
+    assert restricted.status_code == 200, restricted.text
+
+    owner_links = client.get(
+        f"/api/ip/dockets/{docket_id}/matter-links", headers=owner_headers
+    )
+    assert owner_links.status_code == 200, owner_links.text
+    assert owner_links.json()["links"][0]["access_mismatch_warning"] is True
+
+    member_docket = client.get(f"/api/ip/dockets/{docket_id}", headers=member_headers)
+    assert member_docket.status_code == 200, member_docket.text
+    hidden_links = client.get(
+        f"/api/ip/dockets/{docket_id}/matter-links", headers=member_headers
+    )
+    assert hidden_links.status_code == 200, hidden_links.text
+    assert hidden_links.json() == {
+        "docket_id": docket_id,
+        "links": [],
+        "count": 0,
+        "active_count": 0,
+    }
+    assert (
+        client.get(f"/api/matters/{matter['id']}/ip-links", headers=member_headers).status_code
+        == 404
+    )
 
 
 def test_notification_external_block_creates_exactly_one_visible_fallback(

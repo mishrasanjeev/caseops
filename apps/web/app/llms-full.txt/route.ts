@@ -135,6 +135,15 @@ Every public claim is classified as one of: live, review-first, provider-gated, 
 - An appeal link preserves the original opposition order and points to a separate appeal proceeding plus appeal identifier, or to an accessible Matter
 - Withdrawal and settlement closure use the evidence-backed opposition stage history; translation, security-for-costs, multi-class partial outcomes, and downstream disposition remain separate later slices
 
+### 7B. IP and Matter relationships
+
+- One IP docket can have effective-dated operational, litigation, advisory, appeal, enforcement, billing, and other relationships to accessible Matters
+- Creating an IP docket with a Matter creates the operational relationship; additional roles are references and do not become lifecycle parents
+- Matter and IP lifecycle states remain independent and display side by side; disposing or reopening one record does not mutate the other
+- Accessible IP legal events compose into a linked Matter timeline by source reference, without a duplicate Matter activity record
+- Relationship retirement preserves history; retiring the operational role clears only the compatibility Matter pointer
+- Access-policy mismatches are visible to authorized users, while readers who cannot access both records receive no relationship rows, counts, or hidden identifiers
+
 ### 8. Contracts and outside counsel
 
 - Contracts support clause extraction, playbook comparison, obligation tracking, and parsing/viewing DOCX tracked changes; the current UI does not export a tracked Word redline or claim version lineage

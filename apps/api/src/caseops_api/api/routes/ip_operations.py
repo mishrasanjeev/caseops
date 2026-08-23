@@ -93,6 +93,13 @@ from caseops_api.schemas.ip_lifecycle import (
     IpLifecycleTransitionResponse,
     IpProsecutionWorkspaceResponse,
 )
+from caseops_api.schemas.ip_matter_links import (
+    IpDocketMatterLinkListResponse,
+    IpMatterLinkCreateRequest,
+    IpMatterLinkRecord,
+    IpMatterLinkRetireRequest,
+    IpMatterLinkRetireResponse,
+)
 from caseops_api.schemas.ip_operations import (
     IpAssignedCoverageListResponse,
     IpCalendarDriftRecord,
@@ -294,6 +301,11 @@ from caseops_api.services.ip_lifecycle import (
     preview_ip_docket_event,
     preview_ip_docket_lifecycle,
     transition_ip_docket_lifecycle,
+)
+from caseops_api.services.ip_matter_links import (
+    create_matter_link,
+    list_docket_matter_links,
+    retire_matter_link,
 )
 from caseops_api.services.ip_operations import (
     active_ip_incident_kill_switches,
@@ -2182,6 +2194,57 @@ async def get_ip_docket_record(
     session: DbSession,
 ) -> IpDocketRecordResponse:
     return get_ip_docket(session, context=context, docket_id=docket_id)
+
+
+@router.get(
+    "/dockets/{docket_id}/matter-links",
+    response_model=IpDocketMatterLinkListResponse,
+)
+async def get_ip_docket_matter_links(
+    docket_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> IpDocketMatterLinkListResponse:
+    return list_docket_matter_links(session, context=context, docket_id=docket_id)
+
+
+@router.post(
+    "/dockets/{docket_id}/matter-links",
+    response_model=IpMatterLinkRecord,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_ip_docket_matter_link(
+    docket_id: str,
+    payload: IpMatterLinkCreateRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpMatterLinkRecord:
+    return create_matter_link(
+        session,
+        context=context,
+        docket_id=docket_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/matter-links/{link_id}/retire",
+    response_model=IpMatterLinkRetireResponse,
+)
+async def post_ip_docket_matter_link_retirement(
+    docket_id: str,
+    link_id: str,
+    payload: IpMatterLinkRetireRequest,
+    context: IpWriter,
+    session: DbSession,
+) -> IpMatterLinkRetireResponse:
+    return retire_matter_link(
+        session,
+        context=context,
+        docket_id=docket_id,
+        link_id=link_id,
+        payload=payload,
+    )
 
 
 @router.get(

@@ -6,11 +6,11 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `f8d428a4d3f1992a9ceaa4cbf463990bb9adedfba69bb6edc1f2c53776c941d3`
-- SQL tables: `272`
-- SQL columns: `4223`
-- ORM indexes: `1213`
-- Alembic/raw index declarations: `546`
+- Canonical map SHA-256: `d712f5ceb41f9c4b3f9702467192362b953cfd0638c95d12afabbdc79d2de501`
+- SQL tables: `273`
+- SQL columns: `4238`
+- ORM indexes: `1221`
+- Alembic/raw index declarations: `550`
 - Non-SQL data classes: `11`
 
 ## Boundary
@@ -150,6 +150,7 @@ This inventory does not claim approved retention bounds, legal-hold activation, 
 | `ip_identifiers` | `tenant_restricted_legal_content` | 19 | `registry_fail_closed` |
 | `ip_import_rows` | `tenant_restricted_legal_content` | 16 | `registry_fail_closed` |
 | `ip_incident_kill_switches` | `tenant_restricted_legal_content` | 14 | `registry_fail_closed` |
+| `ip_matter_links` | `tenant_restricted_legal_content` | 15 | `registry_fail_closed` |
 | `ip_parties_and_roles` | `tenant_restricted_legal_content` | 11 | `registry_fail_closed` |
 | `ip_portfolio_export_jobs` | `tenant_restricted_legal_content` | 15 | `registry_fail_closed` |
 | `ip_portfolio_saved_views` | `tenant_restricted_legal_content` | 12 | `registry_fail_closed` |
