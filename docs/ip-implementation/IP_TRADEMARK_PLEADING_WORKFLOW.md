@@ -85,7 +85,12 @@ tenant target constraints are enforced in the service and database.
 
 ## Remaining adjacent work
 
-IPLF-047 owns the legal-SME fixture pack and UAT automation. This workflow does
-not claim that slice, filing-provider integration, direct Registry submission,
-legal acceptance, or autonomous filing. Filing and service are records of
-human-controlled external actions, not provider-side automation.
+IPLF-047 adds a versioned, synthetic legal-fixture pack, executable mappings to
+the canonical API tests, tamper-evident content hashes, and a fail-closed legal
+approval gate. The committed pack is an engineering candidate and cannot be
+used as authoritative legal UAT evidence until distinct reviewers approve its
+exact source and content hashes.
+
+This workflow does not claim filing-provider integration, direct Registry
+submission, legal acceptance, or autonomous filing. Filing and service are
+records of human-controlled external actions, not provider-side automation.

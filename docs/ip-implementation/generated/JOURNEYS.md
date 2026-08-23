@@ -27,7 +27,7 @@ Generated; do not edit.
 | UJ-21 | Review watch hit and open action | 4 | IPLF-052B, IPLF-053B | 4 | 0 | not_started | not_run | false |
 | UJ-22 | Use CaseOps Guide | 3 | IPLF-061B | 3 | 0 | not_started | not_run | false |
 | UJ-23 | Ask this Workspace | 4 | IPLF-062B, IPLF-066B | 4 | 0 | not_started | not_run | false |
-| UJ-24 | Generate and approve IP pleading | 4 | IPLF-045B, IPLF-046B | 4 | 3 | implemented | passed | false |
+| UJ-24 | Generate and approve IP pleading | 4 | IPLF-045B, IPLF-046B, IPLF-047B | 5 | 5 | implemented | passed | false |
 | UJ-25 | Operate failed integration | 4 | IPLF-001A, IPLF-001B, IPLF-002B, IPLF-056B | 4 | 2 | in_progress | not_run | false |
 | UJ-26 | Manage renewal | 4 | IPLF-037B | 4 | 1 | implemented | passed | false |
 | UJ-27 | Share client report and instruction | 4 | IPLF-038B, IPLF-055B | 4 | 0 | in_progress | not_run | false |
