@@ -69,3 +69,8 @@ e18cc266f557aa3b8006311393b2a65e71986db2:docs/ip-implementation/PROGRAM_MANIFEST
 # Google Cloud Build execution UUID recorded as deployment evidence. This is a
 # fingerprint-only suppression; new generic-key findings remain blocking.
 470ddcd304d52ed0b7c74b03d0e3cf0224a4ea3f:docs/ip-implementation/evidence/m4/IPLF-045B/release-2026-08-24.md:generic-api-key:26
+
+# 2026-08-24 IPLF-046B release closure: exact false positive on the public
+# Google Cloud Build execution UUID recorded as deployment evidence. This is a
+# fingerprint-only suppression; new generic-key findings remain blocking.
+027f188ebfaea9e052a6cfc2a497e955effe1192:docs/ip-implementation/evidence/m4/IPLF-046B/release-2026-08-24.md:generic-api-key:25
