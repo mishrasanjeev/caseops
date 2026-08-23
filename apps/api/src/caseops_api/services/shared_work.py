@@ -321,7 +321,11 @@ def _task_record(task: MatterTask) -> IpSharedTaskRecord:
 
 
 def create_ip_shared_task(
-    session: Session, *, context: SessionContext, payload: IpSharedTaskCreateRequest
+    session: Session,
+    *,
+    context: SessionContext,
+    payload: IpSharedTaskCreateRequest,
+    commit: bool = True,
 ) -> IpSharedTaskRecord:
     operational = payload.status not in {"completed", "cancelled"}
     memberships = _lock_shared_work_memberships(
@@ -367,8 +371,9 @@ def create_ip_shared_task(
         target_id=task.id,
         metadata={"ip_docket_id": target.target_id, "status": task.status},
     )
-    session.commit()
-    session.refresh(task)
+    if commit:
+        session.commit()
+        session.refresh(task)
     return _task_record(task)
 
 

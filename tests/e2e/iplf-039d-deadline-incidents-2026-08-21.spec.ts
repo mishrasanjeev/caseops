@@ -156,13 +156,15 @@ test("IPLF-039D opens, assesses, communicates and resolves an incident", async (
   await workspace.getByRole("button", { name: "Record impact" }).click();
 
   await workspace.getByRole("button", { name: "Recipients" }).click();
-  for (const recipient of ["client", "insurer", "regulator", "court"] as const) {
+  const recipientMetric = workspace.getByText("Recipient decisions").locator("..");
+  for (const [index, recipient] of ["client", "insurer", "regulator", "court"].entries()) {
     await workspace.getByRole("combobox", { name: /^Recipient/ }).selectOption(recipient);
     await workspace.getByLabel("Private recipient reference").fill(`${recipient}:opaque-1`);
     await workspace.getByRole("combobox", { name: /^Decision/ }).selectOption("not_applicable");
     await workspace.getByLabel("Approval evidence").fill(`approval:${recipient}:1`);
     await workspace.getByLabel("Decision rationale").fill("Risk partner approved no communication.");
     await workspace.getByRole("button", { name: "Record recipient decision" }).click();
+    await expect(recipientMetric.getByText(String(index + 1), { exact: true })).toBeVisible();
   }
 
   await workspace.getByRole("button", { name: "Resolution" }).click();

@@ -29,6 +29,14 @@ vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
+vi.mock("@/components/ip/IpOppositionApplicantWorkflow", () => ({
+  IpOppositionApplicantWorkflow: () => <div data-testid="applicant-workflow-stub" />,
+}));
+
+vi.mock("@/components/ip/IpOppositionOpponentWorkflow", () => ({
+  IpOppositionOpponentWorkflow: () => <div data-testid="opponent-workflow-stub" />,
+}));
+
 import { IpOppositionWorkspace } from "@/components/ip/IpOppositionWorkspace";
 
 function withClient(children: ReactNode) {
@@ -277,5 +285,34 @@ describe("IpOppositionWorkspace", () => {
     expect(await screen.findByText("confirmed opposition identifier required")).toBeVisible();
     expect(screen.getByText("service fact required")).toBeVisible();
     expect(screen.getByRole("button", { name: "Apply stage" })).toBeDisabled();
+  });
+
+  it("refreshes both represented-side workflows after a stage transition", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    render(
+      <QueryClientProvider client={client}>
+        <IpOppositionWorkspace
+          docket={docket}
+          canWrite
+          canReview
+          currentMembershipId="membership-1"
+        />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.change(await screen.findByLabelText("Reason"), {
+      target: { value: "Counsel approved the next opposition stage." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Apply stage" }));
+    await waitFor(() => expect(transitionMock).toHaveBeenCalledOnce());
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({
+      queryKey: ["ip", "opposition-opponent-workflow", "docket-1", "opposition-1"],
+    }));
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: ["ip", "opposition-applicant-workflow", "docket-1", "opposition-1"],
+    });
   });
 });

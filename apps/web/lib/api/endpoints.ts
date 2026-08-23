@@ -8821,6 +8821,40 @@ export type IpOppositionApplicantWorkflow = {
     | "await_opponent_or_later_stage";
 };
 
+export type IpOppositionOpponentWorkflow = {
+  proceeding_id: string;
+  represented_side: "opponent";
+  opposition_number_status: "confirmed" | "pending_allocation";
+  client_instruction_status: "pending" | "confirmed" | "not_required";
+  opponent_actions: IpDocketEvent[];
+  deadlines: Array<{
+    workflow_stage: "notice_filing_due" | "opponent_evidence_due" | "reply_evidence_due";
+    deadline: IpLegalDeadline;
+  }>;
+  corrective_task_id: string | null;
+  next_required_action:
+    | "watch_hit_closed_no_proceeding"
+    | "propose_notice_filing_deadline"
+    | "confirm_notice_filing_deadline"
+    | "record_client_instruction_escalation"
+    | "await_client_instruction"
+    | "file_notice"
+    | "correct_rejected_notice"
+    | "advance_to_notice_filed"
+    | "record_opposition_number"
+    | "advance_to_service_pending"
+    | "record_notice_service"
+    | "await_counterstatement"
+    | "propose_opponent_evidence_deadline"
+    | "confirm_opponent_evidence_deadline"
+    | "record_opponent_evidence_decision"
+    | "await_applicant_evidence"
+    | "propose_reply_evidence_deadline"
+    | "confirm_reply_evidence_deadline"
+    | "record_reply_evidence_decision"
+    | "await_hearing_or_later_stage";
+};
+
 export type IpDocketEvent = {
   id: string;
   company_id: string;
@@ -10472,6 +10506,15 @@ export async function fetchIpOppositionApplicantWorkflow(input: {
   );
 }
 
+export async function fetchIpOppositionOpponentWorkflow(input: {
+  docketId: string;
+  proceedingId: string;
+}): Promise<IpOppositionOpponentWorkflow> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/proceedings/${encodeURIComponent(input.proceedingId)}/opponent-workflow`,
+  );
+}
+
 export async function createIpOppositionIdentifier(input: {
   docketId: string;
   proceedingId: string;
@@ -10563,6 +10606,93 @@ export async function recordIpOppositionApplicantAction(input: {
         verification: input.verification ?? null,
         service: input.service ?? null,
         evidence_election: input.evidenceElection ?? null,
+        evidence_refs: input.evidenceRefs ?? [],
+        document_refs: input.documentRefs ?? [],
+      },
+    },
+  );
+}
+
+export async function proposeIpOppositionOpponentDeadline(input: {
+  docketId: string;
+  proceedingId: string;
+  workflowStage: "notice_filing_due" | "opponent_evidence_due" | "reply_evidence_due";
+  triggerEventId: string;
+  ruleVersionId: string;
+  calendarVersionId: string;
+  baseDate: string | null;
+  certainty: "certain" | "uncertain" | "conflicting" | "unknown";
+}): Promise<IpOppositionOpponentWorkflow["deadlines"][number]> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/proceedings/${encodeURIComponent(input.proceedingId)}/opponent-deadlines`,
+    {
+      method: "POST",
+      body: {
+        workflow_stage: input.workflowStage,
+        trigger_event_id: input.triggerEventId,
+        rule_version_id: input.ruleVersionId,
+        calendar_version_id: input.calendarVersionId,
+        base_date: input.baseDate,
+        base_date_certainty: input.certainty,
+        date_precision: "date",
+        is_critical: true,
+      },
+    },
+  );
+}
+
+export async function recordIpOppositionOpponentAction(input: {
+  docketId: string;
+  proceedingId: string;
+  lifecycleVersion: number;
+  proceedingVersion: number;
+  responsibleMembershipId: string;
+  actionKind:
+    | "watch_hit_closed"
+    | "client_instruction_escalated"
+    | "notice_filed"
+    | "notice_filing_rejected"
+    | "notice_refiled"
+    | "notice_served"
+    | "opponent_evidence_decision"
+    | "reply_evidence_decision";
+  sourceReference: string;
+  effectiveAt: string;
+  reason: string;
+  filingReference?: string | null;
+  filedOn?: string | null;
+  verification?: Record<string, unknown> | null;
+  service?: Record<string, unknown> | null;
+  evidenceElection?: "file_evidence" | "rely_on_pleaded_facts" | "file_reply_evidence" | "no_reply_evidence" | null;
+  rejectionReference?: string | null;
+  correctiveDueOn?: string | null;
+  escalationReference?: string | null;
+  escalationDueOn?: string | null;
+  evidenceRefs?: string[];
+  documentRefs?: string[];
+}): Promise<IpOppositionOpponentWorkflow> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/proceedings/${encodeURIComponent(input.proceedingId)}/opponent-actions`,
+    {
+      method: "POST",
+      body: {
+        expected_lifecycle_version: input.lifecycleVersion,
+        expected_proceeding_version: input.proceedingVersion,
+        action_kind: input.actionKind,
+        source: "manual",
+        source_reference: input.sourceReference,
+        effective_at: input.effectiveAt,
+        responsible_membership_id: input.responsibleMembershipId,
+        reason: input.reason,
+        filing_reference: input.filingReference ?? null,
+        filed_on: input.filedOn ?? null,
+        verification: input.verification ?? null,
+        service: input.service ?? null,
+        evidence_election: input.evidenceElection ?? null,
+        rejection_reference: input.rejectionReference ?? null,
+        corrective_due_on: input.correctiveDueOn ?? null,
+        escalation_reference: input.escalationReference ?? null,
+        escalation_due_on: input.escalationDueOn ?? null,
         evidence_refs: input.evidenceRefs ?? [],
         document_refs: input.documentRefs ?? [],
       },

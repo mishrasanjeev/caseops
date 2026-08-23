@@ -125,6 +125,13 @@ Every public claim is classified as one of: live, review-first, provider-gated, 
 - Litigation Intelligence reviews proceeding signals, affidavit gaps, mock-hearing feedback, bench context, source readiness, knowledge-graph links, and transcript-first coaching with source links and confidence
 - Decision-support surfaces do not provide legal advice, outcome forecasts, judge scoring, biometric analysis, or unsupported court-strategy claims
 
+### 7A. Trademark opposition docketing
+
+- Application and opposition identifiers remain separate, including explicit pending Registry allocation
+- Applicant work covers governed counterstatement and Rule 46 decisions; opponent work covers governed notice filing/correction, separate service, Rule 45 and Rule 47 decisions
+- Critical opposition deadlines require distinct primary and backup owners, while rejected filings and missing client instruction create shared corrective or escalation work without falsely advancing the legal stage
+- Hearing, order, appeal, settlement, translation, security-for-costs, and downstream disposition remain separate later-stage workflows
+
 ### 8. Contracts and outside counsel
 
 - Contracts support clause extraction, playbook comparison, obligation tracking, and parsing/viewing DOCX tracked changes; the current UI does not export a tracked Word redline or claim version lineage

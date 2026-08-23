@@ -19,9 +19,7 @@ class IpOppositionPartyInput(BaseModel):
 class IpOppositionPartyRecord(IpOppositionPartyInput):
     model_config = ConfigDict(from_attributes=True)
 
-    role: Literal["applicant", "opponent", "agent", "counsel"] = Field(
-        validation_alias="role_kind"
-    )
+    role: Literal["applicant", "opponent", "agent", "counsel"] = Field(validation_alias="role_kind")
     id: str
     effective_from: date
     effective_until: date | None
@@ -253,4 +251,170 @@ class IpOppositionApplicantWorkflowResponse(BaseModel):
         "confirm_applicant_evidence_deadline",
         "record_applicant_evidence_decision",
         "await_opponent_or_later_stage",
+    ]
+
+
+class IpOppositionOpponentActionRequest(BaseModel):
+    expected_lifecycle_version: int = Field(ge=0)
+    expected_proceeding_version: int = Field(ge=1)
+    action_kind: Literal[
+        "watch_hit_closed",
+        "client_instruction_escalated",
+        "notice_filed",
+        "notice_filing_rejected",
+        "notice_refiled",
+        "notice_served",
+        "opponent_evidence_decision",
+        "reply_evidence_decision",
+    ]
+    source: Literal["manual", "registry", "integration", "system"]
+    source_reference: str = Field(min_length=2, max_length=255)
+    effective_at: datetime
+    responsible_membership_id: str
+    reason: str = Field(min_length=5, max_length=2000)
+    filing_reference: str | None = Field(default=None, max_length=500)
+    filed_on: date | None = None
+    evidence_election: (
+        Literal[
+            "file_evidence",
+            "rely_on_pleaded_facts",
+            "file_reply_evidence",
+            "no_reply_evidence",
+        ]
+        | None
+    ) = None
+    verification: IpOppositionPleadingVerification | None = None
+    service: IpOppositionServiceFact | None = None
+    rejection_reference: str | None = Field(default=None, max_length=500)
+    corrective_due_on: date | None = None
+    escalation_reference: str | None = Field(default=None, max_length=500)
+    escalation_due_on: date | None = None
+    evidence_refs: list[str] = Field(default_factory=list, max_length=100)
+    document_refs: list[str] = Field(default_factory=list, max_length=100)
+
+    @model_validator(mode="after")
+    def validate_opponent_action(self) -> IpOppositionOpponentActionRequest:
+        if self.effective_at.utcoffset() is None:
+            raise ValueError("Opponent action time must include a timezone.")
+        if self.action_kind in {"notice_filed", "notice_refiled"}:
+            if not all(
+                (
+                    (self.filing_reference or "").strip(),
+                    self.filed_on,
+                    self.verification,
+                    self.document_refs,
+                    self.evidence_refs,
+                )
+            ):
+                raise ValueError(
+                    "A filed TM-O notice requires filing facts, signed verification, "
+                    "the final document, and filing evidence."
+                )
+        elif self.action_kind == "notice_filing_rejected":
+            if not all(
+                (
+                    (self.rejection_reference or "").strip(),
+                    self.corrective_due_on,
+                    self.evidence_refs,
+                )
+            ):
+                raise ValueError(
+                    "A rejected TM-O filing requires rejection evidence and a corrective due date."
+                )
+        elif self.action_kind == "notice_served":
+            if self.service is None:
+                raise ValueError("TM-O notice service requires complete service facts.")
+        elif self.action_kind == "client_instruction_escalated":
+            if not all(
+                (
+                    (self.escalation_reference or "").strip(),
+                    self.escalation_due_on,
+                    self.evidence_refs,
+                )
+            ):
+                raise ValueError(
+                    "Client-instruction escalation requires a reference, due date, and evidence."
+                )
+        elif self.action_kind == "opponent_evidence_decision":
+            if self.evidence_election not in {
+                "file_evidence",
+                "rely_on_pleaded_facts",
+            }:
+                raise ValueError("Rule 45 requires an explicit evidence or pleaded-facts election.")
+        elif self.action_kind == "reply_evidence_decision" and self.evidence_election not in {
+            "file_reply_evidence",
+            "no_reply_evidence",
+        }:
+            raise ValueError("Rule 47 requires an explicit reply-evidence election.")
+        if (
+            self.action_kind
+            not in {
+                "opponent_evidence_decision",
+                "reply_evidence_decision",
+            }
+            and self.evidence_election
+        ):
+            raise ValueError("An evidence election is only valid for an evidence decision.")
+        if self.evidence_election in {"file_evidence", "file_reply_evidence"} and not (
+            self.document_refs and self.evidence_refs
+        ):
+            raise ValueError("Filed evidence requires document and filing evidence references.")
+        if self.action_kind == "watch_hit_closed" and not self.evidence_refs:
+            raise ValueError("Closing a watch hit requires source evidence.")
+        return self
+
+
+class IpOppositionOpponentDeadlineProposalRequest(BaseModel):
+    workflow_stage: Literal[
+        "notice_filing_due",
+        "opponent_evidence_due",
+        "reply_evidence_due",
+    ]
+    trigger_event_id: str
+    rule_version_id: str
+    calendar_version_id: str
+    base_date: date | None
+    base_date_certainty: Literal["certain", "uncertain", "conflicting", "unknown"]
+    date_precision: Literal["unknown", "date", "datetime", "session"] = "date"
+    is_critical: bool = True
+
+
+class IpOppositionOpponentDeadlineRecord(BaseModel):
+    workflow_stage: Literal[
+        "notice_filing_due",
+        "opponent_evidence_due",
+        "reply_evidence_due",
+    ]
+    deadline: IpDeadlineRecord
+
+
+class IpOppositionOpponentWorkflowResponse(BaseModel):
+    proceeding_id: str
+    represented_side: Literal["opponent"]
+    opposition_number_status: Literal["confirmed", "pending_allocation"]
+    client_instruction_status: Literal["pending", "confirmed", "not_required"]
+    opponent_actions: list[IpDocketEventResponse]
+    deadlines: list[IpOppositionOpponentDeadlineRecord]
+    corrective_task_id: str | None
+    next_required_action: Literal[
+        "watch_hit_closed_no_proceeding",
+        "propose_notice_filing_deadline",
+        "confirm_notice_filing_deadline",
+        "record_client_instruction_escalation",
+        "await_client_instruction",
+        "file_notice",
+        "correct_rejected_notice",
+        "advance_to_notice_filed",
+        "record_opposition_number",
+        "advance_to_service_pending",
+        "record_notice_service",
+        "await_counterstatement",
+        "propose_opponent_evidence_deadline",
+        "confirm_opponent_evidence_deadline",
+        "record_opponent_evidence_decision",
+        "await_applicant_evidence",
+        "propose_reply_evidence_deadline",
+        "confirm_reply_evidence_deadline",
+        "record_reply_evidence_decision",
+        "await_hearing_or_later_stage",
     ]

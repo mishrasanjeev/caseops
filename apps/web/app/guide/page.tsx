@@ -729,6 +729,47 @@ export default function GuidePage() {
                     the opposition does not close the linked Matter.
                   </Callout>
                   <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
+                    Opponent opposition docketing
+                  </h3>
+                  <p>
+                    Select the opponent side when the firm is preparing the notice of
+                    opposition. Keep the application number and Registry opposition number
+                    separate; pending opposition-number allocation remains visible until the
+                    Registry number is recorded.
+                  </p>
+                  <Steps
+                    items={[
+                      <>
+                        Confirm the sourced opponent profile, relied-on rights, client
+                        instruction, and limitation date. A watch hit can be closed with
+                        evidence without marking an opposition filed; missing instruction is
+                        escalated through an urgent shared task before limitation.
+                      </>,
+                      <>
+                        Propose and confirm the notice deadline from the exact active
+                        opponent rule and working calendar with distinct primary and backup
+                        owners. Record the signed TM-O notice, filing receipt, verification,
+                        source, and lawyer reason.
+                      </>,
+                      <>
+                        If the Registry rejects the filing, record the rejection evidence and
+                        corrective due date. CaseOps opens a corrective task and keeps the
+                        filed stage blocked until an accepted corrected notice is recorded.
+                      </>,
+                      <>
+                        Record notice service separately. At the evidence stages, confirm the
+                        governed deadlines and make explicit Rule 45 and Rule 47 elections;
+                        filed-evidence elections require final document and filing evidence
+                        references.
+                      </>,
+                    ]}
+                  />
+                  <Callout tone="warn" title="Later opposition stages remain bounded">
+                    Further-evidence leave, hearing, order, appeal, settlement, translation,
+                    security-for-costs, and downstream application disposition are not part
+                    of this opponent docketing workflow.
+                  </Callout>
+                  <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
                     Trademark renewals
                   </h3>
                   <p>

@@ -110,7 +110,7 @@ const platformMoves = [
   {
     icon: PanelsTopLeft,
     title: "Trademark portfolio",
-    body: "Search distinct application and opposition numbers, then run applicant-side opposition work from pending Registry allocation through governed counterstatement and Rule 46 deadlines, signed TM-O evidence, service, dual ownership and explicit evidence election.",
+    body: "Search distinct application and opposition numbers. Run applicant counterstatement and Rule 46 work, or opponent notice, filing-correction, service, Rule 45 and Rule 47 work, with governed deadlines, signed TM-O evidence, dual ownership and explicit elections.",
   },
   {
     icon: Clock3,
