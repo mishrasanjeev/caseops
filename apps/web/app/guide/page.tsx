@@ -798,6 +798,44 @@ export default function GuidePage() {
                     ]}
                   />
                   <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
+                    Trademark pleading review and filing
+                  </h3>
+                  <p>
+                    Open <strong>Trademark pleadings</strong> inside an opposition proceeding.
+                    The available notice, counterstatement, and evidence templates follow the
+                    represented side, current stage, and Registry jurisdiction.
+                  </p>
+                  <Steps
+                    items={[
+                      <>
+                        Generate from the confirmed application and opposition identifiers,
+                        current proceeding, linked immutable document versions, and retrieved
+                        authorities. Conflicting required identifiers block generation.
+                      </>,
+                      <>
+                        Save every lawyer change as a new revision and open the revision
+                        comparison before review. The original generated and previously filed
+                        bodies remain available unchanged.
+                      </>,
+                      <>
+                        Clear every blocker before approval: unresolved placeholders, changed
+                        proceeding context or deadlines, lost authorities, missing or changed
+                        source hashes, and unmapped exhibit references fail closed. Warnings
+                        remain visible for lawyer resolution.
+                      </>,
+                      <>
+                        Finalize the approved revision and download the filing bundle. The
+                        Registry-formatted DOCX is separated from the internal generation
+                        manifest and filing checklist inside the ZIP.
+                      </>,
+                      <>
+                        Record filing, Registry rejection, corrected revision, and service as
+                        separate human actions with references. A rejected filing reopens
+                        drafting without rewriting the originally filed version.
+                      </>,
+                    ]}
+                  />
+                  <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
                     Shared evidence, hearing, order, and appeal work
                   </h3>
                   <Steps

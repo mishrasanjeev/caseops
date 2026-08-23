@@ -11022,6 +11022,9 @@ class DraftStatus(StrEnum):
     CHANGES_REQUESTED = "changes_requested"
     APPROVED = "approved"
     FINALIZED = "finalized"
+    FILED = "filed"
+    FILING_REJECTED = "filing_rejected"
+    SERVED = "served"
 
 
 class DraftType(StrEnum):
@@ -11038,6 +11041,9 @@ class DraftReviewAction(StrEnum):
     REQUEST_CHANGES = "request_changes"
     APPROVE = "approve"
     FINALIZE = "finalize"
+    FILE = "file"
+    REJECT_FILING = "reject_filing"
+    SERVE = "serve"
 
 
 class DraftingDataExtractionStatus(StrEnum):
@@ -11337,6 +11343,7 @@ class DraftReview(Base):
     )
     action: Mapped[str] = mapped_column(String(24), nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,

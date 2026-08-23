@@ -139,6 +139,9 @@
   },
   "table_policy_profile_overrides": {},
   "column_category_overrides": {
+    "draft_reviews": {
+      "metadata_json": "privileged_or_raw_content"
+    },
     "draft_versions": {
       "context_manifest_json": "privileged_or_raw_content",
       "source_manifest_json": "privileged_or_raw_content",
@@ -7377,6 +7380,11 @@
         "id": {
           "category_id": "tenant_or_access_identifier",
           "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "metadata_json": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
           "nullable": false
         },
         "notes": {
@@ -24106,7 +24114,7 @@
       }
     }
   ],
-  "schema_fingerprint": "0f876b5eec76fd095f74fa557aea4ce6bb218554d17a0448786dfee58e48eeb2",
+  "schema_fingerprint": "d13dfdd4d03cc8df0b1eb8d87d6eaa1b831697ab8c1a91c930dc6304171ff713",
   "index_inventory": {
     "orm_index_count": 1231,
     "orm_index_fingerprint": "ffe687f9327f6ccdd736f6f871b4ddf5655bd4076110c36a02fe7832e7a8ff1f",

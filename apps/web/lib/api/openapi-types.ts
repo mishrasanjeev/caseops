@@ -5304,6 +5304,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Pleading Draft Comparison */
+        get: operations["get_ip_pleading_draft_comparison_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__compare_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/export.docx": {
         parameters: {
             query?: never;
@@ -5313,6 +5330,40 @@ export interface paths {
         };
         /** Download Ip Pleading Draft Docx */
         get: operations["download_ip_pleading_draft_docx_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__export_docx_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Pleading Filing */
+        post: operations["post_ip_pleading_filing_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__file_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/filing-bundle.zip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Ip Pleading Filing Bundle */
+        get: operations["download_ip_pleading_filing_bundle_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__filing_bundle_zip_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5355,6 +5406,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/reject-filing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Pleading Filing Rejection */
+        post: operations["post_ip_pleading_filing_rejection_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__reject_filing_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/request-changes": {
         parameters: {
             query?: never;
@@ -5372,6 +5440,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/serve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Pleading Service */
+        post: operations["post_ip_pleading_service_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__serve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/submit": {
         parameters: {
             query?: never;
@@ -5383,6 +5468,23 @@ export interface paths {
         put?: never;
         /** Post Ip Pleading Draft Submission */
         post: operations["post_ip_pleading_draft_submission_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__submit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Pleading Draft Validation */
+        get: operations["get_ip_pleading_draft_validation_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__validate_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -16377,6 +16479,33 @@ export interface components {
              */
             updated_at: string;
         };
+        /** DraftCompareRecord */
+        DraftCompareRecord: {
+            /** Citations Added */
+            citations_added: string[];
+            /** Citations Kept */
+            citations_kept: string[];
+            /** Citations Removed */
+            citations_removed: string[];
+            /** Draft Id */
+            draft_id: string;
+            /** Hunks */
+            hunks: components["schemas"]["DraftDiffHunkRecord"][];
+            /** Lines Added */
+            lines_added: number;
+            /** Lines Removed */
+            lines_removed: number;
+            /** Next Revision */
+            next_revision: number;
+            /** Next Version Id */
+            next_version_id: string;
+            /** Prev Revision */
+            prev_revision: number;
+            /** Prev Version Id */
+            prev_version_id: string;
+            /** Summary */
+            summary: string;
+        };
         /** DraftCompareResponse */
         DraftCompareResponse: {
             /** Citations Added */
@@ -16421,6 +16550,19 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** DraftDiffHunkRecord */
+        DraftDiffHunkRecord: {
+            /** Lines */
+            lines: components["schemas"]["DraftDiffLineRecord"][];
+            /** Next Length */
+            next_length: number;
+            /** Next Start */
+            next_start: number;
+            /** Prev Length */
+            prev_length: number;
+            /** Prev Start */
+            prev_start: number;
+        };
         /** DraftDiffHunkResponse */
         DraftDiffHunkResponse: {
             /** Lines */
@@ -16433,6 +16575,20 @@ export interface components {
             prev_length: number;
             /** Prev Start */
             prev_start: number;
+        };
+        /** DraftDiffLineRecord */
+        DraftDiffLineRecord: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "equal" | "insert" | "delete" | "replace";
+            /** Next Line Number */
+            next_line_number: number | null;
+            /** Prev Line Number */
+            prev_line_number: number | null;
+            /** Text */
+            text: string;
         };
         /** DraftDiffLineResponse */
         DraftDiffLineResponse: {
@@ -16682,7 +16838,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "draft" | "in_review" | "changes_requested" | "approved" | "finalized";
+            status: "draft" | "in_review" | "changes_requested" | "approved" | "finalized" | "filed" | "filing_rejected" | "served";
             /** Template Type */
             template_type: string | null;
             /** Title */
@@ -16701,7 +16857,7 @@ export interface components {
              * Action
              * @enum {string}
              */
-            action: "edit" | "submit" | "request_changes" | "approve" | "finalize";
+            action: "edit" | "submit" | "request_changes" | "approve" | "finalize" | "file" | "reject_filing" | "serve";
             /** Actor Membership Id */
             actor_membership_id: string | null;
             /**
@@ -16713,6 +16869,10 @@ export interface components {
             draft_id: string;
             /** Id */
             id: string;
+            /** Metadata */
+            metadata: {
+                [key: string]: unknown;
+            };
             /** Notes */
             notes: string | null;
             /** Version Id */
@@ -22172,6 +22332,63 @@ export interface components {
             uploaded_by_membership_id: string;
             /** Version */
             version: number;
+        };
+        /** IpDraftLifecycleRequest */
+        IpDraftLifecycleRequest: {
+            /** Method */
+            method?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Occurred At */
+            occurred_at?: string | null;
+            /** Reference */
+            reference: string;
+        };
+        /** IpDraftValidationFindingRecord */
+        IpDraftValidationFindingRecord: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+            /** References */
+            references: string[];
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "warning" | "blocker";
+        };
+        /** IpDraftValidationReportRecord */
+        IpDraftValidationReportRecord: {
+            /** Blocker Count */
+            blocker_count: number;
+            /** Can Approve */
+            can_approve: boolean;
+            /** Can File */
+            can_file: boolean;
+            /** Draft Id */
+            draft_id: string;
+            /**
+             * Evaluated At
+             * Format: date-time
+             */
+            evaluated_at: string;
+            /** Exhibit Anchor Count */
+            exhibit_anchor_count: number;
+            /** Findings */
+            findings: components["schemas"]["IpDraftValidationFindingRecord"][];
+            /** Placeholder Count */
+            placeholder_count: number;
+            /** Revision */
+            revision: number;
+            /** Source Anchor Count */
+            source_anchor_count: number;
+            /** Source Count */
+            source_count: number;
+            /** Version Id */
+            version_id: string;
+            /** Warning Count */
+            warning_count: number;
         };
         /**
          * IpDuplicateCandidate
@@ -47331,11 +47548,116 @@ export interface operations {
             };
         };
     };
+    get_ip_pleading_draft_comparison_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__compare_get: {
+        parameters: {
+            query: {
+                context_lines?: number;
+                next_revision: number;
+                prev_revision: number;
+            };
+            header?: never;
+            path: {
+                docket_id: string;
+                draft_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftCompareRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     download_ip_pleading_draft_docx_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__export_docx_get: {
         parameters: {
             query?: {
                 version_id?: string | null;
             };
+            header?: never;
+            path: {
+                docket_id: string;
+                draft_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_pleading_filing_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__file_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                draft_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpDraftLifecycleRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_ip_pleading_filing_bundle_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__filing_bundle_zip_get: {
+        parameters: {
+            query?: never;
             header?: never;
             path: {
                 docket_id: string;
@@ -47438,6 +47760,43 @@ export interface operations {
             };
         };
     };
+    post_ip_pleading_filing_rejection_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__reject_filing_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                draft_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpDraftLifecycleRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_ip_pleading_draft_changes_request_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__request_changes_post: {
         parameters: {
             query?: never;
@@ -47452,6 +47811,43 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["DraftReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_pleading_service_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__serve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                draft_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpDraftLifecycleRequest"];
             };
         };
         responses: {
@@ -47499,6 +47895,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DraftRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_pleading_draft_validation_api_ip_dockets__docket_id__proceedings__proceeding_id__drafts__draft_id__validate_get: {
+        parameters: {
+            query?: {
+                version_id?: string | null;
+            };
+            header?: never;
+            path: {
+                docket_id: string;
+                draft_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDraftValidationReportRecord"];
                 };
             };
             /** @description Validation Error */

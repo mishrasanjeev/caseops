@@ -3,31 +3,43 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
+  bundleMock,
+  compareMock,
   createMock,
   downloadMock,
   generateMock,
   listDraftsMock,
   listTemplatesMock,
+  lifecycleMock,
   saveMock,
   transitionMock,
+  validationMock,
 } = vi.hoisted(() => ({
+  bundleMock: vi.fn(),
+  compareMock: vi.fn(),
   createMock: vi.fn(),
   downloadMock: vi.fn(),
   generateMock: vi.fn(),
   listDraftsMock: vi.fn(),
   listTemplatesMock: vi.fn(),
+  lifecycleMock: vi.fn(),
   saveMock: vi.fn(),
   transitionMock: vi.fn(),
+  validationMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
+  compareIpPleadingDraftRevisions: compareMock,
   createIpPleadingDraft: createMock,
   downloadIpPleadingDraft: downloadMock,
+  downloadIpPleadingFilingBundle: bundleMock,
   generateIpPleadingDraft: generateMock,
   listIpPleadingDrafts: listDraftsMock,
   listIpPleadingTemplates: listTemplatesMock,
   saveIpPleadingDraft: saveMock,
+  transitionIpPleadingLifecycle: lifecycleMock,
   transitionIpPleadingDraft: transitionMock,
+  validateIpPleadingDraft: validationMock,
 }));
 
 vi.mock("sonner", () => ({
@@ -92,6 +104,42 @@ describe("IpPleadingWorkspace", () => {
     generateMock.mockResolvedValue(draft);
     saveMock.mockResolvedValue(draft);
     transitionMock.mockResolvedValue({ ...draft, status: "in_review" });
+    lifecycleMock.mockResolvedValue({ ...draft, status: "filed" });
+    bundleMock.mockResolvedValue(new Blob(["bundle"]));
+    validationMock.mockResolvedValue({
+      draft_id: "draft-1",
+      version_id: "version-1",
+      revision: 1,
+      evaluated_at: "2026-08-24T10:00:00Z",
+      blocker_count: 0,
+      warning_count: 0,
+      placeholder_count: 0,
+      source_count: 1,
+      source_anchor_count: 0,
+      exhibit_anchor_count: 0,
+      can_approve: true,
+      can_file: true,
+      findings: [],
+    });
+    compareMock.mockResolvedValue({
+      draft_id: "draft-1",
+      prev_revision: 1,
+      next_revision: 2,
+      prev_version_id: "version-1",
+      next_version_id: "version-2",
+      hunks: [],
+      citations_added: [],
+      citations_removed: [],
+      citations_kept: ["2026 SCC OnLine Del 450"],
+      lines_added: 1,
+      lines_removed: 0,
+      summary: "r1 → r2: +1 lines",
+    });
+    vi.stubGlobal("URL", {
+      ...URL,
+      createObjectURL: vi.fn(() => "blob:test"),
+      revokeObjectURL: vi.fn(),
+    });
   });
 
   it("shows frozen sources and drives generation, editing, and submission", async () => {
@@ -114,6 +162,7 @@ describe("IpPleadingWorkspace", () => {
 
     expect(await screen.findByText("Trademark pleadings")).toBeVisible();
     expect(await screen.findByText("1 verified citation")).toBeVisible();
+    expect(await screen.findByText("Current identifiers, sources, citations, exhibits, and placeholders passed.")).toBeVisible();
     fireEvent.click(screen.getByText("Frozen document versions"));
     expect(screen.getByText("Registry notice.pdf")).toBeVisible();
     expect(screen.getByText("abc123")).toBeVisible();
@@ -146,6 +195,88 @@ describe("IpPleadingWorkspace", () => {
       expect.objectContaining({
         action: "submit",
         notes: "Ready for partner review.",
+      }),
+      expect.any(Object),
+    ));
+  });
+
+  it("compares revisions, exports a filing bundle, and records filing", async () => {
+    const revisionTwo = {
+      ...draft.versions[0],
+      id: "version-2",
+      revision: 2,
+      body: `${draft.versions[0].body}\nCorrected line.`,
+    };
+    listDraftsMock.mockResolvedValue({
+      drafts: [{
+        ...draft,
+        status: "finalized",
+        review_required: false,
+        current_version_id: "version-2",
+        versions: [draft.versions[0], revisionTwo],
+      }],
+      next_cursor: null,
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <IpPleadingWorkspace docketId="docket-1" proceedingId="proceeding-1" canCreate canEdit canGenerate canReview canFinalize />
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText("r1 → r2: +1 lines")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Filing bundle" }));
+    await waitFor(() => expect(bundleMock).toHaveBeenCalledOnce());
+    fireEvent.change(screen.getByLabelText("Registry reference"), {
+      target: { value: "TM-O/2026/451" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Mark filed" }));
+    await waitFor(() => expect(lifecycleMock).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "file", reference: "TM-O/2026/451" }),
+      expect.any(Object),
+    ));
+  });
+
+  it("keeps rejection and service as distinct human actions", async () => {
+    listDraftsMock.mockResolvedValue({
+      drafts: [{ ...draft, status: "filed", review_required: false }],
+      next_cursor: null,
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <IpPleadingWorkspace docketId="docket-1" proceedingId="proceeding-1" canCreate canEdit canGenerate canReview canFinalize />
+      </QueryClientProvider>,
+    );
+    await screen.findByRole("button", { name: "Rejected" });
+    fireEvent.change(screen.getByLabelText("Registry reference"), {
+      target: { value: "SERVICE/2026/9" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Rejected" }));
+    await waitFor(() => expect(lifecycleMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "reject-filing",
+        reference: "SERVICE/2026/9",
+      }),
+      expect.any(Object),
+    ));
+    lifecycleMock.mockClear();
+    fireEvent.change(screen.getByLabelText("Registry reference"), {
+      target: { value: "SERVICE/2026/9" },
+    });
+    fireEvent.change(screen.getByLabelText("Service method"), {
+      target: { value: "registered-post" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Mark served" }));
+    await waitFor(() => expect(lifecycleMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "serve",
+        reference: "SERVICE/2026/9",
+        method: "registered-post",
       }),
       expect.any(Object),
     ));

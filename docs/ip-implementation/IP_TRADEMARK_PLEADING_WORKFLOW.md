@@ -38,20 +38,54 @@ Only linked document versions in an approved, filed, served, or accepted state
 provide text to the model. Missing particulars remain placeholders. Provider
 failure creates neither a draft version nor a `ModelRun` ledger row.
 
+## Deterministic validation
+
+IPLF-046 adds deterministic checks to the shared drafting owner. Generation
+fails closed when required application or opposition identifiers are missing or
+conflict. Approval and filing recheck the frozen revision against current
+canonical proceeding, identifier, deadline, authority, and IP document-version
+records. A blocker is emitted for:
+
+- unresolved square-bracket, moustache, or angle-bracket placeholders;
+- a changed proceeding stage/version, identifier set, or captured deadline;
+- a previously verified authority that is no longer available;
+- a missing document version, changed SHA-256, or source that left an approved,
+  filed, served, or accepted state;
+- a `[SOURCE:<document-version-id>]` or
+  `[EXHIBIT:<document-version-id>]` anchor outside the frozen manifest; or
+- an Annexure/Exhibit reference without an exact exhibit anchor.
+
+Conflicting dates for the same sourced registry event remain mandatory warnings
+for lawyer resolution. The validation endpoint returns the exact blocker and
+warning counts used by the approval and filing gates; the UI does not maintain
+a second interpretation.
+
 ## Lawyer-controlled lifecycle
 
 The opposition workspace exposes create, generate, immutable manual revision,
-submit, request changes, approve, finalize, source-manifest inspection, and
-authenticated DOCX export. Manual edits copy the prior immutable manifests and
-reset review. Approval fails closed with zero verified authority citations.
-Finalization is terminal.
+submit, request changes, approve, finalize, source-manifest inspection,
+revision comparison, authenticated DOCX export, and a filing bundle. Manual
+edits copy the prior immutable manifests and reset review. Approval fails closed
+with zero current verified authority citations or any validation blocker.
+
+Finalization locks the revision but is not treated as filing. `file`,
+`reject_filing`, and `serve` are distinct human actions on `DraftReview`, with
+the acted-on immutable version ID, external reference, event time, optional
+service method, actor, and notes. A rejected filing reopens editing; the
+corrected body becomes a new version and the original filed version/event is
+not rewritten.
+
+The filing ZIP places the Registry-formatted, page-numbered DOCX under
+`filed-document/`. The template/model/context/source and validation manifest is
+kept separately under `internal/generation-manifest.json`; the internal filing
+checklist is also outside the filed document.
 
 Routes require both the relevant IP and drafting capability. Docket access and
 tenant target constraints are enforced in the service and database.
 
 ## Remaining adjacent work
 
-IPLF-046 owns pleading consistency, placeholder, exhibit, and deeper source
-validation. IPLF-047 owns the legal-SME fixture pack and UAT automation. This
-workflow does not claim those slices, filing-provider integration, registry
-submission, legal acceptance, or autonomous filing.
+IPLF-047 owns the legal-SME fixture pack and UAT automation. This workflow does
+not claim that slice, filing-provider integration, direct Registry submission,
+legal acceptance, or autonomous filing. Filing and service are records of
+human-controlled external actions, not provider-side automation.

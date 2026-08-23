@@ -76,6 +76,11 @@ from caseops_api.services.drafting_targets import (
     compatible_trademark_templates,
     load_ip_drafting_target,
 )
+from caseops_api.services.ip_draft_validation import (
+    IpDraftValidationReport,
+    evaluate_ip_draft_version,
+    validate_ip_context_manifest,
+)
 from caseops_api.services.llm import (
     PURPOSE_DRAFTING,
     LLMCallContext,
@@ -95,6 +100,11 @@ from caseops_api.services.matter_operational_guard import require_operational_ma
 from caseops_api.services.session_context import SessionContext
 
 logger = logging.getLogger(__name__)
+
+_IP_SOURCE_ANCHOR_RE = re.compile(
+    r"\[(SOURCE|EXHIBIT):([0-9a-f]{8}-[0-9a-f-]{27})\]",
+    re.IGNORECASE,
+)
 
 
 # Same Haiku fallback pattern as services.recommendations /
@@ -1277,6 +1287,11 @@ def generate_ip_draft_version(
             status_code=status.HTTP_409_CONFLICT,
             detail="Finalized drafts cannot be regenerated.",
         )
+    if draft.status in {DraftStatus.FILED, DraftStatus.SERVED}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Filed or served drafts cannot be regenerated.",
+        )
     if not draft.template_type:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -1289,6 +1304,19 @@ def generate_ip_draft_version(
         proceeding_id=proceeding.id,
         template_key=draft.template_type,
     )
+    context_findings = validate_ip_context_manifest(
+        target.context_manifest,
+        template_key=draft.template_type,
+    )
+    context_blockers = [row for row in context_findings if row.severity == "blocker"]
+    if context_blockers:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": "Pleading generation is blocked by inconsistent registry context.",
+                "findings": [row.as_dict() for row in context_blockers],
+            },
+        )
     authorities = _retrieve_for_ip_draft(
         session,
         docket=docket,
@@ -1721,6 +1749,11 @@ def _edit_loaded_draft_version(
             status_code=status.HTTP_409_CONFLICT,
             detail="Finalized drafts cannot be edited.",
         )
+    if draft.status in {DraftStatus.FILED, DraftStatus.SERVED}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Filed or served drafts cannot be edited.",
+        )
 
     current = _assert_current_version(draft)
     if not body.strip():
@@ -1807,6 +1840,7 @@ def _record_review(
     action: str,
     context: SessionContext,
     notes: str | None,
+    metadata: dict | None = None,
 ) -> DraftReview:
     review = DraftReview(
         draft_id=draft.id,
@@ -1814,6 +1848,7 @@ def _record_review(
         actor_membership_id=context.membership.id,
         action=action,
         notes=notes,
+        metadata_json=json.dumps(metadata or {}, sort_keys=True),
     )
     session.add(review)
     session.flush()
@@ -1942,6 +1977,20 @@ def _transition_loaded_draft(
                     "Regenerate with grounded authorities first."
                 ),
             )
+        if draft.ip_docket_id is not None:
+            validation = evaluate_ip_draft_version(
+                session,
+                draft=draft,
+                version=current,
+            )
+            if validation.blocker_count:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail={
+                        "message": "Trademark pleading validation failed before approval.",
+                        "validation": validation.as_dict(),
+                    },
+                )
         draft.status = DraftStatus.APPROVED
         draft.review_required = False
     elif action == DraftReviewAction.FINALIZE:
@@ -1981,6 +2030,154 @@ def _transition_loaded_draft(
             "status_after": draft.status,
             "version_id": current.id,
             "notes_len": len(notes) if notes else 0,
+        },
+    )
+    session.commit()
+    session.refresh(draft)
+    return draft
+
+
+def validate_ip_draft(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+    proceeding_id: str,
+    draft_id: str,
+    version_id: str | None = None,
+) -> IpDraftValidationReport:
+    docket, proceeding = _load_ip_docket_and_proceeding(
+        session,
+        context=context,
+        docket_id=docket_id,
+        proceeding_id=proceeding_id,
+    )
+    draft = _load_ip_draft(session, docket=docket, proceeding=proceeding, draft_id=draft_id)
+    target_id = version_id or draft.current_version_id
+    if not target_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Draft has no version to validate.",
+        )
+    version = next((row for row in draft.versions if row.id == target_id), None)
+    if version is None:
+        raise HTTPException(status_code=404, detail="Draft version not found.")
+    return evaluate_ip_draft_version(session, draft=draft, version=version)
+
+
+def compare_ip_draft_versions(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+    proceeding_id: str,
+    draft_id: str,
+    prev_revision: int,
+    next_revision: int,
+    context_lines: int = 3,
+):
+    from caseops_api.services.draft_compare import compare_versions
+
+    if prev_revision == next_revision:
+        raise HTTPException(status_code=400, detail="Draft revisions must differ.")
+    docket, proceeding = _load_ip_docket_and_proceeding(
+        session,
+        context=context,
+        docket_id=docket_id,
+        proceeding_id=proceeding_id,
+    )
+    draft = _load_ip_draft(session, docket=docket, proceeding=proceeding, draft_id=draft_id)
+    by_revision = {row.revision: row for row in draft.versions}
+    previous = by_revision.get(prev_revision)
+    next_version = by_revision.get(next_revision)
+    if previous is None or next_version is None:
+        raise HTTPException(status_code=404, detail="One or both draft revisions were not found.")
+    return compare_versions(
+        draft_id=draft.id,
+        prev_version=previous,
+        next_version=next_version,
+        context_lines=context_lines,
+    )
+
+
+def transition_ip_draft_lifecycle(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+    proceeding_id: str,
+    draft_id: str,
+    action: Literal["file", "reject_filing", "serve"],
+    reference: str,
+    occurred_at: datetime | None,
+    method: str | None,
+    notes: str | None,
+) -> Draft:
+    docket, proceeding = _load_ip_docket_and_proceeding(
+        session,
+        context=context,
+        docket_id=docket_id,
+        proceeding_id=proceeding_id,
+        require_active=True,
+    )
+    draft = _load_ip_draft(session, docket=docket, proceeding=proceeding, draft_id=draft_id)
+    current = _assert_current_version(draft)
+    if action == DraftReviewAction.FILE:
+        if draft.status != DraftStatus.FINALIZED:
+            raise HTTPException(status_code=409, detail="Only a finalized revision can be filed.")
+        validation = evaluate_ip_draft_version(session, draft=draft, version=current)
+        if validation.blocker_count:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "message": "Trademark pleading validation failed before filing.",
+                    "validation": validation.as_dict(),
+                },
+            )
+        draft.status = DraftStatus.FILED
+    elif action == DraftReviewAction.REJECT_FILING:
+        if draft.status != DraftStatus.FILED:
+            raise HTTPException(status_code=409, detail="Only a filed revision can be rejected.")
+        draft.status = DraftStatus.FILING_REJECTED
+        draft.review_required = True
+    elif action == DraftReviewAction.SERVE:
+        if draft.status != DraftStatus.FILED:
+            raise HTTPException(status_code=409, detail="Only a filed revision can be served.")
+        if not method:
+            raise HTTPException(status_code=422, detail="Service method is required.")
+        draft.status = DraftStatus.SERVED
+    else:  # pragma: no cover
+        raise HTTPException(status_code=400, detail="Unknown pleading lifecycle action.")
+
+    if action != DraftReviewAction.REJECT_FILING:
+        draft.review_required = False
+    event_metadata = {
+        "reference": reference,
+        "occurred_at": (occurred_at or datetime.now(UTC)).isoformat(),
+        "method": method,
+    }
+    _record_review(
+        session,
+        draft=draft,
+        version_id=current.id,
+        action=action,
+        context=context,
+        notes=notes,
+        metadata=event_metadata,
+    )
+    draft.updated_at = datetime.now(UTC)
+    record_from_context(
+        session,
+        context,
+        action=f"draft.{action}",
+        target_type="draft",
+        target_id=draft.id,
+        ip_docket_id=docket.id,
+        metadata={
+            "ip_proceeding_id": proceeding.id,
+            "status_after": draft.status,
+            "version_id": current.id,
+            **event_metadata,
         },
     )
     session.commit()
@@ -2058,7 +2255,13 @@ def _render_loaded_version_docx(
     # circulate it. Close the loop: export is gated unless at least one
     # citation verified OR the draft has reached approved/finalized
     # (the reviewer has accepted the gap on record).
-    gate_bypassed = draft.status in {DraftStatus.APPROVED, DraftStatus.FINALIZED}
+    gate_bypassed = draft.status in {
+        DraftStatus.APPROVED,
+        DraftStatus.FINALIZED,
+        DraftStatus.FILED,
+        DraftStatus.FILING_REJECTED,
+        DraftStatus.SERVED,
+    }
     if not gate_bypassed and (version.verified_citation_count or 0) <= 0:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -2075,6 +2278,35 @@ def _render_loaded_version_docx(
     from docx.shared import Pt
 
     doc = Document()
+    loaded_template_manifest = _load_manifest(version.template_manifest_json, {})
+    template_manifest = (
+        loaded_template_manifest if isinstance(loaded_template_manifest, dict) else {}
+    )
+    loaded_source_manifest = _load_manifest(version.source_manifest_json, [])
+    source_manifest = loaded_source_manifest if isinstance(loaded_source_manifest, list) else []
+    format_profile = str(template_manifest.get("format_profile") or "")
+    if format_profile:
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.oxml import OxmlElement
+        from docx.oxml.ns import qn
+        from docx.shared import Inches
+
+        doc.core_properties.subject = format_profile
+        doc.core_properties.keywords = "registry-format; page-numbered; annexure-indexed"
+        for section in doc.sections:
+            section.top_margin = Inches(1.25)
+            section.bottom_margin = Inches(1.0)
+            section.left_margin = Inches(1.5)
+            section.right_margin = Inches(1.0)
+            header = section.header.paragraphs[0]
+            header.text = "IN THE TRADE MARKS REGISTRY"
+            header.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            footer = section.footer.paragraphs[0]
+            footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            footer.add_run("Page ")
+            page_field = OxmlElement("w:fldSimple")
+            page_field.set(qn("w:instr"), "PAGE")
+            footer._p.append(page_field)
     title = doc.add_heading(draft.title, level=1)
     for run in title.runs:
         run.font.size = Pt(18)
@@ -2107,6 +2339,27 @@ def _render_loaded_version_docx(
         doc.add_heading("Authorities cited", level=2)
         for c in citations:
             doc.add_paragraph(c, style="List Bullet")
+
+    exhibit_ids = [
+        match.group(2).lower()
+        for match in _IP_SOURCE_ANCHOR_RE.finditer(version.body)
+        if match.group(1).upper() == "EXHIBIT"
+    ]
+    if exhibit_ids and isinstance(source_manifest, list):
+        source_by_id = {
+            str(row.get("document_version_id") or "").lower(): row
+            for row in source_manifest
+            if isinstance(row, dict)
+        }
+        doc.add_heading("Annexure index", level=2)
+        table = doc.add_table(rows=1, cols=2)
+        table.rows[0].cells[0].text = "Exhibit anchor"
+        table.rows[0].cells[1].text = "Document"
+        for source_id in dict.fromkeys(exhibit_ids):
+            row = source_by_id.get(source_id, {})
+            cells = table.add_row().cells
+            cells[0].text = f"EXHIBIT:{source_id}"
+            cells[1].text = str(row.get("display_name") or row.get("document_title") or source_id)
 
     if draft.review_required:
         doc.add_paragraph(
@@ -2181,6 +2434,7 @@ def load_draft_record(draft: Draft) -> dict:
                 "actor_membership_id": r.actor_membership_id,
                 "action": r.action,
                 "notes": r.notes,
+                "metadata": _load_manifest(r.metadata_json, {}),
                 "created_at": r.created_at,
             }
             for r in sorted(draft.reviews, key=lambda r: r.created_at)

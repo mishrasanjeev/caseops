@@ -64,3 +64,8 @@ a0972ffcf6257e19c1a92cc30df05cdf227a0891:docs/ip-implementation/PROGRAM_MANIFEST
 # checkpoint. This suppresses only the reviewed e18cc266 finding; newly
 # introduced generic-key findings remain blocking.
 e18cc266f557aa3b8006311393b2a65e71986db2:docs/ip-implementation/PROGRAM_MANIFEST.yaml:generic-api-key:21
+
+# 2026-08-24 IPLF-045B release closure: exact false positive on the public
+# Google Cloud Build execution UUID recorded as deployment evidence. This is a
+# fingerprint-only suppression; new generic-key findings remain blocking.
+470ddcd304d52ed0b7c74b03d0e3cf0224a4ea3f:docs/ip-implementation/evidence/m4/IPLF-045B/release-2026-08-24.md:generic-api-key:26

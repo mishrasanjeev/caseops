@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 from datetime import UTC, datetime
 from typing import Annotated
 
@@ -25,11 +26,14 @@ from caseops_api.api.dependencies import (
 from caseops_api.core.settings import get_settings
 from caseops_api.schemas.audit import IpDocketAuditListResponse
 from caseops_api.schemas.drafts import (
+    DraftCompareRecord,
     DraftEditRequest,
     DraftGenerateRequest,
     DraftListResponse,
     DraftRecord,
     DraftReviewRequest,
+    IpDraftLifecycleRequest,
+    IpDraftValidationReportRecord,
     IpPleadingDraftCreateRequest,
     IpPleadingTemplateListResponse,
 )
@@ -255,6 +259,7 @@ from caseops_api.schemas.shared_work import (
 from caseops_api.services.document_jobs import run_document_processing_job
 from caseops_api.services.document_storage import resolve_storage_path
 from caseops_api.services.drafting import (
+    compare_ip_draft_versions,
     create_ip_draft,
     edit_ip_draft_version,
     generate_ip_draft_version,
@@ -264,6 +269,8 @@ from caseops_api.services.drafting import (
     load_draft_record,
     render_ip_version_docx,
     transition_ip_draft,
+    transition_ip_draft_lifecycle,
+    validate_ip_draft,
 )
 from caseops_api.services.ip_audit import list_ip_docket_audit_events
 from caseops_api.services.ip_capability_catalog import ip_workspace_readiness
@@ -308,6 +315,7 @@ from caseops_api.services.ip_documents import (
     seed_ip_document_taxonomy,
     upsert_ip_document_taxonomy_entry,
 )
+from caseops_api.services.ip_draft_exports import render_ip_draft_bundle
 from caseops_api.services.ip_import_files import MAX_IMPORT_BYTES, parse_ip_import_file
 from caseops_api.services.ip_imports import (
     commit_ip_import_job,
@@ -3409,6 +3417,150 @@ async def post_ip_pleading_draft_finalization(
 
 
 @router.get(
+    "/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/validate",
+    response_model=IpDraftValidationReportRecord,
+)
+async def get_ip_pleading_draft_validation(
+    docket_id: str,
+    proceeding_id: str,
+    draft_id: str,
+    context: IpViewer,
+    session: DbSession,
+    version_id: Annotated[str | None, Query()] = None,
+) -> IpDraftValidationReportRecord:
+    report = validate_ip_draft(
+        session,
+        context=context,
+        docket_id=docket_id,
+        proceeding_id=proceeding_id,
+        draft_id=draft_id,
+        version_id=version_id,
+    )
+    return IpDraftValidationReportRecord.model_validate(report.as_dict())
+
+
+@router.get(
+    "/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/compare",
+    response_model=DraftCompareRecord,
+)
+async def get_ip_pleading_draft_comparison(
+    docket_id: str,
+    proceeding_id: str,
+    draft_id: str,
+    context: IpViewer,
+    session: DbSession,
+    prev_revision: Annotated[int, Query(ge=1)],
+    next_revision: Annotated[int, Query(ge=1)],
+    context_lines: Annotated[int, Query(ge=0, le=20)] = 3,
+) -> DraftCompareRecord:
+    result = compare_ip_draft_versions(
+        session,
+        context=context,
+        docket_id=docket_id,
+        proceeding_id=proceeding_id,
+        draft_id=draft_id,
+        prev_revision=prev_revision,
+        next_revision=next_revision,
+        context_lines=context_lines,
+    )
+    return DraftCompareRecord.model_validate(asdict(result))
+
+
+def _transition_ip_pleading_lifecycle(
+    *,
+    session: DbSession,
+    context: SessionContext,
+    docket_id: str,
+    proceeding_id: str,
+    draft_id: str,
+    action: str,
+    payload: IpDraftLifecycleRequest,
+) -> DraftRecord:
+    draft = transition_ip_draft_lifecycle(
+        session,
+        context=context,
+        docket_id=docket_id,
+        proceeding_id=proceeding_id,
+        draft_id=draft_id,
+        action=action,  # type: ignore[arg-type]
+        reference=payload.reference,
+        occurred_at=payload.occurred_at,
+        method=payload.method,
+        notes=payload.notes,
+    )
+    return DraftRecord.model_validate(load_draft_record(draft))
+
+
+@router.post(
+    "/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/file",
+    response_model=DraftRecord,
+)
+async def post_ip_pleading_filing(
+    docket_id: str,
+    proceeding_id: str,
+    draft_id: str,
+    payload: IpDraftLifecycleRequest,
+    context: IpDraftFinalizer,
+    session: DbSession,
+) -> DraftRecord:
+    return _transition_ip_pleading_lifecycle(
+        session=session,
+        context=context,
+        docket_id=docket_id,
+        proceeding_id=proceeding_id,
+        draft_id=draft_id,
+        action="file",
+        payload=payload,
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/reject-filing",
+    response_model=DraftRecord,
+)
+async def post_ip_pleading_filing_rejection(
+    docket_id: str,
+    proceeding_id: str,
+    draft_id: str,
+    payload: IpDraftLifecycleRequest,
+    context: IpDraftFinalizer,
+    session: DbSession,
+) -> DraftRecord:
+    return _transition_ip_pleading_lifecycle(
+        session=session,
+        context=context,
+        docket_id=docket_id,
+        proceeding_id=proceeding_id,
+        draft_id=draft_id,
+        action="reject_filing",
+        payload=payload,
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/serve",
+    response_model=DraftRecord,
+)
+async def post_ip_pleading_service(
+    docket_id: str,
+    proceeding_id: str,
+    draft_id: str,
+    payload: IpDraftLifecycleRequest,
+    context: IpDraftFinalizer,
+    session: DbSession,
+) -> DraftRecord:
+    return _transition_ip_pleading_lifecycle(
+        session=session,
+        context=context,
+        docket_id=docket_id,
+        proceeding_id=proceeding_id,
+        draft_id=draft_id,
+        action="serve",
+        payload=payload,
+    )
+
+
+@router.get(
     "/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/export.docx",
     response_class=Response,
 )
@@ -3432,4 +3584,29 @@ async def download_ip_pleading_draft_docx(
         content=body,
         media_type=("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get(
+    "/dockets/{docket_id}/proceedings/{proceeding_id}/drafts/{draft_id}/filing-bundle.zip",
+    response_class=Response,
+)
+async def download_ip_pleading_filing_bundle(
+    docket_id: str,
+    proceeding_id: str,
+    draft_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> Response:
+    bundle = render_ip_draft_bundle(
+        session,
+        context=context,
+        docket_id=docket_id,
+        proceeding_id=proceeding_id,
+        draft_id=draft_id,
+    )
+    return Response(
+        content=bundle.body,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{bundle.filename}"'},
     )
