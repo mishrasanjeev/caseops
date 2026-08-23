@@ -12568,7 +12568,7 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m4/IPLF-045B/local-verification-2026-08-23.md",
-          "revision": "23c40ef33f840b8e93d7d525fac427fbdf4210ba",
+          "revision": "a298e6dfc76a41faf87ce68ea3ab21a78019ade4",
           "environment": "local SQLite API and Alembic tests plus generated OpenAPI, Next.js typecheck, Vitest, production build, and focused drafting regressions",
           "fixtures": "deterministic synthetic trademark opposition docket, exact proceeding, confirmed identifiers, parties, events, deadlines, approved source document version, incompatible template, model-provider failure, and cross-docket target; no live filing or legal approval",
           "assertions": "canonical generalized drafting ownership, tenant and docket target fences, immutable context/source manifests, compatible template selection, atomic generation failure, immutable lawyer edits, review transitions, verified-citation approval gate, DOCX export, OpenAPI generation, and responsive pleading workspace",
@@ -12669,7 +12669,7 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m4/IPLF-045B/local-verification-2026-08-23.md",
-          "revision": "23c40ef33f840b8e93d7d525fac427fbdf4210ba",
+          "revision": "a298e6dfc76a41faf87ce68ea3ab21a78019ade4",
           "environment": "local SQLite API and Alembic tests plus generated OpenAPI, Next.js typecheck, Vitest, production build, and focused drafting regressions",
           "fixtures": "deterministic synthetic trademark opposition docket, exact proceeding, confirmed identifiers, parties, events, deadlines, approved source document version, incompatible template, model-provider failure, and cross-docket target; no live filing or legal approval",
           "assertions": "canonical generalized drafting ownership, tenant and docket target fences, immutable context/source manifests, compatible template selection, atomic generation failure, immutable lawyer edits, review transitions, verified-citation approval gate, DOCX export, OpenAPI generation, and responsive pleading workspace",
