@@ -357,3 +357,33 @@ Matter disposal and reopen no longer archive, cancel, close, or resurrect the
 linked IP docket, coverage, obligations, or events. IP lifecycle operations do
 not change the linked Matter. Shared task, deadline, hearing, document,
 notification, billing, opposition, and audit owners remain unchanged.
+
+## IPLF-048 specialized opposition paths
+
+IPLF-048 extends the existing `opposition_shared_action` event stream and reads
+current class/goods rows from `trademark_application_scopes`. It adds no second
+opposition or scope table. Every scope review records an explicit decision per
+selected class segment and preserves all unlisted scopes. Partial or missing
+Registry scope requires a source-confirmation reference. A later amendment or
+division must identify both the related same-tenant application and the source
+relationship reference.
+
+Foreign-language evidence identifies the source and translated document by
+reference and SHA-256, names the source language, translator, credential,
+attestation, and service fact. A Rules 45/46/47 or further-evidence package that
+declares foreign-language documents is rejected until each has a matching
+attested translation event.
+
+Hearing notice, adjournment, written arguments, and attendance records point to
+the canonical `MatterHearing`. They preserve minimum-notice and rule-version
+candidates, adjournment form/reason/fee/count/outcome, argument service, and
+confirmed nonappearance consequences. Hearing status is checked at write time.
+Security for costs remains its own classification and records direction,
+enhancement, due date, payment evidence, and a confirmed consequence candidate.
+
+Closure or an order does not infer an application result. A separate
+disposition-review event identifies its trigger, affected current scope IDs,
+recommendation, review status, and `no_automatic_application_update=true`.
+Madrid oppositions additionally link the current application to its WIPO and
+Indian designation identifiers and lifecycle source without replacing the
+application owner.
