@@ -407,8 +407,8 @@ export default function LawFirmPitchPage() {
               />
               <PitchCard
                 icon={BookOpen}
-                title="Statute model + verbatim quoting — shipped"
-                body="7 central acts catalogued (BNSS / BNS / BSA / CrPC / IPC / Constitution / NI Act, 91 sections). Attach sections to a matter as cited / opposing / context; the prompt receives bare text and quotes verbatim."
+                title="Licensed-source controls"
+                body="The optional Indian Kanoon API adapter is disabled until contract, terms, credentials, permitted-use, retention, legal-coverage, cost and budget gates pass. When active, research shows attribution, freshness, source links and review state; CaseOps never scrapes its public pages."
               />
               <PitchCard
                 icon={Lock}

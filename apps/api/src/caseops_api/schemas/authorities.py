@@ -7,8 +7,21 @@ from pydantic import BaseModel, Field, field_validator
 
 from caseops_api.schemas.source_actions import SourceActionRecord
 
-AuthorityForumLevelLiteral = Literal["high_court", "supreme_court"]
-AuthorityDocumentTypeLiteral = Literal["judgment", "order", "practice_direction", "notice"]
+AuthorityForumLevelLiteral = Literal[
+    "lower_court",
+    "high_court",
+    "supreme_court",
+    "tribunal",
+]
+AuthorityDocumentTypeLiteral = Literal[
+    "judgment",
+    "order",
+    "practice_direction",
+    "notice",
+    "statute",
+    "regulation",
+    "other",
+]
 AuthoritySearchModeLiteral = Literal[
     "keyword",
     "contextual",
@@ -90,6 +103,21 @@ class AuthorityDocumentRecord(BaseModel):
     extracted_char_count: int
     ingested_at: datetime
     updated_at: datetime
+    provider_document_id: str | None = None
+    publisher_name: str | None = None
+    jurisdiction: str | None = None
+    issuing_body: str | None = None
+    source_category: str | None = None
+    authority_status: str | None = None
+    binding_status: str | None = None
+    canonical_url: str | None = None
+    content_hash: str | None = None
+    source_version: str | None = None
+    retrieved_at: datetime | None = None
+    source_access_state: str = "available"
+    attribution: dict | None = None
+    license_policy_version: str | None = None
+    legal_review_status: str = "unreviewed"
 
 
 class AuthorityDocumentListResponse(BaseModel):
@@ -230,6 +258,8 @@ class AuthorityResearchReportRecord(BaseModel):
     analysis_version: str
     generated_at: datetime
     created_at: datetime
+    invalidated_at: datetime | None = None
+    invalidation_reason: str | None = None
 
 
 class AuthorityResearchReportListResponse(BaseModel):

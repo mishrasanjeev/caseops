@@ -283,6 +283,26 @@ class Settings(BaseSettings):
     )
     case_tracking_daily_timezone: str = Field(default="Asia/Kolkata")
 
+    # IPLF-054: licensed legal-research access. The API token is server-only
+    # and the provider remains fail-closed until terms, permitted uses, costs,
+    # and explicit budgets are all configured.
+    indian_kanoon_enabled: bool = Field(default=False)
+    indian_kanoon_api_base_url: str = Field(default="https://api.indiankanoon.org")
+    indian_kanoon_api_token: str | None = Field(default=None)
+    indian_kanoon_terms_approved: bool = Field(default=False)
+    indian_kanoon_legal_coverage_approved: bool = Field(default=False)
+    indian_kanoon_terms_owner: str | None = Field(default=None)
+    indian_kanoon_terms_approved_at: datetime | None = Field(default=None)
+    indian_kanoon_terms_expires_at: datetime | None = Field(default=None)
+    indian_kanoon_permitted_uses: str = Field(default="")
+    indian_kanoon_daily_budget_minor: int = Field(default=0, ge=0)
+    indian_kanoon_monthly_budget_minor: int = Field(default=0, ge=0)
+    indian_kanoon_request_timeout_seconds: float = Field(default=8.0, ge=1.0, le=20.0)
+    indian_kanoon_cache_ttl_seconds: int = Field(default=300, ge=0, le=3600)
+    indian_kanoon_retention_days: int = Field(default=0, ge=0, le=3650)
+    indian_kanoon_max_search_page: int = Field(default=20, ge=0, le=100)
+    indian_kanoon_max_results: int = Field(default=20, ge=1, le=100)
+
     compliance_ai_extraction_enabled: bool = Field(default=False)
     compliance_ai_extraction_auto_run_enabled: bool = Field(default=False)
     compliance_auto_activate_generated_work_enabled: bool = Field(default=False)

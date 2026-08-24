@@ -1119,6 +1119,7 @@ def test_provider_readiness_is_names_only_and_fail_closed(
         "digest_delivery",
         "ecourtsindia",
         "ipindia-registry",
+        "indian-kanoon",
     }
     assert providers["google_drive"]["configured"] is True
     assert providers["google_drive"]["enabled"] is False
@@ -1129,6 +1130,14 @@ def test_provider_readiness_is_names_only_and_fail_closed(
     assert providers["ecourtsindia"]["adapter_contract"]["domain"] == "court_tracking"
     assert providers["ipindia-registry"]["configured"] is False
     assert providers["ipindia-registry"]["external_calls_enabled"] is False
+    assert providers["indian-kanoon"]["state"] == "blocked_missing_config"
+    assert providers["indian-kanoon"]["external_calls_enabled"] is False
+    assert "INDIAN_KANOON_API_TOKEN" in providers["indian-kanoon"][
+        "missing_config_names"
+    ]
+    assert providers["indian-kanoon"]["adapter_contract"]["kill_switch_name"] == (
+        "INDIAN_KANOON_ENABLED"
+    )
     assert providers["ipindia-registry"]["adapter_contract"][
         "commercial_terms_status"
     ] == "not_approved"

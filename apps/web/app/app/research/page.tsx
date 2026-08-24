@@ -42,15 +42,19 @@ import {
   type AuthoritySearchMode,
   type AuthoritySearchOutcome,
   type AuthoritySearchResult,
+  type IndianKanoonSearchResult,
   createAuthorityResearchReport,
   createAuthorityAnnotation,
+  fetchIndianKanoonReadiness,
   searchAuthorities,
+  searchIndianKanoon,
 } from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
 import { formatLegalDate } from "@/lib/dates";
 
 type ForumFilter = "any" | AuthorityForumLevel;
 type DocTypeFilter = "any" | AuthorityDocumentType;
+type ResearchSource = "caseops_corpus" | "indian_kanoon";
 type SearchCriteria = {
   query: string;
   forumLevel: ForumFilter;
@@ -71,6 +75,9 @@ export default function ResearchPage() {
   const [courtName, setCourtName] = useState("");
   const [documentType, setDocumentType] = useState<DocTypeFilter>("any");
   const [searchMode, setSearchMode] = useState<AuthoritySearchMode>(initialMode);
+  const [researchSource, setResearchSource] = useState<ResearchSource>(
+    "caseops_corpus",
+  );
   // PG-110 (2026-05-01): language filter + pagination. Default "en"
   // because the 2026-04-28 ingest sweep dropped the EN-only filter,
   // so without a default users were seeing Garo / Hindi / Tamil
@@ -144,7 +151,37 @@ export default function ResearchPage() {
           searchCriteria.documentType === "any" ? null : searchCriteria.documentType,
       });
     },
-    enabled: canSearch && (searchCriteria?.query.trim().length ?? 0) >= 2,
+    enabled:
+      canSearch &&
+      researchSource === "caseops_corpus" &&
+      (searchCriteria?.query.trim().length ?? 0) >= 2,
+  });
+
+  const licensedReadinessQuery = useQuery({
+    queryKey: ["authorities", "providers", "indian-kanoon", "readiness"],
+    queryFn: fetchIndianKanoonReadiness,
+    enabled: canSearch && researchSource === "indian_kanoon",
+  });
+
+  const licensedSearchQuery = useQuery({
+    queryKey: [
+      "authorities",
+      "providers",
+      "indian-kanoon",
+      "search",
+      searchCriteria?.query,
+    ],
+    queryFn: () => {
+      if (!searchCriteria) {
+        throw new Error("Search criteria are required before provider search.");
+      }
+      return searchIndianKanoon({ query: searchCriteria.query, maxResults: 20 });
+    },
+    enabled:
+      canSearch &&
+      researchSource === "indian_kanoon" &&
+      licensedReadinessQuery.data?.external_calls_enabled === true &&
+      (searchCriteria?.query.trim().length ?? 0) >= 2,
   });
 
   const saveMutation = useMutation({
@@ -224,8 +261,17 @@ export default function ResearchPage() {
   const unreadableOnlyResults = results.length > 0 && visibleResults.length === 0;
   const hasNextPage = (page + 1) * PAGE_SIZE < totalAfterFilter;
   const hasPrevPage = page > 0;
+  const licensedReady =
+    licensedReadinessQuery.data?.external_calls_enabled === true;
+  const activeSearchFetching =
+    researchSource === "indian_kanoon"
+      ? licensedSearchQuery.isFetching
+      : searchQuery.isFetching;
   const canSubmitSearch =
-    canSearch && query.trim().length >= 2 && !searchQuery.isFetching;
+    canSearch &&
+    query.trim().length >= 2 &&
+    !activeSearchFetching &&
+    (researchSource === "caseops_corpus" || licensedReady);
 
   return (
     <div className="flex flex-col gap-6">
@@ -253,11 +299,63 @@ export default function ResearchPage() {
             Find authorities
           </CardTitle>
           <CardDescription>
-            Use natural language. Filters narrow by court, forum, and document type.
+            {researchSource === "indian_kanoon"
+              ? "Search the workspace-approved licensed source."
+              : "Use natural language. Filters narrow by court, forum, and document type."}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <Label className="text-xs text-[var(--color-mute-2)]">Source</Label>
+              <div
+                className="flex w-full min-w-0 rounded-md border border-[var(--color-line)] bg-white sm:w-auto"
+                data-testid="research-source-toggle"
+              >
+                {(
+                  [
+                    ["caseops_corpus", "CaseOps corpus"],
+                    ["indian_kanoon", "Indian Kanoon"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => {
+                      setResearchSource(value);
+                      setSearchCriteria(null);
+                      setPage(0);
+                    }}
+                    data-testid={`research-source-${value.replace("_", "-")}`}
+                    className={`min-w-0 flex-1 px-3 py-1 text-xs font-medium sm:flex-none ${
+                      researchSource === value
+                        ? "bg-[var(--color-ink)] text-white"
+                        : "text-[var(--color-ink-2)]"
+                    }`}
+                    aria-pressed={researchSource === value}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {researchSource === "indian_kanoon" ? (
+              <div
+                className={`rounded-md border px-3 py-2 text-xs ${
+                  licensedReady
+                    ? "border-[var(--color-success-600)]/30 bg-[var(--color-success-50)] text-[var(--color-success-700)]"
+                    : "border-[var(--color-warn-600)]/30 bg-[var(--color-warn-50)] text-[var(--color-warn-700)]"
+                }`}
+                data-testid="research-indian-kanoon-readiness"
+              >
+                {licensedReadinessQuery.isPending
+                  ? "Checking licensed-source readiness…"
+                  : licensedReady
+                    ? "Powered by Indian Kanoon. Licensed access is active for this workspace."
+                    : "Licensed access is unavailable until a workspace administrator completes provider, terms, cost, and budget approval."}
+              </div>
+            ) : null}
+            {researchSource === "caseops_corpus" ? (
             <div className="flex flex-wrap items-center gap-2">
               <Label className="text-xs text-[var(--color-mute-2)]">
                 Mode
@@ -292,6 +390,7 @@ export default function ResearchPage() {
                 ))}
               </div>
             </div>
+            ) : null}
             <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
               <Search className="h-4 w-4 text-[var(--color-mute)]" aria-hidden />
               <Input
@@ -313,7 +412,7 @@ export default function ResearchPage() {
                 data-testid="research-query-submit"
                 className="w-full sm:w-auto"
               >
-                {searchQuery.isFetching ? (
+                {activeSearchFetching ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Searching…
                   </>
@@ -324,6 +423,7 @@ export default function ResearchPage() {
                 )}
               </Button>
             </div>
+            {researchSource === "caseops_corpus" ? (
             <div className="grid gap-3 md:grid-cols-3">
               <div className="flex flex-col gap-1">
                 <Label htmlFor="forum-filter" className="text-xs">
@@ -379,9 +479,11 @@ export default function ResearchPage() {
                 </Select>
               </div>
             </div>
+            ) : null}
             {/* PG-110 (2026-05-01): language filter. Default English so
                 Garo / Hindi / Tamil judgments pulled by the 2026-04-28
                 ingest sweep don't dominate top results. */}
+            {researchSource === "caseops_corpus" ? (
             <div className="flex flex-wrap items-center gap-2">
               <Label className="text-xs text-[var(--color-mute-2)]">
                 Language
@@ -418,11 +520,12 @@ export default function ResearchPage() {
                 </button>
               </div>
             </div>
+            ) : null}
           </form>
         </CardContent>
       </Card>
 
-      {corpusCoverage ? (
+      {researchSource === "caseops_corpus" && corpusCoverage ? (
         <div
           className="rounded-lg border border-[var(--color-line)] bg-[var(--color-bg-2)] px-4 py-3 text-xs text-[var(--color-ink-2)]"
           data-testid="research-corpus-coverage"
@@ -449,26 +552,64 @@ export default function ResearchPage() {
           title="Start with a natural-language query"
           description="Example: ‘triple test for bail under BNSS s.483’, ‘res judicata in HC writs’, or ‘limitation period for arbitration award enforcement’."
         />
-      ) : searchQuery.isPending || searchQuery.isFetching ? (
+      ) : (
+          researchSource === "caseops_corpus"
+            ? searchQuery.isPending || searchQuery.isFetching
+            : licensedSearchQuery.isFetching
+        ) ? (
         <EmptyState
           icon={Loader2}
-          title="Searching the corpus…"
-          description="Hybrid retrieval across judgments, statutes, and your tenant overlay."
+          title={
+            researchSource === "indian_kanoon"
+              ? "Searching Indian Kanoon…"
+              : "Searching the corpus…"
+          }
+          description={
+            researchSource === "indian_kanoon"
+              ? "Running one bounded licensed-provider query."
+              : "Hybrid retrieval across judgments, statutes, and your tenant overlay."
+          }
         />
-      ) : searchQuery.isError ? (
+      ) : (
+          researchSource === "indian_kanoon"
+            ? licensedSearchQuery.isError
+            : searchQuery.isError
+        ) ? (
         <EmptyState
           icon={Scale}
-          title={researchErrorCopy(searchQuery.error).title}
-          description={researchErrorCopy(searchQuery.error).description}
+          title={
+            researchErrorCopy(
+              researchSource === "indian_kanoon"
+                ? licensedSearchQuery.error
+                : searchQuery.error,
+            ).title
+          }
+          description={
+            researchErrorCopy(
+              researchSource === "indian_kanoon"
+                ? licensedSearchQuery.error
+                : searchQuery.error,
+            ).description
+          }
           action={
             <Button
               size="sm"
-              onClick={() => searchQuery.refetch()}
+              onClick={() =>
+                researchSource === "indian_kanoon"
+                  ? licensedSearchQuery.refetch()
+                  : searchQuery.refetch()
+              }
               data-testid="research-search-retry"
             >
               Retry search
             </Button>
           }
+        />
+      ) : researchSource === "indian_kanoon" ? (
+        <IndianKanoonResults
+          results={licensedSearchQuery.data?.results ?? []}
+          call={licensedSearchQuery.data?.call ?? null}
+          disclaimer={licensedSearchQuery.data?.disclaimer ?? null}
         />
       ) : visibleResults.length === 0 ? (
         <EmptyState
@@ -593,6 +734,111 @@ export default function ResearchPage() {
           ) : null}
         </>
       )}
+    </div>
+  );
+}
+
+function IndianKanoonResults({
+  results,
+  call,
+  disclaimer,
+}: {
+  results: IndianKanoonSearchResult[];
+  call: {
+    cached: boolean;
+    stale: boolean;
+    freshness_warning: string | null;
+    retrieved_at: string;
+    estimated_cost_minor: number;
+    currency: "INR";
+    cost_basis: "approved_actual" | "fresh_cache" | "stale_cache";
+  } | null;
+  disclaimer: string | null;
+}) {
+  if (results.length === 0) {
+    return (
+      <EmptyState
+        icon={Scale}
+        title="No licensed-source matches"
+        description="Indian Kanoon returned no documents for this exact query. Revise the terms or search the CaseOps corpus."
+      />
+    );
+  }
+  return (
+    <div className="flex min-w-0 flex-col gap-3" data-testid="research-indian-kanoon-results">
+      <div
+        className={`rounded-md border px-4 py-3 text-xs ${
+          call?.stale
+            ? "border-[var(--color-warn-600)]/30 bg-[var(--color-warn-50)] text-[var(--color-warn-700)]"
+            : "border-[var(--color-line)] bg-[var(--color-bg-2)] text-[var(--color-ink-2)]"
+        }`}
+        data-testid="research-indian-kanoon-attribution"
+      >
+        <span className="font-semibold text-[var(--color-ink)]">
+          Powered by Indian Kanoon
+        </span>
+        {call ? (
+          <span>
+            {` · ${call.cached ? "Cached response" : "Licensed API response"}`}
+            {call.estimated_cost_minor > 0
+              ? ` · estimated provider cost ₹${(call.estimated_cost_minor / 100).toFixed(2)}`
+              : " · no new provider charge"}
+          </span>
+        ) : null}
+        {call?.freshness_warning ? <p className="mt-1">{call.freshness_warning}</p> : null}
+        {disclaimer ? <p className="mt-1">{disclaimer}</p> : null}
+      </div>
+      <ul className="flex flex-col gap-3">
+        {results.map((result) => (
+          <li
+            key={result.document_id}
+            className="rounded-lg border border-[var(--color-line)] bg-white p-4"
+            data-testid={`research-indian-kanoon-result-${result.document_id}`}
+          >
+            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--color-mute)]">
+                  <span className="font-medium text-[var(--color-ink-2)]">
+                    {result.publisher}
+                  </span>
+                  <span>{result.document_type.replace(/_/g, " ")}</span>
+                  {result.decision_or_publication_date ? (
+                    <span>
+                      {formatLegalDate(result.decision_or_publication_date, {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </span>
+                  ) : null}
+                  {result.canonical_citation ? (
+                    <span className="font-mono">{result.canonical_citation}</span>
+                  ) : null}
+                </div>
+                <h3 className="mt-1 text-base font-semibold text-[var(--color-ink)]">
+                  {result.title}
+                </h3>
+                {result.headline ? (
+                  <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-ink-2)]">
+                    {result.headline}
+                  </p>
+                ) : null}
+                <p className="mt-2 text-xs text-[var(--color-mute)]">
+                  {result.authority_status.replace(/_/g, " ")} ·{" "}
+                  {result.binding_status.replace(/_/g, " ")}
+                </p>
+              </div>
+              <div className="shrink-0">
+                <SourceAction
+                  action={result.source_action}
+                  compact
+                  originSurface="research"
+                />
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

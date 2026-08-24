@@ -1498,6 +1498,23 @@ export interface paths {
         patch: operations["patch_authority_annotation_api_authorities_annotations__annotation_id__patch"];
         trace?: never;
     };
+    "/api/authorities/documents/{authority_document_id}/legal-source-review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record a two-person legal-source review decision */
+        post: operations["post_authority_legal_source_review_api_authorities_documents__authority_document_id__legal_source_review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/authorities/documents/{authority_id}/annotations": {
         parameters: {
             query?: never;
@@ -1547,6 +1564,142 @@ export interface paths {
         put?: never;
         /** Pull authority documents from an official live source */
         post: operations["pull_authority_source_api_authorities_ingestions_pull_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/authorities/providers/indian-kanoon/documents/{document_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Fetch a processed licensed Indian Kanoon document */
+        get: operations["get_indian_kanoon_document_api_authorities_providers_indian_kanoon_documents__document_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/authorities/providers/indian-kanoon/documents/{document_id}/fragment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Fetch an exact licensed Indian Kanoon passage */
+        post: operations["post_indian_kanoon_fragment_api_authorities_providers_indian_kanoon_documents__document_id__fragment_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/authorities/providers/indian-kanoon/documents/{document_id}/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import an exact licensed source version into the authority corpus */
+        post: operations["post_indian_kanoon_import_api_authorities_providers_indian_kanoon_documents__document_id__import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/authorities/providers/indian-kanoon/documents/{document_id}/metadata": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Fetch licensed Indian Kanoon source metadata */
+        get: operations["get_indian_kanoon_metadata_api_authorities_providers_indian_kanoon_documents__document_id__metadata_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/authorities/providers/indian-kanoon/documents/{document_id}/original": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Fetch an original licensed Indian Kanoon document */
+        get: operations["get_indian_kanoon_original_document_api_authorities_providers_indian_kanoon_documents__document_id__original_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/authorities/providers/indian-kanoon/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read non-invasive Indian Kanoon adapter health */
+        get: operations["get_indian_kanoon_health_api_authorities_providers_indian_kanoon_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/authorities/providers/indian-kanoon/readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read licensed Indian Kanoon activation gates without exposing secrets */
+        get: operations["get_indian_kanoon_readiness_api_authorities_providers_indian_kanoon_readiness_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/authorities/providers/indian-kanoon/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Search the licensed Indian Kanoon API */
+        post: operations["post_indian_kanoon_search_api_authorities_providers_indian_kanoon_search_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -12139,10 +12292,22 @@ export interface components {
         AuthorityDocumentRecord: {
             /** Adapter Name */
             adapter_name: string;
+            /** Attribution */
+            attribution?: {
+                [key: string]: unknown;
+            } | null;
+            /** Authority Status */
+            authority_status?: string | null;
             /** Bench Name */
             bench_name: string | null;
+            /** Binding Status */
+            binding_status?: string | null;
+            /** Canonical Url */
+            canonical_url?: string | null;
             /** Case Reference */
             case_reference: string | null;
+            /** Content Hash */
+            content_hash?: string | null;
             /** Court Name */
             court_name: string;
             /** Decision Date */
@@ -12151,14 +12316,14 @@ export interface components {
              * Document Type
              * @enum {string}
              */
-            document_type: "judgment" | "order" | "practice_direction" | "notice";
+            document_type: "judgment" | "order" | "practice_direction" | "notice" | "statute" | "regulation" | "other";
             /** Extracted Char Count */
             extracted_char_count: number;
             /**
              * Forum Level
              * @enum {string}
              */
-            forum_level: "high_court" | "supreme_court";
+            forum_level: "lower_court" | "high_court" | "supreme_court" | "tribunal";
             /** Id */
             id: string;
             /**
@@ -12166,12 +12331,38 @@ export interface components {
              * Format: date-time
              */
             ingested_at: string;
+            /** Issuing Body */
+            issuing_body?: string | null;
+            /** Jurisdiction */
+            jurisdiction?: string | null;
+            /**
+             * Legal Review Status
+             * @default unreviewed
+             */
+            legal_review_status: string;
+            /** License Policy Version */
+            license_policy_version?: string | null;
             /** Neutral Citation */
             neutral_citation: string | null;
+            /** Provider Document Id */
+            provider_document_id?: string | null;
+            /** Publisher Name */
+            publisher_name?: string | null;
+            /** Retrieved At */
+            retrieved_at?: string | null;
             /** Source */
             source: string;
+            /**
+             * Source Access State
+             * @default available
+             */
+            source_access_state: string;
+            /** Source Category */
+            source_category?: string | null;
             /** Source Reference */
             source_reference: string | null;
+            /** Source Version */
+            source_version?: string | null;
             /** Summary */
             summary: string;
             /** Title */
@@ -12224,6 +12415,40 @@ export interface components {
             /** Summary */
             summary: string | null;
         };
+        /** AuthorityLegalSourceReviewRequest */
+        AuthorityLegalSourceReviewRequest: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approve" | "reject";
+            /** Expected Content Hash */
+            expected_content_hash: string;
+            /** Note */
+            note: string;
+        };
+        /** AuthorityLegalSourceReviewResponse */
+        AuthorityLegalSourceReviewResponse: {
+            /** Authority Document Id */
+            authority_document_id: string;
+            /** Content Hash */
+            content_hash: string;
+            /** First Reviewed At */
+            first_reviewed_at: string | null;
+            /** First Reviewed By Membership Id */
+            first_reviewed_by_membership_id: string | null;
+            /**
+             * Legal Review Status
+             * @enum {string}
+             */
+            legal_review_status: "first_reviewed" | "verified" | "rejected";
+            /** Note */
+            note: string;
+            /** Second Reviewed At */
+            second_reviewed_at: string | null;
+            /** Second Reviewed By Membership Id */
+            second_reviewed_by_membership_id: string | null;
+        };
         /** AuthorityResearchReportCreateRequest */
         AuthorityResearchReportCreateRequest: {
             /** Criteria */
@@ -12272,6 +12497,10 @@ export interface components {
             generated_at: string;
             /** Id */
             id: string;
+            /** Invalidated At */
+            invalidated_at?: string | null;
+            /** Invalidation Reason */
+            invalidation_reason?: string | null;
             /**
              * Mode
              * @enum {string}
@@ -12347,9 +12576,9 @@ export interface components {
             /** Court Name */
             court_name?: string | null;
             /** Document Type */
-            document_type?: ("judgment" | "order" | "practice_direction" | "notice") | null;
+            document_type?: ("judgment" | "order" | "practice_direction" | "notice" | "statute" | "regulation" | "other") | null;
             /** Forum Level */
-            forum_level?: ("high_court" | "supreme_court") | null;
+            forum_level?: ("lower_court" | "high_court" | "supreme_court" | "tribunal") | null;
             /**
              * Language
              * @default en
@@ -12440,12 +12669,12 @@ export interface components {
              * Document Type
              * @enum {string}
              */
-            document_type: "judgment" | "order" | "practice_direction" | "notice";
+            document_type: "judgment" | "order" | "practice_direction" | "notice" | "statute" | "regulation" | "other";
             /**
              * Forum Level
              * @enum {string}
              */
-            forum_level: "high_court" | "supreme_court";
+            forum_level: "lower_court" | "high_court" | "supreme_court" | "tribunal";
             /** Matched Terms */
             matched_terms: string[];
             /** Neutral Citation */
@@ -12483,12 +12712,12 @@ export interface components {
              * Document Type
              * @enum {string}
              */
-            document_type: "judgment" | "order" | "practice_direction" | "notice";
+            document_type: "judgment" | "order" | "practice_direction" | "notice" | "statute" | "regulation" | "other";
             /**
              * Forum Level
              * @enum {string}
              */
-            forum_level: "high_court" | "supreme_court";
+            forum_level: "lower_court" | "high_court" | "supreme_court" | "tribunal";
             /** Label */
             label: string;
             /** Source */
@@ -19324,6 +19553,332 @@ export interface components {
             event_id?: string | null;
             /** Status */
             status: ("new" | "linked_metadata" | "content_import_requested" | "content_imported" | "ignored" | "rejected" | "failed") | "rejected";
+        };
+        /** IndianKanoonAttribution */
+        IndianKanoonAttribution: {
+            /**
+             * Label
+             * @default Powered by Indian Kanoon
+             * @constant
+             */
+            label: "Powered by Indian Kanoon";
+            /**
+             * Logo Required
+             * @default true
+             */
+            logo_required: boolean;
+            /**
+             * Provider Url
+             * @default https://indiankanoon.org/
+             */
+            provider_url: string;
+            /**
+             * Terms Url
+             * @default https://indiankanoon.org/terms.html
+             */
+            terms_url: string;
+        };
+        /** IndianKanoonCallMetadata */
+        IndianKanoonCallMetadata: {
+            /** Cached */
+            cached: boolean;
+            /**
+             * Cost Basis
+             * @enum {string}
+             */
+            cost_basis: "approved_actual" | "fresh_cache" | "stale_cache";
+            /** Cost Category */
+            cost_category: string;
+            /**
+             * Currency
+             * @default INR
+             * @constant
+             */
+            currency: "INR";
+            /** Estimated Cost Minor */
+            estimated_cost_minor: number;
+            /** Freshness Warning */
+            freshness_warning?: string | null;
+            /**
+             * Retrieved At
+             * Format: date-time
+             */
+            retrieved_at: string;
+            /** Stale */
+            stale: boolean;
+        };
+        /** IndianKanoonDocumentResponse */
+        IndianKanoonDocumentResponse: {
+            attribution?: components["schemas"]["IndianKanoonAttribution"];
+            /**
+             * Authority Status
+             * @default provider_record_unreviewed
+             */
+            authority_status: string;
+            /**
+             * Binding Status
+             * @default verify_jurisdiction_and_precedential_status
+             */
+            binding_status: string;
+            call: components["schemas"]["IndianKanoonCallMetadata"];
+            /** Canonical Citation */
+            canonical_citation?: string | null;
+            /** Canonical Url */
+            canonical_url: string;
+            /** Content */
+            content: string;
+            /** Content Hash */
+            content_hash: string;
+            /** Decision Or Publication Date */
+            decision_or_publication_date?: string | null;
+            /** Document Id */
+            document_id: string;
+            /** Document Type */
+            document_type: string;
+            /** Exact Passage Query */
+            exact_passage_query?: string | null;
+            /** Issuing Body */
+            issuing_body?: string | null;
+            /**
+             * Jurisdiction
+             * @default India
+             */
+            jurisdiction: string;
+            /** Provider Metadata */
+            provider_metadata?: {
+                [key: string]: unknown;
+            };
+            /** Publisher */
+            publisher: string;
+            source_action: components["schemas"]["SourceActionRecord"];
+            /** Source Category */
+            source_category: string;
+            /** Source Version */
+            source_version: string;
+            /** Title */
+            title: string;
+        };
+        /** IndianKanoonFragmentRequest */
+        IndianKanoonFragmentRequest: {
+            /** Query */
+            query: string;
+        };
+        /** IndianKanoonHealthResponse */
+        IndianKanoonHealthResponse: {
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at: string;
+            /**
+             * Health
+             * @enum {string}
+             */
+            health: "ready" | "blocked";
+            /**
+             * Performs External Probe
+             * @default false
+             * @constant
+             */
+            performs_external_probe: false;
+            readiness: components["schemas"]["IndianKanoonReadinessResponse"];
+        };
+        /** IndianKanoonImportRequest */
+        IndianKanoonImportRequest: {
+            /** Expected Content Hash */
+            expected_content_hash?: string | null;
+        };
+        /** IndianKanoonImportResponse */
+        IndianKanoonImportResponse: {
+            attribution?: components["schemas"]["IndianKanoonAttribution"];
+            /** Authority Document Id */
+            authority_document_id: string;
+            /** Changed */
+            changed: boolean;
+            /** Content Hash */
+            content_hash: string;
+            /** Created */
+            created: boolean;
+            /** Document Id */
+            document_id: string;
+            /** Invalidated Report Count */
+            invalidated_report_count: number;
+            /** Legal Review Status */
+            legal_review_status: string;
+            source_action: components["schemas"]["SourceActionRecord"];
+            /** Source Version */
+            source_version: string;
+        };
+        /** IndianKanoonMetadataResponse */
+        IndianKanoonMetadataResponse: {
+            attribution?: components["schemas"]["IndianKanoonAttribution"];
+            /**
+             * Authority Status
+             * @default provider_record_unreviewed
+             */
+            authority_status: string;
+            /**
+             * Binding Status
+             * @default verify_jurisdiction_and_precedential_status
+             */
+            binding_status: string;
+            call: components["schemas"]["IndianKanoonCallMetadata"];
+            /** Canonical Citation */
+            canonical_citation?: string | null;
+            /** Canonical Url */
+            canonical_url: string;
+            /** Content Hash */
+            content_hash?: string | null;
+            /** Decision Or Publication Date */
+            decision_or_publication_date?: string | null;
+            /** Document Id */
+            document_id: string;
+            /** Document Type */
+            document_type: string;
+            /** Issuing Body */
+            issuing_body?: string | null;
+            /**
+             * Jurisdiction
+             * @default India
+             */
+            jurisdiction: string;
+            /** Provider Metadata */
+            provider_metadata?: {
+                [key: string]: unknown;
+            };
+            /** Publisher */
+            publisher: string;
+            source_action: components["schemas"]["SourceActionRecord"];
+            /** Source Category */
+            source_category: string;
+            /** Source Version */
+            source_version?: string | null;
+            /** Title */
+            title: string;
+        };
+        /** IndianKanoonReadinessResponse */
+        IndianKanoonReadinessResponse: {
+            attribution?: components["schemas"]["IndianKanoonAttribution"];
+            /** Configured */
+            configured: boolean;
+            /** Daily Budget Minor */
+            daily_budget_minor: number;
+            /** Enabled */
+            enabled: boolean;
+            /** External Calls Enabled */
+            external_calls_enabled: boolean;
+            /**
+             * Kill Switch Name
+             * @default INDIAN_KANOON_ENABLED
+             * @constant
+             */
+            kill_switch_name: "INDIAN_KANOON_ENABLED";
+            /** Limitations */
+            limitations?: string[];
+            /** Missing Approval Keys */
+            missing_approval_keys?: string[];
+            /** Missing Config Names */
+            missing_config_names?: string[];
+            /** Missing Cost Categories */
+            missing_cost_categories?: string[];
+            /** Monthly Budget Minor */
+            monthly_budget_minor: number;
+            /** Permitted Uses */
+            permitted_uses?: string[];
+            /**
+             * Provider
+             * @default indian-kanoon
+             * @constant
+             */
+            provider: "indian-kanoon";
+            /** Retention Days */
+            retention_days: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "blocked_disabled" | "blocked_missing_config" | "blocked_terms" | "blocked_costs" | "blocked_budget" | "ready";
+            /** Terms Approved At */
+            terms_approved_at?: string | null;
+            /** Terms Expires At */
+            terms_expires_at?: string | null;
+            /** Terms Owner */
+            terms_owner?: string | null;
+        };
+        /** IndianKanoonSearchRequest */
+        IndianKanoonSearchRequest: {
+            /**
+             * Max Results
+             * @default 20
+             */
+            max_results: number;
+            /**
+             * Page Number
+             * @default 0
+             */
+            page_number: number;
+            /** Query */
+            query: string;
+        };
+        /** IndianKanoonSearchResponse */
+        IndianKanoonSearchResponse: {
+            attribution?: components["schemas"]["IndianKanoonAttribution"];
+            call: components["schemas"]["IndianKanoonCallMetadata"];
+            /**
+             * Disclaimer
+             * @default Provider results are research aids. Verify the exact passage, court, precedential status, subsequent treatment, and official source before reliance.
+             */
+            disclaimer: string;
+            /** Page Number */
+            page_number: number;
+            /** Query */
+            query: string;
+            /** Results */
+            results: components["schemas"]["IndianKanoonSearchResult"][];
+            /** Returned Count */
+            returned_count: number;
+        };
+        /** IndianKanoonSearchResult */
+        IndianKanoonSearchResult: {
+            attribution?: components["schemas"]["IndianKanoonAttribution"];
+            /**
+             * Authority Status
+             * @default provider_record_unreviewed
+             */
+            authority_status: string;
+            /**
+             * Binding Status
+             * @default verify_jurisdiction_and_precedential_status
+             */
+            binding_status: string;
+            /** Canonical Citation */
+            canonical_citation?: string | null;
+            /** Canonical Url */
+            canonical_url: string;
+            /** Decision Or Publication Date */
+            decision_or_publication_date?: string | null;
+            /** Document Id */
+            document_id: string;
+            /** Document Type */
+            document_type: string;
+            /** Headline */
+            headline?: string | null;
+            /** Issuing Body */
+            issuing_body?: string | null;
+            /**
+             * Jurisdiction
+             * @default India
+             */
+            jurisdiction: string;
+            /** Publisher */
+            publisher: string;
+            /** Rank */
+            rank: number;
+            source_action: components["schemas"]["SourceActionRecord"];
+            /** Source Category */
+            source_category: string;
+            /** Title */
+            title: string;
         };
         /** IntakeRequestCreateRequest */
         IntakeRequestCreateRequest: {
@@ -35470,9 +36025,11 @@ export interface components {
              * Adapter Status
              * @enum {string}
              */
-            adapter_status: "implemented" | "blocked_pending_provider_contract";
+            adapter_status: "implemented" | "implemented_default_off" | "blocked_pending_provider_contract";
             /** Attribution Label */
             attribution_label: string;
+            /** Attribution Url */
+            attribution_url?: string | null;
             /**
              * Commercial Terms Status
              * @enum {string}
@@ -35486,25 +36043,35 @@ export interface components {
              * Domain
              * @enum {string}
              */
-            domain: "court_tracking" | "ip_office_registry";
+            domain: "court_tracking" | "ip_office_registry" | "legal_research";
             /** Endpoint Paths */
             endpoint_paths?: string[];
             /** Health Path */
             health_path?: string | null;
             /** Implemented Capabilities */
             implemented_capabilities: ("search" | "record_fetch" | "document_fetch" | "health" | "attribution" | "cost" | "capability" | "operations" | "replay")[];
+            /** Kill Switch Name */
+            kill_switch_name?: string | null;
             /** Legal Coverage */
             legal_coverage?: components["schemas"]["ProviderAdapterLegalCoverageRecord"][];
             /** Limitations */
             limitations?: string[];
             /** Operations Path */
             operations_path: string;
+            /** Pricing Evidence Url */
+            pricing_evidence_url?: string | null;
             /** Provider */
             provider: string;
             /** Required Capabilities */
             required_capabilities: ("search" | "record_fetch" | "document_fetch" | "health" | "attribution" | "cost" | "capability" | "operations" | "replay")[];
+            /** Required Config Names */
+            required_config_names?: string[];
+            /** Retention Policy */
+            retention_policy?: string | null;
             /** Support Matrix Path */
             support_matrix_path?: string | null;
+            /** Terms Url */
+            terms_url?: string | null;
         };
         /** ProviderAdapterLegalCoverageRecord */
         ProviderAdapterLegalCoverageRecord: {
@@ -35534,7 +36101,7 @@ export interface components {
              * Category
              * @enum {string}
              */
-            category: "case_refresh" | "bulk_case_refresh" | "llm" | "llm_input" | "llm_output" | "embedding" | "document_processing" | "ocr_page" | "storage" | "bandwidth_export" | "payment_mdr" | "payment_fixed_fee" | "payment_refund_fee" | "payment_chargeback_fee" | "email" | "sms" | "whatsapp" | "manual_support";
+            category: "case_refresh" | "bulk_case_refresh" | "llm" | "llm_input" | "llm_output" | "embedding" | "document_processing" | "ocr_page" | "storage" | "bandwidth_export" | "payment_mdr" | "payment_fixed_fee" | "payment_refund_fee" | "payment_chargeback_fee" | "email" | "sms" | "whatsapp" | "manual_support" | "legal_source_search" | "legal_source_document" | "legal_source_original_document" | "legal_source_fragment" | "legal_source_metadata";
             /**
              * Confidence Level
              * @default low
@@ -35598,7 +36165,7 @@ export interface components {
              * Category
              * @enum {string}
              */
-            category: "case_refresh" | "bulk_case_refresh" | "llm" | "llm_input" | "llm_output" | "embedding" | "document_processing" | "ocr_page" | "storage" | "bandwidth_export" | "payment_mdr" | "payment_fixed_fee" | "payment_refund_fee" | "payment_chargeback_fee" | "email" | "sms" | "whatsapp" | "manual_support";
+            category: "case_refresh" | "bulk_case_refresh" | "llm" | "llm_input" | "llm_output" | "embedding" | "document_processing" | "ocr_page" | "storage" | "bandwidth_export" | "payment_mdr" | "payment_fixed_fee" | "payment_refund_fee" | "payment_chargeback_fee" | "email" | "sms" | "whatsapp" | "manual_support" | "legal_source_search" | "legal_source_document" | "legal_source_original_document" | "legal_source_fragment" | "legal_source_metadata";
             /**
              * Confidence Level
              * @enum {string}
@@ -36285,12 +36852,12 @@ export interface components {
              * Authority Document Type
              * @enum {string}
              */
-            authority_document_type: "judgment" | "order" | "practice_direction" | "notice";
+            authority_document_type: "judgment" | "order" | "practice_direction" | "notice" | "statute" | "regulation" | "other";
             /**
              * Authority Forum Level
              * @enum {string}
              */
-            authority_forum_level: "high_court" | "supreme_court";
+            authority_forum_level: "lower_court" | "high_court" | "supreme_court" | "tribunal";
             /** Authority Neutral Citation */
             authority_neutral_citation: string | null;
             /** Authority Source */
@@ -41630,6 +42197,41 @@ export interface operations {
             };
         };
     };
+    post_authority_legal_source_review_api_authorities_documents__authority_document_id__legal_source_review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                authority_document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthorityLegalSourceReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthorityLegalSourceReviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_authority_annotations_api_authorities_documents__authority_id__annotations_get: {
         parameters: {
             query?: {
@@ -41749,6 +42351,242 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuthorityIngestionRunRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_indian_kanoon_document_api_authorities_providers_indian_kanoon_documents__document_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IndianKanoonDocumentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_indian_kanoon_fragment_api_authorities_providers_indian_kanoon_documents__document_id__fragment_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IndianKanoonFragmentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IndianKanoonDocumentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_indian_kanoon_import_api_authorities_providers_indian_kanoon_documents__document_id__import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IndianKanoonImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IndianKanoonImportResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_indian_kanoon_metadata_api_authorities_providers_indian_kanoon_documents__document_id__metadata_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IndianKanoonMetadataResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_indian_kanoon_original_document_api_authorities_providers_indian_kanoon_documents__document_id__original_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IndianKanoonDocumentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_indian_kanoon_health_api_authorities_providers_indian_kanoon_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IndianKanoonHealthResponse"];
+                };
+            };
+        };
+    };
+    get_indian_kanoon_readiness_api_authorities_providers_indian_kanoon_readiness_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IndianKanoonReadinessResponse"];
+                };
+            };
+        };
+    };
+    post_indian_kanoon_search_api_authorities_providers_indian_kanoon_search_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IndianKanoonSearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IndianKanoonSearchResponse"];
                 };
             };
             /** @description Validation Error */

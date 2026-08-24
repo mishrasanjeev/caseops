@@ -40,6 +40,19 @@ from caseops_api.schemas.authorities import (
     SavedAnnotationListResponse,
     SavedAuthorityAnnotationRecord,
 )
+from caseops_api.schemas.indian_kanoon import (
+    AuthorityLegalSourceReviewRequest,
+    AuthorityLegalSourceReviewResponse,
+    IndianKanoonDocumentResponse,
+    IndianKanoonFragmentRequest,
+    IndianKanoonHealthResponse,
+    IndianKanoonImportRequest,
+    IndianKanoonImportResponse,
+    IndianKanoonMetadataResponse,
+    IndianKanoonReadinessResponse,
+    IndianKanoonSearchRequest,
+    IndianKanoonSearchResponse,
+)
 from caseops_api.services.authorities import (
     get_authority_corpus_stats,
     ingest_authority_source,
@@ -61,6 +74,15 @@ from caseops_api.services.authority_research_reports import (
 from caseops_api.services.authority_treatments import (
     summarize_treatments,
 )
+from caseops_api.services.indian_kanoon import (
+    fetch_indian_kanoon_document,
+    fetch_indian_kanoon_metadata,
+    import_indian_kanoon_document,
+    indian_kanoon_health,
+    indian_kanoon_readiness,
+    review_licensed_authority_source,
+    search_indian_kanoon,
+)
 from caseops_api.services.judgment_alerts import (
     create_judgment_alert_rule,
     list_judgment_alert_rules,
@@ -81,6 +103,156 @@ CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
 AuthorityIngester = Annotated[SessionContext, Depends(require_capability('authorities:ingest'))]
 AuthoritySearcher = Annotated[SessionContext, Depends(require_capability('authorities:search'))]
 AuthorityAnnotator = Annotated[SessionContext, Depends(require_capability('authorities:annotate'))]
+
+
+@router.get(
+    "/providers/indian-kanoon/readiness",
+    response_model=IndianKanoonReadinessResponse,
+    summary="Read licensed Indian Kanoon activation gates without exposing secrets",
+)
+def get_indian_kanoon_readiness(
+    context: AuthoritySearcher,
+    session: DbSession,
+) -> IndianKanoonReadinessResponse:
+    del context
+    return indian_kanoon_readiness(session)
+
+
+@router.get(
+    "/providers/indian-kanoon/health",
+    response_model=IndianKanoonHealthResponse,
+    summary="Read non-invasive Indian Kanoon adapter health",
+)
+def get_indian_kanoon_health(
+    context: AuthoritySearcher,
+    session: DbSession,
+) -> IndianKanoonHealthResponse:
+    del context
+    return indian_kanoon_health(session)
+
+
+@router.post(
+    "/providers/indian-kanoon/search",
+    response_model=IndianKanoonSearchResponse,
+    summary="Search the licensed Indian Kanoon API",
+)
+def post_indian_kanoon_search(
+    payload: IndianKanoonSearchRequest,
+    context: AuthoritySearcher,
+    session: DbSession,
+) -> IndianKanoonSearchResponse:
+    return search_indian_kanoon(
+        session,
+        context=context,
+        query=payload.query,
+        page_number=payload.page_number,
+        max_results=payload.max_results,
+    )
+
+
+@router.get(
+    "/providers/indian-kanoon/documents/{document_id}",
+    response_model=IndianKanoonDocumentResponse,
+    summary="Fetch a processed licensed Indian Kanoon document",
+)
+def get_indian_kanoon_document(
+    document_id: str,
+    context: AuthoritySearcher,
+    session: DbSession,
+) -> IndianKanoonDocumentResponse:
+    return fetch_indian_kanoon_document(
+        session, context=context, document_id=document_id
+    )
+
+
+@router.get(
+    "/providers/indian-kanoon/documents/{document_id}/original",
+    response_model=IndianKanoonDocumentResponse,
+    summary="Fetch an original licensed Indian Kanoon document",
+)
+def get_indian_kanoon_original_document(
+    document_id: str,
+    context: AuthoritySearcher,
+    session: DbSession,
+) -> IndianKanoonDocumentResponse:
+    return fetch_indian_kanoon_document(
+        session, context=context, document_id=document_id, variant="original"
+    )
+
+
+@router.post(
+    "/providers/indian-kanoon/documents/{document_id}/fragment",
+    response_model=IndianKanoonDocumentResponse,
+    summary="Fetch an exact licensed Indian Kanoon passage",
+)
+def post_indian_kanoon_fragment(
+    document_id: str,
+    payload: IndianKanoonFragmentRequest,
+    context: AuthoritySearcher,
+    session: DbSession,
+) -> IndianKanoonDocumentResponse:
+    return fetch_indian_kanoon_document(
+        session,
+        context=context,
+        document_id=document_id,
+        variant="fragment",
+        fragment_query=payload.query,
+    )
+
+
+@router.get(
+    "/providers/indian-kanoon/documents/{document_id}/metadata",
+    response_model=IndianKanoonMetadataResponse,
+    summary="Fetch licensed Indian Kanoon source metadata",
+)
+def get_indian_kanoon_metadata(
+    document_id: str,
+    context: AuthoritySearcher,
+    session: DbSession,
+) -> IndianKanoonMetadataResponse:
+    return fetch_indian_kanoon_metadata(
+        session, context=context, document_id=document_id
+    )
+
+
+@router.post(
+    "/providers/indian-kanoon/documents/{document_id}/import",
+    response_model=IndianKanoonImportResponse,
+    summary="Import an exact licensed source version into the authority corpus",
+)
+def post_indian_kanoon_import(
+    document_id: str,
+    payload: IndianKanoonImportRequest,
+    context: AuthorityIngester,
+    session: DbSession,
+) -> IndianKanoonImportResponse:
+    return import_indian_kanoon_document(
+        session,
+        context=context,
+        document_id=document_id,
+        expected_content_hash=payload.expected_content_hash,
+    )
+
+
+@router.post(
+    "/documents/{authority_document_id}/legal-source-review",
+    response_model=AuthorityLegalSourceReviewResponse,
+    summary="Record a two-person legal-source review decision",
+)
+def post_authority_legal_source_review(
+    authority_document_id: str,
+    payload: AuthorityLegalSourceReviewRequest,
+    context: AuthorityIngester,
+    session: DbSession,
+) -> AuthorityLegalSourceReviewResponse:
+    return review_licensed_authority_source(
+        session,
+        context=context,
+        authority_document_id=authority_document_id,
+        decision=payload.decision,
+        expected_content_hash=payload.expected_content_hash,
+        note=payload.note,
+    )
 
 
 @router.get(

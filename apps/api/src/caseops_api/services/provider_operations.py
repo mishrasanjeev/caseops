@@ -76,6 +76,7 @@ from caseops_api.services.google_workspace import (
     google_workspace_connector_missing_config_names,
     google_workspace_oauth_config,
 )
+from caseops_api.services.indian_kanoon import indian_kanoon_readiness
 from caseops_api.services.notification_delivery import (
     NOTIFICATION_DISPATCH_CLAIM_PREFIX,
     materialize_expired_notification_dispatch_claim,
@@ -2674,8 +2675,11 @@ def provider_readiness_status(
     ecourts_enabled = not ecourts_missing_config and not ecourts_missing_approvals
     ecourts_adapter = provider_adapter_definition("ecourtsindia")
     ipindia_adapter = provider_adapter_definition("ipindia-registry")
+    indian_kanoon_adapter = provider_adapter_definition("indian-kanoon")
     assert ecourts_adapter is not None
     assert ipindia_adapter is not None
+    assert indian_kanoon_adapter is not None
+    indian_kanoon_status = indian_kanoon_readiness(session)
 
     return ProviderReadinessListResponse(
         providers=[
@@ -2741,6 +2745,55 @@ def provider_readiness_status(
                 ),
                 limitations=list(ipindia_adapter.limitations),
                 adapter_contract=ipindia_adapter.record(),
+            ),
+            ProviderReadinessRecord(
+                provider="indian-kanoon",
+                display_name=indian_kanoon_adapter.display_name,
+                adp_slice="IPLF-054",
+                state=(
+                    "ready"
+                    if indian_kanoon_status.state == "ready"
+                    else (
+                        "blocked_missing_config"
+                        if indian_kanoon_status.state
+                        in {"blocked_disabled", "blocked_missing_config"}
+                        else "blocked_pending_admin_approval"
+                    )
+                ),
+                configured=indian_kanoon_status.configured,
+                enabled=indian_kanoon_status.enabled,
+                external_calls_enabled=indian_kanoon_status.external_calls_enabled,
+                durable_workflow_available=workflow.available,
+                required_config_names=list(indian_kanoon_adapter.required_config_names),
+                missing_config_names=indian_kanoon_status.missing_config_names,
+                required_approval_keys=[
+                    "indian_kanoon_terms_approved",
+                    "indian_kanoon_legal_coverage_approved",
+                    "approved_actual_cost_profiles",
+                ],
+                missing_approval_keys=[
+                    *indian_kanoon_status.missing_approval_keys,
+                    *(
+                        ["approved_actual_cost_profiles"]
+                        if indian_kanoon_status.missing_cost_categories
+                        else []
+                    ),
+                ],
+                endpoint_paths=list(indian_kanoon_adapter.endpoint_paths),
+                idempotency_fields=["provider_document_id", "content_hash"],
+                change_detection_fields=[
+                    "provider_document_id",
+                    "content_hash",
+                    "source_version",
+                    "retrieved_at",
+                ],
+                review_queue="Authority corpus two-person licensed-source review",
+                retry_dead_letter=(
+                    "Interactive calls use typed failures and bounded stale cache. "
+                    "No background replay is enabled for licensed research calls."
+                ),
+                limitations=list(indian_kanoon_adapter.limitations),
+                adapter_contract=indian_kanoon_adapter.record(),
             ),
             ProviderReadinessRecord(
                 provider="google_drive",

@@ -592,6 +592,21 @@ def _authority_record(document: AuthorityDocument) -> AuthorityDocumentRecord:
         extracted_char_count=document.extracted_char_count,
         ingested_at=document.ingested_at,
         updated_at=document.updated_at,
+        provider_document_id=document.provider_document_id,
+        publisher_name=document.publisher_name,
+        jurisdiction=document.jurisdiction,
+        issuing_body=document.issuing_body,
+        source_category=document.source_category,
+        authority_status=document.authority_status,
+        binding_status=document.binding_status,
+        canonical_url=document.canonical_url,
+        content_hash=document.content_hash,
+        source_version=document.source_version,
+        retrieved_at=document.retrieved_at,
+        source_access_state=document.source_access_state,
+        attribution=document.attribution_json,
+        license_policy_version=document.license_policy_version,
+        legal_review_status=document.legal_review_status,
     )
 
 

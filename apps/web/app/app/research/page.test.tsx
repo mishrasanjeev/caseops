@@ -7,11 +7,15 @@ const {
   statsMock,
   searchMock,
   createReportMock,
+  indianKanoonReadinessMock,
+  indianKanoonSearchMock,
   useCapabilityMock,
 } = vi.hoisted(() => ({
   statsMock: vi.fn(),
   searchMock: vi.fn(),
   createReportMock: vi.fn(),
+  indianKanoonReadinessMock: vi.fn(),
+  indianKanoonSearchMock: vi.fn(),
   useCapabilityMock: vi.fn(),
 }));
 
@@ -20,6 +24,8 @@ vi.mock("@/lib/api/endpoints", () => ({
   searchAuthorities: searchMock,
   createAuthorityResearchReport: createReportMock,
   createAuthorityAnnotation: vi.fn(),
+  fetchIndianKanoonReadiness: indianKanoonReadinessMock,
+  searchIndianKanoon: indianKanoonSearchMock,
 }));
 
 vi.mock("@/lib/capabilities", () => ({
@@ -44,6 +50,8 @@ describe("ResearchPage", () => {
     statsMock.mockReset();
     searchMock.mockReset();
     createReportMock.mockReset();
+    indianKanoonReadinessMock.mockReset();
+    indianKanoonSearchMock.mockReset();
     createReportMock.mockResolvedValue({ id: "report-1" });
     useCapabilityMock.mockReset();
     useCapabilityMock.mockImplementation(() => true);
@@ -71,12 +79,143 @@ describe("ResearchPage", () => {
         scope_summary: "indexed authority corpus; en language scope",
       },
     });
+    indianKanoonReadinessMock.mockResolvedValue({
+      provider: "indian-kanoon",
+      state: "ready",
+      configured: true,
+      enabled: true,
+      external_calls_enabled: true,
+      missing_config_names: [],
+      missing_approval_keys: [],
+      missing_cost_categories: [],
+      permitted_uses: ["document_display", "research_storage", "search"],
+      daily_budget_minor: 10000,
+      monthly_budget_minor: 100000,
+      retention_days: 30,
+      terms_owner: "CaseOps legal",
+      terms_approved_at: "2026-08-24T00:00:00Z",
+      terms_expires_at: "2026-09-24T00:00:00Z",
+      kill_switch_name: "INDIAN_KANOON_ENABLED",
+      attribution: {
+        label: "Powered by Indian Kanoon",
+        provider_url: "https://indiankanoon.org/",
+        terms_url: "https://indiankanoon.org/terms.html",
+        logo_required: true,
+      },
+      limitations: [],
+    });
+    indianKanoonSearchMock.mockResolvedValue({
+      query: "constitutional proportionality",
+      page_number: 0,
+      returned_count: 1,
+      results: [
+        {
+          document_id: "12345",
+          title: "Example Industries v State",
+          publisher: "Supreme Court of India",
+          jurisdiction: "India",
+          issuing_body: "Supreme Court of India",
+          source_category: "supreme_court",
+          document_type: "judgment",
+          decision_or_publication_date: "2026-08-20",
+          canonical_citation: "2026 INSC 101",
+          authority_status: "provider_record_unreviewed",
+          binding_status: "verify_jurisdiction_and_precedential_status",
+          canonical_url: "https://indiankanoon.org/doc/12345/",
+          source_action: {
+            state: "available",
+            label: "Open source",
+            open_url:
+              "/api/source-actions/open?url=https%3A%2F%2Findiankanoon.org%2Fdoc%2F12345%2F",
+            source_reference: "https://indiankanoon.org/doc/12345/",
+            reason: null,
+            opens_new_tab: true,
+          },
+          attribution: {
+            label: "Powered by Indian Kanoon",
+            provider_url: "https://indiankanoon.org/",
+            terms_url: "https://indiankanoon.org/terms.html",
+            logo_required: true,
+          },
+          rank: 1,
+          headline: "The exact passage matched the query.",
+        },
+      ],
+      call: {
+        cached: false,
+        stale: false,
+        freshness_warning: null,
+        retrieved_at: "2026-08-25T00:00:00Z",
+        estimated_cost_minor: 50,
+        currency: "INR",
+        cost_category: "legal_source_search",
+        cost_basis: "approved_actual",
+      },
+      attribution: {
+        label: "Powered by Indian Kanoon",
+        provider_url: "https://indiankanoon.org/",
+        terms_url: "https://indiankanoon.org/terms.html",
+        logo_required: true,
+      },
+      disclaimer: "Verify the exact passage and subsequent treatment before reliance.",
+    });
   });
 
   it("renders the research query input and submit button", () => {
     render(withClient(<ResearchPage />));
     expect(screen.getByTestId("research-query-input")).toBeInTheDocument();
     expect(screen.getByTestId("research-query-submit")).toBeInTheDocument();
+  });
+
+  it("runs a readiness-gated licensed search with attribution and source access", async () => {
+    render(withClient(<ResearchPage />));
+    fireEvent.click(screen.getByTestId("research-source-indian-kanoon"));
+    expect(
+      await screen.findByText(
+        "Powered by Indian Kanoon. Licensed access is active for this workspace.",
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId("research-query-input"), {
+      target: { value: "constitutional proportionality" },
+    });
+    fireEvent.click(screen.getByTestId("research-query-submit"));
+
+    expect(
+      await screen.findByText("Example Industries v State"),
+    ).toBeInTheDocument();
+    expect(indianKanoonSearchMock).toHaveBeenCalledWith({
+      query: "constitutional proportionality",
+      maxResults: 20,
+    });
+    expect(screen.getByTestId("research-indian-kanoon-attribution")).toHaveTextContent(
+      "Powered by Indian Kanoon",
+    );
+    expect(screen.getByTestId("research-indian-kanoon-attribution")).toHaveTextContent(
+      "estimated provider cost ₹0.50",
+    );
+    expect(screen.getByTestId("source-action-open")).toHaveTextContent("Source");
+    expect(searchMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps licensed provider calls fail-closed when readiness is blocked", async () => {
+    indianKanoonReadinessMock.mockResolvedValueOnce({
+      ...(await indianKanoonReadinessMock()),
+      state: "blocked_terms",
+      enabled: false,
+      external_calls_enabled: false,
+    });
+    indianKanoonReadinessMock.mockClear();
+    render(withClient(<ResearchPage />));
+    fireEvent.click(screen.getByTestId("research-source-indian-kanoon"));
+    expect(
+      await screen.findByText(/Licensed access is unavailable/),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByTestId("research-query-input"), {
+      target: { value: "constitutional proportionality" },
+    });
+    expect(screen.getByTestId("research-query-submit")).toBeDisabled();
+    expect(indianKanoonSearchMock).not.toHaveBeenCalled();
   });
 
   it("uses search coverage without issuing a competing corpus-stats request", async () => {

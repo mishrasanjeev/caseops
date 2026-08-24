@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
 from dataclasses import dataclass
 from urllib.parse import quote, urlsplit
 
@@ -39,6 +40,7 @@ _OFFICIAL_HOSTS = {
     "www.sci.gov.in",
     "sci.gov.in",
 }
+_LICENSED_SOURCE_HOSTS = {"indiankanoon.org", "www.indiankanoon.org"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +60,11 @@ def _is_official_host(hostname: str) -> bool:
     return hostname in _OFFICIAL_HOSTS or any(
         hostname.endswith(suffix) for suffix in _OFFICIAL_HOST_SUFFIXES
     )
+
+
+def _is_approved_source_host(hostname: str) -> bool:
+    hostname = hostname.rstrip(".").lower()
+    return _is_official_host(hostname) or hostname in _LICENSED_SOURCE_HOSTS
 
 
 def authority_source_verified(source: str | None, source_reference: str | None) -> bool:
@@ -96,7 +103,7 @@ def authority_source_verified(source: str | None, source_reference: str | None) 
     entry = LEGAL_SOURCE_REGISTRY_BY_KEY.get((source or "").strip())
     if entry is None or entry.source_type not in {SOURCE_TYPE_OFFICIAL, SOURCE_TYPE_LICENSED}:
         return False
-    return is_official_source_reference(source_reference)
+    return is_approved_legal_source_reference(source_reference)
 
 
 def judge_appointment_source_verified(source_url: str | None) -> bool:
@@ -111,6 +118,21 @@ def judge_appointment_source_verified(source_url: str | None) -> bool:
 def is_official_source_reference(source_reference: str | None) -> bool:
     """Return whether a URL is an approved official HTTPS source reference."""
 
+    return _is_safe_source_reference(source_reference, approved_host=_is_official_host)
+
+
+def is_approved_legal_source_reference(source_reference: str | None) -> bool:
+    """Return whether a URL is an approved official or licensed legal source."""
+
+    return _is_safe_source_reference(source_reference, approved_host=_is_approved_source_host)
+
+
+def _is_safe_source_reference(
+    source_reference: str | None,
+    *,
+    approved_host: Callable[[str], bool],
+) -> bool:
+
     reference = (source_reference or "").strip()
     if not reference:
         return False
@@ -121,7 +143,7 @@ def is_official_source_reference(source_reference: str | None) -> bool:
         and not parsed.username
         and not parsed.password
         and parsed.port in {None, 443}
-        and _is_official_host(parsed.hostname)
+        and approved_host(parsed.hostname)
     )
 
 
@@ -164,7 +186,7 @@ def inspect_source_action(
             source_reference=reference,
             reason="Source URL contains credentials or a non-standard port.",
         )
-    if not _is_official_host(parsed.hostname):
+    if not _is_approved_source_host(parsed.hostname):
         return SourceActionRecord(
             state="unverified",
             source_reference=reference,

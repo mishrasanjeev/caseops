@@ -6,11 +6,11 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `16cfc31cddbf53cb591e4b8715d43eefdba18e495ca06b64f6c5d2dd8f9b4916`
-- SQL tables: `283`
-- SQL columns: `4460`
-- ORM indexes: `1278`
-- Alembic/raw index declarations: `594`
+- Canonical map SHA-256: `f624f137c6db3c269461e978a55eaf2742e9c7bb8816c6cc7531d5b3ea544859`
+- SQL tables: `284`
+- SQL columns: `4489`
+- ORM indexes: `1286`
+- Alembic/raw index declarations: `596`
 - Non-SQL data classes: `11`
 
 ## Boundary
@@ -35,9 +35,10 @@ This inventory does not claim approved retention bounds, legal-hold activation, 
 | `authority_annotations` | `tenant_operational_record` | 10 | `registry_fail_closed` |
 | `authority_citations` | `public_or_licensed_legal_reference` | 10 | `registry_fail_closed` |
 | `authority_document_chunks` | `public_or_licensed_legal_reference` | 15 | `registry_fail_closed` |
-| `authority_documents` | `public_or_licensed_legal_reference` | 26 | `registry_fail_closed` |
+| `authority_documents` | `public_or_licensed_legal_reference` | 47 | `registry_fail_closed` |
 | `authority_ingestion_runs` | `public_or_licensed_legal_reference` | 9 | `registry_fail_closed` |
-| `authority_research_reports` | `tenant_operational_record` | 11 | `registry_fail_closed` |
+| `authority_research_report_sources` | `public_or_licensed_legal_reference` | 6 | `registry_fail_closed` |
+| `authority_research_reports` | `tenant_operational_record` | 13 | `registry_fail_closed` |
 | `authority_search_observations` | `tenant_operational_record` | 12 | `registry_fail_closed` |
 | `authority_statute_references` | `public_or_licensed_legal_reference` | 7 | `registry_fail_closed` |
 | `benches` | `platform_operational_reference` | 6 | `registry_fail_closed` |

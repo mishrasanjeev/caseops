@@ -1534,15 +1534,35 @@
           "sql_type": "TEXT",
           "nullable": true
         },
+        "attribution_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": true
+        },
+        "authority_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(80)",
+          "nullable": true
+        },
         "bench_name": {
           "category_id": "personal_or_contact_data",
           "sql_type": "VARCHAR(255)",
+          "nullable": true
+        },
+        "binding_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(80)",
           "nullable": true
         },
         "canonical_key": {
           "category_id": "domain_attribute",
           "sql_type": "VARCHAR(255)",
           "nullable": false
+        },
+        "canonical_url": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(500)",
+          "nullable": true
         },
         "case_number": {
           "category_id": "domain_attribute",
@@ -1552,6 +1572,11 @@
         "case_reference": {
           "category_id": "domain_attribute",
           "sql_type": "VARCHAR(255)",
+          "nullable": true
+        },
+        "content_hash": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "VARCHAR(64)",
           "nullable": true
         },
         "court_name": {
@@ -1584,6 +1609,16 @@
           "sql_type": "INTEGER",
           "nullable": false
         },
+        "first_reviewed_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "first_reviewed_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
         "forum_level": {
           "category_id": "domain_attribute",
           "sql_type": "VARCHAR(40)",
@@ -1599,9 +1634,34 @@
           "sql_type": "DATETIME",
           "nullable": false
         },
+        "issuing_body": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "VARCHAR(255)",
+          "nullable": true
+        },
         "judges_json": {
           "category_id": "domain_attribute",
           "sql_type": "TEXT",
+          "nullable": true
+        },
+        "jurisdiction": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(120)",
+          "nullable": true
+        },
+        "legal_review_note": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "legal_review_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(32)",
+          "nullable": false
+        },
+        "license_policy_version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "VARCHAR(80)",
           "nullable": true
         },
         "neutral_citation": {
@@ -1619,6 +1679,31 @@
           "sql_type": "TEXT",
           "nullable": true
         },
+        "provider_document_id": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "VARCHAR(120)",
+          "nullable": true
+        },
+        "publisher_name": {
+          "category_id": "personal_or_contact_data",
+          "sql_type": "VARCHAR(255)",
+          "nullable": true
+        },
+        "retrieved_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "second_reviewed_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "second_reviewed_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
         "sections_cited_json": {
           "category_id": "domain_attribute",
           "sql_type": "TEXT",
@@ -1629,9 +1714,29 @@
           "sql_type": "VARCHAR(120)",
           "nullable": false
         },
+        "source_access_state": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(40)",
+          "nullable": false
+        },
+        "source_category": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(80)",
+          "nullable": true
+        },
+        "source_metadata_json": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "JSON",
+          "nullable": true
+        },
         "source_reference": {
           "category_id": "external_or_provider_identifier",
           "sql_type": "VARCHAR(500)",
+          "nullable": true
+        },
+        "source_version": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(120)",
           "nullable": true
         },
         "structured_version": {
@@ -1711,6 +1816,45 @@
       }
     },
     {
+      "id": "authority_research_report_sources",
+      "table_name": "authority_research_report_sources",
+      "purpose": "Repository SQL persistence class `authority_research_report_sources`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "public_or_licensed_legal_reference",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "authority_document_id": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "content_hash": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "VARCHAR(64)",
+          "nullable": true
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "report_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "source_version": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(120)",
+          "nullable": true
+        }
+      }
+    },
+    {
       "id": "authority_research_reports",
       "table_name": "authority_research_reports",
       "purpose": "Repository SQL persistence class `authority_research_reports`; its exact column inventory is intentionally versioned below.",
@@ -1751,6 +1895,16 @@
           "category_id": "tenant_or_access_identifier",
           "sql_type": "VARCHAR(36)",
           "nullable": false
+        },
+        "invalidated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "invalidation_reason": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
         },
         "mode": {
           "category_id": "configuration_or_state_metadata",
@@ -25254,12 +25408,12 @@
       }
     }
   ],
-  "schema_fingerprint": "6a2b1a32a7c34ce9910c06971b948d441207c71d6c24a674937b2b1968fb8bdb",
+  "schema_fingerprint": "7d7d2715bc19250747f08f791c47322f0487332868e2136bb3a9555b7c0f54ab",
   "index_inventory": {
-    "orm_index_count": 1278,
-    "orm_index_fingerprint": "a60fa22887270fd53912567d9bc3c0bff818d8b8f937d19a0e3ed7e176c00f92",
-    "migration_index_count": 594,
-    "migration_index_fingerprint": "8240864fdc336fbbf35da9f1ce22d04be6a0ad6718b647d844b7faebe4b28335",
+    "orm_index_count": 1286,
+    "orm_index_fingerprint": "9201ec302daddd207b915d22e313c41c6b2e0a6064be5f863028f31c5b5538ce",
+    "migration_index_count": 596,
+    "migration_index_fingerprint": "277521faf9581f0997c5c6e4a2d5487f00fe705194cbceaf718b98ad80c87ad0",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."
   }
 }
