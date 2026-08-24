@@ -1853,6 +1853,7 @@ def create_matter(
     context: SessionContext,
     payload: MatterCreateRequest,
     commit: bool = True,
+    required_capability: str | None = None,
 ) -> MatterRecord:
     assignment_memberships = lock_company_memberships_for_assignment(
         session,
@@ -1867,9 +1868,10 @@ def create_matter(
         session,
         assignment_memberships,
         context=context,
-        required_capability=MATTER_MUTATION_CAPABILITIES[
-            "create_matter" if commit else "import_matter"
-        ],
+        required_capability=(
+            required_capability
+            or MATTER_MUTATION_CAPABILITIES["create_matter" if commit else "import_matter"]
+        ),
     )
     if payload.status == MatterStatus.DISPOSED.value:
         raise HTTPException(

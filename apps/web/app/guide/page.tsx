@@ -738,6 +738,55 @@ export default function GuidePage() {
                     </li>
                   </ul>
                   <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
+                    Trademark journal watch
+                  </h3>
+                  <p>
+                    Open <a className="underline" href="/app/ip/watch">Journal watch</a>{" "}
+                    to define docket-specific word, phonetic, device, class, proprietor,
+                    and jurisdiction criteria. Every profile records its check frequency,
+                    notification recipients, provider, and cost ceiling. A cost ceiling or
+                    unavailable provider visibly pauses the profile instead of silently
+                    skipping a check.
+                  </p>
+                  <ul className="mt-4 space-y-2 text-[15px]">
+                    <li>
+                      Manual journal intake records the journal and application numbers,
+                      published mark, classes and goods, proprietor, publication scope,
+                      source URL and page, retrieval time, attribution, and parser version.
+                      The source record is append-only and an idempotency key can replay only
+                      its original payload and exact results.
+                    </li>
+                    <li>
+                      Each hit shows the compared profile, candidate mark, class and goods
+                      overlap, similarity-method evidence, publication date, and official
+                      source link. AI and device-similarity signals are advisory; an attorney
+                      must independently verify the source and record a reasoned disposition.
+                    </li>
+                    <li>
+                      Final source-dependent decisions and action handoffs are blocked while
+                      the source is unavailable or unconfirmed. Authorized recipients receive
+                      a durable in-app notification when a new accessible hit is recorded.
+                    </li>
+                    <li>
+                      A confirmed relevant hit can create an opposition proceeding,
+                      enforcement Matter, task, operational deadline, or client-report evidence
+                      item without re-entering the source and reviewer decision. The receiving
+                      Matter or IP owner remains canonical.
+                    </li>
+                    <li>
+                      Corrections and re-advertisements link to the prior publication and hit.
+                      Prior evidence remains unchanged, partial published scope remains visible,
+                      delayed intake raises a stale alert, and an earlier deadline state is
+                      superseded only after the successor source is reviewed and confirmed.
+                    </li>
+                    <li>
+                      Live journal-provider polling remains paused until the provider contract,
+                      source licence, credentials, cost policy, and legal coverage are approved.
+                      The current workflow supports sourced manual evidence and makes no external
+                      call when those controls are absent.
+                    </li>
+                  </ul>
+                  <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
                     Rectification, cancellation, and non-use proceedings
                   </h3>
                   <p>

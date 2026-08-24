@@ -20,7 +20,7 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
     inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
 
     assert scheduler_inventory.validate_inventory(inventory) == []
-    assert len(inventory["jobs"]) == 6
+    assert len(inventory["jobs"]) == 7
     assert {job["run_job_name"] for job in inventory["jobs"]} == {
         "caseops-legal-update-sync",
         "caseops-case-tracking-poll",
@@ -28,6 +28,7 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
         "caseops-reminders-job",
         "caseops-extract-authority-metadata",
         "caseops-db-index-health",
+        "caseops-ip-journal-watch",
     }
     authority_job = next(
         job

@@ -247,6 +247,11 @@ const NAV_GROUPS: ReadonlyArray<{
         capability: "ip:read",
       },
       {
+        label: "Journal watch",
+        href: "/app/ip/watch",
+        capability: "ip:read",
+      },
+      {
         label: "IP reports",
         href: "/app/ip/reports",
         capability: "ip:read",

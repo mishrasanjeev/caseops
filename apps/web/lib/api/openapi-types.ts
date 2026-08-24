@@ -6879,6 +6879,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/watch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Watch Workspace */
+        get: operations["watch_workspace_api_ip_watch_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/watch/hits/{hit_id}/disposition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Watch Hit Disposition */
+        post: operations["watch_hit_disposition_api_ip_watch_hits__hit_id__disposition_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/watch/hits/{hit_id}/handoffs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Watch Hit Handoff */
+        post: operations["watch_hit_handoff_api_ip_watch_hits__hit_id__handoffs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/watch/journal-ingestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Journal Ingest */
+        post: operations["journal_ingest_api_ip_watch_journal_ingestions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/watch/profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Watch Profile Create */
+        post: operations["watch_profile_create_api_ip_watch_profiles_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/watch/profiles/{profile_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Watch Profile Status */
+        post: operations["watch_profile_status_api_ip_watch_profiles__profile_id__status_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/working-calendars": {
         parameters: {
             query?: never;
@@ -23161,6 +23263,228 @@ export interface components {
             /** Release Reason */
             release_reason: string;
         };
+        /** IpJournalIngestionRunResponse */
+        IpJournalIngestionRunResponse: {
+            /** Company Id */
+            company_id: string;
+            /** Completed At */
+            completed_at: string | null;
+            /** Cost Minor */
+            cost_minor: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /** Duplicate Hits */
+            duplicate_hits: number;
+            /** Error Redacted */
+            error_redacted: string | null;
+            /** External Call */
+            external_call: boolean;
+            /** Hit Ids Json */
+            hit_ids_json: string[];
+            /** Hits Created */
+            hits_created: number;
+            /** Id */
+            id: string;
+            /** Idempotency Key */
+            idempotency_key: string;
+            /** Provider Key */
+            provider_key: string;
+            /** Publication Ids Json */
+            publication_ids_json: string[];
+            /** Publications Created */
+            publications_created: number;
+            /** Publications Seen */
+            publications_seen: number;
+            /** Request Sha256 */
+            request_sha256: string;
+            /** Requested By Membership Id */
+            requested_by_membership_id: string;
+            /** Stale Source Alert */
+            stale_source_alert: boolean;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Status */
+            status: string;
+        };
+        /** IpJournalIngestRequest */
+        IpJournalIngestRequest: {
+            /**
+             * Cost Minor
+             * @default 0
+             */
+            cost_minor: number;
+            /**
+             * Currency
+             * @default INR
+             */
+            currency: string;
+            /**
+             * External Call
+             * @default false
+             */
+            external_call: boolean;
+            /** Idempotency Key */
+            idempotency_key: string;
+            /** Provider Key */
+            provider_key: string;
+            /** Publications */
+            publications: components["schemas"]["IpJournalPublicationCreate"][];
+        };
+        /** IpJournalIngestResponse */
+        IpJournalIngestResponse: {
+            /** Hits */
+            hits?: components["schemas"]["IpWatchHitResponse"][];
+            /**
+             * Idempotent Replay
+             * @default false
+             */
+            idempotent_replay: boolean;
+            /** Publications */
+            publications?: components["schemas"]["IpJournalPublicationResponse"][];
+            run: components["schemas"]["IpJournalIngestionRunResponse"];
+        };
+        /** IpJournalPublicationCreate */
+        IpJournalPublicationCreate: {
+            /** Application Id */
+            application_id?: string | null;
+            /** Application Number */
+            application_number: string;
+            /** Attribution */
+            attribution?: {
+                [key: string]: unknown;
+            };
+            /** Class Numbers */
+            class_numbers: number[];
+            /** Correction Reason */
+            correction_reason?: string | null;
+            /** Device Reference */
+            device_reference?: string | null;
+            /** Goods Services */
+            goods_services?: {
+                [key: string]: string[];
+            };
+            /**
+             * Journal Date
+             * Format: date
+             */
+            journal_date: string;
+            /** Journal Number */
+            journal_number: string;
+            /** Jurisdiction */
+            jurisdiction: string;
+            /** Mark Text */
+            mark_text?: string | null;
+            /** Office */
+            office: string;
+            /** Parser Version */
+            parser_version: string;
+            /** Proprietor Name */
+            proprietor_name?: string | null;
+            /**
+             * Publication Kind
+             * @default advertisement
+             * @enum {string}
+             */
+            publication_kind: "advertisement" | "correction" | "readvertisement";
+            /** Publication Scope */
+            publication_scope?: {
+                [key: string]: unknown;
+            };
+            /** Raw Evidence */
+            raw_evidence?: {
+                [key: string]: unknown;
+            };
+            /** Source Page */
+            source_page?: string | null;
+            /** Source Retrieved At */
+            source_retrieved_at?: string | null;
+            /**
+             * Source Status
+             * @enum {string}
+             */
+            source_status: "available" | "unavailable" | "stale";
+            /** Source Url */
+            source_url: string;
+            /** Supersedes Publication Id */
+            supersedes_publication_id?: string | null;
+        };
+        /** IpJournalPublicationResponse */
+        IpJournalPublicationResponse: {
+            /** Application Id */
+            application_id: string | null;
+            /** Application Number */
+            application_number: string;
+            /** Attribution Json */
+            attribution_json: {
+                [key: string]: unknown;
+            };
+            /** Class Numbers Json */
+            class_numbers_json: number[];
+            /** Company Id */
+            company_id: string;
+            /** Correction Reason */
+            correction_reason: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Device Reference */
+            device_reference: string | null;
+            /** Goods Services Json */
+            goods_services_json: {
+                [key: string]: string[];
+            };
+            /** Id */
+            id: string;
+            /** Ingestion Delay Hours */
+            ingestion_delay_hours: number;
+            /**
+             * Journal Date
+             * Format: date
+             */
+            journal_date: string;
+            /** Journal Number */
+            journal_number: string;
+            /** Jurisdiction */
+            jurisdiction: string;
+            /** Mark Text */
+            mark_text: string | null;
+            /** Office */
+            office: string;
+            /** Parser Version */
+            parser_version: string;
+            /** Proprietor Name */
+            proprietor_name: string | null;
+            /** Provider Key */
+            provider_key: string;
+            /** Publication Kind */
+            publication_kind: string;
+            /** Publication Scope Json */
+            publication_scope_json: {
+                [key: string]: unknown;
+            };
+            /** Source Fingerprint */
+            source_fingerprint: string;
+            /** Source Page */
+            source_page: string | null;
+            /** Source Retrieved At */
+            source_retrieved_at: string | null;
+            /** Source Status */
+            source_status: string;
+            /** Source Url */
+            source_url: string;
+            /** Supersedes Publication Id */
+            supersedes_publication_id: string | null;
+        };
         /** IpLifecycleImpactRow */
         IpLifecycleImpactRow: {
             /** Blocker Code */
@@ -27176,6 +27500,291 @@ export interface components {
             updated_at: string;
             /** Version */
             version: number;
+        };
+        /** IpWatchHandoffRequest */
+        IpWatchHandoffRequest: {
+            /** Application Id */
+            application_id?: string | null;
+            /** Assignee Membership Id */
+            assignee_membership_id?: string | null;
+            /** Due On */
+            due_on?: string | null;
+            /**
+             * Handoff Kind
+             * @enum {string}
+             */
+            handoff_kind: "opposition" | "enforcement_matter" | "task" | "deadline" | "client_report_item";
+            /** Matter Code */
+            matter_code?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Represented Side
+             * @default opponent
+             * @enum {string}
+             */
+            represented_side: "applicant" | "opponent";
+            /** Title */
+            title?: string | null;
+        };
+        /** IpWatchHandoffResponse */
+        IpWatchHandoffResponse: {
+            /** Company Id */
+            company_id: string;
+            /** Completed At */
+            completed_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Membership Id */
+            created_by_membership_id: string;
+            /** Error Redacted */
+            error_redacted: string | null;
+            /** Handoff Kind */
+            handoff_kind: string;
+            /** Hit Id */
+            hit_id: string;
+            /** Id */
+            id: string;
+            /** Request Json */
+            request_json: {
+                [key: string]: unknown;
+            };
+            /** Reviewer Decision Json */
+            reviewer_decision_json: {
+                [key: string]: unknown;
+            };
+            /** Source Snapshot Json */
+            source_snapshot_json: {
+                [key: string]: unknown;
+            };
+            /** Status */
+            status: string;
+            /** Target Id */
+            target_id: string | null;
+            /** Target Type */
+            target_type: string | null;
+        };
+        /** IpWatchHitDispositionRequest */
+        IpWatchHitDispositionRequest: {
+            /**
+             * Disposition
+             * @enum {string}
+             */
+            disposition: "new" | "reviewing" | "relevant" | "not_relevant" | "monitor" | "client_instruction" | "enforcement_opened" | "closed";
+            /** Expected Version */
+            expected_version: number;
+            /** Reason */
+            reason: string;
+            /**
+             * Source Confirmed
+             * @default false
+             */
+            source_confirmed: boolean;
+        };
+        /** IpWatchHitResponse */
+        IpWatchHitResponse: {
+            /** Advisory Notice */
+            advisory_notice: string;
+            /** Ai Advisory */
+            ai_advisory: boolean;
+            /** Candidate Mark Json */
+            candidate_mark_json: {
+                [key: string]: unknown;
+            };
+            /** Classes Goods Json */
+            classes_goods_json: {
+                [key: string]: unknown;
+            };
+            /** Company Id */
+            company_id: string;
+            /** Compared Mark Json */
+            compared_mark_json: {
+                [key: string]: unknown;
+            };
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Deadline Confirmation State */
+            deadline_confirmation_state: string;
+            /**
+             * Disposition
+             * @enum {string}
+             */
+            disposition: "new" | "reviewing" | "relevant" | "not_relevant" | "monitor" | "client_instruction" | "enforcement_opened" | "closed";
+            /** Disposition Reason */
+            disposition_reason: string | null;
+            /** Duplicate Of Hit Id */
+            duplicate_of_hit_id: string | null;
+            /**
+             * Hit Date
+             * Format: date
+             */
+            hit_date: string;
+            /** Id */
+            id: string;
+            /** Profile Id */
+            profile_id: string;
+            /** Publication Id */
+            publication_id: string;
+            /** Reviewed At */
+            reviewed_at: string | null;
+            /** Reviewed By Membership Id */
+            reviewed_by_membership_id: string | null;
+            /** Reviewer Decision Json */
+            reviewer_decision_json: {
+                [key: string]: unknown;
+            };
+            /** Similarity Evidence Json */
+            similarity_evidence_json: {
+                [key: string]: unknown;
+            };
+            /** Source Snapshot Json */
+            source_snapshot_json: {
+                [key: string]: unknown;
+            };
+            /** Source Status */
+            source_status: string;
+            /** Source Url */
+            source_url: string;
+            /** Stale Source Alert */
+            stale_source_alert: boolean;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version */
+            version: number;
+        };
+        /** IpWatchProfileCreateRequest */
+        IpWatchProfileCreateRequest: {
+            /** Class Numbers */
+            class_numbers?: number[];
+            /**
+             * Cost Currency
+             * @default INR
+             */
+            cost_currency: string;
+            /** Device References */
+            device_references?: string[];
+            /** Docket Id */
+            docket_id: string;
+            /**
+             * Frequency
+             * @enum {string}
+             */
+            frequency: "publication" | "daily" | "weekly" | "monthly";
+            /** Jurisdictions */
+            jurisdictions?: string[];
+            /**
+             * Max Cost Minor Per Period
+             * @default 0
+             */
+            max_cost_minor_per_period: number;
+            /** Name */
+            name: string;
+            /** Phonetic Terms */
+            phonetic_terms?: string[];
+            /** Proprietor Terms */
+            proprietor_terms?: string[];
+            /**
+             * Provider Key
+             * @default manual-journal
+             */
+            provider_key: string;
+            /** Recipient Membership Ids */
+            recipient_membership_ids: string[];
+            /** Word Terms */
+            word_terms?: string[];
+        };
+        /** IpWatchProfileResponse */
+        IpWatchProfileResponse: {
+            /** Class Numbers Json */
+            class_numbers_json: number[];
+            /** Company Id */
+            company_id: string;
+            /** Cost Currency */
+            cost_currency: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Membership Id */
+            created_by_membership_id: string;
+            /** Criteria Version */
+            criteria_version: string;
+            /** Device References Json */
+            device_references_json: string[];
+            /** Docket Id */
+            docket_id: string;
+            /** Frequency */
+            frequency: string;
+            /** Id */
+            id: string;
+            /** Jurisdictions Json */
+            jurisdictions_json: string[];
+            /** Last Polled At */
+            last_polled_at: string | null;
+            /** Max Cost Minor Per Period */
+            max_cost_minor_per_period: number;
+            /** Name */
+            name: string;
+            /** Next Poll At */
+            next_poll_at: string | null;
+            /** Pause Reason */
+            pause_reason: string | null;
+            /** Phonetic Terms Json */
+            phonetic_terms_json: string[];
+            /** Poll Status */
+            poll_status: string;
+            /** Proprietor Terms Json */
+            proprietor_terms_json: string[];
+            /** Provider Key */
+            provider_key: string;
+            /** Recipient Membership Ids Json */
+            recipient_membership_ids_json: string[];
+            /** Spent Cost Minor In Period */
+            spent_cost_minor_in_period: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version */
+            version: number;
+            /** Word Terms Json */
+            word_terms_json: string[];
+        };
+        /** IpWatchProfileUpdateRequest */
+        IpWatchProfileUpdateRequest: {
+            /** Expected Version */
+            expected_version: number;
+            /**
+             * Poll Status
+             * @enum {string}
+             */
+            poll_status: "active" | "paused" | "disabled";
+            /** Reason */
+            reason: string;
+        };
+        /** IpWatchWorkspaceResponse */
+        IpWatchWorkspaceResponse: {
+            /** Handoffs */
+            handoffs?: components["schemas"]["IpWatchHandoffResponse"][];
+            /** Hits */
+            hits?: components["schemas"]["IpWatchHitResponse"][];
+            /** Ingestion Runs */
+            ingestion_runs?: components["schemas"]["IpJournalIngestionRunResponse"][];
+            /** Profiles */
+            profiles?: components["schemas"]["IpWatchProfileResponse"][];
+            /** Publications */
+            publications?: components["schemas"]["IpJournalPublicationResponse"][];
         };
         /** IpWorkspaceConfigurationResponse */
         IpWorkspaceConfigurationResponse: {
@@ -52124,6 +52733,209 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ManualTrademarkApplicationCreateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    watch_workspace_api_ip_watch_get: {
+        parameters: {
+            query?: {
+                docket_id?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpWatchWorkspaceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    watch_hit_disposition_api_ip_watch_hits__hit_id__disposition_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpWatchHitDispositionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpWatchHitResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    watch_hit_handoff_api_ip_watch_hits__hit_id__handoffs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpWatchHandoffRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpWatchHandoffResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    journal_ingest_api_ip_watch_journal_ingestions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpJournalIngestRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpJournalIngestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    watch_profile_create_api_ip_watch_profiles_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpWatchProfileCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpWatchProfileResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    watch_profile_status_api_ip_watch_profiles__profile_id__status_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpWatchProfileUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpWatchProfileResponse"];
                 };
             };
             /** @description Validation Error */

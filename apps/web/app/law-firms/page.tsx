@@ -14,6 +14,7 @@ import {
   Link2,
   Lock,
   PanelsTopLeft,
+  Radar,
   Scale,
   Search,
   ShieldCheck,
@@ -118,6 +119,11 @@ const platformMoves = [
     icon: ShieldCheck,
     title: "Registry reconciliation",
     body: "Match an application or proceeding to its office identity, open the official source, preserve immutable raw and normalized snapshots, and review each field change. High-risk canonical and mapped fields require explicit approval, stale reviews cannot overwrite newer accepted state, and deadline changes enter a governed calculation queue; failed and no-change checks remain visible without rewriting legal state.",
+  },
+  {
+    icon: Radar,
+    title: "Trademark journal watch",
+    body: "Configure word, phonetic, device, class, proprietor and jurisdiction watches with named recipients, frequency and cost controls. Review source-linked journal hits with advisory similarity evidence, preserve correction and re-advertisement lineage, and send a confirmed hit into opposition, enforcement, task, deadline or client-report work without re-entering the evidence. Live provider polling stays fail-closed until licensing and credentials are approved.",
   },
   {
     icon: Scale,

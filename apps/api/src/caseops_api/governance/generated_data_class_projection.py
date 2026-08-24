@@ -24,16 +24,16 @@ from caseops_api.governance.types import ReviewedDataClass
 PROJECTION_SCHEMA_VERSION = 1
 
 # Fingerprints of the exact artifacts this projection was rendered from.
-MAP_DOCUMENT_FINGERPRINT = "6ed26bb34a489aafa2ebeffe4333e927a520f832af4a7b811e400a0c6f4ae368"
-MAP_SCHEMA_FINGERPRINT = "569027db36f7f299d7ab94c8e7052e3ee7d9531610f220baeff1d1d66d0ba881"
+MAP_DOCUMENT_FINGERPRINT = "5ee11ae06107b5879db5b651c51c5b3eb850fb4bbf29fb8556bec42b91e4cdbd"
+MAP_SCHEMA_FINGERPRINT = "91f529dbd5b09ee228aba499e15d2fa25a3250396e0490c0d664c1cbc08ed5bc"
 REGISTRY_028A_FINGERPRINT = "dd3c30cf69a9b498cea3820acb485a0368a72bf6d9348c2f0d430b5efa99802d"
 REGISTRY_027A_FINGERPRINT = "10b97a818b23d4fae8fe7f54b63edb50b0e04c16778cf0e646ef907f40e1ad96"
 # The ORM schema at render time. Compared against the live models at runtime, so
 # an image whose models moved after this file was rendered reports stale rather
 # than answering from a projection that no longer describes it.
-ORM_SCHEMA_FINGERPRINT = "9a489c465b5c58b84a7ac950b6e1cb4f437273e2a76c17af6bdf62ba93bcbb0c"
+ORM_SCHEMA_FINGERPRINT = "024bf03c746a2dc17d246cca830c008fbd2b709eee30d23ca482c4e492486be7"
 
-PROJECTION_ID = "a9708d045a34b59fa78e9d55cafb2d1dab9066f394a9f13121921654a7fcec7f"
+PROJECTION_ID = "d259ae48205e8f416b3082a804a7d43c4516649e7b51684da76e12264771850f"
 
 # Every SQL table the repository-wide map inventories. Membership here is what
 # separates "inventoried but never reviewed" from "no such data class", which
@@ -169,6 +169,8 @@ INVENTORIED_SQL_TABLES = frozenset(
         "ip_identifiers",
         "ip_import_rows",
         "ip_incident_kill_switches",
+        "ip_journal_ingestion_runs",
+        "ip_journal_publications",
         "ip_matter_links",
         "ip_parties_and_roles",
         "ip_portfolio_export_jobs",
@@ -187,6 +189,9 @@ INVENTORIED_SQL_TABLES = frozenset(
         "ip_title_interests",
         "ip_tracked_case_links",
         "ip_trademark_particular_versions",
+        "ip_watch_handoffs",
+        "ip_watch_hits",
+        "ip_watch_profiles",
         "ip_workflow_definitions",
         "ip_workflow_versions",
         "ip_workspace_configurations",

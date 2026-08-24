@@ -115,6 +115,10 @@ describe("SidebarBody resolved capability navigation", () => {
       "href",
       "/app/ip/registry",
     );
+    expect(screen.getByRole("link", { name: "Journal watch" })).toHaveAttribute(
+      "href",
+      "/app/ip/watch",
+    );
   });
 
   it("marks the centralized Notices destination active", () => {

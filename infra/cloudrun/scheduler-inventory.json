@@ -63,6 +63,16 @@
       "task_timeout_seconds": null,
       "image_policy": "release_digest",
       "canary_policy": "manual_safe"
+    },
+    {
+      "scheduler_name": "caseops-ip-journal-watch-publication-cadence",
+      "run_job_name": "caseops-ip-journal-watch",
+      "schedule": "15 */2 * * *",
+      "time_zone": "Asia/Kolkata",
+      "desired_state": "ENABLED",
+      "task_timeout_seconds": 900,
+      "image_policy": "release_digest",
+      "canary_policy": "scheduled_execution"
     }
   ],
   "legacy_schedulers_to_pause": ["caseops-case-tracking-poll-midnight"]

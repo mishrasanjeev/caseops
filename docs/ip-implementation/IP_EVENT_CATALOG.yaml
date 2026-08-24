@@ -208,6 +208,19 @@
       "payload_schema": {"required": ["ip_deadline_id", "target_id", "due_at", "rule_version_id", "engine_version", "calculation_version"]}
     },
     {
+      "name": "ip.watch_hit.created",
+      "version": 1,
+      "owner": "ip-watch",
+      "scope": "company",
+      "envelope": "company_domain_event_v1",
+      "emission_status": "emitted",
+      "confidentiality": "privileged",
+      "idempotency_key": "company_id:watch_hit_id:version",
+      "consumers": ["access-filtered-timeline", "notification-intent-adapter"],
+      "retention": "watch evidence retention plus company litigation-hold policy",
+      "payload_schema": {"required": ["watch_hit_id", "target_id", "source_evidence_id", "recipient_profile_id"]}
+    },
+    {
       "name": "bulk_import.operation_state_changed",
       "version": 1,
       "owner": "bulk-imports",
