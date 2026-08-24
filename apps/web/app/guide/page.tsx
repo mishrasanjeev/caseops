@@ -1592,8 +1592,9 @@ export default function GuidePage() {
                 <Section id="research" title="18 · Research and authorities">
                   <p>
                     Open <code>/app/research</code> from the left navigation to run
-                    open-ended queries against the public authority corpus without tying
-                    the query to a specific draft. It is a search tool, not a chatbot.
+                    open-ended queries without tying the query to a specific draft. Choose
+                    the CaseOps corpus or, where your workspace has completed every provider
+                    gate, the licensed Indian Kanoon API.
                   </p>
                   <ul className="mt-3 space-y-2 text-[15px]">
                     <li>
@@ -1603,21 +1604,30 @@ export default function GuidePage() {
                     </li>
                     <li>
                       <strong>Results.</strong> Authority cards show the available title,
-                      citation, court/date metadata, extract, and a generic relevance score.
-                      The current result card does not promise a source-PDF link or expose
-                      raw cosine distance.
+                      citation, publisher, court/date metadata, extract, and source action.
+                      Licensed results also show required attribution, cache freshness,
+                      provider cost, and unreviewed authority/binding status.
                     </li>
                     <li>
                       <strong>Save.</strong> Saving a result creates a tenant-private entry
                       in the workspace research notebook. It is not automatically attached
                       to the matter currently open in another tab.
                     </li>
+                    <li>
+                      <strong>Licensed source.</strong> Indian Kanoon access is disabled by
+                      default. Contract and terms approval, server-only credentials,
+                      permitted uses, retention, legal coverage, approved actual cost
+                      profiles, and daily/monthly budgets must all pass before CaseOps makes
+                      a request. CaseOps never scrapes Indian Kanoon public pages.
+                    </li>
                   </ul>
-                  <Callout title="Why some searches return no result">
-                    CaseOps only returns what it can ground. If a query sits outside the
-                    corpus (rare foreign judgments, unindexed tribunals, matters before
-                    1990 in some courts), the system returns an explicit no-result rather
-                    than invent one. This is the right behaviour for a legal tool.
+                  <Callout title="No result, unavailable, and changed sources">
+                    A genuine zero-result is separate from disabled access, expired terms,
+                    quota or budget exhaustion, authentication failure, provider outage,
+                    removed content, and a changed provider contract. A bounded stale cache
+                    is labelled during an outage. Imported content is hashed; a changed
+                    version resets two-person legal review and invalidates linked frozen
+                    research reports.
                   </Callout>
                 </Section>
 

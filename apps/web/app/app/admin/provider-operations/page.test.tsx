@@ -148,6 +148,44 @@ const readiness = {
         limitations: [],
       },
     },
+    {
+      provider: "indian-kanoon",
+      display_name: "Indian Kanoon licensed API",
+      adp_slice: "IPLF-054",
+      state: "blocked_missing_config",
+      configured: false,
+      enabled: false,
+      external_calls_enabled: false,
+      durable_workflow_available: true,
+      required_config_names: ["INDIAN_KANOON_API_TOKEN"],
+      missing_config_names: ["INDIAN_KANOON_API_TOKEN"],
+      required_approval_keys: ["provider_terms_approved"],
+      missing_approval_keys: ["provider_terms_approved"],
+      endpoint_paths: ["/api/authorities/providers/indian-kanoon/search"],
+      idempotency_fields: ["company_id", "document_id"],
+      change_detection_fields: ["content_hash"],
+      review_queue: "Authority legal-source review",
+      retry_dead_letter: "Shared guarded replay is available.",
+      limitations: ["No public HTML scraping."],
+      adapter_contract: {
+        provider: "indian-kanoon",
+        display_name: "Indian Kanoon licensed API",
+        domain: "legal_research",
+        adapter_status: "implemented_default_off",
+        commercial_terms_status: "not_approved",
+        required_capabilities: ["search", "document"],
+        implemented_capabilities: ["search", "document"],
+        attribution_label: "Powered by Indian Kanoon",
+        cost_categories: ["legal_source_search"],
+        health_path: "/api/authorities/providers/indian-kanoon/health",
+        support_matrix_path: "/api/authorities/providers/indian-kanoon/readiness",
+        operations_path: "/api/admin/provider-operations/jobs",
+        endpoint_paths: ["/api/authorities/providers/indian-kanoon/search"],
+        legal_coverage: [],
+        activation_blockers: ["provider disabled"],
+        limitations: ["No public HTML scraping."],
+      },
+    },
   ],
 };
 
@@ -211,6 +249,12 @@ describe("ProviderOperationsPage", () => {
     );
     expect(screen.getByTestId("readiness-ecourtsindia")).toHaveTextContent(
       "/api/case-tracking/support-matrix",
+    );
+    expect(await screen.findByTestId("readiness-indian-kanoon")).toHaveTextContent(
+      "legal research",
+    );
+    expect(screen.getByTestId("readiness-indian-kanoon")).toHaveTextContent(
+      "implemented default off",
     );
     expect(await screen.findByTestId(`provider-operation-${operation.id}`)).toBeInTheDocument();
     expect(screen.getByText("[token-redacted] at [url-redacted]")).toBeInTheDocument();

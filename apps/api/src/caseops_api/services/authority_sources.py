@@ -940,6 +940,40 @@ DEFAULT_LINEAGE_REQUIREMENTS = (
 
 LEGAL_SOURCE_REGISTRY_ENTRIES: tuple[LegalSourceRegistryEntry, ...] = (
     LegalSourceRegistryEntry(
+        source_key="indian_kanoon_licensed",
+        source_name="Indian Kanoon licensed API",
+        jurisdiction="India",
+        court_or_forum="Indian courts, tribunals, and statutory sources in the licensed feed",
+        source_category=SOURCE_CATEGORY_HIGH_COURT,
+        source_type=SOURCE_TYPE_LICENSED,
+        adapter_available=True,
+        access_mode="contracted_api_default_off",
+        captcha_session_gated=False,
+        allowed_for_public_corpus=False,
+        allowed_for_predictive_aggregates=False,
+        lineage_requirements=(
+            "provider_document_id",
+            "canonical_url",
+            "publisher",
+            "court_or_forum",
+            "decision_or_publication_date",
+            "content_hash",
+            "retrieved_at",
+            "license_policy_version",
+            "attribution",
+        ),
+        last_checked_at="2026-08-25",
+        last_checked_status="technical_adapter_available_activation_blocked",
+        notes=(
+            "Only the contracted api.indiankanoon.org API is permitted. Activation "
+            "requires current terms, credentials, approved actual cost profiles, "
+            "budgets, retention, and legal-coverage review."
+        ),
+        readiness_status=SOURCE_READINESS_BLOCKED_LICENSE_OR_UNKNOWN,
+        proof_status=SOURCE_PROOF_LICENSE_UNKNOWN,
+        blocked_reason="licensed_provider_activation_incomplete",
+    ),
+    LegalSourceRegistryEntry(
         source_key="supreme_court_latest_orders",
         source_name="Supreme Court latest orders",
         jurisdiction="India",

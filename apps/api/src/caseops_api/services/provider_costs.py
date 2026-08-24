@@ -46,6 +46,11 @@ MONEY_COST_CATEGORIES = {
     ProviderCostCategory.SMS,
     ProviderCostCategory.WHATSAPP,
     ProviderCostCategory.MANUAL_SUPPORT,
+    ProviderCostCategory.LEGAL_SOURCE_SEARCH,
+    ProviderCostCategory.LEGAL_SOURCE_DOCUMENT,
+    ProviderCostCategory.LEGAL_SOURCE_ORIGINAL_DOCUMENT,
+    ProviderCostCategory.LEGAL_SOURCE_FRAGMENT,
+    ProviderCostCategory.LEGAL_SOURCE_METADATA,
 }
 BPS_COST_CATEGORIES = {ProviderCostCategory.PAYMENT_MDR}
 REQUIRED_MARGIN_SCENARIOS: tuple[tuple[str, str], ...] = (
@@ -303,6 +308,34 @@ def effective_cost_minor(
     if row is not None and row.unit_amount_minor is not None:
         return int(row.unit_amount_minor), "configured"
     return _fallback_minor(category), "fallback_default"
+
+
+def approved_actual_cost_minor(
+    session: Session,
+    *,
+    category: str,
+    provider: str,
+    currency: str = "INR",
+    at: datetime | None = None,
+) -> int | None:
+    """Return an externally-callable unit cost only after explicit approval."""
+
+    row = _active_profile(
+        session,
+        category=category,
+        provider=provider,
+        currency=currency,
+        at=at,
+    )
+    if (
+        row is None
+        or row.unit_amount_minor is None
+        or row.cost_basis != "actual"
+        or row.founder_approval_status != "approved"
+        or row.approved_at is None
+    ):
+        return None
+    return int(row.unit_amount_minor)
 
 
 def _cost_readiness(row: ProviderCostProfile | None, source: str) -> tuple[bool, str]:

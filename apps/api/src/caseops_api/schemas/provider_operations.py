@@ -25,8 +25,16 @@ ProviderReadinessState = Literal[
     "foundation_available",
     "ready",
 ]
-ProviderAdapterDomain = Literal["court_tracking", "ip_office_registry"]
-ProviderAdapterStatus = Literal["implemented", "blocked_pending_provider_contract"]
+ProviderAdapterDomain = Literal[
+    "court_tracking",
+    "ip_office_registry",
+    "legal_research",
+]
+ProviderAdapterStatus = Literal[
+    "implemented",
+    "implemented_default_off",
+    "blocked_pending_provider_contract",
+]
 ProviderCommercialTermsStatus = Literal[
     "support_matrix_governed",
     "not_approved",
@@ -72,6 +80,12 @@ class ProviderAdapterContractRecord(BaseModel):
     legal_coverage: list[ProviderAdapterLegalCoverageRecord] = Field(default_factory=list)
     activation_blockers: list[str] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
+    attribution_url: str | None = None
+    terms_url: str | None = None
+    pricing_evidence_url: str | None = None
+    required_config_names: list[str] = Field(default_factory=list)
+    kill_switch_name: str | None = None
+    retention_policy: str | None = None
 
 
 class ProviderOperationRecord(BaseModel):

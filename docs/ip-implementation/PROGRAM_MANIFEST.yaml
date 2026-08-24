@@ -14,16 +14,16 @@
     "verification_status": "not_run",
     "release_status": "blocked",
     "execution_policy": "codex_owned_single_ordered_queue; implement first and run the automated check and exact-release verification batch at the end",
-    "active_slice": "IPLF-027B",
+    "active_slice": "IPLF-055A",
     "checkpoint": {
-      "recorded_at": "2026-08-15T13:29:12+05:30",
-      "repository_revision": "5154af359b5351224c34db7468eef5704d3d0faa",
-      "environment": "Canonical repository, CI, deployment, and production evidence are recorded in the cited slice evidence.",
-      "completed_scope": "Completed slices retain their recorded implementation, automated-test, release, and production evidence. All remaining work is owned by Codex and scheduled only in docs/EXECUTION_BACKLOG.md.",
+      "recorded_at": "2026-08-25T18:30:00+05:30",
+      "repository_revision": "8ed5351374e194044e24abe773501f52f75b8c3c",
+      "environment": "Canonical main is exact-production verified through IPLF-053; IPLF-054 is locally verified on codex/iplf054-indian-kanoon-20260825 and awaits PR/release gates.",
+      "completed_scope": "IPLF-052A/B and IPLF-053A/B are exact-production verified. IPLF-054A/B are implemented and locally verified with licensed-provider activation fail-closed. External contract/provider/legal/UAT acceptance is not claimed.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-027B",
-      "next_action": "Execute docs/EXECUTION_BACKLOG.md in order without manual project sign-off or confirmation pauses. Run the automated checks and exact-release production verification once after the implementation batch. Keep destructive deletion, payments, filings, external messages, legal-rule activation, and cross-tenant operations disabled unless an authorized operator separately commands the live operation; these runtime safety controls are outside the implementation queue.",
-      "evidence_ref": "docs/ip-implementation/evidence/m2/IPLF-027B/a0-production-checkpoint-2026-08-15.md"
+      "next_slice": "IPLF-055A",
+      "next_action": "Pass IPLF-054 PR, CI, merge, deployment, and exact-production gates, then extend the existing portal identity/grant/publication owners for IPLF-055 without adding a parallel client portal.",
+      "evidence_ref": "docs/ip-implementation/evidence/m5/IPLF-054/local-2026-08-25.md"
     },
     "work_owner": {
       "owner": "Codex",
@@ -1986,9 +1986,10 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m5/IPLF-052/release-2026-08-25.md"
       ]
     },
     {
@@ -2012,9 +2013,10 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m5/IPLF-052/release-2026-08-25.md"
       ]
     },
     {
@@ -2050,10 +2052,12 @@
         "IPLF-054A",
         "IPLF-054B"
       ],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
-      "evidence_refs": []
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-054/local-2026-08-25.md"
+      ]
     },
     {
       "id": "IPLF-055",
@@ -12387,7 +12391,8 @@
         "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m5/IPLF-052/release-2026-08-25.md"
       ],
       "evidence_metadata": [
         {
@@ -12398,11 +12403,20 @@
           "assertions": "Tenant isolation, immutable source evidence, payload-bound exact replay and conflict rejection, word/phonetic/device/class/proprietor/jurisdiction criteria, duplicate/stale/correction handling, advisory labeling, source-confirmed disposition, notification delivery, provider and cost fail-closed behavior, all five canonical handoffs, late-failure atomic rollback and exact-once retry, migration safety, responsive UI, OpenAPI, scheduler, governance, and real-stack browser journey",
           "result": "passed",
           "recorded_at": "2026-08-24T21:53:17+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m5/IPLF-052/release-2026-08-25.md",
+          "revision": "8ed5351374e194044e24abe773501f52f75b8c3c",
+          "environment": "Independent GitHub CI/Security/CodeQL, PostgreSQL/pgvector, canonical production migration caseops-migrate-job-nb8q6, Cloud Run API caseops-api-00344-b8v and web caseops-web-00322-zwm at 100% latest-only traffic, seven immutable scheduler bindings, exact HTTPS identity, and production workflow 32770786174",
+          "fixtures": "Production-safe synthetic/approved tenant fixtures and sourced manual journal records; no live IP India provider contract, filing, destructive operation, legal-rule activation, or client data claim",
+          "assertions": "Exact merged SHA and image/revision identity, migration-before-traffic, scheduler bootstrap and full runtime reconciliation, 13 CI shards, API/web/security checks, responsive watch review and canonical handoffs, notification intent behavior, stale/conflict handling, source preservation, and dated production browser acceptance",
+          "result": "passed",
+          "recorded_at": "2026-08-25T18:30:00+05:30"
         }
       ],
       "blockers": [],
       "next_actions": [
-        "Pass independent PR CI/review, merge the exact commit, deploy the additive migration and immutable API/web/job revisions, reconcile all scheduler bindings, and run exact-production acceptance before marking deployment_verified."
+        "Repository implementation is complete and exact-production verified. Keep live IP India/provider, legal-SME, and pilot-UAT activation fail-closed until separately evidenced and approved."
       ],
       "data_impact": [
         "Adds tenant-scoped immutable journal publications, ingestion-run ledgers, watch profiles, review hits, and source-preserving handoff records; existing Matter, proceeding, task, deadline, notification, and docket-event owners remain canonical."
@@ -12410,12 +12424,13 @@
       "documentation_impact": [
         "apps/web/app/guide/page.tsx",
         "apps/web/app/law-firms/page.tsx",
-        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m5/IPLF-052/release-2026-08-25.md"
       ],
       "allocation_review": "2026-08-24 integrated allocation review: IPLF-052 owns watch ingestion/review and IPLF-053 owns the handoff half of the same IP-WATCH/UJ-21/UJ-33 scope. One implementation delegates to canonical shared owners and avoids duplicate stores or workflows. Live provider activation remains fail-closed.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_review",
+      "release_status": "deployment_verified",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
@@ -12492,7 +12507,8 @@
         "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m5/IPLF-052/release-2026-08-25.md"
       ],
       "evidence_metadata": [
         {
@@ -12503,11 +12519,20 @@
           "assertions": "Tenant isolation, immutable source evidence, payload-bound exact replay and conflict rejection, word/phonetic/device/class/proprietor/jurisdiction criteria, duplicate/stale/correction handling, advisory labeling, source-confirmed disposition, notification delivery, provider and cost fail-closed behavior, all five canonical handoffs, late-failure atomic rollback and exact-once retry, migration safety, responsive UI, OpenAPI, scheduler, governance, and real-stack browser journey",
           "result": "passed",
           "recorded_at": "2026-08-24T21:53:17+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m5/IPLF-052/release-2026-08-25.md",
+          "revision": "8ed5351374e194044e24abe773501f52f75b8c3c",
+          "environment": "Independent GitHub CI/Security/CodeQL, PostgreSQL/pgvector, canonical production migration caseops-migrate-job-nb8q6, Cloud Run API caseops-api-00344-b8v and web caseops-web-00322-zwm at 100% latest-only traffic, seven immutable scheduler bindings, exact HTTPS identity, and production workflow 32770786174",
+          "fixtures": "Production-safe synthetic/approved tenant fixtures and sourced manual journal records; no live IP India provider contract, filing, destructive operation, legal-rule activation, or client data claim",
+          "assertions": "Exact merged SHA and image/revision identity, migration-before-traffic, scheduler bootstrap and full runtime reconciliation, 13 CI shards, API/web/security checks, responsive watch review and canonical handoffs, notification intent behavior, stale/conflict handling, source preservation, and dated production browser acceptance",
+          "result": "passed",
+          "recorded_at": "2026-08-25T18:30:00+05:30"
         }
       ],
       "blockers": [],
       "next_actions": [
-        "Pass independent PR CI/review, merge the exact commit, deploy the additive migration and immutable API/web/job revisions, reconcile all scheduler bindings, and run exact-production acceptance before marking deployment_verified."
+        "Repository implementation is complete and exact-production verified. Keep live IP India/provider, legal-SME, and pilot-UAT activation fail-closed until separately evidenced and approved."
       ],
       "data_impact": [
         "Adds tenant-scoped immutable journal publications, ingestion-run ledgers, watch profiles, review hits, and source-preserving handoff records; existing Matter, proceeding, task, deadline, notification, and docket-event owners remain canonical."
@@ -12515,12 +12540,13 @@
       "documentation_impact": [
         "apps/web/app/guide/page.tsx",
         "apps/web/app/law-firms/page.tsx",
-        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m5/IPLF-052/release-2026-08-25.md"
       ],
       "allocation_review": "2026-08-24 integrated allocation review: IPLF-052 owns watch ingestion/review and IPLF-053 owns the handoff half of the same IP-WATCH/UJ-21/UJ-33 scope. One implementation delegates to canonical shared owners and avoids duplicate stores or workflows. Live provider activation remains fail-closed.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_review"
+      "release_status": "deployment_verified"
     },
     {
       "id": "IPLF-053A",
@@ -12572,7 +12598,8 @@
         "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m5/IPLF-052/release-2026-08-25.md"
       ],
       "evidence_metadata": [
         {
@@ -12583,11 +12610,20 @@
           "assertions": "Tenant isolation, immutable source evidence, payload-bound exact replay and conflict rejection, word/phonetic/device/class/proprietor/jurisdiction criteria, duplicate/stale/correction handling, advisory labeling, source-confirmed disposition, notification delivery, provider and cost fail-closed behavior, all five canonical handoffs, late-failure atomic rollback and exact-once retry, migration safety, responsive UI, OpenAPI, scheduler, governance, and real-stack browser journey",
           "result": "passed",
           "recorded_at": "2026-08-24T21:53:17+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m5/IPLF-052/release-2026-08-25.md",
+          "revision": "8ed5351374e194044e24abe773501f52f75b8c3c",
+          "environment": "Independent GitHub CI/Security/CodeQL, PostgreSQL/pgvector, canonical production migration caseops-migrate-job-nb8q6, Cloud Run API caseops-api-00344-b8v and web caseops-web-00322-zwm at 100% latest-only traffic, seven immutable scheduler bindings, exact HTTPS identity, and production workflow 32770786174",
+          "fixtures": "Production-safe synthetic/approved tenant fixtures and sourced manual journal records; no live IP India provider contract, filing, destructive operation, legal-rule activation, or client data claim",
+          "assertions": "Exact merged SHA and image/revision identity, migration-before-traffic, scheduler bootstrap and full runtime reconciliation, 13 CI shards, API/web/security checks, responsive watch review and canonical handoffs, notification intent behavior, stale/conflict handling, source preservation, and dated production browser acceptance",
+          "result": "passed",
+          "recorded_at": "2026-08-25T18:30:00+05:30"
         }
       ],
       "blockers": [],
       "next_actions": [
-        "Pass independent PR CI/review, merge the exact commit, deploy the additive migration and immutable API/web/job revisions, reconcile all scheduler bindings, and run exact-production acceptance before marking deployment_verified."
+        "Repository implementation is complete and exact-production verified. Keep live IP India/provider, legal-SME, and pilot-UAT activation fail-closed until separately evidenced and approved."
       ],
       "data_impact": [
         "Adds tenant-scoped immutable journal publications, ingestion-run ledgers, watch profiles, review hits, and source-preserving handoff records; existing Matter, proceeding, task, deadline, notification, and docket-event owners remain canonical."
@@ -12595,12 +12631,13 @@
       "documentation_impact": [
         "apps/web/app/guide/page.tsx",
         "apps/web/app/law-firms/page.tsx",
-        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m5/IPLF-052/release-2026-08-25.md"
       ],
       "allocation_review": "2026-08-24 integrated allocation review: IPLF-052 owns watch ingestion/review and IPLF-053 owns the handoff half of the same IP-WATCH/UJ-21/UJ-33 scope. One implementation delegates to canonical shared owners and avoids duplicate stores or workflows. Live provider activation remains fail-closed.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_review",
+      "release_status": "deployment_verified",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
@@ -12677,7 +12714,8 @@
         "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m5/IPLF-052/release-2026-08-25.md"
       ],
       "evidence_metadata": [
         {
@@ -12688,11 +12726,20 @@
           "assertions": "Tenant isolation, immutable source evidence, payload-bound exact replay and conflict rejection, word/phonetic/device/class/proprietor/jurisdiction criteria, duplicate/stale/correction handling, advisory labeling, source-confirmed disposition, notification delivery, provider and cost fail-closed behavior, all five canonical handoffs, late-failure atomic rollback and exact-once retry, migration safety, responsive UI, OpenAPI, scheduler, governance, and real-stack browser journey",
           "result": "passed",
           "recorded_at": "2026-08-24T21:53:17+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m5/IPLF-052/release-2026-08-25.md",
+          "revision": "8ed5351374e194044e24abe773501f52f75b8c3c",
+          "environment": "Independent GitHub CI/Security/CodeQL, PostgreSQL/pgvector, canonical production migration caseops-migrate-job-nb8q6, Cloud Run API caseops-api-00344-b8v and web caseops-web-00322-zwm at 100% latest-only traffic, seven immutable scheduler bindings, exact HTTPS identity, and production workflow 32770786174",
+          "fixtures": "Production-safe synthetic/approved tenant fixtures and sourced manual journal records; no live IP India provider contract, filing, destructive operation, legal-rule activation, or client data claim",
+          "assertions": "Exact merged SHA and image/revision identity, migration-before-traffic, scheduler bootstrap and full runtime reconciliation, 13 CI shards, API/web/security checks, responsive watch review and canonical handoffs, notification intent behavior, stale/conflict handling, source preservation, and dated production browser acceptance",
+          "result": "passed",
+          "recorded_at": "2026-08-25T18:30:00+05:30"
         }
       ],
       "blockers": [],
       "next_actions": [
-        "Pass independent PR CI/review, merge the exact commit, deploy the additive migration and immutable API/web/job revisions, reconcile all scheduler bindings, and run exact-production acceptance before marking deployment_verified."
+        "Repository implementation is complete and exact-production verified. Keep live IP India/provider, legal-SME, and pilot-UAT activation fail-closed until separately evidenced and approved."
       ],
       "data_impact": [
         "Adds tenant-scoped immutable journal publications, ingestion-run ledgers, watch profiles, review hits, and source-preserving handoff records; existing Matter, proceeding, task, deadline, notification, and docket-event owners remain canonical."
@@ -12700,12 +12747,13 @@
       "documentation_impact": [
         "apps/web/app/guide/page.tsx",
         "apps/web/app/law-firms/page.tsx",
-        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m5/IPLF-052/release-2026-08-25.md"
       ],
       "allocation_review": "2026-08-24 integrated allocation review: IPLF-052 owns watch ingestion/review and IPLF-053 owns the handoff half of the same IP-WATCH/UJ-21/UJ-33 scope. One implementation delegates to canonical shared owners and avoids duplicate stores or workflows. Live provider activation remains fail-closed.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_review"
+      "release_status": "deployment_verified"
     },
     {
       "id": "IPLF-054A",
@@ -12729,22 +12777,52 @@
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/indian_kanoon.py",
+        "apps/api/src/caseops_api/services/provider_adapter_catalog.py",
+        "apps/api/src/caseops_api/services/provider_costs.py",
+        "apps/api/src/caseops_api/services/source_actions.py",
+        "apps/api/src/caseops_api/services/statute_enrichment.py",
+        "apps/api/alembic/versions/20260825_0001_indian_kanoon_lineage.py",
+        "infra/cloudrun/api-service.yaml",
+        "docs/runbooks/indian-kanoon-licensed-adapter.md"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_indian_kanoon.py",
+        "apps/api/tests/test_20260825_indian_kanoon_migration.py",
+        "apps/api/tests/test_source_access.py",
+        "apps/api/tests/test_provider_operations.py",
+        "apps/api/tests/test_statute_enrichment.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-054/local-2026-08-25.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m5/IPLF-054/local-2026-08-25.md",
+          "revision": "cf810e713e807aaea08f62524434c083c468a095",
+          "environment": "Fresh migrated SQLite API fixtures, production-mode Next.js build, and real local API/web Playwright stack",
+          "fixtures": "Synthetic licensed-provider contract responses and fresh tenant records; no live provider call, credential, contract, legal approval, or client data",
+          "assertions": "Default-off activation, typed failures, pinned server-only calls, approved actual costs, budgets, bounded cache, lineage and report invalidation, two-person review, source-policy separation, attribution, responsive result UI, migration rollback refusal, OpenAPI and governance",
+          "result": "passed",
+          "recorded_at": "2026-08-25T02:45:00+05:30"
+        }
+      ],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Pass independent PR review, CI, merge, additive production migration, exact-release verification, and dated default-off production acceptance."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Extends canonical authority documents and frozen research-report lineage with licensed-source version, attribution, review, and invalidation metadata; no parallel corpus or report owner."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "documentation_impact": [
+        "docs/runbooks/indian-kanoon-licensed-adapter.md",
+        "docs/ip-implementation/evidence/m5/IPLF-054/local-2026-08-25.md"
+      ],
+      "allocation_review": "2026-08-25 integrated review: extends authority, research-report, provider-readiness, provider-cost, billing, and source-action owners; removes the uncontracted public scrape and adds no duplicate corpus, report, cost, or provider dashboard.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
@@ -12800,22 +12878,50 @@
       "dependencies": [
         "IPLF-054A"
       ],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/api/routes/authorities.py",
+        "apps/web/app/app/research/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/lib/api/openapi-types.ts",
+        "apps/web/app/guide/page.tsx",
+        "apps/web/app/law-firms/page.tsx",
+        "playwright.prod-ram.config.ts"
+      ],
+      "test_refs": [
+        "apps/web/app/app/research/page.test.tsx",
+        "tests/e2e/iplf-054b-indian-kanoon-2026-08-25.spec.ts",
+        "tests/e2e/iplf-054b-indian-kanoon-2026-08-25-prod.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-054/local-2026-08-25.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m5/IPLF-054/local-2026-08-25.md",
+          "revision": "cf810e713e807aaea08f62524434c083c468a095",
+          "environment": "Production-mode Next.js build with a fresh local API and 390 px Chromium acceptance viewport",
+          "fixtures": "Synthetic ready provider contract plus real default-off API; no paid or live provider operation",
+          "assertions": "Source selection, readiness, disabled refusal, result attribution, cache/freshness/cost disclosure, legal status, protected source action, and no horizontal overflow",
+          "result": "passed",
+          "recorded_at": "2026-08-25T02:45:00+05:30"
+        }
+      ],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Keep paid provider calls disabled in production; verify the exact deployed default-off API/UI and record release evidence."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Uses canonical licensed-source rows and report lineage from IPLF-054A; browser state does not own credentials, catalog identifiers, costs, or legal-source truth."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "documentation_impact": [
+        "apps/web/app/guide/page.tsx",
+        "apps/web/app/law-firms/page.tsx",
+        "docs/ip-implementation/evidence/m5/IPLF-054/local-2026-08-25.md"
+      ],
+      "allocation_review": "2026-08-25 integrated review: the user workflow reuses the research page and source proxy; provider readiness and costs remain server-owned and all external activation remains fail-closed.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
@@ -21517,12 +21623,13 @@
         "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m5/IPLF-052/release-2026-08-25.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-052B",
         "IPLF-053B"
@@ -21566,12 +21673,13 @@
         "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m5/IPLF-052/release-2026-08-25.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-052B",
         "IPLF-053B"
@@ -21615,12 +21723,13 @@
         "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m5/IPLF-052/release-2026-08-25.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-052B",
         "IPLF-053B"
@@ -21664,12 +21773,13 @@
         "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m5/IPLF-052/release-2026-08-25.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-052B",
         "IPLF-053B"
@@ -21713,12 +21823,13 @@
         "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m5/IPLF-052/release-2026-08-25.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-052B",
         "IPLF-053B"
@@ -33512,27 +33623,24 @@
         "UJ-17",
         "UJ-48"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-LEGAL-SRC-01",
-        "planned:IPLF-UJ-15-EXC-01",
-        "planned:IPLF-UJ-15-EXC-02",
-        "planned:IPLF-UJ-15-NORMAL",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL",
-        "planned:IPLF-UJ-48-EXC-01",
-        "planned:IPLF-UJ-48-EXC-02",
-        "planned:IPLF-UJ-48-EXC-03",
-        "planned:IPLF-UJ-48-EXC-04",
-        "planned:IPLF-UJ-48-EXC-05",
-        "planned:IPLF-UJ-48-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/indian_kanoon.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/services/source_actions.py",
+        "apps/web/app/app/research/page.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_indian_kanoon.py",
+        "apps/api/tests/test_source_access.py",
+        "apps/web/app/app/research/page.test.tsx",
+        "tests/e2e/iplf-054b-indian-kanoon-2026-08-25.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-054/local-2026-08-25.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-004B",
@@ -33551,27 +33659,24 @@
         "UJ-17",
         "UJ-48"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-LEGAL-SRC-02",
-        "planned:IPLF-UJ-15-EXC-01",
-        "planned:IPLF-UJ-15-EXC-02",
-        "planned:IPLF-UJ-15-NORMAL",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL",
-        "planned:IPLF-UJ-48-EXC-01",
-        "planned:IPLF-UJ-48-EXC-02",
-        "planned:IPLF-UJ-48-EXC-03",
-        "planned:IPLF-UJ-48-EXC-04",
-        "planned:IPLF-UJ-48-EXC-05",
-        "planned:IPLF-UJ-48-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/indian_kanoon.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/services/source_actions.py",
+        "apps/web/app/app/research/page.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_indian_kanoon.py",
+        "apps/api/tests/test_source_access.py",
+        "apps/web/app/app/research/page.test.tsx",
+        "tests/e2e/iplf-054b-indian-kanoon-2026-08-25.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-054/local-2026-08-25.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-004B",
@@ -33590,27 +33695,24 @@
         "UJ-17",
         "UJ-48"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-LEGAL-SRC-03",
-        "planned:IPLF-UJ-15-EXC-01",
-        "planned:IPLF-UJ-15-EXC-02",
-        "planned:IPLF-UJ-15-NORMAL",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL",
-        "planned:IPLF-UJ-48-EXC-01",
-        "planned:IPLF-UJ-48-EXC-02",
-        "planned:IPLF-UJ-48-EXC-03",
-        "planned:IPLF-UJ-48-EXC-04",
-        "planned:IPLF-UJ-48-EXC-05",
-        "planned:IPLF-UJ-48-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/indian_kanoon.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/services/source_actions.py",
+        "apps/web/app/app/research/page.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_indian_kanoon.py",
+        "apps/api/tests/test_source_access.py",
+        "apps/web/app/app/research/page.test.tsx",
+        "tests/e2e/iplf-054b-indian-kanoon-2026-08-25.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-054/local-2026-08-25.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-004B",
@@ -33629,27 +33731,24 @@
         "UJ-17",
         "UJ-48"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-LEGAL-SRC-04",
-        "planned:IPLF-UJ-15-EXC-01",
-        "planned:IPLF-UJ-15-EXC-02",
-        "planned:IPLF-UJ-15-NORMAL",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL",
-        "planned:IPLF-UJ-48-EXC-01",
-        "planned:IPLF-UJ-48-EXC-02",
-        "planned:IPLF-UJ-48-EXC-03",
-        "planned:IPLF-UJ-48-EXC-04",
-        "planned:IPLF-UJ-48-EXC-05",
-        "planned:IPLF-UJ-48-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/indian_kanoon.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/services/source_actions.py",
+        "apps/web/app/app/research/page.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_indian_kanoon.py",
+        "apps/api/tests/test_source_access.py",
+        "apps/web/app/app/research/page.test.tsx",
+        "tests/e2e/iplf-054b-indian-kanoon-2026-08-25.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-054/local-2026-08-25.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-004B",
@@ -33668,27 +33767,24 @@
         "UJ-17",
         "UJ-48"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-LEGAL-SRC-05",
-        "planned:IPLF-UJ-15-EXC-01",
-        "planned:IPLF-UJ-15-EXC-02",
-        "planned:IPLF-UJ-15-NORMAL",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL",
-        "planned:IPLF-UJ-48-EXC-01",
-        "planned:IPLF-UJ-48-EXC-02",
-        "planned:IPLF-UJ-48-EXC-03",
-        "planned:IPLF-UJ-48-EXC-04",
-        "planned:IPLF-UJ-48-EXC-05",
-        "planned:IPLF-UJ-48-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/indian_kanoon.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/services/source_actions.py",
+        "apps/web/app/app/research/page.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_indian_kanoon.py",
+        "apps/api/tests/test_source_access.py",
+        "apps/web/app/app/research/page.test.tsx",
+        "tests/e2e/iplf-054b-indian-kanoon-2026-08-25.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-054/local-2026-08-25.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-004B",
@@ -33707,27 +33803,24 @@
         "UJ-17",
         "UJ-48"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-LEGAL-SRC-06",
-        "planned:IPLF-UJ-15-EXC-01",
-        "planned:IPLF-UJ-15-EXC-02",
-        "planned:IPLF-UJ-15-NORMAL",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL",
-        "planned:IPLF-UJ-48-EXC-01",
-        "planned:IPLF-UJ-48-EXC-02",
-        "planned:IPLF-UJ-48-EXC-03",
-        "planned:IPLF-UJ-48-EXC-04",
-        "planned:IPLF-UJ-48-EXC-05",
-        "planned:IPLF-UJ-48-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/indian_kanoon.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/services/source_actions.py",
+        "apps/web/app/app/research/page.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_indian_kanoon.py",
+        "apps/api/tests/test_source_access.py",
+        "apps/web/app/app/research/page.test.tsx",
+        "tests/e2e/iplf-054b-indian-kanoon-2026-08-25.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-054/local-2026-08-25.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-004B",
@@ -33746,27 +33839,24 @@
         "UJ-17",
         "UJ-48"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-LEGAL-SRC-07",
-        "planned:IPLF-UJ-15-EXC-01",
-        "planned:IPLF-UJ-15-EXC-02",
-        "planned:IPLF-UJ-15-NORMAL",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL",
-        "planned:IPLF-UJ-48-EXC-01",
-        "planned:IPLF-UJ-48-EXC-02",
-        "planned:IPLF-UJ-48-EXC-03",
-        "planned:IPLF-UJ-48-EXC-04",
-        "planned:IPLF-UJ-48-EXC-05",
-        "planned:IPLF-UJ-48-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/indian_kanoon.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/services/source_actions.py",
+        "apps/web/app/app/research/page.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_indian_kanoon.py",
+        "apps/api/tests/test_source_access.py",
+        "apps/web/app/app/research/page.test.tsx",
+        "tests/e2e/iplf-054b-indian-kanoon-2026-08-25.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-054/local-2026-08-25.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-004B",
@@ -33785,27 +33875,24 @@
         "UJ-17",
         "UJ-48"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-LEGAL-SRC-08",
-        "planned:IPLF-UJ-15-EXC-01",
-        "planned:IPLF-UJ-15-EXC-02",
-        "planned:IPLF-UJ-15-NORMAL",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL",
-        "planned:IPLF-UJ-48-EXC-01",
-        "planned:IPLF-UJ-48-EXC-02",
-        "planned:IPLF-UJ-48-EXC-03",
-        "planned:IPLF-UJ-48-EXC-04",
-        "planned:IPLF-UJ-48-EXC-05",
-        "planned:IPLF-UJ-48-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/indian_kanoon.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/services/source_actions.py",
+        "apps/web/app/app/research/page.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_indian_kanoon.py",
+        "apps/api/tests/test_source_access.py",
+        "apps/web/app/app/research/page.test.tsx",
+        "tests/e2e/iplf-054b-indian-kanoon-2026-08-25.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-054/local-2026-08-25.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-004B",
@@ -33824,27 +33911,24 @@
         "UJ-17",
         "UJ-48"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-LEGAL-SRC-09",
-        "planned:IPLF-UJ-15-EXC-01",
-        "planned:IPLF-UJ-15-EXC-02",
-        "planned:IPLF-UJ-15-NORMAL",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL",
-        "planned:IPLF-UJ-48-EXC-01",
-        "planned:IPLF-UJ-48-EXC-02",
-        "planned:IPLF-UJ-48-EXC-03",
-        "planned:IPLF-UJ-48-EXC-04",
-        "planned:IPLF-UJ-48-EXC-05",
-        "planned:IPLF-UJ-48-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/indian_kanoon.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/services/source_actions.py",
+        "apps/web/app/app/research/page.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_indian_kanoon.py",
+        "apps/api/tests/test_source_access.py",
+        "apps/web/app/app/research/page.test.tsx",
+        "tests/e2e/iplf-054b-indian-kanoon-2026-08-25.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-054/local-2026-08-25.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-004B",
@@ -33863,27 +33947,24 @@
         "UJ-17",
         "UJ-48"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-LEGAL-SRC-10",
-        "planned:IPLF-UJ-15-EXC-01",
-        "planned:IPLF-UJ-15-EXC-02",
-        "planned:IPLF-UJ-15-NORMAL",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL",
-        "planned:IPLF-UJ-48-EXC-01",
-        "planned:IPLF-UJ-48-EXC-02",
-        "planned:IPLF-UJ-48-EXC-03",
-        "planned:IPLF-UJ-48-EXC-04",
-        "planned:IPLF-UJ-48-EXC-05",
-        "planned:IPLF-UJ-48-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/indian_kanoon.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/services/source_actions.py",
+        "apps/web/app/app/research/page.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_indian_kanoon.py",
+        "apps/api/tests/test_source_access.py",
+        "apps/web/app/app/research/page.test.tsx",
+        "tests/e2e/iplf-054b-indian-kanoon-2026-08-25.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-054/local-2026-08-25.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-004B",
@@ -40240,11 +40321,12 @@
         "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m5/IPLF-052/release-2026-08-25.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-052B",
         "IPLF-053B"
@@ -40950,11 +41032,12 @@
         "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m5/IPLF-052/release-2026-08-25.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-052B",
         "IPLF-053B"
@@ -47087,11 +47170,12 @@
         "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m5/IPLF-052/release-2026-08-25.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-052B",
         "IPLF-053B"
@@ -47142,11 +47226,12 @@
         "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m5/IPLF-052/release-2026-08-25.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-052B",
         "IPLF-053B"
@@ -47197,11 +47282,12 @@
         "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m5/IPLF-052/release-2026-08-25.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-052B",
         "IPLF-053B"
@@ -47252,11 +47338,12 @@
         "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m5/IPLF-052/release-2026-08-25.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-052B",
         "IPLF-053B"
@@ -49647,11 +49734,12 @@
         "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m5/IPLF-052/release-2026-08-25.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-052B",
         "IPLF-053B"
@@ -49702,11 +49790,12 @@
         "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m5/IPLF-052/release-2026-08-25.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-052B",
         "IPLF-053B"
@@ -49757,11 +49846,12 @@
         "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m5/IPLF-052/release-2026-08-25.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-052B",
         "IPLF-053B"
@@ -49812,11 +49902,12 @@
         "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m5/IPLF-052/release-2026-08-25.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-052B",
         "IPLF-053B"
@@ -49867,11 +49958,12 @@
         "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m5/IPLF-052/release-2026-08-25.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-052B",
         "IPLF-053B"

@@ -24,6 +24,11 @@ ProviderCostCategoryLiteral = Literal[
     "sms",
     "whatsapp",
     "manual_support",
+    "legal_source_search",
+    "legal_source_document",
+    "legal_source_original_document",
+    "legal_source_fragment",
+    "legal_source_metadata",
 ]
 ProviderCostProfileStatus = Literal["active", "inactive"]
 ProviderCostBasisLiteral = Literal["estimated", "actual"]

@@ -523,6 +523,11 @@ class ProviderCostCategory(StrEnum):
     SMS = "sms"
     WHATSAPP = "whatsapp"
     MANUAL_SUPPORT = "manual_support"
+    LEGAL_SOURCE_SEARCH = "legal_source_search"
+    LEGAL_SOURCE_DOCUMENT = "legal_source_document"
+    LEGAL_SOURCE_ORIGINAL_DOCUMENT = "legal_source_original_document"
+    LEGAL_SOURCE_FRAGMENT = "legal_source_fragment"
+    LEGAL_SOURCE_METADATA = "legal_source_metadata"
 
 
 class DocumentProcessingStatus(StrEnum):
@@ -9979,6 +9984,10 @@ class AuthorityResearchReport(Base):
     result_snapshot_json: Mapped[list] = mapped_column(JSON, nullable=False)
     analysis_version: Mapped[str] = mapped_column(String(80), nullable=False)
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    invalidated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    invalidation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
@@ -10006,6 +10015,45 @@ class AuthorityDocument(Base):
     decision_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
     canonical_key: Mapped[str] = mapped_column(String(255), nullable=False)
     source_reference: Mapped[str | None] = mapped_column(String(500), nullable=True, index=True)
+    provider_document_id: Mapped[str | None] = mapped_column(
+        String(120), nullable=True, index=True
+    )
+    publisher_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    jurisdiction: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    issuing_body: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_category: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    authority_status: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    binding_status: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    canonical_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    source_version: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    retrieved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    source_access_state: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="available"
+    )
+    attribution_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    license_policy_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    source_metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    legal_review_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="unreviewed", index=True
+    )
+    first_reviewed_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    first_reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    second_reviewed_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    second_reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    legal_review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     document_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     extracted_char_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -10053,6 +10101,39 @@ class AuthorityDocument(Base):
         "AuthorityCitation",
         back_populates="cited_authority_document",
         foreign_keys="AuthorityCitation.cited_authority_document_id",
+    )
+
+
+class AuthorityResearchReportSource(Base):
+    """Indexed lineage from a frozen report result to its source version."""
+
+    __tablename__ = "authority_research_report_sources"
+    __table_args__ = (
+        UniqueConstraint(
+            "report_id",
+            "authority_document_id",
+            name="uq_authority_research_report_source",
+        ),
+        Index(
+            "ix_authority_research_report_sources_document",
+            "authority_document_id",
+            "content_hash",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    report_id: Mapped[str] = mapped_column(
+        ForeignKey("authority_research_reports.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    authority_document_id: Mapped[str] = mapped_column(
+        ForeignKey("authority_documents.id", ondelete="CASCADE"), nullable=False
+    )
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    source_version: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
     )
 
 

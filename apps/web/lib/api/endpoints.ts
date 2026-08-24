@@ -5091,6 +5091,102 @@ export async function searchAuthorities(input: {
     }
   }
 
+export type IndianKanoonReadiness = {
+  provider: "indian-kanoon";
+  state:
+    | "blocked_disabled"
+    | "blocked_missing_config"
+    | "blocked_terms"
+    | "blocked_costs"
+    | "blocked_budget"
+    | "ready";
+  configured: boolean;
+  enabled: boolean;
+  external_calls_enabled: boolean;
+  missing_config_names: string[];
+  missing_approval_keys: string[];
+  missing_cost_categories: string[];
+  permitted_uses: string[];
+  daily_budget_minor: number;
+  monthly_budget_minor: number;
+  retention_days: number;
+  terms_owner: string | null;
+  terms_approved_at: string | null;
+  terms_expires_at: string | null;
+  kill_switch_name: "INDIAN_KANOON_ENABLED";
+  attribution: {
+    label: "Powered by Indian Kanoon";
+    provider_url: string;
+    terms_url: string;
+    logo_required: boolean;
+  };
+  limitations: string[];
+};
+
+export type IndianKanoonSearchResult = {
+  document_id: string;
+  title: string;
+  publisher: string;
+  jurisdiction: string;
+  issuing_body: string | null;
+  source_category: string;
+  document_type: string;
+  decision_or_publication_date: string | null;
+  canonical_citation: string | null;
+  authority_status: string;
+  binding_status: string;
+  canonical_url: string;
+  source_action: SourceActionContract;
+  attribution: IndianKanoonReadiness["attribution"];
+  rank: number;
+  headline: string | null;
+};
+
+export type IndianKanoonSearchResponse = {
+  query: string;
+  page_number: number;
+  returned_count: number;
+  results: IndianKanoonSearchResult[];
+  call: {
+    cached: boolean;
+    stale: boolean;
+    freshness_warning: string | null;
+    retrieved_at: string;
+    estimated_cost_minor: number;
+    currency: "INR";
+    cost_category: string;
+    cost_basis: "approved_actual" | "fresh_cache" | "stale_cache";
+  };
+  attribution: IndianKanoonReadiness["attribution"];
+  disclaimer: string;
+};
+
+export async function fetchIndianKanoonReadiness(): Promise<IndianKanoonReadiness> {
+  return apiRequest("/api/authorities/providers/indian-kanoon/readiness");
+}
+
+export async function searchIndianKanoon(input: {
+  query: string;
+  pageNumber?: number;
+  maxResults?: number;
+}): Promise<IndianKanoonSearchResponse> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 12_000);
+  try {
+    return await apiRequest("/api/authorities/providers/indian-kanoon/search", {
+      method: "POST",
+      signal: controller.signal,
+      body: {
+        query: input.query,
+        page_number: input.pageNumber ?? 0,
+        max_results: input.maxResults ?? 20,
+      },
+    });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 export type AuthorityResearchReport = {
   id: string;
   company_id: string;

@@ -9,7 +9,11 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from caseops_api.db.models import AuthorityDocument, AuthorityResearchReport
+from caseops_api.db.models import (
+    AuthorityDocument,
+    AuthorityResearchReport,
+    AuthorityResearchReportSource,
+)
 from caseops_api.schemas.authorities import (
     AuthorityResearchReportCreateRequest,
     AuthorityResearchReportListResponse,
@@ -42,6 +46,8 @@ def _serialize(report: AuthorityResearchReport) -> AuthorityResearchReportRecord
         analysis_version=report.analysis_version,
         generated_at=report.generated_at,
         created_at=report.created_at,
+        invalidated_at=report.invalidated_at,
+        invalidation_reason=report.invalidation_reason,
     )
 
 
@@ -108,6 +114,17 @@ def create_research_report(
     )
     session.add(report)
     session.flush()
+    session.add_all(
+        [
+            AuthorityResearchReportSource(
+                report_id=report.id,
+                authority_document_id=document_id,
+                content_hash=by_id[document_id].content_hash,
+                source_version=by_id[document_id].source_version,
+            )
+            for document_id in ordered_ids
+        ]
+    )
     record_from_context(
         session,
         context,

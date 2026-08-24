@@ -32,6 +32,12 @@ class ProviderAdapterDefinition:
     legal_coverage: tuple[ProviderAdapterLegalCoverageRecord, ...] = ()
     activation_blockers: tuple[str, ...] = ()
     limitations: tuple[str, ...] = ()
+    attribution_url: str | None = None
+    terms_url: str | None = None
+    pricing_evidence_url: str | None = None
+    required_config_names: tuple[str, ...] = ()
+    kill_switch_name: str | None = None
+    retention_policy: str | None = None
 
     def record(self) -> ProviderAdapterContractRecord:
         return ProviderAdapterContractRecord(
@@ -51,6 +57,12 @@ class ProviderAdapterDefinition:
             legal_coverage=list(self.legal_coverage),
             activation_blockers=list(self.activation_blockers),
             limitations=list(self.limitations),
+            attribution_url=self.attribution_url,
+            terms_url=self.terms_url,
+            pricing_evidence_url=self.pricing_evidence_url,
+            required_config_names=list(self.required_config_names),
+            kill_switch_name=self.kill_switch_name,
+            retention_policy=self.retention_policy,
         )
 
 
@@ -123,6 +135,84 @@ PROVIDER_ADAPTERS: tuple[ProviderAdapterDefinition, ...] = (
         limitations=(
             "Manual sourced docketing remains available; no registry search, fetch, "
             "document, or polling call is enabled.",
+        ),
+    ),
+    ProviderAdapterDefinition(
+        provider="indian-kanoon",
+        display_name="Indian Kanoon licensed API",
+        domain="legal_research",
+        adapter_status="implemented_default_off",
+        commercial_terms_status="not_approved",
+        required_capabilities=_FULL_PROVIDER_CAPABILITIES,
+        implemented_capabilities=(
+            "search",
+            "record_fetch",
+            "document_fetch",
+            "health",
+            "attribution",
+            "cost",
+            "capability",
+            "operations",
+        ),
+        attribution_label="Powered by Indian Kanoon",
+        attribution_url="https://indiankanoon.org/",
+        terms_url="https://indiankanoon.org/terms.html",
+        pricing_evidence_url="https://api.indiankanoon.org/",
+        cost_categories=(
+            "legal_source_search",
+            "legal_source_document",
+            "legal_source_original_document",
+            "legal_source_fragment",
+            "legal_source_metadata",
+        ),
+        health_path="/api/authorities/providers/indian-kanoon/health",
+        support_matrix_path="/api/authorities/providers/indian-kanoon/readiness",
+        operations_path="/api/admin/provider-operations/jobs",
+        endpoint_paths=(
+            "/api/authorities/providers/indian-kanoon/search",
+            "/api/authorities/providers/indian-kanoon/documents/{document_id}",
+            "/api/authorities/providers/indian-kanoon/documents/{document_id}/original",
+            "/api/authorities/providers/indian-kanoon/documents/{document_id}/fragment",
+            "/api/authorities/providers/indian-kanoon/documents/{document_id}/metadata",
+            "/api/authorities/providers/indian-kanoon/documents/{document_id}/import",
+        ),
+        legal_coverage=(
+            ProviderAdapterLegalCoverageRecord(
+                jurisdiction="IN",
+                office="Indian courts and tribunals represented by the licensed feed",
+                asset_types=["judgment", "order", "statute", "regulation"],
+                coverage_status="unverified",
+            ),
+        ),
+        required_config_names=(
+            "INDIAN_KANOON_ENABLED",
+            "INDIAN_KANOON_API_TOKEN",
+            "INDIAN_KANOON_TERMS_APPROVED",
+            "INDIAN_KANOON_LEGAL_COVERAGE_APPROVED",
+            "INDIAN_KANOON_TERMS_OWNER",
+            "INDIAN_KANOON_TERMS_APPROVED_AT",
+            "INDIAN_KANOON_TERMS_EXPIRES_AT",
+            "INDIAN_KANOON_PERMITTED_USES",
+            "INDIAN_KANOON_DAILY_BUDGET_MINOR",
+            "INDIAN_KANOON_MONTHLY_BUDGET_MINOR",
+        ),
+        kill_switch_name="INDIAN_KANOON_ENABLED",
+        retention_policy=(
+            "Search responses are process-cached only for the configured TTL; imported "
+            "documents use the approved licensed retention period and immutable lineage."
+        ),
+        activation_blockers=(
+            "provider_contract_and_terms_not_approved",
+            "provider_credentials_not_configured",
+            "permitted_uses_not_configured",
+            "approved_actual_cost_profiles_not_configured",
+            "legal_coverage_not_verified",
+        ),
+        limitations=(
+            "No public-page scraping is permitted; only the contracted API host is called.",
+            "External calls remain disabled until every runtime, terms, cost, and "
+            "budget gate passes.",
+            "Results are research aids, not a representation that a decision remains good law.",
         ),
     ),
 )

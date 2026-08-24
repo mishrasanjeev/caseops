@@ -16,6 +16,11 @@ from caseops_api.db.models import (
     SourceLinkReport,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.services.source_actions import (
+    authority_source_verified,
+    is_official_source_reference,
+    judge_appointment_source_verified,
+)
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 
@@ -61,6 +66,13 @@ def _bootstrap_tenant(client: TestClient, slug: str) -> dict[str, object]:
     )
     assert response.status_code == 200, response.text
     return response.json()
+
+
+def test_licensed_authority_host_does_not_become_official_provenance() -> None:
+    licensed_url = "https://indiankanoon.org/doc/12345/"
+    assert authority_source_verified("indian_kanoon_licensed", licensed_url) is True
+    assert is_official_source_reference(licensed_url) is False
+    assert judge_appointment_source_verified(licensed_url) is False
 
 
 def _seed_matter_attachment(client: TestClient, boot: dict[str, object]) -> tuple[str, str]:
