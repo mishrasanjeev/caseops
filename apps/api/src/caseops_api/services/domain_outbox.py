@@ -92,6 +92,22 @@ _EVENT_CONTRACTS: dict[tuple[str, int], DomainEventContract] = {
         confidentiality="privileged",
         aggregate_payload_field="ip_docket_event_id",
     ),
+    ("ip.watch_hit.created", 1): DomainEventContract(
+        required_payload_fields=frozenset(
+            {
+                "watch_hit_id",
+                "target_id",
+                "source_evidence_id",
+                "recipient_profile_id",
+            }
+        ),
+        consumers=(
+            "access-filtered-timeline",
+            "notification-intent-adapter",
+        ),
+        confidentiality="privileged",
+        aggregate_payload_field="watch_hit_id",
+    ),
     ("ip.deadline.calculation_committed", 1): DomainEventContract(
         required_payload_fields=frozenset(
             {

@@ -6,11 +6,11 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `ff3dd96ee9c3193afe3109a44d99fd783126dec142ef433f5d8406ad16e299dc`
-- SQL tables: `278`
-- SQL columns: `4347`
-- ORM indexes: `1262`
-- Alembic/raw index declarations: `578`
+- Canonical map SHA-256: `16cfc31cddbf53cb591e4b8715d43eefdba18e495ca06b64f6c5d2dd8f9b4916`
+- SQL tables: `283`
+- SQL columns: `4460`
+- ORM indexes: `1278`
+- Alembic/raw index declarations: `594`
 - Non-SQL data classes: `11`
 
 ## Boundary
@@ -150,6 +150,8 @@ This inventory does not claim approved retention bounds, legal-hold activation, 
 | `ip_identifiers` | `tenant_restricted_legal_content` | 19 | `registry_fail_closed` |
 | `ip_import_rows` | `tenant_restricted_legal_content` | 16 | `registry_fail_closed` |
 | `ip_incident_kill_switches` | `tenant_restricted_legal_content` | 14 | `registry_fail_closed` |
+| `ip_journal_ingestion_runs` | `tenant_restricted_legal_content` | 21 | `registry_fail_closed` |
+| `ip_journal_publications` | `tenant_restricted_legal_content` | 28 | `registry_fail_closed` |
 | `ip_matter_links` | `tenant_restricted_legal_content` | 15 | `registry_fail_closed` |
 | `ip_parties_and_roles` | `tenant_restricted_legal_content` | 11 | `registry_fail_closed` |
 | `ip_portfolio_export_jobs` | `tenant_restricted_legal_content` | 15 | `registry_fail_closed` |
@@ -168,6 +170,9 @@ This inventory does not claim approved retention bounds, legal-hold activation, 
 | `ip_title_interests` | `tenant_restricted_legal_content` | 12 | `registry_fail_closed` |
 | `ip_tracked_case_links` | `tenant_restricted_legal_content` | 12 | `registry_fail_closed` |
 | `ip_trademark_particular_versions` | `tenant_restricted_legal_content` | 18 | `registry_fail_closed` |
+| `ip_watch_handoffs` | `tenant_restricted_legal_content` | 14 | `registry_fail_closed` |
+| `ip_watch_hits` | `tenant_restricted_legal_content` | 25 | `registry_fail_closed` |
+| `ip_watch_profiles` | `tenant_restricted_legal_content` | 25 | `registry_fail_closed` |
 | `ip_workflow_definitions` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
 | `ip_workflow_versions` | `tenant_restricted_legal_content` | 38 | `registry_fail_closed` |
 | `ip_workspace_configurations` | `tenant_restricted_legal_content` | 24 | `registry_fail_closed` |

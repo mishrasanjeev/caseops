@@ -1984,10 +1984,12 @@
         "IPLF-052A",
         "IPLF-052B"
       ],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
-      "evidence_refs": []
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+      ]
     },
     {
       "id": "IPLF-053",
@@ -2008,10 +2010,12 @@
         "IPLF-053A",
         "IPLF-053B"
       ],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
-      "evidence_refs": []
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+      ]
     },
     {
       "id": "IPLF-054",
@@ -12355,22 +12359,63 @@
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260824_0003_ip_journal_watch.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/ip_watch.py",
+        "apps/api/src/caseops_api/services/ip_watch.py",
+        "apps/api/src/caseops_api/api/routes/ip_watch.py",
+        "apps/api/src/caseops_api/services/domain_outbox.py",
+        "apps/api/src/caseops_api/scripts/run_ip_journal_watch.py",
+        "apps/web/app/app/ip/watch/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/components/app/Sidebar.tsx",
+        "infra/cloudrun/ip-journal-watch-job.yaml",
+        "infra/cloudrun/scheduler-inventory.json",
+        "infra/cloudrun/deploy.ps1",
+        "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_journal_watch.py",
+        "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
+        "apps/api/tests/test_scheduler_inventory.py",
+        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
+        "apps/api/tests/test_shared_reliability.py",
+        "apps/web/app/app/ip/watch/page.test.tsx",
+        "apps/web/components/app/Sidebar.test.tsx",
+        "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
+          "revision": "810ac975b7216f5716295c5c73d50eaf9a8fe265",
+          "environment": "Windows 11, CPython 3.13 and Node/Next 16.3.0 with locked dependencies, isolated SQLite/API fixtures, a production-mode web build, Chromium real-stack execution, and CI-owned deterministic full-suite shards",
+          "fixtures": "Synthetic isolated law-firm tenants, IP dockets, trademark assets/applications, watch profiles, official-source-shaped journal publications, correction/re-advertisement lineage, inaccessible second tenant, durable notification intents, and canonical opposition, Matter, task, deadline, and client-report targets; no real client filing or provider call",
+          "assertions": "Tenant isolation, immutable source evidence, payload-bound exact replay and conflict rejection, word/phonetic/device/class/proprietor/jurisdiction criteria, duplicate/stale/correction handling, advisory labeling, source-confirmed disposition, notification delivery, provider and cost fail-closed behavior, all five canonical handoffs, late-failure atomic rollback and exact-once retry, migration safety, responsive UI, OpenAPI, scheduler, governance, and real-stack browser journey",
+          "result": "passed",
+          "recorded_at": "2026-08-24T21:53:17+05:30"
+        }
+      ],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Pass independent PR CI/review, merge the exact commit, deploy the additive migration and immutable API/web/job revisions, reconcile all scheduler bindings, and run exact-production acceptance before marking deployment_verified."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Adds tenant-scoped immutable journal publications, ingestion-run ledgers, watch profiles, review hits, and source-preserving handoff records; existing Matter, proceeding, task, deadline, notification, and docket-event owners remain canonical."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "documentation_impact": [
+        "apps/web/app/guide/page.tsx",
+        "apps/web/app/law-firms/page.tsx",
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+      ],
+      "allocation_review": "2026-08-24 integrated allocation review: IPLF-052 owns watch ingestion/review and IPLF-053 owns the handoff half of the same IP-WATCH/UJ-21/UJ-33 scope. One implementation delegates to canonical shared owners and avoids duplicate stores or workflows. Live provider activation remains fail-closed.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
@@ -12419,32 +12464,63 @@
       "dependencies": [
         "IPLF-052A"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-21-EXC-01",
-        "planned:IPLF-UJ-21-EXC-02",
-        "planned:IPLF-UJ-21-EXC-03",
-        "planned:IPLF-UJ-21-NORMAL",
-        "planned:IPLF-UJ-33-EXC-01",
-        "planned:IPLF-UJ-33-EXC-02",
-        "planned:IPLF-UJ-33-EXC-03",
-        "planned:IPLF-UJ-33-EXC-04",
-        "planned:IPLF-UJ-33-NORMAL"
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260824_0003_ip_journal_watch.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/ip_watch.py",
+        "apps/api/src/caseops_api/services/ip_watch.py",
+        "apps/api/src/caseops_api/api/routes/ip_watch.py",
+        "apps/api/src/caseops_api/services/domain_outbox.py",
+        "apps/api/src/caseops_api/scripts/run_ip_journal_watch.py",
+        "apps/web/app/app/ip/watch/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/components/app/Sidebar.tsx",
+        "infra/cloudrun/ip-journal-watch-job.yaml",
+        "infra/cloudrun/scheduler-inventory.json",
+        "infra/cloudrun/deploy.ps1",
+        "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_journal_watch.py",
+        "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
+        "apps/api/tests/test_scheduler_inventory.py",
+        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
+        "apps/api/tests/test_shared_reliability.py",
+        "apps/web/app/app/ip/watch/page.test.tsx",
+        "apps/web/components/app/Sidebar.test.tsx",
+        "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
+          "revision": "810ac975b7216f5716295c5c73d50eaf9a8fe265",
+          "environment": "Windows 11, CPython 3.13 and Node/Next 16.3.0 with locked dependencies, isolated SQLite/API fixtures, a production-mode web build, Chromium real-stack execution, and CI-owned deterministic full-suite shards",
+          "fixtures": "Synthetic isolated law-firm tenants, IP dockets, trademark assets/applications, watch profiles, official-source-shaped journal publications, correction/re-advertisement lineage, inaccessible second tenant, durable notification intents, and canonical opposition, Matter, task, deadline, and client-report targets; no real client filing or provider call",
+          "assertions": "Tenant isolation, immutable source evidence, payload-bound exact replay and conflict rejection, word/phonetic/device/class/proprietor/jurisdiction criteria, duplicate/stale/correction handling, advisory labeling, source-confirmed disposition, notification delivery, provider and cost fail-closed behavior, all five canonical handoffs, late-failure atomic rollback and exact-once retry, migration safety, responsive UI, OpenAPI, scheduler, governance, and real-stack browser journey",
+          "result": "passed",
+          "recorded_at": "2026-08-24T21:53:17+05:30"
+        }
+      ],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Pass independent PR CI/review, merge the exact commit, deploy the additive migration and immutable API/web/job revisions, reconcile all scheduler bindings, and run exact-production acceptance before marking deployment_verified."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Adds tenant-scoped immutable journal publications, ingestion-run ledgers, watch profiles, review hits, and source-preserving handoff records; existing Matter, proceeding, task, deadline, notification, and docket-event owners remain canonical."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked"
+      "documentation_impact": [
+        "apps/web/app/guide/page.tsx",
+        "apps/web/app/law-firms/page.tsx",
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+      ],
+      "allocation_review": "2026-08-24 integrated allocation review: IPLF-052 owns watch ingestion/review and IPLF-053 owns the handoff half of the same IP-WATCH/UJ-21/UJ-33 scope. One implementation delegates to canonical shared owners and avoids duplicate stores or workflows. Live provider activation remains fail-closed.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review"
     },
     {
       "id": "IPLF-053A",
@@ -12468,22 +12544,63 @@
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260824_0003_ip_journal_watch.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/ip_watch.py",
+        "apps/api/src/caseops_api/services/ip_watch.py",
+        "apps/api/src/caseops_api/api/routes/ip_watch.py",
+        "apps/api/src/caseops_api/services/domain_outbox.py",
+        "apps/api/src/caseops_api/scripts/run_ip_journal_watch.py",
+        "apps/web/app/app/ip/watch/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/components/app/Sidebar.tsx",
+        "infra/cloudrun/ip-journal-watch-job.yaml",
+        "infra/cloudrun/scheduler-inventory.json",
+        "infra/cloudrun/deploy.ps1",
+        "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_journal_watch.py",
+        "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
+        "apps/api/tests/test_scheduler_inventory.py",
+        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
+        "apps/api/tests/test_shared_reliability.py",
+        "apps/web/app/app/ip/watch/page.test.tsx",
+        "apps/web/components/app/Sidebar.test.tsx",
+        "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
+          "revision": "810ac975b7216f5716295c5c73d50eaf9a8fe265",
+          "environment": "Windows 11, CPython 3.13 and Node/Next 16.3.0 with locked dependencies, isolated SQLite/API fixtures, a production-mode web build, Chromium real-stack execution, and CI-owned deterministic full-suite shards",
+          "fixtures": "Synthetic isolated law-firm tenants, IP dockets, trademark assets/applications, watch profiles, official-source-shaped journal publications, correction/re-advertisement lineage, inaccessible second tenant, durable notification intents, and canonical opposition, Matter, task, deadline, and client-report targets; no real client filing or provider call",
+          "assertions": "Tenant isolation, immutable source evidence, payload-bound exact replay and conflict rejection, word/phonetic/device/class/proprietor/jurisdiction criteria, duplicate/stale/correction handling, advisory labeling, source-confirmed disposition, notification delivery, provider and cost fail-closed behavior, all five canonical handoffs, late-failure atomic rollback and exact-once retry, migration safety, responsive UI, OpenAPI, scheduler, governance, and real-stack browser journey",
+          "result": "passed",
+          "recorded_at": "2026-08-24T21:53:17+05:30"
+        }
+      ],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Pass independent PR CI/review, merge the exact commit, deploy the additive migration and immutable API/web/job revisions, reconcile all scheduler bindings, and run exact-production acceptance before marking deployment_verified."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Adds tenant-scoped immutable journal publications, ingestion-run ledgers, watch profiles, review hits, and source-preserving handoff records; existing Matter, proceeding, task, deadline, notification, and docket-event owners remain canonical."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "documentation_impact": [
+        "apps/web/app/guide/page.tsx",
+        "apps/web/app/law-firms/page.tsx",
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+      ],
+      "allocation_review": "2026-08-24 integrated allocation review: IPLF-052 owns watch ingestion/review and IPLF-053 owns the handoff half of the same IP-WATCH/UJ-21/UJ-33 scope. One implementation delegates to canonical shared owners and avoids duplicate stores or workflows. Live provider activation remains fail-closed.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
@@ -12532,32 +12649,63 @@
       "dependencies": [
         "IPLF-053A"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-21-EXC-01",
-        "planned:IPLF-UJ-21-EXC-02",
-        "planned:IPLF-UJ-21-EXC-03",
-        "planned:IPLF-UJ-21-NORMAL",
-        "planned:IPLF-UJ-33-EXC-01",
-        "planned:IPLF-UJ-33-EXC-02",
-        "planned:IPLF-UJ-33-EXC-03",
-        "planned:IPLF-UJ-33-EXC-04",
-        "planned:IPLF-UJ-33-NORMAL"
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260824_0003_ip_journal_watch.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/ip_watch.py",
+        "apps/api/src/caseops_api/services/ip_watch.py",
+        "apps/api/src/caseops_api/api/routes/ip_watch.py",
+        "apps/api/src/caseops_api/services/domain_outbox.py",
+        "apps/api/src/caseops_api/scripts/run_ip_journal_watch.py",
+        "apps/web/app/app/ip/watch/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/components/app/Sidebar.tsx",
+        "infra/cloudrun/ip-journal-watch-job.yaml",
+        "infra/cloudrun/scheduler-inventory.json",
+        "infra/cloudrun/deploy.ps1",
+        "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_journal_watch.py",
+        "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
+        "apps/api/tests/test_scheduler_inventory.py",
+        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
+        "apps/api/tests/test_shared_reliability.py",
+        "apps/web/app/app/ip/watch/page.test.tsx",
+        "apps/web/components/app/Sidebar.test.tsx",
+        "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
+          "revision": "810ac975b7216f5716295c5c73d50eaf9a8fe265",
+          "environment": "Windows 11, CPython 3.13 and Node/Next 16.3.0 with locked dependencies, isolated SQLite/API fixtures, a production-mode web build, Chromium real-stack execution, and CI-owned deterministic full-suite shards",
+          "fixtures": "Synthetic isolated law-firm tenants, IP dockets, trademark assets/applications, watch profiles, official-source-shaped journal publications, correction/re-advertisement lineage, inaccessible second tenant, durable notification intents, and canonical opposition, Matter, task, deadline, and client-report targets; no real client filing or provider call",
+          "assertions": "Tenant isolation, immutable source evidence, payload-bound exact replay and conflict rejection, word/phonetic/device/class/proprietor/jurisdiction criteria, duplicate/stale/correction handling, advisory labeling, source-confirmed disposition, notification delivery, provider and cost fail-closed behavior, all five canonical handoffs, late-failure atomic rollback and exact-once retry, migration safety, responsive UI, OpenAPI, scheduler, governance, and real-stack browser journey",
+          "result": "passed",
+          "recorded_at": "2026-08-24T21:53:17+05:30"
+        }
+      ],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Pass independent PR CI/review, merge the exact commit, deploy the additive migration and immutable API/web/job revisions, reconcile all scheduler bindings, and run exact-production acceptance before marking deployment_verified."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Adds tenant-scoped immutable journal publications, ingestion-run ledgers, watch profiles, review hits, and source-preserving handoff records; existing Matter, proceeding, task, deadline, notification, and docket-event owners remain canonical."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked"
+      "documentation_impact": [
+        "apps/web/app/guide/page.tsx",
+        "apps/web/app/law-firms/page.tsx",
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+      ],
+      "allocation_review": "2026-08-24 integrated allocation review: IPLF-052 owns watch ingestion/review and IPLF-053 owns the handoff half of the same IP-WATCH/UJ-21/UJ-33 scope. One implementation delegates to canonical shared owners and avoids duplicate stores or workflows. Live provider activation remains fail-closed.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review"
     },
     {
       "id": "IPLF-054A",
@@ -21341,23 +21489,39 @@
         "UJ-21",
         "UJ-33"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-WATCH-01",
-        "planned:IPLF-UJ-21-EXC-01",
-        "planned:IPLF-UJ-21-EXC-02",
-        "planned:IPLF-UJ-21-EXC-03",
-        "planned:IPLF-UJ-21-NORMAL",
-        "planned:IPLF-UJ-33-EXC-01",
-        "planned:IPLF-UJ-33-EXC-02",
-        "planned:IPLF-UJ-33-EXC-03",
-        "planned:IPLF-UJ-33-EXC-04",
-        "planned:IPLF-UJ-33-NORMAL"
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260824_0003_ip_journal_watch.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/ip_watch.py",
+        "apps/api/src/caseops_api/services/ip_watch.py",
+        "apps/api/src/caseops_api/api/routes/ip_watch.py",
+        "apps/api/src/caseops_api/services/domain_outbox.py",
+        "apps/api/src/caseops_api/scripts/run_ip_journal_watch.py",
+        "apps/web/app/app/ip/watch/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/components/app/Sidebar.tsx",
+        "infra/cloudrun/ip-journal-watch-job.yaml",
+        "infra/cloudrun/scheduler-inventory.json",
+        "infra/cloudrun/deploy.ps1",
+        "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_journal_watch.py",
+        "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
+        "apps/api/tests/test_scheduler_inventory.py",
+        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
+        "apps/api/tests/test_shared_reliability.py",
+        "apps/web/app/app/ip/watch/page.test.tsx",
+        "apps/web/components/app/Sidebar.test.tsx",
+        "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-052B",
@@ -21374,23 +21538,39 @@
         "UJ-21",
         "UJ-33"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-WATCH-02",
-        "planned:IPLF-UJ-21-EXC-01",
-        "planned:IPLF-UJ-21-EXC-02",
-        "planned:IPLF-UJ-21-EXC-03",
-        "planned:IPLF-UJ-21-NORMAL",
-        "planned:IPLF-UJ-33-EXC-01",
-        "planned:IPLF-UJ-33-EXC-02",
-        "planned:IPLF-UJ-33-EXC-03",
-        "planned:IPLF-UJ-33-EXC-04",
-        "planned:IPLF-UJ-33-NORMAL"
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260824_0003_ip_journal_watch.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/ip_watch.py",
+        "apps/api/src/caseops_api/services/ip_watch.py",
+        "apps/api/src/caseops_api/api/routes/ip_watch.py",
+        "apps/api/src/caseops_api/services/domain_outbox.py",
+        "apps/api/src/caseops_api/scripts/run_ip_journal_watch.py",
+        "apps/web/app/app/ip/watch/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/components/app/Sidebar.tsx",
+        "infra/cloudrun/ip-journal-watch-job.yaml",
+        "infra/cloudrun/scheduler-inventory.json",
+        "infra/cloudrun/deploy.ps1",
+        "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_journal_watch.py",
+        "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
+        "apps/api/tests/test_scheduler_inventory.py",
+        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
+        "apps/api/tests/test_shared_reliability.py",
+        "apps/web/app/app/ip/watch/page.test.tsx",
+        "apps/web/components/app/Sidebar.test.tsx",
+        "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-052B",
@@ -21407,23 +21587,39 @@
         "UJ-21",
         "UJ-33"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-WATCH-03",
-        "planned:IPLF-UJ-21-EXC-01",
-        "planned:IPLF-UJ-21-EXC-02",
-        "planned:IPLF-UJ-21-EXC-03",
-        "planned:IPLF-UJ-21-NORMAL",
-        "planned:IPLF-UJ-33-EXC-01",
-        "planned:IPLF-UJ-33-EXC-02",
-        "planned:IPLF-UJ-33-EXC-03",
-        "planned:IPLF-UJ-33-EXC-04",
-        "planned:IPLF-UJ-33-NORMAL"
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260824_0003_ip_journal_watch.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/ip_watch.py",
+        "apps/api/src/caseops_api/services/ip_watch.py",
+        "apps/api/src/caseops_api/api/routes/ip_watch.py",
+        "apps/api/src/caseops_api/services/domain_outbox.py",
+        "apps/api/src/caseops_api/scripts/run_ip_journal_watch.py",
+        "apps/web/app/app/ip/watch/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/components/app/Sidebar.tsx",
+        "infra/cloudrun/ip-journal-watch-job.yaml",
+        "infra/cloudrun/scheduler-inventory.json",
+        "infra/cloudrun/deploy.ps1",
+        "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_journal_watch.py",
+        "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
+        "apps/api/tests/test_scheduler_inventory.py",
+        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
+        "apps/api/tests/test_shared_reliability.py",
+        "apps/web/app/app/ip/watch/page.test.tsx",
+        "apps/web/components/app/Sidebar.test.tsx",
+        "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-052B",
@@ -21440,23 +21636,39 @@
         "UJ-21",
         "UJ-33"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-WATCH-04",
-        "planned:IPLF-UJ-21-EXC-01",
-        "planned:IPLF-UJ-21-EXC-02",
-        "planned:IPLF-UJ-21-EXC-03",
-        "planned:IPLF-UJ-21-NORMAL",
-        "planned:IPLF-UJ-33-EXC-01",
-        "planned:IPLF-UJ-33-EXC-02",
-        "planned:IPLF-UJ-33-EXC-03",
-        "planned:IPLF-UJ-33-EXC-04",
-        "planned:IPLF-UJ-33-NORMAL"
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260824_0003_ip_journal_watch.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/ip_watch.py",
+        "apps/api/src/caseops_api/services/ip_watch.py",
+        "apps/api/src/caseops_api/api/routes/ip_watch.py",
+        "apps/api/src/caseops_api/services/domain_outbox.py",
+        "apps/api/src/caseops_api/scripts/run_ip_journal_watch.py",
+        "apps/web/app/app/ip/watch/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/components/app/Sidebar.tsx",
+        "infra/cloudrun/ip-journal-watch-job.yaml",
+        "infra/cloudrun/scheduler-inventory.json",
+        "infra/cloudrun/deploy.ps1",
+        "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_journal_watch.py",
+        "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
+        "apps/api/tests/test_scheduler_inventory.py",
+        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
+        "apps/api/tests/test_shared_reliability.py",
+        "apps/web/app/app/ip/watch/page.test.tsx",
+        "apps/web/components/app/Sidebar.test.tsx",
+        "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-052B",
@@ -21473,23 +21685,39 @@
         "UJ-21",
         "UJ-33"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-WATCH-05",
-        "planned:IPLF-UJ-21-EXC-01",
-        "planned:IPLF-UJ-21-EXC-02",
-        "planned:IPLF-UJ-21-EXC-03",
-        "planned:IPLF-UJ-21-NORMAL",
-        "planned:IPLF-UJ-33-EXC-01",
-        "planned:IPLF-UJ-33-EXC-02",
-        "planned:IPLF-UJ-33-EXC-03",
-        "planned:IPLF-UJ-33-EXC-04",
-        "planned:IPLF-UJ-33-NORMAL"
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260824_0003_ip_journal_watch.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/ip_watch.py",
+        "apps/api/src/caseops_api/services/ip_watch.py",
+        "apps/api/src/caseops_api/api/routes/ip_watch.py",
+        "apps/api/src/caseops_api/services/domain_outbox.py",
+        "apps/api/src/caseops_api/scripts/run_ip_journal_watch.py",
+        "apps/web/app/app/ip/watch/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/components/app/Sidebar.tsx",
+        "infra/cloudrun/ip-journal-watch-job.yaml",
+        "infra/cloudrun/scheduler-inventory.json",
+        "infra/cloudrun/deploy.ps1",
+        "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_journal_watch.py",
+        "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
+        "apps/api/tests/test_scheduler_inventory.py",
+        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
+        "apps/api/tests/test_shared_reliability.py",
+        "apps/web/app/app/ip/watch/page.test.tsx",
+        "apps/web/components/app/Sidebar.test.tsx",
+        "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-052B",
@@ -39998,19 +40226,47 @@
         "IP-WATCH-05"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-21-EXC-01",
-        "planned:IPLF-UJ-21-EXC-02",
-        "planned:IPLF-UJ-21-EXC-03",
-        "planned:IPLF-UJ-21-NORMAL"
+        "IPLF-UJ-21-EXC-01",
+        "IPLF-UJ-21-EXC-02",
+        "IPLF-UJ-21-EXC-03",
+        "IPLF-UJ-21-NORMAL",
+        "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
+        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
+        "apps/api/tests/test_ip_journal_watch.py",
+        "apps/api/tests/test_scheduler_inventory.py",
+        "apps/api/tests/test_shared_reliability.py",
+        "apps/web/app/app/ip/watch/page.test.tsx",
+        "apps/web/components/app/Sidebar.test.tsx",
+        "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-052B",
         "IPLF-053B"
-      ]
+      ],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260824_0003_ip_journal_watch.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/ip_watch.py",
+        "apps/api/src/caseops_api/services/ip_watch.py",
+        "apps/api/src/caseops_api/api/routes/ip_watch.py",
+        "apps/api/src/caseops_api/services/domain_outbox.py",
+        "apps/api/src/caseops_api/scripts/run_ip_journal_watch.py",
+        "apps/web/app/app/ip/watch/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/components/app/Sidebar.tsx",
+        "infra/cloudrun/ip-journal-watch-job.yaml",
+        "infra/cloudrun/scheduler-inventory.json",
+        "infra/cloudrun/deploy.ps1",
+        "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
+      ],
+      "blockers": []
     },
     {
       "id": "UJ-22",
@@ -40679,20 +40935,48 @@
         "IP-WATCH-05"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-33-EXC-01",
-        "planned:IPLF-UJ-33-EXC-02",
-        "planned:IPLF-UJ-33-EXC-03",
-        "planned:IPLF-UJ-33-EXC-04",
-        "planned:IPLF-UJ-33-NORMAL"
+        "IPLF-UJ-33-EXC-01",
+        "IPLF-UJ-33-EXC-02",
+        "IPLF-UJ-33-EXC-03",
+        "IPLF-UJ-33-EXC-04",
+        "IPLF-UJ-33-NORMAL",
+        "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
+        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
+        "apps/api/tests/test_ip_journal_watch.py",
+        "apps/api/tests/test_scheduler_inventory.py",
+        "apps/api/tests/test_shared_reliability.py",
+        "apps/web/app/app/ip/watch/page.test.tsx",
+        "apps/web/components/app/Sidebar.test.tsx",
+        "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-052B",
         "IPLF-053B"
-      ]
+      ],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260824_0003_ip_journal_watch.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/ip_watch.py",
+        "apps/api/src/caseops_api/services/ip_watch.py",
+        "apps/api/src/caseops_api/api/routes/ip_watch.py",
+        "apps/api/src/caseops_api/services/domain_outbox.py",
+        "apps/api/src/caseops_api/scripts/run_ip_journal_watch.py",
+        "apps/web/app/app/ip/watch/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/components/app/Sidebar.tsx",
+        "infra/cloudrun/ip-journal-watch-job.yaml",
+        "infra/cloudrun/scheduler-inventory.json",
+        "infra/cloudrun/deploy.ps1",
+        "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
+      ],
+      "blockers": []
     },
     {
       "id": "UJ-34",
@@ -46792,17 +47076,45 @@
         "IP-WATCH-05"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-21-NORMAL"
+        "IPLF-UJ-21-NORMAL",
+        "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
+        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
+        "apps/api/tests/test_ip_journal_watch.py",
+        "apps/api/tests/test_scheduler_inventory.py",
+        "apps/api/tests/test_shared_reliability.py",
+        "apps/web/app/app/ip/watch/page.test.tsx",
+        "apps/web/components/app/Sidebar.test.tsx",
+        "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-052B",
         "IPLF-053B"
       ],
-      "allocation_rationale": "UJ-21 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-052, IPLF-053."
+      "allocation_rationale": "UJ-21 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-052, IPLF-053.",
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260824_0003_ip_journal_watch.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/ip_watch.py",
+        "apps/api/src/caseops_api/services/ip_watch.py",
+        "apps/api/src/caseops_api/api/routes/ip_watch.py",
+        "apps/api/src/caseops_api/services/domain_outbox.py",
+        "apps/api/src/caseops_api/scripts/run_ip_journal_watch.py",
+        "apps/web/app/app/ip/watch/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/components/app/Sidebar.tsx",
+        "infra/cloudrun/ip-journal-watch-job.yaml",
+        "infra/cloudrun/scheduler-inventory.json",
+        "infra/cloudrun/deploy.ps1",
+        "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
+      ],
+      "blockers": []
     },
     {
       "id": "UJ-21-EXC-01",
@@ -46819,17 +47131,45 @@
         "IP-WATCH-05"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-21-EXC-01"
+        "IPLF-UJ-21-EXC-01",
+        "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
+        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
+        "apps/api/tests/test_ip_journal_watch.py",
+        "apps/api/tests/test_scheduler_inventory.py",
+        "apps/api/tests/test_shared_reliability.py",
+        "apps/web/app/app/ip/watch/page.test.tsx",
+        "apps/web/components/app/Sidebar.test.tsx",
+        "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-052B",
         "IPLF-053B"
       ],
-      "allocation_rationale": "UJ-21 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-052, IPLF-053."
+      "allocation_rationale": "UJ-21 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-052, IPLF-053.",
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260824_0003_ip_journal_watch.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/ip_watch.py",
+        "apps/api/src/caseops_api/services/ip_watch.py",
+        "apps/api/src/caseops_api/api/routes/ip_watch.py",
+        "apps/api/src/caseops_api/services/domain_outbox.py",
+        "apps/api/src/caseops_api/scripts/run_ip_journal_watch.py",
+        "apps/web/app/app/ip/watch/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/components/app/Sidebar.tsx",
+        "infra/cloudrun/ip-journal-watch-job.yaml",
+        "infra/cloudrun/scheduler-inventory.json",
+        "infra/cloudrun/deploy.ps1",
+        "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
+      ],
+      "blockers": []
     },
     {
       "id": "UJ-21-EXC-02",
@@ -46846,17 +47186,45 @@
         "IP-WATCH-05"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-21-EXC-02"
+        "IPLF-UJ-21-EXC-02",
+        "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
+        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
+        "apps/api/tests/test_ip_journal_watch.py",
+        "apps/api/tests/test_scheduler_inventory.py",
+        "apps/api/tests/test_shared_reliability.py",
+        "apps/web/app/app/ip/watch/page.test.tsx",
+        "apps/web/components/app/Sidebar.test.tsx",
+        "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-052B",
         "IPLF-053B"
       ],
-      "allocation_rationale": "UJ-21 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-052, IPLF-053."
+      "allocation_rationale": "UJ-21 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-052, IPLF-053.",
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260824_0003_ip_journal_watch.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/ip_watch.py",
+        "apps/api/src/caseops_api/services/ip_watch.py",
+        "apps/api/src/caseops_api/api/routes/ip_watch.py",
+        "apps/api/src/caseops_api/services/domain_outbox.py",
+        "apps/api/src/caseops_api/scripts/run_ip_journal_watch.py",
+        "apps/web/app/app/ip/watch/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/components/app/Sidebar.tsx",
+        "infra/cloudrun/ip-journal-watch-job.yaml",
+        "infra/cloudrun/scheduler-inventory.json",
+        "infra/cloudrun/deploy.ps1",
+        "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
+      ],
+      "blockers": []
     },
     {
       "id": "UJ-21-EXC-03",
@@ -46873,17 +47241,45 @@
         "IP-WATCH-05"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-21-EXC-03"
+        "IPLF-UJ-21-EXC-03",
+        "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
+        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
+        "apps/api/tests/test_ip_journal_watch.py",
+        "apps/api/tests/test_scheduler_inventory.py",
+        "apps/api/tests/test_shared_reliability.py",
+        "apps/web/app/app/ip/watch/page.test.tsx",
+        "apps/web/components/app/Sidebar.test.tsx",
+        "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-052B",
         "IPLF-053B"
       ],
-      "allocation_rationale": "UJ-21 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-052, IPLF-053."
+      "allocation_rationale": "UJ-21 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-052, IPLF-053.",
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260824_0003_ip_journal_watch.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/ip_watch.py",
+        "apps/api/src/caseops_api/services/ip_watch.py",
+        "apps/api/src/caseops_api/api/routes/ip_watch.py",
+        "apps/api/src/caseops_api/services/domain_outbox.py",
+        "apps/api/src/caseops_api/scripts/run_ip_journal_watch.py",
+        "apps/web/app/app/ip/watch/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/components/app/Sidebar.tsx",
+        "infra/cloudrun/ip-journal-watch-job.yaml",
+        "infra/cloudrun/scheduler-inventory.json",
+        "infra/cloudrun/deploy.ps1",
+        "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
+      ],
+      "blockers": []
     },
     {
       "id": "UJ-22-NORMAL",
@@ -49240,17 +49636,45 @@
         "IP-WATCH-05"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-33-NORMAL"
+        "IPLF-UJ-33-NORMAL",
+        "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
+        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
+        "apps/api/tests/test_ip_journal_watch.py",
+        "apps/api/tests/test_scheduler_inventory.py",
+        "apps/api/tests/test_shared_reliability.py",
+        "apps/web/app/app/ip/watch/page.test.tsx",
+        "apps/web/components/app/Sidebar.test.tsx",
+        "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-052B",
         "IPLF-053B"
       ],
-      "allocation_rationale": "UJ-33 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-052, IPLF-053."
+      "allocation_rationale": "UJ-33 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-052, IPLF-053.",
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260824_0003_ip_journal_watch.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/ip_watch.py",
+        "apps/api/src/caseops_api/services/ip_watch.py",
+        "apps/api/src/caseops_api/api/routes/ip_watch.py",
+        "apps/api/src/caseops_api/services/domain_outbox.py",
+        "apps/api/src/caseops_api/scripts/run_ip_journal_watch.py",
+        "apps/web/app/app/ip/watch/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/components/app/Sidebar.tsx",
+        "infra/cloudrun/ip-journal-watch-job.yaml",
+        "infra/cloudrun/scheduler-inventory.json",
+        "infra/cloudrun/deploy.ps1",
+        "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
+      ],
+      "blockers": []
     },
     {
       "id": "UJ-33-EXC-01",
@@ -49267,17 +49691,45 @@
         "IP-WATCH-05"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-33-EXC-01"
+        "IPLF-UJ-33-EXC-01",
+        "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
+        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
+        "apps/api/tests/test_ip_journal_watch.py",
+        "apps/api/tests/test_scheduler_inventory.py",
+        "apps/api/tests/test_shared_reliability.py",
+        "apps/web/app/app/ip/watch/page.test.tsx",
+        "apps/web/components/app/Sidebar.test.tsx",
+        "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-052B",
         "IPLF-053B"
       ],
-      "allocation_rationale": "UJ-33 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-052, IPLF-053."
+      "allocation_rationale": "UJ-33 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-052, IPLF-053.",
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260824_0003_ip_journal_watch.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/ip_watch.py",
+        "apps/api/src/caseops_api/services/ip_watch.py",
+        "apps/api/src/caseops_api/api/routes/ip_watch.py",
+        "apps/api/src/caseops_api/services/domain_outbox.py",
+        "apps/api/src/caseops_api/scripts/run_ip_journal_watch.py",
+        "apps/web/app/app/ip/watch/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/components/app/Sidebar.tsx",
+        "infra/cloudrun/ip-journal-watch-job.yaml",
+        "infra/cloudrun/scheduler-inventory.json",
+        "infra/cloudrun/deploy.ps1",
+        "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
+      ],
+      "blockers": []
     },
     {
       "id": "UJ-33-EXC-02",
@@ -49294,17 +49746,45 @@
         "IP-WATCH-05"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-33-EXC-02"
+        "IPLF-UJ-33-EXC-02",
+        "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
+        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
+        "apps/api/tests/test_ip_journal_watch.py",
+        "apps/api/tests/test_scheduler_inventory.py",
+        "apps/api/tests/test_shared_reliability.py",
+        "apps/web/app/app/ip/watch/page.test.tsx",
+        "apps/web/components/app/Sidebar.test.tsx",
+        "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-052B",
         "IPLF-053B"
       ],
-      "allocation_rationale": "UJ-33 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-052, IPLF-053."
+      "allocation_rationale": "UJ-33 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-052, IPLF-053.",
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260824_0003_ip_journal_watch.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/ip_watch.py",
+        "apps/api/src/caseops_api/services/ip_watch.py",
+        "apps/api/src/caseops_api/api/routes/ip_watch.py",
+        "apps/api/src/caseops_api/services/domain_outbox.py",
+        "apps/api/src/caseops_api/scripts/run_ip_journal_watch.py",
+        "apps/web/app/app/ip/watch/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/components/app/Sidebar.tsx",
+        "infra/cloudrun/ip-journal-watch-job.yaml",
+        "infra/cloudrun/scheduler-inventory.json",
+        "infra/cloudrun/deploy.ps1",
+        "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
+      ],
+      "blockers": []
     },
     {
       "id": "UJ-33-EXC-03",
@@ -49321,17 +49801,45 @@
         "IP-WATCH-05"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-33-EXC-03"
+        "IPLF-UJ-33-EXC-03",
+        "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
+        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
+        "apps/api/tests/test_ip_journal_watch.py",
+        "apps/api/tests/test_scheduler_inventory.py",
+        "apps/api/tests/test_shared_reliability.py",
+        "apps/web/app/app/ip/watch/page.test.tsx",
+        "apps/web/components/app/Sidebar.test.tsx",
+        "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-052B",
         "IPLF-053B"
       ],
-      "allocation_rationale": "UJ-33 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-052, IPLF-053."
+      "allocation_rationale": "UJ-33 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-052, IPLF-053.",
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260824_0003_ip_journal_watch.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/ip_watch.py",
+        "apps/api/src/caseops_api/services/ip_watch.py",
+        "apps/api/src/caseops_api/api/routes/ip_watch.py",
+        "apps/api/src/caseops_api/services/domain_outbox.py",
+        "apps/api/src/caseops_api/scripts/run_ip_journal_watch.py",
+        "apps/web/app/app/ip/watch/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/components/app/Sidebar.tsx",
+        "infra/cloudrun/ip-journal-watch-job.yaml",
+        "infra/cloudrun/scheduler-inventory.json",
+        "infra/cloudrun/deploy.ps1",
+        "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
+      ],
+      "blockers": []
     },
     {
       "id": "UJ-33-EXC-04",
@@ -49348,17 +49856,45 @@
         "IP-WATCH-05"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-33-EXC-04"
+        "IPLF-UJ-33-EXC-04",
+        "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
+        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
+        "apps/api/tests/test_ip_journal_watch.py",
+        "apps/api/tests/test_scheduler_inventory.py",
+        "apps/api/tests/test_shared_reliability.py",
+        "apps/web/app/app/ip/watch/page.test.tsx",
+        "apps/web/components/app/Sidebar.test.tsx",
+        "tests/e2e/iplf-052-journal-watch-2026-08-24.spec.ts"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-052B",
         "IPLF-053B"
       ],
-      "allocation_rationale": "UJ-33 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-052, IPLF-053."
+      "allocation_rationale": "UJ-33 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-052, IPLF-053.",
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260824_0003_ip_journal_watch.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/ip_watch.py",
+        "apps/api/src/caseops_api/services/ip_watch.py",
+        "apps/api/src/caseops_api/api/routes/ip_watch.py",
+        "apps/api/src/caseops_api/services/domain_outbox.py",
+        "apps/api/src/caseops_api/scripts/run_ip_journal_watch.py",
+        "apps/web/app/app/ip/watch/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/components/app/Sidebar.tsx",
+        "infra/cloudrun/ip-journal-watch-job.yaml",
+        "infra/cloudrun/scheduler-inventory.json",
+        "infra/cloudrun/deploy.ps1",
+        "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
+      ],
+      "blockers": []
     },
     {
       "id": "UJ-34-NORMAL",

@@ -8731,6 +8731,147 @@ export type IpRegistrySnapshotResult = {
   idempotent_replay: boolean;
 };
 
+export type IpWatchProfile = {
+  id: string;
+  company_id: string;
+  docket_id: string;
+  name: string;
+  provider_key: string;
+  word_terms_json: string[];
+  phonetic_terms_json: string[];
+  device_references_json: string[];
+  class_numbers_json: number[];
+  proprietor_terms_json: string[];
+  jurisdictions_json: string[];
+  frequency: "publication" | "daily" | "weekly" | "monthly";
+  recipient_membership_ids_json: string[];
+  max_cost_minor_per_period: number;
+  spent_cost_minor_in_period: number;
+  cost_currency: string;
+  poll_status: "active" | "paused" | "paused_cost_quota" | "disabled";
+  pause_reason: string | null;
+  last_polled_at: string | null;
+  next_poll_at: string | null;
+  criteria_version: string;
+  version: number;
+  created_by_membership_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type IpJournalPublication = {
+  id: string;
+  company_id: string;
+  application_id: string | null;
+  provider_key: string;
+  journal_number: string;
+  journal_date: string;
+  publication_kind: "advertisement" | "correction" | "readvertisement";
+  application_number: string;
+  mark_text: string | null;
+  device_reference: string | null;
+  proprietor_name: string | null;
+  office: string;
+  jurisdiction: string;
+  class_numbers_json: number[];
+  goods_services_json: Record<string, string[]>;
+  publication_scope_json: Record<string, unknown>;
+  source_url: string;
+  source_page: string | null;
+  source_status: "available" | "unavailable" | "stale";
+  source_retrieved_at: string | null;
+  parser_version: string;
+  attribution_json: Record<string, unknown>;
+  source_fingerprint: string;
+  supersedes_publication_id: string | null;
+  correction_reason: string | null;
+  ingestion_delay_hours: number;
+  created_at: string;
+};
+
+export type IpWatchDisposition =
+  | "new"
+  | "reviewing"
+  | "relevant"
+  | "not_relevant"
+  | "monitor"
+  | "client_instruction"
+  | "enforcement_opened"
+  | "closed";
+
+export type IpWatchHit = {
+  id: string;
+  company_id: string;
+  profile_id: string;
+  publication_id: string;
+  duplicate_of_hit_id: string | null;
+  compared_mark_json: Record<string, unknown>;
+  candidate_mark_json: Record<string, unknown>;
+  classes_goods_json: Record<string, unknown>;
+  similarity_evidence_json: Record<string, unknown>;
+  ai_advisory: boolean;
+  advisory_notice: string;
+  source_url: string;
+  source_status: "available" | "unavailable" | "stale";
+  source_snapshot_json: Record<string, unknown>;
+  hit_date: string;
+  stale_source_alert: boolean;
+  deadline_confirmation_state: "pending_confirmation" | "confirmed" | "superseded";
+  disposition: IpWatchDisposition;
+  disposition_reason: string | null;
+  reviewed_by_membership_id: string | null;
+  reviewed_at: string | null;
+  reviewer_decision_json: Record<string, unknown>;
+  version: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type IpJournalIngestionRun = {
+  id: string;
+  provider_key: string;
+  idempotency_key: string;
+  request_sha256: string;
+  status: "pending" | "succeeded" | "failed" | "paused_cost_quota";
+  external_call: boolean;
+  cost_minor: number;
+  currency: string;
+  publications_seen: number;
+  publications_created: number;
+  hits_created: number;
+  duplicate_hits: number;
+  publication_ids_json: string[];
+  hit_ids_json: string[];
+  stale_source_alert: boolean;
+  error_redacted: string | null;
+  started_at: string;
+  completed_at: string | null;
+  created_at: string;
+};
+
+export type IpWatchHandoff = {
+  id: string;
+  hit_id: string;
+  handoff_kind: "opposition" | "enforcement_matter" | "task" | "deadline" | "client_report_item";
+  status: string;
+  target_type: string | null;
+  target_id: string | null;
+  source_snapshot_json: Record<string, unknown>;
+  reviewer_decision_json: Record<string, unknown>;
+  request_json: Record<string, unknown>;
+  error_redacted: string | null;
+  completed_at: string | null;
+  created_at: string;
+};
+
+export type IpWatchWorkspace = {
+  profiles: IpWatchProfile[];
+  hits: IpWatchHit[];
+  publications: IpJournalPublication[];
+  ingestion_runs: IpJournalIngestionRun[];
+  handoffs: IpWatchHandoff[];
+};
+
 export type IpTrackedCaseReference = {
   id: string;
   company_id: string;
@@ -10377,6 +10518,156 @@ export async function fetchIpDockets(): Promise<{ dockets: IpDocket[]; count: nu
 
 export async function fetchIpDocket(docketId: string): Promise<IpDocket> {
   return apiRequest(`/api/ip/dockets/${encodeURIComponent(docketId)}`);
+}
+
+export async function fetchIpWatchWorkspace(
+  docketId?: string | null,
+): Promise<IpWatchWorkspace> {
+  const params = new URLSearchParams({ limit: "250" });
+  if (docketId) params.set("docket_id", docketId);
+  return apiRequest(`/api/ip/watch?${params.toString()}`);
+}
+
+export async function createIpWatchProfile(input: {
+  docketId: string;
+  name: string;
+  providerKey: string;
+  wordTerms: string[];
+  phoneticTerms: string[];
+  deviceReferences: string[];
+  classNumbers: number[];
+  proprietorTerms: string[];
+  jurisdictions: string[];
+  frequency: IpWatchProfile["frequency"];
+  recipientMembershipIds: string[];
+  maxCostMinorPerPeriod: number;
+  costCurrency: string;
+}): Promise<IpWatchProfile> {
+  return apiRequest("/api/ip/watch/profiles", {
+    method: "POST",
+    body: {
+      docket_id: input.docketId,
+      name: input.name,
+      provider_key: input.providerKey,
+      word_terms: input.wordTerms,
+      phonetic_terms: input.phoneticTerms,
+      device_references: input.deviceReferences,
+      class_numbers: input.classNumbers,
+      proprietor_terms: input.proprietorTerms,
+      jurisdictions: input.jurisdictions,
+      frequency: input.frequency,
+      recipient_membership_ids: input.recipientMembershipIds,
+      max_cost_minor_per_period: input.maxCostMinorPerPeriod,
+      cost_currency: input.costCurrency,
+    },
+  });
+}
+
+export async function updateIpWatchProfileStatus(input: {
+  profileId: string;
+  expectedVersion: number;
+  pollStatus: "active" | "paused" | "disabled";
+  reason: string;
+}): Promise<IpWatchProfile> {
+  return apiRequest(`/api/ip/watch/profiles/${encodeURIComponent(input.profileId)}/status`, {
+    method: "POST",
+    body: {
+      expected_version: input.expectedVersion,
+      poll_status: input.pollStatus,
+      reason: input.reason,
+    },
+  });
+}
+
+export async function ingestIpJournal(input: {
+  idempotencyKey: string;
+  providerKey: string;
+  costMinor: number;
+  publication: {
+    application_id?: string | null;
+    journal_number: string;
+    journal_date: string;
+    publication_kind: "advertisement" | "correction" | "readvertisement";
+    application_number: string;
+    mark_text?: string | null;
+    device_reference?: string | null;
+    proprietor_name?: string | null;
+    office: string;
+    jurisdiction: string;
+    class_numbers: number[];
+    goods_services: Record<string, string[]>;
+    publication_scope: Record<string, unknown>;
+    source_url: string;
+    source_page?: string | null;
+    source_status: "available" | "unavailable" | "stale";
+    source_retrieved_at?: string | null;
+    parser_version: string;
+    attribution: Record<string, unknown>;
+    raw_evidence: Record<string, unknown>;
+    supersedes_publication_id?: string | null;
+    correction_reason?: string | null;
+  };
+}): Promise<{
+  run: IpJournalIngestionRun;
+  publications: IpJournalPublication[];
+  hits: IpWatchHit[];
+  idempotent_replay: boolean;
+}> {
+  return apiRequest("/api/ip/watch/journal-ingestions", {
+    method: "POST",
+    body: {
+      idempotency_key: input.idempotencyKey,
+      provider_key: input.providerKey,
+      external_call: false,
+      cost_minor: input.costMinor,
+      currency: "INR",
+      publications: [input.publication],
+    },
+  });
+}
+
+export async function decideIpWatchHit(input: {
+  hitId: string;
+  expectedVersion: number;
+  disposition: IpWatchDisposition;
+  reason: string;
+  sourceConfirmed: boolean;
+}): Promise<IpWatchHit> {
+  return apiRequest(`/api/ip/watch/hits/${encodeURIComponent(input.hitId)}/disposition`, {
+    method: "POST",
+    body: {
+      expected_version: input.expectedVersion,
+      disposition: input.disposition,
+      reason: input.reason,
+      source_confirmed: input.sourceConfirmed,
+    },
+  });
+}
+
+export async function createIpWatchHandoff(input: {
+  hitId: string;
+  handoffKind: IpWatchHandoff["handoff_kind"];
+  applicationId?: string | null;
+  representedSide?: "applicant" | "opponent";
+  title?: string | null;
+  matterCode?: string | null;
+  dueOn?: string | null;
+  assigneeMembershipId?: string | null;
+  notes?: string | null;
+}): Promise<IpWatchHandoff> {
+  return apiRequest(`/api/ip/watch/hits/${encodeURIComponent(input.hitId)}/handoffs`, {
+    method: "POST",
+    body: {
+      handoff_kind: input.handoffKind,
+      application_id: input.applicationId ?? null,
+      represented_side: input.representedSide ?? "opponent",
+      title: input.title ?? null,
+      matter_code: input.matterCode ?? null,
+      due_on: input.dueOn ?? null,
+      assignee_membership_id: input.assigneeMembershipId ?? null,
+      notes: input.notes ?? null,
+    },
+  });
 }
 
 export async function fetchIpRegistryWorkspaces(

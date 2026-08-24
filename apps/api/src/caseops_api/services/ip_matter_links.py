@@ -225,6 +225,7 @@ def create_matter_link(
     context: SessionContext,
     docket_id: str,
     payload: IpMatterLinkCreateRequest,
+    commit: bool = True,
 ) -> IpMatterLinkRecord:
     context = _lock_ip_writer_context(
         session, context=context, required_capability="ip:write"
@@ -309,8 +310,9 @@ def create_matter_link(
         ip_docket_id=docket.id,
         metadata={"relation_role": link.relation_role, "effective_from": link.effective_from},
     )
-    session.commit()
-    session.refresh(link)
+    if commit:
+        session.commit()
+        session.refresh(link)
     return _record(session, context=context, link=link, docket=docket, matter=matter)
 
 

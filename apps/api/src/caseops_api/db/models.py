@@ -15451,6 +15451,327 @@ class IpTrackedCaseLink(Base):
     )
 
 
+class IpJournalPublication(Base):
+    """Immutable journal entry evidence used by watch and deadline workflows."""
+
+    __tablename__ = "ip_journal_publications"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["application_id", "company_id"],
+            ["trademark_applications.id", "trademark_applications.company_id"],
+            name="fk_ip_journal_publication_application_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["supersedes_publication_id", "company_id"],
+            ["ip_journal_publications.id", "ip_journal_publications.company_id"],
+            name="fk_ip_journal_publication_supersedes_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_ip_journal_publication_id_company"),
+        UniqueConstraint(
+            "company_id", "source_fingerprint", name="uq_ip_journal_publication_fingerprint"
+        ),
+        CheckConstraint(
+            "publication_kind IN ('advertisement', 'correction', 'readvertisement')",
+            name="ck_ip_journal_publication_kind",
+        ),
+        CheckConstraint(
+            "source_status IN ('available', 'unavailable', 'stale')",
+            name="ck_ip_journal_publication_source_status",
+        ),
+        CheckConstraint(
+            "supersedes_publication_id IS NULL OR publication_kind <> 'advertisement'",
+            name="ck_ip_journal_publication_supersession_kind",
+        ),
+        Index(
+            "ix_ip_journal_publications_company_date",
+            "company_id",
+            "journal_date",
+            "created_at",
+        ),
+        Index(
+            "ix_ip_journal_publications_company_application",
+            "company_id",
+            "application_number",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    application_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    provider_key: Mapped[str] = mapped_column(String(80), nullable=False)
+    journal_number: Mapped[str] = mapped_column(String(80), nullable=False)
+    journal_date: Mapped[date] = mapped_column(Date, nullable=False)
+    publication_kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    application_number: Mapped[str] = mapped_column(String(160), nullable=False)
+    mark_text: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    device_reference: Mapped[str | None] = mapped_column(String(800), nullable=True)
+    proprietor_name: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    office: Mapped[str] = mapped_column(String(80), nullable=False)
+    jurisdiction: Mapped[str] = mapped_column(String(40), nullable=False)
+    class_numbers_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    goods_services_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    publication_scope_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    source_url: Mapped[str] = mapped_column(String(800), nullable=False)
+    source_page: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    source_status: Mapped[str] = mapped_column(String(24), nullable=False)
+    source_retrieved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    parser_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    attribution_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    raw_evidence_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    supersedes_publication_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    correction_reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    ingestion_delay_hours: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class IpJournalIngestionRun(Base):
+    __tablename__ = "ip_journal_ingestion_runs"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["requested_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_journal_ingestion_actor_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_ip_journal_ingestion_id_company"),
+        UniqueConstraint(
+            "company_id", "idempotency_key", name="uq_ip_journal_ingestion_idempotency"
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'succeeded', 'failed', 'paused_cost_quota')",
+            name="ck_ip_journal_ingestion_status",
+        ),
+        CheckConstraint(
+            "length(request_sha256) = 64",
+            name="ck_ip_journal_ingestion_request_sha256",
+        ),
+        Index(
+            "ix_ip_journal_ingestion_company_created", "company_id", "created_at"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    provider_key: Mapped[str] = mapped_column(String(80), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    request_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    external_call: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    cost_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR")
+    publications_seen: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    publications_created: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    hits_created: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    duplicate_hits: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    publication_ids_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    hit_ids_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    stale_source_alert: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    error_redacted: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    requested_by_membership_id: Mapped[str] = mapped_column(
+        String(36), nullable=False, index=True
+    )
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class IpWatchProfile(Base):
+    __tablename__ = "ip_watch_profiles"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_watch_profile_docket_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_watch_profile_creator_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_ip_watch_profile_id_company"),
+        CheckConstraint(
+            "frequency IN ('publication', 'daily', 'weekly', 'monthly')",
+            name="ck_ip_watch_profile_frequency",
+        ),
+        CheckConstraint(
+            "poll_status IN ('active', 'paused', 'paused_cost_quota', 'disabled')",
+            name="ck_ip_watch_profile_poll_status",
+        ),
+        CheckConstraint("version > 0", name="ck_ip_watch_profile_version"),
+        Index("ix_ip_watch_profiles_company_poll", "company_id", "poll_status", "next_poll_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    provider_key: Mapped[str] = mapped_column(
+        String(80), nullable=False, default="manual-journal"
+    )
+    word_terms_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    phonetic_terms_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    device_references_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    class_numbers_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    proprietor_terms_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    jurisdictions_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    frequency: Mapped[str] = mapped_column(String(24), nullable=False)
+    recipient_membership_ids_json: Mapped[list] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    max_cost_minor_per_period: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    spent_cost_minor_in_period: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cost_currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR")
+    poll_status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
+    pause_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    last_polled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_poll_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    criteria_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_by_membership_id: Mapped[str] = mapped_column(
+        String(36), nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class IpWatchHit(Base):
+    __tablename__ = "ip_watch_hits"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["profile_id", "company_id"],
+            ["ip_watch_profiles.id", "ip_watch_profiles.company_id"],
+            name="fk_ip_watch_hit_profile_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["publication_id", "company_id"],
+            ["ip_journal_publications.id", "ip_journal_publications.company_id"],
+            name="fk_ip_watch_hit_publication_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["duplicate_of_hit_id", "company_id"],
+            ["ip_watch_hits.id", "ip_watch_hits.company_id"],
+            name="fk_ip_watch_hit_duplicate_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["reviewed_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_watch_hit_reviewer_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_ip_watch_hit_id_company"),
+        UniqueConstraint("company_id", "profile_id", "publication_id", name="uq_ip_watch_hit"),
+        CheckConstraint(
+            "disposition IN ('new', 'reviewing', 'relevant', 'not_relevant', 'monitor', "
+            "'client_instruction', 'enforcement_opened', 'closed')",
+            name="ck_ip_watch_hit_disposition",
+        ),
+        CheckConstraint("version > 0", name="ck_ip_watch_hit_version"),
+        Index("ix_ip_watch_hits_company_disposition", "company_id", "disposition", "hit_date"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    profile_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    publication_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    duplicate_of_hit_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    compared_mark_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    candidate_mark_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    classes_goods_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    similarity_evidence_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    ai_advisory: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    advisory_notice: Mapped[str] = mapped_column(String(500), nullable=False)
+    source_url: Mapped[str] = mapped_column(String(800), nullable=False)
+    source_status: Mapped[str] = mapped_column(String(24), nullable=False)
+    source_snapshot_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    hit_date: Mapped[date] = mapped_column(Date, nullable=False)
+    stale_source_alert: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    deadline_confirmation_state: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="pending_confirmation"
+    )
+    disposition: Mapped[str] = mapped_column(String(32), nullable=False, default="new")
+    disposition_reason: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    reviewed_by_membership_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewer_decision_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class IpWatchHandoff(Base):
+    __tablename__ = "ip_watch_handoffs"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["hit_id", "company_id"],
+            ["ip_watch_hits.id", "ip_watch_hits.company_id"],
+            name="fk_ip_watch_handoff_hit_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_watch_handoff_actor_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_ip_watch_handoff_id_company"),
+        UniqueConstraint("company_id", "hit_id", "handoff_kind", name="uq_ip_watch_handoff_kind"),
+        CheckConstraint(
+            "handoff_kind IN ('opposition', 'enforcement_matter', 'task', 'deadline', "
+            "'client_report_item')",
+            name="ck_ip_watch_handoff_kind",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'completed', 'failed')",
+            name="ck_ip_watch_handoff_status",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    hit_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    handoff_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending")
+    target_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    target_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    source_snapshot_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    reviewer_decision_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    request_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    error_redacted: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    created_by_membership_id: Mapped[str] = mapped_column(
+        String(36), nullable=False, index=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
 class IpWorkspaceConfiguration(Base):
     __tablename__ = "ip_workspace_configurations"
     __table_args__ = (

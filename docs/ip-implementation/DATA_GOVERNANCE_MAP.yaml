@@ -11568,6 +11568,269 @@
       }
     },
     {
+      "id": "ip_journal_ingestion_runs",
+      "table_name": "ip_journal_ingestion_runs",
+      "purpose": "Repository SQL persistence class `ip_journal_ingestion_runs`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "tenant_restricted_legal_content",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "completed_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "cost_minor": {
+          "category_id": "financial_or_payment_data",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "currency": {
+          "category_id": "financial_or_payment_data",
+          "sql_type": "VARCHAR(3)",
+          "nullable": false
+        },
+        "duplicate_hits": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "error_redacted": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(1000)",
+          "nullable": true
+        },
+        "external_call": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "BOOLEAN",
+          "nullable": false
+        },
+        "hit_ids_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "hits_created": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "idempotency_key": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(120)",
+          "nullable": false
+        },
+        "provider_key": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(80)",
+          "nullable": false
+        },
+        "publication_ids_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "publications_created": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "publications_seen": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "request_sha256": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "requested_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "stale_source_alert": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "BOOLEAN",
+          "nullable": false
+        },
+        "started_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(32)",
+          "nullable": false
+        }
+      }
+    },
+    {
+      "id": "ip_journal_publications",
+      "table_name": "ip_journal_publications",
+      "purpose": "Repository SQL persistence class `ip_journal_publications`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "tenant_restricted_legal_content",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "application_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "application_number": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(160)",
+          "nullable": false
+        },
+        "attribution_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "class_numbers_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "correction_reason": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(1000)",
+          "nullable": true
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "device_reference": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(800)",
+          "nullable": true
+        },
+        "goods_services_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "ingestion_delay_hours": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "journal_date": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": false
+        },
+        "journal_number": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(80)",
+          "nullable": false
+        },
+        "jurisdiction": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(40)",
+          "nullable": false
+        },
+        "mark_text": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "VARCHAR(500)",
+          "nullable": true
+        },
+        "office": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(80)",
+          "nullable": false
+        },
+        "parser_version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "VARCHAR(80)",
+          "nullable": false
+        },
+        "proprietor_name": {
+          "category_id": "personal_or_contact_data",
+          "sql_type": "VARCHAR(500)",
+          "nullable": true
+        },
+        "provider_key": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(80)",
+          "nullable": false
+        },
+        "publication_kind": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "publication_scope_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "raw_evidence_json": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "source_fingerprint": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "source_page": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(80)",
+          "nullable": true
+        },
+        "source_retrieved_at": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "source_status": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "source_url": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(800)",
+          "nullable": false
+        },
+        "supersedes_publication_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        }
+      }
+    },
+    {
       "id": "ip_matter_links",
       "table_name": "ip_matter_links",
       "purpose": "Repository SQL persistence class `ip_matter_links`; its exact column inventory is intentionally versioned below.",
@@ -13165,6 +13428,353 @@
         "version": {
           "category_id": "temporal_or_version_metadata",
           "sql_type": "INTEGER",
+          "nullable": false
+        }
+      }
+    },
+    {
+      "id": "ip_watch_handoffs",
+      "table_name": "ip_watch_handoffs",
+      "purpose": "Repository SQL persistence class `ip_watch_handoffs`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "tenant_restricted_legal_content",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "completed_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "created_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "error_redacted": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(1000)",
+          "nullable": true
+        },
+        "handoff_kind": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(40)",
+          "nullable": false
+        },
+        "hit_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "request_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "reviewer_decision_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "source_snapshot_json": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "target_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "target_type": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(80)",
+          "nullable": true
+        }
+      }
+    },
+    {
+      "id": "ip_watch_hits",
+      "table_name": "ip_watch_hits",
+      "purpose": "Repository SQL persistence class `ip_watch_hits`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "tenant_restricted_legal_content",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "advisory_notice": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(500)",
+          "nullable": false
+        },
+        "ai_advisory": {
+          "category_id": "domain_attribute",
+          "sql_type": "BOOLEAN",
+          "nullable": false
+        },
+        "candidate_mark_json": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "classes_goods_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "compared_mark_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "deadline_confirmation_state": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(32)",
+          "nullable": false
+        },
+        "disposition": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(32)",
+          "nullable": false
+        },
+        "disposition_reason": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(2000)",
+          "nullable": true
+        },
+        "duplicate_of_hit_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "hit_date": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "profile_id": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "publication_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "reviewed_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "reviewed_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "reviewer_decision_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "similarity_evidence_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "source_snapshot_json": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "source_status": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "source_url": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(800)",
+          "nullable": false
+        },
+        "stale_source_alert": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "BOOLEAN",
+          "nullable": false
+        },
+        "updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "INTEGER",
+          "nullable": false
+        }
+      }
+    },
+    {
+      "id": "ip_watch_profiles",
+      "table_name": "ip_watch_profiles",
+      "purpose": "Repository SQL persistence class `ip_watch_profiles`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "tenant_restricted_legal_content",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "class_numbers_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "cost_currency": {
+          "category_id": "financial_or_payment_data",
+          "sql_type": "VARCHAR(3)",
+          "nullable": false
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "created_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "criteria_version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "VARCHAR(80)",
+          "nullable": false
+        },
+        "device_references_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "docket_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "frequency": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "jurisdictions_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "last_polled_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "max_cost_minor_per_period": {
+          "category_id": "financial_or_payment_data",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "name": {
+          "category_id": "personal_or_contact_data",
+          "sql_type": "VARCHAR(255)",
+          "nullable": false
+        },
+        "next_poll_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "pause_reason": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(500)",
+          "nullable": true
+        },
+        "phonetic_terms_json": {
+          "category_id": "personal_or_contact_data",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "poll_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(32)",
+          "nullable": false
+        },
+        "proprietor_terms_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "provider_key": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(80)",
+          "nullable": false
+        },
+        "recipient_membership_ids_json": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "spent_cost_minor_in_period": {
+          "category_id": "financial_or_payment_data",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "word_terms_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
           "nullable": false
         }
       }
@@ -24644,12 +25254,12 @@
       }
     }
   ],
-  "schema_fingerprint": "569027db36f7f299d7ab94c8e7052e3ee7d9531610f220baeff1d1d66d0ba881",
+  "schema_fingerprint": "6a2b1a32a7c34ce9910c06971b948d441207c71d6c24a674937b2b1968fb8bdb",
   "index_inventory": {
-    "orm_index_count": 1262,
-    "orm_index_fingerprint": "0238dfc271a70270d173be7a0447a607e1d474a0d2ae324453f7ca85424781e1",
-    "migration_index_count": 578,
-    "migration_index_fingerprint": "13f91a5d353f2a22bffb4f3cc6072b41aa540d5530793c8bed7b174971c53d80",
+    "orm_index_count": 1278,
+    "orm_index_fingerprint": "a60fa22887270fd53912567d9bc3c0bff818d8b8f937d19a0e3ed7e176c00f92",
+    "migration_index_count": 594,
+    "migration_index_fingerprint": "8240864fdc336fbbf35da9f1ce22d04be6a0ad6718b647d844b7faebe4b28335",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."
   }
 }

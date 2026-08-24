@@ -159,11 +159,11 @@ Generated; do not edit.
 | IP-REG-03 | IP-REG | IPLF-050B, IPLF-051B, IPLF-056B | 20 | 0 | in_progress | not_run | blocked | false |
 | IP-REG-04 | IP-REG | IPLF-050B, IPLF-051B, IPLF-056B | 20 | 0 | in_progress | not_run | blocked | false |
 | IP-REG-05 | IP-REG | IPLF-050B, IPLF-051B, IPLF-056B | 20 | 0 | in_progress | not_run | blocked | false |
-| IP-WATCH-01 | IP-WATCH | IPLF-052B, IPLF-053B | 10 | 0 | not_started | not_run | blocked | false |
-| IP-WATCH-02 | IP-WATCH | IPLF-052B, IPLF-053B | 10 | 0 | not_started | not_run | blocked | false |
-| IP-WATCH-03 | IP-WATCH | IPLF-052B, IPLF-053B | 10 | 0 | not_started | not_run | blocked | false |
-| IP-WATCH-04 | IP-WATCH | IPLF-052B, IPLF-053B | 10 | 0 | not_started | not_run | blocked | false |
-| IP-WATCH-05 | IP-WATCH | IPLF-052B, IPLF-053B | 10 | 0 | not_started | not_run | blocked | false |
+| IP-WATCH-01 | IP-WATCH | IPLF-052B, IPLF-053B | 8 | 1 | implemented | passed | blocked | false |
+| IP-WATCH-02 | IP-WATCH | IPLF-052B, IPLF-053B | 8 | 1 | implemented | passed | blocked | false |
+| IP-WATCH-03 | IP-WATCH | IPLF-052B, IPLF-053B | 8 | 1 | implemented | passed | blocked | false |
+| IP-WATCH-04 | IP-WATCH | IPLF-052B, IPLF-053B | 8 | 1 | implemented | passed | blocked | false |
+| IP-WATCH-05 | IP-WATCH | IPLF-052B, IPLF-053B | 8 | 1 | implemented | passed | blocked | false |
 | IP-REN-01 | IP-REN | IPLF-037B | 2 | 1 | implemented | passed | blocked | false |
 | IP-REN-02 | IP-REN | IPLF-037B | 2 | 1 | implemented | passed | blocked | false |
 | IP-REN-03 | IP-REN | IPLF-037B | 2 | 1 | implemented | passed | blocked | false |

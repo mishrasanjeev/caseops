@@ -410,6 +410,7 @@ def create_ip_proceeding(
     context: SessionContext,
     docket_id: str,
     payload: IpProceedingCreateRequest,
+    commit: bool = True,
 ) -> IpProceeding:
     from caseops_api.schemas.ip_records import IpIdentifierCreate
 
@@ -510,8 +511,9 @@ def create_ip_proceeding(
             "identifier_duplicate_candidate_ids": duplicate_ids,
         },
     )
-    session.commit()
-    session.refresh(row)
+    if commit:
+        session.commit()
+        session.refresh(row)
     return row
 
 

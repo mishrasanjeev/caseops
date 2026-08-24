@@ -1,0 +1,34 @@
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: caseops-ip-journal-watch
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/cloudsql-instances: "__PROJECT_ID__:__REGION__:__CLOUD_SQL_INSTANCE__"
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/secrets: "caseops-auth-secret:projects/__PROJECT_NUMBER__/secrets/caseops-auth-secret,caseops-database-url:projects/__PROJECT_NUMBER__/secrets/caseops-database-url"
+    spec:
+      taskCount: 1
+      template:
+        spec:
+          maxRetries: 1
+          timeoutSeconds: 900
+          serviceAccountName: "__SERVICE_ACCOUNT__"
+          containers:
+            - image: "__API_IMAGE__"
+              command: ["uv", "run", "caseops-ip-journal-watch"]
+              env:
+                - name: CASEOPS_ENV
+                  value: "cloud"
+                - name: CASEOPS_AUTO_MIGRATE
+                  value: "false"
+                - name: CASEOPS_DATABASE_URL
+                  valueFrom: {secretKeyRef: {name: "caseops-database-url", key: "latest"}}
+                - name: CASEOPS_AUTH_SECRET
+                  valueFrom: {secretKeyRef: {name: "caseops-auth-secret", key: "__AUTH_SECRET_VERSION__"}}
+              resources:
+                limits:
+                  cpu: "1"
+                  memory: "1Gi"

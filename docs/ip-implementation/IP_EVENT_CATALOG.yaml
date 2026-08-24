@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "status": "stable_names_v1_catalogued_no_runtime_emission_claimed",
+  "status": "stable_names_v1_runtime_emission_tracked",
   "purpose_boundary": "Audit actions are immutable evidence of actor decisions. Domain events are idempotent projection inputs. Repository controls are CI/review evidence and are not tenant AuditEvent rows. A producer may write a company audit action and domain event atomically, but consumers must never treat one as the other.",
   "scope_values": ["company", "repository"],
   "emission_status_values": ["catalogued_not_emitted", "runtime_emitted"],
@@ -206,6 +206,19 @@
       "consumers": ["operational-deadline-projection", "notification-intent-adapter"],
       "retention": "legal record retention including exact rule/engine/source inputs",
       "payload_schema": {"required": ["ip_deadline_id", "target_id", "due_at", "rule_version_id", "engine_version", "calculation_version"]}
+    },
+    {
+      "name": "ip.watch_hit.created",
+      "version": 1,
+      "owner": "ip-legal-state",
+      "scope": "company",
+      "envelope": "company_domain_event_v1",
+      "emission_status": "runtime_emitted",
+      "confidentiality": "privileged",
+      "idempotency_key": "company_id:watch_hit_id:event_schema_version",
+      "consumers": ["access-filtered-timeline", "notification-intent-adapter"],
+      "retention": "watch evidence retention plus company litigation-hold policy",
+      "payload_schema": {"required": ["watch_hit_id", "target_id", "source_evidence_id", "recipient_profile_id"]}
     },
     {
       "name": "bulk_import.operation_state_changed",

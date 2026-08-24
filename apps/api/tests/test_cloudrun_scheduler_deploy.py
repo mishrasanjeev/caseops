@@ -18,6 +18,7 @@ def test_scheduler_deploy_grants_each_managed_job_invoker_access() -> None:
         "caseops-legal-update-sync",
         "caseops-case-tracking-poll",
         "caseops-activity-report",
+        "caseops-ip-journal-watch",
     )
     for job_name in managed_jobs:
         assert f'"{job_name}"' in script

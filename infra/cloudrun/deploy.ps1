@@ -39,6 +39,8 @@ param(
     [string]$CaseTrackingSchedulerSchedule = "30 16 * * *",
     [string]$ActivityReportSchedulerJobName = "caseops-activity-report-0800-ist",
     [string]$ActivityReportSchedulerSchedule = "0 8 * * *",
+    [string]$IpJournalWatchSchedulerJobName = "caseops-ip-journal-watch-publication-cadence",
+    [string]$IpJournalWatchSchedulerSchedule = "15 */2 * * *",
     [string]$SchedulerTimeZone = "Asia/Kolkata",
     [switch]$SkipScheduler
 )
@@ -203,6 +205,7 @@ $workerManifest = Join-Path $renderRoot "document-worker-job.yaml"
 $legalUpdateManifest = Join-Path $renderRoot "legal-update-sync-job.yaml"
 $caseTrackingManifest = Join-Path $renderRoot "case-tracking-poll-job.yaml"
 $activityReportManifest = Join-Path $renderRoot "activity-report-job.yaml"
+$ipJournalWatchManifest = Join-Path $renderRoot "ip-journal-watch-job.yaml"
 
 Render-Template `
     -TemplatePath (Join-Path $scriptRoot "api-service.yaml") `
@@ -229,6 +232,11 @@ Render-Template `
     -OutputPath $caseTrackingManifest `
     -Replacements $replacements
 
+Render-Template `
+    -TemplatePath (Join-Path $scriptRoot "ip-journal-watch-job.yaml") `
+    -OutputPath $ipJournalWatchManifest `
+    -Replacements $replacements
+
 # NOTE: the API *service* is deployed by scripts/deploy-prod.sh, which uses
 # `gcloud run deploy --image` and preserves the multi-container shape
 # (the EG-003 clamav sidecar). Do NOT `gcloud run services replace`
@@ -239,7 +247,8 @@ foreach ($manifest in @(
     $workerManifest,
     $legalUpdateManifest,
     $caseTrackingManifest,
-    $activityReportManifest
+    $activityReportManifest,
+    $ipJournalWatchManifest
 )) {
     & gcloud run jobs replace $manifest --region $Region --project $ProjectId
     if ($LASTEXITCODE -ne 0) {
@@ -252,7 +261,8 @@ if (-not $SkipScheduler) {
         "caseops-document-worker",
         "caseops-legal-update-sync",
         "caseops-case-tracking-poll",
-        "caseops-activity-report"
+        "caseops-activity-report",
+        "caseops-ip-journal-watch"
     )) {
         Ensure-CloudRunJobInvoker `
             -ProjectId $ProjectId `
@@ -299,6 +309,16 @@ if (-not $SkipScheduler) {
         -Region $Region `
         -SchedulerServiceAccount $SchedulerServiceAccount `
         -Schedule $ActivityReportSchedulerSchedule `
+        -TimeZone $SchedulerTimeZone
+
+    Ensure-SchedulerJob `
+        -ProjectId $ProjectId `
+        -Location $SchedulerLocation `
+        -JobName $IpJournalWatchSchedulerJobName `
+        -RunJobName "caseops-ip-journal-watch" `
+        -Region $Region `
+        -SchedulerServiceAccount $SchedulerServiceAccount `
+        -Schedule $IpJournalWatchSchedulerSchedule `
         -TimeZone $SchedulerTimeZone
 }
 

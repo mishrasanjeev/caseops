@@ -953,6 +953,7 @@ def create_ip_operational_deadline(
     *,
     context: SessionContext,
     payload: IpOperationalDeadlineCreateRequest,
+    commit: bool = True,
 ) -> IpOperationalDeadlineRecord:
     memberships = _lock_shared_work_memberships(
         session,
@@ -994,8 +995,9 @@ def create_ip_operational_deadline(
         target_id=deadline.id,
         metadata={"ip_docket_id": target.target_id, "source": deadline.source},
     )
-    session.commit()
-    session.refresh(deadline)
+    if commit:
+        session.commit()
+        session.refresh(deadline)
     return _deadline_record(deadline)
 
 
