@@ -4663,6 +4663,7 @@ class StatuteChangeEvent(Base):
 class TrackedCase(Base):
     __tablename__ = "tracked_cases"
     __table_args__ = (
+        UniqueConstraint("id", "company_id", name="uq_tracked_case_id_company"),
         UniqueConstraint(
             "company_id",
             "provider",
@@ -15026,6 +15027,419 @@ class IpRelationship(Base):
     source: Mapped[str] = mapped_column(String(120), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class IpRegistryLink(Base):
+    """Tenant-owned match between one IP legal record and an office register."""
+
+    __tablename__ = "ip_registry_links"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_registry_link_docket_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["application_id", "company_id"],
+            ["trademark_applications.id", "trademark_applications.company_id"],
+            name="fk_ip_registry_link_application_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["proceeding_id", "company_id"],
+            ["ip_proceedings.id", "ip_proceedings.company_id"],
+            name="fk_ip_registry_link_proceeding_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_registry_link_creator_company",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "(application_id IS NOT NULL AND proceeding_id IS NULL) OR "
+            "(application_id IS NULL AND proceeding_id IS NOT NULL)",
+            name="ck_ip_registry_link_single_target",
+        ),
+        CheckConstraint(
+            "match_status IN ('candidate', 'confirmed', 'mismatch', 'retired')",
+            name="ck_ip_registry_link_match_status",
+        ),
+        CheckConstraint(
+            "freshness_status IN "
+            "('never_succeeded', 'current', 'stale', 'failed', 'blocked')",
+            name="ck_ip_registry_link_freshness_status",
+        ),
+        CheckConstraint(
+            "match_confidence >= 0 AND match_confidence <= 1",
+            name="ck_ip_registry_link_confidence",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_ip_registry_link_id_company"),
+        UniqueConstraint(
+            "company_id",
+            "docket_id",
+            "provider_key",
+            "office",
+            "jurisdiction",
+            "identifier_kind",
+            "normalized_identifier",
+            name="uq_ip_registry_link_identity",
+        ),
+        Index(
+            "ix_ip_registry_links_company_freshness",
+            "company_id",
+            "freshness_status",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    application_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    proceeding_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    provider_key: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    office: Mapped[str] = mapped_column(String(80), nullable=False)
+    jurisdiction: Mapped[str] = mapped_column(String(40), nullable=False)
+    identifier_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    raw_identifier: Mapped[str] = mapped_column(String(160), nullable=False)
+    normalized_identifier: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    source_url: Mapped[str] = mapped_column(String(800), nullable=False)
+    match_status: Mapped[str] = mapped_column(String(24), nullable=False, default="candidate")
+    match_confidence: Mapped[Decimal] = mapped_column(
+        Numeric(5, 4), nullable=False, default=Decimal("0")
+    )
+    match_evidence_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    accepted_state_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    terms_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    capability_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    freshness_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="never_succeeded", index=True
+    )
+    last_attempted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_successful_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_snapshot_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    last_normalized_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    last_error_redacted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class IpRegistrySyncAttempt(Base):
+    """Durable, idempotent evidence for one registry fetch or manual intake."""
+
+    __tablename__ = "ip_registry_sync_attempts"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["link_id", "company_id"],
+            ["ip_registry_links.id", "ip_registry_links.company_id"],
+            name="fk_ip_registry_attempt_link_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["requested_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_registry_attempt_requester_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["replay_of_attempt_id", "company_id"],
+            ["ip_registry_sync_attempts.id", "ip_registry_sync_attempts.company_id"],
+            name="fk_ip_registry_attempt_replay_company",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'succeeded', 'no_change', 'failed', 'blocked')",
+            name="ck_ip_registry_attempt_status",
+        ),
+        CheckConstraint(
+            "response_class IN "
+            "('success', 'no_change', 'authentication', 'rate_limit', 'parse_error', "
+            "'provider_outage', 'configuration', 'policy', 'unknown')",
+            name="ck_ip_registry_attempt_response_class",
+        ),
+        CheckConstraint("attempts > 0", name="ck_ip_registry_attempt_count"),
+        CheckConstraint("cost_minor >= 0", name="ck_ip_registry_attempt_cost"),
+        UniqueConstraint("id", "company_id", name="uq_ip_registry_attempt_id_company"),
+        UniqueConstraint(
+            "company_id",
+            "link_id",
+            "idempotency_key",
+            name="uq_ip_registry_attempt_idempotency",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "correlation_id",
+            name="uq_ip_registry_attempt_correlation",
+        ),
+        Index(
+            "ix_ip_registry_attempts_company_status",
+            "company_id",
+            "status",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    link_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    provider_key: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    operation_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    correlation_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending", index=True)
+    response_class: Mapped[str] = mapped_column(String(32), nullable=False, default="unknown")
+    external_call: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    replay_of_attempt_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    cost_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR")
+    error_redacted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    requested_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class IpRegistrySnapshot(Base):
+    """Immutable raw and normalized IP-office observation."""
+
+    __tablename__ = "ip_registry_snapshots"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["link_id", "company_id"],
+            ["ip_registry_links.id", "ip_registry_links.company_id"],
+            name="fk_ip_registry_snapshot_link_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["attempt_id", "company_id"],
+            ["ip_registry_sync_attempts.id", "ip_registry_sync_attempts.company_id"],
+            name="fk_ip_registry_snapshot_attempt_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["supersedes_snapshot_id", "company_id"],
+            ["ip_registry_snapshots.id", "ip_registry_snapshots.company_id"],
+            name="fk_ip_registry_snapshot_supersedes_company",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "length(raw_sha256) = 64 AND length(normalized_sha256) = 64",
+            name="ck_ip_registry_snapshot_hashes",
+        ),
+        CheckConstraint(
+            "supersedes_snapshot_id IS NULL OR supersedes_snapshot_id <> id",
+            name="ck_ip_registry_snapshot_supersedes_not_self",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_ip_registry_snapshot_id_company"),
+        UniqueConstraint("attempt_id", name="uq_ip_registry_snapshot_attempt"),
+        UniqueConstraint(
+            "company_id",
+            "supersedes_snapshot_id",
+            name="uq_ip_registry_snapshot_single_successor",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "link_id",
+            "normalized_sha256",
+            "supersedes_snapshot_id",
+            name="uq_ip_registry_snapshot_content_lineage",
+        ),
+        Index(
+            "ix_ip_registry_snapshots_company_link_created",
+            "company_id",
+            "link_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    link_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    attempt_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    source_url: Mapped[str] = mapped_column(String(800), nullable=False)
+    source_retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    parser_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    attribution_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    terms_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    raw_sha256: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    normalized_sha256: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    raw_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    normalized_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    supersedes_snapshot_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    correction_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class IpRegistryDiff(Base):
+    """One field-level decision connecting a registry snapshot to legal state."""
+
+    __tablename__ = "ip_registry_diffs"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["snapshot_id", "company_id"],
+            ["ip_registry_snapshots.id", "ip_registry_snapshots.company_id"],
+            name="fk_ip_registry_diff_snapshot_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["resolved_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_registry_diff_resolver_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["emitted_event_id", "company_id"],
+            ["ip_docket_events.id", "ip_docket_events.company_id"],
+            name="fk_ip_registry_diff_event_company",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "change_kind IN ('added', 'changed', 'removed')",
+            name="ck_ip_registry_diff_change_kind",
+        ),
+        CheckConstraint(
+            "risk_level IN ('low', 'high')",
+            name="ck_ip_registry_diff_risk",
+        ),
+        CheckConstraint(
+            "resolution_status IN "
+            "('pending', 'accepted', 'rejected', 'mapped', 'deferred')",
+            name="ck_ip_registry_diff_resolution",
+        ),
+        CheckConstraint(
+            "deadline_recalculation_state IN "
+            "('not_applicable', 'required', 'proposed', 'blocked')",
+            name="ck_ip_registry_diff_deadline_state",
+        ),
+        CheckConstraint("version > 0", name="ck_ip_registry_diff_version"),
+        UniqueConstraint("id", "company_id", name="uq_ip_registry_diff_id_company"),
+        UniqueConstraint("snapshot_id", "field_path", name="uq_ip_registry_diff_field"),
+        Index(
+            "ix_ip_registry_diffs_company_resolution",
+            "company_id",
+            "resolution_status",
+            "risk_level",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    snapshot_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    field_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    change_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    before_value_json: Mapped[object | None] = mapped_column(JSON, nullable=True)
+    after_value_json: Mapped[object | None] = mapped_column(JSON, nullable=True)
+    risk_level: Mapped[str] = mapped_column(String(16), nullable=False)
+    risk_reasons_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    policy_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    resolution_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="pending", index=True
+    )
+    resolution_reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    mapped_field_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    resolved_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    emitted_event_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    deadline_recalculation_state: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="not_applicable"
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class IpTrackedCaseLink(Base):
+    """Reference-only IP link to canonical court/CNR tracking evidence."""
+
+    __tablename__ = "ip_tracked_case_links"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_tracked_case_link_docket_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["proceeding_id", "company_id"],
+            ["ip_proceedings.id", "ip_proceedings.company_id"],
+            name="fk_ip_tracked_case_link_proceeding_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_tracked_case_link_creator_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["tracked_case_id", "company_id"],
+            ["tracked_cases.id", "tracked_cases.company_id"],
+            name="fk_ip_tracked_case_link_case_company",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "link_status IN ('active', 'mismatch', 'retired')",
+            name="ck_ip_tracked_case_link_status",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_ip_tracked_case_link_id_company"),
+        UniqueConstraint(
+            "company_id",
+            "docket_id",
+            "proceeding_id",
+            "tracked_case_id",
+            name="uq_ip_tracked_case_reference",
+        ),
+        Index(
+            "ix_ip_tracked_case_links_company_docket",
+            "company_id",
+            "docket_id",
+            "link_status",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    proceeding_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    tracked_case_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    link_status: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
+    purpose: Mapped[str] = mapped_column(String(120), nullable=False)
+    evidence_reference: Mapped[str] = mapped_column(String(800), nullable=False)
+    created_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )
 
 

@@ -98,9 +98,24 @@ def _redact_secret_tokens(text: str) -> str:
         redacted.append(f"{key_text or 'secret'}=[redacted]")
         index += consumed_key_tokens
         inline_value = separator_index >= 0 and separator_index < len(candidate) - 1
+        inline_secret = (
+            candidate[separator_index + 1 :].strip(_TOKEN_EDGE_PUNCTUATION)
+            if inline_value
+            else ""
+        )
+        if key == "authorization" and inline_secret.casefold() == "bearer":
+            if index < len(tokens):
+                index += 1
+            continue
         if inline_value:
             continue
         if index < len(tokens) and tokens[index] in {"=", ":"}:
+            index += 1
+        if (
+            key == "authorization"
+            and index < len(tokens)
+            and tokens[index].strip(_TOKEN_EDGE_PUNCTUATION).casefold() == "bearer"
+        ):
             index += 1
         if index < len(tokens):
             index += 1
