@@ -500,6 +500,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # MIGRATION-ROLLBACK: restore-forward: downgrade is allowed only before any
+    # registry snapshot, diff, or court-reference evidence has been recorded.
+    # After evidence exists, operators must restore or roll forward so the
+    # immutable reconciliation record is never silently destroyed.
     bind = op.get_bind()
     evidence_count = bind.execute(
         sa.text(

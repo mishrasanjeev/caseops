@@ -24,16 +24,16 @@ from caseops_api.governance.types import ReviewedDataClass
 PROJECTION_SCHEMA_VERSION = 1
 
 # Fingerprints of the exact artifacts this projection was rendered from.
-MAP_DOCUMENT_FINGERPRINT = "66c231adc506adf1834a955fe921ff4b80ebe2cb988505df1b3b597979d7e3c6"
-MAP_SCHEMA_FINGERPRINT = "d13dfdd4d03cc8df0b1eb8d87d6eaa1b831697ab8c1a91c930dc6304171ff713"
+MAP_DOCUMENT_FINGERPRINT = "86606a2edf22ffefe84cee481db501860fabf4c554afd9a5418eb43bc2763ab4"
+MAP_SCHEMA_FINGERPRINT = "b0478fe1011ee324da77cdfedb1455149fc27f1c1a338af8fb7b903a646335fc"
 REGISTRY_028A_FINGERPRINT = "dd3c30cf69a9b498cea3820acb485a0368a72bf6d9348c2f0d430b5efa99802d"
 REGISTRY_027A_FINGERPRINT = "10b97a818b23d4fae8fe7f54b63edb50b0e04c16778cf0e646ef907f40e1ad96"
 # The ORM schema at render time. Compared against the live models at runtime, so
 # an image whose models moved after this file was rendered reports stale rather
 # than answering from a projection that no longer describes it.
-ORM_SCHEMA_FINGERPRINT = "5da03c867622ad636471e4fee5acdfd205ddb8703e9376c2563439485f24ff6c"
+ORM_SCHEMA_FINGERPRINT = "9a489c465b5c58b84a7ac950b6e1cb4f437273e2a76c17af6bdf62ba93bcbb0c"
 
-PROJECTION_ID = "c12e87f6be742d9ac7b990c4bc5a5b60b6e76a083c8ebd1941e8975cdfe936fd"
+PROJECTION_ID = "4f91b3be80b3179fd310c6d77b4cd8833fe6ba3f1568523930ea33fcdba6d21e"
 
 # Every SQL table the repository-wide map inventories. Membership here is what
 # separates "inventoried but never reviewed" from "no such data class", which
@@ -174,6 +174,10 @@ INVENTORIED_SQL_TABLES = frozenset(
         "ip_portfolio_export_jobs",
         "ip_portfolio_saved_views",
         "ip_proceedings",
+        "ip_registry_diffs",
+        "ip_registry_links",
+        "ip_registry_snapshots",
+        "ip_registry_sync_attempts",
         "ip_related_right_obligations",
         "ip_relationships",
         "ip_renewal_terms",
@@ -181,6 +185,7 @@ INVENTORIED_SQL_TABLES = frozenset(
         "ip_rule_sets",
         "ip_rule_versions",
         "ip_title_interests",
+        "ip_tracked_case_links",
         "ip_trademark_particular_versions",
         "ip_workflow_definitions",
         "ip_workflow_versions",
