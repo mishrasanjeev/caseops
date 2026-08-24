@@ -159,11 +159,11 @@ Generated; do not edit.
 | IP-REG-03 | IP-REG | IPLF-050B, IPLF-051B, IPLF-056B | 20 | 0 | in_progress | not_run | blocked | false |
 | IP-REG-04 | IP-REG | IPLF-050B, IPLF-051B, IPLF-056B | 20 | 0 | in_progress | not_run | blocked | false |
 | IP-REG-05 | IP-REG | IPLF-050B, IPLF-051B, IPLF-056B | 20 | 0 | in_progress | not_run | blocked | false |
-| IP-WATCH-01 | IP-WATCH | IPLF-052B, IPLF-053B | 8 | 1 | implemented | passed | blocked | false |
-| IP-WATCH-02 | IP-WATCH | IPLF-052B, IPLF-053B | 8 | 1 | implemented | passed | blocked | false |
-| IP-WATCH-03 | IP-WATCH | IPLF-052B, IPLF-053B | 8 | 1 | implemented | passed | blocked | false |
-| IP-WATCH-04 | IP-WATCH | IPLF-052B, IPLF-053B | 8 | 1 | implemented | passed | blocked | false |
-| IP-WATCH-05 | IP-WATCH | IPLF-052B, IPLF-053B | 8 | 1 | implemented | passed | blocked | false |
+| IP-WATCH-01 | IP-WATCH | IPLF-052B, IPLF-053B | 8 | 2 | implemented | passed | deployment_verified | true |
+| IP-WATCH-02 | IP-WATCH | IPLF-052B, IPLF-053B | 8 | 2 | implemented | passed | deployment_verified | true |
+| IP-WATCH-03 | IP-WATCH | IPLF-052B, IPLF-053B | 8 | 2 | implemented | passed | deployment_verified | true |
+| IP-WATCH-04 | IP-WATCH | IPLF-052B, IPLF-053B | 8 | 2 | implemented | passed | deployment_verified | true |
+| IP-WATCH-05 | IP-WATCH | IPLF-052B, IPLF-053B | 8 | 2 | implemented | passed | deployment_verified | true |
 | IP-REN-01 | IP-REN | IPLF-037B | 2 | 1 | implemented | passed | blocked | false |
 | IP-REN-02 | IP-REN | IPLF-037B | 2 | 1 | implemented | passed | blocked | false |
 | IP-REN-03 | IP-REN | IPLF-037B | 2 | 1 | implemented | passed | blocked | false |
@@ -326,16 +326,16 @@ Generated; do not edit.
 | COMM-12 | COMM | IPLF-039B, IPLF-039H | 86 | 1 | in_progress | not_run | blocked | false |
 | COMM-13 | COMM | IPLF-039B, IPLF-039H | 86 | 1 | in_progress | not_run | blocked | false |
 | COMM-14 | COMM | IPLF-039B, IPLF-039H | 86 | 1 | in_progress | not_run | blocked | false |
-| LEGAL-SRC-01 | LEGAL-SRC | IPLF-004B, IPLF-006C, IPLF-054B | 14 | 0 | in_progress | not_run | blocked | false |
-| LEGAL-SRC-02 | LEGAL-SRC | IPLF-004B, IPLF-006C, IPLF-054B | 14 | 0 | in_progress | not_run | blocked | false |
-| LEGAL-SRC-03 | LEGAL-SRC | IPLF-004B, IPLF-006C, IPLF-054B | 14 | 0 | in_progress | not_run | blocked | false |
-| LEGAL-SRC-04 | LEGAL-SRC | IPLF-004B, IPLF-006C, IPLF-054B | 14 | 0 | in_progress | not_run | blocked | false |
-| LEGAL-SRC-05 | LEGAL-SRC | IPLF-004B, IPLF-006C, IPLF-054B | 14 | 0 | in_progress | not_run | blocked | false |
-| LEGAL-SRC-06 | LEGAL-SRC | IPLF-004B, IPLF-006C, IPLF-054B | 14 | 0 | in_progress | not_run | blocked | false |
-| LEGAL-SRC-07 | LEGAL-SRC | IPLF-004B, IPLF-006C, IPLF-054B | 14 | 0 | in_progress | not_run | blocked | false |
-| LEGAL-SRC-08 | LEGAL-SRC | IPLF-004B, IPLF-006C, IPLF-054B | 14 | 0 | in_progress | not_run | blocked | false |
-| LEGAL-SRC-09 | LEGAL-SRC | IPLF-004B, IPLF-006C, IPLF-054B | 14 | 0 | in_progress | not_run | blocked | false |
-| LEGAL-SRC-10 | LEGAL-SRC | IPLF-004B, IPLF-006C, IPLF-054B | 14 | 0 | in_progress | not_run | blocked | false |
+| LEGAL-SRC-01 | LEGAL-SRC | IPLF-004B, IPLF-006C, IPLF-054B | 4 | 1 | implemented | passed | blocked | false |
+| LEGAL-SRC-02 | LEGAL-SRC | IPLF-004B, IPLF-006C, IPLF-054B | 4 | 1 | implemented | passed | blocked | false |
+| LEGAL-SRC-03 | LEGAL-SRC | IPLF-004B, IPLF-006C, IPLF-054B | 4 | 1 | implemented | passed | blocked | false |
+| LEGAL-SRC-04 | LEGAL-SRC | IPLF-004B, IPLF-006C, IPLF-054B | 4 | 1 | implemented | passed | blocked | false |
+| LEGAL-SRC-05 | LEGAL-SRC | IPLF-004B, IPLF-006C, IPLF-054B | 4 | 1 | implemented | passed | blocked | false |
+| LEGAL-SRC-06 | LEGAL-SRC | IPLF-004B, IPLF-006C, IPLF-054B | 4 | 1 | implemented | passed | blocked | false |
+| LEGAL-SRC-07 | LEGAL-SRC | IPLF-004B, IPLF-006C, IPLF-054B | 4 | 1 | implemented | passed | blocked | false |
+| LEGAL-SRC-08 | LEGAL-SRC | IPLF-004B, IPLF-006C, IPLF-054B | 4 | 1 | implemented | passed | blocked | false |
+| LEGAL-SRC-09 | LEGAL-SRC | IPLF-004B, IPLF-006C, IPLF-054B | 4 | 1 | implemented | passed | blocked | false |
+| LEGAL-SRC-10 | LEGAL-SRC | IPLF-004B, IPLF-006C, IPLF-054B | 4 | 1 | implemented | passed | blocked | false |
 | IP-INC-01 | IP-INC | IPLF-039D, IPLF-039H | 84 | 1 | in_progress | not_run | blocked | false |
 | IP-INC-02 | IP-INC | IPLF-039D, IPLF-039H | 84 | 1 | in_progress | not_run | blocked | false |
 | IP-INC-03 | IP-INC | IPLF-039D, IPLF-039H | 84 | 1 | in_progress | not_run | blocked | false |
