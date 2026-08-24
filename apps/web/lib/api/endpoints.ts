@@ -9073,6 +9073,13 @@ export type IpOppositionSharedWorkflow = {
   represented_side: "applicant" | "opponent";
   current_stage: string;
   shared_actions: IpDocketEvent[];
+  application_scopes: Array<{
+    id: string;
+    class_number: number;
+    specification: string;
+    effective_from: string;
+    source: string;
+  }>;
   active_deadlines: IpLegalDeadline[];
   shared_hearings: Array<{
     id: string;
@@ -10835,7 +10842,16 @@ export async function recordIpOppositionSharedAction(input: {
     | "hearing_preparation_recorded"
     | "post_hearing_note_recorded"
     | "order_recorded"
-    | "appeal_linked";
+    | "appeal_linked"
+    | "scope_review_recorded"
+    | "translation_recorded"
+    | "hearing_notice_recorded"
+    | "adjournment_recorded"
+    | "written_arguments_recorded"
+    | "attendance_recorded"
+    | "security_for_costs_recorded"
+    | "disposition_review_recorded"
+    | "madrid_designation_link_recorded";
   sourceReference: string;
   effectiveAt: string;
   reason: string;
@@ -10849,6 +10865,15 @@ export async function recordIpOppositionSharedAction(input: {
   hearingPreparation?: Record<string, unknown> | null;
   orderDetails?: Record<string, unknown> | null;
   appealLink?: Record<string, unknown> | null;
+  scopeReview?: Record<string, unknown> | null;
+  translation?: Record<string, unknown> | null;
+  hearingNotice?: Record<string, unknown> | null;
+  adjournment?: Record<string, unknown> | null;
+  writtenArguments?: Record<string, unknown> | null;
+  attendance?: Record<string, unknown> | null;
+  securityForCosts?: Record<string, unknown> | null;
+  dispositionReview?: Record<string, unknown> | null;
+  madridDesignation?: Record<string, unknown> | null;
 }): Promise<IpOppositionSharedWorkflow> {
   return apiRequest(
     `/api/ip/dockets/${encodeURIComponent(input.docketId)}/proceedings/${encodeURIComponent(input.proceedingId)}/opposition-shared-actions`,
@@ -10875,6 +10900,15 @@ export async function recordIpOppositionSharedAction(input: {
         hearing_preparation: input.hearingPreparation ?? null,
         order_details: input.orderDetails ?? null,
         appeal_link: input.appealLink ?? null,
+        scope_review: input.scopeReview ?? null,
+        translation: input.translation ?? null,
+        hearing_notice: input.hearingNotice ?? null,
+        adjournment: input.adjournment ?? null,
+        written_arguments: input.writtenArguments ?? null,
+        attendance: input.attendance ?? null,
+        security_for_costs: input.securityForCosts ?? null,
+        disposition_review: input.dispositionReview ?? null,
+        madrid_designation: input.madridDesignation ?? null,
       },
     },
   );

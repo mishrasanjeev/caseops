@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -14,10 +16,13 @@ from caseops_api.db.models import (
     IpProceeding,
     Matter,
     MatterHearing,
+    TrademarkApplication,
+    TrademarkApplicationScope,
 )
 from caseops_api.schemas.ip_deadlines import IpDeadlineOverrideRequest
 from caseops_api.schemas.ip_lifecycle import IpDocketEventCreateRequest, IpDocketEventResponse
 from caseops_api.schemas.ip_oppositions import (
+    IpOppositionApplicationScopeRecord,
     IpOppositionSharedActionRequest,
     IpOppositionSharedHearingRecord,
     IpOppositionSharedWorkflowResponse,
@@ -117,6 +122,33 @@ def _shared_hearings(session: Session, proceeding: IpProceeding) -> list[MatterH
                 MatterHearing.matter_id.is_(None),
             )
             .order_by(MatterHearing.hearing_on, MatterHearing.created_at, MatterHearing.id)
+        )
+    )
+
+
+def _application_scopes(
+    session: Session, proceeding: IpProceeding
+) -> list[TrademarkApplicationScope]:
+    if proceeding.application_id is None:
+        return []
+    today = date.today()
+    return list(
+        session.scalars(
+            select(TrademarkApplicationScope)
+            .where(
+                TrademarkApplicationScope.company_id == proceeding.company_id,
+                TrademarkApplicationScope.application_id == proceeding.application_id,
+                TrademarkApplicationScope.effective_from <= today,
+                (
+                    TrademarkApplicationScope.effective_until.is_(None)
+                    | (TrademarkApplicationScope.effective_until >= today)
+                ),
+            )
+            .order_by(
+                TrademarkApplicationScope.class_number,
+                TrademarkApplicationScope.effective_from,
+                TrademarkApplicationScope.id,
+            )
         )
     )
 
@@ -221,6 +253,16 @@ def get_shared_workflow(
             )
             for row in hearings
         ],
+        application_scopes=[
+            IpOppositionApplicationScopeRecord(
+                id=row.id,
+                class_number=row.class_number,
+                specification=row.specification,
+                effective_from=row.effective_from,
+                source=row.source,
+            )
+            for row in _application_scopes(session, proceeding)
+        ],
         next_required_action=_next_required_action(proceeding, actions, hearings),
     )
 
@@ -313,8 +355,7 @@ def _assert_evidence_package(
         )
     duplicate = any(
         row.payload_json.get("action_kind") == "evidence_package_recorded"
-        and row.payload_json.get("evidence_package", {}).get("package_kind")
-        == package.package_kind
+        and row.payload_json.get("evidence_package", {}).get("package_kind") == package.package_kind
         and row.payload_json.get("evidence_package", {}).get("package_version")
         == package.package_version
         for row in actions
@@ -324,6 +365,156 @@ def _assert_evidence_package(
             status_code=409,
             detail="This evidence package version is already recorded.",
         )
+    translated_source_refs = {
+        row.payload_json.get("translation", {}).get("source_document_ref")
+        for row in actions
+        if row.payload_json.get("action_kind") == "translation_recorded"
+    }
+    missing_translations = sorted(
+        set(package.foreign_language_document_refs) - translated_source_refs
+    )
+    if missing_translations:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "ip_opposition_attested_translation_required",
+                "missing_source_document_refs": missing_translations,
+            },
+        )
+
+
+def _assert_scope_ids(
+    session: Session,
+    *,
+    proceeding: IpProceeding,
+    scope_ids: list[str],
+) -> None:
+    if proceeding.application_id is None:
+        raise HTTPException(status_code=409, detail="Opposition has no linked application.")
+    current_ids = {row.id for row in _application_scopes(session, proceeding)}
+    missing = sorted(set(scope_ids) - current_ids)
+    if missing:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "ip_opposition_scope_not_current",
+                "scope_ids": missing,
+            },
+        )
+
+
+def _assert_specialized_hearing(
+    session: Session,
+    *,
+    proceeding: IpProceeding,
+    hearing_id: str,
+    allowed_statuses: set[str],
+) -> MatterHearing:
+    hearing = session.scalar(
+        select(MatterHearing).where(
+            MatterHearing.id == hearing_id,
+            MatterHearing.company_id == proceeding.company_id,
+            MatterHearing.ip_docket_id == proceeding.docket_id,
+            MatterHearing.matter_id.is_(None),
+        )
+    )
+    if hearing is None:
+        raise HTTPException(status_code=404, detail="Shared opposition hearing not found.")
+    if hearing.status not in allowed_statuses:
+        raise HTTPException(
+            status_code=409,
+            detail="This opposition hearing is not in a valid state for that record.",
+        )
+    return hearing
+
+
+def _assert_specialized_action(
+    session: Session,
+    *,
+    proceeding: IpProceeding,
+    payload: IpOppositionSharedActionRequest,
+    actions: list[IpDocketEvent],
+) -> None:
+    if payload.action_kind == "scope_review_recorded":
+        detail = payload.scope_review
+        assert detail is not None
+        _assert_scope_ids(
+            session,
+            proceeding=proceeding,
+            scope_ids=[row.application_scope_id for row in detail.decisions],
+        )
+        if detail.related_application_id:
+            related = session.scalar(
+                select(TrademarkApplication.id).where(
+                    TrademarkApplication.id == detail.related_application_id,
+                    TrademarkApplication.company_id == proceeding.company_id,
+                    TrademarkApplication.id != proceeding.application_id,
+                )
+            )
+            if related is None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Related amendment or division application not found.",
+                )
+    elif payload.action_kind in {
+        "hearing_notice_recorded",
+        "adjournment_recorded",
+        "written_arguments_recorded",
+        "attendance_recorded",
+    }:
+        details = {
+            "hearing_notice_recorded": payload.hearing_notice,
+            "adjournment_recorded": payload.adjournment,
+            "written_arguments_recorded": payload.written_arguments,
+            "attendance_recorded": payload.attendance,
+        }
+        detail = details[payload.action_kind]
+        assert detail is not None
+        allowed = {
+            "hearing_notice_recorded": {"scheduled", "adjourned"},
+            "adjournment_recorded": {"scheduled", "adjourned"},
+            "written_arguments_recorded": {"scheduled", "adjourned", "completed"},
+            "attendance_recorded": {"completed"},
+        }[payload.action_kind]
+        _assert_specialized_hearing(
+            session,
+            proceeding=proceeding,
+            hearing_id=detail.shared_hearing_id,
+            allowed_statuses=allowed,
+        )
+    elif payload.action_kind == "disposition_review_recorded":
+        detail = payload.disposition_review
+        assert detail is not None
+        _assert_scope_ids(
+            session,
+            proceeding=proceeding,
+            scope_ids=detail.affected_application_scope_ids,
+        )
+        trigger = session.scalar(
+            select(IpDocketEvent).where(
+                IpDocketEvent.id == detail.trigger_event_id,
+                IpDocketEvent.company_id == proceeding.company_id,
+                IpDocketEvent.docket_id == proceeding.docket_id,
+                IpDocketEvent.proceeding_id == proceeding.id,
+            )
+        )
+        valid_trigger = trigger is not None and (
+            trigger.payload_json.get("action_kind") == "order_recorded"
+            or trigger.resulting_stage in {"decided", "withdrawn", "closed"}
+        )
+        if not valid_trigger:
+            raise HTTPException(
+                status_code=409,
+                detail="Disposition review requires this opposition's outcome event.",
+            )
+    elif payload.action_kind == "madrid_designation_link_recorded":
+        detail = payload.madrid_designation
+        assert detail is not None
+        if detail.application_id != proceeding.application_id:
+            raise HTTPException(
+                status_code=409,
+                detail="Madrid designation must link this opposition's application.",
+            )
 
 
 def _assert_order(
@@ -433,16 +624,39 @@ def _action_identity(payload: IpOppositionSharedActionRequest) -> str:
         detail = payload.further_evidence_leave.leave_or_order_reference
     elif payload.evidence_package:
         detail = (
-            f"{payload.evidence_package.package_kind}:"
-            f"{payload.evidence_package.package_version}"
+            f"{payload.evidence_package.package_kind}:{payload.evidence_package.package_version}"
         )
     elif payload.hearing_preparation:
         detail = payload.hearing_preparation.shared_hearing_id
     elif payload.order_details:
         detail = payload.order_details.affected_proceeding_id
-    else:
-        assert payload.appeal_link is not None
+    elif payload.appeal_link:
         detail = f"{payload.appeal_link.target_kind}:{payload.appeal_link.target_id}"
+    elif payload.scope_review:
+        detail = f"revision:{payload.scope_review.revision}"
+    elif payload.translation:
+        detail = (
+            f"{payload.translation.source_document_ref}:"
+            f"{payload.translation.translated_document_sha256}"
+        )
+    elif payload.hearing_notice:
+        detail = payload.hearing_notice.shared_hearing_id
+    elif payload.adjournment:
+        detail = f"{payload.adjournment.shared_hearing_id}:{payload.adjournment.requested_on}"
+    elif payload.written_arguments:
+        detail = (
+            f"{payload.written_arguments.shared_hearing_id}:"
+            f"{payload.written_arguments.filing_reference}"
+        )
+    elif payload.attendance:
+        detail = payload.attendance.shared_hearing_id
+    elif payload.security_for_costs:
+        detail = payload.security_for_costs.direction_reference
+    elif payload.disposition_review:
+        detail = payload.disposition_review.trigger_event_id
+    else:
+        assert payload.madrid_designation is not None
+        detail = payload.madrid_designation.international_registration_number
     return f"{payload.action_kind}:{detail}"
 
 
@@ -464,7 +678,7 @@ def record_shared_action(
     )
     if proceeding.version != payload.expected_proceeding_version:
         raise HTTPException(status_code=409, detail="Proceeding version changed; reload.")
-    if proceeding.stage == "closed":
+    if proceeding.stage == "closed" and payload.action_kind != "disposition_review_recorded":
         raise HTTPException(status_code=409, detail="Closed opposition proceedings are immutable.")
     _assert_supersession(session, proceeding=proceeding, payload=payload)
     events = _proceeding_events(session, proceeding)
@@ -545,6 +759,23 @@ def record_shared_action(
             payload=payload,
             actions=actions,
         )
+    elif payload.action_kind in {
+        "scope_review_recorded",
+        "translation_recorded",
+        "hearing_notice_recorded",
+        "adjournment_recorded",
+        "written_arguments_recorded",
+        "attendance_recorded",
+        "security_for_costs_recorded",
+        "disposition_review_recorded",
+        "madrid_designation_link_recorded",
+    }:
+        _assert_specialized_action(
+            session,
+            proceeding=proceeding,
+            payload=payload,
+            actions=actions,
+        )
 
     from caseops_api.services.ip_lifecycle import append_ip_docket_event
 
@@ -593,12 +824,47 @@ def record_shared_action(
                     else None
                 ),
                 "order_details": (
-                    payload.order_details.model_dump(mode="json")
-                    if payload.order_details
-                    else None
+                    payload.order_details.model_dump(mode="json") if payload.order_details else None
                 ),
                 "appeal_link": (
                     payload.appeal_link.model_dump(mode="json") if payload.appeal_link else None
+                ),
+                "scope_review": (
+                    payload.scope_review.model_dump(mode="json") if payload.scope_review else None
+                ),
+                "translation": (
+                    payload.translation.model_dump(mode="json") if payload.translation else None
+                ),
+                "hearing_notice": (
+                    payload.hearing_notice.model_dump(mode="json")
+                    if payload.hearing_notice
+                    else None
+                ),
+                "adjournment": (
+                    payload.adjournment.model_dump(mode="json") if payload.adjournment else None
+                ),
+                "written_arguments": (
+                    payload.written_arguments.model_dump(mode="json")
+                    if payload.written_arguments
+                    else None
+                ),
+                "attendance": (
+                    payload.attendance.model_dump(mode="json") if payload.attendance else None
+                ),
+                "security_for_costs": (
+                    payload.security_for_costs.model_dump(mode="json")
+                    if payload.security_for_costs
+                    else None
+                ),
+                "disposition_review": (
+                    payload.disposition_review.model_dump(mode="json")
+                    if payload.disposition_review
+                    else None
+                ),
+                "madrid_designation": (
+                    payload.madrid_designation.model_dump(mode="json")
+                    if payload.madrid_designation
+                    else None
                 ),
                 "lawyer_confirmed_by_membership_id": context.membership.id,
             },

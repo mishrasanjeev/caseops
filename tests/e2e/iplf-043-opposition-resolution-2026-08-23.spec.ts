@@ -287,6 +287,16 @@ test("IPLF-043 carries a shared hearing through order and linked appeal", async 
 
   await signIn(page, tenant);
   await page.goto(`/app/ip?docket=${application.docket.id}`);
+  const specialized = page.getByTestId("ip-opposition-specialized-paths");
+  await expect(specialized).toBeVisible();
+  await specialized.getByLabel("Class 9 decision").selectOption("continuing");
+  await fillCommon(specialized, "2026-11-03T12:00", "class-scope");
+  const scopeRecorded = page.waitForResponse(
+    (row) => row.url().endsWith("/opposition-shared-actions") && row.request().method() === "POST",
+  );
+  await specialized.getByTestId("ip-opposition-specialized-submit").click();
+  expect((await scopeRecorded).status()).toBe(201);
+
   const shared = page.getByTestId("ip-opposition-shared-workflow");
   await expect(shared.getByText("Next: Schedule Hearing", { exact: true })).toBeVisible();
   await shared.getByLabel("Hearing date").fill("2026-12-10");
@@ -465,6 +475,7 @@ test("IPLF-043 carries a shared hearing through order and linked appeal", async 
   const finalBody = await finalWorkflow.json();
   expect(finalBody.current_stage).toBe("appealed");
   expect(finalBody.shared_actions.map((row: any) => row.payload_json.action_kind)).toEqual([
+    "scope_review_recorded",
     "hearing_preparation_recorded",
     "order_recorded",
     "appeal_linked",

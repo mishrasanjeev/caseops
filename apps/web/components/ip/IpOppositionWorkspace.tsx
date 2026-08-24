@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { IpOppositionApplicantWorkflow } from "@/components/ip/IpOppositionApplicantWorkflow";
 import { IpOppositionOpponentWorkflow } from "@/components/ip/IpOppositionOpponentWorkflow";
 import { IpOppositionSharedWorkflow } from "@/components/ip/IpOppositionSharedWorkflow";
+import { IpOppositionSpecializedPaths } from "@/components/ip/IpOppositionSpecializedPaths";
 import { IpPleadingWorkspace } from "@/components/ip/IpPleadingWorkspace";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
@@ -406,6 +407,7 @@ export function IpOppositionWorkspace({
             {workspace.data.proceeding.side === "applicant" && workspace.data.profile ? <IpOppositionApplicantWorkflow docket={docket} workspace={workspace.data} canReview={canReview} currentMembershipId={currentMembershipId} /> : null}
             {workspace.data.proceeding.side === "opponent" && workspace.data.profile ? <IpOppositionOpponentWorkflow docket={docket} workspace={workspace.data} canReview={canReview} currentMembershipId={currentMembershipId} /> : null}
             {workspace.data.profile ? <IpOppositionSharedWorkflow docket={docket} workspace={workspace.data} canReview={canReview} currentMembershipId={currentMembershipId} /> : null}
+            {workspace.data.profile ? <IpOppositionSpecializedPaths docket={docket} workspace={workspace.data} canReview={canReview} currentMembershipId={currentMembershipId} /> : null}
 
             <IpPleadingWorkspace
               docketId={docket.id}
