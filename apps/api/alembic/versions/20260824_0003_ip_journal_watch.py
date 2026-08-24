@@ -416,6 +416,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # MIGRATION-ROLLBACK: restore-forward: this destructive downgrade is permitted only
+    # before any real journal/watch rows exist; shipped or data-bearing rollback uses a
+    # forward repair or verified backup restore.
     bind = op.get_bind()
     evidence_count = bind.execute(
         sa.text(
