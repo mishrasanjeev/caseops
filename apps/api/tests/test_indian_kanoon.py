@@ -379,10 +379,61 @@ def test_provider_routes_are_capability_protected_and_default_off(
     )
     assert readiness.status_code == 200
     assert readiness.json()["external_calls_enabled"] is False
-    response = client.post(
+
+    health = client.get(
+        "/api/authorities/providers/indian-kanoon/health", headers=headers
+    )
+    assert health.status_code == 200
+    assert health.json()["health"] == "blocked"
+    assert health.json()["performs_external_probe"] is False
+
+    search = client.post(
         "/api/authorities/providers/indian-kanoon/search",
         headers=headers,
         json={"query": "constitutional proportionality"},
     )
-    assert response.status_code == 503
-    assert response.json()["code"] == "provider_disabled"
+    assert search.status_code == 503
+    assert search.json()["code"] == "provider_disabled"
+
+    disabled_document_calls = (
+        ("GET", "/api/authorities/providers/indian-kanoon/documents/12345", None),
+        (
+            "GET",
+            "/api/authorities/providers/indian-kanoon/documents/12345/original",
+            None,
+        ),
+        (
+            "POST",
+            "/api/authorities/providers/indian-kanoon/documents/12345/fragment",
+            {"query": "exact passage"},
+        ),
+        (
+            "GET",
+            "/api/authorities/providers/indian-kanoon/documents/12345/metadata",
+            None,
+        ),
+        (
+            "POST",
+            "/api/authorities/providers/indian-kanoon/documents/12345/import",
+            {},
+        ),
+    )
+    for method, path, payload in disabled_document_calls:
+        response = client.request(method, path, headers=headers, json=payload)
+        assert response.status_code == 503, response.text
+        assert response.json()["code"] == "provider_disabled"
+
+    missing_review = client.post(
+        "/api/authorities/documents/missing-authority/legal-source-review",
+        headers=headers,
+        json={
+            "decision": "approve",
+            "expected_content_hash": "0" * 64,
+            "note": "Checked the exact licensed source version.",
+        },
+    )
+    assert missing_review.status_code == 404
+    assert missing_review.json()["detail"] == "Licensed source not found."
+
+    with get_session_factory()() as session:
+        assert session.scalar(select(func.count(BillingUsageEvent.id))) == 0
