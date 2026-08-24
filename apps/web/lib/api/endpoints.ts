@@ -8616,6 +8616,158 @@ export type IpDocket = {
   updated_at: string;
 };
 
+export type IpRegistryLink = {
+  id: string;
+  company_id: string;
+  docket_id: string;
+  application_id: string | null;
+  proceeding_id: string | null;
+  provider_key: string;
+  office: string;
+  jurisdiction: string;
+  identifier_kind: string;
+  raw_identifier: string;
+  normalized_identifier: string;
+  source_url: string;
+  match_status: "candidate" | "confirmed" | "mismatch" | "retired";
+  match_confidence: string;
+  match_evidence_json: Record<string, unknown>;
+  accepted_state_json: Record<string, unknown>;
+  terms_version: string | null;
+  capability_version: string;
+  freshness_status: "never_succeeded" | "current" | "stale" | "failed" | "blocked";
+  last_attempted_at: string | null;
+  last_successful_at: string | null;
+  last_snapshot_id: string | null;
+  last_normalized_hash: string | null;
+  last_error_redacted: string | null;
+  version: number;
+  created_by_membership_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type IpRegistrySyncAttempt = {
+  id: string;
+  company_id: string;
+  link_id: string;
+  provider_key: string;
+  operation_kind: string;
+  idempotency_key: string;
+  correlation_id: string;
+  status: "pending" | "succeeded" | "no_change" | "failed" | "blocked";
+  response_class: string;
+  external_call: boolean;
+  attempts: number;
+  replay_of_attempt_id: string | null;
+  cost_minor: number;
+  currency: string;
+  error_redacted: string | null;
+  metadata_json: Record<string, unknown>;
+  requested_by_membership_id: string;
+  started_at: string;
+  completed_at: string | null;
+  created_at: string;
+};
+
+export type IpRegistrySnapshot = {
+  id: string;
+  company_id: string;
+  link_id: string;
+  attempt_id: string;
+  source_url: string;
+  source_retrieved_at: string;
+  parser_version: string;
+  schema_version: number;
+  attribution_json: Record<string, unknown>;
+  terms_version: string | null;
+  raw_sha256: string;
+  normalized_sha256: string;
+  raw_json: Record<string, unknown>;
+  normalized_json: Record<string, unknown>;
+  supersedes_snapshot_id: string | null;
+  correction_reason: string | null;
+  created_at: string;
+};
+
+export type IpRegistrySnapshotSummary = Omit<IpRegistrySnapshot, "raw_json" | "normalized_json">;
+
+export type IpRegistryDiff = {
+  id: string;
+  company_id: string;
+  snapshot_id: string;
+  field_path: string;
+  change_kind: "added" | "changed" | "removed";
+  before_value_json: unknown;
+  after_value_json: unknown;
+  risk_level: "low" | "high";
+  risk_reasons_json: string[];
+  policy_version: string;
+  resolution_status: "pending" | "accepted" | "rejected" | "mapped" | "deferred";
+  resolution_reason: string | null;
+  mapped_field_path: string | null;
+  resolved_by_membership_id: string | null;
+  resolved_at: string | null;
+  emitted_event_id: string | null;
+  deadline_recalculation_state: "not_applicable" | "required" | "proposed" | "blocked";
+  version: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type IpRegistryWorkspace = {
+  link: IpRegistryLink;
+  attempts: IpRegistrySyncAttempt[];
+  snapshots: IpRegistrySnapshotSummary[];
+};
+
+export type IpRegistryWorkspacePage = {
+  items: IpRegistryWorkspace[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type IpRegistryDiffPage = {
+  items: IpRegistryDiff[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type IpRegistrySnapshotResult = {
+  link: IpRegistryLink;
+  attempt: IpRegistrySyncAttempt;
+  snapshot: IpRegistrySnapshot | null;
+  diffs: IpRegistryDiff[];
+  no_change: boolean;
+  idempotent_replay: boolean;
+};
+
+export type IpTrackedCaseReference = {
+  id: string;
+  company_id: string;
+  docket_id: string;
+  proceeding_id: string;
+  tracked_case_id: string;
+  link_status: "active" | "mismatch" | "retired";
+  purpose: string;
+  evidence_reference: string;
+  created_by_membership_id: string;
+  version: number;
+  created_at: string;
+  updated_at: string;
+  provider: string;
+  case_title: string;
+  cnr_number: string | null;
+  case_number: string | null;
+  court_name: string | null;
+  current_status: string | null;
+  last_provider_successful_at: string | null;
+  provider_freshness_status: string;
+  update_count: number;
+};
+
 export type IpMatterRelationRole =
   | "operational"
   | "litigation"
@@ -10238,6 +10390,212 @@ export async function fetchIpDockets(): Promise<{ dockets: IpDocket[]; count: nu
 
 export async function fetchIpDocket(docketId: string): Promise<IpDocket> {
   return apiRequest(`/api/ip/dockets/${encodeURIComponent(docketId)}`);
+}
+
+export async function fetchIpRegistryWorkspaces(
+  docketId?: string | null,
+  limit = 25,
+  offset = 0,
+): Promise<IpRegistryWorkspacePage> {
+  const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (docketId) query.set("docket_id", docketId);
+  return apiRequest(`/api/ip/registry-links?${query}`);
+}
+
+export async function fetchIpRegistryDiffs(
+  linkId: string,
+  limit = 50,
+  offset = 0,
+): Promise<IpRegistryDiffPage> {
+  const query = new URLSearchParams({
+    resolution: "unresolved",
+    limit: String(limit),
+    offset: String(offset),
+  });
+  return apiRequest(
+    `/api/ip/registry-links/${encodeURIComponent(linkId)}/diffs?${query}`,
+  );
+}
+
+export async function createIpRegistryLink(input: {
+  docketId: string;
+  applicationId?: string | null;
+  proceedingId?: string | null;
+  office: string;
+  jurisdiction: string;
+  identifierKind: string;
+  rawIdentifier: string;
+  sourceUrl: string;
+  matchConfidence: number;
+  matchEvidence?: Record<string, unknown>;
+}): Promise<IpRegistryLink> {
+  return apiRequest(`/api/ip/dockets/${encodeURIComponent(input.docketId)}/registry-links`, {
+    method: "POST",
+    body: {
+      application_id: input.applicationId ?? null,
+      proceeding_id: input.proceedingId ?? null,
+      provider_key: "ipindia-registry",
+      office: input.office,
+      jurisdiction: input.jurisdiction,
+      identifier_kind: input.identifierKind,
+      raw_identifier: input.rawIdentifier,
+      source_url: input.sourceUrl,
+      match_confidence: input.matchConfidence,
+      match_evidence: input.matchEvidence ?? {},
+      terms_version: null,
+      capability_version: "manual-evidence-v1",
+    },
+  });
+}
+
+export async function decideIpRegistryMatch(input: {
+  linkId: string;
+  expectedVersion: number;
+  decision: "confirm" | "mismatch" | "retire";
+  reason: string;
+}): Promise<IpRegistryLink> {
+  return apiRequest(
+    `/api/ip/registry-links/${encodeURIComponent(input.linkId)}/match-decision`,
+    {
+      method: "POST",
+      body: {
+        expected_version: input.expectedVersion,
+        decision: input.decision,
+        reason: input.reason,
+      },
+    },
+  );
+}
+
+export async function recordIpRegistryManualSnapshot(input: {
+  linkId: string;
+  expectedLinkVersion: number;
+  idempotencyKey: string;
+  sourceUrl: string;
+  sourceRetrievedAt: string;
+  parserVersion: string;
+  attribution?: Record<string, unknown>;
+  rawSnapshot: Record<string, unknown>;
+  normalizedSnapshot: Record<string, unknown>;
+  supersedesSnapshotId?: string | null;
+  correctionReason?: string | null;
+}): Promise<IpRegistrySnapshotResult> {
+  return apiRequest(
+    `/api/ip/registry-links/${encodeURIComponent(input.linkId)}/snapshots/manual`,
+    {
+      method: "POST",
+      body: {
+        expected_link_version: input.expectedLinkVersion,
+        idempotency_key: input.idempotencyKey,
+        source_url: input.sourceUrl,
+        source_retrieved_at: input.sourceRetrievedAt,
+        parser_version: input.parserVersion,
+        schema_version: 1,
+        attribution: input.attribution ?? {},
+        raw_snapshot: input.rawSnapshot,
+        normalized_snapshot: input.normalizedSnapshot,
+        supersedes_snapshot_id: input.supersedesSnapshotId ?? null,
+        correction_reason: input.correctionReason ?? null,
+      },
+    },
+  );
+}
+
+export async function recordIpRegistryFailure(input: {
+  linkId: string;
+  expectedLinkVersion: number;
+  idempotencyKey: string;
+  responseClass:
+    | "authentication"
+    | "rate_limit"
+    | "parse_error"
+    | "provider_outage"
+    | "configuration"
+    | "policy"
+    | "unknown";
+  error: string;
+  externalCall?: boolean;
+}): Promise<IpRegistrySnapshotResult> {
+  return apiRequest(`/api/ip/registry-links/${encodeURIComponent(input.linkId)}/failures`, {
+    method: "POST",
+    body: {
+      expected_link_version: input.expectedLinkVersion,
+      idempotency_key: input.idempotencyKey,
+      response_class: input.responseClass,
+      error: input.error,
+      external_call: input.externalCall ?? false,
+    },
+  });
+}
+
+export async function resolveIpRegistryDiff(input: {
+  diffId: string;
+  expectedVersion: number;
+  decision: "accept" | "reject" | "map" | "defer";
+  reason: string;
+  mappedFieldPath?: string | null;
+  effectiveAt?: string | null;
+  responsibleMembershipId?: string | null;
+}): Promise<IpRegistryDiff> {
+  return apiRequest(`/api/ip/registry-diffs/${encodeURIComponent(input.diffId)}/resolve`, {
+    method: "POST",
+    body: {
+      expected_version: input.expectedVersion,
+      decision: input.decision,
+      reason: input.reason,
+      mapped_field_path: input.mappedFieldPath ?? null,
+      effective_at: input.effectiveAt ?? null,
+      responsible_membership_id: input.responsibleMembershipId ?? null,
+    },
+  });
+}
+
+export async function fetchIpTrackedCaseReferences(
+  docketId: string,
+): Promise<IpTrackedCaseReference[]> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(docketId)}/tracked-case-references`,
+  );
+}
+
+export async function createIpTrackedCaseReference(input: {
+  docketId: string;
+  proceedingId: string;
+  trackedCaseId: string;
+  purpose: string;
+  evidenceReference: string;
+}): Promise<IpTrackedCaseReference> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/tracked-case-references`,
+    {
+      method: "POST",
+      body: {
+        proceeding_id: input.proceedingId,
+        tracked_case_id: input.trackedCaseId,
+        purpose: input.purpose,
+        evidence_reference: input.evidenceReference,
+      },
+    },
+  );
+}
+
+export async function decideIpTrackedCaseReference(input: {
+  linkId: string;
+  expectedVersion: number;
+  decision: "confirm" | "mismatch" | "retire";
+  reason: string;
+}): Promise<IpTrackedCaseReference> {
+  return apiRequest(
+    `/api/ip/tracked-case-references/${encodeURIComponent(input.linkId)}/decision`,
+    {
+      method: "POST",
+      body: {
+        expected_version: input.expectedVersion,
+        decision: input.decision,
+        reason: input.reason,
+      },
+    },
+  );
 }
 
 export async function fetchIpDocketMatterLinks(

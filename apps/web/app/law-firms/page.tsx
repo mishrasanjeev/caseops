@@ -115,6 +115,11 @@ const platformMoves = [
     body: "Search distinct application and opposition numbers. Run applicant and opponent TM-O work, Rules 45-47 evidence packages, governed extensions, shared hearing preparation, orders, compliance directions and order-linked appeals with source evidence, immutable history and dual deadline ownership.",
   },
   {
+    icon: ShieldCheck,
+    title: "Registry reconciliation",
+    body: "Match an application or proceeding to its office identity, open the official source, preserve immutable raw and normalized snapshots, and review each field change. High-risk canonical and mapped fields require explicit approval, stale reviews cannot overwrite newer accepted state, and deadline changes enter a governed calculation queue; failed and no-change checks remain visible without rewriting legal state.",
+  },
+  {
     icon: Scale,
     title: "Post-registration trademark proceedings",
     body: "Docket rectification, cancellation and non-use removal separately from opposition. Record challenged classes, grounds, forum, form, fee, service and counsel-confirmed rule mappings; link parallel proceedings, enforce sourced stays, and review type-matched disposition candidates without automatically changing the registration.",

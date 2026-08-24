@@ -104,6 +104,19 @@ describe("SidebarBody resolved capability navigation", () => {
     );
   });
 
+  it("shows registry reconciliation when IP read access is available", () => {
+    roleMock.mockReturnValue("viewer");
+    resolvedMock.mockReturnValue(["ip:read"]);
+    canMock.mockReturnValue(false);
+
+    render(<SidebarBody pathname="/app/ip/registry" />);
+
+    expect(screen.getByRole("link", { name: "Registry reconciliation" })).toHaveAttribute(
+      "href",
+      "/app/ip/registry",
+    );
+  });
+
   it("marks the centralized Notices destination active", () => {
     roleMock.mockReturnValue("viewer");
     resolvedMock.mockReturnValue([]);

@@ -7989,3 +7989,116 @@ def test_iplf040_opposition_stage_and_profile_events_are_append_only_on_postgres
                     session.execute(text(statement), {"id": event_id})
                     session.commit()
                 session.rollback()
+
+
+@pytest.mark.postgres
+def test_iplf051_registry_snapshot_is_append_only_and_tenant_fks_exist_on_postgres(
+    pg_engine,
+):
+    from caseops_api.db.models import (
+        IpProceeding,
+        IpRegistryLink,
+        IpRegistrySnapshot,
+        IpRegistrySyncAttempt,
+    )
+
+    inspector = inspect(pg_engine)
+    snapshot_fk_names = {
+        row["name"] for row in inspector.get_foreign_keys("ip_registry_snapshots")
+    }
+    attempt_fk_names = {
+        row["name"] for row in inspector.get_foreign_keys("ip_registry_sync_attempts")
+    }
+    diff_fk_names = {
+        row["name"] for row in inspector.get_foreign_keys("ip_registry_diffs")
+    }
+    tracked_reference_fk_names = {
+        row["name"] for row in inspector.get_foreign_keys("ip_tracked_case_links")
+    }
+    assert "fk_ip_registry_snapshot_link_company" in snapshot_fk_names
+    assert "fk_ip_registry_snapshot_attempt_company" in snapshot_fk_names
+    assert "fk_ip_registry_snapshot_supersedes_company" in snapshot_fk_names
+    assert "fk_ip_registry_attempt_replay_company" in attempt_fk_names
+    assert "fk_ip_registry_diff_event_company" in diff_fk_names
+    assert "fk_ip_tracked_case_link_case_company" in tracked_reference_fk_names
+
+    now = datetime.now(UTC)
+    with Session(pg_engine) as session:
+        fixture = _seed_ip_coverage_lifecycle_fixture(session)
+        proceeding = IpProceeding(
+            company_id=fixture["company_id"],
+            docket_id=fixture["docket_id"],
+            proceeding_kind="opposition",
+            side="applicant",
+            office="Trade Marks Registry Delhi",
+            jurisdiction="IN",
+            stage="draft",
+            origin_kind="registry_event",
+            stage_template_version="opposition-applicant-v1",
+        )
+        session.add(proceeding)
+        session.flush()
+        link = IpRegistryLink(
+            company_id=fixture["company_id"],
+            docket_id=fixture["docket_id"],
+            proceeding_id=proceeding.id,
+            provider_key="ipindia-registry",
+            office="Trade Marks Registry Delhi",
+            jurisdiction="IN",
+            identifier_kind="opposition",
+            raw_identifier=f"OPP-{uuid4()}",
+            normalized_identifier=f"opp{uuid4().hex}",
+            source_url="https://ipindia.gov.in/registry/postgres-fixture",
+            match_status="confirmed",
+            match_confidence="1.0000",
+            match_evidence_json={"fixture": True},
+            accepted_state_json={"status": "draft"},
+            capability_version="manual-evidence-v1",
+            created_by_membership_id=fixture["owner_id"],
+        )
+        session.add(link)
+        session.flush()
+        attempt = IpRegistrySyncAttempt(
+            company_id=fixture["company_id"],
+            link_id=link.id,
+            provider_key="ipindia-registry",
+            operation_kind="manual_snapshot",
+            idempotency_key=f"postgres-{uuid4()}",
+            correlation_id=uuid4().hex + uuid4().hex,
+            status="succeeded",
+            response_class="success",
+            external_call=False,
+            requested_by_membership_id=fixture["owner_id"],
+            started_at=now,
+            completed_at=now,
+            metadata_json={"request_fingerprint": "a" * 64},
+        )
+        session.add(attempt)
+        session.flush()
+        snapshot = IpRegistrySnapshot(
+            company_id=fixture["company_id"],
+            link_id=link.id,
+            attempt_id=attempt.id,
+            source_url=link.source_url,
+            source_retrieved_at=now,
+            parser_version="postgres-fixture-v1",
+            schema_version=1,
+            attribution_json={"fixture": True},
+            raw_sha256="b" * 64,
+            normalized_sha256="c" * 64,
+            raw_json={"status": "pending"},
+            normalized_json={"status": "pending"},
+        )
+        session.add(snapshot)
+        session.commit()
+        snapshot_id = snapshot.id
+
+    for statement in (
+        "UPDATE ip_registry_snapshots SET parser_version = 'rewritten' WHERE id = :id",
+        "DELETE FROM ip_registry_snapshots WHERE id = :id",
+    ):
+        with Session(pg_engine) as session:
+            with pytest.raises(DBAPIError, match="append-only"):
+                session.execute(text(statement), {"id": snapshot_id})
+                session.commit()
+            session.rollback()

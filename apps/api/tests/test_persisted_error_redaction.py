@@ -72,6 +72,17 @@ def test_eg009_01_redaction_never_returns_empty() -> None:
     assert redact_provider_error(None).strip()
 
 
+def test_eg009_01_redaction_removes_authorization_bearer_value() -> None:
+    token = "top-secret-provider-token"
+
+    for separator in (": ", "=", ":"):
+        redacted = redact_provider_error(
+            f"Authorization{separator}Bearer {token} provider rejected request"
+        )
+        assert token not in redacted
+        assert "Bearer" not in redacted
+
+
 def test_eg009_01_redaction_is_linear_on_pathological_input() -> None:
     """The redactor runs on provider-supplied text, so it must not backtrack.
 

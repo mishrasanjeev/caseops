@@ -690,6 +690,54 @@ export default function GuidePage() {
                     </li>
                   </ul>
                   <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
+                    Registry reconciliation
+                  </h3>
+                  <p>
+                    Open <a className="underline" href="/app/ip/registry">Registry reconciliation</a>{" "}
+                    to connect an application or proceeding to one IP-office identifier. Record the
+                    office, jurisdiction, identifier type, source URL, and match evidence, then confirm
+                    or reject the match with a written reason before adding source snapshots.
+                  </p>
+                  <ul className="mt-4 space-y-2 text-[15px]">
+                    <li>
+                      Manual intake stores both the source JSON and normalized register JSON with
+                      retrieval time, parser version, attribution, and SHA-256 hashes. A correction
+                      supersedes its predecessor with a reason; source snapshots cannot be edited or
+                      deleted.
+                    </li>
+                    <li>
+                      Every changed field remains a candidate until it is accepted, rejected, mapped,
+                      or deferred. Proprietor, status, deadline, refusal, opposition, cancellation,
+                      registration, and renewal fields are high risk and require IP approval. Mapping
+                      a provider field to one of those canonical paths applies the same approval rule.
+                    </li>
+                    <li>
+                      Accepting a change records candidate and reconciled IP docket events. A deadline
+                      field also queues a durable calculation proposal; CaseOps does not invent or
+                      confirm a legal deadline without an approved rule and calendar version.
+                    </li>
+                    <li>
+                      The unresolved queue is paginated independently from bounded evidence history,
+                      so an older pending review remains reachable. If accepted state changed after a
+                      diff was created, CaseOps rejects the stale decision and requires a fresh snapshot.
+                    </li>
+                    <li>
+                      A no-change check still updates freshness and attempt history. Authentication,
+                      rate-limit, parsing, outage, configuration, or policy failures preserve the last
+                      successful snapshot and accepted legal state.
+                    </li>
+                    <li>
+                      Court or CNR proceedings reference the existing Matter bookmark and TrackedCase.
+                      Court status, provider snapshots, and updates stay with case tracking and are never
+                      copied into the IP registry record.
+                    </li>
+                    <li>
+                      IP India live automation remains disabled until an approved provider contract,
+                      licensing basis, credentials, and verified legal coverage exist. The current
+                      workspace supports sourced manual evidence without claiming a provider call.
+                    </li>
+                  </ul>
+                  <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
                     Rectification, cancellation, and non-use proceedings
                   </h3>
                   <p>
