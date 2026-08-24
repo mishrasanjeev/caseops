@@ -221,8 +221,32 @@ test("IPLF-052 completes journal watch, correction review, and every canonical h
   const application = await createApplication(api, headers);
   await signIn(page, tenant.slug, tenant.email);
 
+  await page.setViewportSize({ width: 360, height: 800 });
   await page.goto("/app/ip/watch");
   await expect(page.getByRole("heading", { name: "Trademark journal watch" })).toBeVisible();
+  const viewButtons = ["Hits", "Profiles", "Journal intake", "Runs"].map((name) =>
+    page.getByRole("button", { name }),
+  );
+  const boxes: Array<{ x: number; y: number; width: number; height: number }> = [];
+  for (const button of viewButtons) {
+    await expect(button).toBeVisible();
+    const box = await button.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.width).toBeGreaterThan(100);
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(360);
+    boxes.push(box!);
+  }
+  for (let left = 0; left < boxes.length; left += 1) {
+    for (let right = left + 1; right < boxes.length; right += 1) {
+      const horizontal = boxes[left].x < boxes[right].x + boxes[right].width
+        && boxes[left].x + boxes[left].width > boxes[right].x;
+      const vertical = boxes[left].y < boxes[right].y + boxes[right].height
+        && boxes[left].y + boxes[left].height > boxes[right].y;
+      expect(horizontal && vertical).toBe(false);
+    }
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole("button", { name: "Profiles" }).click();
   await page.getByLabel("Profile name").fill("ASTER word, phonetic and class watch");
   await page.getByLabel("Word terms").fill("ASTER");

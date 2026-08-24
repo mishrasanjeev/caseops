@@ -87,6 +87,10 @@ FINAL_SOURCE_DEPENDENT_DISPOSITIONS = {
 }
 ACTIONABLE_DISPOSITIONS = {"relevant", "client_instruction", "enforcement_opened"}
 STALE_AFTER_HOURS = 72
+MAX_INGEST_PUBLICATIONS = 50
+MAX_ACTIVE_PROFILES_PER_INGEST = 100
+MAX_PROFILE_PUBLICATION_COMPARISONS = 2_500
+MAX_HITS_PER_INGEST = 250
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,6 +155,40 @@ def _next_poll(frequency: str, current: datetime) -> datetime:
             "monthly": timedelta(days=30),
         }[frequency]
     )
+
+
+def _aware(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
+def _cost_period_bounds(frequency: str, current: datetime) -> tuple[datetime, datetime]:
+    current = _aware(current)
+    day_start = current.replace(hour=0, minute=0, second=0, microsecond=0)
+    if frequency == "monthly":
+        start = day_start.replace(day=1)
+        end = (
+            start.replace(year=start.year + 1, month=1)
+            if start.month == 12
+            else start.replace(month=start.month + 1)
+        )
+    elif frequency == "weekly":
+        start = day_start - timedelta(days=day_start.weekday())
+        end = start + timedelta(days=7)
+    else:
+        # Publication-triggered profiles use the publication-day cost period.
+        start = day_start
+        end = start + timedelta(days=1)
+    return start, end
+
+
+def _reset_cost_period_if_due(profile: IpWatchProfile, current: datetime) -> None:
+    start, _ = _cost_period_bounds(profile.frequency, current)
+    last_polled = _aware(profile.last_polled_at) if profile.last_polled_at else None
+    if profile.spent_cost_minor_in_period and (last_polled is None or last_polled < start):
+        profile.spent_cost_minor_in_period = 0
+        if profile.poll_status == "paused_cost_quota":
+            profile.poll_status = "active"
+            profile.pause_reason = None
 
 
 def _profile_or_404(
@@ -346,12 +384,17 @@ def _similarity(profile: IpWatchProfile, publication: IpJournalPublication) -> d
         or publication.jurisdiction.upper() in profile.jurisdictions_json
     )
     supplied_device = (publication.raw_evidence_json or {}).get("device_similarity")
+    supplied_device_match = bool(
+        isinstance(supplied_device, dict)
+        and supplied_device.get("matched") is True
+        and supplied_device.get("profile_reference") in profile.device_references_json
+        and supplied_device.get("candidate_reference") == publication.device_reference
+    )
     device_match = bool(
         publication.device_reference
         and profile.device_references_json
         and (
-            publication.device_reference in profile.device_references_json
-            or isinstance(supplied_device, dict)
+            publication.device_reference in profile.device_references_json or supplied_device_match
         )
     )
     matched = (
@@ -585,19 +628,53 @@ def ingest_journal(
                 visible_ip_dockets_filter(session, context=locked),
             )
             .with_for_update(of=IpWatchProfile)
+            .limit(MAX_ACTIVE_PROFILES_PER_INGEST + 1)
         )
     )
+    if len(payload.publications) > MAX_INGEST_PUBLICATIONS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Journal ingestion is limited to {MAX_INGEST_PUBLICATIONS} publications.",
+        )
+    if len(profiles) > MAX_ACTIVE_PROFILES_PER_INGEST:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Too many active watch profiles for one interactive ingestion; "
+                "pause or partition profiles before retrying."
+            ),
+        )
+    comparison_count = len(profiles) * len(payload.publications)
+    if comparison_count > MAX_PROFILE_PUBLICATION_COMPARISONS:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Journal ingestion exceeds the bounded profile/publication comparison limit "
+                f"of {MAX_PROFILE_PUBLICATION_COMPARISONS}."
+            ),
+        )
     active_profiles: list[IpWatchProfile] = []
     paused = False
+    request_currency = payload.currency.upper()
     for profile in profiles:
+        _reset_cost_period_if_due(profile, now)
+        if payload.cost_minor and request_currency != profile.cost_currency.upper():
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Journal ingestion currency must match every charged watch profile "
+                    f"({profile.cost_currency.upper()})."
+                ),
+            )
         would_spend = profile.spent_cost_minor_in_period + payload.cost_minor
         if profile.max_cost_minor_per_period and would_spend > profile.max_cost_minor_per_period:
+            _, period_end = _cost_period_bounds(profile.frequency, now)
             profile.poll_status = "paused_cost_quota"
             profile.pause_reason = (
                 f"Cost quota {profile.max_cost_minor_per_period} {profile.cost_currency} minor "
                 "units would be exceeded."
             )
-            profile.next_poll_at = None
+            profile.next_poll_at = period_end
             profile.version += 1
             paused = True
             continue
@@ -610,7 +687,7 @@ def ingest_journal(
         status="paused_cost_quota" if paused and not active_profiles else "pending",
         external_call=payload.external_call,
         cost_minor=payload.cost_minor,
-        currency=payload.currency.upper(),
+        currency=request_currency,
         publications_seen=len(payload.publications),
         requested_by_membership_id=locked.membership.id,
         started_at=now,
@@ -627,32 +704,63 @@ def ingest_journal(
     created_hits: list[IpWatchHit] = []
     duplicate_hits = 0
     stale_alert = False
-    for item in payload.publications:
-        fingerprint = _publication_fingerprint(payload.provider_key, item)
-        publication = session.scalar(
+    item_fingerprints = [
+        (item, _publication_fingerprint(payload.provider_key, item))
+        for item in payload.publications
+    ]
+    fingerprints = [fingerprint for _, fingerprint in item_fingerprints]
+    existing_publications = list(
+        session.scalars(
             select(IpJournalPublication).where(
                 IpJournalPublication.company_id == locked.company.id,
-                IpJournalPublication.source_fingerprint == fingerprint,
+                IpJournalPublication.source_fingerprint.in_(fingerprints),
             )
         )
-        if publication is None:
-            if item.application_id:
-                application = session.scalar(
-                    select(TrademarkApplication).where(
-                        TrademarkApplication.id == item.application_id,
-                        TrademarkApplication.company_id == locked.company.id,
-                    )
+    )
+    publications_by_fingerprint = {
+        publication.source_fingerprint: publication for publication in existing_publications
+    }
+    application_ids = {item.application_id for item in payload.publications if item.application_id}
+    applications = (
+        list(
+            session.scalars(
+                select(TrademarkApplication).where(
+                    TrademarkApplication.company_id == locked.company.id,
+                    TrademarkApplication.id.in_(application_ids),
                 )
-                if application is None:
-                    raise HTTPException(status_code=404, detail="Trademark application not found.")
+            )
+        )
+        if application_ids
+        else []
+    )
+    applications_by_id = {application.id: application for application in applications}
+    predecessor_ids = {
+        item.supersedes_publication_id
+        for item in payload.publications
+        if item.supersedes_publication_id
+    }
+    predecessors = (
+        list(
+            session.scalars(
+                select(IpJournalPublication).where(
+                    IpJournalPublication.company_id == locked.company.id,
+                    IpJournalPublication.id.in_(predecessor_ids),
+                )
+            )
+        )
+        if predecessor_ids
+        else []
+    )
+    predecessors_by_id = {publication.id: publication for publication in predecessors}
+    candidate_publications_by_id: dict[str, IpJournalPublication] = {}
+    for item, fingerprint in item_fingerprints:
+        publication = publications_by_fingerprint.get(fingerprint)
+        if publication is None:
+            if item.application_id and item.application_id not in applications_by_id:
+                raise HTTPException(status_code=404, detail="Trademark application not found.")
             predecessor = None
             if item.supersedes_publication_id:
-                predecessor = session.scalar(
-                    select(IpJournalPublication).where(
-                        IpJournalPublication.id == item.supersedes_publication_id,
-                        IpJournalPublication.company_id == locked.company.id,
-                    )
-                )
+                predecessor = predecessors_by_id.get(item.supersedes_publication_id)
                 if predecessor is None:
                     raise HTTPException(status_code=404, detail="Superseded publication not found.")
                 if _normalize(predecessor.application_number) != _normalize(
@@ -706,91 +814,122 @@ def ingest_journal(
             session.add(publication)
             session.flush()
             created_publications.append(publication)
+            publications_by_fingerprint[fingerprint] = publication
+        stale_alert = stale_alert or (
+            publication.source_status == "stale"
+            or publication.ingestion_delay_hours > STALE_AFTER_HOURS
+        )
+        candidate_publications_by_id[publication.id] = publication
 
+    candidate_publications = list(candidate_publications_by_id.values())
+    profile_ids = [profile.id for profile in active_profiles]
+    publication_ids = [publication.id for publication in candidate_publications]
+    existing_hits = list(
+        session.scalars(
+            select(IpWatchHit).where(
+                IpWatchHit.company_id == locked.company.id,
+                IpWatchHit.profile_id.in_(profile_ids),
+                IpWatchHit.publication_id.in_(publication_ids),
+            )
+        )
+    )
+    hits_by_pair = {(hit.profile_id, hit.publication_id): hit for hit in existing_hits}
+    application_keys = {
+        publication.application_number.lower() for publication in candidate_publications
+    }
+    history_rows = list(
+        session.execute(
+            select(IpWatchHit, IpJournalPublication.application_number)
+            .join(
+                IpJournalPublication,
+                (IpJournalPublication.id == IpWatchHit.publication_id)
+                & (IpJournalPublication.company_id == IpWatchHit.company_id),
+            )
+            .where(
+                IpWatchHit.company_id == locked.company.id,
+                IpWatchHit.profile_id.in_(profile_ids),
+                func.lower(IpJournalPublication.application_number).in_(application_keys),
+            )
+            .order_by(IpWatchHit.created_at.desc())
+        )
+    )
+    latest_by_application: dict[tuple[str, str], IpWatchHit] = {}
+    for historical_hit, application_number in history_rows:
+        latest_by_application.setdefault(
+            (historical_hit.profile_id, _normalize(application_number)), historical_hit
+        )
+
+    planned_hits: list[tuple[IpWatchProfile, IpJournalPublication, dict[str, Any]]] = []
+    for publication in candidate_publications:
         for profile in active_profiles:
             evidence = _similarity(profile, publication)
             if not evidence["matched"]:
                 continue
-            existing = session.scalar(
-                select(IpWatchHit).where(
-                    IpWatchHit.company_id == locked.company.id,
-                    IpWatchHit.profile_id == profile.id,
-                    IpWatchHit.publication_id == publication.id,
-                )
-            )
+            existing = hits_by_pair.get((profile.id, publication.id))
             if existing is not None:
                 duplicate_hits += 1
                 continue
-            prior = None
-            if publication.supersedes_publication_id:
-                prior = session.scalar(
-                    select(IpWatchHit).where(
-                        IpWatchHit.company_id == locked.company.id,
-                        IpWatchHit.profile_id == profile.id,
-                        IpWatchHit.publication_id == publication.supersedes_publication_id,
-                    )
-                )
-            if prior is None:
-                prior = session.scalar(
-                    select(IpWatchHit)
-                    .join(
-                        IpJournalPublication,
-                        (IpJournalPublication.id == IpWatchHit.publication_id)
-                        & (IpJournalPublication.company_id == IpWatchHit.company_id),
-                    )
-                    .where(
-                        IpWatchHit.company_id == locked.company.id,
-                        IpWatchHit.profile_id == profile.id,
-                        func.lower(IpJournalPublication.application_number)
-                        == publication.application_number.lower(),
-                    )
-                    .order_by(IpWatchHit.created_at.desc())
-                    .limit(1)
-                )
-            hit = IpWatchHit(
-                company_id=locked.company.id,
-                profile_id=profile.id,
-                publication_id=publication.id,
-                duplicate_of_hit_id=prior.id if prior else None,
-                compared_mark_json={
-                    "word_terms": profile.word_terms_json,
-                    "phonetic_terms": profile.phonetic_terms_json,
-                    "device_references": profile.device_references_json,
-                },
-                candidate_mark_json={
-                    "mark_text": publication.mark_text,
-                    "device_reference": publication.device_reference,
-                    "application_number": publication.application_number,
-                    "proprietor_name": publication.proprietor_name,
-                },
-                classes_goods_json={
-                    "classes": publication.class_numbers_json,
-                    "goods_services": publication.goods_services_json,
-                    "scope": publication.publication_scope_json,
-                },
-                similarity_evidence_json=evidence,
-                ai_advisory=evidence["ai_advisory"],
-                advisory_notice=AI_ADVISORY_NOTICE,
-                source_url=publication.source_url,
-                source_status=publication.source_status,
-                source_snapshot_json=_source_snapshot(publication),
-                hit_date=publication.journal_date,
-                stale_source_alert=(
-                    publication.source_status == "stale"
-                    or publication.ingestion_delay_hours > STALE_AFTER_HOURS
-                ),
-                deadline_confirmation_state="pending_confirmation",
+            planned_hits.append((profile, publication, evidence))
+    if len(planned_hits) > MAX_HITS_PER_INGEST:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Journal ingestion is limited to {MAX_HITS_PER_INGEST} resulting hits.",
+        )
+
+    for profile, publication, evidence in planned_hits:
+        prior = None
+        if publication.supersedes_publication_id:
+            prior = hits_by_pair.get((profile.id, publication.supersedes_publication_id))
+        if prior is None:
+            prior = latest_by_application.get(
+                (profile.id, _normalize(publication.application_number))
             )
-            session.add(hit)
-            session.flush()
-            _record_hit_event(
-                session,
-                context=locked,
-                profile=profile,
-                publication=publication,
-                hit=hit,
-            )
-            created_hits.append(hit)
+        hit = IpWatchHit(
+            company_id=locked.company.id,
+            profile_id=profile.id,
+            publication_id=publication.id,
+            duplicate_of_hit_id=prior.id if prior else None,
+            compared_mark_json={
+                "word_terms": profile.word_terms_json,
+                "phonetic_terms": profile.phonetic_terms_json,
+                "device_references": profile.device_references_json,
+            },
+            candidate_mark_json={
+                "mark_text": publication.mark_text,
+                "device_reference": publication.device_reference,
+                "application_number": publication.application_number,
+                "proprietor_name": publication.proprietor_name,
+            },
+            classes_goods_json={
+                "classes": publication.class_numbers_json,
+                "goods_services": publication.goods_services_json,
+                "scope": publication.publication_scope_json,
+            },
+            similarity_evidence_json=evidence,
+            ai_advisory=evidence["ai_advisory"],
+            advisory_notice=AI_ADVISORY_NOTICE,
+            source_url=publication.source_url,
+            source_status=publication.source_status,
+            source_snapshot_json=_source_snapshot(publication),
+            hit_date=publication.journal_date,
+            stale_source_alert=(
+                publication.source_status == "stale"
+                or publication.ingestion_delay_hours > STALE_AFTER_HOURS
+            ),
+            deadline_confirmation_state="pending_confirmation",
+        )
+        session.add(hit)
+        session.flush()
+        _record_hit_event(
+            session,
+            context=locked,
+            profile=profile,
+            publication=publication,
+            hit=hit,
+        )
+        created_hits.append(hit)
+        hits_by_pair[(profile.id, publication.id)] = hit
+        latest_by_application[(profile.id, _normalize(publication.application_number))] = hit
 
     for profile in active_profiles:
         profile.spent_cost_minor_in_period += payload.cost_minor
@@ -803,7 +942,7 @@ def ingest_journal(
     run.publications_created = len(created_publications)
     run.hits_created = len(created_hits)
     run.duplicate_hits = duplicate_hits
-    run.publication_ids_json = [row.id for row in created_publications]
+    run.publication_ids_json = [row.id for row in candidate_publications]
     run.hit_ids_json = [row.id for row in created_hits]
     run.stale_source_alert = stale_alert
     run.completed_at = _now()
@@ -830,7 +969,7 @@ def ingest_journal(
             detail="Journal ingestion conflicted; retry safely.",
         ) from exc
     session.refresh(run)
-    return run, created_publications, created_hits, False
+    return run, candidate_publications, created_hits, False
 
 
 def decide_watch_hit(
@@ -1198,12 +1337,25 @@ def run_journal_watch_scheduler(
     profiles = list(
         session.scalars(
             select(IpWatchProfile)
+            .join(
+                IpDocketRecord,
+                (IpDocketRecord.id == IpWatchProfile.docket_id)
+                & (IpDocketRecord.company_id == IpWatchProfile.company_id),
+            )
+            .outerjoin(
+                Matter,
+                (Matter.id == IpDocketRecord.matter_id)
+                & (Matter.company_id == IpDocketRecord.company_id),
+            )
             .where(
-                IpWatchProfile.poll_status == "active",
+                IpWatchProfile.poll_status.in_(("active", "paused_cost_quota")),
                 or_(
                     IpWatchProfile.next_poll_at.is_(None),
                     IpWatchProfile.next_poll_at <= current,
                 ),
+                IpDocketRecord.is_active.is_(True),
+                IpDocketRecord.archived_by_matter_disposal.is_(False),
+                or_(IpDocketRecord.matter_id.is_(None), Matter.is_active.is_(True)),
             )
             .order_by(IpWatchProfile.company_id, IpWatchProfile.id)
             .with_for_update(of=IpWatchProfile)
@@ -1213,6 +1365,7 @@ def run_journal_watch_scheduler(
     cost_paused = 0
     provider_paused = 0
     for profile in profiles:
+        _reset_cost_period_if_due(profile, current)
         if (
             profile.max_cost_minor_per_period
             and profile.spent_cost_minor_in_period >= profile.max_cost_minor_per_period
@@ -1222,7 +1375,8 @@ def run_journal_watch_scheduler(
                 f"Cost quota {profile.max_cost_minor_per_period} {profile.cost_currency} "
                 "minor units is exhausted."
             )
-            profile.next_poll_at = None
+            _, period_end = _cost_period_bounds(profile.frequency, current)
+            profile.next_poll_at = period_end
             profile.version += 1
             cost_paused += 1
             continue

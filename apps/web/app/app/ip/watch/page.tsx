@@ -179,14 +179,18 @@ export default function IpJournalWatchPage() {
             ))}
           </select>
         </div>
-        <div className="inline-flex h-10 overflow-hidden rounded-md border border-[var(--color-line)] bg-white">
+        <div
+          aria-label="Watch views"
+          className="grid w-full min-w-0 grid-cols-2 overflow-hidden rounded-md border border-[var(--color-line)] bg-white sm:w-auto sm:grid-cols-4"
+        >
           {(["hits", "profiles", "ingest", "runs"] as View[]).map((item) => (
             <button
               key={item}
+              aria-pressed={view === item}
               className={
                 view === item
-                  ? "bg-[var(--color-ink)] px-4 text-sm font-medium text-white"
-                  : "px-4 text-sm font-medium text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)]"
+                  ? "min-h-10 min-w-0 px-2 text-sm font-medium text-white bg-[var(--color-ink)] sm:px-4"
+                  : "min-h-10 min-w-0 px-2 text-sm font-medium text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)] sm:px-4"
               }
               onClick={() => setView(item)}
             >

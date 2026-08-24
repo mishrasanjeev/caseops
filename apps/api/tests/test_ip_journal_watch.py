@@ -5,11 +5,12 @@ from datetime import UTC, datetime
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import event, select
 
 from caseops_api.db.models import (
     DomainOutboxEvent,
     IpDocketEvent,
+    IpDocketRecord,
     IpJournalIngestionRun,
     IpJournalPublication,
     IpMatterLink,
@@ -24,6 +25,7 @@ from caseops_api.db.models import (
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.schemas.ip_watch import (
+    IpJournalIngestRequest,
     IpJournalPublicationCreate,
     IpWatchProfileCreateRequest,
 )
@@ -172,14 +174,8 @@ def _ingest(
         ),
     ],
 )
-def test_watch_contracts_reject_incomplete_or_invalid_scope(
-    payload: dict, message: str
-) -> None:
-    model = (
-        IpWatchProfileCreateRequest
-        if "docket_id" in payload
-        else IpJournalPublicationCreate
-    )
+def test_watch_contracts_reject_incomplete_or_invalid_scope(payload: dict, message: str) -> None:
+    model = IpWatchProfileCreateRequest if "docket_id" in payload else IpJournalPublicationCreate
     with pytest.raises(ValidationError, match=message):
         model.model_validate(payload)
 
@@ -298,8 +294,7 @@ def test_iplf_uj_21_normal_watch_review_and_canonical_handoffs(
     with SessionLocal() as session:
         assert session.get(MatterTask, task_handoff["target_id"]).ip_docket_id == docket["id"]
         assert (
-            session.get(MatterDeadline, deadline.json()["target_id"]).ip_docket_id
-            == docket["id"]
+            session.get(MatterDeadline, deadline.json()["target_id"]).ip_docket_id == docket["id"]
         )
         proceeding = session.get(IpProceeding, opposition.json()["target_id"])
         assert proceeding is not None and proceeding.origin_kind == "watch_hit"
@@ -319,18 +314,20 @@ def test_iplf_uj_21_normal_watch_review_and_canonical_handoffs(
                 NotificationDeliveryIntent.company_id == bootstrap["company"]["id"],
                 NotificationDeliveryIntent.source_type == "ip_watch_hit",
                 NotificationDeliveryIntent.source_id == hit["id"],
-                NotificationDeliveryIntent.recipient_membership_id
-                == bootstrap["membership"]["id"],
+                NotificationDeliveryIntent.recipient_membership_id == bootstrap["membership"]["id"],
             )
         )
         assert intent is not None
         assert str(intent.status) == "delivered"
-        assert session.scalar(
-            select(IpDocketEvent).where(
-                IpDocketEvent.company_id == bootstrap["company"]["id"],
-                IpDocketEvent.payload_json["watch_hit_id"].as_string() == hit["id"],
+        assert (
+            session.scalar(
+                select(IpDocketEvent).where(
+                    IpDocketEvent.company_id == bootstrap["company"]["id"],
+                    IpDocketEvent.payload_json["watch_hit_id"].as_string() == hit["id"],
+                )
             )
-        ) is not None
+            is not None
+        )
 
 
 def test_watch_handoff_target_and_evidence_link_are_atomic_and_retryable(
@@ -393,15 +390,17 @@ def test_watch_handoff_target_and_evidence_link_are_atomic_and_retryable(
 
     SessionLocal = get_session_factory()
     with SessionLocal() as session:
-        assert session.scalar(
-            select(IpWatchHandoff).where(IpWatchHandoff.hit_id == hit["id"])
-        ) is None
-        assert session.scalar(
-            select(Matter).where(Matter.matter_code == payload["matter_code"])
-        ) is None
-        assert session.scalar(
-            select(IpMatterLink).where(IpMatterLink.docket_id == docket["id"])
-        ) is None
+        assert (
+            session.scalar(select(IpWatchHandoff).where(IpWatchHandoff.hit_id == hit["id"])) is None
+        )
+        assert (
+            session.scalar(select(Matter).where(Matter.matter_code == payload["matter_code"]))
+            is None
+        )
+        assert (
+            session.scalar(select(IpMatterLink).where(IpMatterLink.docket_id == docket["id"]))
+            is None
+        )
 
     monkeypatch.setattr(ip_watch_service, "record_from_context", original_record)
     retry = client.post(
@@ -411,20 +410,26 @@ def test_watch_handoff_target_and_evidence_link_are_atomic_and_retryable(
     )
     assert retry.status_code == 201, retry.text
     with SessionLocal() as session:
-        assert len(
-            list(
-                session.scalars(
-                    select(IpWatchHandoff).where(IpWatchHandoff.hit_id == hit["id"])
+        assert (
+            len(
+                list(
+                    session.scalars(
+                        select(IpWatchHandoff).where(IpWatchHandoff.hit_id == hit["id"])
+                    )
                 )
             )
-        ) == 1
-        assert len(
-            list(
-                session.scalars(
-                    select(Matter).where(Matter.matter_code == payload["matter_code"])
+            == 1
+        )
+        assert (
+            len(
+                list(
+                    session.scalars(
+                        select(Matter).where(Matter.matter_code == payload["matter_code"])
+                    )
                 )
             )
-        ) == 1
+            == 1
+        )
 
 
 def test_iplf_uj_21_exceptions_source_duplicate_cost_and_tenant_scope(
@@ -551,6 +556,7 @@ def test_iplf_uj_21_exceptions_source_duplicate_cost_and_tenant_scope(
     )
     assert second_run["run"]["duplicate_hits"] == 1
     assert second_run["hits"] == []
+    assert second_run["publications"][0]["id"] == unavailable["publications"][0]["id"]
 
     other_tenant = client.post(
         "/api/bootstrap/company",
@@ -669,12 +675,13 @@ def test_journal_publication_is_immutable_and_handoff_retains_decision(
         with pytest.raises(Exception, match="append-only"):
             session.commit()
         session.rollback()
-        assert session.scalar(
-            select(IpWatchHit).where(IpWatchHit.publication_id == publication_id)
-        ) is not None
-        assert session.scalar(
-            select(IpWatchHandoff).where(IpWatchHandoff.hit_id == "missing")
-        ) is None
+        assert (
+            session.scalar(select(IpWatchHit).where(IpWatchHit.publication_id == publication_id))
+            is not None
+        )
+        assert (
+            session.scalar(select(IpWatchHandoff).where(IpWatchHandoff.hit_id == "missing")) is None
+        )
 
 
 def test_journal_watch_scheduler_is_durable_and_fail_closed(
@@ -721,3 +728,272 @@ def test_journal_watch_scheduler_is_durable_and_fail_closed(
         )
         assert {row.status for row in runs} == {"succeeded", "failed"}
         assert all(row.external_call is False for row in runs)
+
+
+def test_device_similarity_requires_affirmative_reference_bound_evidence(
+    client: TestClient,
+) -> None:
+    bootstrap, headers, docket, application = _fixture(client, "DEVICE")
+    profile_response = client.post(
+        "/api/ip/watch/profiles",
+        headers=headers,
+        json={
+            "docket_id": docket["id"],
+            "name": "DEVICE reference watch",
+            "device_references": ["https://evidence.example/registered-device.png"],
+            "frequency": "daily",
+            "recipient_membership_ids": [bootstrap["membership"]["id"]],
+            "cost_currency": "INR",
+        },
+    )
+    assert profile_response.status_code == 201, profile_response.text
+    low_score = _publication(
+        application_id=application["id"],
+        application_number="TM-DEVICE-LOW",
+        journal_number="TMJ-DEVICE-LOW",
+    )
+    low_score["mark_text"] = None
+    low_score["device_reference"] = "https://evidence.example/candidate-device.png"
+    low_score["class_numbers"] = [9]
+    low_score["goods_services"] = {"9": ["software"]}
+    low_score["raw_evidence"]["device_similarity"] = {"method": "ai", "score": 0.01}
+    rejected_match = _ingest(
+        client,
+        headers=headers,
+        key="watch-device-negative-0001",
+        publication=low_score,
+        cost_minor=0,
+    )
+    assert rejected_match["hits"] == []
+
+    confirmed = _publication(
+        application_id=application["id"],
+        application_number="TM-DEVICE-CONFIRMED",
+        journal_number="TMJ-DEVICE-CONFIRMED",
+    )
+    confirmed["mark_text"] = None
+    confirmed["device_reference"] = "https://evidence.example/candidate-device.png"
+    confirmed["class_numbers"] = [9]
+    confirmed["goods_services"] = {"9": ["software"]}
+    confirmed["raw_evidence"]["device_similarity"] = {
+        "method": "ai",
+        "score": 0.94,
+        "matched": True,
+        "profile_reference": "https://evidence.example/registered-device.png",
+        "candidate_reference": "https://evidence.example/candidate-device.png",
+    }
+    accepted_match = _ingest(
+        client,
+        headers=headers,
+        key="watch-device-confirmed-0001",
+        publication=confirmed,
+        cost_minor=0,
+    )
+    assert len(accepted_match["hits"]) == 1
+    assert accepted_match["hits"][0]["similarity_evidence_json"]["device"]["matched"] is True
+    assert accepted_match["hits"][0]["ai_advisory"] is True
+
+
+def test_ingestion_rejects_cross_currency_charging_without_partial_writes(
+    client: TestClient,
+) -> None:
+    bootstrap, headers, docket, application = _fixture(client, "CURRENCY")
+    profile = _profile(
+        client,
+        headers=headers,
+        docket_id=docket["id"],
+        recipient_id=bootstrap["membership"]["id"],
+    )
+    response = client.post(
+        "/api/ip/watch/journal-ingestions",
+        headers=headers,
+        json={
+            "idempotency_key": "watch-currency-mismatch-0001",
+            "provider_key": "ipindia-journal-manual",
+            "external_call": False,
+            "cost_minor": 10,
+            "currency": "USD",
+            "publications": [_publication(application_id=application["id"])],
+        },
+    )
+    assert response.status_code == 422, response.text
+    assert "currency" in response.text.lower()
+    SessionLocal = get_session_factory()
+    with SessionLocal() as session:
+        persisted = session.get(IpWatchProfile, profile["id"])
+        assert persisted is not None and persisted.spent_cost_minor_in_period == 0
+        assert (
+            session.scalar(
+                select(IpJournalIngestionRun).where(
+                    IpJournalIngestionRun.idempotency_key == "watch-currency-mismatch-0001"
+                )
+            )
+            is None
+        )
+
+
+def test_quota_resets_at_period_boundary_and_terminal_dockets_never_run(
+    client: TestClient,
+) -> None:
+    bootstrap, headers, docket, _ = _fixture(client, "PERIOD")
+    profile = _profile(
+        client,
+        headers=headers,
+        docket_id=docket["id"],
+        recipient_id=bootstrap["membership"]["id"],
+        max_cost=100,
+    )
+    SessionLocal = get_session_factory()
+    with SessionLocal() as session:
+        row = session.get(IpWatchProfile, profile["id"])
+        assert row is not None
+        row.frequency = "daily"
+        row.spent_cost_minor_in_period = 100
+        row.last_polled_at = datetime(2026, 8, 23, 18, 0, tzinfo=UTC)
+        row.next_poll_at = datetime(2026, 8, 24, 0, 0, tzinfo=UTC)
+        row.poll_status = "paused_cost_quota"
+        row.pause_reason = "Prior UTC-day quota exhausted."
+        session.commit()
+        result = run_journal_watch_scheduler(session, now=datetime(2026, 8, 24, 12, 0, tzinfo=UTC))
+        assert result.due_profiles == 1
+        assert result.checked_profiles == 1
+        session.refresh(row)
+        assert row.poll_status == "active"
+        assert row.pause_reason is None
+        assert row.spent_cost_minor_in_period == 0
+
+        docket_row = session.get(IpDocketRecord, docket["id"])
+        assert docket_row is not None
+        docket_row.status = "archived"
+        docket_row.is_active = False
+        docket_row.archived_by_matter_disposal = True
+        row.next_poll_at = datetime(2026, 8, 25, 0, 0, tzinfo=UTC)
+        run_count = len(
+            list(
+                session.scalars(
+                    select(IpJournalIngestionRun).where(
+                        IpJournalIngestionRun.company_id == bootstrap["company"]["id"]
+                    )
+                )
+            )
+        )
+        session.commit()
+        terminal_result = run_journal_watch_scheduler(
+            session, now=datetime(2026, 8, 25, 12, 0, tzinfo=UTC)
+        )
+        assert terminal_result.due_profiles == 0
+        assert (
+            len(
+                list(
+                    session.scalars(
+                        select(IpJournalIngestionRun).where(
+                            IpJournalIngestionRun.company_id == bootstrap["company"]["id"]
+                        )
+                    )
+                )
+            )
+            == run_count
+        )
+
+
+def test_ingestion_is_bounded_and_batches_profile_publication_lookups(
+    client: TestClient,
+) -> None:
+    with pytest.raises(ValidationError, match="at most 50"):
+        IpJournalIngestRequest.model_validate(
+            {
+                "idempotency_key": "watch-over-limit-0001",
+                "provider_key": "manual-journal",
+                "publications": [{}] * 51,
+            }
+        )
+
+    bootstrap, headers, docket, application = _fixture(client, "BATCH")
+    for index in range(2):
+        response = client.post(
+            "/api/ip/watch/profiles",
+            headers=headers,
+            json={
+                "docket_id": docket["id"],
+                "name": f"No-match profile {index}",
+                "word_terms": [f"UNRELATED-{index}"],
+                "class_numbers": [1],
+                "frequency": "daily",
+                "recipient_membership_ids": [bootstrap["membership"]["id"]],
+                "cost_currency": "INR",
+            },
+        )
+        assert response.status_code == 201, response.text
+    publications = [
+        _publication(
+            application_id=application["id"],
+            application_number=f"TM-BATCH-{index}",
+            journal_number=f"TMJ-BATCH-{index}",
+        )
+        for index in range(2)
+    ]
+    statements: list[str] = []
+
+    def capture_statement(
+        _conn: object,
+        _cursor: object,
+        statement: str,
+        _parameters: object,
+        _context: object,
+        _executemany: object,
+    ) -> None:
+        statements.append(statement)
+
+    SessionLocal = get_session_factory()
+    with SessionLocal() as session:
+        assert session.bind is not None
+        event.listen(session.bind, "before_cursor_execute", capture_statement)
+        try:
+            response = client.post(
+                "/api/ip/watch/journal-ingestions",
+                headers=headers,
+                json={
+                    "idempotency_key": "watch-batched-ingestion-0001",
+                    "provider_key": "ipindia-journal-manual",
+                    "external_call": False,
+                    "cost_minor": 0,
+                    "currency": "INR",
+                    "publications": publications,
+                },
+            )
+        finally:
+            event.remove(session.bind, "before_cursor_execute", capture_statement)
+    assert response.status_code == 201, response.text
+    assert response.json()["hits"] == []
+    select_count = sum(statement.lstrip().upper().startswith("SELECT") for statement in statements)
+    assert select_count <= 24
+
+    _profile(
+        client,
+        headers=headers,
+        docket_id=docket["id"],
+        recipient_id=bootstrap["membership"]["id"],
+    )
+    duplicate_item = _publication(
+        application_id=application["id"],
+        application_number="TM-BATCH-DUPLICATE",
+        journal_number="TMJ-BATCH-DUPLICATE",
+    )
+    duplicate_response = client.post(
+        "/api/ip/watch/journal-ingestions",
+        headers=headers,
+        json={
+            "idempotency_key": "watch-same-payload-duplicate-0001",
+            "provider_key": "ipindia-journal-manual",
+            "external_call": False,
+            "cost_minor": 0,
+            "currency": "INR",
+            "publications": [duplicate_item, duplicate_item],
+        },
+    )
+    assert duplicate_response.status_code == 201, duplicate_response.text
+    duplicate_body = duplicate_response.json()
+    assert duplicate_body["run"]["publications_seen"] == 2
+    assert duplicate_body["run"]["publications_created"] == 1
+    assert len(duplicate_body["publications"]) == 1
+    assert len(duplicate_body["hits"]) == 1

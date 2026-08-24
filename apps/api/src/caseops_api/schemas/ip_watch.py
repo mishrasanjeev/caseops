@@ -95,9 +95,7 @@ class IpJournalPublicationCreate(BaseModel):
     application_id: str | None = None
     journal_number: str = Field(min_length=1, max_length=80)
     journal_date: date
-    publication_kind: Literal["advertisement", "correction", "readvertisement"] = (
-        "advertisement"
-    )
+    publication_kind: Literal["advertisement", "correction", "readvertisement"] = "advertisement"
     application_number: str = Field(min_length=1, max_length=160)
     mark_text: str | None = Field(default=None, max_length=500)
     device_reference: str | None = Field(default=None, max_length=800)
@@ -146,7 +144,7 @@ class IpJournalIngestRequest(BaseModel):
     external_call: bool = False
     cost_minor: int = Field(default=0, ge=0)
     currency: str = Field(default="INR", min_length=3, max_length=3)
-    publications: list[IpJournalPublicationCreate] = Field(min_length=1, max_length=500)
+    publications: list[IpJournalPublicationCreate] = Field(min_length=1, max_length=50)
 
 
 class IpJournalPublicationResponse(BaseModel):
