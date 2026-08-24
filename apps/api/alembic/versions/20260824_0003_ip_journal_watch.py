@@ -214,6 +214,11 @@ def upgrade() -> None:
         "ip_journal_ingestion_runs",
         ["company_id", "created_at"],
     )
+    op.create_index(
+        "ix_ip_journal_ingestion_runs_requested_by_membership_id",
+        "ip_journal_ingestion_runs",
+        ["requested_by_membership_id"],
+    )
 
     op.create_table(
         "ip_watch_profiles",
@@ -275,6 +280,11 @@ def upgrade() -> None:
         sa.UniqueConstraint("id", "company_id", name="uq_ip_watch_profile_id_company"),
     )
     op.create_index("ix_ip_watch_profiles_docket_id", "ip_watch_profiles", ["docket_id"])
+    op.create_index(
+        "ix_ip_watch_profiles_created_by_membership_id",
+        "ip_watch_profiles",
+        ["created_by_membership_id"],
+    )
     op.create_index(
         "ix_ip_watch_profiles_company_poll",
         "ip_watch_profiles",
@@ -413,6 +423,11 @@ def upgrade() -> None:
         ),
     )
     op.create_index("ix_ip_watch_handoffs_hit_id", "ip_watch_handoffs", ["hit_id"])
+    op.create_index(
+        "ix_ip_watch_handoffs_created_by_membership_id",
+        "ip_watch_handoffs",
+        ["created_by_membership_id"],
+    )
 
 
 def downgrade() -> None:

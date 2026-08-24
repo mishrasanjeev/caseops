@@ -57,6 +57,16 @@ def test_journal_watch_migration_round_trips_when_empty(
         assert "fk_ip_watch_handoff_hit_company" in {
             row["name"] for row in schema.get_foreign_keys("ip_watch_handoffs")
         }
+        assert ("requested_by_membership_id",) in {
+            tuple(row["column_names"])
+            for row in schema.get_indexes("ip_journal_ingestion_runs")
+        }
+        assert ("created_by_membership_id",) in {
+            tuple(row["column_names"]) for row in schema.get_indexes("ip_watch_profiles")
+        }
+        assert ("created_by_membership_id",) in {
+            tuple(row["column_names"]) for row in schema.get_indexes("ip_watch_handoffs")
+        }
         with engine.connect() as connection:
             triggers = set(connection.scalars(text(
                 "SELECT name FROM sqlite_master WHERE type = 'trigger' "

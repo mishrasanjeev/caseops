@@ -15576,7 +15576,9 @@ class IpJournalIngestionRun(Base):
     hit_ids_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     stale_source_alert: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     error_redacted: Mapped[str | None] = mapped_column(String(1000), nullable=True)
-    requested_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    requested_by_membership_id: Mapped[str] = mapped_column(
+        String(36), nullable=False, index=True
+    )
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -15638,7 +15640,9 @@ class IpWatchProfile(Base):
     next_poll_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     criteria_version: Mapped[str] = mapped_column(String(80), nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    created_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    created_by_membership_id: Mapped[str] = mapped_column(
+        String(36), nullable=False, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
@@ -15759,7 +15763,9 @@ class IpWatchHandoff(Base):
     reviewer_decision_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     request_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     error_redacted: Mapped[str | None] = mapped_column(String(1000), nullable=True)
-    created_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    created_by_membership_id: Mapped[str] = mapped_column(
+        String(36), nullable=False, index=True
+    )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
