@@ -691,6 +691,10 @@ function IpWorkspaceSetupCard({
   });
   const escalationOwner =
     configuration?.escalation_owner_membership_id ?? currentMembershipId ?? "";
+  const providerAdapters = status?.provider_adapters ?? [];
+  const selectedAdapter = providerAdapters.find(
+    (adapter) => adapter.provider === providerKey,
+  );
 
   const save = useMutation({
     mutationFn: () =>
@@ -783,9 +787,55 @@ function IpWorkspaceSetupCard({
             />
           </Field>
           <Field label="Permitted registry provider (optional)">
-            <Input value={providerKey} onChange={(event) => setProviderKey(event.target.value)} />
+            <select
+              className={FORM_SELECT_CLASS}
+              value={providerKey}
+              onChange={(event) => {
+                setProviderKey(event.target.value);
+                setAcceptTerms(false);
+                setAutomations((current) => ({ ...current, registry_sync: false }));
+              }}
+              aria-label="Permitted registry provider"
+            >
+              <option value="">Manual docketing only</option>
+              {providerAdapters.map((adapter) => (
+                <option key={adapter.provider} value={adapter.provider}>
+                  {adapter.display_name} ({adapter.adapter_status.replaceAll("_", " ")})
+                </option>
+              ))}
+            </select>
           </Field>
         </div>
+
+        {selectedAdapter ? (
+          <div
+            className="rounded-md border border-[var(--color-line)] p-3 text-sm"
+            data-testid="ip-provider-contract"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-semibold">{selectedAdapter.display_name}</span>
+              <Badge
+                tone={selectedAdapter.adapter_status === "implemented" ? "success" : "warning"}
+              >
+                {selectedAdapter.adapter_status.replaceAll("_", " ")}
+              </Badge>
+              <Badge tone="neutral">
+                {selectedAdapter.commercial_terms_status.replaceAll("_", " ")}
+              </Badge>
+            </div>
+            {selectedAdapter.legal_coverage.map((coverage) => (
+              <div key={`${coverage.jurisdiction}:${coverage.office}`} className="mt-2 text-xs">
+                {coverage.jurisdiction} · {coverage.office} · {coverage.asset_types.join(", ")}
+                {" · "}{coverage.coverage_status} legal coverage
+              </div>
+            ))}
+            {selectedAdapter.activation_blockers.length ? (
+              <div className="mt-2 break-words text-xs text-amber-800">
+                Activation blocked: {selectedAdapter.activation_blockers.join(", ")}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="rounded-lg border border-[var(--color-line)] p-3 text-sm">
           <div className="font-semibold">Seeded governance contract</div>
@@ -884,6 +934,10 @@ function IpWorkspaceSetupCard({
                 <input
                   type="checkbox"
                   checked={automations[feature]}
+                  disabled={
+                    feature === "registry_sync" &&
+                    selectedAdapter?.adapter_status !== "implemented"
+                  }
                   onChange={(event) =>
                     setAutomations((current) => ({ ...current, [feature]: event.target.checked }))
                   }

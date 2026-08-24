@@ -2599,6 +2599,36 @@ export const providerOperationReplayBatchResponse = z.object({
   operations: z.array(providerOperationActionResponse),
 });
 
+export const providerAdapterLegalCoverageRecord = z.object({
+  jurisdiction: z.string(),
+  office: z.string(),
+  asset_types: z.array(z.string()).default([]),
+  identifier_types: z.array(z.string()).default([]),
+  register_fields: z.array(z.string()).default([]),
+  document_types: z.array(z.string()).default([]),
+  coverage_status: z.enum(["verified", "partial", "unverified"]),
+  evidence_ref: z.string().nullable().default(null),
+});
+
+export const providerAdapterContractRecord = z.object({
+  provider: z.string(),
+  display_name: z.string(),
+  domain: z.enum(["court_tracking", "ip_office_registry"]),
+  adapter_status: z.enum(["implemented", "blocked_pending_provider_contract"]),
+  commercial_terms_status: z.enum(["support_matrix_governed", "not_approved"]),
+  required_capabilities: z.array(z.string()).default([]),
+  implemented_capabilities: z.array(z.string()).default([]),
+  attribution_label: z.string(),
+  cost_categories: z.array(z.string()).default([]),
+  health_path: z.string().nullable().default(null),
+  support_matrix_path: z.string().nullable().default(null),
+  operations_path: z.string(),
+  endpoint_paths: z.array(z.string()).default([]),
+  legal_coverage: z.array(providerAdapterLegalCoverageRecord).default([]),
+  activation_blockers: z.array(z.string()).default([]),
+  limitations: z.array(z.string()).default([]),
+});
+
 export const providerReadinessRecord = z.object({
   provider: z.string(),
   display_name: z.string(),
@@ -2623,6 +2653,7 @@ export const providerReadinessRecord = z.object({
   review_queue: z.string().nullable(),
   retry_dead_letter: z.string(),
   limitations: z.array(z.string()).default([]),
+  adapter_contract: providerAdapterContractRecord.nullable().optional(),
 });
 
 export const providerReadinessListResponse = z.object({
@@ -3509,6 +3540,9 @@ export type ProviderOperationReplayPreviewResponse =
   z.infer<typeof providerOperationReplayPreviewResponse>;
 export type ProviderOperationReplayBatchResponse =
   z.infer<typeof providerOperationReplayBatchResponse>;
+export type ProviderAdapterContractRecord = z.infer<
+  typeof providerAdapterContractRecord
+>;
 export type ProviderReadinessRecord = z.infer<typeof providerReadinessRecord>;
 export type ProviderReadinessListResponse =
   z.infer<typeof providerReadinessListResponse>;

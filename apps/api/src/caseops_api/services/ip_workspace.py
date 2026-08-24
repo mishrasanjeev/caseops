@@ -25,6 +25,10 @@ from caseops_api.services.assignment_memberships import (
     require_locked_membership_capability,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.provider_adapter_catalog import (
+    provider_adapter_contracts,
+    provider_adapter_definition,
+)
 from caseops_api.services.session_context import SessionContext
 
 AUTOMATION_REQUIRED_TESTS: dict[str, frozenset[str]] = {
@@ -151,6 +155,7 @@ def get_ip_workspace_configuration_status(
             [],
         )),
         enablement_blockers=blockers,
+        provider_adapters=provider_adapter_contracts(domain="ip_office_registry"),
     )
 
 
@@ -199,6 +204,18 @@ def upsert_ip_workspace_configuration(
             status_code=422,
             detail="Escalation owner is not an active tenant member.",
         )
+    for provider_key in payload.provider_keys:
+        adapter = provider_adapter_definition(provider_key)
+        if adapter is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Provider is not registered in the provider adapter catalog.",
+            )
+        if adapter.domain != "ip_office_registry":
+            raise HTTPException(
+                status_code=422,
+                detail="Provider is not an IP-office registry adapter.",
+            )
     row = _configuration(session, company_id=company_id, for_update=True)
     if candidate is not None and (
         row is None
@@ -364,6 +381,37 @@ def _execute_safe_test(
             return False, "provider_not_configured", {"dry_run": True, "external_call": False}
         if configuration.provider_terms_accepted_at is None:
             return False, "provider_terms_not_accepted", {"dry_run": True, "external_call": False}
+        adapter = provider_adapter_definition(payload.provider_key)
+        if adapter is None:
+            return False, "provider_not_registered", {
+                "dry_run": True,
+                "external_call": False,
+            }
+        if adapter.domain != "ip_office_registry":
+            return False, "provider_domain_mismatch", {
+                "dry_run": True,
+                "external_call": False,
+            }
+        if (
+            adapter.adapter_status != "implemented"
+            or adapter.commercial_terms_status == "not_approved"
+        ):
+            return False, "provider_contract_not_approved", {
+                "dry_run": True,
+                "external_call": False,
+                "adapter_status": adapter.adapter_status,
+                "commercial_terms_status": adapter.commercial_terms_status,
+                "activation_blockers": list(adapter.activation_blockers),
+            }
+        required_capability = (
+            "health" if payload.test_kind == "connection" else "document_fetch"
+        )
+        if required_capability not in adapter.implemented_capabilities:
+            return False, "provider_capability_missing", {
+                "dry_run": True,
+                "external_call": False,
+                "required_capability": required_capability,
+            }
         return True, None, {
             "dry_run": True,
             "external_call": False,

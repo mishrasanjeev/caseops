@@ -110,6 +110,44 @@ const readiness = {
       retry_dead_letter: "ADP-24 provider operations replay is available.",
       limitations: ["No external calls."],
     },
+    {
+      provider: "ecourtsindia",
+      display_name: "eCourtsIndia case tracking",
+      adp_slice: "IPLF-050",
+      state: "ready",
+      configured: true,
+      enabled: true,
+      external_calls_enabled: true,
+      durable_workflow_available: true,
+      required_config_names: [],
+      missing_config_names: [],
+      required_approval_keys: [],
+      missing_approval_keys: [],
+      endpoint_paths: ["/api/case-tracking/search"],
+      idempotency_fields: ["tracked_case_id"],
+      change_detection_fields: ["normalized_record_hash"],
+      review_queue: "TrackedCase provider operations",
+      retry_dead_letter: "Shared guarded replay is available.",
+      limitations: [],
+      adapter_contract: {
+        provider: "ecourtsindia",
+        display_name: "eCourtsIndia case tracking",
+        domain: "court_tracking",
+        adapter_status: "implemented",
+        commercial_terms_status: "support_matrix_governed",
+        required_capabilities: ["search", "record_fetch", "health"],
+        implemented_capabilities: ["search", "record_fetch", "health"],
+        attribution_label: "eCourtsIndia provider-normalized court record",
+        cost_categories: ["case_refresh"],
+        health_path: "/api/admin/integrations/health",
+        support_matrix_path: "/api/case-tracking/support-matrix",
+        operations_path: "/api/admin/provider-operations/jobs",
+        endpoint_paths: ["/api/case-tracking/search"],
+        legal_coverage: [],
+        activation_blockers: [],
+        limitations: [],
+      },
+    },
   ],
 };
 
@@ -168,6 +206,12 @@ describe("ProviderOperationsPage", () => {
     render(withClient(<ProviderOperationsPage />));
     expect(await screen.findByText("Provider operations")).toBeInTheDocument();
     expect(await screen.findByTestId("readiness-google_drive")).toBeInTheDocument();
+    expect(await screen.findByTestId("readiness-ecourtsindia")).toHaveTextContent(
+      "3/3 capabilities",
+    );
+    expect(screen.getByTestId("readiness-ecourtsindia")).toHaveTextContent(
+      "/api/case-tracking/support-matrix",
+    );
     expect(await screen.findByTestId(`provider-operation-${operation.id}`)).toBeInTheDocument();
     expect(screen.getByText("[token-redacted] at [url-redacted]")).toBeInTheDocument();
     expect(screen.queryByText(/secret-token/i)).not.toBeInTheDocument();

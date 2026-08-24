@@ -25,6 +25,53 @@ ProviderReadinessState = Literal[
     "foundation_available",
     "ready",
 ]
+ProviderAdapterDomain = Literal["court_tracking", "ip_office_registry"]
+ProviderAdapterStatus = Literal["implemented", "blocked_pending_provider_contract"]
+ProviderCommercialTermsStatus = Literal[
+    "support_matrix_governed",
+    "not_approved",
+]
+ProviderAdapterCapability = Literal[
+    "search",
+    "record_fetch",
+    "document_fetch",
+    "health",
+    "attribution",
+    "cost",
+    "capability",
+    "operations",
+    "replay",
+]
+
+
+class ProviderAdapterLegalCoverageRecord(BaseModel):
+    jurisdiction: str
+    office: str
+    asset_types: list[str] = Field(default_factory=list)
+    identifier_types: list[str] = Field(default_factory=list)
+    register_fields: list[str] = Field(default_factory=list)
+    document_types: list[str] = Field(default_factory=list)
+    coverage_status: Literal["verified", "partial", "unverified"]
+    evidence_ref: str | None = None
+
+
+class ProviderAdapterContractRecord(BaseModel):
+    provider: str
+    display_name: str
+    domain: ProviderAdapterDomain
+    adapter_status: ProviderAdapterStatus
+    commercial_terms_status: ProviderCommercialTermsStatus
+    required_capabilities: list[ProviderAdapterCapability]
+    implemented_capabilities: list[ProviderAdapterCapability]
+    attribution_label: str
+    cost_categories: list[str] = Field(default_factory=list)
+    health_path: str | None = None
+    support_matrix_path: str | None = None
+    operations_path: str
+    endpoint_paths: list[str] = Field(default_factory=list)
+    legal_coverage: list[ProviderAdapterLegalCoverageRecord] = Field(default_factory=list)
+    activation_blockers: list[str] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
 
 
 class ProviderOperationRecord(BaseModel):
@@ -232,6 +279,7 @@ class ProviderReadinessRecord(BaseModel):
     review_queue: str | None = None
     retry_dead_letter: str
     limitations: list[str] = Field(default_factory=list)
+    adapter_contract: ProviderAdapterContractRecord | None = None
 
 
 class ProviderReadinessListResponse(BaseModel):
