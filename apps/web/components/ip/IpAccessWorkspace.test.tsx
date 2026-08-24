@@ -112,6 +112,28 @@ describe("IpAccessWorkspace", () => {
     });
   });
 
+  it("shows progress while an access preview is being calculated", async () => {
+    previewIpAccessChangeMock.mockImplementation(() => new Promise(() => undefined));
+    render(withClient(<IpAccessWorkspace docket={docket} onChanged={vi.fn()} />));
+
+    const workspace = await screen.findByTestId("ip-access-workspace");
+    await within(workspace).findByText("Restricted");
+    fireEvent.change(within(workspace).getByLabelText("Reason for change"), {
+      target: { value: "Conflict clearance completed." },
+    });
+    fireEvent.change(within(workspace).getByLabelText("Person or team"), {
+      target: { value: "membership-2" },
+    });
+    fireEvent.click(within(workspace).getByRole("button", { name: "Preview grant" }));
+
+    expect(await within(workspace).findByRole("status")).toHaveTextContent(
+      "Calculating the affected people, documents, and queued deliveries",
+    );
+    expect(
+      within(workspace).getAllByRole("button", { name: "Previewing access change..." }),
+    ).toHaveLength(2);
+  });
+
   it("previews and confirms an independently versioned grant on a narrow viewport", async () => {
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 360 });
     const onChanged = vi.fn().mockResolvedValue(undefined);

@@ -72,7 +72,24 @@
       "desired_state": "ENABLED",
       "task_timeout_seconds": 900,
       "image_policy": "release_digest",
-      "canary_policy": "scheduled_execution"
+      "canary_policy": "scheduled_execution",
+      "bootstrap": {
+        "command": ["uv"],
+        "args": ["run", "caseops-ip-journal-watch"],
+        "environment": {
+          "CASEOPS_ENV": "cloud",
+          "CASEOPS_AUTO_MIGRATE": "false"
+        },
+        "secrets": {
+          "CASEOPS_DATABASE_URL": "caseops-database-url:latest",
+          "CASEOPS_AUTH_SECRET": "caseops-auth-secret:latest"
+        },
+        "service_account": "caseops-runtime@perfect-period-305406.iam.gserviceaccount.com",
+        "cloud_sql_instances": "perfect-period-305406:asia-south1:caseops-db",
+        "cpu": "1",
+        "memory": "1Gi",
+        "max_retries": 1
+      }
     }
   ],
   "legacy_schedulers_to_pause": ["caseops-case-tracking-poll-midnight"]

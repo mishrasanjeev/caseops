@@ -256,7 +256,9 @@ export function IpAccessWorkspace({
                 onClick={previewSubjectChange}
                 disabled={!reasonReady || !subjectId || preview.isPending}
               >
-                Preview {changeKind === "grant" ? "grant" : "ethical wall"}
+                {preview.isPending
+                  ? "Previewing access change..."
+                  : `Preview ${changeKind === "grant" ? "grant" : "ethical wall"}`}
               </Button>
               <Button
                 className="w-full sm:w-auto"
@@ -264,9 +266,17 @@ export function IpAccessWorkspace({
                 onClick={() => previewPolicy(!current.restricted)}
                 disabled={!reasonReady || preview.isPending}
               >
-                Preview {current.restricted ? "default access" : "restricted access"}
+                {preview.isPending
+                  ? "Previewing access change..."
+                  : `Preview ${current.restricted ? "default access" : "restricted access"}`}
               </Button>
             </div>
+
+            {preview.isPending ? (
+              <p className="text-sm text-[var(--color-mute)]" role="status">
+                Calculating the affected people, documents, and queued deliveries...
+              </p>
+            ) : null}
 
             <AccessHistory
               title="Grant history"
