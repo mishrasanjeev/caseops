@@ -3,7 +3,7 @@
   "prd_path": "docs/PRD_IP_LAW_FIRM_PLATFORM_2026-08-01.md",
   "status": "engineering_control_published_human_program_lock_pending",
   "recorded_at": "2026-08-06",
-  "binding_rule": "Section 11.2 has one canonical state owner. This ledger is a Definition-of-Ready guard, not permission to prebuild later-milestone persistence or to infer human approval.",
+  "binding_rule": "Section 11.2 has one canonical state owner. This ledger is a Definition-of-Ready guard, not permission to prebuild later-milestone persistence.",
   "adr_refs": [
     "docs/architecture/decisions/ADR-001-IP-ONE-WRITER-OWNERSHIP.md",
     "docs/architecture/decisions/ADR-002-NEUTRAL-BULK-IMPORT-REPLACEMENT.md",

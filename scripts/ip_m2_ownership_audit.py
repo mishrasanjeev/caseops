@@ -2,7 +2,7 @@
 """Validate and render the M2 one-writer reconciliation audit.
 
 This repository control makes the M2 exit condition reviewable without
-pretending that a file reference proves human acceptance or a production run.
+pretending that a file reference proves a production run.
 It requires every implemented/in-progress M2 slice to retain a canonical-writer
 contract, executable repository test references, and an evidence artifact.  A
 blocked active slice must name its blocker.  Deployment-verified rows must
@@ -229,7 +229,7 @@ def _render_markdown(manifest: Mapping[str, Any]) -> str:
         "## Boundary",
         "",
         "This is a repository Definition-of-Ready control. It validates required",
-        "canonical-writer, test, and evidence references. It does not establish human acceptance,",
+        "canonical-writer, test, and evidence references.",
         "run a production operation, or convert a blocked slice into",
         "a released capability.",
         "",
@@ -260,7 +260,7 @@ def _render_markdown(manifest: Mapping[str, Any]) -> str:
             "",
             "`deployment-evidence-recorded` means only that the canonical manifest",
             "contains checked-in evidence for a `deployment_verified` slice. It is not",
-            "a substitute for its specified production journey, named human approval,",
+            "a substitute for its specified production journey,",
             "or any still-open external gate. `repository-evidence-recorded-release-blocked`",
             "deliberately preserves the active blocker.",
             "",

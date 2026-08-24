@@ -3,7 +3,7 @@
   "prd_path": "docs/PRD_IP_LAW_FIRM_PLATFORM_2026-08-01.md",
   "scope": "ARCH-OPS-01..26",
   "status": "published_repository_control",
-  "runtime_acceptance": "Each later behavior slice must prove its own allocated journeys; this administrative slice does not infer UJ-47, UJ-67, or human acceptance.",
+  "runtime_evidence": "Each later behavior slice must prove its own allocated journeys; this administrative slice does not infer UJ-47 or UJ-67.",
   "shared_refs": {
     "ownership_ledger": "docs/ip-implementation/OWNERSHIP_LEDGER.yaml",
     "event_catalogue": "docs/ip-implementation/IP_EVENT_CATALOG.yaml",

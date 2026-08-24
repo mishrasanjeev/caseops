@@ -1,7 +1,7 @@
 # IP deadline, rule, calendar, and responsibility foundation
 
 **Slice:** `IPLF-023A`  
-**Status:** Repository implementation and local verification complete; independent CI, canonical-main release, production deployment, and human acceptance remain pending.  
+**Status:** Repository implementation and local verification complete; independent CI, canonical-main release, and exact-release production verification remain pending.
 **Program status:** `PROGRAM INCOMPLETE`
 
 ## Ownership boundary

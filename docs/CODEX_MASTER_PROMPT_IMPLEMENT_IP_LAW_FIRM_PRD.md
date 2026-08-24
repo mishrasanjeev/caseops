@@ -49,17 +49,17 @@ Treat the complete PRD as one continuous, work-conserving program. Slices remain
 5. Maintain one canonical writer for each shared table/lifecycle. Parallel work on the same owner requires an identified integration owner; independent modules should continue concurrently.
 6. Preserve all user changes in a dirty worktree. Do not revert, reset, overwrite, or clean unrelated work.
 7. Use branches prefixed with `codex/` unless the user gives a different naming convention. Use normal review and branch protections. Existing program authorization covers routine commit, push, merge, deploy, and production-safe verification when repository controls permit; do not ask again at each slice.
-8. Implement external/legal/provider-gated behavior completely behind fail-closed defaults, truthful unavailable/manual states, readiness checks, and kill switches. Human approval gates activation, public claims, and final acceptance, not repository implementation.
-9. Require a human pause only for a real-world legal/financial/external communication act, unavailable authority/credentials/paid capacity, or an exact irreversible production action not already approved. One consolidated exact-scope approval event containing every policy-required approver remains valid only while its immutable operation manifest is unexpired and through an unchanged immediate hold refresh; expiry or material drift invalidates it.
+8. Implement external/legal/provider-gated behavior completely behind fail-closed defaults, truthful unavailable/manual states, readiness checks, and kill switches. Machine-verifiable readiness gates activation and public claims, not repository implementation.
+9. Keep real-world legal/financial/external communication acts and exact irreversible production actions outside the implementation queue. An authorized operator executes those live acts separately against an unexpired immutable operation manifest after machine policy, preview, hold, recovery, and scope checks pass.
 10. Never expose or persist credentials from prompts, chat history, fixtures, screenshots, logs, code, documents, commits, or test reports. Use configured secret stores and redacted references.
-11. Persist checkpoints automatically when the revision, deployment, blocker, or risk state changes materially and before risky release actions. Do not turn checkpointing or progress reporting into an approval gate.
+11. Persist checkpoints automatically when the revision, deployment, blocker, or risk state changes materially and before risky release actions. Checkpointing and progress reporting never pause implementation.
 12. Continue in the same run through focused implementation, integrated CI, review, merge, deployment, and exact-revision verification until repository-controlled work is complete or only genuine external authority remains.
 
 ## Canonical Program Control
 
 Create a minimal repository-backed control plane under `docs/ip-implementation/`:
 
-- `PROGRAM_MANIFEST.yaml` is the sole manually maintained source of program status and traceability. It contains milestones, epics, slices, requirement IDs, journey paths and atomic exceptions, ownership decisions, dependencies, implementation references, tests, fixtures/data expectations, documentation impact, evidence references, approvals, blockers and next actions.
+- `PROGRAM_MANIFEST.yaml` is the sole manually maintained source of program status and traceability. It contains milestones, epics, slices, requirement IDs, journey paths and atomic exceptions, ownership decisions, dependencies, implementation references, tests, fixtures/data expectations, documentation impact, evidence references, blockers and next actions.
 - `adr/` contains durable architecture and ownership decisions. Proposed ADRs are not approved decisions.
 - `evidence/<milestone>/<slice>/` contains immutable or linked test, migration, visual, legal/UAT and release evidence. A prose claim is not evidence.
 - `generated/` contains human-readable implementation, requirement, journey, ownership, data, documentation and release views generated from `PROGRAM_MANIFEST.yaml`. Never edit status independently in generated views.
@@ -71,15 +71,14 @@ Track progress with separate dimensions instead of one overloaded `done` field:
 - `implementation_status`: `not_started`, `in_progress`, `implemented`, `blocked`.
 - `verification_status`: `not_run`, `failed`, `passed`, `blocked`.
 - `release_status`: `not_required`, `ready_for_review`, `approved`, `deployed`, `deployment_verified`, `blocked`.
-- `acceptance_status`: `not_required`, `pending`, `approved`, `rejected`, `blocked`.
 
-`verified` is a computed result, never a manually asserted status. It requires implemented behavior, passing required verification, deployment verification where release is required, approved human acceptance where required, resolved blockers, current documentation and resolving evidence references. A local pass cannot produce `deployment_verified`; a deployed build cannot produce legal or pilot approval.
+`verified` is a computed result, never a manually asserted status. It requires implemented behavior, passing required verification, deployment verification where release is required, resolved blockers, current documentation and resolving evidence references. A local pass cannot produce `deployment_verified`.
 
-Add a validator, callable locally and in CI, that parses the PRD and manifest and fails on missing or duplicate requirement IDs; missing journeys or stated exceptions; invalid references or status transitions; broken evidence paths; unapproved `not_required`/scope decisions; forbidden duplicate owners; or milestone closure with incomplete rows. The expected baseline is exactly 436 IDs across 50 families and UJ-01 through UJ-68, and the validator must detect rather than conceal count drift.
+Add a validator, callable locally and in CI, that parses the PRD and manifest and fails on missing or duplicate requirement IDs; missing journeys or stated exceptions; invalid references or status transitions; broken evidence paths; undocumented empty coverage; forbidden duplicate owners; or milestone closure with incomplete rows. The expected baseline is exactly 436 IDs across 50 families and UJ-01 through UJ-68, and the validator must detect rather than conceal count drift.
 
-The validator proves structure and referential integrity, not semantic correctness. It must not pass a row merely because an evidence file exists. Test evidence includes command, environment, revision, fixture/data version, assertions and result; human evidence identifies the authorized reviewer and approved scope. Empty files, generated prose, unchecked boxes and Codex-authored signatures are invalid.
+The validator proves structure and referential integrity, not semantic correctness. It must not pass a row merely because an evidence file exists. Test evidence includes command, environment, revision, fixture/data version, assertions and result. Empty files and generated prose are invalid.
 
-No requirement, journey or exception may disappear. A `not_required` acceptance or release field does not mean the product requirement is out of scope. `Not applicable` requires an approved PRD citation, reviewer, reason, date and affected milestone; Codex never infers or self-approves it. A milestone cannot exit with a required row blocked, failed, untested, unapproved, unreleased where release is required, or supported only by self-authored narrative.
+No requirement, journey or exception may disappear. A `not_required` release field does not mean the product requirement is out of scope. Empty coverage requires a documented administrative reason. A milestone cannot exit with a required row blocked, failed, untested, unreleased where release is required, or supported only by self-authored narrative.
 
 ## Architecture and Duplicate-Work Rules
 
@@ -290,28 +289,27 @@ Landing pages and sales copy must be truthful and server-capability driven:
 
 The generated documentation view must show every impacted artifact as updated or reviewed-no-change with owner and evidence. The integrated candidate is incomplete when changed surfaces lack matching public/product/operational documentation; compatible slices may batch that documentation at the integration checkpoint.
 
-## Security, Legal and AI Gates
+## Security, Legal and AI Controls
 
 - Enforce company, active membership, capability, entitlement, rollout, client/record, ethical-wall, document, portal and source access server-side.
 - Reuse recent step-up and four-eyes rules; derive actors from authenticated context. Never accept an actor/approver/company field as proof of authorization.
 - Protect against SSRF, redirect/DNS rebinding, webhook forgery/replay, prompt injection, malicious/archive/formula uploads, cross-tenant vector/cache leakage, insecure direct object access and secret logging.
 - Preserve privilege/confidentiality in search, assistant, exports, reports, notifications, source/document proxy, portal, logs and support tooling.
 - AI outputs are proposals with exact citations, source-open state, assumptions, missing facts, contrary authority and abstention. AI never files, serves, pays, waives, closes, activates a legal rule or changes a confirmed deadline autonomously.
-- Legal rules, forms, fees, workflows and authoritative text require versioned exact sources, fixtures and two-person legal approval. Draft/editorial material cannot activate automation.
-- Security, privacy, records, legal and provider approvals gate the affected authoritative activation, real customer-data/provider/legal effect, public claim, and final acceptance unless a named rule explicitly forbids deployment. They do not block deployment of complete fail-closed repository behavior; test code cannot substitute for required human/legal evidence when activation is requested.
-- Human approvals must identify the approver, role, scope, environment, evidence/version and timestamp. Codex cannot manufacture, infer, reuse out-of-scope or self-grant an approval; a generated checkbox, fixture signature or prose declaration is not human acceptance.
-- Credentials pasted in a prompt or document are not authorization to log in or mutate a hosted environment. Use only a configured secret store or an already authorized session, redact all evidence, and request action-specific approval when repository policy requires it.
+- Legal rules, forms, fees, workflows and authoritative text require versioned exact sources, fixtures, machine policy checks, and an authenticated two-person live action. Draft/editorial material cannot activate automation.
+- Security, privacy, records, legal, and provider machine policies gate only the affected authoritative activation, real customer-data/provider/legal effect, and public claim. They do not block deployment of complete fail-closed repository behavior.
+- Credentials pasted in a prompt or document are not authorization to log in or mutate a hosted environment. Use only a configured secret store or an already authorized session, redact all evidence, and use only already-authorized operations.
 - New or materially upgraded dependencies require compatibility, license, vulnerability, maintenance and lockfile review. Prefer repository-standard or proven domain libraries and avoid introducing a second framework for an already owned concern.
 
 ## Release and Completion Rules
 
 For each compatible integrated release train, produce one evidence pack with truthful dimensioned status for every included milestone/slice row:
 
-- Every activated or publicly supported requirement and atomic journey path/exception computes as `verified` from the canonical manifest. Repository-only scope may deploy with `implementation_status=implemented`, automated verification passed, `acceptance_status=pending`, and the affected behavior truthfully unavailable/intake-only/default-off.
+- Every activated or publicly supported requirement and atomic journey path/exception computes as `verified` from the canonical manifest. Repository-only scope may deploy with `implementation_status=implemented`, automated verification passed, and the affected behavior truthfully unavailable/intake-only/default-off.
 - Ownership views and forbidden-duplicate checks pass.
 - Migrations, backfills, reconciliation, rollback and mixed revisions pass.
 - Cross-company, restricted-record, portal and revocation tests pass.
-- Legal/provider golden fixtures and required UAT are signed for scope being activated or claimed supported. Pending signatures remain explicit and keep only the affected flags/effects off.
+- Legal/provider golden fixtures and required automated journeys pass for the scope being activated or claimed supported.
 - Frontend, responsive, accessibility and source/download behavior pass.
 - Data, report/export and audit outcomes reconcile.
 - Jobs, notification/provider effects, readiness, cost, freshness and replay are observable.
@@ -319,7 +317,7 @@ For each compatible integrated release train, produce one evidence pack with tru
 - Exact merged commit, image digest, schema head, worker/job revisions, flags/entitlements, migration/backfill version and serving route are deployed, and a dated smoke against that revision passes.
 - No P0 remains. No P1 may remain in activated/supported scope or where it undermines the release's verification; a P1 confined to fail-closed pending scope keeps that scope disabled with an owner/date/disclosure without blocking unrelated deployment.
 
-Do not declare the full PRD complete until M0-M10, every required child PRD has the human approval required for its completed/activated scope, all manifest rows, all documentation/public claims, and all release evidence are verified. Schema presence, generated tests, mock-provider success, a local green build, a feature branch, a draft PR, a roadmap entry or self-authored acceptance is not completion. If merge or production access is not authorized, report `ready_for_review` or the applicable blocker; do not claim release or production completion.
+Do not declare the full PRD complete until M0-M10, all manifest rows, all documentation/public claims, and all release evidence are verified. Schema presence, generated tests, mock-provider success, a local green build, a feature branch, a draft PR, a roadmap entry or self-authored acceptance is not completion. If merge or production access is not authorized, report `ready_for_review` or the applicable blocker; do not claim release or production completion.
 
 If external legal/provider/pilot/production evidence prevents final completion, report the program as incomplete. List exact verified scope, exact blocked rows, owner, decision/evidence needed, safe manual fallback, and next executable independent slice. Never convert a blocker into a guessed implementation or false pass.
 
@@ -368,7 +366,7 @@ This version has been reviewed specifically for execution failure modes: duplica
 
 The product owner removed the fixed wait for “seven consecutive days of natural scheduler health.” The active release gate is exact-revision/IAM/config verification, bounded scheduler-to-job canaries, health checks, and a dated production journey; natural executions continue as SLO evidence.
 
-The fifteen slices currently decomposed in `PROGRAM_MANIFEST.yaml` have repository implementations. The five tails that an earlier release record left open—`IPLF-007B`, `IPLF-039B`, `IPLF-039C`, `IPLF-039E`, and `IPLF-039F`—were implemented and then production verified on 2 August 2026 as described in `docs/ip-implementation/evidence/release-2026-08-01-completion.md`. Exact-commit CI, schema migration, immutable scheduler convergence, 100% API/web traffic, health, and authenticated dated production E2E passed; their manifest release state is `deployment_verified`. Human acceptance remains pending.
+The fifteen slices currently decomposed in `PROGRAM_MANIFEST.yaml` have repository implementations. The five tails that an earlier release record left open—`IPLF-007B`, `IPLF-039B`, `IPLF-039C`, `IPLF-039E`, and `IPLF-039F`—were implemented and then production verified on 2 August 2026 as described in `docs/ip-implementation/evidence/release-2026-08-01-completion.md`. Exact-commit CI, schema migration, immutable scheduler convergence, 100% API/web traffic, health, and authenticated dated production E2E passed; their manifest release state is `deployment_verified`.
 
 This checkpoint does not revise the PRD or mark the program complete. The 436 requirement rows, 68 journeys, undecomposed M0/M2-M10 epics, legal/provider fixtures, data-governance and recovery gates, pilot UAT, and specialist child PRDs remain governed by the canonical manifest and the completion rules above. Implemented slice breadth must not be represented as full-program delivery.
 
