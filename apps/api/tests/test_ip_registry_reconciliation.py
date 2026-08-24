@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import DatabaseError
 
@@ -15,9 +18,125 @@ from caseops_api.db.models import (
     TrackedCase,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.schemas.ip_registry import (
+    IpRegistryDiffResolveRequest,
+    IpRegistryLinkCreateRequest,
+    IpRegistryManualSnapshotRequest,
+)
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_clients import _mk_matter
 from tests.test_ip_record_workflow import _application, _asset, _docket, _particulars
+
+
+def _valid_link_request(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "application_id": "application-1",
+        "provider_key": "ipindia-registry",
+        "office": "IP India",
+        "jurisdiction": "IN",
+        "identifier_kind": "application",
+        "raw_identifier": "TM-1234567",
+        "source_url": "https://ipindia.gov.in/registry/TM-1234567",
+        "match_confidence": "0.96",
+        "capability_version": "manual-evidence-v1",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _valid_snapshot_request(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "expected_link_version": 1,
+        "idempotency_key": "snapshot-validation-1",
+        "source_url": "https://ipindia.gov.in/registry/TM-1234567",
+        "source_retrieved_at": datetime(2026, 8, 24, 8, 30, tzinfo=UTC),
+        "parser_version": "manual-normalizer-v1",
+        "raw_snapshot": {"status": "registered"},
+        "normalized_snapshot": {"status": "registered"},
+    }
+    payload.update(overrides)
+    return payload
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        (
+            _valid_link_request(application_id=None),
+            "Choose exactly one application or proceeding target",
+        ),
+        (
+            _valid_link_request(source_url="ftp://ipindia.gov.in/TM-1234567"),
+            "Registry source URL must use HTTP or HTTPS",
+        ),
+    ],
+)
+def test_registry_link_request_rejects_ambiguous_target_or_unsafe_url(
+    payload: dict[str, object],
+    message: str,
+) -> None:
+    with pytest.raises(ValidationError, match=message):
+        IpRegistryLinkCreateRequest.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        (
+            {"source_url": "file:///tmp/registry.json"},
+            "Registry source URL must use HTTP or HTTPS",
+        ),
+        (
+            {"source_retrieved_at": datetime(2026, 8, 24, 8, 30)},
+            "Source retrieval time must include a timezone",
+        ),
+        (
+            {"raw_snapshot": {}},
+            "Raw and normalized snapshots must both contain evidence",
+        ),
+        (
+            {"supersedes_snapshot_id": "snapshot-1"},
+            "A corrected snapshot requires both predecessor and reason",
+        ),
+    ],
+)
+def test_manual_snapshot_request_rejects_unverifiable_evidence(
+    overrides: dict[str, object],
+    message: str,
+) -> None:
+    with pytest.raises(ValidationError, match=message):
+        IpRegistryManualSnapshotRequest.model_validate(_valid_snapshot_request(**overrides))
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        (
+            {"expected_version": 1, "decision": "map", "reason": "Map registry field."},
+            "Mapping requires a canonical field path",
+        ),
+        (
+            {"expected_version": 1, "decision": "accept", "reason": "Accept source fact."},
+            "Acceptance requires effective time and responsible member",
+        ),
+        (
+            {
+                "expected_version": 1,
+                "decision": "accept",
+                "reason": "Accept source fact.",
+                "effective_at": datetime(2026, 8, 24, 8, 30),
+                "responsible_membership_id": "membership-1",
+            },
+            "Accepted effective time must include a timezone",
+        ),
+    ],
+)
+def test_registry_diff_decision_requires_complete_review_evidence(
+    payload: dict[str, object],
+    message: str,
+) -> None:
+    with pytest.raises(ValidationError, match=message):
+        IpRegistryDiffResolveRequest.model_validate(payload)
 
 
 def _registry_link(
