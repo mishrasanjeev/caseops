@@ -387,3 +387,33 @@ recommendation, review status, and `no_automatic_application_update=true`.
 Madrid oppositions additionally link the current application to its WIPO and
 Indian designation identifiers and lifecycle source without replacing the
 application owner.
+
+## IPLF-049 post-registration proceedings
+
+IPLF-049 extends `ip_proceedings`, `ip_identifiers`, and the append-only
+`ip_docket_events` stream. It creates no parallel rectification, cancellation,
+non-use, party, fee, service, document, hearing, deadline, order, or audit
+owner. `rectification`, `cancellation`, and `non_use_removal` remain distinct
+proceeding and identifier kinds. Opposition numbers and opposition stage
+templates are rejected for these proceedings.
+
+Each post-registration profile records the target right, applicant and
+respondent, challenged class scope, grounds, forum, form, fee and service
+status, source documents, and a lawyer-confirmed rule map. The canonical
+template key is `post-registration/{proceeding_kind}`. A rule applied mutatis
+mutandis must name its source rule, mapped provisions, excluded provisions,
+and lawyer confirmation; copying an opposition template is not accepted.
+
+Procedural actions append typed `post_registration_action` events. Stage,
+evidence, hearing, order, compliance, and appeal states use the proceeding's
+own template. A parallel court or Registry proceeding is linked by ID but
+remains a separate `ip_proceedings` row. Interim-stay and stay-lift events are
+projected in sequence, and an active stay blocks both creation and approval of
+a registration-disposition candidate.
+
+Settlement, withdrawal, and closure require the closure type, explicit legal
+effect, effective date, source evidence, and authorized confirmation. A
+disposition remains a candidate followed by an explicit approve/reject review.
+Both events carry `registration_disposition_applied=false`; this workflow never
+changes the linked trademark application's phase, active state, or registration
+scope automatically.

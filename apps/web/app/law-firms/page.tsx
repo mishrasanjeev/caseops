@@ -115,6 +115,11 @@ const platformMoves = [
     body: "Search distinct application and opposition numbers. Run applicant and opponent TM-O work, Rules 45-47 evidence packages, governed extensions, shared hearing preparation, orders, compliance directions and order-linked appeals with source evidence, immutable history and dual deadline ownership.",
   },
   {
+    icon: Scale,
+    title: "Post-registration trademark proceedings",
+    body: "Docket rectification, cancellation and non-use removal separately from opposition. Record challenged classes, grounds, forum, form, fee, service and counsel-confirmed rule mappings; link parallel proceedings, enforce sourced stays, and review type-matched disposition candidates without automatically changing the registration.",
+  },
+  {
     icon: FileSignature,
     title: "Trademark pleading studio",
     body: "Draft opposition notices, counterstatements and evidence affidavits from side-and-stage-aware templates. Before approval and filing, CaseOps rechecks current identifiers, dates, authority citations, document-version hashes, source and exhibit anchors, and unresolved placeholders. Compare immutable revisions, export a registry-formatted filing bundle, and record filing, rejection, correction and service as separate human events.",

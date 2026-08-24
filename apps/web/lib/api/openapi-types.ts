@@ -5611,6 +5611,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/post-registration-actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Post Registration Action */
+        post: operations["post_ip_post_registration_action_api_ip_dockets__docket_id__proceedings__proceeding_id__post_registration_actions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/post-registration-workspace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Post Registration Workspace */
+        get: operations["get_ip_post_registration_workspace_api_ip_dockets__docket_id__proceedings__proceeding_id__post_registration_workspace_get"];
+        /** Put Ip Post Registration Workspace */
+        put: operations["put_ip_post_registration_workspace_api_ip_dockets__docket_id__proceedings__proceeding_id__post_registration_workspace_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/stage": {
         parameters: {
             query?: never;
@@ -21557,7 +21592,7 @@ export interface components {
              * Event Kind
              * @enum {string}
              */
-            event_kind: "filing" | "formalities" | "examination_report" | "response" | "show_cause_hearing" | "acceptance" | "publication" | "registration" | "renewal" | "refusal" | "abandonment" | "restoration" | "lifecycle_transition" | "opposition_profile" | "opposition_applicant_action" | "opposition_opponent_action" | "opposition_shared_action";
+            event_kind: "filing" | "formalities" | "examination_report" | "response" | "show_cause_hearing" | "acceptance" | "publication" | "registration" | "renewal" | "refusal" | "abandonment" | "restoration" | "lifecycle_transition" | "opposition_profile" | "opposition_applicant_action" | "opposition_opponent_action" | "opposition_shared_action" | "post_registration_profile" | "post_registration_action";
             /** Evidence Refs */
             evidence_refs?: string[];
             /** Expected Application Version */
@@ -22673,7 +22708,7 @@ export interface components {
              * Identifier Kind
              * @enum {string}
              */
-            identifier_kind: "application" | "registration" | "opposition" | "rectification" | "appeal" | "court";
+            identifier_kind: "application" | "registration" | "opposition" | "rectification" | "cancellation" | "non_use_removal" | "appeal" | "court";
             /**
              * Is Primary
              * @default false
@@ -22707,7 +22742,7 @@ export interface components {
              * Identifier Kind
              * @enum {string}
              */
-            identifier_kind: "application" | "registration" | "opposition" | "rectification" | "appeal" | "court";
+            identifier_kind: "application" | "registration" | "opposition" | "rectification" | "cancellation" | "non_use_removal" | "appeal" | "court";
             /**
              * Is Primary
              * @default false
@@ -24903,6 +24938,185 @@ export interface components {
             /** Team Id */
             team_id?: string | null;
         };
+        /** IpPostRegistrationActionRequest */
+        IpPostRegistrationActionRequest: {
+            /**
+             * Action Kind
+             * @enum {string}
+             */
+            action_kind: "stage_update" | "parallel_proceeding_link" | "interim_stay" | "stay_lifted" | "order_recorded" | "closure" | "disposition_candidate" | "disposition_review";
+            /** Authority Reference */
+            authority_reference?: string | null;
+            /** Authorized Confirmation */
+            authorized_confirmation?: string | null;
+            /** Candidate Disposition */
+            candidate_disposition?: ("rectify_registration" | "cancel_registration" | "remove_for_non_use" | "no_change") | null;
+            /** Candidate Event Id */
+            candidate_event_id?: string | null;
+            /** Document Refs */
+            document_refs?: string[];
+            /**
+             * Effective At
+             * Format: date-time
+             */
+            effective_at: string;
+            /** Evidence Refs */
+            evidence_refs?: string[];
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version: number;
+            /** Expected Proceeding Version */
+            expected_proceeding_version: number;
+            /** Legal Effect */
+            legal_effect?: string | null;
+            /** Legal Effective Date */
+            legal_effective_date?: string | null;
+            /** Parallel Proceeding Id */
+            parallel_proceeding_id?: string | null;
+            /** Reason */
+            reason: string;
+            /** Responsible Membership Id */
+            responsible_membership_id: string;
+            /** Review Decision */
+            review_decision?: ("approved" | "rejected") | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "manual" | "registry" | "integration" | "system";
+            /** Source Reference */
+            source_reference: string;
+            /** Stage */
+            stage?: string | null;
+        };
+        /** IpPostRegistrationProfile */
+        IpPostRegistrationProfile: {
+            /** Applicant Name */
+            applicant_name: string;
+            /** Challenged Scope */
+            challenged_scope: components["schemas"]["IpPostRegistrationScope"][];
+            /** Fee Reference */
+            fee_reference?: string | null;
+            /**
+             * Fee Status
+             * @enum {string}
+             */
+            fee_status: "required" | "paid" | "not_required" | "manual_review";
+            /** Form Key */
+            form_key: string;
+            /** Forum */
+            forum: string;
+            /** Grounds */
+            grounds: string[];
+            /**
+             * Lawyer Confirmed By Membership Id
+             * @default
+             */
+            lawyer_confirmed_by_membership_id: string;
+            /** Legal Basis */
+            legal_basis: string;
+            /**
+             * Proceeding Type
+             * @enum {string}
+             */
+            proceeding_type: "rectification" | "cancellation" | "non_use_removal";
+            /** Respondent Name */
+            respondent_name: string;
+            rule_map: components["schemas"]["IpPostRegistrationRuleMap"];
+            /** Service Reference */
+            service_reference?: string | null;
+            /**
+             * Service Status
+             * @enum {string}
+             */
+            service_status: "not_started" | "prepared" | "served" | "not_required";
+            /** Target Right Reference */
+            target_right_reference: string;
+        };
+        /** IpPostRegistrationRuleMap */
+        IpPostRegistrationRuleMap: {
+            /** Authority Reference */
+            authority_reference: string;
+            /** Excluded Provisions */
+            excluded_provisions?: string[];
+            /** Lawyer Confirmation */
+            lawyer_confirmation?: string | null;
+            /** Mapped From Rule */
+            mapped_from_rule?: string | null;
+            /** Mapped Provisions */
+            mapped_provisions?: string[];
+            /**
+             * Mutatis Mutandis
+             * @default false
+             */
+            mutatis_mutandis: boolean;
+            /** Source Reference */
+            source_reference: string;
+            /** Template Key */
+            template_key: string;
+            /** Template Version */
+            template_version: string;
+        };
+        /** IpPostRegistrationScope */
+        IpPostRegistrationScope: {
+            /** Class Number */
+            class_number: number;
+            /** Goods Services Segment */
+            goods_services_segment: string;
+        };
+        /** IpPostRegistrationWorkspaceResponse */
+        IpPostRegistrationWorkspaceResponse: {
+            /** Action Events */
+            action_events: components["schemas"]["IpDocketEventResponse"][];
+            /** Active Stay */
+            active_stay: boolean;
+            /** Identifiers */
+            identifiers: components["schemas"]["IpIdentifierResponse"][];
+            proceeding: components["schemas"]["IpProceedingResponse"];
+            profile: components["schemas"]["IpPostRegistrationProfile"] | null;
+            profile_event: components["schemas"]["IpDocketEventResponse"] | null;
+            /** Profile Revision Count */
+            profile_revision_count: number;
+            /** Readiness Gaps */
+            readiness_gaps: string[];
+            /** Ready For Stage Progression */
+            ready_for_stage_progression: boolean;
+            /**
+             * Registration Disposition Is Automatic
+             * @default false
+             * @constant
+             */
+            registration_disposition_is_automatic: false;
+        };
+        /** IpPostRegistrationWorkspaceUpsertRequest */
+        IpPostRegistrationWorkspaceUpsertRequest: {
+            /** Document Refs */
+            document_refs: string[];
+            /**
+             * Effective At
+             * Format: date-time
+             */
+            effective_at: string;
+            /** Evidence Refs */
+            evidence_refs?: string[];
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version: number;
+            /** Expected Proceeding Version */
+            expected_proceeding_version: number;
+            /** Expected Profile Event Id */
+            expected_profile_event_id?: string | null;
+            profile: components["schemas"]["IpPostRegistrationProfile"];
+            /** Reason */
+            reason: string;
+            /** Responsible Membership Id */
+            responsible_membership_id: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "manual" | "registry" | "integration" | "system";
+            /** Source Reference */
+            source_reference: string;
+        };
         /** IpProceedingCreateRequest */
         IpProceedingCreateRequest: {
             /** Application Id */
@@ -24922,7 +25136,8 @@ export interface components {
              * Proceeding Kind
              * @enum {string}
              */
-            proceeding_kind: "opposition" | "rectification" | "appeal" | "court";
+            proceeding_kind: "opposition" | "rectification" | "cancellation" | "non_use_removal" | "appeal" | "court";
+            proceeding_number?: components["schemas"]["IpProceedingNumberCreate"] | null;
             /**
              * Side
              * @enum {string}
@@ -24940,6 +25155,23 @@ export interface components {
             stage: string;
             /** Stage Template Version */
             stage_template_version?: string | null;
+        };
+        /** IpProceedingNumberCreate */
+        IpProceedingNumberCreate: {
+            /**
+             * Effective From
+             * Format: date
+             */
+            effective_from: string;
+            /**
+             * Is Primary
+             * @default true
+             */
+            is_primary: boolean;
+            /** Raw Value */
+            raw_value: string;
+            /** Source */
+            source: string;
         };
         /** IpProceedingResponse */
         IpProceedingResponse: {
@@ -48477,6 +48709,110 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpPleadingTemplateListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_post_registration_action_api_ip_dockets__docket_id__proceedings__proceeding_id__post_registration_actions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpPostRegistrationActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpPostRegistrationWorkspaceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_post_registration_workspace_api_ip_dockets__docket_id__proceedings__proceeding_id__post_registration_workspace_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpPostRegistrationWorkspaceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_ip_post_registration_workspace_api_ip_dockets__docket_id__proceedings__proceeding_id__post_registration_workspace_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpPostRegistrationWorkspaceUpsertRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpPostRegistrationWorkspaceResponse"];
                 };
             };
             /** @description Validation Error */

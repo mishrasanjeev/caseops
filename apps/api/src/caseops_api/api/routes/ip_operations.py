@@ -197,6 +197,11 @@ from caseops_api.schemas.ip_portfolio import (
     IpPortfolioSavedViewRecord,
     IpPortfolioSavedViewUpdate,
 )
+from caseops_api.schemas.ip_post_registration import (
+    IpPostRegistrationActionRequest,
+    IpPostRegistrationWorkspaceResponse,
+    IpPostRegistrationWorkspaceUpsertRequest,
+)
 from caseops_api.schemas.ip_records import (
     IpAssetCreateRequest,
     IpAssetResponse,
@@ -417,6 +422,11 @@ from caseops_api.services.ip_portfolio_workflow import (
     retry_portfolio_export,
     run_portfolio_export_job,
     update_saved_view,
+)
+from caseops_api.services.ip_post_registration import (
+    get_post_registration_workspace,
+    record_post_registration_action,
+    save_post_registration_workspace,
 )
 from caseops_api.services.ip_records import (
     correct_ip_identifier,
@@ -2581,6 +2591,65 @@ async def put_ip_opposition_workspace(
     session: DbSession,
 ) -> IpOppositionWorkspaceResponse:
     return save_opposition_workspace(
+        session,
+        context=context,
+        docket_id=docket_id,
+        proceeding_id=proceeding_id,
+        payload=payload,
+    )
+
+
+@router.get(
+    "/dockets/{docket_id}/proceedings/{proceeding_id}/post-registration-workspace",
+    response_model=IpPostRegistrationWorkspaceResponse,
+)
+async def get_ip_post_registration_workspace(
+    docket_id: str,
+    proceeding_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> IpPostRegistrationWorkspaceResponse:
+    return get_post_registration_workspace(
+        session,
+        context=context,
+        docket_id=docket_id,
+        proceeding_id=proceeding_id,
+    )
+
+
+@router.put(
+    "/dockets/{docket_id}/proceedings/{proceeding_id}/post-registration-workspace",
+    response_model=IpPostRegistrationWorkspaceResponse,
+)
+async def put_ip_post_registration_workspace(
+    docket_id: str,
+    proceeding_id: str,
+    payload: IpPostRegistrationWorkspaceUpsertRequest,
+    context: IpReviewer,
+    session: DbSession,
+) -> IpPostRegistrationWorkspaceResponse:
+    return save_post_registration_workspace(
+        session,
+        context=context,
+        docket_id=docket_id,
+        proceeding_id=proceeding_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/dockets/{docket_id}/proceedings/{proceeding_id}/post-registration-actions",
+    response_model=IpPostRegistrationWorkspaceResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_ip_post_registration_action(
+    docket_id: str,
+    proceeding_id: str,
+    payload: IpPostRegistrationActionRequest,
+    context: IpReviewer,
+    session: DbSession,
+) -> IpPostRegistrationWorkspaceResponse:
+    return record_post_registration_action(
         session,
         context=context,
         docket_id=docket_id,
