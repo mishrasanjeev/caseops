@@ -22,7 +22,7 @@ Generated; do not edit.
 | UJ-16 | Run keyword or contextual research | 4 | IPLF-005A, IPLF-005B | 8 | 2 | implemented | not_run | false |
 | UJ-17 | Open judgment or reference source | 4 | IPLF-003A, IPLF-003B, IPLF-003C, IPLF-004B | 4 | 1 | implemented | not_run | false |
 | UJ-18 | Run intelligent review | 4 | IPLF-063B, IPLF-065B | 4 | 0 | not_started | not_run | false |
-| UJ-19 | Track eCourts/provider case | 5 | IPLF-050B, IPLF-051B | 5 | 0 | not_started | not_run | false |
+| UJ-19 | Track eCourts/provider case | 5 | IPLF-050B, IPLF-051B | 5 | 0 | in_progress | not_run | false |
 | UJ-20 | Browse judge and mapped judgments | 4 | IPLF-003B, IPLF-060B | 4 | 1 | in_progress | not_run | false |
 | UJ-21 | Review watch hit and open action | 4 | IPLF-052B, IPLF-053B | 4 | 0 | not_started | not_run | false |
 | UJ-22 | Use CaseOps Guide | 3 | IPLF-061B | 3 | 0 | not_started | not_run | false |

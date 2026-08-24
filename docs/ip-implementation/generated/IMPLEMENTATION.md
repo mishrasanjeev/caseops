@@ -96,8 +96,8 @@ Generated; do not edit.
 | IPLF-048B | derived | IPLF-048 | M4 | IP-OPP-01, IP-OPP-02, IP-OPP-03, IP-OPP-04, IP-OPP-05, IP-OPP-06, IP-OPP-07, IP-OPP-08, IP-OPP-09, IP-OPP-10, IP-OPP-11, IP-OPP-12, IP-OPP-13, IP-OPP-14, IP-OPP-15, IP-OPP-16, IP-OPP-17, IP-OPP-18, IP-OPP-19, IP-OPP-20, IP-OPP-21, IP-OPP-22, IP-OPP-23, IP-OPP-24 | UJ-34-EXC-01, UJ-34-EXC-02, UJ-34-EXC-03, UJ-34-NORMAL | implemented | passed | deployment_verified | not_required |
 | IPLF-049A | derived | IPLF-049 | M4 |  |  | implemented | passed | deployment_verified | not_required |
 | IPLF-049B | derived | IPLF-049 | M4 | IP-OPP-01, IP-OPP-02, IP-OPP-03, IP-OPP-04, IP-OPP-05, IP-OPP-06, IP-OPP-07, IP-OPP-08, IP-OPP-09, IP-OPP-10, IP-OPP-11, IP-OPP-12, IP-OPP-13, IP-OPP-14, IP-OPP-15, IP-OPP-16, IP-OPP-17, IP-OPP-18, IP-OPP-19, IP-OPP-20, IP-OPP-21, IP-OPP-22, IP-OPP-23, IP-OPP-24 | UJ-38-EXC-01, UJ-38-EXC-02, UJ-38-EXC-03, UJ-38-EXC-04, UJ-38-NORMAL | implemented | passed | deployment_verified | not_required |
-| IPLF-050A | derived | IPLF-050 | M5 |  |  | not_started | not_run | blocked | not_required |
-| IPLF-050B | derived | IPLF-050 | M5 | IP-REG-01, IP-REG-02, IP-REG-03, IP-REG-04, IP-REG-05 | UJ-19-EXC-01, UJ-19-EXC-02, UJ-19-EXC-03, UJ-19-EXC-04, UJ-19-NORMAL | not_started | not_run | blocked | not_required |
+| IPLF-050A | derived | IPLF-050 | M5 |  |  | implemented | passed | blocked | not_required |
+| IPLF-050B | derived | IPLF-050 | M5 | IP-REG-01, IP-REG-02, IP-REG-03, IP-REG-04, IP-REG-05 | UJ-19-EXC-01, UJ-19-EXC-02, UJ-19-EXC-03, UJ-19-EXC-04, UJ-19-NORMAL | implemented | passed | blocked | not_required |
 | IPLF-051A | derived | IPLF-051 | M5 |  |  | not_started | not_run | blocked | not_required |
 | IPLF-051B | derived | IPLF-051 | M5 | IP-REG-01, IP-REG-02, IP-REG-03, IP-REG-04, IP-REG-05 | UJ-07-EXC-01, UJ-07-EXC-02, UJ-07-EXC-03, UJ-07-NORMAL, UJ-19-EXC-01, UJ-19-EXC-02, UJ-19-EXC-03, UJ-19-EXC-04, UJ-19-NORMAL | not_started | not_run | blocked | not_required |
 | IPLF-052A | derived | IPLF-052 | M5 |  |  | not_started | not_run | blocked | not_required |
