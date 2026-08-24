@@ -95,6 +95,14 @@ def upgrade() -> None:
         batch.create_index(
             "ix_authority_documents_legal_review_status", ["legal_review_status"]
         )
+        batch.create_index(
+            "ix_authority_documents_first_reviewed_by_membership_id",
+            ["first_reviewed_by_membership_id"],
+        )
+        batch.create_index(
+            "ix_authority_documents_second_reviewed_by_membership_id",
+            ["second_reviewed_by_membership_id"],
+        )
         batch.create_foreign_key(
             "fk_authority_documents_first_legal_reviewer",
             "company_memberships",
@@ -184,6 +192,8 @@ def downgrade() -> None:
         batch.drop_constraint(
             "fk_authority_documents_first_legal_reviewer", type_="foreignkey"
         )
+        batch.drop_index("ix_authority_documents_second_reviewed_by_membership_id")
+        batch.drop_index("ix_authority_documents_first_reviewed_by_membership_id")
         batch.drop_index("ix_authority_documents_legal_review_status")
         batch.drop_index("ix_authority_documents_content_hash")
         batch.drop_index("ix_authority_documents_source_category")

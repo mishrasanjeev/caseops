@@ -20,6 +20,10 @@ DOCUMENT_COLUMNS = {
     "source_version",
     "legal_review_status",
 }
+DOCUMENT_INDEXES = {
+    "ix_authority_documents_first_reviewed_by_membership_id",
+    "ix_authority_documents_second_reviewed_by_membership_id",
+}
 
 
 def _config(project_root: Path) -> Config:
@@ -28,7 +32,7 @@ def _config(project_root: Path) -> Config:
     return config
 
 
-def _schema(database_url: str) -> tuple[set[str], set[str], str]:
+def _schema(database_url: str) -> tuple[set[str], set[str], set[str], str]:
     engine = create_engine(database_url, future=True)
     try:
         inspector = inspect(engine)
@@ -38,11 +42,20 @@ def _schema(database_url: str) -> tuple[set[str], set[str], str]:
             if "authority_documents" in tables
             else set()
         )
+        indexes = (
+            {
+                str(index["name"])
+                for index in inspector.get_indexes("authority_documents")
+                if index.get("name")
+            }
+            if "authority_documents" in tables
+            else set()
+        )
         with engine.connect() as connection:
             head = str(
                 connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
             )
-        return tables, columns, head
+        return tables, columns, indexes, head
     finally:
         engine.dispose()
 
@@ -61,19 +74,20 @@ def test_indian_kanoon_lineage_migration_and_fail_closed_rollback(
     config = _config(project_root)
 
     command.upgrade(config, PREVIOUS_REVISION)
-    tables, columns, head = _schema(database_url)
+    tables, columns, _, head = _schema(database_url)
     assert LINEAGE_TABLE not in tables
     assert not DOCUMENT_COLUMNS.intersection(columns)
     assert head == PREVIOUS_REVISION
 
     command.upgrade(config, REVISION)
-    tables, columns, head = _schema(database_url)
+    tables, columns, indexes, head = _schema(database_url)
     assert LINEAGE_TABLE in tables
     assert DOCUMENT_COLUMNS <= columns
+    assert DOCUMENT_INDEXES <= indexes
     assert head == REVISION
 
     command.downgrade(config, PREVIOUS_REVISION)
-    tables, columns, head = _schema(database_url)
+    tables, columns, _, head = _schema(database_url)
     assert LINEAGE_TABLE not in tables
     assert not DOCUMENT_COLUMNS.intersection(columns)
     assert head == PREVIOUS_REVISION
@@ -100,7 +114,7 @@ def test_indian_kanoon_lineage_migration_and_fail_closed_rollback(
     with pytest.raises(RuntimeError, match="Refusing IPLF-054 downgrade"):
         command.downgrade(config, PREVIOUS_REVISION)
 
-    _, _, head = _schema(database_url)
+    _, _, _, head = _schema(database_url)
     assert head == REVISION
     get_settings.cache_clear()
     clear_engine_cache()

@@ -10038,13 +10038,17 @@ class AuthorityDocument(Base):
         String(32), nullable=False, default="unreviewed", index=True
     )
     first_reviewed_by_membership_id: Mapped[str | None] = mapped_column(
-        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     first_reviewed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     second_reviewed_by_membership_id: Mapped[str | None] = mapped_column(
-        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     second_reviewed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
