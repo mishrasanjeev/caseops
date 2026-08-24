@@ -104,6 +104,27 @@ async function signIn(page: Page): Promise<void> {
   await page.waitForURL(/\/app(?:[/?]|$)/);
 }
 
+async function establishApiSession(page: Page): Promise<void> {
+  const login = await page.request.post(`${API_BASE_URL}/api/auth/login`, {
+    data: {
+      company_slug: COMPANY_SLUG,
+      email: TESTER_EMAIL,
+      password: password(),
+    },
+  });
+  await expectStatus(login, 200, "journal-watch API sign-in");
+  const session = await login.json();
+  await page.goto(`${BASE_URL}/`);
+  await page.evaluate((context) => {
+    window.localStorage.setItem("caseops.session.context", JSON.stringify(context));
+  }, {
+    company: session.company,
+    user: session.user,
+    membership: session.membership,
+    capabilities: session.capabilities,
+  });
+}
+
 async function assertInsideViewport(
   page: Page,
   locator: Locator,
@@ -248,5 +269,91 @@ test.describe.serial("Ram 2026-08-24 local and deployed regressions", () => {
     await expect(page.getByTestId("dry-run-detail")).toContainText(
       "This record cannot execute an operation",
     );
+  });
+
+  test("IPLF-052: the exact release serves journal-watch data and responsive operator views", async ({
+    page,
+  }) => {
+    await establishApiSession(page);
+    const workspaceResponsePromise = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === "/api/ip/watch" &&
+        response.request().method() === "GET",
+      { timeout: 30_000 },
+    );
+
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.goto(`${BASE_URL}/app/ip/watch`);
+    const workspaceResponse = await workspaceResponsePromise;
+    await expectStatus(workspaceResponse, 200, "journal-watch workspace data");
+    const workspace = (await workspaceResponse.json()) as Record<string, unknown>;
+    for (const collection of [
+      "profiles",
+      "hits",
+      "publications",
+      "ingestion_runs",
+      "handoffs",
+    ]) {
+      expect(Array.isArray(workspace[collection]), `${collection} must be an array`).toBe(
+        true,
+      );
+    }
+
+    await expect(
+      page.getByRole("heading", { name: "Trademark journal watch" }),
+    ).toBeVisible();
+    await expect(page.getByLabel("Docket scope")).toBeVisible();
+
+    for (const viewport of [
+      { width: 360, height: 800 },
+      { width: 639, height: 900 },
+      { width: 640, height: 900 },
+      { width: 1280, height: 900 },
+    ]) {
+      await page.setViewportSize(viewport);
+      const boxes = [];
+      for (const name of ["Hits", "Profiles", "Journal intake", "Runs"]) {
+        const box = await assertInsideViewport(
+          page,
+          page.getByRole("button", { name, exact: true }),
+          `${name} watch view at ${viewport.width}px`,
+        );
+        expect(box.width).toBeGreaterThan(viewport.width < 640 ? 100 : 70);
+        boxes.push(box);
+      }
+      for (let left = 0; left < boxes.length; left += 1) {
+        for (let right = left + 1; right < boxes.length; right += 1) {
+          const horizontal =
+            boxes[left].x < boxes[right].x + boxes[right].width &&
+            boxes[left].x + boxes[left].width > boxes[right].x;
+          const vertical =
+            boxes[left].y < boxes[right].y + boxes[right].height &&
+            boxes[left].y + boxes[left].height > boxes[right].y;
+          expect(
+            horizontal && vertical,
+            `watch views ${left} and ${right} must not overlap at ${viewport.width}px`,
+          ).toBe(false);
+        }
+      }
+    }
+
+    await page.getByRole("button", { name: "Profiles", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "New watch profile" })).toBeVisible();
+    await page.getByRole("button", { name: "Runs", exact: true }).click();
+    if ((workspace.ingestion_runs as unknown[]).length === 0) {
+      await expect(page.getByRole("heading", { name: "No ingestion runs" })).toBeVisible();
+    } else {
+      await expect(page.getByRole("table")).toBeVisible();
+      await expect(page.getByRole("columnheader", { name: "Started" })).toBeVisible();
+      await expect(page.getByRole("columnheader", { name: "Provider" })).toBeVisible();
+    }
+
+    await page.goto(`${BASE_URL}/law-firms`);
+    await expect(
+      page.getByRole("heading", { name: "Trademark journal watch" }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(/Live provider polling stays fail-closed until licensing and credentials are approved/),
+    ).toBeVisible();
   });
 });
