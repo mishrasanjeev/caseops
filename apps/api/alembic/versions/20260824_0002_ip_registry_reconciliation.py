@@ -198,6 +198,11 @@ def upgrade() -> None:
         "ix_ip_registry_links_last_snapshot_id", "ip_registry_links", ["last_snapshot_id"]
     )
     op.create_index(
+        "ix_ip_registry_links_created_by_membership_id",
+        "ip_registry_links",
+        ["created_by_membership_id"],
+    )
+    op.create_index(
         "ix_ip_registry_links_company_freshness",
         "ip_registry_links",
         ["company_id", "freshness_status"],
@@ -277,6 +282,11 @@ def upgrade() -> None:
         "ix_ip_registry_sync_attempts_replay_of_attempt_id",
         "ip_registry_sync_attempts",
         ["replay_of_attempt_id"],
+    )
+    op.create_index(
+        "ix_ip_registry_sync_attempts_requested_by_membership_id",
+        "ip_registry_sync_attempts",
+        ["requested_by_membership_id"],
     )
     op.create_index(
         "ix_ip_registry_attempts_company_status",
@@ -429,6 +439,11 @@ def upgrade() -> None:
         "ix_ip_registry_diffs_emitted_event_id", "ip_registry_diffs", ["emitted_event_id"]
     )
     op.create_index(
+        "ix_ip_registry_diffs_resolved_by_membership_id",
+        "ip_registry_diffs",
+        ["resolved_by_membership_id"],
+    )
+    op.create_index(
         "ix_ip_registry_diffs_company_resolution",
         "ip_registry_diffs",
         ["company_id", "resolution_status", "risk_level"],
@@ -491,6 +506,11 @@ def upgrade() -> None:
     )
     op.create_index(
         "ix_ip_tracked_case_links_tracked_case_id", "ip_tracked_case_links", ["tracked_case_id"]
+    )
+    op.create_index(
+        "ix_ip_tracked_case_links_created_by_membership_id",
+        "ip_tracked_case_links",
+        ["created_by_membership_id"],
     )
     op.create_index(
         "ix_ip_tracked_case_links_company_docket",

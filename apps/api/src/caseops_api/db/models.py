@@ -15128,7 +15128,9 @@ class IpRegistryLink(Base):
     last_normalized_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     last_error_redacted: Mapped[str | None] = mapped_column(Text, nullable=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    created_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    created_by_membership_id: Mapped[str] = mapped_column(
+        String(36), nullable=False, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
@@ -15208,7 +15210,9 @@ class IpRegistrySyncAttempt(Base):
     currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR")
     error_redacted: Mapped[str | None] = mapped_column(Text, nullable=True)
     metadata_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
-    requested_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    requested_by_membership_id: Mapped[str] = mapped_column(
+        String(36), nullable=False, index=True
+    )
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
@@ -15361,7 +15365,9 @@ class IpRegistryDiff(Base):
     )
     resolution_reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     mapped_field_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    resolved_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    resolved_by_membership_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     emitted_event_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     deadline_recalculation_state: Mapped[str] = mapped_column(
@@ -15433,7 +15439,9 @@ class IpTrackedCaseLink(Base):
     link_status: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
     purpose: Mapped[str] = mapped_column(String(120), nullable=False)
     evidence_reference: Mapped[str] = mapped_column(String(800), nullable=False)
-    created_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    created_by_membership_id: Mapped[str] = mapped_column(
+        String(36), nullable=False, index=True
+    )
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
