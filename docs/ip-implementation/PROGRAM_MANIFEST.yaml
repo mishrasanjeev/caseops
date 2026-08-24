@@ -1621,17 +1621,9 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "blocked",
-      "acceptance_status": "not_required",
       "evidence_refs": [
         "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md"
-      ],
-      "not_required_approval": {
-        "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
-        "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
-        "reason": "The program owner removed the requirement for named specific sign-offs. This is an owner waiver, not professional approval; no lawyer, security, privacy, provider, SRE, product or pilot reviewer has signed.",
-        "date": "2026-08-14",
-        "milestone": "M4"
-      }
+      ]
     },
     {
       "id": "IPLF-042",
@@ -1673,17 +1665,9 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "blocked",
-      "acceptance_status": "not_required",
       "evidence_refs": [
         "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md"
-      ],
-      "not_required_approval": {
-        "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
-        "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
-        "reason": "The program owner removed the requirement for named specific sign-offs. This is an owner waiver, not professional approval; no lawyer, security, privacy, provider, SRE, product or pilot reviewer has signed.",
-        "date": "2026-08-14",
-        "milestone": "M4"
-      }
+      ]
     },
     {
       "id": "IPLF-043",
@@ -1723,17 +1707,9 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "blocked",
-      "acceptance_status": "not_required",
       "evidence_refs": [
         "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md"
-      ],
-      "not_required_approval": {
-        "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
-        "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
-        "reason": "The program owner removed the requirement for named specific sign-offs. This is an owner waiver, not professional approval; no lawyer, security, privacy, provider, SRE, product or pilot reviewer has signed.",
-        "date": "2026-08-14",
-        "milestone": "M4"
-      }
+      ]
     },
     {
       "id": "IPLF-044",
@@ -1748,18 +1724,10 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "evidence_refs": [
         "docs/ip-implementation/evidence/m4/IPLF-044/local-2026-08-23.md",
         "docs/ip-implementation/evidence/m4/IPLF-044/release-2026-08-23.md"
-      ],
-      "not_required_approval": {
-        "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
-        "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
-        "reason": "The program owner removed the requirement for named specific sign-offs. This is an owner waiver, not professional approval; no lawyer, security, privacy, provider, SRE, product or pilot reviewer has signed.",
-        "date": "2026-08-14",
-        "milestone": "M4"
-      }
+      ]
     },
     {
       "id": "IPLF-045",
@@ -1787,18 +1755,10 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "evidence_refs": [
         "docs/ip-implementation/evidence/m4/IPLF-045B/local-verification-2026-08-23.md",
         "docs/ip-implementation/evidence/m4/IPLF-045B/release-2026-08-24.md"
-      ],
-      "not_required_approval": {
-        "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
-        "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
-        "reason": "The program owner removed the requirement for named specific sign-offs. This is an owner waiver, not professional approval; no lawyer, security, privacy, provider, SRE, product or pilot reviewer has signed.",
-        "date": "2026-08-14",
-        "milestone": "M4"
-      }
+      ]
     },
     {
       "id": "IPLF-046",
@@ -1826,18 +1786,10 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "evidence_refs": [
         "docs/ip-implementation/evidence/m4/IPLF-046B/local-2026-08-24.md",
         "docs/ip-implementation/evidence/m4/IPLF-046B/release-2026-08-24.md"
-      ],
-      "not_required_approval": {
-        "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
-        "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
-        "reason": "The program owner removed the requirement for named specific sign-offs. This is an owner waiver, not professional approval; no lawyer, security, privacy, provider, SRE, product or pilot reviewer has signed.",
-        "date": "2026-08-14",
-        "milestone": "M4"
-      }
+      ]
     },
     {
       "id": "IPLF-047",
@@ -1865,18 +1817,10 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "evidence_refs": [
         "docs/ip-implementation/evidence/m4/IPLF-047B/local-2026-08-24.md",
         "docs/ip-implementation/evidence/m4/IPLF-047B/release-2026-08-24.md"
-      ],
-      "not_required_approval": {
-        "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
-        "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
-        "reason": "The program owner removed the requirement for named specific sign-offs. This is an owner waiver, not professional approval; no lawyer, security, privacy, provider, SRE, product or pilot reviewer has signed.",
-        "date": "2026-08-14",
-        "milestone": "M4"
-      }
+      ]
     },
     {
       "id": "IPLF-048",
@@ -1918,18 +1862,10 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "evidence_refs": [
         "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md",
         "docs/ip-implementation/evidence/m4/IPLF-048B/release-2026-08-24.md"
-      ],
-      "not_required_approval": {
-        "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
-        "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
-        "reason": "The program owner removed the requirement for named specific sign-offs. This is an owner waiver, not professional approval; no lawyer, security, privacy, provider, SRE, product or pilot reviewer has signed.",
-        "date": "2026-08-14",
-        "milestone": "M4"
-      }
+      ]
     },
     {
       "id": "IPLF-049",
@@ -1971,19 +1907,11 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "evidence_refs": [
         "docs/ip-implementation/evidence/m4/IPLF-049A/local-2026-08-24.md",
         "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md",
         "docs/ip-implementation/evidence/m4/IPLF-049B/release-2026-08-24.md"
-      ],
-      "not_required_approval": {
-        "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
-        "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
-        "reason": "The program owner removed the requirement for named specific sign-offs. This is an owner waiver, not professional approval; no lawyer, security, privacy, provider, SRE, product or pilot reviewer has signed.",
-        "date": "2026-08-14",
-        "milestone": "M4"
-      }
+      ]
     },
     {
       "id": "IPLF-050",
@@ -2006,18 +1934,10 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "evidence_refs": [
         "docs/ip-implementation/evidence/m5/IPLF-050/local-2026-08-24.md",
         "docs/ip-implementation/evidence/m5/IPLF-050/release-2026-08-24.md"
-      ],
-      "not_required_approval": {
-        "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
-        "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
-        "reason": "The program owner removed the requirement for named specific sign-offs. This is an owner waiver, not professional approval; no lawyer, security, privacy, provider, SRE, product or pilot reviewer has signed.",
-        "date": "2026-08-14",
-        "milestone": "M5"
-      }
+      ]
     },
     {
       "id": "IPLF-051",
@@ -2041,17 +1961,9 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "blocked",
-      "acceptance_status": "not_required",
       "evidence_refs": [
         "docs/ip-implementation/evidence/m5/IPLF-051/local-2026-08-24.md"
-      ],
-      "not_required_approval": {
-        "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
-        "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
-        "reason": "The program owner removed the requirement for named specific sign-offs. This is an owner waiver, not professional approval; no lawyer, security, privacy, provider, SRE, product or pilot reviewer has signed.",
-        "date": "2026-08-14",
-        "milestone": "M5"
-      }
+      ]
     },
     {
       "id": "IPLF-052",
@@ -10429,7 +10341,6 @@
           "recorded_at": "2026-08-23T13:07:33+05:30"
         }
       ],
-      "approvals": [],
       "blockers": [
         {
           "id": "IPLF-041A-HOSTED-RELEASE",
@@ -10548,7 +10459,6 @@
           "recorded_at": "2026-08-23T13:07:33+05:30"
         }
       ],
-      "approvals": [],
       "blockers": [
         {
           "id": "IPLF-041B-HOSTED-RELEASE",
@@ -10573,15 +10483,7 @@
       "allocation_review": "2026-08-23 review confirms IPLF-041 owns the applicant counterstatement and Rule 46 deadline/work-product contribution to UJ-12. The implementation reuses IPLF-040 records and shared platform owners; it does not claim opponent Rule 45/47 work allocated to IPLF-042 or hearing/order/appeal and other shared opposition scope allocated to IPLF-043 and later slices.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
-      "acceptance_status": "not_required",
-      "not_required_approval": {
-        "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
-        "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
-        "reason": "The program owner removed the requirement for named specific sign-offs. This is an owner waiver, not professional approval; no lawyer, security, privacy, provider, SRE, product or pilot reviewer has signed.",
-        "date": "2026-08-14",
-        "milestone": "M4"
-      }
+      "release_status": "blocked"
     },
     {
       "id": "IPLF-042A",
@@ -10638,7 +10540,6 @@
           "recorded_at": "2026-08-23T15:22:28+05:30"
         }
       ],
-      "approvals": [],
       "blockers": [
         {
           "id": "IPLF-042A-HOSTED-RELEASE",
@@ -10761,7 +10662,6 @@
           "recorded_at": "2026-08-23T15:22:28+05:30"
         }
       ],
-      "approvals": [],
       "blockers": [
         {
           "id": "IPLF-042B-HOSTED-RELEASE",
@@ -10788,15 +10688,7 @@
       "allocation_review": "2026-08-23 review confirms IPLF-042 owns the opponent notice, correction, service, Rule 45 and Rule 47 deadline/work-product contribution to UJ-13. It reuses IPLF-040 records and shared platform owners; it does not claim shared further-evidence, hearing, order, appeal, settlement, translation, security-for-costs, or downstream-disposition scope allocated to IPLF-043 and later slices.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
-      "acceptance_status": "not_required",
-      "not_required_approval": {
-        "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
-        "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
-        "reason": "The program owner removed the requirement for named specific sign-offs. This is an owner waiver, not professional approval; no lawyer, security, privacy, provider, SRE, product or pilot reviewer has signed.",
-        "date": "2026-08-14",
-        "milestone": "M4"
-      }
+      "release_status": "blocked"
     },
     {
       "id": "IPLF-043A",
@@ -10854,7 +10746,6 @@
           "recorded_at": "2026-08-23T17:01:34+05:30"
         }
       ],
-      "approvals": [],
       "blockers": [
         {
           "id": "IPLF-043A-HOSTED-RELEASE",
@@ -10970,7 +10861,6 @@
           "recorded_at": "2026-08-23T17:01:34+05:30"
         }
       ],
-      "approvals": [],
       "blockers": [
         {
           "id": "IPLF-043B-HOSTED-RELEASE",
@@ -11080,7 +10970,6 @@
           "recorded_at": "2026-08-23T21:40:00+05:30"
         }
       ],
-      "approvals": [],
       "blockers": [],
       "next_actions": [
         "Proceed to IPLF-045 without introducing a parallel drafting engine.",
@@ -11099,7 +10988,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
@@ -11176,7 +11064,6 @@
           "recorded_at": "2026-08-23T21:40:00+05:30"
         }
       ],
-      "approvals": [],
       "blockers": [],
       "next_actions": [
         "Continue IPLF-045 next without introducing a parallel drafting engine.",
@@ -11198,7 +11085,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
@@ -11266,7 +11152,6 @@
           "recorded_at": "2026-08-24T01:24:10+05:30"
         }
       ],
-      "approvals": [],
       "blockers": [],
       "next_actions": [
         "Proceed to IPLF-046 consistency, placeholder, exhibit, and source validation without introducing a parallel drafting engine."
@@ -11283,7 +11168,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
@@ -11373,7 +11257,6 @@
           "recorded_at": "2026-08-24T01:24:10+05:30"
         }
       ],
-      "approvals": [],
       "blockers": [],
       "next_actions": [
         "Proceed to IPLF-046 consistency, placeholder, exhibit, and source validation. IPLF-047 remains independently pending."
@@ -11389,15 +11272,7 @@
       "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
-      "not_required_approval": {
-        "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
-        "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
-        "reason": "The program owner removed the requirement for named specific sign-offs. This is an owner waiver, not professional approval; no lawyer, security, privacy, provider, SRE, product or pilot reviewer has signed.",
-        "date": "2026-08-14",
-        "milestone": "M4"
-      }
+      "release_status": "deployment_verified"
     },
     {
       "id": "IPLF-046A",
@@ -11457,7 +11332,6 @@
           "recorded_at": "2026-08-24T03:57:01+05:30"
         }
       ],
-      "approvals": [],
       "blockers": [],
       "next_actions": [
         "Continue IPLF-047 independently; do not infer legal-SME approval or Registry/provider acceptance from IPLF-046 deployment verification."
@@ -11474,7 +11348,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
@@ -11563,7 +11436,6 @@
           "recorded_at": "2026-08-24T03:57:01+05:30"
         }
       ],
-      "approvals": [],
       "blockers": [],
       "next_actions": [
         "Continue IPLF-047 independently; do not infer legal-SME approval or Registry/provider acceptance from IPLF-046 deployment verification."
@@ -11581,15 +11453,7 @@
       "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
-      "not_required_approval": {
-        "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
-        "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
-        "reason": "The program owner removed the requirement for named specific sign-offs. This is an owner waiver, not professional approval; no lawyer, security, privacy, provider, SRE, product or pilot reviewer has signed.",
-        "date": "2026-08-14",
-        "milestone": "M4"
-      }
+      "release_status": "deployment_verified"
     },
     {
       "id": "IPLF-047A",
@@ -11636,7 +11500,6 @@
           "recorded_at": "2026-08-24T03:35:44+05:30"
         }
       ],
-      "approvals": [],
       "blockers": [
         {
           "id": "IPLF-047A-LEGAL-SME-APPROVAL",
@@ -11664,7 +11527,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
@@ -11741,7 +11603,6 @@
           "recorded_at": "2026-08-24T03:35:44+05:30"
         }
       ],
-      "approvals": [],
       "blockers": [
         {
           "id": "IPLF-047B-LEGAL-UAT-ACTIVATION",
@@ -11769,7 +11630,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
@@ -11835,7 +11695,6 @@
           "recorded_at": "2026-08-24T09:45:00+05:30"
         }
       ],
-      "approvals": [],
       "blockers": [],
       "next_actions": [],
       "data_impact": [
@@ -11850,7 +11709,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
@@ -11952,7 +11810,6 @@
           "recorded_at": "2026-08-24T09:45:00+05:30"
         }
       ],
-      "approvals": [],
       "blockers": [],
       "next_actions": [],
       "data_impact": [
@@ -11966,15 +11823,7 @@
       "allocation_review": "2026-08-24 duplicate-work review confirms IPLF-048 extends IPLF-040 through IPLF-043 canonical proceeding/event writers, existing trademark application scopes, and canonical Matter hearings. No parallel opposition, scope, hearing, fee, document, notification, or audit owner is introduced.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
-      "not_required_approval": {
-        "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
-        "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
-        "reason": "The program owner removed the requirement for named specific sign-offs. This is an owner waiver, not professional approval; no lawyer, security, privacy, provider, SRE, product or pilot reviewer has signed.",
-        "date": "2026-08-14",
-        "milestone": "M4"
-      }
+      "release_status": "deployment_verified"
     },
     {
       "id": "IPLF-049A",
@@ -12023,7 +11872,6 @@
           "recorded_at": "2026-08-24T10:58:00+05:30"
         }
       ],
-      "approvals": [],
       "blockers": [],
       "next_actions": [],
       "data_impact": [
@@ -12037,7 +11885,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
@@ -12132,7 +11979,6 @@
           "recorded_at": "2026-08-24T10:58:00+05:30"
         }
       ],
-      "approvals": [],
       "blockers": [],
       "next_actions": [],
       "data_impact": [
@@ -12147,15 +11993,7 @@
       "allocation_review": "2026-08-24 duplicate-work review confirms IPLF-049 reuses the IPLF-048 opposition foundations only where explicitly mapped, while preserving distinct templates, identifiers, proceedings, events, and legal effects for UJ-38.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
-      "not_required_approval": {
-        "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
-        "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
-        "reason": "The program owner removed the requirement for named specific sign-offs. This is an owner waiver, not professional approval; no lawyer, security, privacy, provider, SRE, product or pilot reviewer has signed.",
-        "date": "2026-08-14",
-        "milestone": "M4"
-      }
+      "release_status": "deployment_verified"
     },
     {
       "id": "IPLF-050A",
@@ -12216,7 +12054,6 @@
           "recorded_at": "2026-08-24T15:25:36+05:30"
         }
       ],
-      "approvals": [],
       "blockers": [],
       "next_actions": [
         "Complete hosted CI, exact-main CI, immutable deployment, and exact production verification.",
@@ -12232,7 +12069,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
@@ -12312,7 +12148,6 @@
           "recorded_at": "2026-08-24T15:25:36+05:30"
         }
       ],
-      "approvals": [],
       "blockers": [
         {
           "id": "IPLF-050B-IPINDIA-ACTIVATION",
@@ -12337,15 +12172,7 @@
       "allocation_review": "2026-08-24 workflow review limits this slice to adapter discovery, visibility, attribution/cost acceptance, legal-coverage disclosure, and fail-closed probes. IPLF-051 independently owns every registry-data and full UJ-19 reconciliation behavior.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
-      "not_required_approval": {
-        "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
-        "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
-        "reason": "The program owner removed the requirement for named specific sign-offs. This is an owner waiver, not professional approval; no lawyer, security, privacy, provider, SRE, product or pilot reviewer has signed.",
-        "date": "2026-08-14",
-        "milestone": "M5"
-      }
+      "release_status": "deployment_verified"
     },
     {
       "id": "IPLF-051A",
@@ -12395,7 +12222,6 @@
           "recorded_at": "2026-08-24T15:25:36+05:30"
         }
       ],
-      "approvals": [],
       "blockers": [],
       "next_actions": [
         "Run pull-request PostgreSQL validation and all required CI workflows, then deploy the exact merge revision through the migration and staged production gates."
@@ -12489,7 +12315,6 @@
           "recorded_at": "2026-08-24T15:25:36+05:30"
         }
       ],
-      "approvals": [],
       "blockers": [],
       "next_actions": [
         "Open and review the IPLF-051 pull request, require green CI/security/CodeQL and PostgreSQL validation, then deploy and run exact-production acceptance."
@@ -12506,15 +12331,7 @@
       "allocation_review": "2026-08-24 journey review maps every UJ-07/UJ-19 normal and exception path to tested registry matching, provenance, immutable snapshots, reconciliation decisions, no-change/failure history, and reference-only court tracking. Live provider activation remains outside this technical release.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
-      "acceptance_status": "not_required",
-      "not_required_approval": {
-        "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
-        "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
-        "reason": "The program owner removed the requirement for named specific sign-offs. This is an owner waiver, not professional approval; no lawyer, security, privacy, provider, SRE, product or pilot reviewer has signed.",
-        "date": "2026-08-14",
-        "milestone": "M5"
-      }
+      "release_status": "blocked"
     },
     {
       "id": "IPLF-052A",
@@ -22682,7 +22499,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-045B",
         "IPLF-046B",
@@ -22718,7 +22534,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-045B",
         "IPLF-046B",
@@ -22754,7 +22569,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-045B",
         "IPLF-046B",
@@ -22790,7 +22604,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-045B",
         "IPLF-046B",
@@ -22826,7 +22639,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-045B",
         "IPLF-046B",
@@ -22862,7 +22674,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-045B",
         "IPLF-046B",
@@ -22898,7 +22709,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-045B",
         "IPLF-046B",
@@ -22934,7 +22744,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-045B",
         "IPLF-046B",
@@ -22970,7 +22779,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-045B",
         "IPLF-046B",
@@ -23006,7 +22814,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-045B",
         "IPLF-046B",
@@ -40336,19 +40143,11 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-045B",
         "IPLF-046B",
         "IPLF-047B"
-      ],
-      "not_required_approval": {
-        "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
-        "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
-        "reason": "The program owner removed the requirement for named specific sign-offs. This is an owner waiver, not professional approval; no lawyer, security, privacy, provider, SRE, product or pilot reviewer has signed.",
-        "date": "2026-08-14",
-        "milestone": "PROGRAM"
-      }
+      ]
     },
     {
       "id": "UJ-25",
@@ -40946,7 +40745,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-048B"
       ]
@@ -41105,7 +40903,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-049B"
       ]
@@ -47385,7 +47182,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-045B",
         "IPLF-046B",
@@ -47425,7 +47221,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-045B",
         "IPLF-046B",
@@ -47465,7 +47260,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-045B",
         "IPLF-046B",
@@ -47505,7 +47299,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-045B",
         "IPLF-046B",
@@ -49608,7 +49401,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-048B"
       ],
@@ -49656,7 +49448,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-048B"
       ],
@@ -49704,7 +49495,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-048B"
       ],
@@ -49752,7 +49542,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-048B"
       ],
@@ -50147,7 +49936,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-049B"
       ],
@@ -50196,7 +49984,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-049B"
       ],
@@ -50245,7 +50032,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-049B"
       ],
@@ -50294,7 +50080,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-049B"
       ],
@@ -50343,7 +50128,6 @@
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified",
-      "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-049B"
       ],
