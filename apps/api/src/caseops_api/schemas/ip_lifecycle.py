@@ -23,6 +23,8 @@ IpEventKind = Literal[
     "opposition_applicant_action",
     "opposition_opponent_action",
     "opposition_shared_action",
+    "post_registration_profile",
+    "post_registration_action",
 ]
 IpEventSource = Literal["manual", "registry", "integration", "system"]
 IpCandidateStatus = Literal["candidate", "confirmed", "reconciled", "rejected"]

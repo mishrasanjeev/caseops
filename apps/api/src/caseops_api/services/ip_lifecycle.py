@@ -501,13 +501,26 @@ def preview_ip_docket_event(
             payload.event_kind == "opposition_shared_action"
             or
             payload.event_kind
-            not in {"opposition_applicant_action", "opposition_opponent_action"}
-            or row.payload_json.get("action_kind") == payload.payload.get("action_kind")
+            not in {
+                "opposition_applicant_action",
+                "opposition_opponent_action",
+                "post_registration_action",
+            }
+            or (
+                row.payload_json.get("action_kind") == payload.payload.get("action_kind")
+                and (
+                    payload.event_kind != "post_registration_action"
+                    or row.payload_json.get("action_identity")
+                    == payload.payload.get("action_identity")
+                )
+            )
         )
         and row.candidate_status != "rejected"
         and row.id != payload.supersedes_event_id
     ]
     if payload.event_kind == "opposition_profile" and payload.supersedes_event_id:
+        duplicate_ids = []
+    if payload.event_kind == "post_registration_profile" and payload.supersedes_event_id:
         duplicate_ids = []
     if payload.event_kind == "opposition_shared_action":
         duplicate_ids = []
@@ -590,13 +603,26 @@ def _append_locked_event(
             payload.event_kind == "opposition_shared_action"
             or
             payload.event_kind
-            not in {"opposition_applicant_action", "opposition_opponent_action"}
-            or row.payload_json.get("action_kind") == payload.payload.get("action_kind")
+            not in {
+                "opposition_applicant_action",
+                "opposition_opponent_action",
+                "post_registration_action",
+            }
+            or (
+                row.payload_json.get("action_kind") == payload.payload.get("action_kind")
+                and (
+                    payload.event_kind != "post_registration_action"
+                    or row.payload_json.get("action_identity")
+                    == payload.payload.get("action_identity")
+                )
+            )
         )
         and row.candidate_status != "rejected"
         and row.id != payload.supersedes_event_id
     ]
     if payload.event_kind == "opposition_profile" and payload.supersedes_event_id:
+        duplicate_ids = []
+    if payload.event_kind == "post_registration_profile" and payload.supersedes_event_id:
         duplicate_ids = []
     if payload.event_kind == "opposition_shared_action":
         duplicate_ids = []

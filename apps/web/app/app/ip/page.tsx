@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/Button";
 import { IpAccessWorkspace } from "@/components/ip/IpAccessWorkspace";
 import { IpDocumentWorkspace } from "@/components/ip/IpDocumentWorkspace";
 import { IpOppositionWorkspace } from "@/components/ip/IpOppositionWorkspace";
+import { IpPostRegistrationWorkspace } from "@/components/ip/IpPostRegistrationWorkspace";
 import { IpMatterLinksPanel } from "@/components/ip/IpMatterLinksPanel";
 import { Badge } from "@/components/ui/Badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -1065,6 +1066,8 @@ const IDENTIFIER_LABEL: Record<IpIdentifier["identifier_kind"], string> = {
   registration: "Registration no.",
   opposition: "Opposition no.",
   rectification: "Rectification no.",
+  cancellation: "Cancellation no.",
+  non_use_removal: "Non-use proceeding no.",
   appeal: "Appeal no.",
   court: "Court reference",
 };
@@ -1335,6 +1338,12 @@ function DocketWorkspace({
           canGenerateDraft={canGenerateDraft}
           canReviewDraft={canReviewDraft}
           canFinalizeDraft={canFinalizeDraft}
+          currentMembershipId={currentMembershipId}
+        />
+        <IpPostRegistrationWorkspace
+          docket={docket}
+          canWrite={canWrite}
+          canReview={canReview}
           currentMembershipId={currentMembershipId}
         />
         {canManageAccess ? (

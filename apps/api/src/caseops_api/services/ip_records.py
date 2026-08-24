@@ -439,7 +439,12 @@ def create_ip_proceeding(
             or (
                 f"opposition-{payload.side}-v1"
                 if payload.proceeding_kind == "opposition"
-                else "generic-v1"
+                else (
+                    f"post-registration-{payload.proceeding_kind}-v1"
+                    if payload.proceeding_kind
+                    in {"rectification", "cancellation", "non_use_removal"}
+                    else "generic-v1"
+                )
             )
         ),
         source_pending_identifier_allocation=(
@@ -468,6 +473,25 @@ def create_ip_proceeding(
         )
         duplicate_ids = [candidate.id for candidate in duplicates]
         row.source_pending_identifier_allocation = False
+    if payload.proceeding_number is not None:
+        identifier, duplicates = create_ip_identifier(
+            session,
+            context=context,
+            docket_id=docket.id,
+            payload=IpIdentifierCreate(
+                identifier_kind=payload.proceeding_kind,
+                raw_value=payload.proceeding_number.raw_value,
+                office=payload.office,
+                jurisdiction=payload.jurisdiction,
+                source=payload.proceeding_number.source,
+                effective_from=payload.proceeding_number.effective_from,
+                is_primary=payload.proceeding_number.is_primary,
+                proceeding_id=row.id,
+            ),
+            commit=False,
+        )
+        duplicate_ids = [candidate.id for candidate in duplicates]
+        row.source_pending_identifier_allocation = False
     record_from_context(
         session,
         context,
@@ -482,6 +506,7 @@ def create_ip_proceeding(
             "origin_kind": row.origin_kind,
             "stage_template_version": row.stage_template_version,
             "opposition_number_supplied": payload.opposition_number is not None,
+            "proceeding_number_supplied": payload.proceeding_number is not None,
             "identifier_duplicate_candidate_ids": duplicate_ids,
         },
     )
@@ -512,6 +537,16 @@ def create_ip_identifier(
                 status_code=422,
                 detail="Opposition numbers must belong to an opposition proceeding.",
             )
+        owner.source_pending_identifier_allocation = False
+    elif isinstance(owner, IpProceeding) and payload.identifier_kind != owner.proceeding_kind:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"{payload.identifier_kind} identifiers cannot belong to a "
+                f"{owner.proceeding_kind} proceeding."
+            ),
+        )
+    elif isinstance(owner, IpProceeding):
         owner.source_pending_identifier_allocation = False
     duplicates = _duplicate_identifiers(
         session,

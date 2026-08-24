@@ -667,10 +667,10 @@ export default function GuidePage() {
                   </p>
                   <ul className="mt-4 space-y-2 text-[15px]">
                     <li>
-                      Application, registration, opposition, rectification, appeal, and
-                      court identifiers retain separate labels and legal owners. An
-                      opposition number is never displayed or stored as the trademark
-                      application number.
+                      Application, registration, opposition, rectification, cancellation,
+                      non-use removal, appeal, and court identifiers retain separate labels
+                      and legal owners. An opposition or post-registration proceeding number
+                      is never displayed or stored as the trademark application number.
                     </li>
                     <li>
                       Punctuation and spacing variants are normalized for matching while
@@ -687,6 +687,38 @@ export default function GuidePage() {
                       Correcting a number creates a new identifier version. The prior source
                       value, effective range, correction reason, and audit evidence remain in
                       history.
+                    </li>
+                  </ul>
+                  <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
+                    Rectification, cancellation, and non-use proceedings
+                  </h3>
+                  <p>
+                    Open the post-registration workspace in the{" "}
+                    <a className="underline" href="/app/ip">IP docket</a> to create a
+                    claimant- or respondent-side proceeding against the exact application.
+                    Keep its proceeding number, profile, challenged classes, grounds, forum,
+                    form, fee, service, rule map, and source records distinct from opposition.
+                  </p>
+                  <ul className="mt-4 space-y-2 text-[15px]">
+                    <li>
+                      A rule applied mutatis mutandis requires counsel to record the source
+                      rule, mapped provisions, excluded provisions, and confirmation. An
+                      opposition template cannot be silently reused.
+                    </li>
+                    <li>
+                      Link a parallel court or Registry proceeding without merging either
+                      record. Record sourced stays and lift orders before proposing a legal
+                      disposition.
+                    </li>
+                    <li>
+                      Settlement, withdrawal, and closure require the legal effect, effective
+                      date, evidence, and authorized confirmation. Candidate outcomes are
+                      limited to the proceeding type and require a separate review.
+                    </li>
+                    <li>
+                      Approval records the reviewed candidate but never changes the trademark
+                      registration automatically. Any authoritative register update remains a
+                      separate sourced, authorized action.
                     </li>
                   </ul>
                   <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">

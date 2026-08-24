@@ -8873,6 +8873,8 @@ export type IpIdentifier = {
     | "registration"
     | "opposition"
     | "rectification"
+    | "cancellation"
+    | "non_use_removal"
     | "appeal"
     | "court";
   raw_value: string;
@@ -8894,7 +8896,13 @@ export type IpProceeding = {
   id: string;
   docket_id: string;
   application_id: string | null;
-  proceeding_kind: "opposition" | "rectification" | "appeal" | "court";
+  proceeding_kind:
+    | "opposition"
+    | "rectification"
+    | "cancellation"
+    | "non_use_removal"
+    | "appeal"
+    | "court";
   side: "applicant" | "opponent" | "claimant" | "respondent" | "other";
   office: string;
   jurisdiction: string;
@@ -8939,6 +8947,49 @@ export type IpCoreRecords = {
   applications: TrademarkApplication[];
   proceedings: IpProceeding[];
   identifiers: IpIdentifier[];
+};
+
+export type IpPostRegistrationKind = "rectification" | "cancellation" | "non_use_removal";
+
+export type IpPostRegistrationProfile = {
+  proceeding_type: IpPostRegistrationKind;
+  legal_basis: string;
+  target_right_reference: string;
+  applicant_name: string;
+  respondent_name: string;
+  challenged_scope: Array<{ class_number: number; goods_services_segment: string }>;
+  grounds: string[];
+  forum: string;
+  form_key: string;
+  fee_status: "required" | "paid" | "not_required" | "manual_review";
+  fee_reference: string | null;
+  service_status: "not_started" | "prepared" | "served" | "not_required";
+  service_reference: string | null;
+  rule_map: {
+    template_key: string;
+    template_version: string;
+    authority_reference: string;
+    source_reference: string;
+    mutatis_mutandis: boolean;
+    mapped_from_rule: string | null;
+    mapped_provisions: string[];
+    excluded_provisions: string[];
+    lawyer_confirmation: string | null;
+  };
+  lawyer_confirmed_by_membership_id: string;
+};
+
+export type IpPostRegistrationWorkspace = {
+  proceeding: IpProceeding;
+  profile: IpPostRegistrationProfile | null;
+  profile_event: IpDocketEvent | null;
+  profile_revision_count: number;
+  identifiers: IpIdentifier[];
+  action_events: IpDocketEvent[];
+  active_stay: boolean;
+  ready_for_stage_progression: boolean;
+  readiness_gaps: string[];
+  registration_disposition_is_automatic: false;
 };
 
 export type IpOppositionParty = {
@@ -10799,6 +10850,153 @@ export async function fetchIpOppositionWorkspace(input: {
 }): Promise<IpOppositionWorkspace> {
   return apiRequest(
     `/api/ip/dockets/${encodeURIComponent(input.docketId)}/proceedings/${encodeURIComponent(input.proceedingId)}/opposition-workspace`,
+  );
+}
+
+export async function createIpPostRegistrationProceeding(input: {
+  docketId: string;
+  applicationId: string;
+  proceedingKind: IpPostRegistrationKind;
+  side: "claimant" | "respondent";
+  office: string;
+  jurisdiction: string;
+  originKind: "linked_application" | "registry_event" | "watch_hit" | "manual_intake";
+  proceedingNumber?: string | null;
+  identifierSource: string;
+  identifierEffectiveFrom: string;
+}): Promise<IpProceeding> {
+  return apiRequest(`/api/ip/dockets/${encodeURIComponent(input.docketId)}/proceedings`, {
+    method: "POST",
+    body: {
+      application_id: input.applicationId,
+      proceeding_kind: input.proceedingKind,
+      side: input.side,
+      office: input.office,
+      jurisdiction: input.jurisdiction,
+      stage: "draft",
+      origin_kind: input.originKind,
+      source_pending_identifier_allocation: !input.proceedingNumber?.trim(),
+      proceeding_number: input.proceedingNumber?.trim()
+        ? {
+            raw_value: input.proceedingNumber.trim(),
+            source: input.identifierSource,
+            effective_from: input.identifierEffectiveFrom,
+            is_primary: true,
+          }
+        : null,
+    },
+  });
+}
+
+export async function fetchIpPostRegistrationWorkspace(input: {
+  docketId: string;
+  proceedingId: string;
+}): Promise<IpPostRegistrationWorkspace> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/proceedings/${encodeURIComponent(input.proceedingId)}/post-registration-workspace`,
+  );
+}
+
+export async function saveIpPostRegistrationWorkspace(input: {
+  docketId: string;
+  proceedingId: string;
+  lifecycleVersion: number;
+  proceedingVersion: number;
+  expectedProfileEventId?: string | null;
+  effectiveAt: string;
+  responsibleMembershipId: string;
+  source: "manual" | "registry" | "integration" | "system";
+  sourceReference: string;
+  reason: string;
+  evidenceRefs?: string[];
+  documentRefs: string[];
+  profile: Omit<IpPostRegistrationProfile, "lawyer_confirmed_by_membership_id">;
+}): Promise<IpPostRegistrationWorkspace> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/proceedings/${encodeURIComponent(input.proceedingId)}/post-registration-workspace`,
+    {
+      method: "PUT",
+      body: {
+        expected_lifecycle_version: input.lifecycleVersion,
+        expected_proceeding_version: input.proceedingVersion,
+        expected_profile_event_id: input.expectedProfileEventId ?? null,
+        effective_at: input.effectiveAt,
+        responsible_membership_id: input.responsibleMembershipId,
+        source: input.source,
+        source_reference: input.sourceReference,
+        reason: input.reason,
+        evidence_refs: input.evidenceRefs ?? [],
+        document_refs: input.documentRefs,
+        profile: input.profile,
+      },
+    },
+  );
+}
+
+export type IpPostRegistrationActionKind =
+  | "stage_update"
+  | "parallel_proceeding_link"
+  | "interim_stay"
+  | "stay_lifted"
+  | "order_recorded"
+  | "closure"
+  | "disposition_candidate"
+  | "disposition_review";
+
+export async function recordIpPostRegistrationAction(input: {
+  docketId: string;
+  proceedingId: string;
+  lifecycleVersion: number;
+  proceedingVersion: number;
+  actionKind: IpPostRegistrationActionKind;
+  effectiveAt: string;
+  responsibleMembershipId: string;
+  source: "manual" | "registry" | "integration" | "system";
+  sourceReference: string;
+  reason: string;
+  evidenceRefs?: string[];
+  documentRefs?: string[];
+  stage?: string | null;
+  authorityReference?: string | null;
+  parallelProceedingId?: string | null;
+  legalEffect?: string | null;
+  legalEffectiveDate?: string | null;
+  candidateDisposition?:
+    | "rectify_registration"
+    | "cancel_registration"
+    | "remove_for_non_use"
+    | "no_change"
+    | null;
+  candidateEventId?: string | null;
+  reviewDecision?: "approved" | "rejected" | null;
+  authorizedConfirmation?: string | null;
+}): Promise<IpPostRegistrationWorkspace> {
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(input.docketId)}/proceedings/${encodeURIComponent(input.proceedingId)}/post-registration-actions`,
+    {
+      method: "POST",
+      body: {
+        expected_lifecycle_version: input.lifecycleVersion,
+        expected_proceeding_version: input.proceedingVersion,
+        action_kind: input.actionKind,
+        effective_at: input.effectiveAt,
+        responsible_membership_id: input.responsibleMembershipId,
+        source: input.source,
+        source_reference: input.sourceReference,
+        reason: input.reason,
+        evidence_refs: input.evidenceRefs ?? [],
+        document_refs: input.documentRefs ?? [],
+        stage: input.stage ?? null,
+        authority_reference: input.authorityReference ?? null,
+        parallel_proceeding_id: input.parallelProceedingId ?? null,
+        legal_effect: input.legalEffect ?? null,
+        legal_effective_date: input.legalEffectiveDate ?? null,
+        candidate_disposition: input.candidateDisposition ?? null,
+        candidate_event_id: input.candidateEventId ?? null,
+        review_decision: input.reviewDecision ?? null,
+        authorized_confirmation: input.authorizedConfirmation ?? null,
+      },
+    },
   );
 }
 

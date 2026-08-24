@@ -6,7 +6,14 @@ import unicodedata
 
 APPLICATION_IDENTIFIER_KINDS = frozenset({"application", "registration"})
 PROCEEDING_IDENTIFIER_KINDS = frozenset(
-    {"opposition", "rectification", "appeal", "court"}
+    {
+        "opposition",
+        "rectification",
+        "cancellation",
+        "non_use_removal",
+        "appeal",
+        "court",
+    }
 )
 IP_IDENTIFIER_KINDS = APPLICATION_IDENTIFIER_KINDS | PROCEEDING_IDENTIFIER_KINDS
 

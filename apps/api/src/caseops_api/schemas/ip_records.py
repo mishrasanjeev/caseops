@@ -15,7 +15,14 @@ from caseops_api.services.ip_identifier_rules import (
 
 class IpIdentifierCreate(BaseModel):
     identifier_kind: Literal[
-        "application", "registration", "opposition", "rectification", "appeal", "court"
+        "application",
+        "registration",
+        "opposition",
+        "rectification",
+        "cancellation",
+        "non_use_removal",
+        "appeal",
+        "court",
     ]
     raw_value: str = Field(min_length=1, max_length=160)
     office: str = Field(min_length=1, max_length=80)
@@ -73,6 +80,10 @@ class IpOppositionNumberCreate(IpApplicationNumberCreate):
     pass
 
 
+class IpProceedingNumberCreate(IpApplicationNumberCreate):
+    pass
+
+
 class TrademarkApplicationCreateRequest(BaseModel):
     asset_id: str
     office: str = Field(min_length=2, max_length=80)
@@ -84,7 +95,14 @@ class TrademarkApplicationCreateRequest(BaseModel):
 
 class IpProceedingCreateRequest(BaseModel):
     application_id: str | None = None
-    proceeding_kind: Literal["opposition", "rectification", "appeal", "court"]
+    proceeding_kind: Literal[
+        "opposition",
+        "rectification",
+        "cancellation",
+        "non_use_removal",
+        "appeal",
+        "court",
+    ]
     side: Literal["applicant", "opponent", "claimant", "respondent", "other"]
     office: str = Field(min_length=2, max_length=80)
     jurisdiction: str = Field(min_length=2, max_length=40)
@@ -95,27 +113,58 @@ class IpProceedingCreateRequest(BaseModel):
     stage_template_version: str | None = Field(default=None, min_length=2, max_length=80)
     source_pending_identifier_allocation: bool = False
     opposition_number: IpOppositionNumberCreate | None = None
+    proceeding_number: IpProceedingNumberCreate | None = None
 
     @model_validator(mode="after")
     def validate_opposition_contract(self) -> IpProceedingCreateRequest:
         if self.proceeding_kind != "opposition":
             if self.opposition_number is not None:
                 raise ValueError("Opposition numbers can only belong to opposition proceedings.")
+        else:
+            if self.proceeding_number is not None:
+                raise ValueError("Opposition proceedings must use an opposition number.")
+            if self.side not in {"applicant", "opponent"}:
+                raise ValueError("Opposition represented side must be applicant or opponent.")
+            if self.stage != "draft":
+                raise ValueError("Opposition proceedings must be created in draft stage.")
+            expected_template = f"opposition-{self.side}-v1"
+            if self.stage_template_version not in {None, expected_template}:
+                raise ValueError(f"Opposition represented side requires {expected_template!r}.")
+            if self.application_id is None and self.origin_kind == "linked_application":
+                raise ValueError("Linked-application opposition intake requires an application.")
+            if self.opposition_number is not None and self.source_pending_identifier_allocation:
+                raise ValueError(
+                    "A supplied opposition number cannot also be marked pending allocation."
+                )
             return self
-        if self.side not in {"applicant", "opponent"}:
-            raise ValueError("Opposition represented side must be applicant or opponent.")
-        if self.stage != "draft":
-            raise ValueError("Opposition proceedings must be created in draft stage.")
-        expected_template = f"opposition-{self.side}-v1"
-        if self.stage_template_version not in {None, expected_template}:
+
+        if self.proceeding_kind in {
+            "rectification",
+            "cancellation",
+            "non_use_removal",
+        }:
+            if self.application_id is None:
+                raise ValueError("Post-registration proceedings require a target application.")
+            if self.side not in {"claimant", "respondent"}:
+                raise ValueError(
+                    "Post-registration represented side must be claimant or respondent."
+                )
+            if self.stage != "draft":
+                raise ValueError("Post-registration proceedings must be created in draft stage.")
+            expected_template = f"post-registration-{self.proceeding_kind}-v1"
+            if self.stage_template_version not in {None, expected_template}:
+                raise ValueError(
+                    f"{self.proceeding_kind} proceedings require {expected_template!r}."
+                )
+            if self.proceeding_number is not None and self.source_pending_identifier_allocation:
+                raise ValueError(
+                    "A supplied proceeding number cannot also be marked pending allocation."
+                )
+            return self
+
+        if self.proceeding_number is not None:
             raise ValueError(
-                f"Opposition represented side requires {expected_template!r}."
-            )
-        if self.application_id is None and self.origin_kind == "linked_application":
-            raise ValueError("Linked-application opposition intake requires an application.")
-        if self.opposition_number is not None and self.source_pending_identifier_allocation:
-            raise ValueError(
-                "A supplied opposition number cannot also be marked pending allocation."
+                "Proceeding-number intake is currently limited to post-registration proceedings."
             )
         return self
 
