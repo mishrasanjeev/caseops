@@ -58,10 +58,13 @@ vi.mock("sonner", () => ({
 
 import MatterOverviewPage from "@/app/app/matters/[id]/page";
 
-function withClient(children: ReactNode) {
-  const client = new QueryClient({
+function createClient() {
+  return new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
+}
+
+function withClient(children: ReactNode, client = createClient()) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
@@ -115,9 +118,7 @@ describe("MatterOverviewPage", () => {
       disclaimer: "Statistical analysis based on indexed decisions only.",
     });
     render(withClient(<MatterOverviewPage />));
-    expect(
-      await screen.findByText("A short description."),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("A short description.")).toBeInTheDocument();
     expect(screen.getByText(/Matter summary/i)).toBeInTheDocument();
     expect(screen.getByText("Court 7")).toBeInTheDocument();
   });
@@ -171,7 +172,10 @@ describe("MatterOverviewPage", () => {
       disclaimer: "Not legal advice.",
     });
     const client = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
     });
     const view = render(
       <QueryClientProvider client={client}>
@@ -236,12 +240,16 @@ describe("MatterOverviewPage", () => {
 
     render(withClient(<MatterOverviewPage />));
 
-    expect(screen.getByTestId("matter-overview-no-hearings")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("matter-overview-no-hearings"),
+    ).toBeInTheDocument();
     expect(screen.queryByText("Cancelled mention")).toBeNull();
   });
 
   it("lets matter editors correct matter details from the overview", async () => {
-    useCapabilityMock.mockImplementation((capability: string) => capability === "matters:edit");
+    useCapabilityMock.mockImplementation(
+      (capability: string) => capability === "matters:edit",
+    );
     useMatterWorkspaceMock.mockReturnValue({
       data: {
         ...BASE_DATA,
@@ -273,19 +281,37 @@ describe("MatterOverviewPage", () => {
 
     await userEvent.click(screen.getByTestId("matter-edit-open"));
     await userEvent.clear(screen.getByTestId("matter-edit-title"));
-    await userEvent.type(screen.getByTestId("matter-edit-title"), "Corrected Matter");
+    await userEvent.type(
+      screen.getByTestId("matter-edit-title"),
+      "Corrected Matter",
+    );
     await userEvent.clear(screen.getByTestId("matter-edit-code"));
-    await userEvent.type(screen.getByTestId("matter-edit-code"), "fixed-2026-001");
+    await userEvent.type(
+      screen.getByTestId("matter-edit-code"),
+      "fixed-2026-001",
+    );
     await userEvent.clear(screen.getByTestId("matter-edit-client"));
-    await userEvent.type(screen.getByTestId("matter-edit-client"), "Correct Client");
+    await userEvent.type(
+      screen.getByTestId("matter-edit-client"),
+      "Correct Client",
+    );
     await userEvent.clear(screen.getByTestId("matter-edit-opposing"));
-    await userEvent.type(screen.getByTestId("matter-edit-opposing"), "Correct Opponent");
+    await userEvent.type(
+      screen.getByTestId("matter-edit-opposing"),
+      "Correct Opponent",
+    );
     await userEvent.clear(screen.getByTestId("matter-edit-case-number"));
-    await userEvent.type(screen.getByTestId("matter-edit-case-number"), "CASE-99");
+    await userEvent.type(
+      screen.getByTestId("matter-edit-case-number"),
+      "CASE-99",
+    );
     await userEvent.clear(screen.getByTestId("matter-edit-cnr-number"));
     await userEvent.type(screen.getByTestId("matter-edit-cnr-number"), "CNR99");
     await userEvent.clear(screen.getByTestId("matter-edit-court-forum-number"));
-    await userEvent.type(screen.getByTestId("matter-edit-court-forum-number"), "Court 12");
+    await userEvent.type(
+      screen.getByTestId("matter-edit-court-forum-number"),
+      "Court 12",
+    );
     await userEvent.click(screen.getByTestId("matter-edit-save"));
 
     await waitFor(() => expect(updateMatterMock).toHaveBeenCalledTimes(1));
@@ -336,11 +362,22 @@ describe("MatterOverviewPage", () => {
       top_statute_sections: [],
       disclaimer: "Not legal advice.",
     });
+    const client = createClient();
+    let finishInvalidation: (() => void) | undefined;
+    const invalidation = new Promise<void>((resolve) => {
+      finishInvalidation = resolve;
+    });
+    const invalidateQueries = vi
+      .spyOn(client, "invalidateQueries")
+      .mockImplementation(() => invalidation);
 
-    render(withClient(<MatterOverviewPage />));
+    render(withClient(<MatterOverviewPage />, client));
 
     await userEvent.click(screen.getByTestId("matter-edit-open"));
-    await userEvent.selectOptions(screen.getByTestId("matter-edit-status"), "active");
+    await userEvent.selectOptions(
+      screen.getByTestId("matter-edit-status"),
+      "active",
+    );
     expect(screen.queryByTestId("matter-edit-active-conflict-hint")).toBeNull();
     await userEvent.click(screen.getByTestId("matter-edit-save"));
 
@@ -353,7 +390,9 @@ describe("MatterOverviewPage", () => {
     await waitFor(() =>
       expect(screen.queryByTestId("matter-edit-form")).not.toBeInTheDocument(),
     );
+    expect(invalidateQueries).toHaveBeenCalledTimes(2);
     expect(screen.queryByTestId("matter-edit-conflict-gate")).toBeNull();
+    finishInvalidation?.();
   });
 
   it("does not replay untouched status and surfaces a rejected stale metadata edit", async () => {
@@ -364,7 +403,8 @@ describe("MatterOverviewPage", () => {
     updateMatterMock.mockRejectedValue({
       name: "ApiError",
       status: 409,
-      detail: "Matter changed after this page was loaded. Refresh and try again.",
+      detail:
+        "Matter changed after this page was loaded. Refresh and try again.",
       problemType: null,
       data: null,
     });
@@ -385,9 +425,9 @@ describe("MatterOverviewPage", () => {
     });
     await userEvent.click(screen.getByTestId("matter-edit-save"));
 
-    expect(await screen.findByTestId("matter-edit-stale-write")).toHaveTextContent(
-      /changed in another session/i,
-    );
+    expect(
+      await screen.findByTestId("matter-edit-stale-write"),
+    ).toHaveTextContent(/changed in another session/i);
     expect(updateMatterMock).toHaveBeenCalledWith({
       matterId: "m-1",
       expected_updated_at: "2026-07-15T08:30:00Z",

@@ -43,7 +43,10 @@ import { formatLegalDate } from "@/lib/dates";
 import { normalizeMatterCodeInput } from "@/lib/matter-code";
 import { useMatterWorkspace } from "@/lib/use-matter-workspace";
 
-function formatDate(value: string | null | undefined, withTime = false): string {
+function formatDate(
+  value: string | null | undefined,
+  withTime = false,
+): string {
   if (!value) return "—";
   if (!withTime) {
     return formatLegalDate(value, {
@@ -80,7 +83,10 @@ type MatterEditDraft = {
   description: string;
 };
 
-const STATUS_OPTIONS: Array<{ value: MatterEditDraft["status"]; label: string }> = [
+const STATUS_OPTIONS: Array<{
+  value: MatterEditDraft["status"];
+  label: string;
+}> = [
   { value: "intake", label: "Intake" },
   { value: "active", label: "Active" },
   { value: "on_hold", label: "On hold" },
@@ -153,11 +159,13 @@ function buildMatterUpdateInput(
 
   if (title !== matter.title) input.title = title;
   if (matterCode !== matter.matter_code) input.matter_code = matterCode;
-  if (clientName !== (matter.client_name ?? null)) input.client_name = clientName;
+  if (clientName !== (matter.client_name ?? null))
+    input.client_name = clientName;
   if (opposingParty !== (matter.opposing_party ?? null)) {
     input.opposing_party = opposingParty;
   }
-  if (caseNumber !== (matter.case_number ?? null)) input.case_number = caseNumber;
+  if (caseNumber !== (matter.case_number ?? null))
+    input.case_number = caseNumber;
   if (cnrNumber !== (matter.cnr_number ?? null)) input.cnr_number = cnrNumber;
   if (practiceArea !== (matter.practice_area ?? "")) {
     input.practice_area = practiceArea;
@@ -171,7 +179,8 @@ function buildMatterUpdateInput(
   if (nextHearingOn !== (matter.next_hearing_on ?? null)) {
     input.next_hearing_on = nextHearingOn;
   }
-  if (description !== (matter.description ?? null)) input.description = description;
+  if (description !== (matter.description ?? null))
+    input.description = description;
   if (
     draft.status !== matter.status &&
     draft.status !== "disposed" &&
@@ -214,20 +223,23 @@ export default function MatterOverviewPage() {
   const [isEditingMatter, setIsEditingMatter] = useState(false);
   const [matterDraft, setMatterDraft] = useState<MatterEditDraft | null>(null);
   const [matterEditBase, setMatterEditBase] = useState<Matter | null>(null);
-  const [matterEditConcurrencyError, setMatterEditConcurrencyError] =
-    useState<string | null>(null);
+  const [matterEditConcurrencyError, setMatterEditConcurrencyError] = useState<
+    string | null
+  >(null);
   const matterMutation = useMutation({
     mutationFn: (input: MatterUpdateInput) => updateMatter(input),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: ["matters", params.id, "workspace"],
-      });
-      await queryClient.invalidateQueries({ queryKey: ["matters"] });
-      toast.success("Matter updated.");
       setIsEditingMatter(false);
       setMatterDraft(null);
       setMatterEditBase(null);
       setMatterEditConcurrencyError(null);
+      toast.success("Matter updated.");
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["matters", params.id, "workspace"],
+        }),
+        queryClient.invalidateQueries({ queryKey: ["matters"] }),
+      ]);
     },
     onError: async (err) => {
       const message = apiErrorMessage(err, "Could not update the matter.");
@@ -301,7 +313,9 @@ export default function MatterOverviewPage() {
                   await queryClient.invalidateQueries({
                     queryKey: ["matters", params.id, "workspace"],
                   });
-                  await queryClient.invalidateQueries({ queryKey: ["matters"] });
+                  await queryClient.invalidateQueries({
+                    queryKey: ["matters"],
+                  });
                 }}
               />
             ) : null}
@@ -360,10 +374,13 @@ export default function MatterOverviewPage() {
                   role="alert"
                   data-testid="matter-edit-stale-write"
                 >
-                  <p className="font-medium">This matter changed in another session.</p>
+                  <p className="font-medium">
+                    This matter changed in another session.
+                  </p>
                   <p className="mt-1 text-xs leading-5">
-                    {matterEditConcurrencyError} Your stale values were not applied. Cancel and
-                    reopen the editor to use the latest record.
+                    {matterEditConcurrencyError} Your stale values were not
+                    applied. Cancel and reopen the editor to use the latest
+                    record.
                   </p>
                 </div>
               ) : null}
@@ -373,7 +390,9 @@ export default function MatterOverviewPage() {
                   id="matter-edit-title"
                   className="mt-1.5"
                   value={matterDraft.title}
-                  onChange={(event) => updateMatterDraft({ title: event.target.value })}
+                  onChange={(event) =>
+                    updateMatterDraft({ title: event.target.value })
+                  }
                   data-testid="matter-edit-title"
                   required
                 />
@@ -384,7 +403,9 @@ export default function MatterOverviewPage() {
                   id="matter-edit-code"
                   className="mt-1.5"
                   value={matterDraft.matterCode}
-                  onChange={(event) => updateMatterDraft({ matterCode: event.target.value })}
+                  onChange={(event) =>
+                    updateMatterDraft({ matterCode: event.target.value })
+                  }
                   data-testid="matter-edit-code"
                   required
                 />
@@ -428,7 +449,9 @@ export default function MatterOverviewPage() {
                   id="matter-edit-forum-level"
                   className="mt-1.5 h-10 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
                   value={matterDraft.forumLevel}
-                  onChange={(event) => updateMatterDraft({ forumLevel: event.target.value })}
+                  onChange={(event) =>
+                    updateMatterDraft({ forumLevel: event.target.value })
+                  }
                   data-testid="matter-edit-forum-level"
                 >
                   {FORUM_LEVEL_OPTIONS.map((option) => (
@@ -444,7 +467,9 @@ export default function MatterOverviewPage() {
                   id="matter-edit-client"
                   className="mt-1.5"
                   value={matterDraft.clientName}
-                  onChange={(event) => updateMatterDraft({ clientName: event.target.value })}
+                  onChange={(event) =>
+                    updateMatterDraft({ clientName: event.target.value })
+                  }
                   data-testid="matter-edit-client"
                 />
               </div>
@@ -466,7 +491,9 @@ export default function MatterOverviewPage() {
                   id="matter-edit-case-number"
                   className="mt-1.5"
                   value={matterDraft.caseNumber}
-                  onChange={(event) => updateMatterDraft({ caseNumber: event.target.value })}
+                  onChange={(event) =>
+                    updateMatterDraft({ caseNumber: event.target.value })
+                  }
                   data-testid="matter-edit-case-number"
                 />
               </div>
@@ -476,7 +503,9 @@ export default function MatterOverviewPage() {
                   id="matter-edit-cnr-number"
                   className="mt-1.5"
                   value={matterDraft.cnrNumber}
-                  onChange={(event) => updateMatterDraft({ cnrNumber: event.target.value })}
+                  onChange={(event) =>
+                    updateMatterDraft({ cnrNumber: event.target.value })
+                  }
                   data-testid="matter-edit-cnr-number"
                 />
               </div>
@@ -486,12 +515,16 @@ export default function MatterOverviewPage() {
                   id="matter-edit-court"
                   className="mt-1.5"
                   value={matterDraft.courtName}
-                  onChange={(event) => updateMatterDraft({ courtName: event.target.value })}
+                  onChange={(event) =>
+                    updateMatterDraft({ courtName: event.target.value })
+                  }
                   data-testid="matter-edit-court"
                 />
               </div>
               <div>
-                <Label htmlFor="matter-edit-court-forum-number">Court / forum number</Label>
+                <Label htmlFor="matter-edit-court-forum-number">
+                  Court / forum number
+                </Label>
                 <Input
                   id="matter-edit-court-forum-number"
                   className="mt-1.5"
@@ -509,7 +542,9 @@ export default function MatterOverviewPage() {
                   id="matter-edit-judge"
                   className="mt-1.5"
                   value={matterDraft.judgeName}
-                  onChange={(event) => updateMatterDraft({ judgeName: event.target.value })}
+                  onChange={(event) =>
+                    updateMatterDraft({ judgeName: event.target.value })
+                  }
                   data-testid="matter-edit-judge"
                 />
               </div>
@@ -584,18 +619,39 @@ export default function MatterOverviewPage() {
                 />
               )}
               <div className="grid gap-4 sm:grid-cols-2">
-                <MatterDetail label="Matter code" value={data.matter.matter_code} />
+                <MatterDetail
+                  label="Matter code"
+                  value={data.matter.matter_code}
+                />
                 <MatterDetail label="Client" value={data.matter.client_name} />
-                <MatterDetail label="Opposing party" value={data.matter.opposing_party} />
-                <MatterDetail label="Practice area" value={data.matter.practice_area} />
-                <MatterDetail label="Case number" value={data.matter.case_number} />
-                <MatterDetail label="CNR number" value={data.matter.cnr_number} />
-                <MatterDetail label="Court / forum" value={data.matter.court_name} />
+                <MatterDetail
+                  label="Opposing party"
+                  value={data.matter.opposing_party}
+                />
+                <MatterDetail
+                  label="Practice area"
+                  value={data.matter.practice_area}
+                />
+                <MatterDetail
+                  label="Case number"
+                  value={data.matter.case_number}
+                />
+                <MatterDetail
+                  label="CNR number"
+                  value={data.matter.cnr_number}
+                />
+                <MatterDetail
+                  label="Court / forum"
+                  value={data.matter.court_name}
+                />
                 <MatterDetail
                   label="Court / forum number"
                   value={data.matter.court_forum_number}
                 />
-                <MatterDetail label="Judge / bench" value={data.matter.judge_name} />
+                <MatterDetail
+                  label="Judge / bench"
+                  value={data.matter.judge_name}
+                />
                 <MatterDetail
                   label="Next hearing"
                   value={formatDate(data.matter.next_hearing_on)}
@@ -631,7 +687,9 @@ export default function MatterOverviewPage() {
         <Card>
           <CardHeader>
             <CardTitle>Last court order</CardTitle>
-            <CardDescription>Most recent imported or attached order.</CardDescription>
+            <CardDescription>
+              Most recent imported or attached order.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex flex-col gap-1.5">
@@ -681,7 +739,9 @@ export default function MatterOverviewPage() {
                   </div>
                   <div className="flex items-center justify-between text-xs text-[var(--color-mute)]">
                     <span>{task.owner_name ?? "Unassigned"}</span>
-                    <span>{task.due_on ? formatDate(task.due_on) : "No due date"}</span>
+                    <span>
+                      {task.due_on ? formatDate(task.due_on) : "No due date"}
+                    </span>
                   </div>
                 </li>
               ))}
@@ -719,7 +779,10 @@ export default function MatterOverviewPage() {
                       {h.hearing_type ?? "Hearing"}
                     </span>
                     <span className="text-xs text-[var(--color-mute)]">
-                      {formatDate(h.hearing_on ?? h.scheduled_for ?? h.listing_date, true)}
+                      {formatDate(
+                        h.hearing_on ?? h.scheduled_for ?? h.listing_date,
+                        true,
+                      )}
                     </span>
                   </div>
                   <StatusBadge status={h.status ?? "pending"} />
@@ -734,8 +797,8 @@ export default function MatterOverviewPage() {
             <div>
               <CardTitle>Upcoming hearings</CardTitle>
               <CardDescription>
-                No hearings scheduled yet — add one to populate the calendar
-                and unlock the hearing-pack workflow.
+                No hearings scheduled yet — add one to populate the calendar and
+                unlock the hearing-pack workflow.
               </CardDescription>
             </div>
             {data.matter.status !== "disposed" ? (
@@ -781,7 +844,9 @@ export default function MatterOverviewPage() {
                     </span>
                   </div>
                   {event.detail ? (
-                    <p className="mt-0.5 text-sm text-[var(--color-mute)]">{event.detail}</p>
+                    <p className="mt-0.5 text-sm text-[var(--color-mute)]">
+                      {event.detail}
+                    </p>
                   ) : null}
                   <p className="mt-0.5 text-xs text-[var(--color-mute-2)]">
                     {event.actor_name ?? "system"} · {event.event_type}
@@ -797,7 +862,9 @@ export default function MatterOverviewPage() {
         <Card className="lg:col-span-3">
           <CardHeader>
             <CardTitle>Recent notes</CardTitle>
-            <CardDescription>Your team's private thinking on this matter.</CardDescription>
+            <CardDescription>
+              Your team's private thinking on this matter.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <ul className="flex flex-col gap-4">
@@ -810,7 +877,9 @@ export default function MatterOverviewPage() {
                     <span>{note.author_name ?? "Unknown"}</span>
                     <span>{formatDate(note.created_at, true)}</span>
                   </div>
-                  <p className="whitespace-pre-line leading-relaxed">{note.body}</p>
+                  <p className="whitespace-pre-line leading-relaxed">
+                    {note.body}
+                  </p>
                 </li>
               ))}
             </ul>
