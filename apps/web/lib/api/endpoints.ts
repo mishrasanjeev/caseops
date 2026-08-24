@@ -8690,6 +8690,8 @@ export type IpRegistrySnapshot = {
   created_at: string;
 };
 
+export type IpRegistrySnapshotSummary = Omit<IpRegistrySnapshot, "raw_json" | "normalized_json">;
+
 export type IpRegistryDiff = {
   id: string;
   company_id: string;
@@ -8716,8 +8718,21 @@ export type IpRegistryDiff = {
 export type IpRegistryWorkspace = {
   link: IpRegistryLink;
   attempts: IpRegistrySyncAttempt[];
-  snapshots: IpRegistrySnapshot[];
-  diffs: IpRegistryDiff[];
+  snapshots: IpRegistrySnapshotSummary[];
+};
+
+export type IpRegistryWorkspacePage = {
+  items: IpRegistryWorkspace[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type IpRegistryDiffPage = {
+  items: IpRegistryDiff[];
+  total: number;
+  limit: number;
+  offset: number;
 };
 
 export type IpRegistrySnapshotResult = {
@@ -10379,9 +10394,27 @@ export async function fetchIpDocket(docketId: string): Promise<IpDocket> {
 
 export async function fetchIpRegistryWorkspaces(
   docketId?: string | null,
-): Promise<IpRegistryWorkspace[]> {
-  const query = docketId ? `?docket_id=${encodeURIComponent(docketId)}` : "";
-  return apiRequest(`/api/ip/registry-links${query}`);
+  limit = 25,
+  offset = 0,
+): Promise<IpRegistryWorkspacePage> {
+  const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (docketId) query.set("docket_id", docketId);
+  return apiRequest(`/api/ip/registry-links?${query}`);
+}
+
+export async function fetchIpRegistryDiffs(
+  linkId: string,
+  limit = 50,
+  offset = 0,
+): Promise<IpRegistryDiffPage> {
+  const query = new URLSearchParams({
+    resolution: "unresolved",
+    limit: String(limit),
+    offset: String(offset),
+  });
+  return apiRequest(
+    `/api/ip/registry-links/${encodeURIComponent(linkId)}/diffs?${query}`,
+  );
 }
 
 export async function createIpRegistryLink(input: {

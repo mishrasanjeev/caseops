@@ -9,10 +9,11 @@ from hashlib import sha256
 from typing import TYPE_CHECKING, Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
+    IpDocketRecord,
     IpIdentifier,
     IpPartyAndRole,
     IpProceeding,
@@ -21,6 +22,7 @@ from caseops_api.db.models import (
     IpRegistrySnapshot,
     IpRegistrySyncAttempt,
     IpTrackedCaseLink,
+    Matter,
     TrackedCase,
     TrackedCaseBookmark,
     TrackedCaseUpdate,
@@ -28,19 +30,24 @@ from caseops_api.db.models import (
 )
 from caseops_api.schemas.ip_lifecycle import IpDocketEventCreateRequest
 from caseops_api.schemas.ip_registry import (
+    IpRegistryDiffPageResponse,
     IpRegistryDiffResponse,
     IpRegistryLinkResponse,
     IpRegistrySnapshotResponse,
     IpRegistrySnapshotResult,
+    IpRegistrySnapshotSummaryResponse,
     IpRegistrySyncAttemptResponse,
+    IpRegistryWorkspacePageResponse,
     IpRegistryWorkspaceResponse,
     IpTrackedCaseReferenceResponse,
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.capabilities import membership_has_capability
+from caseops_api.services.domain_outbox import enqueue_domain_event
 from caseops_api.services.ip_identifier_rules import normalize_ip_identifier
 from caseops_api.services.ip_lifecycle import append_ip_docket_event
 from caseops_api.services.ip_operations import _docket_or_404, _lock_ip_writer_context
+from caseops_api.services.matter_access import visible_ip_dockets_filter
 from caseops_api.services.notification_delivery import redact_provider_error
 from caseops_api.services.provider_adapter_catalog import provider_adapter_definition
 from caseops_api.services.session_context import SessionContext
@@ -159,6 +166,18 @@ def _remove_pointer(document: dict[str, Any], path: str) -> dict[str, Any]:
         cursor = child
     cursor.pop(segments[-1], None)
     return result
+
+
+def _pointer_value(document: dict[str, Any], path: str) -> tuple[bool, object | None]:
+    segments = [_unescape_pointer(item) for item in path.split("/")[1:]]
+    if not segments:
+        return True, copy.deepcopy(document)
+    cursor: object = document
+    for segment in segments:
+        if not isinstance(cursor, dict) or segment not in cursor:
+            return False, None
+        cursor = cursor[segment]
+    return True, copy.deepcopy(cursor)
 
 
 def _risk(field_path: str) -> tuple[str, list[str], str]:
@@ -855,7 +874,9 @@ def resolve_registry_diff(
         )
     if row.resolution_status in {"accepted", "rejected"}:
         raise HTTPException(status_code=409, detail="Registry diff is already final.")
-    if row.risk_level == "high" and payload.decision == "accept":
+    target_path = row.mapped_field_path or row.field_path
+    target_risk, target_risk_reasons, target_deadline_state = _risk(target_path)
+    if target_risk == "high" and payload.decision == "accept":
         if not membership_has_capability(session, locked_context.membership, "ip:approve"):
             raise HTTPException(
                 status_code=403,
@@ -864,6 +885,23 @@ def resolve_registry_diff(
     now = _now()
     emitted_event_id: str | None = None
     if payload.decision == "accept":
+        current_present, current_value = _pointer_value(
+            link.accepted_state_json or {}, target_path
+        )
+        expected_present = row.change_kind != "added"
+        if current_present != expected_present or (
+            expected_present and current_value != row.before_value_json
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Accepted registry state changed after this diff was created; "
+                    "record a fresh snapshot before reconciling it."
+                ),
+            )
+        row.risk_level = target_risk
+        row.risk_reasons_json = target_risk_reasons
+        row.deadline_recalculation_state = target_deadline_state
         application = (
             session.scalar(
                 select(TrademarkApplication).where(
@@ -890,7 +928,8 @@ def resolve_registry_diff(
                 "registry_link_id": link.id,
                 "registry_snapshot_id": snapshot.id,
                 "registry_diff_id": row.id,
-                "field_path": row.field_path,
+                "field_path": target_path,
+                "observed_field_path": row.field_path,
                 "change_kind": row.change_kind,
                 "before_value": row.before_value_json,
                 "after_value": row.after_value_json,
@@ -924,7 +963,6 @@ def resolve_registry_diff(
         emitted_event_id = accepted.id
         row.resolution_status = "accepted"
         row.emitted_event_id = accepted.id
-        target_path = row.mapped_field_path or row.field_path
         link.accepted_state_json = (
             _remove_pointer(link.accepted_state_json or {}, target_path)
             if row.change_kind == "removed"
@@ -934,11 +972,53 @@ def resolve_registry_diff(
                 row.after_value_json,
             )
         )
+        if row.deadline_recalculation_state == "required":
+            assert payload.effective_at is not None
+            enqueue_domain_event(
+                session,
+                company_id=locked_context.company.id,
+                event_key=f"ip-registry-deadline:{row.id}:{row.version}",
+                event_type="ip.docket_event.recorded",
+                schema_version=1,
+                aggregate_type="ip_docket_event",
+                aggregate_id=accepted.id,
+                aggregate_version=accepted.sequence,
+                occurred_at=now,
+                effective_at=payload.effective_at,
+                source_command_id=f"ip_registry_diff:{row.id}:{row.version}",
+                source_event_id=accepted.id,
+                producer="caseops.ip_registry",
+                confidentiality="privileged",
+                correlation_id=f"ip-registry-deadline:{row.id}",
+                payload={
+                    "ip_docket_event_id": accepted.id,
+                    "target_id": docket.id,
+                    "event_type": "registry_change",
+                    "event_version": accepted.sequence,
+                    "source_evidence_id": snapshot.id,
+                },
+            )
+            row.deadline_recalculation_state = "proposed"
     elif payload.decision == "reject":
         row.resolution_status = "rejected"
     elif payload.decision == "map":
+        assert payload.mapped_field_path is not None
+        mapped_present, mapped_value = _pointer_value(
+            link.accepted_state_json or {}, payload.mapped_field_path
+        )
+        if row.change_kind == "removed" and not mapped_present:
+            raise HTTPException(
+                status_code=409,
+                detail="The canonical registry field is already absent; record a fresh snapshot.",
+            )
         row.resolution_status = "mapped"
         row.mapped_field_path = payload.mapped_field_path
+        row.before_value_json = mapped_value
+        if row.change_kind != "removed":
+            row.change_kind = "changed" if mapped_present else "added"
+        row.risk_level, row.risk_reasons_json, row.deadline_recalculation_state = _risk(
+            payload.mapped_field_path
+        )
     else:
         row.resolution_status = "deferred"
     row.resolution_reason = payload.reason
@@ -975,62 +1055,193 @@ def list_registry_workspaces(
     *,
     context: SessionContext,
     docket_id: str | None = None,
-) -> list[IpRegistryWorkspaceResponse]:
+    limit: int = 25,
+    offset: int = 0,
+) -> IpRegistryWorkspacePageResponse:
     if docket_id:
         _docket_or_404(session, context=context, docket_id=docket_id)
-    statement = select(IpRegistryLink).where(IpRegistryLink.company_id == context.company.id)
+    statement = (
+        select(IpRegistryLink)
+        .join(
+            IpDocketRecord,
+            (IpDocketRecord.id == IpRegistryLink.docket_id)
+            & (IpDocketRecord.company_id == IpRegistryLink.company_id),
+        )
+        .outerjoin(
+            Matter,
+            (Matter.id == IpDocketRecord.matter_id)
+            & (Matter.company_id == IpDocketRecord.company_id),
+        )
+        .where(
+            IpRegistryLink.company_id == context.company.id,
+            IpDocketRecord.is_active.is_(True),
+            IpDocketRecord.archived_by_matter_disposal.is_(False),
+            or_(IpDocketRecord.matter_id.is_(None), Matter.is_active.is_(True)),
+            visible_ip_dockets_filter(session, context=context),
+        )
+    )
     if docket_id:
         statement = statement.where(IpRegistryLink.docket_id == docket_id)
-    links = list(session.scalars(statement.order_by(IpRegistryLink.updated_at.desc())).all())
-    output: list[IpRegistryWorkspaceResponse] = []
-    for link in links:
-        _docket_or_404(session, context=context, docket_id=link.docket_id)
+    total = session.scalar(
+        select(func.count()).select_from(statement.order_by(None).subquery())
+    ) or 0
+    links = list(
+        session.scalars(
+            statement.order_by(IpRegistryLink.updated_at.desc(), IpRegistryLink.id)
+            .limit(limit)
+            .offset(offset)
+        ).all()
+    )
+    link_ids = [link.id for link in links]
+    attempts_by_link: dict[str, list[IpRegistrySyncAttemptResponse]] = {
+        link_id: [] for link_id in link_ids
+    }
+    snapshots_by_link: dict[str, list[IpRegistrySnapshotSummaryResponse]] = {
+        link_id: [] for link_id in link_ids
+    }
+    if link_ids:
+        attempt_ranks = (
+            select(
+                IpRegistrySyncAttempt.id.label("attempt_id"),
+                func.row_number()
+                .over(
+                    partition_by=IpRegistrySyncAttempt.link_id,
+                    order_by=(
+                        IpRegistrySyncAttempt.created_at.desc(),
+                        IpRegistrySyncAttempt.id,
+                    ),
+                )
+                .label("history_rank"),
+            )
+            .where(
+                IpRegistrySyncAttempt.company_id == context.company.id,
+                IpRegistrySyncAttempt.link_id.in_(link_ids),
+            )
+            .subquery()
+        )
         attempts = list(
             session.scalars(
                 select(IpRegistrySyncAttempt)
-                .where(
-                    IpRegistrySyncAttempt.link_id == link.id,
-                    IpRegistrySyncAttempt.company_id == context.company.id,
+                .join(attempt_ranks, attempt_ranks.c.attempt_id == IpRegistrySyncAttempt.id)
+                .where(attempt_ranks.c.history_rank <= 20)
+                .order_by(
+                    IpRegistrySyncAttempt.link_id,
+                    IpRegistrySyncAttempt.created_at.desc(),
+                    IpRegistrySyncAttempt.id,
                 )
-                .order_by(IpRegistrySyncAttempt.created_at.desc())
-                .limit(20)
             ).all()
         )
-        snapshots = list(
-            session.scalars(
-                select(IpRegistrySnapshot)
-                .where(
-                    IpRegistrySnapshot.link_id == link.id,
-                    IpRegistrySnapshot.company_id == context.company.id,
-                )
-                .order_by(IpRegistrySnapshot.created_at.desc())
-                .limit(20)
-            ).all()
-        )
-        snapshot_ids = [row.id for row in snapshots]
-        diffs = (
-            list(
-                session.scalars(
-                    select(IpRegistryDiff)
-                    .where(
-                        IpRegistryDiff.snapshot_id.in_(snapshot_ids),
-                        IpRegistryDiff.company_id == context.company.id,
-                    )
-                    .order_by(IpRegistryDiff.created_at.desc(), IpRegistryDiff.field_path)
-                ).all()
+        for attempt in attempts:
+            attempts_by_link[attempt.link_id].append(
+                IpRegistrySyncAttemptResponse.model_validate(attempt)
             )
-            if snapshot_ids
-            else []
+
+        summary_columns = (
+            IpRegistrySnapshot.id,
+            IpRegistrySnapshot.company_id,
+            IpRegistrySnapshot.link_id,
+            IpRegistrySnapshot.attempt_id,
+            IpRegistrySnapshot.source_url,
+            IpRegistrySnapshot.source_retrieved_at,
+            IpRegistrySnapshot.parser_version,
+            IpRegistrySnapshot.schema_version,
+            IpRegistrySnapshot.attribution_json,
+            IpRegistrySnapshot.terms_version,
+            IpRegistrySnapshot.raw_sha256,
+            IpRegistrySnapshot.normalized_sha256,
+            IpRegistrySnapshot.supersedes_snapshot_id,
+            IpRegistrySnapshot.correction_reason,
+            IpRegistrySnapshot.created_at,
         )
-        output.append(
+        snapshot_ranks = (
+            select(
+                *summary_columns,
+                func.row_number()
+                .over(
+                    partition_by=IpRegistrySnapshot.link_id,
+                    order_by=(
+                        IpRegistrySnapshot.created_at.desc(),
+                        IpRegistrySnapshot.id,
+                    ),
+                )
+                .label("history_rank"),
+            )
+            .where(
+                IpRegistrySnapshot.company_id == context.company.id,
+                IpRegistrySnapshot.link_id.in_(link_ids),
+            )
+            .subquery()
+        )
+        snapshot_rows = session.execute(
+            select(snapshot_ranks)
+            .where(snapshot_ranks.c.history_rank <= 20)
+            .order_by(
+                snapshot_ranks.c.link_id,
+                snapshot_ranks.c.created_at.desc(),
+                snapshot_ranks.c.id,
+            )
+        ).mappings()
+        for snapshot_row in snapshot_rows:
+            values = dict(snapshot_row)
+            values.pop("history_rank", None)
+            summary = IpRegistrySnapshotSummaryResponse.model_validate(values)
+            snapshots_by_link[summary.link_id].append(summary)
+
+    return IpRegistryWorkspacePageResponse(
+        items=[
             IpRegistryWorkspaceResponse(
                 link=IpRegistryLinkResponse.model_validate(link),
-                attempts=[IpRegistrySyncAttemptResponse.model_validate(row) for row in attempts],
-                snapshots=[IpRegistrySnapshotResponse.model_validate(row) for row in snapshots],
-                diffs=[IpRegistryDiffResponse.model_validate(row) for row in diffs],
+                attempts=attempts_by_link[link.id],
+                snapshots=snapshots_by_link[link.id],
             )
+            for link in links
+        ],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+def list_registry_diffs(
+    session: Session,
+    *,
+    context: SessionContext,
+    link_id: str,
+    unresolved_only: bool = True,
+    limit: int = 50,
+    offset: int = 0,
+) -> IpRegistryDiffPageResponse:
+    link = _link_or_404(session, context=context, link_id=link_id)
+    _docket_or_404(session, context=context, docket_id=link.docket_id)
+    statement = (
+        select(IpRegistryDiff)
+        .join(IpRegistrySnapshot, IpRegistrySnapshot.id == IpRegistryDiff.snapshot_id)
+        .where(
+            IpRegistryDiff.company_id == context.company.id,
+            IpRegistrySnapshot.company_id == context.company.id,
+            IpRegistrySnapshot.link_id == link.id,
         )
-    return output
+    )
+    if unresolved_only:
+        statement = statement.where(
+            IpRegistryDiff.resolution_status.in_(("pending", "mapped", "deferred"))
+        )
+    total = session.scalar(
+        select(func.count()).select_from(statement.order_by(None).subquery())
+    ) or 0
+    rows = list(
+        session.scalars(
+            statement.order_by(IpRegistryDiff.created_at.desc(), IpRegistryDiff.id)
+            .limit(limit)
+            .offset(offset)
+        ).all()
+    )
+    return IpRegistryDiffPageResponse(
+        items=[IpRegistryDiffResponse.model_validate(row) for row in rows],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 def create_tracked_case_reference(

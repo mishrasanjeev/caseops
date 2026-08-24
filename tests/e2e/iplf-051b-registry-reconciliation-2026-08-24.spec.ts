@@ -283,8 +283,24 @@ test("IPLF-051 reconciles immutable registry evidence without claiming a provide
   await markRow.getByRole("button", { name: "Accept" }).click();
   const accepted = await acceptedResponse;
   expect(accepted.status(), await accepted.text()).toBe(200);
-  await expect(markRow).toContainText("accepted");
-  await expect(markRow).toContainText("Event recorded");
+  const acceptedDiff = await accepted.json();
+  expect(acceptedDiff.resolution_status).toBe("accepted");
+  expect(acceptedDiff.emitted_event_id).toBeTruthy();
+  await expect(markRow).toHaveCount(0);
+  const diffHistory = await api.get(
+    `${apiBaseUrl}/api/ip/registry-links/${link.id}/diffs?resolution=all&limit=100`,
+    { headers },
+  );
+  expect(diffHistory.status(), await diffHistory.text()).toBe(200);
+  expect((await diffHistory.json()).items).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        id: acceptedDiff.id,
+        resolution_status: "accepted",
+        emitted_event_id: acceptedDiff.emitted_event_id,
+      }),
+    ]),
+  );
 
   await page
     .getByLabel("Redactable operator detail")

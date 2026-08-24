@@ -708,12 +708,18 @@ export default function GuidePage() {
                     <li>
                       Every changed field remains a candidate until it is accepted, rejected, mapped,
                       or deferred. Proprietor, status, deadline, refusal, opposition, cancellation,
-                      registration, and renewal fields are high risk and require IP approval.
+                      registration, and renewal fields are high risk and require IP approval. Mapping
+                      a provider field to one of those canonical paths applies the same approval rule.
                     </li>
                     <li>
                       Accepting a change records candidate and reconciled IP docket events. A deadline
-                      field is marked for recalculation review; CaseOps does not invent a legal deadline
-                      without an approved rule and calendar version.
+                      field also queues a durable calculation proposal; CaseOps does not invent or
+                      confirm a legal deadline without an approved rule and calendar version.
+                    </li>
+                    <li>
+                      The unresolved queue is paginated independently from bounded evidence history,
+                      so an older pending review remains reachable. If accepted state changed after a
+                      diff was created, CaseOps rejects the stale decision and requires a fresh snapshot.
                     </li>
                     <li>
                       A no-change check still updates freshness and attempt history. Authentication,

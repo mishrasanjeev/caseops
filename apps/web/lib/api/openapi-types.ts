@@ -6605,6 +6605,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/registry-links/{link_id}/diffs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Registry Link Diffs */
+        get: operations["registry_link_diffs_api_ip_registry_links__link_id__diffs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/registry-links/{link_id}/failures": {
         parameters: {
             query?: never;
@@ -25379,6 +25396,17 @@ export interface components {
             /** Unconfirmed Deadline Refs */
             unconfirmed_deadline_refs: string[];
         };
+        /** IpRegistryDiffPageResponse */
+        IpRegistryDiffPageResponse: {
+            /** Items */
+            items?: components["schemas"]["IpRegistryDiffResponse"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
         /** IpRegistryDiffResolveRequest */
         IpRegistryDiffResolveRequest: {
             /**
@@ -25696,6 +25724,50 @@ export interface components {
             no_change: boolean;
             snapshot: components["schemas"]["IpRegistrySnapshotResponse"] | null;
         };
+        /**
+         * IpRegistrySnapshotSummaryResponse
+         * @description Bounded registry history without the immutable evidence bodies.
+         */
+        IpRegistrySnapshotSummaryResponse: {
+            /** Attempt Id */
+            attempt_id: string;
+            /** Attribution Json */
+            attribution_json: {
+                [key: string]: unknown;
+            };
+            /** Company Id */
+            company_id: string;
+            /** Correction Reason */
+            correction_reason: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Link Id */
+            link_id: string;
+            /** Normalized Sha256 */
+            normalized_sha256: string;
+            /** Parser Version */
+            parser_version: string;
+            /** Raw Sha256 */
+            raw_sha256: string;
+            /** Schema Version */
+            schema_version: number;
+            /**
+             * Source Retrieved At
+             * Format: date-time
+             */
+            source_retrieved_at: string;
+            /** Source Url */
+            source_url: string;
+            /** Supersedes Snapshot Id */
+            supersedes_snapshot_id: string | null;
+            /** Terms Version */
+            terms_version: string | null;
+        };
         /** IpRegistrySyncAttemptResponse */
         IpRegistrySyncAttemptResponse: {
             /** Attempts */
@@ -25750,15 +25822,24 @@ export interface components {
              */
             status: "pending" | "succeeded" | "no_change" | "failed" | "blocked";
         };
+        /** IpRegistryWorkspacePageResponse */
+        IpRegistryWorkspacePageResponse: {
+            /** Items */
+            items?: components["schemas"]["IpRegistryWorkspaceResponse"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
         /** IpRegistryWorkspaceResponse */
         IpRegistryWorkspaceResponse: {
             /** Attempts */
             attempts?: components["schemas"]["IpRegistrySyncAttemptResponse"][];
-            /** Diffs */
-            diffs?: components["schemas"]["IpRegistryDiffResponse"][];
             link: components["schemas"]["IpRegistryLinkResponse"];
             /** Snapshots */
-            snapshots?: components["schemas"]["IpRegistrySnapshotResponse"][];
+            snapshots?: components["schemas"]["IpRegistrySnapshotSummaryResponse"][];
         };
         /** IpRelatedRightObligationCompleteRequest */
         IpRelatedRightObligationCompleteRequest: {
@@ -51513,6 +51594,8 @@ export interface operations {
         parameters: {
             query?: {
                 docket_id?: string | null;
+                limit?: number;
+                offset?: number;
             };
             header?: never;
             path?: never;
@@ -51526,7 +51609,42 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["IpRegistryWorkspaceResponse"][];
+                    "application/json": components["schemas"]["IpRegistryWorkspacePageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    registry_link_diffs_api_ip_registry_links__link_id__diffs_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                resolution?: string;
+            };
+            header?: never;
+            path: {
+                link_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpRegistryDiffPageResponse"];
                 };
             };
             /** @description Validation Error */

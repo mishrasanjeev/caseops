@@ -9,6 +9,7 @@ const {
   coreMock,
   createReferenceMock,
   decideMatchMock,
+  diffsMock,
   docketsMock,
   bookmarksMock,
   recordSnapshotMock,
@@ -19,6 +20,7 @@ const {
   coreMock: vi.fn(),
   createReferenceMock: vi.fn(),
   decideMatchMock: vi.fn(),
+  diffsMock: vi.fn(),
   docketsMock: vi.fn(),
   bookmarksMock: vi.fn(),
   recordSnapshotMock: vi.fn(),
@@ -48,6 +50,7 @@ vi.mock("@/lib/api/endpoints", () => ({
   decideIpTrackedCaseReference: vi.fn(),
   fetchIpCoreRecords: coreMock,
   fetchIpDockets: docketsMock,
+  fetchIpRegistryDiffs: diffsMock,
   fetchIpRegistryWorkspaces: workspacesMock,
   fetchIpTrackedCaseReferences: referencesMock,
   listCaseTrackingBookmarks: bookmarksMock,
@@ -128,7 +131,13 @@ describe("IP registry reconciliation page", () => {
     capabilityMock.mockReturnValue(true);
     docketsMock.mockResolvedValue({ dockets: [DOCKET], count: 1 });
     coreMock.mockResolvedValue(CORE);
-    workspacesMock.mockResolvedValue([{ link: LINK, attempts: [], snapshots: [], diffs: [] }]);
+    workspacesMock.mockResolvedValue({
+      items: [{ link: LINK, attempts: [], snapshots: [] }],
+      total: 1,
+      limit: 25,
+      offset: 0,
+    });
+    diffsMock.mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
     referencesMock.mockResolvedValue([]);
     bookmarksMock.mockResolvedValue({
       bookmarks: [
@@ -183,9 +192,12 @@ describe("IP registry reconciliation page", () => {
   it("records immutable manual evidence after the registry match is confirmed", async () => {
     const user = userEvent.setup();
     const confirmed = { ...LINK, match_status: "confirmed" as const, version: 2 };
-    workspacesMock.mockResolvedValue([
-      { link: confirmed, attempts: [], snapshots: [], diffs: [] },
-    ]);
+    workspacesMock.mockResolvedValue({
+      items: [{ link: confirmed, attempts: [], snapshots: [] }],
+      total: 1,
+      limit: 25,
+      offset: 0,
+    });
     recordSnapshotMock.mockResolvedValue({
       link: { ...confirmed, version: 3 },
       attempt: { id: "attempt-1", status: "no_change" },

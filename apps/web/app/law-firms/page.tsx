@@ -117,7 +117,7 @@ const platformMoves = [
   {
     icon: ShieldCheck,
     title: "Registry reconciliation",
-    body: "Match an application or proceeding to its office identity, open the official source, preserve immutable raw and normalized snapshots, and review each field change. Proprietor, status, deadline, refusal, opposition and cancellation changes require explicit approval; failed and no-change checks remain visible without rewriting accepted legal state.",
+    body: "Match an application or proceeding to its office identity, open the official source, preserve immutable raw and normalized snapshots, and review each field change. High-risk canonical and mapped fields require explicit approval, stale reviews cannot overwrite newer accepted state, and deadline changes enter a governed calculation queue; failed and no-change checks remain visible without rewriting legal state.",
   },
   {
     icon: Scale,

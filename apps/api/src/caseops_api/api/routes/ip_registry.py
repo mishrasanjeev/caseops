@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Query, status
 
 from caseops_api.api.dependencies import DbSession, require_capability
 from caseops_api.schemas.ip_registry import (
+    IpRegistryDiffPageResponse,
     IpRegistryDiffResolveRequest,
     IpRegistryDiffResponse,
     IpRegistryFailureRequest,
@@ -16,7 +17,7 @@ from caseops_api.schemas.ip_registry import (
     IpRegistryLinkResponse,
     IpRegistryManualSnapshotRequest,
     IpRegistrySnapshotResult,
-    IpRegistryWorkspaceResponse,
+    IpRegistryWorkspacePageResponse,
     IpTrackedCaseLinkCreateRequest,
     IpTrackedCaseLinkDecisionRequest,
     IpTrackedCaseReferenceResponse,
@@ -26,6 +27,7 @@ from caseops_api.services.ip_registry import (
     create_tracked_case_reference,
     decide_registry_match,
     decide_tracked_case_reference,
+    list_registry_diffs,
     list_registry_workspaces,
     list_tracked_case_references,
     record_manual_snapshot,
@@ -37,16 +39,42 @@ from caseops_api.services.session_context import SessionContext
 router = APIRouter()
 
 
-@router.get("/registry-links", response_model=list[IpRegistryWorkspaceResponse])
+@router.get("/registry-links", response_model=IpRegistryWorkspacePageResponse)
 def registry_links(
     session: DbSession,
     context: Annotated[SessionContext, Depends(require_capability("ip:read"))],
     docket_id: Annotated[str | None, Query()] = None,
-) -> list[IpRegistryWorkspaceResponse]:
+    limit: Annotated[int, Query(ge=1, le=100)] = 25,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> IpRegistryWorkspacePageResponse:
     return list_registry_workspaces(
         session,
         context=context,
         docket_id=docket_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get(
+    "/registry-links/{link_id}/diffs",
+    response_model=IpRegistryDiffPageResponse,
+)
+def registry_link_diffs(
+    link_id: str,
+    session: DbSession,
+    context: Annotated[SessionContext, Depends(require_capability("ip:read"))],
+    resolution: Annotated[str, Query(pattern="^(unresolved|all)$")] = "unresolved",
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> IpRegistryDiffPageResponse:
+    return list_registry_diffs(
+        session,
+        context=context,
+        link_id=link_id,
+        unresolved_only=resolution == "unresolved",
+        limit=limit,
+        offset=offset,
     )
 
 

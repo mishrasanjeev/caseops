@@ -9,7 +9,9 @@ from sqlalchemy import func, select, text
 from sqlalchemy.exc import DatabaseError
 
 from caseops_api.db.models import (
+    DomainOutboxEvent,
     IpDocketEvent,
+    IpDocketRecord,
     IpRegistryDiff,
     IpRegistryLink,
     IpRegistrySnapshot,
@@ -366,7 +368,7 @@ def test_registry_snapshot_reconciliation_and_no_change_history(
         headers=headers,
     )
     assert workspace.status_code == 200, workspace.text
-    [current] = workspace.json()
+    [current] = workspace.json()["items"]
     accepted_state = current["link"]["accepted_state_json"]
     assert accepted_state["mark_name"] == "REGISTRY RECONCILIATION"
     assert "identifiers" not in accepted_state
@@ -531,6 +533,219 @@ def test_registry_failure_preserves_last_good_state_and_snapshots_are_immutable(
                 {"snapshot_id": baseline["snapshot"]["id"]},
             )
             session.commit()
+
+
+def test_mapped_high_risk_path_requires_approval_capability(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bootstrap, headers, _, _, link = _confirmed_application_link(client)
+    snapshot = client.post(
+        f"/api/ip/registry-links/{link['id']}/snapshots/manual",
+        headers=headers,
+        json=_snapshot_payload(
+            link_version=link["version"],
+            idempotency_key="registry-mapped-risk-0001",
+            normalized_snapshot=link["accepted_state_json"] | {"provider_note": "registered"},
+        ),
+    )
+    assert snapshot.status_code == 201, snapshot.text
+    diff = next(row for row in snapshot.json()["diffs"] if row["field_path"] == "/provider_note")
+    assert diff["risk_level"] == "low"
+
+    mapped = client.post(
+        f"/api/ip/registry-diffs/{diff['id']}/resolve",
+        headers=headers,
+        json={
+            "expected_version": 1,
+            "decision": "map",
+            "reason": "Map the provider value onto canonical application status.",
+            "mapped_field_path": "/status",
+        },
+    )
+    assert mapped.status_code == 200, mapped.text
+    assert mapped.json()["risk_level"] == "high"
+    assert mapped.json()["before_value_json"] == "draft"
+
+    monkeypatch.setattr(
+        "caseops_api.services.ip_registry.membership_has_capability",
+        lambda *_args, **_kwargs: False,
+    )
+    forbidden = client.post(
+        f"/api/ip/registry-diffs/{diff['id']}/resolve",
+        headers=headers,
+        json={
+            "expected_version": 2,
+            "decision": "accept",
+            "reason": "A registry-sync-only user must not approve legal status.",
+            "effective_at": "2026-08-24T08:30:00Z",
+            "responsible_membership_id": bootstrap["membership"]["id"],
+        },
+    )
+    assert forbidden.status_code == 403
+
+
+def test_out_of_order_registry_diff_cannot_revert_accepted_state(client: TestClient) -> None:
+    bootstrap, headers, _, _, link = _confirmed_application_link(client)
+    older = client.post(
+        f"/api/ip/registry-links/{link['id']}/snapshots/manual",
+        headers=headers,
+        json=_snapshot_payload(
+            link_version=link["version"],
+            idempotency_key="registry-stale-older-0001",
+            normalized_snapshot=link["accepted_state_json"] | {"status": "registered"},
+        ),
+    )
+    assert older.status_code == 201, older.text
+    older_status = next(
+        row for row in older.json()["diffs"] if row["field_path"] == "/status"
+    )
+    newer = client.post(
+        f"/api/ip/registry-links/{link['id']}/snapshots/manual",
+        headers=headers,
+        json=_snapshot_payload(
+            link_version=older.json()["link"]["version"],
+            idempotency_key="registry-stale-newer-0002",
+            normalized_snapshot=link["accepted_state_json"] | {"status": "refused"},
+        ),
+    )
+    assert newer.status_code == 201, newer.text
+    newer_status = next(
+        row for row in newer.json()["diffs"] if row["field_path"] == "/status"
+    )
+    decision = {
+        "expected_version": 1,
+        "decision": "accept",
+        "reason": "Accept the most recent registry status observation.",
+        "effective_at": "2026-08-24T09:00:00Z",
+        "responsible_membership_id": bootstrap["membership"]["id"],
+    }
+    accepted = client.post(
+        f"/api/ip/registry-diffs/{newer_status['id']}/resolve",
+        headers=headers,
+        json=decision,
+    )
+    assert accepted.status_code == 200, accepted.text
+    stale = client.post(
+        f"/api/ip/registry-diffs/{older_status['id']}/resolve",
+        headers=headers,
+        json=decision | {"reason": "An older observation must not overwrite current state."},
+    )
+    assert stale.status_code == 409
+    assert "Accepted registry state changed" in stale.text
+    workspace = client.get(
+        f"/api/ip/registry-links?docket_id={link['docket_id']}", headers=headers
+    ).json()
+    assert workspace["items"][0]["link"]["accepted_state_json"]["status"] == "refused"
+
+
+def test_deadline_field_acceptance_enqueues_calculation_handoff(client: TestClient) -> None:
+    bootstrap, headers, _, _, link = _confirmed_application_link(client)
+    snapshot = client.post(
+        f"/api/ip/registry-links/{link['id']}/snapshots/manual",
+        headers=headers,
+        json=_snapshot_payload(
+            link_version=link["version"],
+            idempotency_key="registry-deadline-0001",
+            normalized_snapshot=link["accepted_state_json"]
+            | {"renewal_date": "2036-08-24"},
+        ),
+    )
+    assert snapshot.status_code == 201, snapshot.text
+    deadline_diff = next(
+        row for row in snapshot.json()["diffs"] if row["field_path"] == "/renewal_date"
+    )
+    accepted = client.post(
+        f"/api/ip/registry-diffs/{deadline_diff['id']}/resolve",
+        headers=headers,
+        json={
+            "expected_version": 1,
+            "decision": "accept",
+            "reason": "Accept the sourced renewal date and propose deadline recalculation.",
+            "effective_at": "2026-08-24T09:15:00Z",
+            "responsible_membership_id": bootstrap["membership"]["id"],
+        },
+    )
+    assert accepted.status_code == 200, accepted.text
+    assert accepted.json()["deadline_recalculation_state"] == "proposed"
+    with get_session_factory()() as session:
+        event = session.scalar(
+            select(DomainOutboxEvent).where(
+                DomainOutboxEvent.source_event_id == accepted.json()["emitted_event_id"]
+            )
+        )
+        assert event is not None
+        assert event.event_type == "ip.docket_event.recorded"
+        assert "deadline-calculation-adapter" in event.expected_consumers_json
+        assert event.payload_json["source_evidence_id"] == snapshot.json()["snapshot"]["id"]
+
+
+def test_registry_lists_are_paginated_batched_lightweight_and_suppress_terminal_dockets(
+    client: TestClient,
+) -> None:
+    _, headers, first_docket, _, link = _confirmed_application_link(client)
+    oldest_diff_id: str | None = None
+    current_link = link
+    for index in range(21):
+        snapshot = client.post(
+            f"/api/ip/registry-links/{link['id']}/snapshots/manual",
+            headers=headers,
+            json=_snapshot_payload(
+                link_version=current_link["version"],
+                idempotency_key=f"registry-history-{index:04d}",
+                normalized_snapshot=link["accepted_state_json"] | {"poll_sequence": index},
+            ),
+        )
+        assert snapshot.status_code == 201, snapshot.text
+        current_link = snapshot.json()["link"]
+        if index == 0:
+            oldest_diff_id = snapshot.json()["diffs"][0]["id"]
+
+    unresolved = client.get(
+        f"/api/ip/registry-links/{link['id']}/diffs?limit=100",
+        headers=headers,
+    )
+    assert unresolved.status_code == 200, unresolved.text
+    assert unresolved.json()["total"] == 21
+    assert oldest_diff_id in {row["id"] for row in unresolved.json()["items"]}
+
+    workspace = client.get(
+        f"/api/ip/registry-links?docket_id={first_docket['id']}&limit=1",
+        headers=headers,
+    )
+    assert workspace.status_code == 200, workspace.text
+    body = workspace.json()
+    assert body["total"] == 1
+    assert len(body["items"][0]["snapshots"]) == 20
+    assert "raw_json" not in body["items"][0]["snapshots"][0]
+    assert "normalized_json" not in body["items"][0]["snapshots"][0]
+
+    second_docket = _docket(client, headers, "REGISTRY ACTIVE SECOND")
+    second_asset = _asset(client, headers, second_docket["id"], "REGISTRY ACTIVE SECOND")
+    second_application = _application(
+        client, headers, second_docket["id"], second_asset["id"]
+    )
+    second_link = _registry_link(
+        client,
+        headers,
+        docket=second_docket,
+        application=second_application,
+    )
+    page = client.get("/api/ip/registry-links?limit=1&offset=0", headers=headers)
+    assert page.status_code == 200, page.text
+    assert page.json()["total"] == 2
+    assert len(page.json()["items"]) == 1
+
+    with get_session_factory()() as session:
+        terminal = session.get(IpDocketRecord, first_docket["id"])
+        assert terminal is not None
+        terminal.status = "retired"
+        terminal.is_active = False
+        session.commit()
+    active_only = client.get("/api/ip/registry-links", headers=headers)
+    assert active_only.status_code == 200, active_only.text
+    assert active_only.json()["total"] == 1
+    assert active_only.json()["items"][0]["link"]["id"] == second_link["id"]
 
 
 def test_registry_is_tenant_scoped_and_rejects_non_registry_adapter(

@@ -161,6 +161,28 @@ class IpRegistrySnapshotResponse(BaseModel):
     created_at: datetime
 
 
+class IpRegistrySnapshotSummaryResponse(BaseModel):
+    """Bounded registry history without the immutable evidence bodies."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    company_id: str
+    link_id: str
+    attempt_id: str
+    source_url: str
+    source_retrieved_at: datetime
+    parser_version: str
+    schema_version: int
+    attribution_json: dict[str, Any]
+    terms_version: str | None
+    raw_sha256: str
+    normalized_sha256: str
+    supersedes_snapshot_id: str | None
+    correction_reason: str | None
+    created_at: datetime
+
+
 class IpRegistryDiffResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -222,8 +244,21 @@ class IpRegistryDiffResolveRequest(BaseModel):
 class IpRegistryWorkspaceResponse(BaseModel):
     link: IpRegistryLinkResponse
     attempts: list[IpRegistrySyncAttemptResponse] = Field(default_factory=list)
-    snapshots: list[IpRegistrySnapshotResponse] = Field(default_factory=list)
-    diffs: list[IpRegistryDiffResponse] = Field(default_factory=list)
+    snapshots: list[IpRegistrySnapshotSummaryResponse] = Field(default_factory=list)
+
+
+class IpRegistryWorkspacePageResponse(BaseModel):
+    items: list[IpRegistryWorkspaceResponse] = Field(default_factory=list)
+    total: int = Field(ge=0)
+    limit: int = Field(ge=1)
+    offset: int = Field(ge=0)
+
+
+class IpRegistryDiffPageResponse(BaseModel):
+    items: list[IpRegistryDiffResponse] = Field(default_factory=list)
+    total: int = Field(ge=0)
+    limit: int = Field(ge=1)
+    offset: int = Field(ge=0)
 
 
 class IpTrackedCaseLinkCreateRequest(BaseModel):

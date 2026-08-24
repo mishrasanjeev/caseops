@@ -34,6 +34,7 @@ import {
   decideIpTrackedCaseReference,
   fetchIpCoreRecords,
   fetchIpDockets,
+  fetchIpRegistryDiffs,
   fetchIpRegistryWorkspaces,
   fetchIpTrackedCaseReferences,
   listCaseTrackingBookmarks,
@@ -96,6 +97,7 @@ export default function IpRegistryPage() {
   const queryClient = useQueryClient();
   const [selectedDocketId, setSelectedDocketId] = useState("");
   const [selectedLinkId, setSelectedLinkId] = useState("");
+  const [workspaceOffset, setWorkspaceOffset] = useState(0);
 
   const dockets = useQuery({
     queryKey: ["ip", "dockets"],
@@ -103,8 +105,8 @@ export default function IpRegistryPage() {
     enabled: canRead,
   });
   const workspaces = useQuery({
-    queryKey: ["ip", "registry", "workspaces"],
-    queryFn: () => fetchIpRegistryWorkspaces(),
+    queryKey: ["ip", "registry", "workspaces", selectedDocketId, workspaceOffset],
+    queryFn: () => fetchIpRegistryWorkspaces(selectedDocketId, 25, workspaceOffset),
     enabled: canRead,
   });
   const core = useQuery({
@@ -129,13 +131,11 @@ export default function IpRegistryPage() {
     }
   }, [dockets.data, selectedDocketId]);
 
-  const visibleWorkspaces = useMemo(
-    () =>
-      (workspaces.data ?? []).filter(
-        (workspace) => !selectedDocketId || workspace.link.docket_id === selectedDocketId,
-      ),
-    [selectedDocketId, workspaces.data],
-  );
+  const visibleWorkspaces = useMemo(() => workspaces.data?.items ?? [], [workspaces.data]);
+
+  useEffect(() => {
+    setWorkspaceOffset(0);
+  }, [selectedDocketId]);
 
   useEffect(() => {
     if (!visibleWorkspaces.some((row) => row.link.id === selectedLinkId)) {
@@ -229,7 +229,7 @@ export default function IpRegistryPage() {
                 <div className="grid gap-4 text-sm sm:grid-cols-3">
                   <div><span className="text-[var(--color-mute)]">Record</span><strong className="mt-1 block">{selectedDocket.title}</strong></div>
                   <div><span className="text-[var(--color-mute)]">Matter</span><strong className="mt-1 block">{selectedDocket.matter_id ? "Linked" : "Not linked"}</strong></div>
-                  <div><span className="text-[var(--color-mute)]">Registry identities</span><strong className="mt-1 block tabular-nums">{visibleWorkspaces.length}</strong></div>
+                  <div><span className="text-[var(--color-mute)]">Registry identities</span><strong className="mt-1 block tabular-nums">{workspaces.data?.total ?? 0}</strong></div>
                 </div>
               ) : (
                 <p className="text-sm text-[var(--color-mute)]">Select a docket to begin.</p>
@@ -272,6 +272,29 @@ export default function IpRegistryPage() {
                     ))}
                   </div>
                 )}
+                {(workspaces.data?.total ?? 0) > 25 ? (
+                  <div className="flex items-center justify-between border-t border-[var(--color-line)] p-3">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={workspaceOffset === 0 || workspaces.isFetching}
+                      onClick={() => setWorkspaceOffset(Math.max(0, workspaceOffset - 25))}
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-xs tabular-nums text-[var(--color-mute)]">
+                      {workspaceOffset + 1}-{Math.min(workspaceOffset + 25, workspaces.data?.total ?? 0)} of {workspaces.data?.total ?? 0}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={workspaceOffset + 25 >= (workspaces.data?.total ?? 0) || workspaces.isFetching}
+                      onClick={() => setWorkspaceOffset(workspaceOffset + 25)}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                ) : null}
               </CardContent>
             </Card>
 
@@ -392,6 +415,7 @@ function RegistryWorkspace({
   onChanged: () => Promise<void>;
 }) {
   const { link } = workspace;
+  const [diffOffset, setDiffOffset] = useState(0);
   const [matchReason, setMatchReason] = useState("");
   const [raw, setRaw] = useState('{\n  "register_record": {}\n}');
   const [normalized, setNormalized] = useState(jsonValue(link.accepted_state_json));
@@ -403,6 +427,20 @@ function RegistryWorkspace({
   const [failureMessage, setFailureMessage] = useState("");
   const [reviewReason, setReviewReason] = useState("");
   const [mappedPath, setMappedPath] = useState("");
+  const diffs = useQuery({
+    queryKey: ["ip", "registry", "diffs", link.id, diffOffset],
+    queryFn: () => fetchIpRegistryDiffs(link.id, 50, diffOffset),
+  });
+
+  useEffect(() => {
+    setDiffOffset(0);
+  }, [link.id]);
+
+  useEffect(() => {
+    if (diffOffset > 0 && diffs.data && diffs.data.items.length === 0) {
+      setDiffOffset(Math.max(0, diffOffset - 50));
+    }
+  }, [diffOffset, diffs.data]);
 
   useEffect(() => {
     setNormalized(jsonValue(link.accepted_state_json));
@@ -477,7 +515,7 @@ function RegistryWorkspace({
       <Card>
         <CardHeader><CardTitle as="h3">Field reconciliation</CardTitle><p className="text-sm text-[var(--color-mute)]">High-risk proprietor, status, opposition, refusal, cancellation and deadline fields require IP approval.</p></CardHeader>
         <CardContent className="flex min-w-0 flex-col gap-4">
-          {workspace.diffs.length === 0 ? <p className="text-sm text-[var(--color-mute)]">No field changes are awaiting or carrying a decision.</p> : <><div className="grid gap-3 sm:grid-cols-2"><div><Label htmlFor="review-reason">Decision reason</Label><Input id="review-reason" className="mt-1" value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} /></div><div><Label htmlFor="mapped-path">Canonical mapped path</Label><Input id="mapped-path" className="mt-1" value={mappedPath} onChange={(event) => setMappedPath(event.target.value)} placeholder="/status" /></div></div><div className="overflow-x-auto"><table className="w-full min-w-[920px] border-collapse text-left text-sm"><thead><tr className="border-b border-[var(--color-line)] text-xs uppercase text-[var(--color-mute)]"><th className="px-3 py-2">Field</th><th className="px-3 py-2">Change</th><th className="px-3 py-2">Before</th><th className="px-3 py-2">After</th><th className="px-3 py-2">Risk</th><th className="px-3 py-2">Decision</th><th className="px-3 py-2">Actions</th></tr></thead><tbody>{workspace.diffs.map((diff) => <tr className="border-b border-[var(--color-line)] align-top" key={diff.id}><td className="px-3 py-3 font-mono text-xs">{diff.field_path}</td><td className="px-3 py-3"><Badge tone="neutral">{diff.change_kind}</Badge></td><td className="max-w-48 break-words px-3 py-3 font-mono text-xs">{jsonValue(diff.before_value_json)}</td><td className="max-w-48 break-words px-3 py-3 font-mono text-xs">{jsonValue(diff.after_value_json)}</td><td className="px-3 py-3"><Badge tone={diff.risk_level === "high" ? "warning" : "neutral"}>{diff.risk_level}</Badge>{diff.deadline_recalculation_state === "required" ? <div className="mt-2 text-xs text-amber-800">Deadline review required</div> : null}</td><td className="px-3 py-3"><Badge tone={statusTone(diff.resolution_status)}>{diff.resolution_status}</Badge>{diff.emitted_event_id ? <div className="mt-2 text-xs text-[var(--color-mute)]">Event recorded</div> : null}</td><td className="px-3 py-3"><div className="flex flex-wrap gap-1">{canSync && !["accepted", "rejected"].includes(diff.resolution_status) ? <><Button size="sm" disabled={!membershipId || reviewReason.trim().length < 5 || resolveDiff.isPending} onClick={() => resolveDiff.mutate({ diff, decision: "accept" })}>Accept</Button><Button size="sm" variant="outline" disabled={reviewReason.trim().length < 5 || resolveDiff.isPending} onClick={() => resolveDiff.mutate({ diff, decision: "reject" })}>Reject</Button><Button size="sm" variant="outline" disabled={reviewReason.trim().length < 5 || !mappedPath.startsWith("/") || resolveDiff.isPending} onClick={() => resolveDiff.mutate({ diff, decision: "map" })}>Map</Button><Button size="sm" variant="ghost" disabled={reviewReason.trim().length < 5 || resolveDiff.isPending} onClick={() => resolveDiff.mutate({ diff, decision: "defer" })}>Defer</Button></> : null}</div></td></tr>)}</tbody></table></div></>}
+          {diffs.isPending ? <Skeleton className="h-32" /> : diffs.isError ? <QueryErrorState error={diffs.error} title="Could not load unresolved registry changes" onRetry={() => diffs.refetch()} /> : (diffs.data?.items.length ?? 0) === 0 ? <p className="text-sm text-[var(--color-mute)]">No field changes are awaiting a decision.</p> : <><div className="grid gap-3 sm:grid-cols-2"><div><Label htmlFor="review-reason">Decision reason</Label><Input id="review-reason" className="mt-1" value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} /></div><div><Label htmlFor="mapped-path">Canonical mapped path</Label><Input id="mapped-path" className="mt-1" value={mappedPath} onChange={(event) => setMappedPath(event.target.value)} placeholder="/status" /></div></div><div className="overflow-x-auto"><table className="w-full min-w-[920px] border-collapse text-left text-sm"><thead><tr className="border-b border-[var(--color-line)] text-xs uppercase text-[var(--color-mute)]"><th className="px-3 py-2">Field</th><th className="px-3 py-2">Change</th><th className="px-3 py-2">Before</th><th className="px-3 py-2">After</th><th className="px-3 py-2">Risk</th><th className="px-3 py-2">Decision</th><th className="px-3 py-2">Actions</th></tr></thead><tbody>{diffs.data?.items.map((diff) => <tr className="border-b border-[var(--color-line)] align-top" key={diff.id}><td className="px-3 py-3 font-mono text-xs">{diff.mapped_field_path ?? diff.field_path}</td><td className="px-3 py-3"><Badge tone="neutral">{diff.change_kind}</Badge></td><td className="max-w-48 break-words px-3 py-3 font-mono text-xs">{jsonValue(diff.before_value_json)}</td><td className="max-w-48 break-words px-3 py-3 font-mono text-xs">{jsonValue(diff.after_value_json)}</td><td className="px-3 py-3"><Badge tone={diff.risk_level === "high" ? "warning" : "neutral"}>{diff.risk_level}</Badge>{diff.deadline_recalculation_state === "required" ? <div className="mt-2 text-xs text-amber-800">Deadline review required</div> : null}</td><td className="px-3 py-3"><Badge tone={statusTone(diff.resolution_status)}>{diff.resolution_status}</Badge></td><td className="px-3 py-3"><div className="flex flex-wrap gap-1">{canSync ? <><Button size="sm" disabled={!membershipId || reviewReason.trim().length < 5 || resolveDiff.isPending} onClick={() => resolveDiff.mutate({ diff, decision: "accept" })}>Accept</Button><Button size="sm" variant="outline" disabled={reviewReason.trim().length < 5 || resolveDiff.isPending} onClick={() => resolveDiff.mutate({ diff, decision: "reject" })}>Reject</Button><Button size="sm" variant="outline" disabled={reviewReason.trim().length < 5 || !mappedPath.startsWith("/") || resolveDiff.isPending} onClick={() => resolveDiff.mutate({ diff, decision: "map" })}>Map</Button><Button size="sm" variant="ghost" disabled={reviewReason.trim().length < 5 || resolveDiff.isPending} onClick={() => resolveDiff.mutate({ diff, decision: "defer" })}>Defer</Button></> : null}</div></td></tr>)}</tbody></table></div>{(diffs.data?.total ?? 0) > 50 ? <div className="flex items-center justify-end gap-3"><Button size="sm" variant="ghost" disabled={diffOffset === 0} onClick={() => setDiffOffset(Math.max(0, diffOffset - 50))}>Previous</Button><span className="text-xs tabular-nums text-[var(--color-mute)]">{diffOffset + 1}-{Math.min(diffOffset + 50, diffs.data?.total ?? 0)} of {diffs.data?.total ?? 0}</span><Button size="sm" variant="ghost" disabled={diffOffset + 50 >= (diffs.data?.total ?? 0)} onClick={() => setDiffOffset(diffOffset + 50)}>Next</Button></div> : null}</>}
         </CardContent>
       </Card>
 
