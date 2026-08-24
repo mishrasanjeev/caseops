@@ -716,8 +716,29 @@ test.describe.serial("Ram 2026-07-15 deployed workbook fixes", () => {
 
     await page.locator("#notice-search").fill(sentSubject);
     await page.getByLabel("Filter by matter").selectOption(lifecycleMatter.id);
+    const sentFilterPromise = page.waitForResponse(
+      (response) => {
+        const url = new URL(response.url());
+        return (
+          url.pathname === "/api/notices/" &&
+          response.request().method() === "GET" &&
+          url.searchParams.get("query") === sentSubject &&
+          url.searchParams.get("matter_id") === lifecycleMatter.id &&
+          url.searchParams.get("owner_membership_id") === tester.membership.id
+        );
+      },
+      { timeout: 30_000 },
+    );
     await page.getByLabel("Filter by owner").selectOption(tester.membership.id);
-    await expect(sentRow).toBeVisible();
+    const sentFilterResponse = await sentFilterPromise;
+    expect(sentFilterResponse.status(), await sentFilterResponse.text()).toBe(200);
+    const sentFilterRegister = (await sentFilterResponse.json()) as {
+      notices: NoticeRecord[];
+    };
+    expect(sentFilterRegister.notices.map((notice) => notice.id)).toContain(
+      sentNotice.id,
+    );
+    await expect(sentRow).toBeVisible({ timeout: 30_000 });
 
     // Safe production cleanup: preserve the auditable records, but leave
     // neither notice looking operational after the regression completes.
