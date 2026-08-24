@@ -41,7 +41,7 @@ Generated; do not edit.
 | UJ-35 | Manage Madrid international registration or designation | 5 | IPLF-057B | 5 | 0 | not_started | not_run | false |
 | UJ-36 | Complete post-registration recordal | 5 | IPLF-058B | 5 | 0 | not_started | not_run | false |
 | UJ-37 | Coordinate foreign associate filing | 5 | IPLF-059B | 5 | 0 | not_started | not_run | false |
-| UJ-38 | Manage rectification, cancellation, or non-use removal | 5 | IPLF-049B | 5 | 1 | implemented | passed | false |
+| UJ-38 | Manage rectification, cancellation, or non-use removal | 5 | IPLF-049B | 5 | 2 | implemented | passed | true |
 | UJ-39 | Manage patent prosecution or opposition | 5 | IPLF-080B | 5 | 0 | not_started | not_run | false |
 | UJ-40 | Manage patent annuity and working requirement | 5 | IPLF-080B | 5 | 0 | not_started | not_run | false |
 | UJ-41 | Manage industrial design lifecycle | 5 | IPLF-090B | 5 | 0 | not_started | not_run | false |
