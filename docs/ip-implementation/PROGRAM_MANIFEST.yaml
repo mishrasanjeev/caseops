@@ -2344,10 +2344,11 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "not_required",
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-048B/release-2026-08-24.md"
       ],
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
@@ -2394,11 +2395,14 @@
         "IPLF-049A",
         "IPLF-049B"
       ],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-049A/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+      ],
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -13173,7 +13177,8 @@
         "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-048B/release-2026-08-24.md"
       ],
       "evidence_metadata": [
         {
@@ -13184,24 +13189,32 @@
           "assertions": "typed validation, tenant and canonical-record fences, immutable event payloads, all UJ-34 paths, translation gate, procedural paths, explicit no-inference disposition, UI controls, OpenAPI contract, and regression coverage",
           "result": "passed",
           "recorded_at": "2026-08-24T07:30:00+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m4/IPLF-048B/release-2026-08-24.md",
+          "revision": "2736c1530d76a7b5a122250c00ba218a36ce336a",
+          "environment": "production API and web",
+          "fixtures": "dated production RAM, notice-module, conflict-workflow, quiescence, health, and release-identity fixtures",
+          "assertions": "exact-main CI, security, CodeQL, exact-SHA deployment, serving release identity, API health, and fresh production verification",
+          "result": "passed",
+          "recorded_at": "2026-08-24T09:45:00+05:30"
         }
       ],
       "approvals": [],
       "blockers": [],
-      "next_actions": [
-        "Pass exact-head PR CI, merge with the exact-head fence, pass exact-main CI, deploy that exact main revision, and record production verification."
-      ],
+      "next_actions": [],
       "data_impact": [
         "No migration. Specialized records append to existing ip_docket_events; current application scopes and canonical hearings are referenced without duplication or automatic status mutation."
       ],
       "documentation_impact": [
         "docs/ip-implementation/IP_CORE_RECORD_MODEL.md",
-        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-048B/release-2026-08-24.md"
       ],
       "allocation_review": "2026-08-24 duplicate-work review confirms IPLF-048 extends IPLF-040 through IPLF-043 canonical proceeding/event writers, existing trademark application scopes, and canonical Matter hearings. No parallel opposition, scope, hearing, fee, document, notification, or audit owner is introduced.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "not_required",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
@@ -13288,7 +13301,8 @@
         "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-048B/release-2026-08-24.md"
       ],
       "evidence_metadata": [
         {
@@ -13299,24 +13313,32 @@
           "assertions": "typed validation, tenant and canonical-record fences, immutable event payloads, all UJ-34 paths, translation gate, procedural paths, explicit no-inference disposition, UI controls, OpenAPI contract, and regression coverage",
           "result": "passed",
           "recorded_at": "2026-08-24T07:30:00+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m4/IPLF-048B/release-2026-08-24.md",
+          "revision": "2736c1530d76a7b5a122250c00ba218a36ce336a",
+          "environment": "production API and web",
+          "fixtures": "dated production RAM, notice-module, conflict-workflow, quiescence, health, and release-identity fixtures",
+          "assertions": "exact-main CI, security, CodeQL, exact-SHA deployment, serving release identity, API health, and fresh production verification",
+          "result": "passed",
+          "recorded_at": "2026-08-24T09:45:00+05:30"
         }
       ],
       "approvals": [],
       "blockers": [],
-      "next_actions": [
-        "Pass exact-head PR CI, merge with the exact-head fence, pass exact-main CI, deploy that exact main revision, and record production verification."
-      ],
+      "next_actions": [],
       "data_impact": [
         "No migration. Specialized records append to existing ip_docket_events; current application scopes and canonical hearings are referenced without duplication or automatic status mutation."
       ],
       "documentation_impact": [
         "docs/ip-implementation/IP_CORE_RECORD_MODEL.md",
-        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-048B/release-2026-08-24.md"
       ],
       "allocation_review": "2026-08-24 duplicate-work review confirms IPLF-048 extends IPLF-040 through IPLF-043 canonical proceeding/event writers, existing trademark application scopes, and canonical Matter hearings. No parallel opposition, scope, hearing, fee, document, notification, or audit owner is introduced.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "not_required",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
@@ -13342,28 +13364,51 @@
         {
           "classification": "EXTEND",
           "component": "IPLF-049 canonical scope: Rectification/cancellation/non-use proceeding foundation.",
-          "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
-          "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
-          "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
+          "canonical_writer": "Existing IpProceeding, IpIdentifier, and append-only IpDocketEvent writers extended by ip_records and ip_post_registration.",
+          "compatibility_path": "Existing application, opposition, appeal, court, Matter, document, deadline, hearing, notification, audit, and access records remain canonical and unchanged.",
+          "retirement_gate": "No compatibility path or canonical owner is retired by IPLF-049."
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/schemas/ip_post_registration.py",
+        "apps/api/src/caseops_api/services/ip_post_registration.py",
+        "apps/api/src/caseops_api/schemas/ip_records.py",
+        "apps/api/src/caseops_api/services/ip_records.py",
+        "apps/api/src/caseops_api/services/ip_lifecycle.py"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_post_registration.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-049A/local-2026-08-24.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m4/IPLF-049A/local-2026-08-24.md",
+          "revision": "5af0e40e8a9058be488e9fa41471ea85e977314b",
+          "environment": "local Windows API test environment",
+          "fixtures": "synthetic rectification, cancellation, non-use removal, application, identifier, parallel court, stay, closure, and disposition records",
+          "assertions": "typed ownership, identifier separation, exact rule templates, mutatis mapping, tenant/version fences, append-only actions, type-matched dispositions, and no automatic registration mutation",
+          "result": "passed",
+          "recorded_at": "2026-08-24T10:58:00+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Pass exact-head PR CI, merge with the exact-head fence, pass exact-main CI, deploy that exact main revision, and record production verification."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No migration. Typed post-registration records extend existing ip_proceedings, ip_identifiers, and append-only ip_docket_events."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        "docs/ip-implementation/IP_CORE_RECORD_MODEL.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049A/local-2026-08-24.md"
+      ],
+      "allocation_review": "2026-08-24 duplicate-work review confirms IPLF-049 extends the existing IP record and event writers. No parallel application, opposition, Matter, document, deadline, hearing, notification, audit, access, or registration-status owner is introduced.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "administrative_exception": {
@@ -13428,36 +13473,61 @@
         {
           "classification": "EXTEND",
           "component": "IPLF-049 canonical scope: Rectification/cancellation/non-use proceeding foundation.",
-          "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
-          "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
-          "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
+          "canonical_writer": "Existing IpProceeding, IpIdentifier, and append-only IpDocketEvent writers extended by ip_records and ip_post_registration.",
+          "compatibility_path": "Existing application, opposition, appeal, court, Matter, document, deadline, hearing, notification, audit, and access records remain canonical and unchanged.",
+          "retirement_gate": "No compatibility path or canonical owner is retired by IPLF-049."
         }
       ],
       "dependencies": [
         "IPLF-049A"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-38-EXC-01",
-        "planned:IPLF-UJ-38-EXC-02",
-        "planned:IPLF-UJ-38-EXC-03",
-        "planned:IPLF-UJ-38-EXC-04",
-        "planned:IPLF-UJ-38-NORMAL"
+      "implementation_refs": [
+        "apps/web/components/ip/IpPostRegistrationWorkspace.tsx",
+        "apps/web/app/app/ip/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/app/guide/page.tsx",
+        "apps/web/app/law-firms/page.tsx"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_post_registration.py",
+        "apps/web/components/ip/IpPostRegistrationWorkspace.test.tsx",
+        "IPLF-UJ-38-EXC-01:apps/api/tests/test_ip_post_registration.py",
+        "IPLF-UJ-38-EXC-02:apps/api/tests/test_ip_post_registration.py",
+        "IPLF-UJ-38-EXC-03:apps/api/tests/test_ip_post_registration.py",
+        "IPLF-UJ-38-EXC-04:apps/api/tests/test_ip_post_registration.py",
+        "IPLF-UJ-38-NORMAL:tests/e2e/iplf-049-post-registration-2026-08-24.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md",
+          "revision": "5af0e40e8a9058be488e9fa41471ea85e977314b",
+          "environment": "local Windows API, web, and Playwright environments",
+          "fixtures": "synthetic sourced rectification, cancellation, non-use, mutatis mapping, parallel court, stay/lift, disposition, settlement, and mobile viewport records",
+          "assertions": "all UJ-38 normal and exception paths, UI controls, API regressions, OpenAPI contract, typecheck, production build, and responsive overflow",
+          "result": "passed",
+          "recorded_at": "2026-08-24T10:58:00+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Pass exact-head PR CI, merge with the exact-head fence, pass exact-main CI, deploy that exact main revision, and record production verification."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No migration. The UI and API append to existing canonical IP proceeding, identifier, and lifecycle-event records."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        "docs/ip-implementation/IP_CORE_RECORD_MODEL.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md",
+        "apps/web/app/guide/page.tsx",
+        "apps/web/app/law-firms/page.tsx"
+      ],
+      "allocation_review": "2026-08-24 duplicate-work review confirms IPLF-049 reuses the IPLF-048 opposition foundations only where explicitly mapped, while preserving distinct templates, identifiers, proceedings, events, and legal effects for UJ-38.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "not_required_approval": {
@@ -46308,7 +46378,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-048B"
@@ -46486,15 +46556,17 @@
         "IP-OPP-24"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-38-EXC-01",
-        "planned:IPLF-UJ-38-EXC-02",
-        "planned:IPLF-UJ-38-EXC-03",
-        "planned:IPLF-UJ-38-EXC-04",
-        "planned:IPLF-UJ-38-NORMAL"
+        "IPLF-UJ-38-EXC-01:apps/api/tests/test_ip_post_registration.py",
+        "IPLF-UJ-38-EXC-02:apps/api/tests/test_ip_post_registration.py",
+        "IPLF-UJ-38-EXC-03:apps/api/tests/test_ip_post_registration.py",
+        "IPLF-UJ-38-EXC-04:apps/api/tests/test_ip_post_registration.py",
+        "IPLF-UJ-38-NORMAL:tests/e2e/iplf-049-post-registration-2026-08-24.spec.ts"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -56244,7 +56316,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-048B"
@@ -56299,7 +56371,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-048B"
@@ -56354,7 +56426,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-048B"
@@ -56409,7 +56481,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-048B"
@@ -56923,11 +56995,13 @@
         "IP-OPP-24"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-38-NORMAL"
+        "IPLF-UJ-38-NORMAL:tests/e2e/iplf-049-post-registration-2026-08-24.spec.ts"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -56976,11 +57050,13 @@
         "IP-OPP-24"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-38-EXC-01"
+        "IPLF-UJ-38-EXC-01:apps/api/tests/test_ip_post_registration.py"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -57029,11 +57105,13 @@
         "IP-OPP-24"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-38-EXC-02"
+        "IPLF-UJ-38-EXC-02:apps/api/tests/test_ip_post_registration.py"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -57082,11 +57160,13 @@
         "IP-OPP-24"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-38-EXC-03"
+        "IPLF-UJ-38-EXC-03:apps/api/tests/test_ip_post_registration.py"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
@@ -57135,11 +57215,13 @@
         "IP-OPP-24"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-38-EXC-04"
+        "IPLF-UJ-38-EXC-04:apps/api/tests/test_ip_post_registration.py"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "slice_ids": [
