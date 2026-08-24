@@ -4,6 +4,7 @@ import {
   outsideCounselAssignmentStatus,
   outsideCounselSpendStatus,
   panelStatus,
+  providerAdapterContractRecord,
 } from "@/lib/api/schemas";
 
 // All three enums below MUST match
@@ -72,4 +73,30 @@ describe("outsideCounselSpendStatus", () => {
       expect(() => outsideCounselSpendStatus.parse(value)).toThrow();
     },
   );
+});
+
+describe("providerAdapterContractRecord", () => {
+  it("accepts a licensed legal-research adapter that is implemented default-off", () => {
+    const parsed = providerAdapterContractRecord.parse({
+      provider: "indian-kanoon",
+      display_name: "Indian Kanoon licensed API",
+      domain: "legal_research",
+      adapter_status: "implemented_default_off",
+      commercial_terms_status: "not_approved",
+      required_capabilities: ["search", "document"],
+      implemented_capabilities: ["search", "document"],
+      attribution_label: "Powered by Indian Kanoon",
+      cost_categories: ["legal_source_search"],
+      health_path: "/api/authorities/providers/indian-kanoon/health",
+      support_matrix_path: "/api/authorities/providers/indian-kanoon/readiness",
+      operations_path: "/api/admin/provider-operations/jobs",
+      endpoint_paths: ["/api/authorities/providers/indian-kanoon/search"],
+      legal_coverage: [],
+      activation_blockers: ["provider disabled"],
+      limitations: ["No public HTML scraping."],
+    });
+
+    expect(parsed.domain).toBe("legal_research");
+    expect(parsed.adapter_status).toBe("implemented_default_off");
+  });
 });
