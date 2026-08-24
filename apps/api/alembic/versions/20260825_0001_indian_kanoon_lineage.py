@@ -9,8 +9,9 @@ owners. It does not create a parallel legal-source corpus.
 
 MIGRATION-LOCK-RISK: acknowledged: additive nullable columns, two constant
 defaults, and bounded index creation; PostgreSQL lock timeout is five seconds.
-MIGRATION-ROLLBACK: downgrade refuses after licensed source data or report
-lineage exists.
+MIGRATION-ROLLBACK: restore-forward: an empty pre-activation schema may be
+downgraded, but after licensed source data or report lineage exists the
+downgrade refuses and operators must restore-forward.
 """
 
 from __future__ import annotations
