@@ -142,7 +142,7 @@ test.describe.serial("Ram 2026-08-24 local and deployed regressions", () => {
     expect(expectedSha).toMatch(/^[0-9a-f]{40}$/);
     const [apiBuild, webBuild] = await Promise.all([
       page.request.get(`${API_BASE_URL}/api/build`),
-      page.request.get(`${BASE_URL}/api/build`),
+      page.request.get(`${BASE_URL}/api/release-identity`),
     ]);
     await expectStatus(apiBuild, 200, "API release identity");
     await expectStatus(webBuild, 200, "web release identity");
