@@ -828,10 +828,10 @@ describe("IpDocketPage", () => {
           notification_channels_json: ["in_app"],
           critical_event_policy_json: { escalation_after_minutes: 30 },
           escalation_owner_membership_id: "membership-1",
-          provider_keys_json: [],
-          provider_terms_version: null,
-          provider_terms_accepted_by_membership_id: null,
-          provider_terms_accepted_at: null,
+          provider_keys_json: ["ipindia-registry"],
+          provider_terms_version: "2026.1",
+          provider_terms_accepted_by_membership_id: "membership-1",
+          provider_terms_accepted_at: "2026-08-07T00:00:00Z",
           enabled_automations_json: [],
           workspace_enabled: false,
           updated_by_membership_id: "membership-1",
@@ -841,6 +841,33 @@ describe("IpDocketPage", () => {
         tests: [],
         ready_for_manual_docketing: true,
         enablement_blockers: [],
+        provider_adapters: [{
+          provider: "ipindia-registry",
+          display_name: "IP India registry",
+          domain: "ip_office_registry",
+          adapter_status: "blocked_pending_provider_contract",
+          commercial_terms_status: "not_approved",
+          required_capabilities: ["search", "record_fetch", "document_fetch"],
+          implemented_capabilities: [],
+          attribution_label: "IP India registry source (not activated)",
+          cost_categories: ["registry_search"],
+          health_path: null,
+          support_matrix_path: null,
+          operations_path: "/api/admin/provider-operations/jobs",
+          endpoint_paths: [],
+          legal_coverage: [{
+            jurisdiction: "IN",
+            office: "IP India",
+            asset_types: ["trademark"],
+            identifier_types: [],
+            register_fields: [],
+            document_types: [],
+            coverage_status: "unverified",
+            evidence_ref: null,
+          }],
+          activation_blockers: ["provider_contract_not_approved"],
+          limitations: ["Manual sourced docketing remains available."],
+        }],
       },
       features: [{
         feature_id: "workspace_core",
@@ -865,6 +892,14 @@ describe("IpDocketPage", () => {
     expect(screen.getByRole("link", { name: "Map IP roles" })).toBeVisible();
     expect(screen.getByRole("link", { name: "Configure pilot teams" })).toBeVisible();
     expect(screen.getByRole("link", { name: "Configure provider secrets" })).toBeVisible();
+    expect(screen.getByLabelText("Permitted registry provider")).toHaveValue(
+      "ipindia-registry",
+    );
+    expect(screen.getByTestId("ip-provider-contract")).toHaveTextContent(
+      "blocked pending provider contract",
+    );
+    expect(screen.getByText(/unverified legal coverage/i)).toBeVisible();
+    expect(screen.getByLabelText("registry sync")).toBeDisabled();
     expect(screen.getByRole("button", { name: "Test provider connection" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Test source open" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Test notification (dry run)" })).toBeVisible();

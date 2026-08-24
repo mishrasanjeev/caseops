@@ -462,6 +462,23 @@ function ReadinessTile({ provider }: { provider: ProviderReadinessRecord }) {
           {provider.durable_workflow_available ? "workflow ready" : "workflow gated"}
         </Badge>
       </div>
+      {provider.adapter_contract ? (
+        <div className="mt-3 text-xs text-[var(--color-mute)]">
+          <div>
+            {provider.adapter_contract.domain.replaceAll("_", " ")} · {" "}
+            {provider.adapter_contract.adapter_status.replaceAll("_", " ")} · {" "}
+            {provider.adapter_contract.implemented_capabilities.length}/
+            {provider.adapter_contract.required_capabilities.length} capabilities
+          </div>
+          <div className="mt-1 break-words">
+            Controls: {[
+              provider.adapter_contract.support_matrix_path,
+              provider.adapter_contract.health_path,
+              provider.adapter_contract.operations_path,
+            ].filter(Boolean).join(", ")}
+          </div>
+        </div>
+      ) : null}
       {missing.length ? (
         <div className="mt-3 text-xs text-[var(--color-mute)]">
           Missing: {missing.slice(0, 4).join(", ")}

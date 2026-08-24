@@ -103,6 +103,7 @@ import {
   type ProviderOperationReplayPreviewResponse,
   type ProviderCostProfileListResponse,
   type ProviderCostProfileRecord,
+  type ProviderAdapterContractRecord,
   type ProviderReadinessListResponse,
   type TenantConnectorRegistryResponse,
   type MarginSimulationListResponse,
@@ -9425,6 +9426,7 @@ export type IpWorkspaceConfigurationStatus = {
   tests: IpWorkspaceTestResult[];
   ready_for_manual_docketing: boolean;
   enablement_blockers: string[];
+  provider_adapters: ProviderAdapterContractRecord[];
 };
 
 export type IpWorkspaceReadiness = {

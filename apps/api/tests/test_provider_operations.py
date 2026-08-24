@@ -17,6 +17,7 @@ from caseops_api.db.models import (
     CalendarEventSyncStatus,
     CalendarProvider,
     CalendarSyncSourceType,
+    CaseTrackingSupportMatrix,
     Company,
     CompanyMembership,
     ConnectorHealthRecord,
@@ -1066,10 +1067,29 @@ def test_provider_readiness_is_names_only_and_fail_closed(
     monkeypatch.setenv("CASEOPS_SENDGRID_API_KEY", "sendgrid-secret-token")
     monkeypatch.setenv("CASEOPS_SENDGRID_SENDER_EMAIL", "billing@example.test")
     monkeypatch.setenv("CASEOPS_SENDGRID_WEBHOOK_PUBLIC_KEY", "public-key-secret")
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_ENABLED", "true")
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_PROVIDER", "ecourtsindia")
+    monkeypatch.setenv(
+        "CASEOPS_ECOURTSINDIA_API_BASE_URL",
+        "https://ecourts-provider.example.test",
+    )
+    monkeypatch.setenv("CASEOPS_ECOURTSINDIA_API_TOKEN", "ecourts-secret-token")
     get_settings.cache_clear()
     try:
         boot = bootstrap_company(client)
         token = str(boot["access_token"])
+        with get_session_factory()() as session:
+            session.add(
+                CaseTrackingSupportMatrix(
+                    provider="ecourtsindia",
+                    court="Delhi High Court",
+                    lookup_method="cnr",
+                    legal_tos_status="approved",
+                    enabled=True,
+                    tenant_visible=True,
+                )
+            )
+            session.commit()
 
         response = client.get(
             "/api/admin/provider-operations/readiness",
@@ -1087,6 +1107,8 @@ def test_provider_readiness_is_names_only_and_fail_closed(
         "sendgrid-secret-token",
         "billing@example.test",
         "public-key-secret",
+        "ecourts-provider.example.test",
+        "ecourts-secret-token",
     ):
         assert secret_value not in text
     body = response.json()
@@ -1095,11 +1117,21 @@ def test_provider_readiness_is_names_only_and_fail_closed(
         "google_drive",
         "email_connector",
         "digest_delivery",
+        "ecourtsindia",
+        "ipindia-registry",
     }
     assert providers["google_drive"]["configured"] is True
     assert providers["google_drive"]["enabled"] is False
     assert providers["email_connector"]["external_calls_enabled"] is False
     assert providers["digest_delivery"]["external_calls_enabled"] is False
+    assert providers["ecourtsindia"]["state"] == "ready"
+    assert providers["ecourtsindia"]["external_calls_enabled"] is True
+    assert providers["ecourtsindia"]["adapter_contract"]["domain"] == "court_tracking"
+    assert providers["ipindia-registry"]["configured"] is False
+    assert providers["ipindia-registry"]["external_calls_enabled"] is False
+    assert providers["ipindia-registry"]["adapter_contract"][
+        "commercial_terms_status"
+    ] == "not_approved"
     assert "GOOGLE_DRIVE_CLIENT_SECRET" in providers["google_drive"][
         "required_config_names"
     ]

@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from caseops_api.schemas.ip_lifecycle import IpDocketEventResponse
+from caseops_api.schemas.provider_operations import ProviderAdapterContractRecord
 from caseops_api.services.ip_identifier_rules import (
     normalize_ip_identifier,
     validate_identifier_owner,
@@ -461,6 +462,7 @@ class IpWorkspaceConfigurationStatusResponse(BaseModel):
     tests: list[IpWorkspaceTestResultResponse]
     ready_for_manual_docketing: bool
     enablement_blockers: list[str]
+    provider_adapters: list[ProviderAdapterContractRecord] = Field(default_factory=list)
 
 
 class IpDuplicateCandidate(BaseModel):

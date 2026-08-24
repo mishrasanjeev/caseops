@@ -306,7 +306,7 @@
       "deliverable": "Approved registry/WIPO boundary, IP snapshots/diffs, journal/watch, Madrid/post-registration, source proxy, foreign associates, client reports/instructions and extension of existing portal grants/publications",
       "exit_criteria": "Existing connector readiness/support/cost/provider-operations surfaces show every IP adapter; no court update is copied from `TrackedCase`; provider contracts/terms/support matrix, replay/cost/circuit breakers; UJ-07, UJ-19, UJ-21, UJ-27, UJ-35 through UJ-37 pass; 30-day provider/freshness evidence or explicit pilot exception",
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -2397,11 +2397,12 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "not_required",
       "evidence_refs": [
         "docs/ip-implementation/evidence/m4/IPLF-049A/local-2026-08-24.md",
-        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/release-2026-08-24.md"
       ],
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
@@ -2429,11 +2430,13 @@
         "IPLF-050A",
         "IPLF-050B"
       ],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-050/local-2026-08-24.md"
+      ],
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
         "reviewer": "Sanjeev Kumar (CaseOps repository and program owner)",
@@ -13381,7 +13384,8 @@
         "apps/api/tests/test_ip_post_registration.py"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m4/IPLF-049A/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m4/IPLF-049A/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/release-2026-08-24.md"
       ],
       "evidence_metadata": [
         {
@@ -13396,9 +13400,7 @@
       ],
       "approvals": [],
       "blockers": [],
-      "next_actions": [
-        "Pass exact-head PR CI, merge with the exact-head fence, pass exact-main CI, deploy that exact main revision, and record production verification."
-      ],
+      "next_actions": [],
       "data_impact": [
         "No migration. Typed post-registration records extend existing ip_proceedings, ip_identifiers, and append-only ip_docket_events."
       ],
@@ -13409,7 +13411,7 @@
       "allocation_review": "2026-08-24 duplicate-work review confirms IPLF-049 extends the existing IP record and event writers. No parallel application, opposition, Matter, document, deadline, hearing, notification, audit, access, or registration-status owner is introduced.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "not_required",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
@@ -13498,7 +13500,8 @@
         "IPLF-UJ-38-NORMAL:tests/e2e/iplf-049-post-registration-2026-08-24.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/release-2026-08-24.md"
       ],
       "evidence_metadata": [
         {
@@ -13513,9 +13516,7 @@
       ],
       "approvals": [],
       "blockers": [],
-      "next_actions": [
-        "Pass exact-head PR CI, merge with the exact-head fence, pass exact-main CI, deploy that exact main revision, and record production verification."
-      ],
+      "next_actions": [],
       "data_impact": [
         "No migration. The UI and API append to existing canonical IP proceeding, identifier, and lifecycle-event records."
       ],
@@ -13528,7 +13529,7 @@
       "allocation_review": "2026-08-24 duplicate-work review confirms IPLF-049 reuses the IPLF-048 opposition foundations only where explicitly mapped, while preserving distinct templates, identifiers, proceedings, events, and legal effects for UJ-38.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "not_required",
       "not_required_approval": {
         "prd_citation": "Owner waiver 2026-08-14 of PRD Sections 24 and 26.4 named human sign-off requirements; see docs/ip-implementation/OWNER_ACCEPTANCE_WAIVER_2026-08-14.md",
@@ -13546,8 +13547,8 @@
       "source_kind": "derived",
       "scope_source": "IPLF-050",
       "primary_behavior": "Foundation, ownership, and backend contract",
-      "migration_boundary": "Additive expand/backfill/verify/switch boundary when persistence changes; otherwise explicitly no schema change.",
-      "release_boundary": "Compatible slices may share one exact integrated candidate, CI matrix, staged rollout, rollback plan, and dated deployed acceptance; this row remains a traceability and activation unit, not a mandatory separate release.",
+      "migration_boundary": "No schema change. The static adapter contract is projected through existing provider readiness and IP workspace responses.",
+      "release_boundary": "Pass API catalog/readiness/workspace tests, generated OpenAPI parity, full web tests/build, IPLF-050B browser acceptance, hosted CI/security/CodeQL, exact-main CI, immutable deployment, and exact production identity/health verification.",
       "requirement_ids": [],
       "journey_path_ids": [],
       "ownership": [
@@ -13560,22 +13561,48 @@
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/schemas/provider_operations.py",
+        "apps/api/src/caseops_api/services/provider_adapter_catalog.py",
+        "apps/api/src/caseops_api/services/provider_operations.py",
+        "apps/api/src/caseops_api/services/ip_workspace.py",
+        "apps/api/src/caseops_api/schemas/ip_records.py",
+        "apps/web/lib/api/openapi-types.ts"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_provider_adapter_catalog.py",
+        "apps/api/tests/test_provider_operations.py::test_provider_readiness_is_names_only_and_fail_closed",
+        "apps/api/tests/test_ip_workspace_configuration.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-050/local-2026-08-24.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m5/IPLF-050/local-2026-08-24.md",
+          "revision": "90ce8903175e19a2dee01dd052755b22e492dfcf",
+          "environment": "local SQLite API tests, generated OpenAPI, TypeScript, Vitest, production web build, and production-build Playwright",
+          "fixtures": "synthetic law-firm tenants, one approved eCourts support-matrix scope, and an intentionally unapproved IP India adapter; no live provider or legal fact",
+          "assertions": "canonical adapter contract, existing-owner projection, support-matrix gating, secret non-disclosure, unknown/wrong-domain rejection, and zero-call unapproved-provider failure",
+          "result": "passed",
+          "recorded_at": "2026-08-24T13:15:38+05:30"
+        }
+      ],
       "approvals": [],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Complete hosted CI, exact-main CI, immutable deployment, and exact production verification.",
+        "Keep IP India external calls disabled until a genuine provider contract, licensing approval, credentials, and verified legal coverage exist."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No persistence change. The catalog is static and existing support-matrix, cost, health, provider-operation, and TrackedCase owners remain canonical."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        "docs/ip-implementation/evidence/m5/IPLF-050/local-2026-08-24.md"
+      ],
+      "allocation_review": "2026-08-24 duplicate-work review confirms this slice only defines and projects adapter contracts. Existing case tracking, support matrix, costs, connector health, provider operations, replay, and TrackedCase records remain canonical; IP-only coverage fields do not duplicate those owners.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "administrative_exception": {
@@ -13601,8 +13628,8 @@
       "source_kind": "derived",
       "scope_source": "IPLF-050",
       "primary_behavior": "User workflow, exceptions, and release proof",
-      "migration_boundary": "Additive expand/backfill/verify/switch boundary when persistence changes; otherwise explicitly no schema change.",
-      "release_boundary": "Compatible slices may share one exact integrated candidate, CI matrix, staged rollout, rollback plan, and dated deployed acceptance; this row remains a traceability and activation unit, not a mandatory separate release.",
+      "migration_boundary": "No schema change. Registered adapter choices and legal coverage are read from the additive API contract.",
+      "release_boundary": "Pass blocked-provider API exceptions, registered-provider UI and mobile-safe layout tests, production-build browser acceptance, hosted CI/security/CodeQL, exact-main CI, immutable deployment, and exact production identity/health verification.",
       "requirement_ids": [
         "IP-REG-01",
         "IP-REG-02",
@@ -13629,28 +13656,65 @@
       "dependencies": [
         "IPLF-050A"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-19-EXC-01",
-        "planned:IPLF-UJ-19-EXC-02",
-        "planned:IPLF-UJ-19-EXC-03",
-        "planned:IPLF-UJ-19-EXC-04",
-        "planned:IPLF-UJ-19-NORMAL"
+      "implementation_refs": [
+        "apps/web/app/app/ip/page.tsx",
+        "apps/web/app/app/admin/provider-operations/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/lib/api/schemas.ts"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "test_refs": [
+        "apps/web/app/app/ip/page.test.tsx",
+        "apps/web/app/app/admin/provider-operations/page.test.tsx",
+        "tests/e2e/iplf-050b-provider-contract-2026-08-24.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-050/local-2026-08-24.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m5/IPLF-050/local-2026-08-24.md",
+          "revision": "90ce8903175e19a2dee01dd052755b22e492dfcf",
+          "environment": "local API and production-build Chromium acceptance",
+          "fixtures": "synthetic entitled law-firm tenant with selected but unapproved IP India adapter; no external registry call",
+          "assertions": "registered select options, visible legal coverage and blockers, disabled registry automation, manual readiness, typed failed probes, and shared provider-operations visibility",
+          "result": "passed",
+          "recorded_at": "2026-08-24T13:15:38+05:30"
+        }
+      ],
       "approvals": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-050B-IPLF-051-JOURNEY-DEPENDENCY",
+          "summary": "IPLF-051 must implement registry matching, links, snapshots, diffs, reconciliation, freshness, and durable sync-attempt evidence before UJ-19 or IP-REG-01..05 can complete.",
+          "owner": "IPLF-051 engineering owner",
+          "evidence_needed": "Passing IPLF-051 API, integration, browser, durability, reconciliation, and production acceptance evidence for the shared requirement and journey paths.",
+          "safe_fallback": "Keep registry automation disabled and use sourced manual docketing.",
+          "milestone_impact": "Blocks complete UJ-19, IP-REG-01..05, and M5 claims but not IPLF-050 fail-closed control-plane release.",
+          "next_independent_slice": "Release IPLF-050 and proceed directly to IPLF-051."
+        },
+        {
+          "id": "IPLF-050B-IPINDIA-ACTIVATION",
+          "summary": "IP India activation requires a genuine provider contract, licensing approval, credentials, and verified legal coverage.",
+          "owner": "Authorized provider, legal, security, and release owners",
+          "evidence_needed": "Executed provider terms, approved licensing basis, configured secret references, verified field/document coverage, and provider sandbox acceptance.",
+          "safe_fallback": "The adapter exposes zero implemented capabilities, performs no external call, and leaves manual sourced docketing available.",
+          "milestone_impact": "Blocks live IP India registry automation and any live-provider claim.",
+          "next_independent_slice": "Implement provider-independent IPLF-051 foundations while activation remains disabled."
+        }
+      ],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Complete the PR, release, and exact production verification for this fail-closed control-plane slice.",
+        "Proceed to IPLF-051 without claiming or enabling an uncontracted live provider."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No persistence change. Existing saved provider keys are restricted to catalogued IP-office adapters on future workspace writes."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        "docs/ip-implementation/evidence/m5/IPLF-050/local-2026-08-24.md"
+      ],
+      "allocation_review": "2026-08-24 workflow review limits this slice to adapter discovery, visibility, attribution/cost acceptance, legal-coverage disclosure, and fail-closed probes. IPLF-051 retains every registry-data and full UJ-19 behavior.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "acceptance_status": "not_required",
       "not_required_approval": {
@@ -24229,7 +24293,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -24283,7 +24347,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -24337,7 +24401,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -24391,7 +24455,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -24445,7 +24509,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -45441,7 +45505,7 @@
         "planned:IPLF-UJ-19-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -46563,11 +46627,12 @@
         "IPLF-UJ-38-NORMAL:tests/e2e/iplf-049-post-registration-2026-08-24.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/release-2026-08-24.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-049B"
@@ -52946,7 +53011,7 @@
         "planned:IPLF-UJ-19-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -52981,7 +53046,7 @@
         "planned:IPLF-UJ-19-EXC-01"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -53016,7 +53081,7 @@
         "planned:IPLF-UJ-19-EXC-02"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -53051,7 +53116,7 @@
         "planned:IPLF-UJ-19-EXC-03"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -53086,7 +53151,7 @@
         "planned:IPLF-UJ-19-EXC-04"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "acceptance_status": "not_required",
@@ -56998,11 +57063,12 @@
         "IPLF-UJ-38-NORMAL:tests/e2e/iplf-049-post-registration-2026-08-24.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/release-2026-08-24.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-049B"
@@ -57053,11 +57119,12 @@
         "IPLF-UJ-38-EXC-01:apps/api/tests/test_ip_post_registration.py"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/release-2026-08-24.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-049B"
@@ -57108,11 +57175,12 @@
         "IPLF-UJ-38-EXC-02:apps/api/tests/test_ip_post_registration.py"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/release-2026-08-24.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-049B"
@@ -57163,11 +57231,12 @@
         "IPLF-UJ-38-EXC-03:apps/api/tests/test_ip_post_registration.py"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/release-2026-08-24.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-049B"
@@ -57218,11 +57287,12 @@
         "IPLF-UJ-38-EXC-04:apps/api/tests/test_ip_post_registration.py"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/release-2026-08-24.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "acceptance_status": "not_required",
       "slice_ids": [
         "IPLF-049B"

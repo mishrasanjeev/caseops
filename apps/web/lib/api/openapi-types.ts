@@ -26567,6 +26567,8 @@ export interface components {
             configuration: components["schemas"]["IpWorkspaceConfigurationResponse"] | null;
             /** Enablement Blockers */
             enablement_blockers: string[];
+            /** Provider Adapters */
+            provider_adapters?: components["schemas"]["ProviderAdapterContractRecord"][];
             /** Ready For Manual Docketing */
             ready_for_manual_docketing: boolean;
             /** Tests */
@@ -34198,6 +34200,72 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** ProviderAdapterContractRecord */
+        ProviderAdapterContractRecord: {
+            /** Activation Blockers */
+            activation_blockers?: string[];
+            /**
+             * Adapter Status
+             * @enum {string}
+             */
+            adapter_status: "implemented" | "blocked_pending_provider_contract";
+            /** Attribution Label */
+            attribution_label: string;
+            /**
+             * Commercial Terms Status
+             * @enum {string}
+             */
+            commercial_terms_status: "support_matrix_governed" | "not_approved";
+            /** Cost Categories */
+            cost_categories?: string[];
+            /** Display Name */
+            display_name: string;
+            /**
+             * Domain
+             * @enum {string}
+             */
+            domain: "court_tracking" | "ip_office_registry";
+            /** Endpoint Paths */
+            endpoint_paths?: string[];
+            /** Health Path */
+            health_path?: string | null;
+            /** Implemented Capabilities */
+            implemented_capabilities: ("search" | "record_fetch" | "document_fetch" | "health" | "attribution" | "cost" | "capability" | "operations" | "replay")[];
+            /** Legal Coverage */
+            legal_coverage?: components["schemas"]["ProviderAdapterLegalCoverageRecord"][];
+            /** Limitations */
+            limitations?: string[];
+            /** Operations Path */
+            operations_path: string;
+            /** Provider */
+            provider: string;
+            /** Required Capabilities */
+            required_capabilities: ("search" | "record_fetch" | "document_fetch" | "health" | "attribution" | "cost" | "capability" | "operations" | "replay")[];
+            /** Support Matrix Path */
+            support_matrix_path?: string | null;
+        };
+        /** ProviderAdapterLegalCoverageRecord */
+        ProviderAdapterLegalCoverageRecord: {
+            /** Asset Types */
+            asset_types?: string[];
+            /**
+             * Coverage Status
+             * @enum {string}
+             */
+            coverage_status: "verified" | "partial" | "unverified";
+            /** Document Types */
+            document_types?: string[];
+            /** Evidence Ref */
+            evidence_ref?: string | null;
+            /** Identifier Types */
+            identifier_types?: string[];
+            /** Jurisdiction */
+            jurisdiction: string;
+            /** Office */
+            office: string;
+            /** Register Fields */
+            register_fields?: string[];
+        };
         /** ProviderCostProfileCreateRequest */
         ProviderCostProfileCreateRequest: {
             /**
@@ -34613,6 +34681,7 @@ export interface components {
         };
         /** ProviderReadinessRecord */
         ProviderReadinessRecord: {
+            adapter_contract?: components["schemas"]["ProviderAdapterContractRecord"] | null;
             /** Adp Slice */
             adp_slice: string;
             /** Change Detection Fields */

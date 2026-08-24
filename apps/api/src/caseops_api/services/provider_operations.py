@@ -20,6 +20,7 @@ from caseops_api.db.models import (
     CalendarEventSync,
     CalendarEventSyncStatus,
     CalendarSyncSourceType,
+    CaseTrackingSupportMatrix,
     ConnectorHealthRecord,
     DriveFileCandidate,
     InboundEmailEvent,
@@ -83,6 +84,7 @@ from caseops_api.services.notification_delivery import (
     notification_provider_reconciliation_detail,
     redact_provider_error,
 )
+from caseops_api.services.provider_adapter_catalog import provider_adapter_definition
 from caseops_api.services.provider_costs import effective_cost_minor
 from caseops_api.services.security import require_recent_step_up
 from caseops_api.services.session_context import SessionContext
@@ -2642,8 +2644,104 @@ def provider_readiness_status(
     if not settings.sendgrid_webhook_public_key:
         digest_email_missing.append("SENDGRID_WEBHOOK_PUBLIC_KEY")
 
+    ecourts_missing_config: list[str] = []
+    if not settings.case_tracking_enabled:
+        ecourts_missing_config.append("CASE_TRACKING_ENABLED")
+    if settings.case_tracking_provider != "ecourtsindia":
+        ecourts_missing_config.append("CASE_TRACKING_PROVIDER")
+    if not settings.ecourtsindia_api_base_url:
+        ecourts_missing_config.append("ECOURTSINDIA_API_BASE_URL")
+    if not settings.ecourtsindia_api_token:
+        ecourts_missing_config.append("ECOURTSINDIA_API_TOKEN")
+    ecourts_support_rows = []
+    if session is not None:
+        ecourts_support_rows = list(
+            session.scalars(
+                select(CaseTrackingSupportMatrix).where(
+                    CaseTrackingSupportMatrix.provider == "ecourtsindia",
+                    CaseTrackingSupportMatrix.tenant_visible.is_(True),
+                )
+            ).all()
+        )
+    ecourts_approved_scopes = [
+        row
+        for row in ecourts_support_rows
+        if row.enabled and row.legal_tos_status.strip().lower() == "approved"
+    ]
+    ecourts_missing_approvals = (
+        [] if ecourts_approved_scopes else ["case_tracking_support_matrix_scope_approved"]
+    )
+    ecourts_enabled = not ecourts_missing_config and not ecourts_missing_approvals
+    ecourts_adapter = provider_adapter_definition("ecourtsindia")
+    ipindia_adapter = provider_adapter_definition("ipindia-registry")
+    assert ecourts_adapter is not None
+    assert ipindia_adapter is not None
+
     return ProviderReadinessListResponse(
         providers=[
+            ProviderReadinessRecord(
+                provider="ecourtsindia",
+                display_name=ecourts_adapter.display_name,
+                adp_slice="IPLF-050",
+                state=(
+                    "ready"
+                    if ecourts_enabled
+                    else (
+                        "blocked_missing_config"
+                        if ecourts_missing_config
+                        else "blocked_pending_admin_approval"
+                    )
+                ),
+                configured=not ecourts_missing_config,
+                enabled=ecourts_enabled,
+                external_calls_enabled=ecourts_enabled,
+                durable_workflow_available=workflow.available,
+                required_config_names=[
+                    "CASE_TRACKING_ENABLED",
+                    "CASE_TRACKING_PROVIDER",
+                    "ECOURTSINDIA_API_BASE_URL",
+                    "ECOURTSINDIA_API_TOKEN",
+                ],
+                missing_config_names=ecourts_missing_config,
+                required_approval_keys=["case_tracking_support_matrix_scope_approved"],
+                missing_approval_keys=ecourts_missing_approvals,
+                endpoint_paths=list(ecourts_adapter.endpoint_paths),
+                idempotency_fields=["tracked_case_id", "provider_operation_id"],
+                change_detection_fields=[
+                    "provider_updated_at",
+                    "normalized_record_hash",
+                    "source_document_reference",
+                ],
+                review_queue="TrackedCase provider operations and source evidence",
+                retry_dead_letter=(
+                    "Case-tracking polls and records use the shared provider-operations "
+                    "queue, guarded replay, and dead-letter controls."
+                ),
+                limitations=list(ecourts_adapter.limitations),
+                adapter_contract=ecourts_adapter.record(),
+            ),
+            ProviderReadinessRecord(
+                provider="ipindia-registry",
+                display_name=ipindia_adapter.display_name,
+                adp_slice="IPLF-050",
+                state="blocked_pending_admin_approval",
+                configured=False,
+                enabled=False,
+                external_calls_enabled=False,
+                durable_workflow_available=workflow.available,
+                required_approval_keys=list(ipindia_adapter.activation_blockers),
+                missing_approval_keys=list(ipindia_adapter.activation_blockers),
+                endpoint_paths=list(ipindia_adapter.endpoint_paths),
+                idempotency_fields=[],
+                change_detection_fields=[],
+                review_queue="Manual sourced IP docketing",
+                retry_dead_letter=(
+                    "No external provider job can be created until the adapter contract "
+                    "and legal coverage are approved."
+                ),
+                limitations=list(ipindia_adapter.limitations),
+                adapter_contract=ipindia_adapter.record(),
+            ),
             ProviderReadinessRecord(
                 provider="google_drive",
                 display_name="Google Drive sync",

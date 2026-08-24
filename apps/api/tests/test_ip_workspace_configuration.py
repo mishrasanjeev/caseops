@@ -145,21 +145,43 @@ def test_normal_workspace_setup_records_tests_terms_flags_and_actor(
     config = saved.json()["configuration"]
     assert config["provider_terms_accepted_by_membership_id"] == membership_id
     assert config["provider_terms_accepted_at"] is not None
+    [adapter] = saved.json()["provider_adapters"]
+    assert adapter["provider"] == "ipindia-registry"
+    assert adapter["adapter_status"] == "blocked_pending_provider_contract"
+    assert adapter["implemented_capabilities"] == []
+    assert adapter["legal_coverage"] == [
+        {
+            "jurisdiction": "IN",
+            "office": "IP India",
+            "asset_types": ["trademark"],
+            "identifier_types": [],
+            "register_fields": [],
+            "document_types": [],
+            "coverage_status": "unverified",
+            "evidence_ref": None,
+        }
+    ]
 
-    assert _run_test(
+    connection = _run_test(
         client,
         headers,
         version=1,
         test_kind="connection",
         provider_key="ipindia-registry",
-    )["status"] == "passed"
-    assert _run_test(
+    )
+    assert connection["status"] == "failed"
+    assert connection["failure_code"] == "provider_contract_not_approved"
+    assert connection["details_json"]["external_call"] is False
+    source_open = _run_test(
         client,
         headers,
         version=1,
         test_kind="source_open",
         provider_key="ipindia-registry",
-    )["details_json"]["external_call"] is False
+    )
+    assert source_open["status"] == "failed"
+    assert source_open["failure_code"] == "provider_contract_not_approved"
+    assert source_open["details_json"]["external_call"] is False
     notification = _run_test(
         client,
         headers,
@@ -183,7 +205,6 @@ def test_normal_workspace_setup_records_tests_terms_flags_and_actor(
         json={
             "expected_config_version": 1,
             "enabled_automations": [
-                "registry_sync",
                 "deadline_automation",
                 "notification_automation",
             ],
@@ -194,7 +215,6 @@ def test_normal_workspace_setup_records_tests_terms_flags_and_actor(
     assert status["enablement_blockers"] == []
     assert status["configuration"]["workspace_enabled"] is True
     assert set(status["configuration"]["enabled_automations_json"]) == {
-        "registry_sync",
         "deadline_automation",
         "notification_automation",
     }
@@ -239,6 +259,30 @@ def test_normal_workspace_setup_records_tests_terms_flags_and_actor(
         "ip_workspace.readiness_test_completed",
         "ip_workspace.enabled",
     }.issubset(audit_actions)
+
+
+def test_workspace_rejects_unknown_and_wrong_domain_provider_keys(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    membership_id = str(bootstrap["membership"]["id"])
+
+    unknown = client.put(
+        "/api/ip/workspace/configuration",
+        headers=headers,
+        json=_configuration(membership_id, provider_keys=["invented-registry"]),
+    )
+    assert unknown.status_code == 422
+    assert "not registered" in unknown.text
+
+    wrong_domain = client.put(
+        "/api/ip/workspace/configuration",
+        headers=headers,
+        json=_configuration(membership_id, provider_keys=["ecourtsindia"]),
+    )
+    assert wrong_domain.status_code == 422
+    assert "not an IP-office registry adapter" in wrong_domain.text
 
 
 def test_workspace_configuration_is_tenant_scoped_and_admin_guarded(
