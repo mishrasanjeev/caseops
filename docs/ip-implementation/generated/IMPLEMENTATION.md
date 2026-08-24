@@ -100,10 +100,10 @@ Generated; do not edit.
 | IPLF-050B | derived | IPLF-050 | M5 | IP-REG-01, IP-REG-02, IP-REG-03, IP-REG-04, IP-REG-05 | UJ-19-EXC-01, UJ-19-EXC-02, UJ-19-EXC-03, UJ-19-EXC-04, UJ-19-NORMAL | implemented | passed | deployment_verified | not_required |
 | IPLF-051A | derived | IPLF-051 | M5 |  |  | implemented | passed | deployment_verified | not_required |
 | IPLF-051B | derived | IPLF-051 | M5 | IP-REG-01, IP-REG-02, IP-REG-03, IP-REG-04, IP-REG-05 | UJ-07-EXC-01, UJ-07-EXC-02, UJ-07-EXC-03, UJ-07-NORMAL, UJ-19-EXC-01, UJ-19-EXC-02, UJ-19-EXC-03, UJ-19-EXC-04, UJ-19-NORMAL | implemented | passed | deployment_verified | not_required |
-| IPLF-052A | derived | IPLF-052 | M5 |  |  | not_started | not_run | blocked | not_required |
-| IPLF-052B | derived | IPLF-052 | M5 | IP-WATCH-01, IP-WATCH-02, IP-WATCH-03, IP-WATCH-04, IP-WATCH-05 | UJ-21-EXC-01, UJ-21-EXC-02, UJ-21-EXC-03, UJ-21-NORMAL, UJ-33-EXC-01, UJ-33-EXC-02, UJ-33-EXC-03, UJ-33-EXC-04, UJ-33-NORMAL | not_started | not_run | blocked | not_required |
-| IPLF-053A | derived | IPLF-053 | M5 |  |  | not_started | not_run | blocked | not_required |
-| IPLF-053B | derived | IPLF-053 | M5 | IP-WATCH-01, IP-WATCH-02, IP-WATCH-03, IP-WATCH-04, IP-WATCH-05 | UJ-21-EXC-01, UJ-21-EXC-02, UJ-21-EXC-03, UJ-21-NORMAL, UJ-33-EXC-01, UJ-33-EXC-02, UJ-33-EXC-03, UJ-33-EXC-04, UJ-33-NORMAL | not_started | not_run | blocked | not_required |
+| IPLF-052A | derived | IPLF-052 | M5 |  |  | implemented | passed | ready_for_review | not_required |
+| IPLF-052B | derived | IPLF-052 | M5 | IP-WATCH-01, IP-WATCH-02, IP-WATCH-03, IP-WATCH-04, IP-WATCH-05 | UJ-21-EXC-01, UJ-21-EXC-02, UJ-21-EXC-03, UJ-21-NORMAL, UJ-33-EXC-01, UJ-33-EXC-02, UJ-33-EXC-03, UJ-33-EXC-04, UJ-33-NORMAL | implemented | passed | ready_for_review | not_required |
+| IPLF-053A | derived | IPLF-053 | M5 |  |  | implemented | passed | ready_for_review | not_required |
+| IPLF-053B | derived | IPLF-053 | M5 | IP-WATCH-01, IP-WATCH-02, IP-WATCH-03, IP-WATCH-04, IP-WATCH-05 | UJ-21-EXC-01, UJ-21-EXC-02, UJ-21-EXC-03, UJ-21-NORMAL, UJ-33-EXC-01, UJ-33-EXC-02, UJ-33-EXC-03, UJ-33-EXC-04, UJ-33-NORMAL | implemented | passed | ready_for_review | not_required |
 | IPLF-054A | derived | IPLF-054 | M5 |  |  | not_started | not_run | blocked | not_required |
 | IPLF-054B | derived | IPLF-054 | M5 | LEGAL-SRC-01, LEGAL-SRC-02, LEGAL-SRC-03, LEGAL-SRC-04, LEGAL-SRC-05, LEGAL-SRC-06, LEGAL-SRC-07, LEGAL-SRC-08, LEGAL-SRC-09, LEGAL-SRC-10, SRC-01, SRC-02, SRC-03, SRC-04, SRC-05, SRC-06, SRC-07, SRC-08, SRC-09, SRC-10, SRC-11, SRC-12 |  | not_started | not_run | blocked | not_required |
 | IPLF-055A | derived | IPLF-055 | M5 |  |  | not_started | not_run | blocked | not_required |
