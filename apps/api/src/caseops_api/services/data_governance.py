@@ -16,7 +16,7 @@ from hashlib import sha256
 from typing import Any, NoReturn
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import MetaData, Table, func, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
@@ -30,11 +30,14 @@ from caseops_api.db.models import (
     TenantDataOperationItem,
 )
 from caseops_api.governance.data_class_projection import (
+    admissible_data_classes,
     require_admissible_data_class,
     require_current_projection,
     review_coverage,
 )
 from caseops_api.schemas.data_governance import (
+    TenantDataClassCatalogResponse,
+    TenantDataClassOption,
     TenantDataGovernanceIntegrityCheck,
     TenantDataGovernanceIntegrityReport,
     TenantDataOperationDependencyPlan,
@@ -45,6 +48,7 @@ from caseops_api.schemas.data_governance import (
     TenantDataOperationExclusion,
     TenantDataOperationItemRecord,
     TenantDataOperationOffboardingCategory,
+    TenantDataOperationTenantDryRunRequest,
     TenantLegalHoldSummary,
 )
 from caseops_api.services.assignment_memberships import (
@@ -891,6 +895,103 @@ def create_dry_run_manifest(
     )
 
 
+def list_admissible_data_class_catalog(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> TenantDataClassCatalogResponse:
+    """Expose the exact reviewed catalog used by dry-run admission."""
+
+    _lock_dry_run_actor(session, context=context)
+    require_current_projection(session)
+    entries = admissible_data_classes()
+    if entries is None:  # Defensive: require_current_projection already refused.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The reviewed data-class catalog is unavailable.",
+        )
+    return TenantDataClassCatalogResponse(
+        data_classes=[
+            TenantDataClassOption(
+                id=entry.id,
+                label=entry.id.replace("_", " ").title(),
+                confidentiality=entry.confidentiality,
+            )
+            for entry in entries
+        ]
+    )
+
+
+def create_tenant_scoped_dry_run_manifest(
+    session: Session,
+    *,
+    context: SessionContext,
+    payload: TenantDataOperationTenantDryRunRequest,
+) -> TenantDataOperationDryRunRecord:
+    """Create a useful dry run without asking an operator for internal hashes.
+
+    The authenticated company is the only allowed tenant target. Class names
+    resolve through the reviewed projection, counts come from that tenant's
+    rows, and the opaque target digest is derived server-side.
+    """
+
+    locked_context = _lock_dry_run_actor(session, context=context)
+    require_current_projection(session)
+    tenant_hash = sha256(
+        f"caseops:tenant:{locked_context.company.id}".encode()
+    ).hexdigest()
+    items: list[dict[str, object]] = []
+    for data_class_id in payload.data_class_ids:
+        entry = require_admissible_data_class(data_class_id)
+        metadata = MetaData()
+        table = Table(entry.table_name, metadata, autoload_with=session.get_bind())
+        if entry.company_key is None or entry.company_key not in table.c:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "type": "data_class_company_scope_unavailable",
+                    "detail": "The selected data class cannot be scoped to this workspace.",
+                    "data_class_id": entry.id,
+                },
+            )
+        candidate_count = int(
+            session.scalar(
+                select(func.count())
+                .select_from(table)
+                .where(table.c[entry.company_key] == locked_context.company.id)
+            )
+            or 0
+        )
+        items.append(
+            {
+                "data_class_id": entry.id,
+                "target_type": "tenant",
+                "target_reference_hash": tenant_hash,
+                "candidate_record_count": candidate_count,
+                "estimated_bytes": 0,
+                "detail_redacted": "Authenticated workspace scope derived by CaseOps.",
+            }
+        )
+
+    now = _now()
+    evidence_ref = payload.request_evidence_ref or (
+        "caseops://data-governance/tenant-dry-run/" + now.isoformat()
+    )
+    request = TenantDataOperationDryRunRequest.model_validate(
+        {
+            "operation_type": payload.operation_type,
+            "request_evidence_ref": evidence_ref,
+            "items": items,
+            "as_of": now,
+        }
+    )
+    return create_dry_run_manifest(
+        session,
+        context=locked_context,
+        payload=request,
+    )
+
+
 def _approved_execution_id(
     session: Session, *, company_id: str, dry_run_id: str
 ) -> str | None:
@@ -1122,9 +1223,11 @@ def reject_data_operation_execution(*, operation_id: str) -> NoReturn:
 
 __all__ = [
     "create_dry_run_manifest",
+    "create_tenant_scoped_dry_run_manifest",
     "get_tenant_legal_hold_summary",
     "get_dry_run_manifest",
     "get_tenant_integrity_report",
     "list_dry_run_manifests",
+    "list_admissible_data_class_catalog",
     "reject_data_operation_execution",
 ]

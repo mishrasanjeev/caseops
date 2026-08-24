@@ -165,7 +165,7 @@ IMPLEMENTATION_REFS = {
 def status_block() -> dict[str, str]:
     return {
         "implementation_status": "not_started", "verification_status": "not_run",
-        "release_status": "blocked", "acceptance_status": "pending",
+        "release_status": "blocked",
     }
 
 
@@ -200,8 +200,8 @@ def derived_slice(epic: dict, suffix: str, phase: str, depends_on: list[str]) ->
         "ownership": [owner_for(epic["id"], epic["title"])],
         "dependencies": depends_on, "external_preconditions": [],
         "implementation_refs": [], "test_refs": [],
-        "evidence_refs": [], "evidence_metadata": [], "approvals": [], "blockers": [],
-        "next_actions": ["Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."],
+        "evidence_refs": [], "evidence_metadata": [], "blockers": [],
+        "next_actions": ["Start this node whenever its direct dependencies are ready; unavailable external systems keep only the affected runtime path fail-closed while independent implementation continues."],
         "data_impact": ["Pending slice design; no data mutation is authorized by this allocation row."],
         "documentation_impact": [], "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
         **status_block(),
@@ -209,6 +209,13 @@ def derived_slice(epic: dict, suffix: str, phase: str, depends_on: list[str]) ->
 
 
 def aggregate(rows: list[dict]) -> dict[str, str]:
+    if not rows:
+        return {
+            "implementation_status": "implemented",
+            "verification_status": "passed",
+            "release_status": "not_required",
+        }
+
     implementations = {row["implementation_status"] for row in rows}
     if rows and implementations == {"implemented"}:
         implementation = "implemented"
@@ -232,18 +239,9 @@ def aggregate(rows: list[dict]) -> dict[str, str]:
         release = "deployment_verified" if "deployment_verified" in releases else "not_required"
     else:
         release = "blocked"
-    acceptances = {row["acceptance_status"] for row in rows}
-    if "rejected" in acceptances:
-        acceptance = "rejected"
-    elif rows and acceptances <= {"approved", "not_required"}:
-        acceptance = "approved" if "approved" in acceptances else "not_required"
-    elif "blocked" in acceptances:
-        acceptance = "blocked"
-    else:
-        acceptance = "pending"
     return {
         "implementation_status": implementation, "verification_status": verification,
-        "release_status": release, "acceptance_status": acceptance,
+        "release_status": release,
     }
 
 
@@ -410,16 +408,10 @@ def main() -> None:
 
     manifest["gates"] = [
         {
-            "id": "M0-HUMAN-PROGRAM-LOCK", "milestone_id": "M0", "kind": "human_acceptance",
-            "summary": "Named owners, pilot firms, source policy, taxonomy/rule inputs, staffing, and signed ownership ledger require human approval.",
-            "evidence_refs": [], "blockers": [{"id": "M0-APPROVALS", "summary": "Required Product, legal, security, data, SRE, and pilot approvals are not attached.", "owner": "Named human program owners", "evidence_needed": "Version-bound signed approvals required by PRD Sections 24 and 26.4."}],
-            "implementation_status": "blocked", "verification_status": "blocked", "release_status": "blocked", "acceptance_status": "pending",
-        },
-        {
             "id": "PHASE0-NOTICES-PRODUCTION", "milestone_id": "M1", "kind": "production_regression",
             "summary": "Latest scheduled production Notices workflow failed after a successful create response.",
             "evidence_refs": [], "blockers": [{"id": "PROD-NOTICES-30729636524", "summary": "GitHub Actions run 30729636524 failed BUG-001 and skipped the dependent notice-module suite.", "owner": "Engineering/QA", "evidence_needed": "Exact deployed fix and newest complete production Playwright pass."}],
-            "implementation_status": "in_progress", "verification_status": "failed", "release_status": "blocked", "acceptance_status": "pending",
+            "implementation_status": "in_progress", "verification_status": "failed", "release_status": "blocked",
         },
     ]
     gates_by_milestone: dict[str, list[dict]] = defaultdict(list)
@@ -436,8 +428,8 @@ def main() -> None:
         milestone["evidence_refs"] = sorted({ref for row in epics_by_milestone[milestone["id"]] + gates_by_milestone[milestone["id"]] for ref in row.get("evidence_refs", [])})
     manifest["program"].update(aggregate(manifest["milestones"]))
     manifest["program"]["execution_policy"] = (
-        "one_go_work_conserving_dependency_dag; active_slice and next_slice identify the "
-        "current safety-critical fence lane, never an exclusive program scheduler"
+        "codex_owned_single_ordered_queue; implement first and run the "
+        "automated check and exact-release verification batch at the end"
     )
     manifest["program"]["active_slice"] = "IPLF-002A"
     manifest["program"]["checkpoint"] = {

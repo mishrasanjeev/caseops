@@ -183,6 +183,22 @@ def admitted_data_class_ids() -> frozenset[str] | None:
     return frozenset(_module().ADMITTED_DATA_CLASSES)
 
 
+def admissible_data_classes() -> tuple[ReviewedDataClass, ...] | None:
+    """Return the reviewed tenant classes in stable display order.
+
+    The UI must consume the same compiled projection as the writer. Returning
+    ``None`` preserves the fail-closed distinction when that projection cannot
+    be trusted; callers must never substitute a hand-maintained dropdown.
+    """
+
+    if not _structural_state().is_current:
+        return None
+    return tuple(
+        _module().ADMITTED_DATA_CLASSES[key]
+        for key in sorted(_module().ADMITTED_DATA_CLASSES)
+    )
+
+
 def inventoried_sql_table_ids() -> frozenset[str] | None:
     if not _structural_state().is_current:
         return None

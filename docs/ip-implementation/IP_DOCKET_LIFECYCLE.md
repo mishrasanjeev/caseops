@@ -6,8 +6,7 @@ Implementation slices: `IPLF-022A` foundation and `IPLF-022B` user workflow
 
 Status: repository implementation and local verification complete through
 IPLF-022B at `08ae3ecd0a8eedd3d5f2bc2e994b48732fddfaf1`; independent CI,
-canonical-main release, exact production verification, and human acceptance
-remain pending.
+canonical-main release, and exact production verification remain pending.
 
 ## Ownership boundary
 

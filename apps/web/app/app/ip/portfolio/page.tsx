@@ -348,8 +348,8 @@ export default function IpPortfolioPage() {
       />
 
       <section aria-label="Portfolio controls" className="flex min-w-0 flex-col gap-3">
-        <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-end">
-          <form className="flex min-w-0 flex-1 gap-2" onSubmit={submitSearch}>
+        <div className="flex min-w-0 flex-wrap items-end gap-3">
+          <form className="flex w-full min-w-0 gap-2 2xl:min-w-72 2xl:flex-1" onSubmit={submitSearch}>
             <div className="min-w-0 flex-1">
               <Label htmlFor="ip-portfolio-search" className="sr-only">
                 Search marks and registry numbers
@@ -366,7 +366,7 @@ export default function IpPortfolioPage() {
             </Button>
           </form>
 
-          <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4 xl:flex xl:w-auto">
+          <div className="grid w-full min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 2xl:w-auto">
             <FilterSelect
               label="Jurisdiction"
               value={first(filters.jurisdiction)}
@@ -386,7 +386,7 @@ export default function IpPortfolioPage() {
               onChange={(value) => setFilters((current) => ({ ...current, docket_status: one(value) }))}
             />
             <Select value={selectedViewId} onValueChange={applyView}>
-              <SelectTrigger aria-label="Saved view" className="min-w-0 xl:w-44">
+              <SelectTrigger aria-label="Saved view" className="w-full min-w-0 2xl:w-44">
                 <SelectValue placeholder="Saved view" />
               </SelectTrigger>
               <SelectContent>
@@ -402,7 +402,7 @@ export default function IpPortfolioPage() {
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" aria-label="Choose portfolio columns">
+              <Button className="w-full sm:w-auto" variant="outline" aria-label="Choose portfolio columns">
                 <Settings2 className="h-4 w-4" aria-hidden /> Columns
               </Button>
             </DropdownMenuTrigger>
@@ -437,7 +437,7 @@ export default function IpPortfolioPage() {
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" aria-label="More portfolio filters">
+              <Button className="w-full sm:w-auto" variant="outline" aria-label="More portfolio filters">
                 <SlidersHorizontal className="h-4 w-4" aria-hidden /> Filters
               </Button>
             </DropdownMenuTrigger>
@@ -830,7 +830,7 @@ function FilterSelect({
 }) {
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger aria-label={label} className="min-w-0 xl:w-40">
+      <SelectTrigger aria-label={label} className="w-full min-w-0 2xl:w-40">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>

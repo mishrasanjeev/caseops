@@ -61,6 +61,41 @@ class TenantDataOperationDryRunRequest(BaseModel):
     as_of: datetime | None = Field(default=None)
 
 
+class TenantDataOperationTenantDryRunRequest(BaseModel):
+    """A tenant-scoped dry run whose technical scope is server-derived."""
+
+    operation_type: DataOperationType
+    data_class_ids: list[str] = Field(min_length=1, max_length=50)
+    request_evidence_ref: str | None = Field(default=None, max_length=512)
+
+    @field_validator("data_class_ids")
+    @classmethod
+    def _normalize_data_class_ids(cls, values: list[str]) -> list[str]:
+        normalized = [value.strip() for value in values]
+        if any(not value for value in normalized):
+            raise ValueError("data_class_ids cannot contain an empty value")
+        if len(set(normalized)) != len(normalized):
+            raise ValueError("data_class_ids cannot contain duplicates")
+        return normalized
+
+    @field_validator("request_evidence_ref")
+    @classmethod
+    def _normalize_optional_evidence_ref(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip() or None
+
+
+class TenantDataClassOption(BaseModel):
+    id: str
+    label: str
+    confidentiality: str
+
+
+class TenantDataClassCatalogResponse(BaseModel):
+    data_classes: list[TenantDataClassOption]
+
+
 class TenantDataOperationItemRecord(BaseModel):
     id: str
     data_class_id: str
@@ -134,45 +169,6 @@ class TenantDataOperationDryRunRecord(BaseModel):
     offboarding_plan: list[TenantDataOperationOffboardingCategory]
     exclusions: list[TenantDataOperationExclusion]
     items: list[TenantDataOperationItemRecord]
-
-
-class TenantDataOperationApprovalRequest(BaseModel):
-    #: The role or title the approver signs as, snapshotted onto the authorised
-    #: operation. The approver is always the caller - it is never a parameter,
-    #: because accepting an approver id would let one person record another as
-    #: having approved, and the step-up satisfied would be the caller's.
-    approver_label: str = Field(min_length=2, max_length=255)
-
-
-class TenantDataOperationRejectionRequest(BaseModel):
-    #: A refusal that does not say why cannot be acted on months later, so the
-    #: reason is required rather than defaulted. The service enforces the same
-    #: bound and refuses an over-long reason instead of truncating it.
-    reason: str = Field(min_length=1, max_length=500)
-
-
-class TenantDataOperationReviewRecord(BaseModel):
-    """The reviewable state of one manifest after a review transition.
-
-    Deliberately not the execute row. Approval produces a separate authorised
-    operation in status ``planned``; this reports the manifest's review state
-    and, when one exists, the id of the operation the approval authorised.
-    Execution itself remains refused.
-    """
-
-    id: str
-    operation_type: DataOperationType
-    approval_status: DataOperationDryRunApprovalStatus
-    rejection_reason: str | None
-    manifest_hash: str
-    request_scope_hash: str
-    #: Present only after an approval. Its existence is what records that the
-    #: manifest was approved - the dry run itself may never hold 'approved'.
-    approved_operation_id: str | None = None
-    #: Always false. Approving authorises an execution; it does not perform one,
-    #: and the execute route still refuses unconditionally. Stated in the
-    #: response so a client cannot infer otherwise from a 200.
-    executed: Literal[False] = False
 
 
 class TenantDataOperationDryRunSummary(BaseModel):

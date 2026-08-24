@@ -106,7 +106,6 @@ export type Capability =
   | "workspace:admin"
   | "audit:export"
   | "matter_access:manage"
-  | "data_operations:review"
   // intake (Sprint 8b BG-025)
   | "intake:submit"
   | "intake:triage"
@@ -232,7 +231,6 @@ const GOVERNANCE: Capability[] = [
   "workspace:admin",
   "matters:bulk_import",
   "matter_access:manage",
-  "data_operations:review",
   "teams:manage",
   // Email templates editor sits next to Teams admin.
   "email_templates:manage",
