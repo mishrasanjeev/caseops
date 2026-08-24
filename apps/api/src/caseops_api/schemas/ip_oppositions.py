@@ -433,6 +433,7 @@ class IpOppositionEvidencePackage(BaseModel):
     filed_on: date
     service: IpOppositionServiceFact
     leave_or_order_reference: str | None = Field(default=None, max_length=500)
+    foreign_language_document_refs: list[str] = Field(default_factory=list, max_length=100)
 
     @model_validator(mode="after")
     def validate_further_evidence(self) -> IpOppositionEvidencePackage:
@@ -504,6 +505,189 @@ class IpOppositionDeadlineExtension(BaseModel):
         return self
 
 
+class IpOppositionApplicationScopeRecord(BaseModel):
+    id: str
+    class_number: int = Field(ge=1, le=45)
+    specification: str
+    effective_from: date
+    source: str
+
+
+class IpOppositionScopeDecision(BaseModel):
+    application_scope_id: str
+    challenged_segment: str = Field(min_length=2, max_length=4000)
+    status: Literal["challenged", "continuing", "withdrawn", "decided"]
+    outcome: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def validate_outcome(self) -> IpOppositionScopeDecision:
+        if self.status == "decided" and not (self.outcome or "").strip():
+            raise ValueError("A decided class segment requires its outcome.")
+        if self.status != "decided" and self.outcome:
+            raise ValueError("An outcome is only valid for a decided class segment.")
+        return self
+
+
+class IpOppositionScopeReview(BaseModel):
+    revision: int = Field(ge=1)
+    source_scope_certainty: Literal["certain", "partial", "missing"]
+    source_confirmation_reference: str | None = Field(default=None, max_length=500)
+    decisions: list[IpOppositionScopeDecision] = Field(min_length=1, max_length=45)
+    related_application_id: str | None = None
+    amendment_or_division_reference: str | None = Field(default=None, max_length=500)
+    preserve_unlisted_scopes: Literal[True] = True
+
+    @model_validator(mode="after")
+    def validate_scope_review(self) -> IpOppositionScopeReview:
+        scope_ids = [row.application_scope_id for row in self.decisions]
+        if len(scope_ids) != len(set(scope_ids)):
+            raise ValueError("A scope review cannot repeat an application scope.")
+        if self.source_scope_certainty != "certain" and not (
+            self.source_confirmation_reference or ""
+        ).strip():
+            raise ValueError(
+                "Partial or missing Registry scope requires source confirmation."
+            )
+        if bool(self.related_application_id) != bool(self.amendment_or_division_reference):
+            raise ValueError(
+                "Amendment or division relationships require both application and reference."
+            )
+        return self
+
+
+class IpOppositionTranslationRecord(BaseModel):
+    source_document_ref: str = Field(min_length=2, max_length=500)
+    source_document_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    source_language: str = Field(min_length=2, max_length=80)
+    translated_document_ref: str = Field(min_length=2, max_length=500)
+    translated_document_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    translated_language: Literal["Hindi", "English"]
+    translator_name: str = Field(min_length=2, max_length=255)
+    translator_credential: str = Field(min_length=2, max_length=500)
+    attested_on: date
+    attestation_reference: str = Field(min_length=2, max_length=500)
+    service: IpOppositionServiceFact
+
+    @model_validator(mode="after")
+    def validate_language(self) -> IpOppositionTranslationRecord:
+        if self.source_language.casefold() in {"hindi", "english"}:
+            raise ValueError("Hindi or English material does not require this translation record.")
+        return self
+
+
+class IpOppositionHearingNoticeRecord(BaseModel):
+    shared_hearing_id: str
+    notice_received_on: date
+    notice_document_ref: str = Field(min_length=2, max_length=500)
+    minimum_notice_days: int = Field(ge=0, le=365)
+    notice_status: Literal["sufficient", "short", "unknown"]
+    applicable_rule_version: str = Field(min_length=2, max_length=120)
+    confirmation_reference: str = Field(min_length=2, max_length=500)
+
+
+class IpOppositionAdjournmentRecord(BaseModel):
+    shared_hearing_id: str
+    requested_on: date
+    request_form_ref: str = Field(min_length=2, max_length=500)
+    request_reason: str = Field(min_length=5, max_length=2000)
+    fee_status: Literal["not_required", "pending", "paid"]
+    fee_amount_minor: int | None = Field(default=None, ge=0)
+    fee_evidence_ref: str | None = Field(default=None, max_length=500)
+    prior_adjournment_count: int = Field(ge=0, le=100)
+    allowed_count_candidate: int = Field(ge=0, le=100)
+    applicable_rule_version: str = Field(min_length=2, max_length=120)
+    policy_confirmation_reference: str = Field(min_length=2, max_length=500)
+    outcome: Literal["pending", "granted", "refused"] = "pending"
+
+    @model_validator(mode="after")
+    def validate_fee(self) -> IpOppositionAdjournmentRecord:
+        if self.fee_status == "paid" and not (
+            self.fee_amount_minor is not None and (self.fee_evidence_ref or "").strip()
+        ):
+            raise ValueError("A paid adjournment fee requires amount and evidence.")
+        if self.prior_adjournment_count > self.allowed_count_candidate:
+            raise ValueError("Prior adjournments exceed the confirmed allowed-count candidate.")
+        return self
+
+
+class IpOppositionWrittenArgumentsRecord(BaseModel):
+    shared_hearing_id: str
+    filed_on: date
+    filing_reference: str = Field(min_length=2, max_length=500)
+    document_refs: list[str] = Field(min_length=1, max_length=100)
+    service: IpOppositionServiceFact
+
+
+class IpOppositionAttendanceRecord(BaseModel):
+    shared_hearing_id: str
+    appearance_status: Literal["attended", "unrepresented", "nonappearance"]
+    attendee_membership_ids: list[str] = Field(default_factory=list, max_length=100)
+    attendance_source_ref: str = Field(min_length=2, max_length=500)
+    nonappearance_consequence_candidate: str | None = Field(default=None, max_length=2000)
+    applicable_rule_version: str = Field(min_length=2, max_length=120)
+    consequence_confirmation_reference: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_appearance(self) -> IpOppositionAttendanceRecord:
+        if self.appearance_status == "attended" and not self.attendee_membership_ids:
+            raise ValueError("Attendance requires at least one attendee.")
+        if self.appearance_status == "nonappearance" and not all(
+            (
+                (self.nonappearance_consequence_candidate or "").strip(),
+                (self.consequence_confirmation_reference or "").strip(),
+            )
+        ):
+            raise ValueError(
+                "Nonappearance requires a confirmed, rule-versioned consequence candidate."
+            )
+        return self
+
+
+class IpOppositionSecurityForCostsRecord(BaseModel):
+    direction_reference: str = Field(min_length=2, max_length=500)
+    directed_on: date
+    amount_minor: int = Field(ge=0)
+    enhancement_amount_minor: int = Field(default=0, ge=0)
+    due_on: date
+    payment_status: Literal["pending", "paid", "overdue", "waived"]
+    paid_on: date | None = None
+    payment_reference: str | None = Field(default=None, max_length=500)
+    consequence_candidate: str = Field(min_length=5, max_length=2000)
+    applicable_rule_version: str = Field(min_length=2, max_length=120)
+    fee_classification: Literal["security_for_costs"] = "security_for_costs"
+
+    @model_validator(mode="after")
+    def validate_payment(self) -> IpOppositionSecurityForCostsRecord:
+        if self.due_on < self.directed_on:
+            raise ValueError("Security-for-costs due date cannot precede its direction.")
+        if self.payment_status == "paid" and not all(
+            (self.paid_on, (self.payment_reference or "").strip())
+        ):
+            raise ValueError("Paid security for costs requires payment date and reference.")
+        return self
+
+
+class IpOppositionDispositionReviewRecord(BaseModel):
+    trigger_event_id: str
+    outcome_kind: Literal[
+        "dismissal", "abandonment", "withdrawal", "settlement", "final_decision"
+    ]
+    affected_application_scope_ids: list[str] = Field(min_length=1, max_length=45)
+    recommended_application_disposition: str = Field(min_length=2, max_length=2000)
+    review_status: Literal["pending", "confirmed", "not_applicable"]
+    review_reference: str = Field(min_length=2, max_length=500)
+    no_automatic_application_update: Literal[True] = True
+
+
+class IpOppositionMadridDesignationRecord(BaseModel):
+    application_id: str
+    international_registration_number: str = Field(min_length=2, max_length=160)
+    wipo_reference: str = Field(min_length=2, max_length=500)
+    india_designation_identifier: str = Field(min_length=2, max_length=160)
+    designation_status: str = Field(min_length=2, max_length=120)
+    lifecycle_source_reference: str = Field(min_length=2, max_length=500)
+
+
 class IpOppositionSharedActionRequest(BaseModel):
     expected_lifecycle_version: int = Field(ge=0)
     expected_proceeding_version: int = Field(ge=1)
@@ -515,6 +699,15 @@ class IpOppositionSharedActionRequest(BaseModel):
         "post_hearing_note_recorded",
         "order_recorded",
         "appeal_linked",
+        "scope_review_recorded",
+        "translation_recorded",
+        "hearing_notice_recorded",
+        "adjournment_recorded",
+        "written_arguments_recorded",
+        "attendance_recorded",
+        "security_for_costs_recorded",
+        "disposition_review_recorded",
+        "madrid_designation_link_recorded",
     ]
     source: Literal["manual", "integration", "system"]
     source_reference: str = Field(min_length=2, max_length=255)
@@ -532,6 +725,15 @@ class IpOppositionSharedActionRequest(BaseModel):
     hearing_preparation: IpOppositionHearingPreparation | None = None
     order_details: IpOppositionOrderDetails | None = None
     appeal_link: IpOppositionAppealLink | None = None
+    scope_review: IpOppositionScopeReview | None = None
+    translation: IpOppositionTranslationRecord | None = None
+    hearing_notice: IpOppositionHearingNoticeRecord | None = None
+    adjournment: IpOppositionAdjournmentRecord | None = None
+    written_arguments: IpOppositionWrittenArgumentsRecord | None = None
+    attendance: IpOppositionAttendanceRecord | None = None
+    security_for_costs: IpOppositionSecurityForCostsRecord | None = None
+    disposition_review: IpOppositionDispositionReviewRecord | None = None
+    madrid_designation: IpOppositionMadridDesignationRecord | None = None
 
     @model_validator(mode="after")
     def validate_shared_action(self) -> IpOppositionSharedActionRequest:
@@ -545,6 +747,15 @@ class IpOppositionSharedActionRequest(BaseModel):
             "post_hearing_note_recorded": "hearing_preparation",
             "order_recorded": "order_details",
             "appeal_linked": "appeal_link",
+            "scope_review_recorded": "scope_review",
+            "translation_recorded": "translation",
+            "hearing_notice_recorded": "hearing_notice",
+            "adjournment_recorded": "adjournment",
+            "written_arguments_recorded": "written_arguments",
+            "attendance_recorded": "attendance",
+            "security_for_costs_recorded": "security_for_costs",
+            "disposition_review_recorded": "disposition_review",
+            "madrid_designation_link_recorded": "madrid_designation",
         }[self.action_kind]
         detail_fields = {
             "deadline_extension": self.deadline_extension,
@@ -553,6 +764,15 @@ class IpOppositionSharedActionRequest(BaseModel):
             "hearing_preparation": self.hearing_preparation,
             "order_details": self.order_details,
             "appeal_link": self.appeal_link,
+            "scope_review": self.scope_review,
+            "translation": self.translation,
+            "hearing_notice": self.hearing_notice,
+            "adjournment": self.adjournment,
+            "written_arguments": self.written_arguments,
+            "attendance": self.attendance,
+            "security_for_costs": self.security_for_costs,
+            "disposition_review": self.disposition_review,
+            "madrid_designation": self.madrid_designation,
         }
         if detail_fields[required_field] is None:
             raise ValueError(f"{self.action_kind.replace('_', ' ')} requires {required_field}.")
@@ -586,6 +806,7 @@ class IpOppositionSharedWorkflowResponse(BaseModel):
     shared_actions: list[IpDocketEventResponse]
     active_deadlines: list[IpDeadlineRecord]
     shared_hearings: list[IpOppositionSharedHearingRecord]
+    application_scopes: list[IpOppositionApplicationScopeRecord]
     next_required_action: Literal[
         "complete_role_workflow",
         "record_evidence_package",

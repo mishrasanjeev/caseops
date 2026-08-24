@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import date
 
 import pytest
 from fastapi.testclient import TestClient
@@ -8,7 +9,11 @@ from pydantic import ValidationError
 from sqlalchemy import select
 
 from caseops_api.core.settings import get_settings
-from caseops_api.db.models import IpDeadline
+from caseops_api.db.models import (
+    IpDeadline,
+    TrademarkApplication,
+    TrademarkApplicationScope,
+)
 from caseops_api.db.session import get_session_factory
 from caseops_api.schemas.ip_oppositions import IpOppositionSharedActionRequest
 from tests.test_auth_company import auth_headers
@@ -18,9 +23,14 @@ from tests.test_ip_opposition_opponent_workflow import (
     _fixture as _opponent_fixture,
 )
 from tests.test_ip_opposition_opponent_workflow import _profile, _propose_and_confirm
+from tests.test_ip_record_workflow import _application
 
-SHARED_WORKFLOW_PATH = "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/opposition-shared-workflow"  # noqa: E501
-SHARED_ACTIONS_PATH = "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/opposition-shared-actions"  # noqa: E501
+SHARED_WORKFLOW_PATH = (
+    "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/opposition-shared-workflow"  # noqa: E501
+)
+SHARED_ACTIONS_PATH = (
+    "/api/ip/dockets/{docket_id}/proceedings/{proceeding_id}/opposition-shared-actions"  # noqa: E501
+)
 
 
 @pytest.fixture(autouse=True)
@@ -36,10 +46,7 @@ def test_shared_opposition_routes_are_published_in_openapi(client: TestClient) -
 
 
 def _route(docket: dict, proceeding: dict, suffix: str) -> str:
-    return (
-        f"/api/ip/dockets/{docket['id']}/proceedings/"
-        f"{proceeding['id']}/{suffix}"
-    )
+    return f"/api/ip/dockets/{docket['id']}/proceedings/{proceeding['id']}/{suffix}"
 
 
 def _shared_body(
@@ -61,9 +68,7 @@ def _shared_body(
         "authorized_confirmation": "Approved by responsible IP counsel.",
         "evidence_refs": [f"evidence:{action_kind}:043"],
         "document_refs": [f"document:{action_kind}:043"],
-        "acknowledged_exception_codes": [
-            "backdated_recalculation_review_required"
-        ],
+        "acknowledged_exception_codes": ["backdated_recalculation_review_required"],
     }
     payload.update(details)
     return payload
@@ -150,7 +155,7 @@ def _skip_to(
         transition_kind="skipped",
         authority_reference="registry-direction:043",
         authorized_confirmation="Approved by responsible IP counsel.",
-        effective_at="2026-08-24T12:30:00+05:30",
+        effective_at="2026-08-26T12:30:00+05:30",
     )["proceeding"]
 
 
@@ -231,6 +236,365 @@ def test_shared_action_schema_rejects_ambiguous_or_unverifiable_records() -> Non
     with pytest.raises(ValidationError, match="leave or order reference"):
         IpOppositionSharedActionRequest.model_validate(further)
 
+    uncertain_scope = _shared_body(
+        bootstrap,
+        proceeding,
+        action_kind="scope_review_recorded",
+        scope_review={
+            "revision": 1,
+            "source_scope_certainty": "missing",
+            "decisions": [
+                {
+                    "application_scope_id": "scope:048",
+                    "challenged_segment": "Software",
+                    "status": "challenged",
+                }
+            ],
+        },
+    )
+    with pytest.raises(ValidationError, match="requires source confirmation"):
+        IpOppositionSharedActionRequest.model_validate(uncertain_scope)
+
+    nonappearance = _shared_body(
+        bootstrap,
+        proceeding,
+        action_kind="attendance_recorded",
+        attendance={
+            "shared_hearing_id": "hearing:048",
+            "appearance_status": "nonappearance",
+            "attendance_source_ref": "cause-list:048",
+            "applicable_rule_version": "tm-rules-2017@2026-08-24",
+        },
+    )
+    with pytest.raises(ValidationError, match="Nonappearance requires"):
+        IpOppositionSharedActionRequest.model_validate(nonappearance)
+
+
+def test_specialized_opposition_paths_preserve_scope_and_require_explicit_review(
+    client: TestClient,
+) -> None:
+    bootstrap, _, docket, proceeding = _fixture(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    _complete_workspace(
+        client,
+        bootstrap=bootstrap,
+        docket=docket,
+        proceeding=proceeding,
+    )
+    factory = get_session_factory()
+    with factory() as session:
+        application = session.get(TrademarkApplication, proceeding["application_id"])
+        assert application is not None
+        canonical_asset_id = application.asset_id
+        session.add(
+            TrademarkApplicationScope(
+                company_id=bootstrap["company"]["id"],
+                application_id=proceeding["application_id"],
+                class_number=42,
+                specification="Software design and legal technology services",
+                effective_from=date(2026, 8, 23),
+                source="registry:class-42:048",
+            )
+        )
+        session.commit()
+
+    related_application = _application(
+        client,
+        headers,
+        docket["id"],
+        canonical_asset_id,
+    )
+    workflow_response = client.get(
+        _route(docket, proceeding, "opposition-shared-workflow"),
+        headers=headers,
+    )
+    assert workflow_response.status_code == 200, workflow_response.text
+    workflow = workflow_response.json()
+    scopes = workflow["application_scopes"]
+    assert {row["class_number"] for row in scopes} == {9, 42}
+    scope_by_class = {row["class_number"]: row for row in scopes}
+
+    scope_workflow = _post_action(
+        client,
+        bootstrap=bootstrap,
+        docket=docket,
+        proceeding=proceeding,
+        action_kind="scope_review_recorded",
+        scope_review={
+            "revision": 1,
+            "source_scope_certainty": "partial",
+            "source_confirmation_reference": "registry-source-pdf:048",
+            "related_application_id": related_application["id"],
+            "amendment_or_division_reference": "registry-division:048",
+            "decisions": [
+                {
+                    "application_scope_id": scope_by_class[9]["id"],
+                    "challenged_segment": "Downloadable software",
+                    "status": "withdrawn",
+                },
+                {
+                    "application_scope_id": scope_by_class[42]["id"],
+                    "challenged_segment": "Legal technology services",
+                    "status": "continuing",
+                },
+            ],
+        },
+    )
+    scope_event = scope_workflow["shared_actions"][-1]
+    assert scope_event["payload_json"]["scope_review"]["preserve_unlisted_scopes"] is True
+    assert {row["status"] for row in scope_event["payload_json"]["scope_review"]["decisions"]} == {
+        "withdrawn",
+        "continuing",
+    }
+
+    invalid_scope = client.post(
+        _route(docket, proceeding, "opposition-shared-actions"),
+        headers=headers,
+        json=_shared_body(
+            bootstrap,
+            proceeding,
+            action_kind="scope_review_recorded",
+            scope_review={
+                "revision": 2,
+                "source_scope_certainty": "certain",
+                "decisions": [
+                    {
+                        "application_scope_id": "not-a-current-scope",
+                        "challenged_segment": "All goods",
+                        "status": "challenged",
+                    }
+                ],
+            },
+        ),
+    )
+    assert invalid_scope.status_code == 409, invalid_scope.text
+    assert "ip_opposition_scope_not_current" in invalid_scope.text
+
+    missing_translation = _skip_to(
+        client,
+        bootstrap=bootstrap,
+        docket=docket,
+        proceeding=proceeding,
+        to_stage="applicant_evidence_filed",
+    )
+    foreign_package = _evidence_package("rule_46")
+    foreign_package["foreign_language_document_refs"] = ["document:marathi-exhibit:048"]
+    blocked_package = client.post(
+        _route(docket, missing_translation, "opposition-shared-actions"),
+        headers=headers,
+        json=_shared_body(
+            bootstrap,
+            missing_translation,
+            action_kind="evidence_package_recorded",
+            evidence_package=foreign_package,
+        ),
+    )
+    assert blocked_package.status_code == 409, blocked_package.text
+    assert "ip_opposition_attested_translation_required" in blocked_package.text
+
+    _post_action(
+        client,
+        bootstrap=bootstrap,
+        docket=docket,
+        proceeding=missing_translation,
+        action_kind="translation_recorded",
+        translation={
+            "source_document_ref": "document:marathi-exhibit:048",
+            "source_document_sha256": "a" * 64,
+            "source_language": "Marathi",
+            "translated_document_ref": "document:english-translation:048",
+            "translated_document_sha256": "b" * 64,
+            "translated_language": "English",
+            "translator_name": "Asha Kulkarni",
+            "translator_credential": "Court-approved translator credential 048",
+            "attested_on": "2026-08-24",
+            "attestation_reference": "notary-attestation:048",
+            "service": _service(),
+        },
+    )
+    package_workflow = _post_action(
+        client,
+        bootstrap=bootstrap,
+        docket=docket,
+        proceeding=missing_translation,
+        action_kind="evidence_package_recorded",
+        evidence_package=foreign_package,
+    )
+    assert package_workflow["shared_actions"][-1]["payload_json"]["evidence_package"][
+        "foreign_language_document_refs"
+    ] == ["document:marathi-exhibit:048"]
+
+    _post_action(
+        client,
+        bootstrap=bootstrap,
+        docket=docket,
+        proceeding=missing_translation,
+        action_kind="security_for_costs_recorded",
+        security_for_costs={
+            "direction_reference": "registry-direction:security:048",
+            "directed_on": "2026-08-24",
+            "amount_minor": 500000,
+            "enhancement_amount_minor": 100000,
+            "due_on": "2026-09-10",
+            "payment_status": "paid",
+            "paid_on": "2026-09-01",
+            "payment_reference": "bank-proof:048",
+            "consequence_candidate": "Proceeding may be stayed after counsel confirmation.",
+            "applicable_rule_version": "tm-rules-2017@2026-08-24",
+        },
+    )
+    _post_action(
+        client,
+        bootstrap=bootstrap,
+        docket=docket,
+        proceeding=missing_translation,
+        action_kind="madrid_designation_link_recorded",
+        madrid_designation={
+            "application_id": proceeding["application_id"],
+            "international_registration_number": "IR-1848001",
+            "wipo_reference": "WIPO-MADRID-048",
+            "india_designation_identifier": "DIND-048-2026",
+            "designation_status": "opposition pending in India",
+            "lifecycle_source_reference": "wipo-status-extract:048",
+        },
+    )
+
+    proceeding = _stage(
+        client,
+        bootstrap=bootstrap,
+        docket=docket,
+        proceeding_id=missing_translation["id"],
+        version=missing_translation["version"],
+        to_stage="hearing_pending",
+        effective_at="2026-09-15T12:30:00+05:30",
+        acknowledged_exception_codes=["backdated_recalculation_review_required"],
+    )["proceeding"]
+    hearing = _hearing(client, bootstrap=bootstrap, docket=docket)
+    proceeding = _stage(
+        client,
+        bootstrap=bootstrap,
+        docket=docket,
+        proceeding_id=proceeding["id"],
+        version=proceeding["version"],
+        to_stage="hearing_scheduled",
+        effective_at="2026-09-16T12:30:00+05:30",
+        acknowledged_exception_codes=["backdated_recalculation_review_required"],
+    )["proceeding"]
+
+    _post_action(
+        client,
+        bootstrap=bootstrap,
+        docket=docket,
+        proceeding=proceeding,
+        action_kind="hearing_notice_recorded",
+        hearing_notice={
+            "shared_hearing_id": hearing["id"],
+            "notice_received_on": "2026-09-20",
+            "notice_document_ref": "registry-hearing-notice:048",
+            "minimum_notice_days": 30,
+            "notice_status": "sufficient",
+            "applicable_rule_version": "tm-rules-2017@2026-08-24",
+            "confirmation_reference": "counsel-review:notice:048",
+        },
+    )
+    _post_action(
+        client,
+        bootstrap=bootstrap,
+        docket=docket,
+        proceeding=proceeding,
+        action_kind="adjournment_recorded",
+        adjournment={
+            "shared_hearing_id": hearing["id"],
+            "requested_on": "2026-09-25",
+            "request_form_ref": "tm-m-adjournment:048",
+            "request_reason": "Lead witness has a documented medical conflict.",
+            "fee_status": "paid",
+            "fee_amount_minor": 90000,
+            "fee_evidence_ref": "registry-fee-receipt:048",
+            "prior_adjournment_count": 0,
+            "allowed_count_candidate": 2,
+            "applicable_rule_version": "tm-rules-2017@2026-08-24",
+            "policy_confirmation_reference": "counsel-policy-review:048",
+            "outcome": "granted",
+        },
+    )
+    _post_action(
+        client,
+        bootstrap=bootstrap,
+        docket=docket,
+        proceeding=proceeding,
+        action_kind="written_arguments_recorded",
+        written_arguments={
+            "shared_hearing_id": hearing["id"],
+            "filed_on": "2026-10-18",
+            "filing_reference": "registry-written-arguments:048",
+            "document_refs": ["document:written-arguments:048"],
+            "service": _service(),
+        },
+    )
+    completed = client.patch(
+        f"/api/ip/hearings/{hearing['id']}",
+        headers=headers,
+        json={
+            "docket_id": docket["id"],
+            "status": "completed",
+            "outcome_note": "Opponent did not appear; consequence requires review.",
+        },
+    )
+    assert completed.status_code == 200, completed.text
+    attendance_workflow = _post_action(
+        client,
+        bootstrap=bootstrap,
+        docket=docket,
+        proceeding=proceeding,
+        action_kind="attendance_recorded",
+        attendance={
+            "shared_hearing_id": hearing["id"],
+            "appearance_status": "nonappearance",
+            "attendance_source_ref": "registry-cause-list:048",
+            "nonappearance_consequence_candidate": "Proceed ex parte if the Registry so directs.",
+            "applicable_rule_version": "tm-rules-2017@2026-08-24",
+            "consequence_confirmation_reference": "counsel-nonappearance-review:048",
+        },
+    )
+    assert (
+        attendance_workflow["shared_actions"][-1]["payload_json"]["attendance"]["appearance_status"]
+        == "nonappearance"
+    )
+
+    outcome = _stage(
+        client,
+        bootstrap=bootstrap,
+        docket=docket,
+        proceeding_id=proceeding["id"],
+        version=proceeding["version"],
+        to_stage="withdrawn",
+        transition_kind="skipped",
+        authority_reference="registry-withdrawal-order:048",
+        authorized_confirmation="Withdrawal reviewed by responsible IP counsel.",
+        effective_at="2026-10-21T12:30:00+05:30",
+    )
+    disposition = _post_action(
+        client,
+        bootstrap=bootstrap,
+        docket=docket,
+        proceeding=outcome["proceeding"],
+        action_kind="disposition_review_recorded",
+        disposition_review={
+            "trigger_event_id": outcome["event"]["id"],
+            "outcome_kind": "withdrawal",
+            "affected_application_scope_ids": [scope_by_class[9]["id"]],
+            "recommended_application_disposition": (
+                "Review class 9 only; class 42 remains unaffected by this withdrawal."
+            ),
+            "review_status": "confirmed",
+            "review_reference": "counsel-disposition-review:048",
+        },
+    )
+    review_payload = disposition["shared_actions"][-1]["payload_json"]["disposition_review"]
+    assert review_payload["no_automatic_application_update"] is True
+    assert review_payload["affected_application_scope_ids"] == [scope_by_class[9]["id"]]
+
 
 def test_deadline_extension_is_atomic_and_preserves_canonical_history(
     client: TestClient,
@@ -282,11 +646,7 @@ def test_deadline_extension_is_atomic_and_preserves_canonical_history(
     assert failed.status_code == 409, failed.text
 
     with get_session_factory()() as session:
-        rows = list(
-            session.scalars(
-                select(IpDeadline).where(IpDeadline.docket_id == docket["id"])
-            )
-        )
+        rows = list(session.scalars(select(IpDeadline).where(IpDeadline.docket_id == docket["id"])))
         assert [(row.id, row.state) for row in rows] == [(deadline["id"], "confirmed")]
 
     result = _post_action(
@@ -445,9 +805,7 @@ def test_hearing_order_and_appeal_use_shared_records_and_gate_stages(
             "responsible_membership_id": bootstrap["membership"]["id"],
             "reason": "Hearing concluded and order was reserved.",
             "evidence_refs": ["registry:cause-list:043"],
-            "acknowledged_exception_codes": [
-                "backdated_recalculation_review_required"
-            ],
+            "acknowledged_exception_codes": ["backdated_recalculation_review_required"],
         },
     )
     assert blocked.status_code == 409, blocked.text
@@ -474,8 +832,7 @@ def test_hearing_order_and_appeal_use_shared_records_and_gate_stages(
     )
     assert completed.status_code == 200, completed.text
     after_hearing = client.get(
-        f"/api/ip/dockets/{docket['id']}/proceedings/{proceeding['id']}"
-        "/opposition-shared-workflow",
+        f"/api/ip/dockets/{docket['id']}/proceedings/{proceeding['id']}/opposition-shared-workflow",
         headers=auth_headers(str(bootstrap["access_token"])),
     )
     assert after_hearing.status_code == 200, after_hearing.text
@@ -593,9 +950,7 @@ def test_hearing_order_and_appeal_use_shared_records_and_gate_stages(
             "order_event_id": order_event["id"],
         },
     )
-    assert linked["shared_actions"][-1]["payload_json"]["appeal_link"]["target_id"] == appeal[
-        "id"
-    ]
+    assert linked["shared_actions"][-1]["payload_json"]["appeal_link"]["target_id"] == appeal["id"]
     proceeding = _stage(
         client,
         bootstrap=bootstrap,

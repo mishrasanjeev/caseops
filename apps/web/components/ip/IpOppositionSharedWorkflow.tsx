@@ -105,6 +105,7 @@ export function IpOppositionSharedWorkflow({
   const [exhibitRefs, setExhibitRefs] = useState("");
   const [indexRef, setIndexRef] = useState("");
   const [reliedRefs, setReliedRefs] = useState("");
+  const [foreignLanguageRefs, setForeignLanguageRefs] = useState("");
   const [filingReference, setFilingReference] = useState("");
   const [filedOn, setFiledOn] = useState("");
   const [signatory, setSignatory] = useState("");
@@ -210,6 +211,7 @@ export function IpOppositionSharedWorkflow({
         index_document_ref: indexRef,
         verification,
         relied_on_document_refs: refs(reliedRefs),
+        foreign_language_document_refs: refs(foreignLanguageRefs),
         filing_reference: filingReference,
         filed_on: filedOn,
         service,
@@ -234,7 +236,7 @@ export function IpOppositionSharedWorkflow({
         order_event_id: orderEventId,
       },
     };
-  }, [actionKind, affidavitRef, appealIdentifier, appealReview, appealTargetId, appealTargetKind, attendanceIds, authority, authorityRefs, backupId, causeListSource, checklist, complianceDirection, complianceDueOn, costDirections, deponent, exhibitRefs, filedOn, filingReference, hearingEvidenceRefs, hearingId, indexRef, issues, knowledgeBasis, leaveGrantedOn, leaveReference, leaveScope, newDeadlineOn, operativeResult, orderDocumentRef, orderEventId, packageKind, packageVersion, paragraphs, place, postHearingNotes, primaryId, proceeding.application_id, proceeding.id, reliedRefs, selectedDeadline, serviceDestination, serviceMethod, serviceRefs, signatory, signedRef, submissionRefs]);
+  }, [actionKind, affidavitRef, appealIdentifier, appealReview, appealTargetId, appealTargetKind, attendanceIds, authority, authorityRefs, backupId, causeListSource, checklist, complianceDirection, complianceDueOn, costDirections, deponent, exhibitRefs, filedOn, filingReference, foreignLanguageRefs, hearingEvidenceRefs, hearingId, indexRef, issues, knowledgeBasis, leaveGrantedOn, leaveReference, leaveScope, newDeadlineOn, operativeResult, orderDocumentRef, orderEventId, packageKind, packageVersion, paragraphs, place, postHearingNotes, primaryId, proceeding.application_id, proceeding.id, reliedRefs, selectedDeadline, serviceDestination, serviceMethod, serviceRefs, signatory, signedRef, submissionRefs]);
 
   const refresh = async () => {
     await Promise.all([
@@ -361,6 +363,7 @@ export function IpOppositionSharedWorkflow({
           <Field label="Exhibit documents"><Input value={exhibitRefs} onChange={(event) => setExhibitRefs(event.target.value)} placeholder="Comma separated" /></Field>
           <Field label="Evidence index"><Input value={indexRef} onChange={(event) => setIndexRef(event.target.value)} /></Field>
           <Field label="Relied-on documents"><Input value={reliedRefs} onChange={(event) => setReliedRefs(event.target.value)} placeholder="Comma separated" /></Field>
+          <Field label="Foreign-language documents"><Input value={foreignLanguageRefs} onChange={(event) => setForeignLanguageRefs(event.target.value)} placeholder="Comma separated" /></Field>
           <Field label="Filing reference"><Input value={filingReference} onChange={(event) => setFilingReference(event.target.value)} /></Field>
           <Field label="Filed and verified on"><Input type="date" value={filedOn} onChange={(event) => setFiledOn(event.target.value)} /></Field>
           <Field label="Signatory"><Input value={signatory} onChange={(event) => setSignatory(event.target.value)} /></Field>

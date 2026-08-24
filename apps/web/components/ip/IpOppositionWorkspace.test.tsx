@@ -40,6 +40,9 @@ vi.mock("@/components/ip/IpOppositionOpponentWorkflow", () => ({
 vi.mock("@/components/ip/IpOppositionSharedWorkflow", () => ({
   IpOppositionSharedWorkflow: () => <div data-testid="shared-workflow-stub" />,
 }));
+vi.mock("@/components/ip/IpOppositionSpecializedPaths", () => ({
+  IpOppositionSpecializedPaths: () => <div data-testid="specialized-paths-stub" />,
+}));
 
 vi.mock("@/components/ip/IpPleadingWorkspace", () => ({
   IpPleadingWorkspace: () => <div data-testid="pleading-workspace-stub" />,
