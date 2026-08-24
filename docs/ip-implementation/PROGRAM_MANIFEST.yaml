@@ -12392,7 +12392,7 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
-          "revision": "00c683a95a759135a629b8bc3944edcc4fec83ca",
+          "revision": "750a670aa25aaa130291c26c62d4e45d082cc46c",
           "environment": "Windows 11, CPython 3.13 and Node/Next 16.3.0 with locked dependencies, isolated SQLite/API fixtures, a production-mode web build, Chromium real-stack execution, and CI-owned deterministic full-suite shards",
           "fixtures": "Synthetic isolated law-firm tenants, IP dockets, trademark assets/applications, watch profiles, official-source-shaped journal publications, correction/re-advertisement lineage, inaccessible second tenant, durable notification intents, and canonical opposition, Matter, task, deadline, and client-report targets; no real client filing or provider call",
           "assertions": "Tenant isolation, immutable source evidence, payload-bound exact replay and conflict rejection, word/phonetic/device/class/proprietor/jurisdiction criteria, duplicate/stale/correction handling, advisory labeling, source-confirmed disposition, notification delivery, provider and cost fail-closed behavior, all five canonical handoffs, late-failure atomic rollback and exact-once retry, migration safety, responsive UI, OpenAPI, scheduler, governance, and real-stack browser journey",
@@ -12497,7 +12497,7 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
-          "revision": "00c683a95a759135a629b8bc3944edcc4fec83ca",
+          "revision": "750a670aa25aaa130291c26c62d4e45d082cc46c",
           "environment": "Windows 11, CPython 3.13 and Node/Next 16.3.0 with locked dependencies, isolated SQLite/API fixtures, a production-mode web build, Chromium real-stack execution, and CI-owned deterministic full-suite shards",
           "fixtures": "Synthetic isolated law-firm tenants, IP dockets, trademark assets/applications, watch profiles, official-source-shaped journal publications, correction/re-advertisement lineage, inaccessible second tenant, durable notification intents, and canonical opposition, Matter, task, deadline, and client-report targets; no real client filing or provider call",
           "assertions": "Tenant isolation, immutable source evidence, payload-bound exact replay and conflict rejection, word/phonetic/device/class/proprietor/jurisdiction criteria, duplicate/stale/correction handling, advisory labeling, source-confirmed disposition, notification delivery, provider and cost fail-closed behavior, all five canonical handoffs, late-failure atomic rollback and exact-once retry, migration safety, responsive UI, OpenAPI, scheduler, governance, and real-stack browser journey",
@@ -12577,7 +12577,7 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
-          "revision": "00c683a95a759135a629b8bc3944edcc4fec83ca",
+          "revision": "750a670aa25aaa130291c26c62d4e45d082cc46c",
           "environment": "Windows 11, CPython 3.13 and Node/Next 16.3.0 with locked dependencies, isolated SQLite/API fixtures, a production-mode web build, Chromium real-stack execution, and CI-owned deterministic full-suite shards",
           "fixtures": "Synthetic isolated law-firm tenants, IP dockets, trademark assets/applications, watch profiles, official-source-shaped journal publications, correction/re-advertisement lineage, inaccessible second tenant, durable notification intents, and canonical opposition, Matter, task, deadline, and client-report targets; no real client filing or provider call",
           "assertions": "Tenant isolation, immutable source evidence, payload-bound exact replay and conflict rejection, word/phonetic/device/class/proprietor/jurisdiction criteria, duplicate/stale/correction handling, advisory labeling, source-confirmed disposition, notification delivery, provider and cost fail-closed behavior, all five canonical handoffs, late-failure atomic rollback and exact-once retry, migration safety, responsive UI, OpenAPI, scheduler, governance, and real-stack browser journey",
@@ -12682,7 +12682,7 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m5/IPLF-052/local-2026-08-24.md",
-          "revision": "00c683a95a759135a629b8bc3944edcc4fec83ca",
+          "revision": "750a670aa25aaa130291c26c62d4e45d082cc46c",
           "environment": "Windows 11, CPython 3.13 and Node/Next 16.3.0 with locked dependencies, isolated SQLite/API fixtures, a production-mode web build, Chromium real-stack execution, and CI-owned deterministic full-suite shards",
           "fixtures": "Synthetic isolated law-firm tenants, IP dockets, trademark assets/applications, watch profiles, official-source-shaped journal publications, correction/re-advertisement lineage, inaccessible second tenant, durable notification intents, and canonical opposition, Matter, task, deadline, and client-report targets; no real client filing or provider call",
           "assertions": "Tenant isolation, immutable source evidence, payload-bound exact replay and conflict rejection, word/phonetic/device/class/proprietor/jurisdiction criteria, duplicate/stale/correction handling, advisory labeling, source-confirmed disposition, notification delivery, provider and cost fail-closed behavior, all five canonical handoffs, late-failure atomic rollback and exact-once retry, migration safety, responsive UI, OpenAPI, scheduler, governance, and real-stack browser journey",
