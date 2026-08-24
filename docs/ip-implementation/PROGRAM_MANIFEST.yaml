@@ -13779,7 +13779,7 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m5/IPLF-051/local-2026-08-24.md",
-          "revision": "2835e0205e1da9c9977c9af942c9899e659fe7c1",
+          "revision": "6407d63e94b55ece030025d069c939fddbedfbcd",
           "environment": "local SQLite migration, API integration, generated-contract, and PostgreSQL-test authoring",
           "fixtures": "synthetic tenant-scoped applications, proceedings, registry observations, failures, correction lineage, and canonical tracked-case bookmarks; no external registry call",
           "assertions": "tenant composite foreign keys, immutable snapshots, payload-bound idempotency, change-kind semantics, high-risk approval, last-good preservation, correction lineage, and reference-only court linkage",
@@ -13881,7 +13881,7 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m5/IPLF-051/local-2026-08-24.md",
-          "revision": "2835e0205e1da9c9977c9af942c9899e659fe7c1",
+          "revision": "6407d63e94b55ece030025d069c939fddbedfbcd",
           "environment": "local API integration, full web unit suite, production Next.js build, and Chromium end-to-end acceptance",
           "fixtures": "synthetic entitled law-firm tenant with manual trademark application and sourced IP India-shaped registry evidence; external_call=false",
           "assertions": "match review, source provenance, immutable history, added/changed/removed diffs, approval gates, accept/reject/map/defer, emitted events, deadline marker, failure redaction, last-good preservation, and canonical court-reference reuse",
