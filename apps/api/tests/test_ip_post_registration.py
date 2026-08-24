@@ -1,10 +1,20 @@
 from __future__ import annotations
 
+from copy import deepcopy
+
+import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from sqlalchemy import select
 
 from caseops_api.db.models import IpDocketEvent, TrademarkApplication
 from caseops_api.db.session import get_session_factory
+from caseops_api.schemas.ip_post_registration import (
+    IpPostRegistrationActionRequest,
+    IpPostRegistrationProfile,
+    IpPostRegistrationRuleMap,
+    IpPostRegistrationWorkspaceUpsertRequest,
+)
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_ip_record_workflow import _application, _asset, _docket
 
@@ -432,3 +442,70 @@ def test_settlement_or_withdrawal_requires_explicit_legal_effect(
         assert len(events) == 1
     finally:
         session.close()
+
+
+def test_post_registration_schema_fails_closed_for_incomplete_governed_fields() -> None:
+    rule_map = {
+        "template_key": "post-registration/rectification",
+        "template_version": "lawyer-reviewed-v1",
+        "authority_reference": "Trade Marks Act and Rules mapping:049",
+        "source_reference": "legal-source:049",
+        "mutatis_mutandis": False,
+        "mapped_from_rule": "Opposition evidence provisions",
+    }
+    with pytest.raises(ValidationError, match="explicitly enabled"):
+        IpPostRegistrationRuleMap.model_validate(rule_map)
+
+    body = _profile_body(
+        bootstrap={"membership": {"id": "membership-schema"}},
+        proceeding={"version": 1, "proceeding_kind": "rectification"},
+    )
+    valid_profile = body["profile"]
+    assert isinstance(valid_profile, dict)
+    invalid_profiles = [
+        {**deepcopy(valid_profile), "fee_reference": None},
+        {**deepcopy(valid_profile), "service_reference": None},
+        {**deepcopy(valid_profile), "grounds": [""]},
+    ]
+    for invalid_profile in invalid_profiles:
+        with pytest.raises(ValidationError):
+            IpPostRegistrationProfile.model_validate(invalid_profile)
+
+    naive_workspace = deepcopy(body)
+    naive_workspace["effective_at"] = "2026-08-24T08:00:00"
+    with pytest.raises(ValidationError, match="timezone"):
+        IpPostRegistrationWorkspaceUpsertRequest.model_validate(naive_workspace)
+
+    base_action = _action_body(
+        bootstrap={"membership": {"id": "membership-schema"}},
+        proceeding={"version": 1},
+        action_kind="stage_update",
+        stage="petition_filed",
+    )
+    invalid_actions = [
+        {**deepcopy(base_action), "effective_at": "2026-08-24T09:00:00"},
+        {
+            **deepcopy(base_action),
+            "action_kind": "order_recorded",
+            "authority_reference": None,
+        },
+        {**deepcopy(base_action), "stage": None},
+        {
+            **deepcopy(base_action),
+            "action_kind": "parallel_proceeding_link",
+            "stage": None,
+        },
+        {
+            **deepcopy(base_action),
+            "action_kind": "disposition_candidate",
+            "stage": None,
+        },
+        {
+            **deepcopy(base_action),
+            "action_kind": "disposition_review",
+            "stage": None,
+        },
+    ]
+    for invalid_action in invalid_actions:
+        with pytest.raises(ValidationError):
+            IpPostRegistrationActionRequest.model_validate(invalid_action)
