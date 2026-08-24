@@ -465,7 +465,18 @@ test("IPLF-026B production previews, grants, and revokes independent IP access a
       .getByLabel("Reason for change")
       .fill("Assigned for the dated production IP access review.");
     await workspace.getByLabel("Person or team").selectOption(membershipId);
+    const previewResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url().endsWith(`/api/ip/dockets/${docket.id}/access/preview`) &&
+        response.request().method() === "POST",
+      { timeout: 20_000 },
+    );
     await workspace.getByRole("button", { name: "Preview grant" }).click();
+    await expect(workspace.getByRole("status")).toContainText(
+      "Calculating the affected people, documents, and queued deliveries",
+    );
+    const previewResponse = await previewResponsePromise;
+    expect(previewResponse.status(), await previewResponse.text()).toBe(200);
     const preview = workspace.getByTestId("ip-access-preview");
     await expect(preview).toContainText("Gains: 1");
     await expect(preview).toContainText("this change never copies permissions");

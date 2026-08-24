@@ -3,10 +3,11 @@
 
 The checked-in JSON file is the sole source for scheduler names, targets,
 cadences, time zones, desired states, invoker identity, release-image policy,
-and explicitly owned task timeouts. The live commands intentionally preserve
-each Cloud Run job's command, environment, secrets, resources, retries, and
-runtime service account; its release image, inventory-owned task timeout,
-scheduler state, and invoker binding are converged.
+and explicitly owned task timeouts. Jobs without a bootstrap contract preserve
+their existing command, environment, secrets, resources, retries, and runtime
+service account. A job that may be introduced for the first time declares a
+bootstrap contract whose complete runtime shape is converged and verified on
+every release.
 """
 
 from __future__ import annotations
@@ -102,11 +103,82 @@ def validate_inventory(payload: object) -> list[str]:
                 f"{label}.task_timeout_seconds must be null or an integer "
                 "between 1 and 86400"
             )
+        bootstrap = job.get("bootstrap")
+        if bootstrap is not None:
+            errors.extend(_validate_bootstrap(bootstrap, label=label))
     legacy = payload.get("legacy_schedulers_to_pause", [])
     if not isinstance(legacy, list) or any(not isinstance(value, str) for value in legacy):
         errors.append("legacy_schedulers_to_pause must be a list of strings")
     elif seen_schedulers.intersection(legacy):
         errors.append("a canonical scheduler cannot also be marked legacy")
+    return errors
+
+
+def _validate_bootstrap(bootstrap: object, *, label: str) -> list[str]:
+    if not isinstance(bootstrap, dict):
+        return [f"{label}.bootstrap must be an object"]
+    required = {
+        "command",
+        "args",
+        "environment",
+        "secrets",
+        "service_account",
+        "cloud_sql_instances",
+        "cpu",
+        "memory",
+        "max_retries",
+    }
+    errors: list[str] = []
+    missing = sorted(required - bootstrap.keys())
+    if missing:
+        errors.append(f"{label}.bootstrap missing fields: {', '.join(missing)}")
+        return errors
+    for field in ("command", "args"):
+        value = bootstrap[field]
+        if (
+            not isinstance(value, list)
+            or (field == "command" and not value)
+            or any(
+                not isinstance(item, str) or not item or "," in item for item in value
+            )
+        ):
+            errors.append(
+                f"{label}.bootstrap.{field} must be "
+                f"{'a non-empty' if field == 'command' else 'an'} array of strings"
+            )
+    for field in ("environment", "secrets"):
+        value = bootstrap[field]
+        if (
+            not isinstance(value, dict)
+            or not value
+            or any(
+                not isinstance(key, str)
+                or not key
+                or not isinstance(item, str)
+                or not item
+                or "," in key
+                or "," in item
+                for key, item in value.items()
+            )
+        ):
+            errors.append(
+                f"{label}.bootstrap.{field} must be a non-empty string map "
+                "without commas"
+            )
+    for field in (
+        "service_account",
+        "cloud_sql_instances",
+        "cpu",
+        "memory",
+    ):
+        value = bootstrap[field]
+        if not isinstance(value, str) or not value.strip():
+            errors.append(f"{label}.bootstrap.{field} must be a non-empty string")
+    retries = bootstrap["max_retries"]
+    if isinstance(retries, bool) or not isinstance(retries, int) or not 0 <= retries <= 10:
+        errors.append(
+            f"{label}.bootstrap.max_retries must be an integer between 0 and 10"
+        )
     return errors
 
 
@@ -139,13 +211,29 @@ def scheduler_uri(project: str, region: str, run_job_name: str) -> str:
     )
 
 
-def scheduler_exists(name: str, *, project: str, location: str) -> bool:
+def _gcloud_resource_exists(arguments: list[str]) -> bool:
     executable = shutil.which("gcloud")
     if not executable:
         raise InventoryError("gcloud CLI is required")
     completed = subprocess.run(
+        [executable, *arguments],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    if completed.returncode == 0:
+        return True
+    detail = (completed.stderr or completed.stdout).strip()
+    lowered = detail.lower()
+    if any(marker in lowered for marker in ("not found", "could not be found", "does not exist")):
+        return False
+    raise InventoryError(f"gcloud {' '.join(arguments)} failed: {detail}")
+
+
+def scheduler_exists(name: str, *, project: str, location: str) -> bool:
+    return _gcloud_resource_exists(
         [
-            executable,
             "scheduler",
             "jobs",
             "describe",
@@ -155,13 +243,72 @@ def scheduler_exists(name: str, *, project: str, location: str) -> bool:
             "--location",
             location,
             "--format=json(name)",
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
+        ]
     )
-    return completed.returncode == 0
+
+
+def run_job_exists(name: str, *, project: str, region: str) -> bool:
+    return _gcloud_resource_exists(
+        [
+            "run",
+            "jobs",
+            "describe",
+            name,
+            "--project",
+            project,
+            "--region",
+            region,
+            "--format=json(name)",
+        ]
+    )
+
+
+def _bootstrap_arguments(
+    job: dict[str, Any], *, action: str, project: str, region: str, image: str
+) -> list[str]:
+    bootstrap = job.get("bootstrap")
+    if bootstrap is None:
+        raise InventoryError(
+            f"Cloud Run job {job['run_job_name']!r} is missing and has no "
+            "checked-in bootstrap contract"
+        )
+    arguments = [
+        "run",
+        "jobs",
+        action,
+        job["run_job_name"],
+        "--image",
+        image,
+        "--region",
+        region,
+        "--project",
+        project,
+        "--command",
+        ",".join(bootstrap["command"]),
+        "--args",
+        ",".join(bootstrap["args"]),
+        "--set-env-vars",
+        ",".join(
+            f"{key}={value}" for key, value in bootstrap["environment"].items()
+        ),
+        "--set-secrets",
+        ",".join(f"{key}={value}" for key, value in bootstrap["secrets"].items()),
+        "--service-account",
+        bootstrap["service_account"],
+        "--set-cloudsql-instances",
+        bootstrap["cloud_sql_instances"],
+        "--cpu",
+        bootstrap["cpu"],
+        "--memory",
+        bootstrap["memory"],
+        "--max-retries",
+        str(bootstrap["max_retries"]),
+        "--quiet",
+    ]
+    task_timeout = job["task_timeout_seconds"]
+    if task_timeout is not None:
+        arguments.extend(["--task-timeout", f"{task_timeout}s"])
+    return arguments
 
 
 def reconcile(inventory: dict[str, Any], *, project: str, region: str, image: str) -> None:
@@ -179,23 +326,37 @@ def reconcile(inventory: dict[str, Any], *, project: str, region: str, image: st
         run_job = job["run_job_name"]
         scheduler = job["scheduler_name"]
         print(f"converging {scheduler} -> {run_job}", flush=True)
-        update_arguments = [
-            "run",
-            "jobs",
-            "update",
-            run_job,
-            "--image",
-            image,
-            "--region",
-            region,
-            "--project",
-            project,
-            "--quiet",
-        ]
-        task_timeout = job["task_timeout_seconds"]
-        if task_timeout is not None:
-            update_arguments.extend(["--task-timeout", f"{task_timeout}s"])
-        run_gcloud(update_arguments)
+        exists = run_job_exists(run_job, project=project, region=region)
+        if job.get("bootstrap") is not None:
+            run_job_arguments = _bootstrap_arguments(
+                job,
+                action="update" if exists else "create",
+                project=project,
+                region=region,
+                image=image,
+            )
+        elif exists:
+            run_job_arguments = [
+                "run",
+                "jobs",
+                "update",
+                run_job,
+                "--image",
+                image,
+                "--region",
+                region,
+                "--project",
+                project,
+                "--quiet",
+            ]
+            task_timeout = job["task_timeout_seconds"]
+            if task_timeout is not None:
+                run_job_arguments.extend(["--task-timeout", f"{task_timeout}s"])
+        else:
+            run_job_arguments = _bootstrap_arguments(
+                job, action="create", project=project, region=region, image=image
+            )
+        run_gcloud(run_job_arguments)
         run_gcloud(
             [
                 "run",
@@ -390,6 +551,7 @@ def inspect_live(
             .get("spec", {})
         )
         actual_image = run_spec.get("containers", [{}])[0].get("image", "")
+        container = run_spec.get("containers", [{}])[0]
         actual_timeout = _duration_seconds(run_spec.get("timeoutSeconds"))
         actual_member = target.get("oauthToken", {}).get("serviceAccountEmail")
         checks = {
@@ -408,6 +570,43 @@ def inspect_live(
         expected_timeout = job["task_timeout_seconds"]
         if expected_timeout is not None:
             checks["task_timeout"] = actual_timeout == expected_timeout
+        bootstrap = job.get("bootstrap")
+        if bootstrap is not None:
+            actual_environment: dict[str, str] = {}
+            actual_secrets: dict[str, str] = {}
+            for item in container.get("env", []):
+                name = item.get("name")
+                if not isinstance(name, str):
+                    continue
+                secret = (item.get("valueFrom") or {}).get("secretKeyRef")
+                if isinstance(secret, dict):
+                    actual_secrets[name] = (
+                        f"{secret.get('name', '')}:{secret.get('key', '')}"
+                    )
+                elif isinstance(item.get("value"), str):
+                    actual_environment[name] = item["value"]
+            annotations = (
+                run_job.get("spec", {})
+                .get("template", {})
+                .get("metadata", {})
+                .get("annotations", {})
+            )
+            resources = container.get("resources", {}).get("limits", {})
+            checks["bootstrap_contract"] = all(
+                (
+                    container.get("command", []) == bootstrap["command"],
+                    container.get("args", []) == bootstrap["args"],
+                    actual_environment == bootstrap["environment"],
+                    actual_secrets == bootstrap["secrets"],
+                    run_spec.get("serviceAccountName")
+                    == bootstrap["service_account"],
+                    annotations.get("run.googleapis.com/cloudsql-instances")
+                    == bootstrap["cloud_sql_instances"],
+                    str(resources.get("cpu", "")) == bootstrap["cpu"],
+                    str(resources.get("memory", "")) == bootstrap["memory"],
+                    run_spec.get("maxRetries") == bootstrap["max_retries"],
+                )
+            )
         scheduler_status = scheduler.get("status") or {}
         last_attempt = str(scheduler.get("lastAttemptTime") or "")
         scheduler_attempt_required = job["desired_state"] == "ENABLED"

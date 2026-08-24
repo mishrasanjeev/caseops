@@ -37,6 +37,13 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
     )
     assert authority_job["desired_state"] == "PAUSED"
     assert authority_job["task_timeout_seconds"] == 43_200
+    watch_job = next(
+        job
+        for job in inventory["jobs"]
+        if job["run_job_name"] == "caseops-ip-journal-watch"
+    )
+    assert watch_job["bootstrap"]["command"] == ["uv"]
+    assert watch_job["bootstrap"]["args"] == ["run", "caseops-ip-journal-watch"]
     assert all(
         job["desired_state"] == "ENABLED"
         for job in inventory["jobs"]
@@ -60,6 +67,20 @@ def test_inventory_rejects_duplicate_owners_and_mutable_image_policy() -> None:
     assert any("image_policy must be release_digest" in error for error in errors)
     assert any("desired_state must be ENABLED or PAUSED" in error for error in errors)
     assert any("task_timeout_seconds must be null or an integer" in error for error in errors)
+
+
+def test_inventory_rejects_unsafe_or_incomplete_bootstrap_contract() -> None:
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    watch_job = inventory["jobs"][-1]
+    watch_job["bootstrap"]["command"] = []
+    watch_job["bootstrap"]["environment"]["UNSAFE"] = "one,two"
+    watch_job["bootstrap"]["max_retries"] = 11
+
+    errors = scheduler_inventory.validate_inventory(inventory)
+
+    assert any("bootstrap.command" in error for error in errors)
+    assert any("bootstrap.environment" in error for error in errors)
+    assert any("bootstrap.max_retries" in error for error in errors)
 
 
 def test_reconcile_converges_inventory_owned_timeout_and_scheduler_state(
@@ -91,6 +112,9 @@ def test_reconcile_converges_inventory_owned_timeout_and_scheduler_state(
         return ""
 
     monkeypatch.setattr(scheduler_inventory, "run_gcloud", fake_gcloud)
+    monkeypatch.setattr(
+        scheduler_inventory, "run_job_exists", lambda *_args, **_kwargs: True
+    )
     monkeypatch.setattr(scheduler_inventory, "scheduler_exists", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(
         scheduler_inventory,
@@ -162,6 +186,9 @@ def test_reconcile_transitions_scheduler_state_only_on_mismatch(
 
     monkeypatch.setattr(scheduler_inventory, "run_gcloud", fake_gcloud)
     monkeypatch.setattr(
+        scheduler_inventory, "run_job_exists", lambda *_args, **_kwargs: True
+    )
+    monkeypatch.setattr(
         scheduler_inventory,
         "scheduler_exists",
         lambda *_args, **_kwargs: True,
@@ -208,6 +235,130 @@ def test_reconcile_requires_an_immutable_release_image() -> None:
         )
 
 
+def test_reconcile_bootstraps_a_missing_declared_run_job(monkeypatch) -> None:
+    inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
+    watch_job = next(
+        job
+        for job in inventory["jobs"]
+        if job["run_job_name"] == "caseops-ip-journal-watch"
+    )
+    inventory["jobs"] = [watch_job]
+    inventory["legacy_schedulers_to_pause"] = []
+    expected_image = "registry.example/caseops-api@sha256:" + "c" * 64
+    calls: list[list[str]] = []
+
+    def fake_gcloud(arguments: list[str], *, expect_json: bool = False):
+        calls.append(arguments)
+        if arguments[:3] == ["scheduler", "jobs", "describe"]:
+            assert expect_json
+            return {"state": "ENABLED"}
+        return ""
+
+    monkeypatch.setattr(scheduler_inventory, "run_gcloud", fake_gcloud)
+    monkeypatch.setattr(
+        scheduler_inventory, "run_job_exists", lambda *_args, **_kwargs: False
+    )
+    monkeypatch.setattr(
+        scheduler_inventory,
+        "scheduler_exists",
+        lambda *_args, **_kwargs: False,
+    )
+    monkeypatch.setattr(
+        scheduler_inventory,
+        "inspect_live",
+        lambda *_args, **_kwargs: ([], {"result": "pass"}),
+    )
+
+    scheduler_inventory.reconcile(
+        inventory,
+        project=inventory["production_project"],
+        region=inventory["location"],
+        image=expected_image,
+    )
+
+    create = next(call for call in calls if call[:3] == ["run", "jobs", "create"])
+    assert create[3] == "caseops-ip-journal-watch"
+    assert create[create.index("--image") + 1] == expected_image
+    assert create[create.index("--command") + 1] == "uv"
+    assert create[create.index("--args") + 1] == "run,caseops-ip-journal-watch"
+    assert create[create.index("--task-timeout") + 1] == "900s"
+    assert create[create.index("--max-retries") + 1] == "1"
+    assert "CASEOPS_DATABASE_URL=caseops-database-url:latest" in create[
+        create.index("--set-secrets") + 1
+    ]
+
+
+def test_reconcile_converges_an_existing_bootstrap_contract(monkeypatch) -> None:
+    inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
+    watch_job = next(
+        job
+        for job in inventory["jobs"]
+        if job["run_job_name"] == "caseops-ip-journal-watch"
+    )
+    inventory["jobs"] = [watch_job]
+    inventory["legacy_schedulers_to_pause"] = []
+    calls: list[list[str]] = []
+
+    def fake_gcloud(arguments: list[str], *, expect_json: bool = False):
+        calls.append(arguments)
+        if arguments[:3] == ["scheduler", "jobs", "describe"]:
+            assert expect_json
+            return {"state": "ENABLED"}
+        return ""
+
+    monkeypatch.setattr(scheduler_inventory, "run_gcloud", fake_gcloud)
+    monkeypatch.setattr(
+        scheduler_inventory, "run_job_exists", lambda *_args, **_kwargs: True
+    )
+    monkeypatch.setattr(
+        scheduler_inventory, "scheduler_exists", lambda *_args, **_kwargs: True
+    )
+    monkeypatch.setattr(
+        scheduler_inventory,
+        "inspect_live",
+        lambda *_args, **_kwargs: ([], {"result": "pass"}),
+    )
+
+    scheduler_inventory.reconcile(
+        inventory,
+        project=inventory["production_project"],
+        region=inventory["location"],
+        image="registry.example/caseops-api@sha256:" + "e" * 64,
+    )
+
+    update = next(call for call in calls if call[:3] == ["run", "jobs", "update"])
+    assert update[3] == "caseops-ip-journal-watch"
+    assert "--set-env-vars" in update
+    assert "--set-secrets" in update
+    assert "--set-cloudsql-instances" in update
+
+
+def test_reconcile_fails_closed_when_a_missing_job_has_no_bootstrap(monkeypatch) -> None:
+    inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
+    job = inventory["jobs"][0]
+    inventory["jobs"] = [job]
+    inventory["legacy_schedulers_to_pause"] = []
+    calls: list[list[str]] = []
+    monkeypatch.setattr(
+        scheduler_inventory,
+        "run_gcloud",
+        lambda arguments, **_kwargs: calls.append(arguments) or "",
+    )
+    monkeypatch.setattr(
+        scheduler_inventory, "run_job_exists", lambda *_args, **_kwargs: False
+    )
+
+    with pytest.raises(scheduler_inventory.InventoryError, match="bootstrap contract"):
+        scheduler_inventory.reconcile(
+            inventory,
+            project=inventory["production_project"],
+            region=inventory["location"],
+            image="registry.example/caseops-api@sha256:" + "d" * 64,
+        )
+
+    assert calls == []
+
+
 @pytest.mark.skipif(os.name != "nt", reason="Windows gcloud uses a .CMD shim")
 def test_gcloud_runner_resolves_windows_command_shim(monkeypatch) -> None:
     calls: list[list[str]] = []
@@ -230,6 +381,31 @@ def test_gcloud_runner_resolves_windows_command_shim(monkeypatch) -> None:
 
     assert scheduler_inventory.run_gcloud(["--version"]) == "ok"
     assert calls == [[r"C:\Cloud SDK\bin\gcloud.CMD", "--version"]]
+
+
+def test_existence_probe_distinguishes_not_found_from_control_plane_failure(
+    monkeypatch,
+) -> None:
+    class _Completed:
+        returncode = 1
+        stdout = ""
+        stderr = "NOT_FOUND: Job could not be found"
+
+    monkeypatch.setattr(scheduler_inventory.shutil, "which", lambda _name: "gcloud")
+    monkeypatch.setattr(
+        scheduler_inventory.subprocess,
+        "run",
+        lambda *_args, **_kwargs: _Completed(),
+    )
+    assert not scheduler_inventory.run_job_exists(
+        "missing", project="project", region="region"
+    )
+
+    _Completed.stderr = "PERMISSION_DENIED: caller is not authorized"
+    with pytest.raises(scheduler_inventory.InventoryError, match="PERMISSION_DENIED"):
+        scheduler_inventory.scheduler_exists(
+            "unknown", project="project", location="region"
+        )
 
 
 def test_live_inspection_detects_identity_and_image_drift(monkeypatch) -> None:
@@ -279,6 +455,118 @@ def test_live_inspection_detects_identity_and_image_drift(monkeypatch) -> None:
     assert "caseops-legal-update-sync-midnight: image drift" in errors
     assert "caseops-legal-update-sync-midnight: invoker_iam drift" in errors
     assert summary["result"] == "fail"
+
+
+def test_live_inspection_detects_bootstrap_contract_drift(monkeypatch) -> None:
+    inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
+    watch_job = next(
+        job
+        for job in inventory["jobs"]
+        if job["run_job_name"] == "caseops-ip-journal-watch"
+    )
+    inventory["jobs"] = [watch_job]
+    expected_image = "registry.example/caseops-api@sha256:" + "f" * 64
+
+    def fake_gcloud(arguments: list[str], *, expect_json: bool = False):
+        assert expect_json
+        if arguments[:3] == ["scheduler", "jobs", "describe"]:
+            return {
+                "state": "ENABLED",
+                "schedule": watch_job["schedule"],
+                "timeZone": watch_job["time_zone"],
+                "httpTarget": {
+                    "uri": scheduler_inventory.scheduler_uri(
+                        inventory["production_project"],
+                        inventory["location"],
+                        watch_job["run_job_name"],
+                    ),
+                    "oauthToken": {
+                        "serviceAccountEmail": inventory["invoker_service_account"]
+                    },
+                },
+            }
+        if arguments[:3] == ["run", "jobs", "describe"]:
+            bootstrap = watch_job["bootstrap"]
+            return {
+                "spec": {
+                    "template": {
+                        "metadata": {
+                            "annotations": {
+                                "run.googleapis.com/cloudsql-instances": bootstrap[
+                                    "cloud_sql_instances"
+                                ]
+                            }
+                        },
+                        "spec": {
+                            "template": {
+                                "spec": {
+                                    "containers": [
+                                        {
+                                            "image": expected_image,
+                                            "command": ["wrong-command"],
+                                            "args": bootstrap["args"],
+                                            "env": [
+                                                *[
+                                                    {"name": key, "value": value}
+                                                    for key, value in bootstrap[
+                                                        "environment"
+                                                    ].items()
+                                                ],
+                                                *[
+                                                    {
+                                                        "name": key,
+                                                        "valueFrom": {
+                                                            "secretKeyRef": {
+                                                                "name": value.split(":")[0],
+                                                                "key": value.split(":")[1],
+                                                            }
+                                                        },
+                                                    }
+                                                    for key, value in bootstrap[
+                                                        "secrets"
+                                                    ].items()
+                                                ],
+                                            ],
+                                            "resources": {
+                                                "limits": {
+                                                    "cpu": bootstrap["cpu"],
+                                                    "memory": bootstrap["memory"],
+                                                }
+                                            },
+                                        }
+                                    ],
+                                    "serviceAccountName": bootstrap[
+                                        "service_account"
+                                    ],
+                                    "maxRetries": bootstrap["max_retries"],
+                                    "timeoutSeconds": "900s",
+                                }
+                            }
+                        },
+                    }
+                }
+            }
+        return {
+            "bindings": [
+                {
+                    "role": "roles/run.invoker",
+                    "members": [
+                        f"serviceAccount:{inventory['invoker_service_account']}"
+                    ],
+                }
+            ]
+        }
+
+    monkeypatch.setattr(scheduler_inventory, "run_gcloud", fake_gcloud)
+    errors, summary = scheduler_inventory.inspect_live(
+        inventory,
+        project=inventory["production_project"],
+        region=inventory["location"],
+        expected_image=expected_image,
+    )
+
+    assert f"{watch_job['scheduler_name']}: bootstrap_contract drift" in errors
+    assert summary["jobs"][0]["configuration"] == "fail"
 
 
 def test_live_inspection_detects_authority_state_and_timeout_drift(monkeypatch) -> None:
