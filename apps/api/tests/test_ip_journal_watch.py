@@ -27,6 +27,7 @@ from caseops_api.db.session import get_session_factory
 from caseops_api.schemas.ip_watch import (
     IpJournalIngestRequest,
     IpJournalPublicationCreate,
+    IpWatchHandoffRequest,
     IpWatchProfileCreateRequest,
 )
 from caseops_api.services import ip_watch as ip_watch_service
@@ -178,6 +179,99 @@ def test_watch_contracts_reject_incomplete_or_invalid_scope(payload: dict, messa
     model = IpWatchProfileCreateRequest if "docket_id" in payload else IpJournalPublicationCreate
     with pytest.raises(ValidationError, match=message):
         model.model_validate(payload)
+
+
+def test_watch_contracts_reject_unsafe_profile_publication_and_handoff_inputs() -> None:
+    profile = {
+        "docket_id": "docket-1",
+        "name": "ASTER watch",
+        "word_terms": ["ASTER"],
+        "frequency": "daily",
+        "recipient_membership_ids": ["member-1"],
+    }
+    publication = {
+        "journal_number": "2248",
+        "journal_date": "2026-08-21",
+        "application_number": "TM-1",
+        "mark_text": "ASTER",
+        "office": "IP India",
+        "jurisdiction": "IN",
+        "class_numbers": [9],
+        "source_url": "https://ipindia.gov.in/journal/2248",
+        "source_status": "available",
+        "parser_version": "manual-v1",
+    }
+    invalid_contracts = [
+        (
+            IpWatchProfileCreateRequest,
+            profile | {"class_numbers": [0]},
+            "between 1 and 45",
+        ),
+        (
+            IpWatchProfileCreateRequest,
+            profile | {"recipient_membership_ids": ["member-1", "member-1"]},
+            "recipients must be unique",
+        ),
+        (
+            IpWatchProfileCreateRequest,
+            profile | {"device_references": ["file:///untrusted-device.png"]},
+            "must use HTTP or HTTPS",
+        ),
+        (
+            IpJournalPublicationCreate,
+            publication | {"mark_text": None},
+            "requires a word mark or device reference",
+        ),
+        (
+            IpJournalPublicationCreate,
+            publication | {"source_url": "file:///untrusted-journal.pdf"},
+            "source URL must use HTTP or HTTPS",
+        ),
+        (
+            IpJournalPublicationCreate,
+            publication | {"device_reference": "file:///untrusted-device.png"},
+            "Device reference must use HTTP or HTTPS",
+        ),
+        (
+            IpJournalPublicationCreate,
+            publication | {"class_numbers": [9, 9]},
+            "Publication classes must be unique",
+        ),
+        (
+            IpJournalPublicationCreate,
+            publication | {"goods_services": {"42": ["Legal services"]}},
+            "scope must belong to a published class",
+        ),
+        (
+            IpJournalPublicationCreate,
+            publication | {"publication_kind": "correction"},
+            "requires predecessor and reason",
+        ),
+        (
+            IpJournalPublicationCreate,
+            publication | {"source_retrieved_at": "2026-08-24T10:00:00"},
+            "must include a timezone",
+        ),
+        (
+            IpWatchHandoffRequest,
+            {"handoff_kind": "task"},
+            "requires a title",
+        ),
+        (
+            IpWatchHandoffRequest,
+            {"handoff_kind": "deadline", "title": "Confirm limitation"},
+            "requires a due date",
+        ),
+        (
+            IpWatchHandoffRequest,
+            {"handoff_kind": "enforcement_matter", "title": "Open enforcement review"},
+            "requires a matter code",
+        ),
+    ]
+
+    for model, payload, message in invalid_contracts:
+        with pytest.raises(ValidationError, match=message):
+            model.model_validate(payload)
 
 
 def test_iplf_uj_21_normal_watch_review_and_canonical_handoffs(
