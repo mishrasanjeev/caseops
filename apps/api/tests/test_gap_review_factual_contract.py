@@ -46,20 +46,17 @@ def test_documented_coverage_scope_matches_the_gate() -> None:
         assert "untracked modules are ungated" not in compact
         assert "coverage is measured but never gated" not in compact.lower()
 
-    backlog = _read("docs/EXECUTION_BACKLOG.md")
-    assert "combines the 16 shard coverage artifacts" in backlog
-
-
-def test_workflow_approval_is_not_claimed_without_runtime_state() -> None:
+def test_workflow_activation_is_runtime_state_not_a_project_gate() -> None:
     backlog = _read("docs/EXECUTION_BACKLOG.md")
     feedback = _read("docs/FEEDBACK_MERGE_BACKLOG_2026-08-16.md")
     resolutions = _read("docs/OPEN_ITEM_RESOLUTIONS_2026-08-16.md")
     ownership = _read("docs/ip-implementation/OWNERSHIP_LEDGER.yaml")
     models = _read("apps/api/src/caseops_api/db/models.py")
 
-    assert "No active workflow definition" in backlog
-    assert "must first be seeded as `candidate`" in backlog
-    assert "version 1 already approved" not in backlog.lower()
+    assert "No manual project approval or sign-off gates" in backlog
+    assert "Machine-enforced runtime controls remain" in backlog
+    assert "Claude" not in backlog
+    assert backlog.count("| Codex") == 12
     for document in (feedback, resolutions):
         compact = _compact(document)
         assert "No workflow service or route exists today" in compact
@@ -116,22 +113,7 @@ def test_gst_and_owner_contracts_are_scoped_and_collision_free() -> None:
     assert "GO for continued repository implementation" in review
     assert "does not block unrelated repository implementation" in _compact(ledger)
     assert "| Either |" not in backlog
-    assert "`EH-SGR-17` | Enforce legal holds in storage deletion" in backlog
-    assert "`EH-SGR-09` | Observability that actually runs" in backlog
-    assert "ledger EH-SGR-09; gap review §5 item 7" in backlog
-    for service in (
-        "services/matter_billing.py",
-        "services/matters.py",
-        "services/payments.py",
-        "services/portal_outside_counsel.py",
-        "services/pine_labs.py",
-        "services/llm.py",
-        "api/routes/payments.py",
-        "api/routes/portal.py",
-        "apps/web/app/portal/**",
-        "services/court_sync_sources.py",
-        "services/hearing_reminders.py",
-        "services/ip_records.py",
-        "services/ip_lifecycle.py",
-    ):
-        assert service in backlog
+    assert "`EH-SGR-09`, `EH-SGR-17`" in backlog
+    assert "Turn on useful observability and enforce legal holds/retention" in backlog
+    assert "`EH-SGR-13`, `EH-SGR-14`" in backlog
+    assert "one primary-identifier rule and one terminal-status definition" in backlog

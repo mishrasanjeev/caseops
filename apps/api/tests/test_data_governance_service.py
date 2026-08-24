@@ -193,6 +193,47 @@ def test_iplf_028b_dry_run_routes_persist_reviewable_evidence_but_refuse_executi
     assert execution.json()["code"] == "data_operation_execution_unavailable"
 
 
+def test_tenant_scoped_dry_run_uses_server_catalog_scope_and_no_manual_review_routes(
+    client: TestClient,
+) -> None:
+    token = str(bootstrap_company(client)["access_token"])
+
+    catalog = client.get(
+        "/api/admin/data-governance/data-classes",
+        headers=auth_headers(token),
+    )
+    assert catalog.status_code == 200, catalog.text
+    ids = [entry["id"] for entry in catalog.json()["data_classes"]]
+    assert ids == sorted(ids)
+    assert "tenant_data_operations" in ids
+
+    created = client.post(
+        "/api/admin/data-governance/operations/dry-runs/tenant-scope",
+        headers=auth_headers(token),
+        json={
+            "operation_type": "tenant_export",
+            "data_class_ids": ["tenant_data_operations"],
+        },
+    )
+    assert created.status_code == 201, created.text
+    record = created.json()
+    assert record["request_evidence_ref"].startswith(
+        "caseops://data-governance/tenant-dry-run/"
+    )
+    assert record["items"][0]["data_class_id"] == "tenant_data_operations"
+    assert record["items"][0]["target_type"] == "tenant"
+    assert len(record["items"][0]["target_reference_hash"]) == 64
+    assert record["items"][0]["candidate_record_count"] == 0
+
+    for action in ("request", "approve", "reject"):
+        removed = client.post(
+            f"/api/admin/data-governance/operations/{record['id']}/review/{action}",
+            headers=auth_headers(token),
+            json={},
+        )
+        assert removed.status_code == 404
+
+
 def test_iplf_028b_dry_run_history_is_bounded_and_tenant_scoped(
     client: TestClient,
 ) -> None:

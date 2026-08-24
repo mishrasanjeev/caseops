@@ -2512,6 +2512,22 @@ export const tenantDataOperationDryRunInput = z.object({
   asOf: z.string().nullable().optional(),
 });
 
+export const tenantDataOperationTenantDryRunInput = z.object({
+  operationType: tenantDataOperationType,
+  dataClassIds: z.array(z.string().min(1).max(160)).min(1).max(50),
+  requestEvidenceRef: z.string().max(512).nullable().optional(),
+});
+
+export const tenantDataClassCatalogResponse = z.object({
+  data_classes: z.array(
+    z.object({
+      id: z.string(),
+      label: z.string(),
+      confidentiality: z.string(),
+    }),
+  ),
+});
+
 export const tenantDataOperationDryRunSummary = z.object({
   id: z.string(),
   operation_type: tenantDataOperationType,
@@ -2552,18 +2568,6 @@ export const tenantDataOperationDryRunRecord = tenantDataOperationDryRunSummary.
   exclusions: z.array(z.unknown()),
   offboarding_plan: z.array(z.unknown()),
   dependency_plan: z.unknown().nullable(),
-});
-
-export const tenantDataOperationReviewRecord = z.object({
-  id: z.string(),
-  operation_type: tenantDataOperationType,
-  approval_status: tenantDataOperationApprovalStatus,
-  rejection_reason: z.string().nullable(),
-  manifest_hash: z.string(),
-  request_scope_hash: z.string(),
-  approved_operation_id: z.string().nullable().default(null),
-  // Always false. Approving authorises an execution; it never performs one.
-  executed: z.literal(false),
 });
 
 export const providerOperationActionResponse = z.object({
@@ -3528,12 +3532,14 @@ export type TenantDataOperationDryRunSummary =
   z.infer<typeof tenantDataOperationDryRunSummary>;
 export type TenantDataOperationDryRunInput =
   z.infer<typeof tenantDataOperationDryRunInput>;
+export type TenantDataOperationTenantDryRunInput =
+  z.infer<typeof tenantDataOperationTenantDryRunInput>;
+export type TenantDataClassCatalogResponse =
+  z.infer<typeof tenantDataClassCatalogResponse>;
 export type TenantDataOperationDryRunListResponse =
   z.infer<typeof tenantDataOperationDryRunListResponse>;
 export type TenantDataOperationDryRunRecord =
   z.infer<typeof tenantDataOperationDryRunRecord>;
-export type TenantDataOperationReviewRecord =
-  z.infer<typeof tenantDataOperationReviewRecord>;
 export type ProviderOperationActionResponse =
   z.infer<typeof providerOperationActionResponse>;
 export type ProviderOperationReplayPreviewResponse =

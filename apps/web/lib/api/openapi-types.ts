@@ -110,6 +110,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/data-governance/data-classes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List data classes admitted by the current reviewed projection */
+        get: operations["list_data_classes_api_admin_data_governance_data_classes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/data-governance/holds/summary": {
         parameters: {
             query?: never;
@@ -161,63 +178,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/admin/data-governance/operations/{operation_id}/review/approve": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Approve a submitted manifest under step-up and four eyes
-         * @description Authorise an execution. This does not perform one.
-         *
-         *     The execute route below still refuses unconditionally, and the response
-         *     carries ``executed: false`` so a 200 here cannot be read as "it ran".
-         */
-        post: operations["approve_operation_review_api_admin_data_governance_operations__operation_id__review_approve_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/data-governance/operations/{operation_id}/review/reject": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Refuse a submitted manifest, keeping the record of the refusal */
-        post: operations["reject_operation_review_api_admin_data_governance_operations__operation_id__review_reject_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/data-governance/operations/{operation_id}/review/request": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Submit a completed dry-run manifest for execution approval */
-        post: operations["request_operation_review_api_admin_data_governance_operations__operation_id__review_request_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/admin/data-governance/operations/dry-runs": {
         parameters: {
             query?: never;
@@ -225,7 +185,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List reviewable non-executable tenant data-operation dry runs */
+        /** List non-executable tenant data-operation dry runs */
         get: operations["list_operation_dry_runs_api_admin_data_governance_operations_dry_runs_get"];
         put?: never;
         /** Create a non-executable tenant data-operation dry run */
@@ -247,6 +207,23 @@ export interface paths {
         get: operations["read_operation_dry_run_api_admin_data_governance_operations_dry_runs__operation_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/data-governance/operations/dry-runs/tenant-scope": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a server-scoped non-executable tenant data-operation dry run */
+        post: operations["create_tenant_operation_dry_run_api_admin_data_governance_operations_dry_runs_tenant_scope_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -37664,6 +37641,20 @@ export interface components {
             /** Connectors */
             connectors: components["schemas"]["TenantConnectorRecord"][];
         };
+        /** TenantDataClassCatalogResponse */
+        TenantDataClassCatalogResponse: {
+            /** Data Classes */
+            data_classes: components["schemas"]["TenantDataClassOption"][];
+        };
+        /** TenantDataClassOption */
+        TenantDataClassOption: {
+            /** Confidentiality */
+            confidentiality: string;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+        };
         /**
          * TenantDataGovernanceIntegrityCheck
          * @description Content-minimized result from one DATA-GOV-17 integrity check.
@@ -37698,11 +37689,6 @@ export interface components {
             ok_count: number;
             /** Unavailable Count */
             unavailable_count: number;
-        };
-        /** TenantDataOperationApprovalRequest */
-        TenantDataOperationApprovalRequest: {
-            /** Approver Label */
-            approver_label: string;
         };
         /**
          * TenantDataOperationDependencyPlan
@@ -37938,47 +37924,20 @@ export interface components {
             /** Record Count */
             record_count: number | null;
         };
-        /** TenantDataOperationRejectionRequest */
-        TenantDataOperationRejectionRequest: {
-            /** Reason */
-            reason: string;
-        };
         /**
-         * TenantDataOperationReviewRecord
-         * @description The reviewable state of one manifest after a review transition.
-         *
-         *     Deliberately not the execute row. Approval produces a separate authorised
-         *     operation in status ``planned``; this reports the manifest's review state
-         *     and, when one exists, the id of the operation the approval authorised.
-         *     Execution itself remains refused.
+         * TenantDataOperationTenantDryRunRequest
+         * @description A tenant-scoped dry run whose technical scope is server-derived.
          */
-        TenantDataOperationReviewRecord: {
-            /**
-             * Approval Status
-             * @enum {string}
-             */
-            approval_status: "not_requested" | "requested" | "rejected";
-            /** Approved Operation Id */
-            approved_operation_id?: string | null;
-            /**
-             * Executed
-             * @default false
-             * @constant
-             */
-            executed: false;
-            /** Id */
-            id: string;
-            /** Manifest Hash */
-            manifest_hash: string;
+        TenantDataOperationTenantDryRunRequest: {
+            /** Data Class Ids */
+            data_class_ids: string[];
             /**
              * Operation Type
              * @enum {string}
              */
             operation_type: "tenant_export" | "retention_purge" | "tenant_offboarding" | "restore_validation";
-            /** Rejection Reason */
-            rejection_reason: string | null;
-            /** Request Scope Hash */
-            request_scope_hash: string;
+            /** Request Evidence Ref */
+            request_evidence_ref?: string | null;
         };
         /**
          * TenantDataOperationUnsatisfiedDependency
@@ -38941,6 +38900,26 @@ export interface operations {
             };
         };
     };
+    list_data_classes_api_admin_data_governance_data_classes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantDataClassCatalogResponse"];
+                };
+            };
+        };
+    };
     read_tenant_legal_hold_summary_api_admin_data_governance_holds_summary_get: {
         parameters: {
             query?: never;
@@ -38999,107 +38978,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    approve_operation_review_api_admin_data_governance_operations__operation_id__review_approve_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                operation_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TenantDataOperationApprovalRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TenantDataOperationReviewRecord"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    reject_operation_review_api_admin_data_governance_operations__operation_id__review_reject_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                operation_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TenantDataOperationRejectionRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TenantDataOperationReviewRecord"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    request_operation_review_api_admin_data_governance_operations__operation_id__review_request_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                operation_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TenantDataOperationReviewRecord"];
                 };
             };
             /** @description Validation Error */
@@ -39190,6 +39068,39 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantDataOperationDryRunRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_tenant_operation_dry_run_api_admin_data_governance_operations_dry_runs_tenant_scope_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantDataOperationTenantDryRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };

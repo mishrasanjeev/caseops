@@ -56,3 +56,23 @@ requirements when using the fallback.
   `Intake -> Active` transition are not silent reactivation. Reopen audits must
   distinguish those events and prove terminal immutability across generic
   PATCHes, imports, workers, children, operational views, audits, and reloads.
+- Responsive control groups must be tested against the width available after
+  navigation and sidebars, not only the browser viewport. Assert useful input
+  width, sibling non-overlap, and full visibility at widths immediately below,
+  at, and above every breakpoint; `scrollWidth == clientWidth` alone can still
+  hide a control that flexbox collapsed to zero.
+- A legal-operator workflow must not ask the browser to invent server-owned
+  identifiers, tenant hashes, catalog keys, or candidate counts. Resolve tenant
+  scope from the authenticated context, expose the same reviewed catalog used
+  for admission, reject invented entries, and surface the API problem detail.
+- A non-executable diagnostic record does not need a manual approval workflow.
+  Remove approval routes, capabilities, and UI for that record while keeping
+  destructive execution unavailable through a machine-enforced fail-closed
+  boundary.
+- Bug-workbook summary tabs are not authoritative. Count and classify the
+  populated issue rows, reconcile any stale totals or copied summaries, and
+  report the discrepancy before implementation.
+- Investigate a reopening report from persisted lifecycle state and audit
+  events. Do not infer an automatic resurrection from an explicit, audited
+  `Disposed -> Intake` transition, and do not weaken lifecycle protections to
+  make a UI symptom disappear.

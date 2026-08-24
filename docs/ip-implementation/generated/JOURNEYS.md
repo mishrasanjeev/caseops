@@ -10,7 +10,7 @@ Generated; do not edit.
 | UJ-04 | Find and work from portfolio listing | 4 | IPLF-030A, IPLF-030B | 7 | 2 | implemented | passed | false |
 | UJ-05 | Detect and resolve duplicate | 2 | IPLF-031A | 2 | 1 | implemented | passed | false |
 | UJ-06 | Record prosecution event | 4 | IPLF-022B, IPLF-033A, IPLF-033B | 4 | 3 | implemented | passed | false |
-| UJ-07 | Reconcile registry update | 4 | IPLF-051B | 6 | 2 | implemented | passed | true |
+| UJ-07 | Reconcile registry update | 4 | IPLF-051B | 6 | 1 | implemented | passed | false |
 | UJ-08 | Calculate and confirm deadline | 3 | IPLF-023B, IPLF-034B | 4 | 2 | implemented | passed | false |
 | UJ-09 | Override or supersede deadline | 3 | IPLF-023B, IPLF-034A, IPLF-034B | 4 | 3 | implemented | passed | false |
 | UJ-10 | Schedule hearing and reminders | 4 | IPLF-025B, IPLF-035A, IPLF-035B | 6 | 2 | implemented | passed | false |
@@ -22,7 +22,7 @@ Generated; do not edit.
 | UJ-16 | Run keyword or contextual research | 4 | IPLF-005A, IPLF-005B | 8 | 2 | implemented | not_run | false |
 | UJ-17 | Open judgment or reference source | 4 | IPLF-003A, IPLF-003B, IPLF-003C, IPLF-004B | 4 | 1 | implemented | not_run | false |
 | UJ-18 | Run intelligent review | 4 | IPLF-063B, IPLF-065B | 4 | 0 | not_started | not_run | false |
-| UJ-19 | Track eCourts/provider case | 5 | IPLF-050B, IPLF-051B | 7 | 3 | implemented | passed | true |
+| UJ-19 | Track eCourts/provider case | 5 | IPLF-050B, IPLF-051B | 7 | 2 | implemented | passed | false |
 | UJ-20 | Browse judge and mapped judgments | 4 | IPLF-003B, IPLF-060B | 4 | 1 | in_progress | not_run | false |
 | UJ-21 | Review watch hit and open action | 4 | IPLF-052B, IPLF-053B | 12 | 1 | implemented | passed | false |
 | UJ-22 | Use CaseOps Guide | 3 | IPLF-061B | 3 | 0 | not_started | not_run | false |

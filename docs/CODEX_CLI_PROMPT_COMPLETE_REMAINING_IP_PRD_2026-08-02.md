@@ -34,7 +34,7 @@ Establish these sources at run start and cache their relevant decisions. Read th
 4. `docs/PRD_IP_LAW_FIRM_PLATFORM_2026-08-01.md`, especially Sections 11, 23-26, 30, and 31.
 5. `docs/ip-implementation/PROGRAM_MANIFEST.yaml` and its evidence, but only after reconciling the known control defects below.
 6. Current `main`, migrations, tests, CI, cloud configuration, serving revisions, provider state, and data evidence for implementation truth.
-7. Approved ADRs, legal fixtures, source/provider contracts, security decisions, child PRDs, and human acceptance for their specific scopes.
+7. ADRs, legal fixtures, source/provider contracts, security decisions, child PRDs, and exact-release evidence for their specific scopes.
 
 The PRD controls product scope and acceptance. Current code controls what already exists and how it should be extended. Existing code cannot silently waive a requirement. A stale manifest cannot make missing work disappear. A generated document cannot override code, tests, deployed truth, or required human evidence.
 
@@ -64,7 +64,7 @@ This authorization does not waive platform safety controls and does not authoriz
 - Scrape or republish data contrary to source terms, bypass CAPTCHA/login/access controls, or describe a commercial provider as an official government API.
 - Perform irreversible production deletion, tenant purge, retention destruction, or destructive evidence rewrite without the separately required preview, hold checks, owner approval, and recovery proof.
 - Use credentials copied from prompts, documentation, logs, or chat. Use configured secret stores, CI secrets, existing authorized sessions, workload identity, and redacted references.
-- Manufacture legal, provider, security, privacy, pilot, or UAT approval. Codex-authored signatures and generated checkboxes are not human approval.
+- Treat generated prose, fixtures, signatures, or checkboxes as release evidence.
 
 Implement blocked external behavior completely behind fail-closed configuration, manual fallback, observable readiness, and kill switches. Continue all independent repository work. Record genuine external gates precisely and never call them complete.
 
@@ -77,10 +77,10 @@ This program is intended to run as one continuous implementation and delivery ef
 - Batch compatible slices into one integration branch and one release train. Run focused checks during development; run the full applicable regression, security, migration, build, and production evidence suite once for the exact integrated release candidate. Any code, dependency, runtime configuration, migration, fixture, test, or generated-artifact change creates a new exact candidate and reruns its applicable gates; evidence/prose-only changes use change-aware validators.
 - Do not require a separate PR, owner checkpoint, evidence review, canary approval, or deployment approval for each slice. Use repository protections and automated checks as the routine gates. Split work only when there is a real ownership conflict, incompatible migration/release boundary, platform limit, or independently reversible high-risk change.
 - Missing legal, provider, product, pilot, or UAT approval blocks only activation and public claims for the affected behavior. Implement and merge the complete behavior behind default-off configuration, truthful unavailable/manual states, observable readiness, and a kill switch, then continue with all other work.
-- Child PRDs and specialist decisions may be drafted, implemented, and tested in the same run. Named human approval is required before activating domain-specific legal automation or claiming acceptance, not before repository-controlled implementation begins.
+- Child PRDs and specialist decisions may be drafted, implemented, and tested in the same run. Domain-specific legal automation remains fail-closed until versioned sources, fixtures, machine policy, and exact-release checks pass.
 - Prefer machine-verifiable controls over bespoke human gates. Do not introduce a manual checkpoint when an exact scope, immutable revision, dry run, invariant, automated test, fail-closed flag, audit record, or rollback check can enforce the same safety property.
 - For an exact irreversible production plan, use one consolidated approval event that contains every policy-required owner, dual-control, or four-eyes identity and authorizes the unexpired immutable operation manifest, target list, and operation. Refreshing hold evidence immediately before execution does not require another approval event while that manifest is unexpired and scope, targets, exclusions, recovery path, and risk are unchanged; expiry or any material drift invalidates it and stops the operation.
-- Never turn ordinary progress reporting, context compaction, CI polling, reviewer availability, or evidence regeneration into an approval gate. Persist state automatically and keep working.
+- Never pause for ordinary progress reporting, context compaction, CI polling, reviewer availability, or evidence regeneration. Persist state automatically and keep working.
 
 The only mandatory human pauses are for authority that cannot be delegated by this prompt: a real-world legal/financial/external communication act, activation of unapproved legal or provider content, access to unavailable credentials or paid capacity, acceptance that must legally or contractually be human, or an irreversible production action whose exact scope has not already been approved.
 
@@ -104,7 +104,7 @@ The last independent audit found the following. Re-fetch `origin`, re-read curre
 - The manifest still listed scheduler IAM/image blockers after live scheduler verification passed, and it named completed `IPLF-039F` as both the active and next slice.
 - The newest scheduled production Playwright run on `b7365cc`, GitHub Actions run `30729636524`, failed the global Notices workflow: 50 passed, 1 failed, 3 skipped, and 1 did not run. The created received-notice row was not found, and the notice-module suite did not execute.
 - The production IP E2E checked route/headings/responsive presence but did not execute all five tail workflows against production.
-- Production external notification delivery remained provider/approval gated.
+- Production external notification delivery remained disabled pending provider readiness evidence.
 
 These are starting audit facts, not immutable truth. Correct them from current evidence. Do not erase a negative fact without a resolving test, deployment, or approved decision.
 

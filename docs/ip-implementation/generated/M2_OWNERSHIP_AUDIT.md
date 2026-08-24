@@ -5,7 +5,7 @@ Generated from `PROGRAM_MANIFEST.yaml`; do not edit this view directly.
 ## Boundary
 
 This is a repository Definition-of-Ready control. It validates required
-canonical-writer, test, and evidence references. It does not establish human acceptance,
+canonical-writer, test, and evidence references.
 run a production operation, or convert a blocked slice into
 a released capability.
 
@@ -44,6 +44,6 @@ a released capability.
 
 `deployment-evidence-recorded` means only that the canonical manifest
 contains checked-in evidence for a `deployment_verified` slice. It is not
-a substitute for its specified production journey, named human approval,
+a substitute for its specified production journey,
 or any still-open external gate. `repository-evidence-recorded-release-blocked`
 deliberately preserves the active blocker.
