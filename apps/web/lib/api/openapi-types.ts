@@ -52872,7 +52872,9 @@ export interface operations {
     };
     get_ip_documents_api_ip_documents_get: {
         parameters: {
-            query?: never;
+            query?: {
+                docket_id?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -52886,6 +52888,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpDocumentListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

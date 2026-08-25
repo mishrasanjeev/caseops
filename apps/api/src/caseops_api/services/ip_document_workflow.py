@@ -332,7 +332,17 @@ def list_ip_documents(
     session: Session,
     *,
     context: SessionContext,
+    docket_id: str | None = None,
 ) -> IpDocumentListResponse:
+    if docket_id is not None:
+        linked = list_linked_ip_documents(
+            session,
+            context=context,
+            docket_id=docket_id,
+            event_ids=set(),
+            deadline_ids=set(),
+        )
+        return IpDocumentListResponse(items=linked, total=len(linked))
     rows = list(
         session.scalars(
             select(IpDocument)

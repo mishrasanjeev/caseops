@@ -141,3 +141,30 @@ def test_uj36_exc02_partial_assignment_preserves_scope_and_prior_title(
     prior = next(row for row in interests if row["party_name"] == "Oldco Brands Limited")
     assert prior["recordal_status"] == "recorded"
     assert prior["scope_json"] == {}
+
+
+def test_recordal_workspace_can_load_only_selected_docket_documents(
+    client: TestClient,
+) -> None:
+    """The interactive recordal path must not scan another docket's document corpus."""
+
+    headers, membership_id, docket, document_id = _fixture(client, "BOUNDED DOCUMENTS")
+    other = _docket(client, headers, "UNRELATED DOCUMENTS")
+    other_document_id = _supporting_document(
+        client,
+        headers=headers,
+        company_id=docket["company_id"],
+        membership_id=membership_id,
+        docket_id=other["id"],
+    )
+
+    response = client.get(
+        "/api/ip/documents",
+        headers=headers,
+        params={"docket_id": docket["id"]},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["total"] == 1
+    assert [row["id"] for row in response.json()["items"]] == [document_id]
+    assert other_document_id not in {row["id"] for row in response.json()["items"]}
