@@ -474,13 +474,16 @@ class IpDeadlineIncidentRecord(BaseModel):
 class IpTitleInterestCreateRequest(BaseModel):
     interest_type: Literal["ownership", "assignment", "licence", "encumbrance", "security"]
     party_name: str = Field(min_length=2, max_length=255)
+    party_role: str | None = Field(default=None, min_length=2, max_length=40)
+    executed_on: date | None = None
     effective_from: date
     effective_until: date | None = None
     related_docket_id: str | None = None
+    scope: dict[str, object] = Field(default_factory=dict)
     evidence_reference: str = Field(min_length=3, max_length=500)
-    recordal_status: Literal["not_required", "pending", "filed", "recorded", "rejected"] = (
-        "not_required"
-    )
+    recordal_status: Literal[
+        "not_required", "pending", "filed", "recorded", "rejected", "withdrawn"
+    ] = "not_required"
 
     @model_validator(mode="after")
     def valid_dates(self) -> IpTitleInterestCreateRequest:
@@ -495,13 +498,20 @@ class IpTitleInterestRecord(BaseModel):
     id: str
     interest_type: str
     party_name: str
+    party_role: str | None
+    executed_on: date | None
     effective_from: date
     effective_until: date | None
     related_docket_id: str | None
+    source_recordal_id: str | None
+    scope_json: dict[str, object]
     evidence_reference: str
     recordal_status: str
+    registry_recorded_on: date | None
     conflict_flags_json: list
+    version: int
     created_at: datetime
+    updated_at: datetime
 
 
 class IpRelatedRightObligationCreateRequest(BaseModel):

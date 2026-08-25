@@ -14,15 +14,15 @@
     "verification_status": "not_run",
     "release_status": "blocked",
     "execution_policy": "codex_owned_single_ordered_queue; implement first and run the automated check and exact-release verification batch at the end",
-    "active_slice": "IPLF-058A",
+    "active_slice": "IPLF-058B",
     "checkpoint": {
       "recorded_at": "2026-08-25T16:36:40+05:30",
       "repository_revision": "57706e9bb51fd17e495ecc9cd9f4533bb7511010",
       "environment": "Main and production serve exact merge 57706e9b. IPLF-057B passed hosted CI/security/CodeQL, migration-first deployment, exact identity/health, dedicated UJ-35 production acceptance and the complete corrected production Playwright batch.",
       "completed_scope": "IPLF-057B is deployment-verified for the full Madrid registration/designation workspace, typed transactions, source-candidate reconciliation, exception paths, bounded canonical evidence projection, fail-closed WIPO readiness, guide and truthful law-firm claims without introducing a duplicate owner.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-058A",
-      "next_action": "Implement IPLF-058A from released main by extending IpTitleInterest and the shared docket-event/deadline/document/cost owners; do not duplicate IPLF-039E title or IPLF-049 proceeding work.",
+      "next_slice": "IPLF-058B",
+      "next_action": "Release IPLF-058A only after hosted and exact-production proof, then implement IPLF-058B UJ-36/UJ-61 workflows over its canonical recordal foundation.",
       "evidence_ref": "docs/ip-implementation/evidence/m5/IPLF-057/release-057b-2026-08-25.md"
     },
     "work_owner": {
@@ -2170,7 +2170,7 @@
         "IPLF-058A",
         "IPLF-058B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "evidence_refs": []
@@ -13608,21 +13608,80 @@
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260825_0005_iplf058a_recordal_foundation.py",
+        "apps/api/src/caseops_api/api/routes/ip_recordals.py",
+        "apps/api/src/caseops_api/services/ip_recordals.py",
+        "apps/api/src/caseops_api/schemas/ip_recordals.py",
+        "apps/api/src/caseops_api/services/ip_operations.py",
+        "apps/api/src/caseops_api/services/ip_lifecycle.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/governance/generated_data_class_projection.py",
+        "docs/ip-implementation/IP_RECORDAL_FOUNDATION.md"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_058a_recordal_foundation.py",
+        "apps/api/tests/test_20260825_ip_recordal_migration.py",
+        "apps/api/tests/test_ip_039e_chain_of_title.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-058/local-058a-2026-08-25.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m5/IPLF-058/local-058a-2026-08-25.md",
+          "revision": "230b1f8a31765ce3af53c2ad2b836f534a13859c",
+          "environment": "Windows CPython 3.13, locked uv dependencies, ephemeral SQLite migration/API fixtures, generated OpenAPI client and repository manifest/data-governance validators",
+          "fixtures": "fresh entitled law-firm tenants, canonical docket-linked assignment instrument, confirmed IP India application link, immutable registry snapshot, co-assignees and cross-tenant boundary records",
+          "assertions": "typed recordal lifecycle, writer-versus-approver RBAC, optimistic concurrency, canonical party evidence, confirmed affected registry identity, exact source URL, title projections, rejection/withdrawal history, tenant isolation, migration rollback refusal and 68-test neighboring IP regression matrix",
+          "result": "passed",
+          "recorded_at": "2026-08-25T17:55:00+05:30"
+        }
+      ],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Merge only on green hosted checks, deploy the exact merge migration-first, and record production evidence before releasing IPLF-058A.",
+        "Then implement IPLF-058B UJ-36/UJ-61 user workflows without duplicating title, proceeding, renewal, document, cost, deadline, registry, access or audit owners."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Add ip_post_registration_recordals as the typed aggregate and extend ip_title_interests/ip_docket_events with tenant-correlated recordal projection and event links.",
+        "Preserve documents, costs, deadlines, registry snapshots, access, audit, lifecycle, proceeding and renewal records as links to their existing canonical owners."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/IP_RECORDAL_FOUNDATION.md",
+          "disposition": "created",
+          "owner": "IP recordal operating contract",
+          "evidence": "State, ownership, evidence, registry, title-projection and release boundaries"
+        },
+        {
+          "artifact": "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml",
+          "disposition": "updated",
+          "owner": "Data governance control plane",
+          "evidence": "Generated inventory and sensitivity/retention controls for the additive recordal schema"
+        },
+        {
+          "artifact": "docs/ip-implementation/generated/DATA_GOVERNANCE_MAP.md",
+          "disposition": "generated",
+          "owner": "Data governance rendered view",
+          "evidence": "Human-readable generated table inventory"
+        },
+        {
+          "artifact": "apps/web/lib/api/openapi-types.ts",
+          "disposition": "generated",
+          "owner": "Typed web API client",
+          "evidence": "Generated recordal route and response contracts"
+        },
+        {
+          "artifact": "apps/api/src/caseops_api/governance/generated_data_class_projection.py",
+          "disposition": "generated",
+          "owner": "Runtime data-class governance projection",
+          "evidence": "Current ORM/map fingerprints and inventory membership for the recordal table"
+        }
+      ],
+      "allocation_review": "2026-08-25 brutal implementation review: one typed recordal aggregate extends the existing title and event writers and links every shared concern to its current owner. IPLF-049 proceedings and IPLF-037 renewal state remain separate by design; IPLF-058B retains every UJ-36/UJ-61 path and public claim.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",

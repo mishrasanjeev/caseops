@@ -435,6 +435,40 @@ def _event_checklist(payload: IpDocketEventCreateRequest) -> list[IpChecklistIte
     ]
 
 
+def _same_event_duplicate_identity(
+    row: IpDocketEvent,
+    payload: IpDocketEventCreateRequest,
+) -> bool:
+    if payload.event_kind == "opposition_shared_action":
+        return True
+    if payload.event_kind == "post_registration_recordal_transaction":
+        return (
+            row.payload_json.get("recordal_id") == payload.payload.get("recordal_id")
+            and row.payload_json.get("transaction_kind")
+            == payload.payload.get("transaction_kind")
+            and row.payload_json.get("recordal_version_before")
+            == payload.payload.get("recordal_version_before")
+        )
+    if payload.event_kind not in {
+        "madrid_action",
+        "opposition_applicant_action",
+        "opposition_opponent_action",
+        "post_registration_action",
+    }:
+        return True
+    if row.payload_json.get("action_kind") != payload.payload.get("action_kind"):
+        return False
+    if payload.event_kind not in {"post_registration_action", "madrid_action"}:
+        return True
+    if row.payload_json.get("action_identity") == payload.payload.get("action_identity"):
+        return True
+    return (
+        payload.event_kind == "madrid_action"
+        and row.payload_json.get("source_reference")
+        == payload.payload.get("source_reference")
+    )
+
+
 def preview_ip_docket_event(
     session: Session,
     *,
@@ -497,30 +531,7 @@ def preview_ip_docket_event(
             payload.proceeding_id is None
             or row.resulting_stage == payload.resulting_stage
         )
-        and (
-            payload.event_kind == "opposition_shared_action"
-            or
-            payload.event_kind
-            not in {
-                "madrid_action",
-                "opposition_applicant_action",
-                "opposition_opponent_action",
-                "post_registration_action",
-            }
-            or (
-                row.payload_json.get("action_kind") == payload.payload.get("action_kind")
-                and (
-                    payload.event_kind not in {"post_registration_action", "madrid_action"}
-                    or row.payload_json.get("action_identity")
-                    == payload.payload.get("action_identity")
-                    or (
-                        payload.event_kind == "madrid_action"
-                        and row.payload_json.get("source_reference")
-                        == payload.payload.get("source_reference")
-                    )
-                )
-            )
-        )
+        and _same_event_duplicate_identity(row, payload)
         and row.candidate_status != "rejected"
         and row.id != payload.supersedes_event_id
     ]
@@ -605,30 +616,7 @@ def _append_locked_event(
             payload.proceeding_id is None
             or row.resulting_stage == payload.resulting_stage
         )
-        and (
-            payload.event_kind == "opposition_shared_action"
-            or
-            payload.event_kind
-            not in {
-                "madrid_action",
-                "opposition_applicant_action",
-                "opposition_opponent_action",
-                "post_registration_action",
-            }
-            or (
-                row.payload_json.get("action_kind") == payload.payload.get("action_kind")
-                and (
-                    payload.event_kind not in {"post_registration_action", "madrid_action"}
-                    or row.payload_json.get("action_identity")
-                    == payload.payload.get("action_identity")
-                    or (
-                        payload.event_kind == "madrid_action"
-                        and row.payload_json.get("source_reference")
-                        == payload.payload.get("source_reference")
-                    )
-                )
-            )
-        )
+        and _same_event_duplicate_identity(row, payload)
         and row.candidate_status != "rejected"
         and row.id != payload.supersedes_event_id
     ]

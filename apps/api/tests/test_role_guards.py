@@ -16,6 +16,7 @@ from fastapi.routing import APIRoute
 
 from caseops_api.api.dependencies import (
     require_all_capabilities,
+    require_any_capability,
     require_capability,
     require_role,
 )
@@ -212,6 +213,12 @@ def test_guard_detection_recognises_require_capability():
 
 def test_guard_detection_recognises_require_all_capabilities():
     guard = require_all_capabilities("ip:write", "drafts:create")
+    assert guard.__name__ == "_dep"
+    assert "capabilities" in guard.__code__.co_freevars
+
+
+def test_guard_detection_recognises_require_any_capability():
+    guard = require_any_capability("ip:write", "ip:approve")
     assert guard.__name__ == "_dep"
     assert "capabilities" in guard.__code__.co_freevars
 

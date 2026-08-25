@@ -26,6 +26,7 @@ from caseops_api.api.routes import (
     integrations,
     ip_international,
     ip_operations,
+    ip_recordals,
     ip_registry,
     ip_watch,
     mailbox,
@@ -58,6 +59,7 @@ api_router.include_router(bulk_imports.router, prefix="/imports", tags=["bulk-im
 api_router.include_router(companies.router, prefix="/companies", tags=["companies"])
 api_router.include_router(ip_international.router, prefix="/ip", tags=["ip-international"])
 api_router.include_router(ip_operations.router, prefix="/ip", tags=["ip-operations"])
+api_router.include_router(ip_recordals.router, prefix="/ip", tags=["ip-recordals"])
 api_router.include_router(ip_registry.router, prefix="/ip", tags=["ip-registry"])
 api_router.include_router(ip_watch.router, prefix="/ip", tags=["ip-watch"])
 api_router.include_router(matters.router, prefix="/matters", tags=["matters"])

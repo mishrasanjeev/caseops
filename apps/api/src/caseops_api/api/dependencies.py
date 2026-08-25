@@ -169,6 +169,31 @@ def require_all_capabilities(*capabilities: str) -> Callable[..., SessionContext
     return _dep
 
 
+def require_any_capability(*capabilities: str) -> Callable[..., SessionContext]:
+    """FastAPI dependency requiring at least one listed capability."""
+    if not capabilities:
+        raise RuntimeError("require_any_capability needs at least one capability")
+    for capability in capabilities:
+        if CAPABILITY_ROLES.get(capability) is None:
+            raise RuntimeError(f"Unknown capability {capability!r}; add it to CAPABILITY_ROLES.")
+
+    def _dep(
+        context: Annotated[SessionContext, Depends(get_current_context)],
+        session: DbSession,
+    ) -> SessionContext:
+        if not any(
+            membership_has_capability(session, context.membership, capability)
+            for capability in capabilities
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Requires any capability in {sorted(capabilities)}.",
+            )
+        return context
+
+    return _dep
+
+
 def list_capabilities(roles: Iterable[MembershipRole]) -> list[str]:
     """Helper for sanity checks / tests."""
     return list_static_capabilities(roles)
