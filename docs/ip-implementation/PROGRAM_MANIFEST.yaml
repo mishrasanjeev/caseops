@@ -16,14 +16,14 @@
     "execution_policy": "codex_owned_single_ordered_queue; implement first and run the automated check and exact-release verification batch at the end",
     "active_slice": "IPLF-058A",
     "checkpoint": {
-      "recorded_at": "2026-08-25T14:10:00+05:30",
-      "repository_revision": "7da59ffd706b07c6757fbae6bc59f8fca6ee5525",
-      "environment": "Main and production serve exact merge 1ef14d2c. IPLF-057B is locally implemented over that released aggregate; focused API, provider, migration, web build/component and fresh-tenant UJ-35 Playwright gates pass. Hosted PostgreSQL and release gates remain pending.",
-      "completed_scope": "IPLF-057B implements the full Madrid registration/designation workspace, typed transactions, source-candidate reconciliation, exception paths, bounded canonical evidence projection, fail-closed WIPO readiness, guide and law-firm claims without introducing a duplicate owner.",
+      "recorded_at": "2026-08-25T16:36:40+05:30",
+      "repository_revision": "57706e9bb51fd17e495ecc9cd9f4533bb7511010",
+      "environment": "Main and production serve exact merge 57706e9b. IPLF-057B passed hosted CI/security/CodeQL, migration-first deployment, exact identity/health, dedicated UJ-35 production acceptance and the complete corrected production Playwright batch.",
+      "completed_scope": "IPLF-057B is deployment-verified for the full Madrid registration/designation workspace, typed transactions, source-candidate reconciliation, exception paths, bounded canonical evidence projection, fail-closed WIPO readiness, guide and truthful law-firm claims without introducing a duplicate owner.",
       "program_state": "PROGRAM INCOMPLETE",
       "next_slice": "IPLF-058A",
-      "next_action": "Pass IPLF-057B hosted and exact-release gates, then begin IPLF-058A ownership/backend reconciliation from released main.",
-      "evidence_ref": "docs/ip-implementation/evidence/m5/IPLF-057/local-057b-2026-08-25.md"
+      "next_action": "Implement IPLF-058A from released main by extending IpTitleInterest and the shared docket-event/deadline/document/cost owners; do not duplicate IPLF-039E title or IPLF-049 proceeding work.",
+      "evidence_ref": "docs/ip-implementation/evidence/m5/IPLF-057/release-057b-2026-08-25.md"
     },
     "work_owner": {
       "owner": "Codex",
@@ -2144,11 +2144,12 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "evidence_refs": [
         "docs/ip-implementation/evidence/m5/IPLF-057/local-057a-2026-08-25.md",
         "docs/ip-implementation/evidence/m5/IPLF-057/release-056b-057a-2026-08-25.md",
-        "docs/ip-implementation/evidence/m5/IPLF-057/local-057b-2026-08-25.md"
+        "docs/ip-implementation/evidence/m5/IPLF-057/local-057b-2026-08-25.md",
+        "docs/ip-implementation/evidence/m5/IPLF-057/release-057b-2026-08-25.md"
       ]
     },
     {
@@ -13519,10 +13520,12 @@
         "IPLF-UJ-35-EXC-04:apps/api/tests/test_ip_international.py::test_madrid_impact_agent_and_fee_actions_reuse_canonical_owners",
         "apps/api/tests/test_postgres_validation.py::test_iplf057b_madrid_projection_and_source_reconciliation_on_postgres",
         "apps/api/tests/test_20260825_ip_madrid_projection_migration.py",
-        "apps/web/app/app/ip/madrid/page.test.tsx"
+        "apps/web/app/app/ip/madrid/page.test.tsx",
+        "tests/e2e/iplf-057b-madrid-workflow-2026-08-25-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-057/local-057b-2026-08-25.md"
+        "docs/ip-implementation/evidence/m5/IPLF-057/local-057b-2026-08-25.md",
+        "docs/ip-implementation/evidence/m5/IPLF-057/release-057b-2026-08-25.md"
       ],
       "evidence_metadata": [
         {
@@ -13533,11 +13536,20 @@
           "assertions": "UJ-35 normal and all exceptions, optimistic concurrency, independent status, bounded canonical evidence, provider fail-closed state, responsive workspace, guide and public claims",
           "result": "passed",
           "recorded_at": "2026-08-25T14:10:00+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m5/IPLF-057/release-057b-2026-08-25.md",
+          "revision": "57706e9bb51fd17e495ecc9cd9f4533bb7511010",
+          "environment": "hosted CI/security/CodeQL, migration-first Cloud Run API/web deployment, exact identity/health, and exact-release production Playwright",
+          "fixtures": "synthetic dedicated IP QA basic mark, Madrid IR, India and EU designations, sourced status candidates, local agent, and standard production QA regression records",
+          "assertions": "UJ-35 normal and all exceptions, exact release identity, provider fail-closed state, source links, mobile navigation and geometry, guide and public claims, plus complete production regression coverage",
+          "result": "passed",
+          "recorded_at": "2026-08-25T16:36:40+05:30"
         }
       ],
       "blockers": [],
       "next_actions": [
-        "Pass hosted PostgreSQL, coverage, web, Playwright, security and CodeQL gates; merge, deploy exact main and run dated production UJ-35 acceptance."
+        "Begin IPLF-058A from released main while keeping live WIPO activation fail-closed."
       ],
       "data_impact": [
         "Additive bounded restore-forward backfill creates the required IpTrademarkParticularVersion compatibility projection for existing Madrid dockets; no Madrid legal facts move ownership and downgrade retains valid projections.",
@@ -13561,12 +13573,18 @@
           "disposition": "created",
           "owner": "Program control plane",
           "evidence": "Local ownership, implementation and verification record"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m5/IPLF-057/release-057b-2026-08-25.md",
+          "disposition": "created",
+          "owner": "Program control plane",
+          "evidence": "Exact hosted, migration, deployment, production identity and UJ-35 acceptance record"
         }
       ],
       "allocation_review": "2026-08-25 brutal implementation review: IPLF-057B extends the released Madrid aggregate and existing docket/event/deadline/document/cost/provider owners. The projection migration repairs shared-reader compatibility only; no parallel legal-state, evidence, lifecycle, access, audit or provider control plane was introduced.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_review"
+      "release_status": "deployment_verified"
     },
     {
       "id": "IPLF-058A",
@@ -25758,7 +25776,7 @@
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-057B"
       ],
@@ -25787,7 +25805,7 @@
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-057B"
       ],
@@ -25817,7 +25835,7 @@
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-057B"
       ],
@@ -25848,7 +25866,7 @@
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-057B"
       ],
@@ -41367,7 +41385,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-057B"
       ]
@@ -50430,7 +50448,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-057B"
       ],
@@ -50458,7 +50476,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-057B"
       ],
@@ -50486,7 +50504,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-057B"
       ],
@@ -50514,7 +50532,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-057B"
       ],
@@ -50542,7 +50560,7 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-057B"
       ],
