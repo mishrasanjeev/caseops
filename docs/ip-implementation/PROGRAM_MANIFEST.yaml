@@ -17,12 +17,12 @@
     "active_slice": "IPLF-057B",
     "checkpoint": {
       "recorded_at": "2026-08-25T12:05:00+05:30",
-      "repository_revision": "c846287fb50cacc4b50ba19763219c761d86a8dc",
-      "environment": "Main and production serve exact IPLF-056B revision fdbfe8af. Production workflow 32814217518 verified identity, passed 82 broad tests plus A0/notices, and exposed two verifier defects remediated in c846287f. IPLF-057A is locally verified and awaits hosted/release gates.",
+      "repository_revision": "667c386a1088f723269dda9c598867b6b2022a74",
+      "environment": "Main and production serve exact IPLF-056B revision fdbfe8af. Production workflow 32814217518 verified identity, passed 82 broad tests plus A0/notices, and exposed two verifier defects remediated in c846287f. IPLF-057A candidate 667c386a passes local API, migration, governance, generated-client, web and real PostgreSQL 17 gates and awaits hosted/release gates.",
       "completed_scope": "IPLF-057A adds one canonical Madrid international-registration/designation aggregate over existing docket, relationship, event, access, lifecycle, audit, governance and provider owners. Tenant isolation, independent designation state, migration rollback policy and bounded APIs are locally verified; no live WIPO call is enabled.",
       "program_state": "PROGRAM INCOMPLETE",
       "next_slice": "IPLF-057B",
-      "next_action": "Pass IPLF-057A hosted and PostgreSQL gates, merge and deploy the exact candidate, rerun the corrected production suite, then complete IPLF-057B UJ-35 workflows and exceptions.",
+      "next_action": "Pass IPLF-057A hosted gates, merge and deploy exact candidate 667c386a or its descendant, rerun the corrected production suite, then complete IPLF-057B UJ-35 workflows and exceptions.",
       "evidence_ref": "docs/ip-implementation/evidence/m5/IPLF-057/local-057a-2026-08-25.md"
     },
     "work_owner": {
@@ -13312,7 +13312,7 @@
         }
       ],
       "next_actions": [
-        "Merge and deploy candidate c846287f or its descendant, then rerun the corrected exact-production acceptance before marking deployment verified."
+        "Merge and deploy candidate 667c386a or its descendant, then rerun the corrected exact-production acceptance before marking deployment verified."
       ],
       "data_impact": [
         "No schema change. IP operation history remains immutable; source-report resolution, connector disconnect and credential evidence continue through their existing audited canonical writers."
@@ -13397,8 +13397,8 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m5/IPLF-057/local-057a-2026-08-25.md",
-          "revision": "c846287fb50cacc4b50ba19763219c761d86a8dc",
-          "environment": "local SQLite API/migration tests, repository governance/OpenAPI gates, TypeScript and Playwright discovery; PostgreSQL test collected for hosted CI",
+          "revision": "667c386a1088f723269dda9c598867b6b2022a74",
+          "environment": "local SQLite API/migration tests, repository governance/OpenAPI/generated-client gates, TypeScript and Playwright discovery, plus PostgreSQL 17 with pgvector",
           "fixtures": "outbound Indian basic mark, two independent designations, sourced WIPO event, cross-tenant actor, terminal lifecycle, empty/populated migration databases",
           "assertions": "single-owner composition, tenant composite FKs, independent WIPO/national state, relationship/event reuse, lifecycle suppression, bounded lists, audit, uniqueness and restore-forward",
           "result": "passed",
