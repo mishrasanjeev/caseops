@@ -249,10 +249,10 @@ Generated; do not edit.
 | IP-FILE-04 | IP-FILE | IPLF-039H | 83 | 0 | not_started | not_run | blocked | false |
 | IP-FILE-05 | IP-FILE | IPLF-039H | 83 | 0 | not_started | not_run | blocked | false |
 | IP-FILE-06 | IP-FILE | IPLF-039H | 83 | 0 | not_started | not_run | blocked | false |
-| IP-MAD-01 | IP-MAD | IPLF-057B | 6 | 0 | not_started | not_run | blocked | false |
-| IP-MAD-02 | IP-MAD | IPLF-057B | 6 | 0 | not_started | not_run | blocked | false |
-| IP-MAD-03 | IP-MAD | IPLF-057B | 6 | 0 | not_started | not_run | blocked | false |
-| IP-MAD-04 | IP-MAD | IPLF-057B | 6 | 0 | not_started | not_run | blocked | false |
+| IP-MAD-01 | IP-MAD | IPLF-057B | 3 | 1 | implemented | passed | blocked | false |
+| IP-MAD-02 | IP-MAD | IPLF-057B | 3 | 1 | implemented | passed | blocked | false |
+| IP-MAD-03 | IP-MAD | IPLF-057B | 3 | 1 | implemented | passed | blocked | false |
+| IP-MAD-04 | IP-MAD | IPLF-057B | 3 | 1 | implemented | passed | blocked | false |
 | IP-POST-01 | IP-POST | IPLF-039H, IPLF-058B | 88 | 0 | not_started | not_run | blocked | false |
 | IP-POST-02 | IP-POST | IPLF-039E, IPLF-039H, IPLF-058B | 91 | 1 | in_progress | not_run | blocked | false |
 | IP-POST-03 | IP-POST | IPLF-039E, IPLF-039H, IPLF-058B | 91 | 1 | in_progress | not_run | blocked | false |
