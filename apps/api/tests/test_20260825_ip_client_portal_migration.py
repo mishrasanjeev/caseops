@@ -67,6 +67,20 @@ def test_ip_client_portal_migration_empty_round_trip(
             "source_portal_grant_id",
             "portal_publication_id",
         } <= instruction_columns
+        publication_indexes = {
+            tuple(index["column_names"])
+            for index in schema.get_indexes("portal_publications")
+        }
+        assert {
+            ("report_artifact_id",),
+            ("document_version_id",),
+            ("revoked_by_membership_id",),
+        } <= publication_indexes
+        instruction_indexes = {
+            tuple(index["column_names"])
+            for index in schema.get_indexes("ip_client_instructions")
+        }
+        assert ("renewal_term_id",) in instruction_indexes
         assert _head(database_url) == MIGRATION_HEAD
     finally:
         engine.dispose()

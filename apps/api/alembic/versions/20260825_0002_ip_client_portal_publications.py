@@ -286,6 +286,21 @@ def upgrade() -> None:
         ["delivery_intent_id"],
     )
     op.create_index(
+        "ix_portal_publications_report_artifact_id",
+        "portal_publications",
+        ["report_artifact_id"],
+    )
+    op.create_index(
+        "ix_portal_publications_document_version_id",
+        "portal_publications",
+        ["document_version_id"],
+    )
+    op.create_index(
+        "ix_portal_publications_revoked_by_membership_id",
+        "portal_publications",
+        ["revoked_by_membership_id"],
+    )
+    op.create_index(
         "ix_portal_publications_user_status",
         "portal_publications",
         ["portal_user_id", "status", "scheduled_for"],
@@ -448,6 +463,10 @@ def upgrade() -> None:
             "ix_ip_client_instructions_portal_publication_id",
             ["portal_publication_id"],
         )
+        batch.create_index(
+            "ix_ip_client_instructions_renewal_term_id",
+            ["renewal_term_id"],
+        )
 
 
 def downgrade() -> None:
@@ -469,6 +488,7 @@ def downgrade() -> None:
         )
 
     with op.batch_alter_table("ip_client_instructions") as batch:
+        batch.drop_index("ix_ip_client_instructions_renewal_term_id")
         batch.drop_index("ix_ip_client_instructions_portal_publication_id")
         batch.drop_index("ix_ip_client_instructions_source_portal_grant_id")
         batch.drop_index("ix_ip_client_instructions_source_portal_user_id")

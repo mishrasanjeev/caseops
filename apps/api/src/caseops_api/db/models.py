@@ -13657,6 +13657,9 @@ class PortalPublication(Base):
             "status",
             "scheduled_for",
         ),
+        Index("ix_portal_publications_report_artifact_id", "report_artifact_id"),
+        Index("ix_portal_publications_document_version_id", "document_version_id"),
+        Index("ix_portal_publications_revoked_by_membership_id", "revoked_by_membership_id"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -17824,6 +17827,7 @@ class IpClientInstruction(Base):
             "renewal_term_id",
             "status",
         ),
+        Index("ix_ip_client_instructions_renewal_term_id", "renewal_term_id"),
         Index("ix_ip_client_instructions_docket_id", "docket_id", "company_id"),
         Index(
             "ix_ip_client_instructions_source_communication_id",
