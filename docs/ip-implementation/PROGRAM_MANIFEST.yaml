@@ -14,16 +14,16 @@
     "verification_status": "not_run",
     "release_status": "blocked",
     "execution_policy": "codex_owned_single_ordered_queue; implement first and run the automated check and exact-release verification batch at the end",
-    "active_slice": "IPLF-056A",
+    "active_slice": "IPLF-056B",
     "checkpoint": {
-      "recorded_at": "2026-08-25T20:30:00+05:30",
-      "repository_revision": "b319f845df9f9e467c64d638022f3a5357b0e196",
-      "environment": "Canonical main and production are exact-release verified through IPLF-054. IPLF-055 is implemented and locally verified on codex/iplf055-client-portal-20260825 and awaits PR/release gates.",
-      "completed_scope": "IPLF-054A/B are exact-production verified. IPLF-055A/B extend the existing portal, report, document, notification, and instruction owners and are locally verified. External legal/provider/UAT acceptance is not claimed.",
+      "recorded_at": "2026-08-25T08:43:00+05:30",
+      "repository_revision": "39b10d427e69d05c78c9f7acfe0c2c73d408eeea",
+      "environment": "Canonical main and production are exact-release verified through IPLF-055 at cb31627. IPLF-056A is locally verified on codex/iplf056-provider-operations-20260825 and awaits hosted PR/release gates.",
+      "completed_scope": "IPLF-055A/B are exact-production verified. IPLF-056A registers registry, journal-watch, and source-health records in the existing provider-operations owner with tenant fencing, redaction, cost/quota state, audited source resolution, and fail-closed replay. External legal/provider/UAT acceptance is not claimed.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-056A",
-      "next_action": "Pass IPLF-055 PR, CI, merge, deployment, and exact-production gates, then register the remaining registry/watch/source operation kinds in the existing provider-operations owners for IPLF-056.",
-      "evidence_ref": "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
+      "next_slice": "IPLF-056B",
+      "next_action": "Pass IPLF-056A PR, CI, merge, deployment, and exact-production gates, then complete UJ-25 failed-integration operation and UJ-68 credential rotation/disconnection without duplicating existing readiness, credential, or source owners.",
+      "evidence_ref": "docs/ip-implementation/evidence/m5/IPLF-056/local-2026-08-25.md"
     },
     "work_owner": {
       "owner": "Codex",
@@ -2079,9 +2079,10 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
+        "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md",
+        "docs/ip-implementation/evidence/m5/IPLF-055/release-2026-08-25.md"
       ]
     },
     {
@@ -2115,10 +2116,12 @@
         "IPLF-056A",
         "IPLF-056B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
-      "evidence_refs": []
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-056/local-2026-08-25.md"
+      ]
     },
     {
       "id": "IPLF-057",
@@ -12973,7 +12976,8 @@
         "apps/api/tests/test_portal_ip.py"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
+        "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md",
+        "docs/ip-implementation/evidence/m5/IPLF-055/release-2026-08-25.md"
       ],
       "evidence_metadata": [
         {
@@ -13001,7 +13005,7 @@
       "allocation_review": "2026-08-25 duplicate-work review confirms one portal identity/session/grant path, one notification delivery owner, one document store, and one client-instruction ledger.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_review",
+      "release_status": "deployment_verified",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
@@ -13067,7 +13071,8 @@
         "apps/web/app/portal/ip/[id]/page.test.tsx"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
+        "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md",
+        "docs/ip-implementation/evidence/m5/IPLF-055/release-2026-08-25.md"
       ],
       "evidence_metadata": [
         {
@@ -13095,7 +13100,7 @@
       "allocation_review": "2026-08-25 workflow review confirms client UI consumes only server-owned grants/publications and cannot invent tenant, grant, target-version, or legal-state identifiers.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_review"
+      "release_status": "deployment_verified"
     },
     {
       "id": "IPLF-056A",
@@ -13119,22 +13124,49 @@
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/schemas/provider_operations.py",
+        "apps/api/src/caseops_api/services/provider_operations.py",
+        "apps/web/lib/api/schemas.ts",
+        "apps/web/lib/api/openapi-types.ts"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_iplf056_provider_operations.py::test_ip_provider_attempts_use_shared_operations_contract_without_secret_leakage",
+        "apps/api/tests/test_provider_operations.py",
+        "apps/api/tests/test_ip_registry_reconciliation.py",
+        "apps/api/tests/test_ip_journal_watch.py",
+        "apps/api/tests/test_source_access.py",
+        "apps/web/lib/api/schemas.test.ts",
+        "apps/web/app/app/admin/provider-operations/page.test.tsx"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-056/local-2026-08-25.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m5/IPLF-056/local-2026-08-25.md",
+          "revision": "39b10d427e69d05c78c9f7acfe0c2c73d408eeea",
+          "environment": "local SQLite API, generated OpenAPI/TypeScript parity, Vitest, and web typecheck",
+          "fixtures": "tenant-scoped registry failure, journal quota pause with recorded cost, and quarantined source-health report",
+          "assertions": "canonical shared owner, bounded listing, exact tenant fencing, secret and URL redaction, cost/quota classification, immutable replay denial, and audited source resolution",
+          "result": "passed",
+          "recorded_at": "2026-08-25T08:43:00+05:30"
+        }
+      ],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Pass hosted PR, exact-main, deployment, and exact-release production gates, then continue IPLF-056B."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No schema change. Existing registry attempts, journal ingestion runs, and source-link reports are projected read-only into the shared provider-operations contract; only the existing audited source-report status workflow mutates state."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "documentation_impact": [
+        "docs/ip-implementation/evidence/m5/IPLF-056/local-2026-08-25.md"
+      ],
+      "allocation_review": "2026-08-25 implementation review confirms the existing provider-operations service/dashboard, readiness catalog, source actions, and provider credential owners remain canonical; no duplicate health, support, cost, or replay surface was introduced.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
@@ -23243,12 +23275,13 @@
         "apps/web/app/app/ip/client-portal/page.test.tsx"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
+        "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md",
+        "docs/ip-implementation/evidence/m5/IPLF-055/release-2026-08-25.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-055B"
       ],
@@ -23272,12 +23305,13 @@
         "apps/web/app/app/ip/client-portal/page.test.tsx"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
+        "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md",
+        "docs/ip-implementation/evidence/m5/IPLF-055/release-2026-08-25.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-055B"
       ],
@@ -23302,12 +23336,13 @@
         "apps/web/app/portal/ip/[id]/page.test.tsx"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
+        "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md",
+        "docs/ip-implementation/evidence/m5/IPLF-055/release-2026-08-25.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-055B"
       ],
@@ -23332,12 +23367,13 @@
         "apps/web/app/portal/ip/[id]/page.test.tsx"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
+        "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md",
+        "docs/ip-implementation/evidence/m5/IPLF-055/release-2026-08-25.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-055B"
       ],

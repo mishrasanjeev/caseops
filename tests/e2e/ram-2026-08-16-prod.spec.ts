@@ -256,6 +256,11 @@ const NAV_GROUPS: ReadonlyArray<{
         href: "/app/ip/reports",
         capability: "ip:read",
       },
+      {
+        label: "IP client portal",
+        href: "/app/ip/client-portal",
+        capability: "ip:read",
+      },
     ],
   },
   {

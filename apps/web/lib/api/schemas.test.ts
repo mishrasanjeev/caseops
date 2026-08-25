@@ -5,6 +5,7 @@ import {
   outsideCounselSpendStatus,
   panelStatus,
   providerAdapterContractRecord,
+  providerOperationRecord,
 } from "@/lib/api/schemas";
 
 // All three enums below MUST match
@@ -98,5 +99,53 @@ describe("providerAdapterContractRecord", () => {
 
     expect(parsed.domain).toBe("legal_research");
     expect(parsed.adapter_status).toBe("implemented_default_off");
+  });
+});
+
+describe("providerOperationRecord", () => {
+  it.each([
+    ["ip_registry_sync", "provider_outage"],
+    ["ip_journal_ingestion", "rate_limit"],
+    ["source_link_health", "changed_content"],
+  ])("accepts the IPLF-056 operation kind %s", (jobKind, responseClass) => {
+    const parsed = providerOperationRecord.parse({
+      id: `${jobKind}:operation-1`,
+      job_kind: jobKind,
+      provider: "ipindia-registry",
+      company_id: "company-1",
+      matter_id: null,
+      source_type: "ip_registry_link",
+      source_ref: "id:abc123",
+      provider_item_ref: null,
+      status: "failed",
+      operator_state: "open",
+      error_redacted: "Provider operation failed.",
+      dead_letter_reason: null,
+      attempts: 1,
+      max_attempts: 1,
+      next_attempt_at: null,
+      created_at: "2026-08-25T00:00:00Z",
+      updated_at: "2026-08-25T00:00:00Z",
+      correlation_ref: null,
+      response_class: responseClass,
+      last_attempted_at: "2026-08-25T00:00:00Z",
+      last_successful_at: null,
+      last_good_at: null,
+      next_scheduled_at: null,
+      freshness_state: "stale",
+      records_affected: null,
+      estimated_cost_minor: 0,
+      estimated_cost_currency: "INR",
+      estimated_cost_basis: "recorded_provider_attempt",
+      retryable: false,
+      quarantined: false,
+      replay_available: false,
+      ignore_available: false,
+      mark_resolved_available: false,
+      notes: [],
+    });
+
+    expect(parsed.job_kind).toBe(jobKind);
+    expect(parsed.response_class).toBe(responseClass);
   });
 });
