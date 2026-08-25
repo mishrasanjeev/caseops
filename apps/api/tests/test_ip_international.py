@@ -110,6 +110,61 @@ def test_madrid_contract_rejects_unsafe_or_incomplete_evidence(
         TrademarkInternationalRecordCreateRequest.model_validate(payload)
 
 
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        (
+            _registration_payload(basic_application_id="application-1")
+            | {"docket_id": "docket-1", "docket_title": "Duplicate docket"},
+            "Docket title is only valid",
+        ),
+        (
+            _registration_payload(basic_application_id="application-1")
+            | {"goods_services": {"9": "Software", "42": "  "}},
+            "entries cannot be blank",
+        ),
+        (
+            _registration_payload(basic_application_id="application-1")
+            | {"designated_member_code": "IN"},
+            "cannot contain designation fields",
+        ),
+        (
+            _designation_payload(
+                parent_registration_id="registration-1",
+                member_code="IN",
+                national_status="pending",
+            )
+            | {"jurisdiction": None},
+            "requires its parent, member, jurisdiction, kind and date",
+        ),
+        (
+            _designation_payload(
+                parent_registration_id="registration-1",
+                member_code="IN",
+                national_status="pending",
+            )
+            | {"basic_application_id": "application-1"},
+            "Only the international registration may own",
+        ),
+        (
+            _designation_payload(
+                parent_registration_id="registration-1",
+                member_code="IN",
+                national_status="pending",
+            )
+            | {"ir_number": "1888001"},
+            "IR number belongs to the parent",
+        ),
+    ],
+)
+def test_madrid_record_contract_rejects_conflicting_ownership(
+    payload: dict[str, object],
+    message: str,
+) -> None:
+    with pytest.raises(ValidationError, match=message):
+        TrademarkInternationalRecordCreateRequest.model_validate(payload)
+
+
 def test_madrid_registration_and_designations_reuse_dockets_events_and_relationships(
     client: TestClient,
 ) -> None:
@@ -617,3 +672,167 @@ def test_madrid_action_contract_keeps_authority_and_reconciliation_distinct() ->
                 reconciliation_decision="same_fact",
             )
         )
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        (
+            _action_payload(
+                membership_id="membership-1",
+                expected_version=1,
+                action_kind="change_recorded",
+                authority="internal",
+                source_reference="internal:change-1",
+                effective_at=datetime(2026, 8, 25, 9),
+            ),
+            "Effective time must include a timezone",
+        ),
+        (
+            _action_payload(
+                membership_id="membership-1",
+                expected_version=1,
+                action_kind="change_recorded",
+                authority="internal",
+                source_reference="internal:change-1",
+                source_url="file:///tmp/evidence.json",
+            ),
+            "source URL must use HTTP or HTTPS",
+        ),
+        (
+            _action_payload(
+                membership_id="membership-1",
+                expected_version=1,
+                action_kind="wipo_notification_recorded",
+                authority="wipo",
+                source_reference="WIPO:notice-1",
+            ),
+            "External-office actions require a source URL",
+        ),
+        (
+            _action_payload(
+                membership_id="membership-1",
+                expected_version=1,
+                action_kind="change_recorded",
+                authority="internal",
+                source_reference="internal:change-1",
+                national_status="protected",
+            ),
+            "Only a national-office-attributed action",
+        ),
+        (
+            _action_payload(
+                membership_id="membership-1",
+                expected_version=1,
+                action_kind="change_recorded",
+                authority="internal",
+                source_reference="internal:change-1",
+                local_agent_name="India Agent LLP",
+            ),
+            "Local agent may change only",
+        ),
+        (
+            _action_payload(
+                membership_id="membership-1",
+                expected_version=1,
+                action_kind="local_agent_instruction",
+                authority="internal",
+                source_reference="internal:agent-1",
+            ),
+            "must remain attributed to the local agent",
+        ),
+        (
+            _action_payload(
+                membership_id="membership-1",
+                expected_version=1,
+                action_kind="source_snapshot",
+                authority="internal",
+                source_reference="internal:snapshot-1",
+            ),
+            "snapshot must be attributed to WIPO or a national office",
+        ),
+        (
+            _action_payload(
+                membership_id="membership-1",
+                expected_version=1,
+                action_kind="source_snapshot",
+                authority="wipo",
+                source_reference="WIPO:snapshot-1",
+                source_url="https://www.wipo.int/madrid/snapshot-1",
+            ),
+            "snapshot must propose its authority-owned status",
+        ),
+        (
+            _action_payload(
+                membership_id="membership-1",
+                expected_version=1,
+                action_kind="source_snapshot",
+                authority="wipo",
+                source_reference="WIPO:snapshot-1",
+                source_url="https://www.wipo.int/madrid/snapshot-1",
+                wipo_status="registered",
+                reconciles_event_id="event-1",
+            ),
+            "snapshot cannot reconcile another source event",
+        ),
+        (
+            _action_payload(
+                membership_id="membership-1",
+                expected_version=1,
+                action_kind="source_reconciliation",
+                authority="internal",
+                source_reference="internal:review-1",
+            ),
+            "requires a candidate event and explicit decision",
+        ),
+        (
+            _action_payload(
+                membership_id="membership-1",
+                expected_version=1,
+                action_kind="change_recorded",
+                authority="internal",
+                source_reference="internal:change-1",
+                reconciles_event_id="event-1",
+            ),
+            "Only source reconciliation may reference",
+        ),
+        (
+            _action_payload(
+                membership_id="membership-1",
+                expected_version=1,
+                action_kind="change_recorded",
+                authority="wipo",
+                source_reference="WIPO:change-1",
+                source_url="https://www.wipo.int/madrid/change-1",
+                wipo_status="registered",
+            ),
+            "Legal status changes must enter through a sourced snapshot",
+        ),
+        (
+            _action_payload(
+                membership_id="membership-1",
+                expected_version=1,
+                action_kind="dependency_impact_review",
+                authority="internal",
+                source_reference="internal:impact-1",
+            ),
+            "requires impact_scope and recommended_action",
+        ),
+        (
+            _action_payload(
+                membership_id="membership-1",
+                expected_version=1,
+                action_kind="fee_recorded",
+                authority="internal",
+                source_reference="internal:fee-1",
+            ),
+            "Fee action requires at least one canonical cost item",
+        ),
+    ],
+)
+def test_madrid_action_contract_rejects_invalid_authority_boundaries(
+    payload: dict[str, object],
+    message: str,
+) -> None:
+    with pytest.raises(ValidationError, match=message):
+        TrademarkInternationalActionRequest.model_validate(payload)
