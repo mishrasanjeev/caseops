@@ -16,14 +16,14 @@
     "execution_policy": "codex_owned_single_ordered_queue; implement first and run the automated check and exact-release verification batch at the end",
     "active_slice": "IPLF-059B",
     "checkpoint": {
-      "recorded_at": "2026-08-25T22:59:33+05:30",
-      "repository_revision": "7809ed33c0b26f7f3b8e84d3a107d6ef690c8c56",
-      "environment": "Exact canonical main deployed migration-first to production API caseops-api-00355-8rn and web caseops-web-00333-jls at 100 percent latest-only traffic. Exact-main CI, Security, CodeQL and production verifier 32874739889 passed.",
-      "completed_scope": "IPLF-058 is deployment-verified. IPLF-058B provides the post-registration operator workspace, all UJ-36 paths, bounded IPLF-039E-owned UJ-61 title presentation, correction/conflict-review hardening, navigation, guide and law-firm claims without duplicating renewal, proceeding, title, Registry, document, deadline or cost owners.",
+      "recorded_at": "2026-08-26T03:14:13+05:30",
+      "repository_revision": "f56e5a2f2c48f1e0e5149b5004568635c49793b3",
+      "environment": "Exact canonical main deployed migration-first to production API caseops-api-00357-cn7 and web caseops-web-00335-vwv at 100 percent latest-only traffic. Exact-main CI, Security, CodeQL and production verifier 32900844537 passed.",
+      "completed_scope": "IPLF-059A is deployment-verified. It provides the canonical foreign-associate instruction aggregate, migration, linked-owner APIs, independent acknowledgement/filing evidence, finance reconciliation, refusal/reassignment history and terminal-lifecycle hardening without duplicating shared owners.",
       "program_state": "PROGRAM INCOMPLETE",
       "next_slice": "IPLF-059B",
-      "next_action": "Release IPLF-059A migration-first, then implement IPLF-059B and all UJ-37 paths over the canonical foundation without duplicating shared owners.",
-      "evidence_ref": "docs/ip-implementation/evidence/m5/IPLF-058/release-058b-2026-08-25.md"
+      "next_action": "Implement, test and release IPLF-059B and all five UJ-37 browser paths over the deployed canonical foundation, including reminders, responsive UX, guide and truthful law-firm claims.",
+      "evidence_ref": "docs/ip-implementation/evidence/m5/IPLF-059/release-059a-2026-08-26.md"
     },
     "work_owner": {
       "owner": "Codex",
@@ -2196,7 +2196,8 @@
       "verification_status": "not_run",
       "release_status": "blocked",
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-059/local-059a-2026-08-26.md"
+        "docs/ip-implementation/evidence/m5/IPLF-059/local-059a-2026-08-26.md",
+        "docs/ip-implementation/evidence/m5/IPLF-059/release-059a-2026-08-26.md"
       ]
     },
     {
@@ -13872,7 +13873,8 @@
         "apps/api/tests/test_route_coverage_matrix.py"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-059/local-059a-2026-08-26.md"
+        "docs/ip-implementation/evidence/m5/IPLF-059/local-059a-2026-08-26.md",
+        "docs/ip-implementation/evidence/m5/IPLF-059/release-059a-2026-08-26.md"
       ],
       "evidence_metadata": [
         {
@@ -13883,12 +13885,19 @@
           "assertions": "typed lifecycle, stale-write rejection, durable terminal neutralization with no reopen resurrection, sent/manual dispatch state, delivery versus acknowledgement, wrong-recipient rejection, privileged approval, required assignment budget and fee/tax approval, independent filing verification, amount/currency/client-billing reconciliation, refusal/reassignment version history, audit/event lineage, tenant isolation and migration restore-forward refusal",
           "result": "passed",
           "recorded_at": "2026-08-26T00:33:11+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m5/IPLF-059/release-059a-2026-08-26.md",
+          "revision": "f56e5a2f2c48f1e0e5149b5004568635c49793b3",
+          "environment": "Exact canonical main on production API caseops-api-00357-cn7 and web caseops-web-00335-vwv, each at 100 percent latest-only traffic with release tag f56e5a2",
+          "fixtures": "Dedicated production QA workspace and synthetic browser records only; no live Registry mutation, filing, payment, provider call, external recipient or client record",
+          "assertions": "PR and exact-main hosted gates; immutable builds; migration 20260825_0006 before traffic; scheduler reconciliation; exact release identity; 90-test RAM batch; A0 quiescence; notice module; health and latest-only traffic",
+          "result": "passed",
+          "recorded_at": "2026-08-26T03:14:13+05:30"
         }
       ],
       "blockers": [],
-      "next_actions": [
-        "Pass hosted CI, merge and deploy this foundation migration-first, then implement IPLF-059B and every UJ-37 browser path without duplicating the linked canonical owners."
-      ],
+      "next_actions": [],
       "data_impact": [
         "Add ip_foreign_associate_instructions as a versioned, tenant-scoped coordination aggregate and add its optional tenant-correlated link to ip_docket_events.",
         "Preserve client instructions, panel associates, Matter assignments, Communications, IP documents, IP costs, outside-counsel spend, deadlines, access and audit as links to their existing canonical owners."
@@ -13923,12 +13932,18 @@
           "disposition": "created",
           "owner": "Engineering/SRE",
           "evidence": "Duplicate-work review, local acceptance and explicit release boundary"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m5/IPLF-059/release-059a-2026-08-26.md",
+          "disposition": "created",
+          "owner": "Engineering/SRE",
+          "evidence": "PR and exact-main gates, immutable migration-first deployment, scheduler convergence, dated production acceptance and explicit IPLF-059B/external-approval boundaries"
         }
       ],
       "allocation_review": "2026-08-26 brutal duplicate-work review: one new coordination aggregate links the existing client-instruction, outside-counsel, Communication, document, cost/spend, deadline, docket-event, access and audit owners. It adds no second directory, mailer, document store, financial ledger, deadline/notification engine, permission model or event log. IPLF-059B retains all UJ-37 paths and public/user documentation claims.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
