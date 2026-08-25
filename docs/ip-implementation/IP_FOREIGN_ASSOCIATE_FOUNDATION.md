@@ -45,6 +45,14 @@ an approver and replace the estimate link without deleting the prior event
 evidence. Conflict or refusal re-assignment creates a successor instruction and
 preserves the original correspondence, scope and selected-document history.
 
+An approved Matter assignment must carry a budget ceiling before the initial
+estimate can be admitted. A canonical Communication counts as dispatch only in
+manual-log, sent, delivered or opened state; queued, failed and bounced records
+cannot start the response clock. A terminal docket transition atomically marks
+every unfinished instruction `cancelled` with the lifecycle event, lifecycle
+version and timestamp. Those records remain audit history but are excluded from
+instruction reads, so controlled reopen cannot resurrect actionable work.
+
 ## API contract
 
 - `GET/POST /api/ip/foreign-associate-instructions`

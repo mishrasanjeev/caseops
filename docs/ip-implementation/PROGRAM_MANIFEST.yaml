@@ -13867,6 +13867,7 @@
         "apps/api/tests/test_ip_059a_foreign_associate_schemas.py",
         "apps/api/tests/test_20260825_ip_foreign_associate_migration.py",
         "apps/api/tests/test_schema_fk_indexes.py",
+        "apps/api/tests/test_ip_lifecycle_service.py",
         "apps/api/tests/test_openapi_quality.py",
         "apps/api/tests/test_route_coverage_matrix.py"
       ],
@@ -13876,10 +13877,10 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m5/IPLF-059/local-059a-2026-08-26.md",
-          "revision": "e518e5647a2097a423748d5576d9ad3bce99724b",
+          "revision": "96eeb0902e3da69fa97ac0c40aa71424ba52f4e5",
           "environment": "Windows CPython 3.13, locked uv dependencies, ephemeral SQLite migration/API fixtures, generated OpenAPI client and repository governance validators",
           "fixtures": "fresh entitled law-firm tenants, canonical client authority fallback, panel associates and approved Matter assignments, docket-linked public/privileged documents, estimates, delivered and misdirected Communications, foreign filing evidence, actual costs and outside-counsel spend",
-          "assertions": "typed lifecycle, stale-write rejection, delivery versus acknowledgement, wrong-recipient rejection, privileged approval, budget and fee/tax approval, independent filing verification, amount/currency/client-billing reconciliation, refusal/reassignment version history, audit/event lineage, tenant isolation and migration restore-forward refusal",
+          "assertions": "typed lifecycle, stale-write rejection, durable terminal neutralization with no reopen resurrection, sent/manual dispatch state, delivery versus acknowledgement, wrong-recipient rejection, privileged approval, required assignment budget and fee/tax approval, independent filing verification, amount/currency/client-billing reconciliation, refusal/reassignment version history, audit/event lineage, tenant isolation and migration restore-forward refusal",
           "result": "passed",
           "recorded_at": "2026-08-26T00:33:11+05:30"
         }
