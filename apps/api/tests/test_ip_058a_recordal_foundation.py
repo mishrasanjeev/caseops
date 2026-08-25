@@ -207,7 +207,8 @@ def _transaction(
         "responsible_membership_id": membership_id,
         "reason": f"Record the {transaction_kind.replace('_', ' ')} transaction.",
         "evidence_refs": [document_id]
-        if transaction_kind in {"filed", "defect_noted", "rejected", "accepted"}
+        if transaction_kind
+        in {"filed", "defect_noted", "corrected", "rejected", "accepted"}
         else [],
         "document_refs": [document_id],
     }
@@ -222,6 +223,7 @@ def _transaction(
 def test_assignment_recordal_projects_pending_then_registry_recorded_title(
     client: TestClient,
 ) -> None:
+    """IPLF-UJ-36-NORMAL / EXC-03 / EXC-04: lifecycle, correction, conflict approval."""
     bootstrap = bootstrap_company(client)
     headers = auth_headers(str(bootstrap["access_token"]))
     company_id = str(bootstrap["company"]["id"])
@@ -373,6 +375,7 @@ def test_assignment_recordal_projects_pending_then_registry_recorded_title(
             "source_reference": "IP India register snapshot dated 25 August 2026",
             "registry_snapshot_id": snapshot_id,
             "registry_recorded_on": "2026-08-25",
+            "details": {"client_registry_conflict_reviewed": True},
         },
     )
     assert mismatched_registration.status_code == 422
@@ -402,7 +405,7 @@ def test_assignment_recordal_projects_pending_then_registry_recorded_title(
     assert mismatched_source.status_code == 422
     assert "must match the selected immutable snapshot" in mismatched_source.text
 
-    accepted = _transaction(
+    unreviewed_conflict = _transaction(
         client,
         headers=headers,
         docket_id=docket["id"],
@@ -418,12 +421,33 @@ def test_assignment_recordal_projects_pending_then_registry_recorded_title(
             "registry_recorded_on": "2026-08-25",
         },
     )
+    assert unreviewed_conflict.status_code == 422
+    assert "conflict review" in unreviewed_conflict.text
+
+    accepted = _transaction(
+        client,
+        headers=headers,
+        docket_id=docket["id"],
+        recordal_id=recordal["id"],
+        recordal_version=6,
+        membership_id=membership_id,
+        transaction_kind="accepted",
+        document_id=document_id,
+        extra={
+            "source_url": "https://ipindia.gov.in/registry/TM-1234567-2026",
+            "source_reference": "IP India register snapshot dated 25 August 2026",
+            "registry_snapshot_id": snapshot_id,
+            "registry_recorded_on": "2026-08-25",
+            "details": {"client_registry_conflict_reviewed": True},
+        },
+    )
     assert accepted.status_code == 201, accepted.text
     result = accepted.json()
     assert result["recordal"]["status"] == "accepted"
     assert result["registry_projection_applied"] is True
     assert result["event"]["source"] == "manual"
     assert result["event"]["payload_json"]["registry_evidence_source"] == "immutable_snapshot"
+    assert result["event"]["payload_json"]["client_registry_conflict_detected"] is True
     assert all(
         row["recordal_status"] == "recorded"
         for row in result["projected_title_interests"]

@@ -253,10 +253,10 @@ Generated; do not edit.
 | IP-MAD-02 | IP-MAD | IPLF-057B | 3 | 1 | implemented | passed | deployment_verified | true |
 | IP-MAD-03 | IP-MAD | IPLF-057B | 3 | 1 | implemented | passed | deployment_verified | true |
 | IP-MAD-04 | IP-MAD | IPLF-057B | 3 | 1 | implemented | passed | deployment_verified | true |
-| IP-POST-01 | IP-POST | IPLF-039H, IPLF-058B | 88 | 0 | not_started | not_run | blocked | false |
+| IP-POST-01 | IP-POST | IPLF-039H, IPLF-058B | 88 | 0 | in_progress | not_run | blocked | false |
 | IP-POST-02 | IP-POST | IPLF-039E, IPLF-039H, IPLF-058B | 91 | 1 | in_progress | not_run | blocked | false |
 | IP-POST-03 | IP-POST | IPLF-039E, IPLF-039H, IPLF-058B | 91 | 1 | in_progress | not_run | blocked | false |
-| IP-POST-04 | IP-POST | IPLF-039H, IPLF-058B | 88 | 0 | not_started | not_run | blocked | false |
+| IP-POST-04 | IP-POST | IPLF-039H, IPLF-058B | 88 | 0 | in_progress | not_run | blocked | false |
 | IP-ACCESS-01 | IP-ACCESS | IPLF-026B, IPLF-066B, IPLF-073B | 20 | 0 | in_progress | not_run | blocked | false |
 | IP-ACCESS-02 | IP-ACCESS | IPLF-026B, IPLF-066B, IPLF-073B | 20 | 0 | in_progress | not_run | blocked | false |
 | IP-ACCESS-03 | IP-ACCESS | IPLF-026B, IPLF-066B, IPLF-073B | 20 | 0 | in_progress | not_run | blocked | false |

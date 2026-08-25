@@ -30,12 +30,12 @@ const LEGACY_QA_PROD_SPECS =
 // context. The two historical dated specs still depend on the QA storage state
 // and therefore remain in LEGACY_QA_PROD_SPECS above.
 const TESTER_AUTH_PROD_SPECS =
-  /(?:^(?!.*(?:hari-2026-05-09-prod|hari-2026-07-02-prod)\.spec\.ts$).*(?:hari|ram)-\d{4}-\d{2}-\d{2}-prod\.spec\.ts$|.*ram-2026-08-(?:11|24)-bugs\.spec\.ts$|.*iplf-05(?:4b-indian-kanoon|6b-provider-operations|7b-madrid-workflow)-2026-08-25-prod\.spec\.ts$)/;
+  /(?:^(?!.*(?:hari-2026-05-09-prod|hari-2026-07-02-prod)\.spec\.ts$).*(?:hari|ram)-\d{4}-\d{2}-\d{2}-prod\.spec\.ts$|.*ram-2026-08-(?:11|24)-bugs\.spec\.ts$|.*iplf-05(?:4b-indian-kanoon|6b-provider-operations|7b-madrid-workflow|8b-recordal-workflow)-2026-08-25-prod\.spec\.ts$)/;
 
 export default defineConfig({
   testDir: "tests/e2e",
   testMatch:
-    /(ram-batch-2026-04-26-prod\.spec\.ts|recommendations-grounding-2026-04-29-prod\.spec\.ts|ram-batch-2026-05-01-prod\.spec\.ts|pg-004-today-cockpit-2026-05-01-prod\.spec\.ts|hari-2026-05-09-prod\.spec\.ts|hari-2026-05-09-bug-033-prod\.spec\.ts|hari-2026-05-09-outlook-sync-prod\.spec\.ts|hari-2026-05-09-bug-032-prod\.spec\.ts|hari-2026-07-02-prod\.spec\.ts|(?:hari|ram)-\d{4}-\d{2}-\d{2}-prod\.spec\.ts|ram-2026-08-(?:11|24)-bugs\.spec\.ts|iplf-05(?:4b-indian-kanoon|6b-provider-operations|7b-madrid-workflow)-2026-08-25-prod\.spec\.ts|qa-auth\.setup\.ts)$/,
+    /(ram-batch-2026-04-26-prod\.spec\.ts|recommendations-grounding-2026-04-29-prod\.spec\.ts|ram-batch-2026-05-01-prod\.spec\.ts|pg-004-today-cockpit-2026-05-01-prod\.spec\.ts|hari-2026-05-09-prod\.spec\.ts|hari-2026-05-09-bug-033-prod\.spec\.ts|hari-2026-05-09-outlook-sync-prod\.spec\.ts|hari-2026-05-09-bug-032-prod\.spec\.ts|hari-2026-07-02-prod\.spec\.ts|(?:hari|ram)-\d{4}-\d{2}-\d{2}-prod\.spec\.ts|ram-2026-08-(?:11|24)-bugs\.spec\.ts|iplf-05(?:4b-indian-kanoon|6b-provider-operations|7b-madrid-workflow|8b-recordal-workflow)-2026-08-25-prod\.spec\.ts|qa-auth\.setup\.ts)$/,
   timeout: 120_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,

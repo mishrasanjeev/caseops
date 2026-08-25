@@ -14,16 +14,16 @@
     "verification_status": "not_run",
     "release_status": "blocked",
     "execution_policy": "codex_owned_single_ordered_queue; implement first and run the automated check and exact-release verification batch at the end",
-    "active_slice": "IPLF-058B",
+    "active_slice": "IPLF-059A",
     "checkpoint": {
-      "recorded_at": "2026-08-25T19:52:02+05:30",
-      "repository_revision": "1880b81648df7603d7f0e3313873d9c3bcbf9b5a",
-      "environment": "Main and production serve exact merge 1880b816. IPLF-058A passed hosted and exact-main CI/security/CodeQL, migration-first deployment, immutable scheduler reconciliation, latest-only traffic, exact identity/health and the complete production Playwright verification batch.",
-      "completed_scope": "IPLF-058A is deployment-verified for the canonical post-registration recordal aggregate, typed lifecycle and transactions, writer/approver RBAC, optimistic concurrency, canonical instrument and Registry evidence, effective-dated title projections, tenant isolation and additive migration without duplicating shared owners.",
+      "recorded_at": "2026-08-25T20:29:46+05:30",
+      "repository_revision": "682a805fe6079b0c944924ff664f2413d8ded213",
+      "environment": "Local Windows candidate integrated over canonical main 1f76c749. Targeted API, title-ledger and web suites plus the fresh-tenant dated Playwright journey passed; hosted CI and exact-production acceptance remain pending.",
+      "completed_scope": "IPLF-058B is locally implemented and verified for the post-registration operator workspace, all UJ-36 paths, IPLF-039E-owned UJ-61 title presentation, API correction/conflict-review hardening, navigation, guide, law-firm claims and dated local/production browser specifications without duplicating renewal, proceeding, title, registry, document, deadline or cost owners.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-058B",
-      "next_action": "Implement IPLF-058B UJ-36/UJ-61 operator workflows, exception paths, chain-of-title experience, truthful guide and landing-page claims, and dedicated exact-production journey over the released IPLF-058A foundation.",
-      "evidence_ref": "docs/ip-implementation/evidence/m5/IPLF-058/release-058a-2026-08-25.md"
+      "next_slice": "IPLF-059A",
+      "next_action": "Pass hosted CI/security/CodeQL, merge the exact candidate to main, deploy it migration-first, run the dated production recordal journey and publish the final IPLF-058 release evidence before advancing to IPLF-059A.",
+      "evidence_ref": "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-2026-08-25.md"
     },
     "work_owner": {
       "owner": "Codex",
@@ -2170,10 +2170,14 @@
         "IPLF-058A",
         "IPLF-058B"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
-      "evidence_refs": []
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-058/local-058a-2026-08-25.md",
+        "docs/ip-implementation/evidence/m5/IPLF-058/release-058a-2026-08-25.md",
+        "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-2026-08-25.md"
+      ]
     },
     {
       "id": "IPLF-059",
@@ -13738,30 +13742,67 @@
       "dependencies": [
         "IPLF-058A"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-36-EXC-01",
-        "planned:IPLF-UJ-36-EXC-02",
-        "planned:IPLF-UJ-36-EXC-03",
-        "planned:IPLF-UJ-36-EXC-04",
-        "planned:IPLF-UJ-36-NORMAL",
-        "planned:IPLF-UJ-61-EXC-01",
-        "planned:IPLF-UJ-61-EXC-02",
-        "planned:IPLF-UJ-61-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/schemas/ip_recordals.py",
+        "apps/api/src/caseops_api/services/ip_recordals.py",
+        "apps/web/app/app/ip/recordals/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/components/app/Sidebar.tsx",
+        "apps/web/app/guide/page.tsx",
+        "apps/web/app/law-firms/page.tsx"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_058a_recordal_foundation.py::test_assignment_recordal_projects_pending_then_registry_recorded_title#IPLF-UJ-36-NORMAL",
+        "apps/api/tests/test_ip_058b_recordal_journeys.py::test_uj36_exc01_pending_recordal_does_not_replace_registered_proprietor#IPLF-UJ-36-EXC-01",
+        "apps/api/tests/test_ip_058b_recordal_journeys.py::test_uj36_exc02_partial_assignment_preserves_scope_and_prior_title#IPLF-UJ-36-EXC-02",
+        "apps/api/tests/test_ip_058a_recordal_foundation.py::test_assignment_recordal_projects_pending_then_registry_recorded_title#IPLF-UJ-36-EXC-03",
+        "apps/api/tests/test_ip_058a_recordal_foundation.py::test_assignment_recordal_projects_pending_then_registry_recorded_title#IPLF-UJ-36-EXC-04",
+        "apps/api/tests/test_ip_039e_chain_of_title.py::test_uj61_normal_reconcile_chain_of_title_and_family#IPLF-UJ-61-NORMAL",
+        "apps/api/tests/test_ip_039e_chain_of_title.py::test_uj61_exc01_overlapping_and_unrecorded_interests_are_flagged#IPLF-UJ-61-EXC-01",
+        "apps/api/tests/test_ip_039e_chain_of_title.py::test_uj61_exc02_family_association_never_updates_another_recordal#IPLF-UJ-61-EXC-02",
+        "IPLF-UJ-36-NORMAL:tests/e2e/iplf-058b-recordal-workflow-2026-08-25.spec.ts",
+        "IPLF-UJ-61-NORMAL:tests/e2e/iplf-058b-recordal-workflow-2026-08-25.spec.ts",
+        "tests/e2e/iplf-058b-recordal-workflow-2026-08-25-prod.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-2026-08-25.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-2026-08-25.md",
+          "revision": "682a805fe6079b0c944924ff664f2413d8ded213",
+          "environment": "Windows CPython 3.13, locked uv dependencies, local API/web servers, fresh law-firm tenant and Chromium at 360x800 and 1440x1000",
+          "fixtures": "synthetic trademark application, same-docket canonical assignment instrument, prior recorded proprietor, partial assignee, confirmed IP India link and immutable conflicting Registry snapshot",
+          "assertions": "all five UJ-36 paths, all three IPLF-039E-owned UJ-61 paths, correction fail-closed contract, approver conflict review, exact sources, title-at-date separation, responsive geometry, guide and landing claims",
+          "result": "passed",
+          "recorded_at": "2026-08-25T20:29:46+05:30"
+        }
+      ],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Run hosted CI/security/CodeQL, merge the exact candidate, deploy that main revision and execute the dated production acceptance before changing release_status."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No schema change. IPLF-058B reuses the deployed IPLF-058A recordal aggregate and IPLF-039E title-interest ledger.",
+        "API hardening requires evidence and a same-docket corrected instrument for correction and an explicit approved review for detected Registry/instrument party conflicts."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        {
+          "artifact": "apps/web/app/guide/page.tsx and apps/web/app/law-firms/page.tsx",
+          "disposition": "updated",
+          "owner": "Product/Engineering",
+          "evidence": "Manual reviewed recordal workflow, title-at-date use, source access and canonical renewal/proceeding boundaries"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-2026-08-25.md",
+          "disposition": "created",
+          "owner": "Engineering/SRE",
+          "evidence": "Ownership review, all eight allocated journey paths, local gates and remaining exact-release boundary"
+        }
+      ],
+      "allocation_review": "2026-08-25 brutal duplicate-work review: the UI extends IPLF-058A, reads IPLF-039E title interests, and links to IPLF-037 renewals and IPLF-049 proceedings. No second legal-state writer, registry client, document store, deadline engine or cost ledger was added.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked"
     },
     {
@@ -26056,7 +26097,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -26449,7 +26490,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -41479,15 +41520,22 @@
         "IP-POST-04"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-36-EXC-01",
-        "planned:IPLF-UJ-36-EXC-02",
-        "planned:IPLF-UJ-36-EXC-03",
-        "planned:IPLF-UJ-36-EXC-04",
-        "planned:IPLF-UJ-36-NORMAL"
+        "IPLF-UJ-36-EXC-01:tests/e2e/iplf-058b-recordal-workflow-2026-08-25.spec.ts",
+        "IPLF-UJ-36-EXC-02:tests/e2e/iplf-058b-recordal-workflow-2026-08-25.spec.ts",
+        "IPLF-UJ-36-EXC-03:tests/e2e/iplf-058b-recordal-workflow-2026-08-25.spec.ts",
+        "IPLF-UJ-36-EXC-04:tests/e2e/iplf-058b-recordal-workflow-2026-08-25.spec.ts",
+        "IPLF-UJ-36-NORMAL:tests/e2e/iplf-058b-recordal-workflow-2026-08-25.spec.ts",
+        "apps/api/tests/test_ip_058a_recordal_foundation.py::test_assignment_recordal_projects_pending_then_registry_recorded_title#IPLF-UJ-36-EXC-03",
+        "apps/api/tests/test_ip_058a_recordal_foundation.py::test_assignment_recordal_projects_pending_then_registry_recorded_title#IPLF-UJ-36-EXC-04",
+        "apps/api/tests/test_ip_058a_recordal_foundation.py::test_assignment_recordal_projects_pending_then_registry_recorded_title#IPLF-UJ-36-NORMAL",
+        "apps/api/tests/test_ip_058b_recordal_journeys.py::test_uj36_exc01_pending_recordal_does_not_replace_registered_proprietor#IPLF-UJ-36-EXC-01",
+        "apps/api/tests/test_ip_058b_recordal_journeys.py::test_uj36_exc02_partial_assignment_preserves_scope_and_prior_title#IPLF-UJ-36-EXC-02"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-2026-08-25.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-058B"
@@ -50647,11 +50695,14 @@
         "IP-POST-04"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-36-NORMAL"
+        "apps/api/tests/test_ip_058a_recordal_foundation.py::test_assignment_recordal_projects_pending_then_registry_recorded_title#IPLF-UJ-36-NORMAL",
+        "IPLF-UJ-36-NORMAL:tests/e2e/iplf-058b-recordal-workflow-2026-08-25.spec.ts"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-2026-08-25.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-058B"
@@ -50672,11 +50723,14 @@
         "IP-POST-04"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-36-EXC-01"
+        "apps/api/tests/test_ip_058b_recordal_journeys.py::test_uj36_exc01_pending_recordal_does_not_replace_registered_proprietor#IPLF-UJ-36-EXC-01",
+        "IPLF-UJ-36-EXC-01:tests/e2e/iplf-058b-recordal-workflow-2026-08-25.spec.ts"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-2026-08-25.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-058B"
@@ -50697,11 +50751,14 @@
         "IP-POST-04"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-36-EXC-02"
+        "apps/api/tests/test_ip_058b_recordal_journeys.py::test_uj36_exc02_partial_assignment_preserves_scope_and_prior_title#IPLF-UJ-36-EXC-02",
+        "IPLF-UJ-36-EXC-02:tests/e2e/iplf-058b-recordal-workflow-2026-08-25.spec.ts"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-2026-08-25.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-058B"
@@ -50722,11 +50779,14 @@
         "IP-POST-04"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-36-EXC-03"
+        "apps/api/tests/test_ip_058a_recordal_foundation.py::test_assignment_recordal_projects_pending_then_registry_recorded_title#IPLF-UJ-36-EXC-03",
+        "IPLF-UJ-36-EXC-03:tests/e2e/iplf-058b-recordal-workflow-2026-08-25.spec.ts"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-2026-08-25.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-058B"
@@ -50747,11 +50807,14 @@
         "IP-POST-04"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-36-EXC-04"
+        "apps/api/tests/test_ip_058a_recordal_foundation.py::test_assignment_recordal_projects_pending_then_registry_recorded_title#IPLF-UJ-36-EXC-04",
+        "IPLF-UJ-36-EXC-04:tests/e2e/iplf-058b-recordal-workflow-2026-08-25.spec.ts"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-2026-08-25.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-058B"

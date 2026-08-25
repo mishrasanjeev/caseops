@@ -8619,6 +8619,26 @@ export type BulkImportManifest = {
   limitations: string[];
 };
 
+export type IpTitleInterest = {
+  id: string;
+  interest_type: string;
+  party_name: string;
+  party_role: string | null;
+  executed_on: string | null;
+  effective_from: string;
+  effective_until: string | null;
+  related_docket_id: string | null;
+  source_recordal_id: string | null;
+  scope_json: Record<string, unknown>;
+  evidence_reference: string;
+  recordal_status: string;
+  registry_recorded_on: string | null;
+  conflict_flags_json: string[];
+  version: number;
+  created_at: string;
+  updated_at: string;
+};
+
 export type IpDocket = {
   id: string;
   company_id: string;
@@ -8652,15 +8672,7 @@ export type IpDocket = {
     updated_at: string;
   }>;
   deadline_incidents: IpDeadlineIncident[];
-  title_interests: Array<{
-    id: string;
-    interest_type: string;
-    party_name: string;
-    effective_from: string;
-    effective_until: string | null;
-    recordal_status: string;
-    conflict_flags_json: string[];
-  }>;
+  title_interests: IpTitleInterest[];
   related_right_obligations: IpRelatedRightObligation[];
   cost_items: Array<{
     id: string;
@@ -9561,6 +9573,98 @@ export type IpDocketEvent = {
   reconciliation_decision: string | null;
   payload_json: Record<string, unknown>;
   created_at: string;
+};
+
+export type IpRecordalType =
+  | "renewal"
+  | "restoration"
+  | "assignment"
+  | "transmission"
+  | "name_change"
+  | "address_change"
+  | "address_for_service_change"
+  | "registered_user"
+  | "licence"
+  | "association"
+  | "division"
+  | "limitation"
+  | "disclaimer"
+  | "certified_copy"
+  | "well_known_mark";
+
+export type IpRecordalStatus =
+  | "draft"
+  | "ready"
+  | "filed"
+  | "defective"
+  | "accepted"
+  | "rejected"
+  | "withdrawn";
+
+export type IpRecordalPartyRole =
+  | "registered_proprietor"
+  | "assignor"
+  | "assignee"
+  | "transmitter"
+  | "transmittee"
+  | "licensor"
+  | "licensee"
+  | "registered_user"
+  | "applicant"
+  | "subject"
+  | "authorized_signatory";
+
+export type IpRecordalTransactionKind =
+  | "review_approved"
+  | "filed"
+  | "acknowledgement_received"
+  | "defect_noted"
+  | "corrected"
+  | "accepted"
+  | "rejected"
+  | "withdrawn";
+
+export type IpRecordalParty = {
+  role: IpRecordalPartyRole;
+  name: string;
+  identifier: string | null;
+  address: string | null;
+  evidence_reference: string;
+};
+
+export type IpRecordal = {
+  id: string;
+  company_id: string;
+  docket_id: string;
+  recordal_type: IpRecordalType;
+  legal_basis: string;
+  form_code: string;
+  parties_json: IpRecordalParty[];
+  executed_on: string | null;
+  effective_on: string | null;
+  affected_registration_refs_json: string[];
+  affected_classes_json: number[];
+  scope_json: Record<string, unknown>;
+  supporting_instrument_refs_json: string[];
+  fee_cost_item_refs_json: string[];
+  filing_evidence_refs_json: string[];
+  acceptance_evidence_refs_json: string[];
+  deadline_rule_key: string | null;
+  registry_snapshot_id: string | null;
+  status: IpRecordalStatus;
+  version: number;
+  created_by_membership_id: string;
+  updated_by_membership_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type IpRecordalWorkspace = {
+  recordal: IpRecordal;
+  transactions: IpDocketEvent[];
+  title_interests: IpTitleInterest[];
+  current_registered_interests: IpTitleInterest[];
+  pending_interests: IpTitleInterest[];
 };
 
 export type MadridRecord = {
@@ -10696,6 +10800,115 @@ export async function fetchIpDockets(): Promise<{ dockets: IpDocket[]; count: nu
 
 export async function fetchIpDocket(docketId: string): Promise<IpDocket> {
   return apiRequest(`/api/ip/dockets/${encodeURIComponent(docketId)}`);
+}
+
+export async function fetchIpRecordals(input?: {
+  docketId?: string | null;
+  recordalType?: IpRecordalType | null;
+  status?: IpRecordalStatus | null;
+}): Promise<{ items: IpRecordal[]; total: number; limit: number; offset: number }> {
+  const query = new URLSearchParams({ limit: "100", offset: "0" });
+  if (input?.docketId) query.set("docket_id", input.docketId);
+  if (input?.recordalType) query.set("recordal_type", input.recordalType);
+  if (input?.status) query.set("status", input.status);
+  return apiRequest(`/api/ip/recordals?${query.toString()}`);
+}
+
+export async function fetchIpRecordalWorkspace(
+  recordalId: string,
+): Promise<IpRecordalWorkspace> {
+  return apiRequest(`/api/ip/recordals/${encodeURIComponent(recordalId)}/workspace`);
+}
+
+export async function createIpRecordal(input: {
+  docketId: string;
+  expectedLifecycleVersion: number;
+  responsibleMembershipId: string;
+  reason: string;
+  recordalType: IpRecordalType;
+  legalBasis: string;
+  formCode: string;
+  parties: IpRecordalParty[];
+  executedOn?: string | null;
+  effectiveOn?: string | null;
+  affectedRegistrationRefs: string[];
+  affectedClasses: number[];
+  scopeKind: "whole_right" | "partial";
+  scopeDetails: Record<string, unknown>;
+  supportingInstrumentRefs: string[];
+  feeCostItemRefs: string[];
+  deadlineRuleKey?: string | null;
+}): Promise<IpRecordal> {
+  return apiRequest("/api/ip/recordals", {
+    method: "POST",
+    body: {
+      docket_id: input.docketId,
+      expected_lifecycle_version: input.expectedLifecycleVersion,
+      responsible_membership_id: input.responsibleMembershipId,
+      reason: input.reason,
+      recordal_type: input.recordalType,
+      legal_basis: input.legalBasis,
+      form_code: input.formCode,
+      parties: input.parties,
+      executed_on: input.executedOn ?? null,
+      effective_on: input.effectiveOn ?? null,
+      affected_registration_refs: input.affectedRegistrationRefs,
+      affected_classes: input.affectedClasses,
+      scope_kind: input.scopeKind,
+      scope_details: input.scopeDetails,
+      supporting_instrument_refs: input.supportingInstrumentRefs,
+      fee_cost_item_refs: input.feeCostItemRefs,
+      deadline_rule_key: input.deadlineRuleKey ?? null,
+    },
+  });
+}
+
+export async function recordIpRecordalTransaction(input: {
+  recordalId: string;
+  expectedVersion: number;
+  expectedLifecycleVersion: number;
+  transactionKind: IpRecordalTransactionKind;
+  effectiveAt: string;
+  responsibleMembershipId: string;
+  reason: string;
+  sourceUrl?: string | null;
+  sourceReference?: string | null;
+  evidenceRefs: string[];
+  documentRefs: string[];
+  deadlineRefs: string[];
+  costItemRefs: string[];
+  registrySnapshotId?: string | null;
+  registryRecordedOn?: string | null;
+  details?: Record<string, unknown>;
+}): Promise<{
+  recordal: IpRecordal;
+  event: IpDocketEvent;
+  projected_title_interests: IpTitleInterest[];
+  registry_projection_applied: boolean;
+}> {
+  return apiRequest(
+    `/api/ip/recordals/${encodeURIComponent(input.recordalId)}/transactions`,
+    {
+      method: "POST",
+      body: {
+        expected_version: input.expectedVersion,
+        expected_lifecycle_version: input.expectedLifecycleVersion,
+        transaction_kind: input.transactionKind,
+        effective_at: input.effectiveAt,
+        responsible_membership_id: input.responsibleMembershipId,
+        reason: input.reason,
+        source_url: input.sourceUrl ?? null,
+        source_reference: input.sourceReference ?? null,
+        evidence_refs: input.evidenceRefs,
+        document_refs: input.documentRefs,
+        deadline_refs: input.deadlineRefs,
+        cost_item_refs: input.costItemRefs,
+        registry_snapshot_id: input.registrySnapshotId ?? null,
+        registry_recorded_on: input.registryRecordedOn ?? null,
+        details: input.details ?? {},
+      },
+    },
+  );
 }
 
 export async function fetchMadridRecords(input?: {

@@ -247,6 +247,11 @@ const NAV_GROUPS: ReadonlyArray<{
         capability: "ip:read",
       },
       {
+        label: "Post-registration",
+        href: "/app/ip/recordals",
+        capability: "ip:read",
+      },
+      {
         label: "Registry reconciliation",
         href: "/app/ip/registry",
         capability: "ip:read",
