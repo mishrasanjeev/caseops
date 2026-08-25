@@ -89,7 +89,11 @@ test("IPLF-056B production exposes one fail-closed IP provider control plane", a
   await expect(page.getByTestId("readiness-indian-kanoon")).toContainText(
     "external calls off",
   );
-  await expect(page.locator("body")).not.toContainText(/api[_ -]?token|bearer\s+[a-z0-9]/i);
+  const visibleText = await page.locator("body").innerText();
+  expect(visibleText).not.toContain(token);
+  expect(visibleText).not.toMatch(
+    /(?:api[_ -]?token|authorization)\s*[:=]\s*(?:bearer\s+)?[a-z0-9._-]{16,}/i,
+  );
 
   await page.goto(`${BASE_URL}/app/ip`);
   await expect(page.getByText(/manual docketing/i).first()).toBeVisible();

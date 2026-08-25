@@ -6,11 +6,11 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `ee1af5f2e79307df3cf81b34712de9839c7d45fec6d826d6d121e1df481660f9`
-- SQL tables: `287`
-- SQL columns: `4554`
-- ORM indexes: `1316`
-- Alembic/raw index declarations: `612`
+- Canonical map SHA-256: `034ed0976ba963f3f7b499ecefd68d2ad19a68b99af7a8ca0236e901310e57c6`
+- SQL tables: `288`
+- SQL columns: `4594`
+- ORM indexes: `1325`
+- Alembic/raw index declarations: `621`
 - Non-SQL data classes: `11`
 
 ## Boundary
@@ -298,6 +298,7 @@ This inventory does not claim approved retention bounds, legal-hold activation, 
 | `tracked_cases` | `tenant_operational_record` | 30 | `registry_fail_closed` |
 | `trademark_application_scopes` | `tenant_operational_record` | 9 | `registry_fail_closed` |
 | `trademark_applications` | `tenant_operational_record` | 13 | `registry_fail_closed` |
+| `trademark_international_registrations` | `tenant_operational_record` | 40 | `registry_fail_closed` |
 | `trademark_representations` | `tenant_operational_record` | 10 | `registry_fail_closed` |
 | `user_calendar_connections` | `tenant_operational_record` | 13 | `registry_fail_closed` |
 | `user_drive_connections` | `tenant_operational_record` | 13 | `registry_fail_closed` |

@@ -15384,6 +15384,183 @@ class IpRelationship(Base):
     )
 
 
+class TrademarkInternationalRegistration(Base):
+    """Type-specific Madrid record for an IR or one independently owned designation."""
+
+    __tablename__ = "trademark_international_registrations"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_tm_international_docket_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["parent_registration_id", "company_id"],
+            [
+                "trademark_international_registrations.id",
+                "trademark_international_registrations.company_id",
+            ],
+            name="fk_tm_international_parent_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["basic_application_id", "company_id"],
+            ["trademark_applications.id", "trademark_applications.company_id"],
+            name="fk_tm_international_basic_application_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_tm_international_creator_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["updated_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_tm_international_updater_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_tm_international_id_company"),
+        UniqueConstraint(
+            "company_id",
+            "docket_id",
+            name="uq_tm_international_company_docket",
+        ),
+        Index(
+            "uq_tm_international_company_ir_number",
+            "company_id",
+            "ir_number",
+            unique=True,
+            postgresql_where=text(
+                "record_kind = 'international_registration' AND ir_number IS NOT NULL"
+            ),
+            sqlite_where=text(
+                "record_kind = 'international_registration' AND ir_number IS NOT NULL"
+            ),
+        ),
+        Index(
+            "uq_tm_international_designation_member",
+            "company_id",
+            "parent_registration_id",
+            "designated_member_code",
+            "designation_effective_date",
+            unique=True,
+            postgresql_where=text("record_kind = 'international_designation'"),
+            sqlite_where=text("record_kind = 'international_designation'"),
+        ),
+        Index(
+            "ix_tm_international_company_parent",
+            "company_id",
+            "parent_registration_id",
+        ),
+        Index(
+            "ix_tm_international_company_status",
+            "company_id",
+            "record_kind",
+            "wipo_status",
+            "national_status",
+        ),
+        Index("ix_tm_international_created_by", "created_by_membership_id"),
+        Index("ix_tm_international_updated_by", "updated_by_membership_id"),
+        CheckConstraint(
+            "record_kind IN ('international_registration', 'international_designation')",
+            name="ck_tm_international_record_kind",
+        ),
+        CheckConstraint(
+            "direction IN ('outbound', 'inbound')",
+            name="ck_tm_international_direction",
+        ),
+        CheckConstraint(
+            "designation_kind IS NULL OR designation_kind IN ('original', 'subsequent')",
+            name="ck_tm_international_designation_kind",
+        ),
+        CheckConstraint(
+            "(record_kind = 'international_registration' AND parent_registration_id IS NULL "
+            "AND designated_member_code IS NULL AND jurisdiction IS NULL "
+            "AND designation_kind IS NULL AND designation_effective_date IS NULL "
+            "AND national_status IS NULL) OR "
+            "(record_kind = 'international_designation' AND parent_registration_id IS NOT NULL "
+            "AND designated_member_code IS NOT NULL AND jurisdiction IS NOT NULL "
+            "AND designation_kind IS NOT NULL AND designation_effective_date IS NOT NULL)",
+            name="ck_tm_international_kind_fields",
+        ),
+        CheckConstraint(
+            "record_kind = 'international_registration' OR basic_application_id IS NULL",
+            name="ck_tm_international_basic_application_owner",
+        ),
+        CheckConstraint(
+            "parent_registration_id IS NULL OR parent_registration_id <> id",
+            name="ck_tm_international_parent_not_self",
+        ),
+        CheckConstraint("version > 0", name="ck_tm_international_version_positive"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    record_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    direction: Mapped[str] = mapped_column(String(16), nullable=False)
+    parent_registration_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    basic_application_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    international_application_number: Mapped[str | None] = mapped_column(
+        String(120), nullable=True
+    )
+    ir_number: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    wipo_reference: Mapped[str] = mapped_column(String(255), nullable=False)
+    holder_name: Mapped[str] = mapped_column(String(500), nullable=False)
+    mark_name: Mapped[str] = mapped_column(String(500), nullable=False)
+    office_of_origin: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    designated_member_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    designated_office: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    jurisdiction: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    designation_kind: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    classes_json: Mapped[list[int]] = mapped_column(JSON, nullable=False, default=list)
+    goods_services_json: Mapped[dict[str, str]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    priority_claims_json: Mapped[list[dict[str, object]]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    form_kind: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    wipo_status: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    national_status: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    local_agent_name: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    source_url: Mapped[str] = mapped_column(String(800), nullable=False)
+    source_reference: Mapped[str] = mapped_column(String(500), nullable=False)
+    source_retrieved_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    application_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    international_registration_date: Mapped[date | None] = mapped_column(
+        Date, nullable=True
+    )
+    designation_effective_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    notification_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    publication_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    statement_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    dependency_end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    renewal_due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_by_membership_id: Mapped[str] = mapped_column(
+        String(36), nullable=False
+    )
+    updated_by_membership_id: Mapped[str] = mapped_column(
+        String(36), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
 class IpRegistryLink(Base):
     """Tenant-owned match between one IP legal record and an office register."""
 

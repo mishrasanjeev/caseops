@@ -6510,6 +6510,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/international-registrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** International Registration List */
+        get: operations["international_registration_list_api_ip_international_registrations_get"];
+        put?: never;
+        /** International Registration Create */
+        post: operations["international_registration_create_api_ip_international_registrations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/international-registrations/{record_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** International Registration Get */
+        get: operations["international_registration_get_api_ip_international_registrations__record_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/operational-deadlines": {
         parameters: {
             query?: never;
@@ -39650,6 +39685,208 @@ export interface components {
             /** Specification */
             specification: string;
         };
+        /** TrademarkInternationalRecordCreateRequest */
+        TrademarkInternationalRecordCreateRequest: {
+            /** Application Date */
+            application_date?: string | null;
+            /** Basic Application Id */
+            basic_application_id?: string | null;
+            /** Classes */
+            classes?: number[];
+            /** Dependency End Date */
+            dependency_end_date?: string | null;
+            /** Designated Member Code */
+            designated_member_code?: string | null;
+            /** Designated Office */
+            designated_office?: string | null;
+            /** Designation Effective Date */
+            designation_effective_date?: string | null;
+            /** Designation Kind */
+            designation_kind?: ("original" | "subsequent") | null;
+            /**
+             * Direction
+             * @enum {string}
+             */
+            direction: "outbound" | "inbound";
+            /** Docket Id */
+            docket_id?: string | null;
+            /** Docket Title */
+            docket_title?: string | null;
+            /** Form Kind */
+            form_kind?: string | null;
+            /** Goods Services */
+            goods_services?: {
+                [key: string]: string;
+            };
+            /** Holder Name */
+            holder_name: string;
+            /** International Application Number */
+            international_application_number?: string | null;
+            /** International Registration Date */
+            international_registration_date?: string | null;
+            /** Ir Number */
+            ir_number?: string | null;
+            /** Jurisdiction */
+            jurisdiction?: string | null;
+            /** Local Agent Name */
+            local_agent_name?: string | null;
+            /** Mark Name */
+            mark_name: string;
+            /** National Status */
+            national_status?: string | null;
+            /** Notification Date */
+            notification_date?: string | null;
+            /** Office Of Origin */
+            office_of_origin?: string | null;
+            /** Parent Registration Id */
+            parent_registration_id?: string | null;
+            /** Priority Claims */
+            priority_claims?: {
+                [key: string]: unknown;
+            }[];
+            /** Publication Date */
+            publication_date?: string | null;
+            /**
+             * Record Kind
+             * @enum {string}
+             */
+            record_kind: "international_registration" | "international_designation";
+            /** Renewal Due Date */
+            renewal_due_date?: string | null;
+            /**
+             * Restricted
+             * @default false
+             */
+            restricted: boolean;
+            /** Source Reference */
+            source_reference: string;
+            /**
+             * Source Retrieved At
+             * Format: date-time
+             */
+            source_retrieved_at: string;
+            /** Source Url */
+            source_url: string;
+            /** Statement Date */
+            statement_date?: string | null;
+            /** Wipo Reference */
+            wipo_reference: string;
+            /** Wipo Status */
+            wipo_status?: string | null;
+        };
+        /** TrademarkInternationalRecordPageResponse */
+        TrademarkInternationalRecordPageResponse: {
+            /** Items */
+            items: components["schemas"]["TrademarkInternationalRecordResponse"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
+        /** TrademarkInternationalRecordResponse */
+        TrademarkInternationalRecordResponse: {
+            /** Application Date */
+            application_date: string | null;
+            /** Basic Application Id */
+            basic_application_id: string | null;
+            /** Classes Json */
+            classes_json: number[];
+            /** Company Id */
+            company_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Membership Id */
+            created_by_membership_id: string;
+            /** Dependency End Date */
+            dependency_end_date: string | null;
+            /** Designated Member Code */
+            designated_member_code: string | null;
+            /** Designated Office */
+            designated_office: string | null;
+            /** Designation Effective Date */
+            designation_effective_date: string | null;
+            /** Designation Kind */
+            designation_kind: ("original" | "subsequent") | null;
+            /**
+             * Direction
+             * @enum {string}
+             */
+            direction: "outbound" | "inbound";
+            /** Docket Id */
+            docket_id: string;
+            /** Form Kind */
+            form_kind: string | null;
+            /** Goods Services Json */
+            goods_services_json: {
+                [key: string]: string;
+            };
+            /** Holder Name */
+            holder_name: string;
+            /** Id */
+            id: string;
+            /** International Application Number */
+            international_application_number: string | null;
+            /** International Registration Date */
+            international_registration_date: string | null;
+            /** Ir Number */
+            ir_number: string | null;
+            /** Jurisdiction */
+            jurisdiction: string | null;
+            /** Local Agent Name */
+            local_agent_name: string | null;
+            /** Mark Name */
+            mark_name: string;
+            /** National Status */
+            national_status: string | null;
+            /** Notification Date */
+            notification_date: string | null;
+            /** Office Of Origin */
+            office_of_origin: string | null;
+            /** Parent Registration Id */
+            parent_registration_id: string | null;
+            /** Priority Claims Json */
+            priority_claims_json: {
+                [key: string]: unknown;
+            }[];
+            /** Publication Date */
+            publication_date: string | null;
+            /**
+             * Record Kind
+             * @enum {string}
+             */
+            record_kind: "international_registration" | "international_designation";
+            /** Renewal Due Date */
+            renewal_due_date: string | null;
+            /** Source Reference */
+            source_reference: string;
+            /**
+             * Source Retrieved At
+             * Format: date-time
+             */
+            source_retrieved_at: string;
+            /** Source Url */
+            source_url: string;
+            /** Statement Date */
+            statement_date: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Updated By Membership Id */
+            updated_by_membership_id: string;
+            /** Version */
+            version: number;
+            /** Wipo Reference */
+            wipo_reference: string;
+            /** Wipo Status */
+            wipo_status: string | null;
+        };
         /** TrademarkParticularPayload */
         TrademarkParticularPayload: {
             /** Agent */
@@ -52977,6 +53214,104 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpImportPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    international_registration_list_api_ip_international_registrations_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                parent_registration_id?: string | null;
+                record_kind?: ("international_registration" | "international_designation") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrademarkInternationalRecordPageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    international_registration_create_api_ip_international_registrations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrademarkInternationalRecordCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrademarkInternationalRecordResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    international_registration_get_api_ip_international_registrations__record_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrademarkInternationalRecordResponse"];
                 };
             };
             /** @description Validation Error */
