@@ -39,7 +39,7 @@ Generated; do not edit.
 | UJ-33 | Monitor journal publication and opposition window | 5 | IPLF-052B, IPLF-053B | 13 | 2 | implemented | passed | true |
 | UJ-34 | Manage multi-class or partial opposition | 4 | IPLF-048B | 4 | 1 | implemented | passed | true |
 | UJ-35 | Manage Madrid international registration or designation | 5 | IPLF-057B | 7 | 1 | implemented | passed | true |
-| UJ-36 | Complete post-registration recordal | 5 | IPLF-058B | 10 | 1 | implemented | passed | false |
+| UJ-36 | Complete post-registration recordal | 5 | IPLF-058B | 10 | 2 | implemented | passed | true |
 | UJ-37 | Coordinate foreign associate filing | 5 | IPLF-059B | 5 | 0 | not_started | not_run | false |
 | UJ-38 | Manage rectification, cancellation, or non-use removal | 5 | IPLF-049B | 5 | 2 | implemented | passed | true |
 | UJ-39 | Manage patent prosecution or opposition | 5 | IPLF-080B | 5 | 0 | not_started | not_run | false |

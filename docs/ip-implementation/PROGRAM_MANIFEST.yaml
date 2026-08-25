@@ -16,14 +16,14 @@
     "execution_policy": "codex_owned_single_ordered_queue; implement first and run the automated check and exact-release verification batch at the end",
     "active_slice": "IPLF-059A",
     "checkpoint": {
-      "recorded_at": "2026-08-25T20:29:46+05:30",
-      "repository_revision": "682a805fe6079b0c944924ff664f2413d8ded213",
-      "environment": "Local Windows candidate integrated over canonical main 1f76c749. Targeted API, title-ledger and web suites plus the fresh-tenant dated Playwright journey passed; hosted CI and exact-production acceptance remain pending.",
-      "completed_scope": "IPLF-058B is locally implemented and verified for the post-registration operator workspace, all UJ-36 paths, IPLF-039E-owned UJ-61 title presentation, API correction/conflict-review hardening, navigation, guide, law-firm claims and dated local/production browser specifications without duplicating renewal, proceeding, title, registry, document, deadline or cost owners.",
+      "recorded_at": "2026-08-25T22:59:33+05:30",
+      "repository_revision": "7809ed33c0b26f7f3b8e84d3a107d6ef690c8c56",
+      "environment": "Exact canonical main deployed migration-first to production API caseops-api-00355-8rn and web caseops-web-00333-jls at 100 percent latest-only traffic. Exact-main CI, Security, CodeQL and production verifier 32874739889 passed.",
+      "completed_scope": "IPLF-058 is deployment-verified. IPLF-058B provides the post-registration operator workspace, all UJ-36 paths, bounded IPLF-039E-owned UJ-61 title presentation, correction/conflict-review hardening, navigation, guide and law-firm claims without duplicating renewal, proceeding, title, Registry, document, deadline or cost owners.",
       "program_state": "PROGRAM INCOMPLETE",
       "next_slice": "IPLF-059A",
-      "next_action": "Pass hosted CI/security/CodeQL, merge the exact candidate to main, deploy it migration-first, run the dated production recordal journey and publish the final IPLF-058 release evidence before advancing to IPLF-059A.",
-      "evidence_ref": "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-2026-08-25.md"
+      "next_action": "Implement IPLF-059A from the canonical ownership boundary, then run its complete local, hosted and exact-production release gates before promotion.",
+      "evidence_ref": "docs/ip-implementation/evidence/m5/IPLF-058/release-058b-2026-08-25.md"
     },
     "work_owner": {
       "owner": "Codex",
@@ -2172,11 +2172,12 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "evidence_refs": [
         "docs/ip-implementation/evidence/m5/IPLF-058/local-058a-2026-08-25.md",
         "docs/ip-implementation/evidence/m5/IPLF-058/release-058a-2026-08-25.md",
-        "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-2026-08-25.md"
+        "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-2026-08-25.md",
+        "docs/ip-implementation/evidence/m5/IPLF-058/release-058b-2026-08-25.md"
       ]
     },
     {
@@ -13765,7 +13766,8 @@
         "tests/e2e/iplf-058b-recordal-workflow-2026-08-25-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-2026-08-25.md"
+        "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-2026-08-25.md",
+        "docs/ip-implementation/evidence/m5/IPLF-058/release-058b-2026-08-25.md"
       ],
       "evidence_metadata": [
         {
@@ -13776,12 +13778,19 @@
           "assertions": "all five UJ-36 paths, all three IPLF-039E-owned UJ-61 paths, correction fail-closed contract, approver conflict review, exact sources, title-at-date separation, responsive geometry, guide and landing claims",
           "result": "passed",
           "recorded_at": "2026-08-25T20:29:46+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m5/IPLF-058/release-058b-2026-08-25.md",
+          "revision": "7809ed33c0b26f7f3b8e84d3a107d6ef690c8c56",
+          "environment": "Exact canonical main on production API caseops-api-00355-8rn and web caseops-web-00333-jls, each at 100 percent latest-only traffic with release tag 7809ed3",
+          "fixtures": "Dedicated production QA workspace and synthetic recordal records only; no live Registry mutation, filing, payment, provider call, external recipient or client record",
+          "assertions": "PR and exact-main hosted gates; immutable builds; migration-first deployment; scheduler reconciliation; exact release identity; 90-test RAM batch including the dated IPLF-058B workflow; A0 quiescence; notice module; bounded selected-docket loading at production corpus scale",
+          "result": "passed",
+          "recorded_at": "2026-08-25T22:59:33+05:30"
         }
       ],
       "blockers": [],
-      "next_actions": [
-        "Run hosted CI/security/CodeQL, merge the exact candidate, deploy that main revision and execute the dated production acceptance before changing release_status."
-      ],
+      "next_actions": [],
       "data_impact": [
         "No schema change. IPLF-058B reuses the deployed IPLF-058A recordal aggregate and IPLF-039E title-interest ledger.",
         "API hardening requires evidence and a same-docket corrected instrument for correction and an explicit approved review for detected Registry/instrument party conflicts."
@@ -13798,12 +13807,18 @@
           "disposition": "created",
           "owner": "Engineering/SRE",
           "evidence": "Ownership review, all eight allocated journey paths, local gates and remaining exact-release boundary"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m5/IPLF-058/release-058b-2026-08-25.md",
+          "disposition": "created",
+          "owner": "Engineering/SRE",
+          "evidence": "PR and exact-main gates, production-scale correction, immutable deployment identity, dated production acceptance and explicit UJ-61/external-approval boundaries"
         }
       ],
       "allocation_review": "2026-08-25 brutal duplicate-work review: the UI extends IPLF-058A, reads IPLF-039E title interests, and links to IPLF-037 renewals and IPLF-049 proceedings. No second legal-state writer, registry client, document store, deadline engine or cost ledger was added.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked"
+      "release_status": "deployment_verified"
     },
     {
       "id": "IPLF-059A",
@@ -41532,11 +41547,12 @@
         "apps/api/tests/test_ip_058b_recordal_journeys.py::test_uj36_exc02_partial_assignment_preserves_scope_and_prior_title#IPLF-UJ-36-EXC-02"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-2026-08-25.md"
+        "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-2026-08-25.md",
+        "docs/ip-implementation/evidence/m5/IPLF-058/release-058b-2026-08-25.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-058B"
       ]
@@ -50699,11 +50715,12 @@
         "IPLF-UJ-36-NORMAL:tests/e2e/iplf-058b-recordal-workflow-2026-08-25.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-2026-08-25.md"
+        "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-2026-08-25.md",
+        "docs/ip-implementation/evidence/m5/IPLF-058/release-058b-2026-08-25.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-058B"
       ],
@@ -50727,11 +50744,12 @@
         "IPLF-UJ-36-EXC-01:tests/e2e/iplf-058b-recordal-workflow-2026-08-25.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-2026-08-25.md"
+        "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-2026-08-25.md",
+        "docs/ip-implementation/evidence/m5/IPLF-058/release-058b-2026-08-25.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-058B"
       ],
@@ -50755,11 +50773,12 @@
         "IPLF-UJ-36-EXC-02:tests/e2e/iplf-058b-recordal-workflow-2026-08-25.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-2026-08-25.md"
+        "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-2026-08-25.md",
+        "docs/ip-implementation/evidence/m5/IPLF-058/release-058b-2026-08-25.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-058B"
       ],
@@ -50783,11 +50802,12 @@
         "IPLF-UJ-36-EXC-03:tests/e2e/iplf-058b-recordal-workflow-2026-08-25.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-2026-08-25.md"
+        "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-2026-08-25.md",
+        "docs/ip-implementation/evidence/m5/IPLF-058/release-058b-2026-08-25.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-058B"
       ],
@@ -50811,11 +50831,12 @@
         "IPLF-UJ-36-EXC-04:tests/e2e/iplf-058b-recordal-workflow-2026-08-25.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-2026-08-25.md"
+        "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-2026-08-25.md",
+        "docs/ip-implementation/evidence/m5/IPLF-058/release-058b-2026-08-25.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-058B"
       ],
