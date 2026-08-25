@@ -32,6 +32,7 @@ from caseops_api.db.models import (
     IpEvidenceCandidate,
     IpIncidentKillSwitch,
     IpMatterLink,
+    IpPostRegistrationRecordal,
     IpRelatedRightObligation,
     IpTitleInterest,
     IpTrademarkParticularVersion,
@@ -3015,6 +3016,129 @@ def assert_no_active_ip_incident_kill_switch(
         )
 
 
+def _title_scopes_overlap(
+    left: dict[str, object],
+    right: dict[str, object],
+) -> bool:
+    if left.get("scope_kind") != "partial" or right.get("scope_kind") != "partial":
+        return True
+    left_classes = {int(value) for value in left.get("affected_classes", [])}
+    right_classes = {int(value) for value in right.get("affected_classes", [])}
+    if left_classes and right_classes and left_classes.isdisjoint(right_classes):
+        return False
+    return True
+
+
+def project_ip_recordal_title_interests(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket: IpDocketRecord,
+    recordal: IpPostRegistrationRecordal,
+    recordal_status: str,
+    registry_recorded_on: date | None = None,
+) -> list[IpTitleInterest]:
+    """Project a reviewed recordal through the one canonical title-interest writer."""
+
+    role_specs = {
+        "assignment": ({"assignee"}, "assignment"),
+        "transmission": ({"transmittee"}, "assignment"),
+        "licence": ({"licensee"}, "licence"),
+        "registered_user": ({"registered_user"}, "licence"),
+    }
+    role_spec = role_specs.get(recordal.recordal_type)
+    if role_spec is None:
+        return []
+    if recordal.effective_on is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Ownership and licence recordals require an effective date.",
+        )
+
+    eligible_roles, interest_type = role_spec
+    parties = [
+        party
+        for party in recordal.parties_json
+        if str(party.get("role", "")) in eligible_roles
+    ]
+    if not parties:
+        raise HTTPException(
+            status_code=422,
+            detail="Recordal has no party eligible for title-interest projection.",
+        )
+
+    all_interests = list(
+        session.scalars(
+            select(IpTitleInterest)
+            .where(
+                IpTitleInterest.company_id == context.company.id,
+                IpTitleInterest.docket_id == docket.id,
+            )
+            .order_by(IpTitleInterest.id)
+            .with_for_update()
+        ).all()
+    )
+    existing_by_party = {
+        (row.party_name.casefold(), row.party_role): row
+        for row in all_interests
+        if row.source_recordal_id == recordal.id
+    }
+    if recordal_status in {"rejected", "withdrawn"} and not existing_by_party:
+        return []
+    scope = {
+        **recordal.scope_json,
+        "affected_registration_refs": recordal.affected_registration_refs_json,
+        "affected_classes": recordal.affected_classes_json,
+    }
+    projected: list[IpTitleInterest] = []
+    for party in parties:
+        party_name = str(party["name"]).strip()
+        party_role = str(party["role"])
+        interest = existing_by_party.get((party_name.casefold(), party_role))
+        if interest is None:
+            flags: list[str] = []
+            for other in all_interests:
+                if other.source_recordal_id == recordal.id:
+                    continue
+                other_until = other.effective_until or date.max
+                overlaps = (
+                    recordal.effective_on <= other_until
+                    and _title_scopes_overlap(scope, other.scope_json)
+                )
+                if overlaps and other.party_name.casefold() != party_name.casefold():
+                    flags.append(f"party_overlap:{other.id}")
+                    if interest_type == "assignment" and other.interest_type in {
+                        "ownership",
+                        "assignment",
+                    }:
+                        flags.append(f"competing_title:{other.id}")
+            interest = IpTitleInterest(
+                company_id=context.company.id,
+                docket_id=docket.id,
+                interest_type=interest_type,
+                party_name=party_name,
+                party_role=party_role,
+                executed_on=recordal.executed_on,
+                effective_from=recordal.effective_on,
+                source_recordal_id=recordal.id,
+                scope_json=scope,
+                evidence_reference=recordal.supporting_instrument_refs_json[0],
+                recordal_status=recordal_status,
+                registry_recorded_on=registry_recorded_on,
+                conflict_flags_json=flags,
+            )
+            session.add(interest)
+            all_interests.append(interest)
+        else:
+            interest.recordal_status = recordal_status
+            interest.registry_recorded_on = registry_recorded_on
+            interest.version += 1
+            interest.updated_at = datetime.now(UTC)
+        projected.append(interest)
+    session.flush()
+    return projected
+
+
 def add_ip_title_interest(
     session: Session,
     *,
@@ -3078,9 +3202,12 @@ def add_ip_title_interest(
         docket_id=docket.id,
         interest_type=payload.interest_type,
         party_name=payload.party_name.strip(),
+        party_role=payload.party_role.strip() if payload.party_role else None,
+        executed_on=payload.executed_on,
         effective_from=payload.effective_from,
         effective_until=payload.effective_until,
         related_docket_id=payload.related_docket_id,
+        scope_json=payload.scope,
         evidence_reference=payload.evidence_reference.strip(),
         recordal_status=payload.recordal_status,
         conflict_flags_json=flags,
@@ -3638,6 +3765,7 @@ __all__ = [
     "get_ip_docket",
     "ip_docket_control_report",
     "list_ip_dockets",
+    "project_ip_recordal_title_interests",
     "reconcile_ip_cost_items",
     "reassign_ip_deadline_coverage",
     "record_ip_deadline_incident_action",

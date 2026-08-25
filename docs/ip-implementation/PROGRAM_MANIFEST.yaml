@@ -7307,20 +7307,42 @@
       "dependencies": [
         "IPLF-029A"
       ],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260825_0005_iplf058a_recordal_foundation.py",
+        "apps/api/src/caseops_api/api/routes/ip_recordals.py",
+        "apps/api/src/caseops_api/services/ip_recordals.py",
+        "apps/api/src/caseops_api/schemas/ip_recordals.py",
+        "apps/api/src/caseops_api/services/ip_operations.py",
+        "apps/api/src/caseops_api/services/ip_lifecycle.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "docs/ip-implementation/IP_RECORDAL_FOUNDATION.md"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_058a_recordal_foundation.py",
+        "apps/api/tests/test_20260825_ip_recordal_migration.py",
+        "apps/api/tests/test_ip_039e_chain_of_title.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-058/local-058a-2026-08-25.md"
+      ],
       "evidence_metadata": [],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Complete branch-wide regression and review, merge only on green hosted checks, deploy the exact merge migration-first, and record production evidence before releasing IPLF-058A.",
+        "Then implement IPLF-058B UJ-36/UJ-61 user workflows without duplicating title, proceeding, renewal, document, cost, deadline, registry, access or audit owners."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Add ip_post_registration_recordals as the typed aggregate and extend ip_title_interests/ip_docket_events with tenant-correlated recordal projection and event links.",
+        "Preserve documents, costs, deadlines, registry snapshots, access, audit, lifecycle, proceeding and renewal records as links to their existing canonical owners."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
+      "documentation_impact": [
+        "docs/ip-implementation/IP_RECORDAL_FOUNDATION.md",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml",
+        "docs/ip-implementation/generated/DATA_GOVERNANCE_MAP.md",
+        "apps/web/lib/api/openapi-types.ts"
+      ],
+      "allocation_review": "2026-08-25 brutal implementation review: one typed recordal aggregate extends the existing title and event writers and links every shared concern to its current owner. IPLF-049 proceedings and IPLF-037 renewal state remain separate by design; IPLF-058B retains every UJ-36/UJ-61 path and public claim.",
+      "implementation_status": "implemented",
       "verification_status": "not_run",
       "release_status": "blocked",
       "administrative_exception": {

@@ -14753,6 +14753,12 @@ class IpDocketEvent(Base):
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
+            ["recordal_id", "company_id"],
+            ["ip_post_registration_recordals.id", "ip_post_registration_recordals.company_id"],
+            name="fk_ip_docket_event_recordal_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
             ["responsible_membership_id", "company_id"],
             ["company_memberships.id", "company_memberships.company_id"],
             name="fk_ip_docket_event_responsible_company",
@@ -14801,9 +14807,19 @@ class IpDocketEvent(Base):
             "company_id",
             "candidate_status",
         ),
+        Index(
+            "ix_ip_docket_events_company_recordal_sequence",
+            "company_id",
+            "recordal_id",
+            "sequence",
+        ),
         CheckConstraint(
             "NOT (application_id IS NOT NULL AND proceeding_id IS NOT NULL)",
             name="ck_ip_docket_event_single_legal_target",
+        ),
+        CheckConstraint(
+            "recordal_id IS NULL OR event_kind = 'post_registration_recordal_transaction'",
+            name="ck_ip_docket_event_recordal_kind",
         ),
         CheckConstraint(
             "sequence > 0",
@@ -14840,6 +14856,7 @@ class IpDocketEvent(Base):
     sequence: Mapped[int] = mapped_column(Integer, nullable=False)
     application_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     proceeding_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    recordal_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     event_kind: Mapped[str] = mapped_column(String(64), nullable=False)
     source: Mapped[str] = mapped_column(String(40), nullable=False)
     source_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -17211,6 +17228,111 @@ class IpIncidentKillSwitch(Base):
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
 
+class IpPostRegistrationRecordal(Base):
+    """Typed post-registration recordal; shared owners retain effects and evidence."""
+
+    __tablename__ = "ip_post_registration_recordals"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_recordal_docket_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["registry_snapshot_id", "company_id"],
+            ["ip_registry_snapshots.id", "ip_registry_snapshots.company_id"],
+            name="fk_ip_recordal_registry_snapshot_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_recordal_creator_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["updated_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_recordal_updater_company",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "recordal_type IN ('renewal', 'restoration', 'assignment', 'transmission', "
+            "'name_change', 'address_change', 'address_for_service_change', "
+            "'registered_user', 'licence', 'association', 'division', 'limitation', "
+            "'disclaimer', 'certified_copy', 'well_known_mark')",
+            name="ck_ip_recordal_type",
+        ),
+        CheckConstraint(
+            "status IN ('draft', 'ready', 'filed', 'defective', 'accepted', "
+            "'rejected', 'withdrawn')",
+            name="ck_ip_recordal_status",
+        ),
+        CheckConstraint("version > 0", name="ck_ip_recordal_version_positive"),
+        CheckConstraint(
+            "effective_on IS NULL OR executed_on IS NULL OR effective_on >= executed_on",
+            name="ck_ip_recordal_effective_after_execution",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_ip_recordal_id_company"),
+        Index(
+            "ix_ip_recordals_company_docket_status",
+            "company_id",
+            "docket_id",
+            "status",
+        ),
+        Index(
+            "ix_ip_recordals_company_type_status",
+            "company_id",
+            "recordal_type",
+            "status",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    recordal_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    legal_basis: Mapped[str] = mapped_column(Text, nullable=False)
+    form_code: Mapped[str] = mapped_column(String(80), nullable=False)
+    parties_json: Mapped[list[dict[str, object]]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    executed_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    effective_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    affected_registration_refs_json: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    affected_classes_json: Mapped[list[int]] = mapped_column(JSON, nullable=False, default=list)
+    scope_json: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+    supporting_instrument_refs_json: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    fee_cost_item_refs_json: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    filing_evidence_refs_json: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    acceptance_evidence_refs_json: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    deadline_rule_key: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    registry_snapshot_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="draft")
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    updated_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
 class IpTitleInterest(Base):
     __tablename__ = "ip_title_interests"
     __table_args__ = (
@@ -17220,7 +17342,16 @@ class IpTitleInterest(Base):
             name="fk_ip_title_interest_docket_company",
             ondelete="CASCADE",
         ),
+        ForeignKeyConstraint(
+            ["source_recordal_id", "company_id"],
+            ["ip_post_registration_recordals.id", "ip_post_registration_recordals.company_id"],
+            name="fk_ip_title_interest_recordal_company",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("version > 0", name="ck_ip_title_interest_version_positive"),
+        UniqueConstraint("id", "company_id", name="uq_ip_title_interest_id_company"),
         Index("ix_ip_title_interests_company_docket", "company_id", "docket_id"),
+        Index("ix_ip_title_interests_source_recordal", "source_recordal_id"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -17228,14 +17359,23 @@ class IpTitleInterest(Base):
     docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     interest_type: Mapped[str] = mapped_column(String(32), nullable=False)
     party_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    party_role: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    executed_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     effective_from: Mapped[date] = mapped_column(Date, nullable=False)
     effective_until: Mapped[date | None] = mapped_column(Date, nullable=True)
     related_docket_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    source_recordal_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    scope_json: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
     evidence_reference: Mapped[str] = mapped_column(String(500), nullable=False)
     recordal_status: Mapped[str] = mapped_column(String(32), nullable=False, default="not_required")
+    registry_recorded_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     conflict_flags_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )
 
 

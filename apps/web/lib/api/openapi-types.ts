@@ -6872,6 +6872,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/recordals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recordal List */
+        get: operations["recordal_list_api_ip_recordals_get"];
+        put?: never;
+        /** Recordal Create */
+        post: operations["recordal_create_api_ip_recordals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/recordals/{recordal_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recordal Get */
+        get: operations["recordal_get_api_ip_recordals__recordal_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/recordals/{recordal_id}/transactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Recordal Transaction */
+        post: operations["recordal_transaction_api_ip_recordals__recordal_id__transactions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/recordals/{recordal_id}/workspace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recordal Workspace */
+        get: operations["recordal_workspace_api_ip_recordals__recordal_id__workspace_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/registry-diffs/{diff_id}/resolve": {
         parameters: {
             query?: never;
@@ -22653,7 +22722,7 @@ export interface components {
              * Event Kind
              * @enum {string}
              */
-            event_kind: "filing" | "formalities" | "examination_report" | "response" | "show_cause_hearing" | "acceptance" | "publication" | "registration" | "renewal" | "refusal" | "abandonment" | "restoration" | "lifecycle_transition" | "opposition_profile" | "opposition_applicant_action" | "opposition_opponent_action" | "opposition_shared_action" | "post_registration_profile" | "post_registration_action" | "madrid_action" | "registry_change";
+            event_kind: "filing" | "formalities" | "examination_report" | "response" | "show_cause_hearing" | "acceptance" | "publication" | "registration" | "renewal" | "refusal" | "abandonment" | "restoration" | "lifecycle_transition" | "opposition_profile" | "opposition_applicant_action" | "opposition_opponent_action" | "opposition_shared_action" | "post_registration_profile" | "post_registration_action" | "post_registration_recordal_transaction" | "madrid_action" | "registry_change";
             /** Evidence Refs */
             evidence_refs?: string[];
             /** Expected Application Version */
@@ -22774,6 +22843,8 @@ export interface components {
             reconciles_event_id: string | null;
             /** Reconciliation Decision */
             reconciliation_decision: string | null;
+            /** Recordal Id */
+            recordal_id: string | null;
             /** Responsible Membership Id */
             responsible_membership_id: string;
             /** Resulting Deadline Refs Json */
@@ -26525,6 +26596,205 @@ export interface components {
             /** Unconfirmed Deadline Refs */
             unconfirmed_deadline_refs: string[];
         };
+        /** IpRecordalCreateRequest */
+        IpRecordalCreateRequest: {
+            /** Affected Classes */
+            affected_classes?: number[];
+            /** Affected Registration Refs */
+            affected_registration_refs: string[];
+            /** Deadline Rule Key */
+            deadline_rule_key?: string | null;
+            /** Docket Id */
+            docket_id: string;
+            /** Effective On */
+            effective_on?: string | null;
+            /** Executed On */
+            executed_on?: string | null;
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version: number;
+            /** Fee Cost Item Refs */
+            fee_cost_item_refs?: string[];
+            /** Form Code */
+            form_code: string;
+            /** Legal Basis */
+            legal_basis: string;
+            /** Parties */
+            parties: components["schemas"]["IpRecordalParty"][];
+            /** Reason */
+            reason: string;
+            /**
+             * Recordal Type
+             * @enum {string}
+             */
+            recordal_type: "renewal" | "restoration" | "assignment" | "transmission" | "name_change" | "address_change" | "address_for_service_change" | "registered_user" | "licence" | "association" | "division" | "limitation" | "disclaimer" | "certified_copy" | "well_known_mark";
+            /** Responsible Membership Id */
+            responsible_membership_id: string;
+            /** Scope Details */
+            scope_details?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Scope Kind
+             * @default whole_right
+             * @enum {string}
+             */
+            scope_kind: "whole_right" | "partial";
+            /** Supporting Instrument Refs */
+            supporting_instrument_refs: string[];
+        };
+        /** IpRecordalPageResponse */
+        IpRecordalPageResponse: {
+            /** Items */
+            items: components["schemas"]["IpRecordalResponse"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
+        /** IpRecordalParty */
+        IpRecordalParty: {
+            /** Address */
+            address?: string | null;
+            /** Evidence Reference */
+            evidence_reference: string;
+            /** Identifier */
+            identifier?: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "registered_proprietor" | "assignor" | "assignee" | "transmitter" | "transmittee" | "licensor" | "licensee" | "registered_user" | "applicant" | "subject" | "authorized_signatory";
+        };
+        /** IpRecordalResponse */
+        IpRecordalResponse: {
+            /** Acceptance Evidence Refs Json */
+            acceptance_evidence_refs_json: string[];
+            /** Affected Classes Json */
+            affected_classes_json: number[];
+            /** Affected Registration Refs Json */
+            affected_registration_refs_json: string[];
+            /** Company Id */
+            company_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Membership Id */
+            created_by_membership_id: string;
+            /** Deadline Rule Key */
+            deadline_rule_key: string | null;
+            /** Docket Id */
+            docket_id: string;
+            /** Effective On */
+            effective_on: string | null;
+            /** Executed On */
+            executed_on: string | null;
+            /** Fee Cost Item Refs Json */
+            fee_cost_item_refs_json: string[];
+            /** Filing Evidence Refs Json */
+            filing_evidence_refs_json: string[];
+            /** Form Code */
+            form_code: string;
+            /** Id */
+            id: string;
+            /** Legal Basis */
+            legal_basis: string;
+            /** Parties Json */
+            parties_json: {
+                [key: string]: unknown;
+            }[];
+            /** Recordal Type */
+            recordal_type: string;
+            /** Registry Snapshot Id */
+            registry_snapshot_id: string | null;
+            /** Scope Json */
+            scope_json: {
+                [key: string]: unknown;
+            };
+            /** Status */
+            status: string;
+            /** Supporting Instrument Refs Json */
+            supporting_instrument_refs_json: string[];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Updated By Membership Id */
+            updated_by_membership_id: string;
+            /** Version */
+            version: number;
+        };
+        /** IpRecordalTransactionRequest */
+        IpRecordalTransactionRequest: {
+            /** Cost Item Refs */
+            cost_item_refs?: string[];
+            /** Deadline Refs */
+            deadline_refs?: string[];
+            /** Details */
+            details?: {
+                [key: string]: unknown;
+            };
+            /** Document Refs */
+            document_refs?: string[];
+            /**
+             * Effective At
+             * Format: date-time
+             */
+            effective_at: string;
+            /** Evidence Refs */
+            evidence_refs?: string[];
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version: number;
+            /** Expected Version */
+            expected_version: number;
+            /** Reason */
+            reason: string;
+            /** Registry Recorded On */
+            registry_recorded_on?: string | null;
+            /** Registry Snapshot Id */
+            registry_snapshot_id?: string | null;
+            /** Responsible Membership Id */
+            responsible_membership_id: string;
+            /** Source Reference */
+            source_reference?: string | null;
+            /** Source Url */
+            source_url?: string | null;
+            /**
+             * Transaction Kind
+             * @enum {string}
+             */
+            transaction_kind: "review_approved" | "filed" | "acknowledgement_received" | "defect_noted" | "corrected" | "accepted" | "rejected" | "withdrawn";
+        };
+        /** IpRecordalTransactionResponse */
+        IpRecordalTransactionResponse: {
+            event: components["schemas"]["IpDocketEventResponse"];
+            /** Projected Title Interests */
+            projected_title_interests?: components["schemas"]["IpTitleInterestRecord"][];
+            recordal: components["schemas"]["IpRecordalResponse"];
+            /**
+             * Registry Projection Applied
+             * @default false
+             */
+            registry_projection_applied: boolean;
+        };
+        /** IpRecordalWorkspaceResponse */
+        IpRecordalWorkspaceResponse: {
+            /** Current Registered Interests */
+            current_registered_interests: components["schemas"]["IpTitleInterestRecord"][];
+            /** Pending Interests */
+            pending_interests: components["schemas"]["IpTitleInterestRecord"][];
+            recordal: components["schemas"]["IpRecordalResponse"];
+            /** Title Interests */
+            title_interests: components["schemas"]["IpTitleInterestRecord"][];
+            /** Transactions */
+            transactions: components["schemas"]["IpDocketEventResponse"][];
+        };
         /** IpRegistryDiffPageResponse */
         IpRegistryDiffPageResponse: {
             /** Items */
@@ -28184,6 +28454,8 @@ export interface components {
             effective_until?: string | null;
             /** Evidence Reference */
             evidence_reference: string;
+            /** Executed On */
+            executed_on?: string | null;
             /**
              * Interest Type
              * @enum {string}
@@ -28191,14 +28463,20 @@ export interface components {
             interest_type: "ownership" | "assignment" | "licence" | "encumbrance" | "security";
             /** Party Name */
             party_name: string;
+            /** Party Role */
+            party_role?: string | null;
             /**
              * Recordal Status
              * @default not_required
              * @enum {string}
              */
-            recordal_status: "not_required" | "pending" | "filed" | "recorded" | "rejected";
+            recordal_status: "not_required" | "pending" | "filed" | "recorded" | "rejected" | "withdrawn";
             /** Related Docket Id */
             related_docket_id?: string | null;
+            /** Scope */
+            scope?: {
+                [key: string]: unknown;
+            };
         };
         /** IpTitleInterestRecord */
         IpTitleInterestRecord: {
@@ -28218,16 +28496,35 @@ export interface components {
             effective_until: string | null;
             /** Evidence Reference */
             evidence_reference: string;
+            /** Executed On */
+            executed_on: string | null;
             /** Id */
             id: string;
             /** Interest Type */
             interest_type: string;
             /** Party Name */
             party_name: string;
+            /** Party Role */
+            party_role: string | null;
             /** Recordal Status */
             recordal_status: string;
+            /** Registry Recorded On */
+            registry_recorded_on: string | null;
             /** Related Docket Id */
             related_docket_id: string | null;
+            /** Scope Json */
+            scope_json: {
+                [key: string]: unknown;
+            };
+            /** Source Recordal Id */
+            source_recordal_id: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version */
+            version: number;
         };
         /** IpTrackedCaseLinkCreateRequest */
         IpTrackedCaseLinkCreateRequest: {
@@ -54210,6 +54507,171 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpWorkspaceReadinessResponse"];
+                };
+            };
+        };
+    };
+    recordal_list_api_ip_recordals_get: {
+        parameters: {
+            query?: {
+                docket_id?: string | null;
+                limit?: number;
+                offset?: number;
+                recordal_type?: ("renewal" | "restoration" | "assignment" | "transmission" | "name_change" | "address_change" | "address_for_service_change" | "registered_user" | "licence" | "association" | "division" | "limitation" | "disclaimer" | "certified_copy" | "well_known_mark") | null;
+                status?: ("draft" | "ready" | "filed" | "defective" | "accepted" | "rejected" | "withdrawn") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpRecordalPageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recordal_create_api_ip_recordals_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpRecordalCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpRecordalResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recordal_get_api_ip_recordals__recordal_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recordal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpRecordalResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recordal_transaction_api_ip_recordals__recordal_id__transactions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recordal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpRecordalTransactionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpRecordalTransactionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recordal_workspace_api_ip_recordals__recordal_id__workspace_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                recordal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpRecordalWorkspaceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
