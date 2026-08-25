@@ -505,6 +505,12 @@ test("IPLF-026B production previews, grants, and revokes independent IP access a
     await workspace
       .getByLabel("Reason for change")
       .fill("The dated production review assignment has ended.");
+    const revokePreviewResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url().endsWith(`/api/ip/dockets/${docket.id}/access/preview`) &&
+        response.request().method() === "POST",
+      { timeout: 20_000 },
+    );
     await workspace
       .getByRole("button", {
         name: new RegExp(
@@ -512,6 +518,11 @@ test("IPLF-026B production previews, grants, and revokes independent IP access a
         ),
       })
       .click();
+    const revokePreviewResponse = await revokePreviewResponsePromise;
+    expect(
+      revokePreviewResponse.status(),
+      await revokePreviewResponse.text(),
+    ).toBe(200);
     await expect(preview).toContainText("Losses: 1");
     await preview.getByRole("button", { name: "Apply access change" }).click();
     await expect(workspace.getByText("v3", { exact: true })).toBeVisible();

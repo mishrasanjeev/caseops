@@ -25130,6 +25130,215 @@
       }
     },
     {
+      "id": "trademark_international_registrations",
+      "table_name": "trademark_international_registrations",
+      "purpose": "Repository SQL persistence class `trademark_international_registrations`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "tenant_operational_record",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "application_date": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "basic_application_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "classes_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "created_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "dependency_end_date": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "designated_member_code": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(20)",
+          "nullable": true
+        },
+        "designated_office": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(120)",
+          "nullable": true
+        },
+        "designation_effective_date": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "designation_kind": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(20)",
+          "nullable": true
+        },
+        "direction": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(16)",
+          "nullable": false
+        },
+        "docket_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "form_kind": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(40)",
+          "nullable": true
+        },
+        "goods_services_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "holder_name": {
+          "category_id": "personal_or_contact_data",
+          "sql_type": "VARCHAR(500)",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "international_application_number": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(120)",
+          "nullable": true
+        },
+        "international_registration_date": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "ir_number": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(120)",
+          "nullable": true
+        },
+        "jurisdiction": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(40)",
+          "nullable": true
+        },
+        "local_agent_name": {
+          "category_id": "personal_or_contact_data",
+          "sql_type": "VARCHAR(500)",
+          "nullable": true
+        },
+        "mark_name": {
+          "category_id": "personal_or_contact_data",
+          "sql_type": "VARCHAR(500)",
+          "nullable": false
+        },
+        "national_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(120)",
+          "nullable": true
+        },
+        "notification_date": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "office_of_origin": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(120)",
+          "nullable": true
+        },
+        "parent_registration_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "priority_claims_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "publication_date": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "record_kind": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(40)",
+          "nullable": false
+        },
+        "renewal_due_date": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "source_reference": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(500)",
+          "nullable": false
+        },
+        "source_retrieved_at": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "source_url": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(800)",
+          "nullable": false
+        },
+        "statement_date": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATE",
+          "nullable": true
+        },
+        "updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "updated_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "wipo_reference": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(255)",
+          "nullable": false
+        },
+        "wipo_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(120)",
+          "nullable": true
+        }
+      }
+    },
+    {
       "id": "trademark_representations",
       "table_name": "trademark_representations",
       "purpose": "Repository SQL persistence class `trademark_representations`; its exact column inventory is intentionally versioned below.",
@@ -25760,12 +25969,12 @@
       }
     }
   ],
-  "schema_fingerprint": "5725fbf1f77ae1f765c54f7cd35854985b4a7294a272ceaca45476d01bc4db9d",
+  "schema_fingerprint": "eaf31659268c92f253b240be089d4f20a46b672d2e8ce78eae17eba6edb4ccdf",
   "index_inventory": {
-    "orm_index_count": 1316,
-    "orm_index_fingerprint": "ecdae5de12646e78a206914dde7f60568b0e83afebcf60891983c7874c3e7a21",
-    "migration_index_count": 612,
-    "migration_index_fingerprint": "00877d1538ab904d1d0d5a6ce7d6060bbc44f2c1c94a3e27cd38f18d004964f0",
+    "orm_index_count": 1325,
+    "orm_index_fingerprint": "da9fd6c8ec5c8234e3b609028b9ad3374542fe586cc6a9f003fbbc0155f8e98b",
+    "migration_index_count": 621,
+    "migration_index_fingerprint": "d1c38dff2e0bb7de9ed953c1e2a8d60e4c5071ab2be72e99e5c6f15dc49672f2",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."
   }
 }

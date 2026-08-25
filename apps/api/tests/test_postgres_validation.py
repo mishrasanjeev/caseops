@@ -8102,3 +8102,186 @@ def test_iplf051_registry_snapshot_is_append_only_and_tenant_fks_exist_on_postgr
                 session.execute(text(statement), {"id": snapshot_id})
                 session.commit()
             session.rollback()
+
+
+@pytest.mark.postgres
+def test_iplf057a_madrid_tenant_fks_and_designation_identity_on_postgres(pg_engine):
+    from caseops_api.db.models import (
+        IpDocketRecord,
+        TrademarkInternationalRegistration,
+    )
+
+    inspector = inspect(pg_engine)
+    foreign_keys = {
+        row["name"]
+        for row in inspector.get_foreign_keys("trademark_international_registrations")
+    }
+    assert {
+        "fk_tm_international_docket_company",
+        "fk_tm_international_parent_company",
+        "fk_tm_international_basic_application_company",
+        "fk_tm_international_creator_company",
+        "fk_tm_international_updater_company",
+    } <= foreign_keys
+    indexes = {
+        row["name"]: row
+        for row in inspector.get_indexes("trademark_international_registrations")
+    }
+    assert indexes["uq_tm_international_company_ir_number"]["unique"] is True
+    assert indexes["uq_tm_international_designation_member"]["unique"] is True
+
+    now = datetime.now(UTC)
+    registration_id = str(uuid4())
+    designation_date = date(2026, 8, 25)
+    with Session(pg_engine) as session:
+        fixture = _seed_ip_coverage_lifecycle_fixture(session)
+        registration_docket = IpDocketRecord(
+            company_id=fixture["company_id"],
+            record_type="international_registration",
+            title="PostgreSQL Madrid registration",
+            status="ready",
+            created_by_membership_id=fixture["owner_id"],
+        )
+        first_designation_docket = IpDocketRecord(
+            company_id=fixture["company_id"],
+            record_type="international_designation",
+            title="PostgreSQL Madrid IN designation",
+            status="ready",
+            created_by_membership_id=fixture["owner_id"],
+        )
+        duplicate_designation_docket = IpDocketRecord(
+            company_id=fixture["company_id"],
+            record_type="international_designation",
+            title="PostgreSQL duplicate designation",
+            status="ready",
+            created_by_membership_id=fixture["owner_id"],
+        )
+        session.add_all(
+            [
+                registration_docket,
+                first_designation_docket,
+                duplicate_designation_docket,
+            ]
+        )
+        session.flush()
+        registration = TrademarkInternationalRegistration(
+            id=registration_id,
+            company_id=fixture["company_id"],
+            docket_id=registration_docket.id,
+            record_kind="international_registration",
+            direction="inbound",
+            ir_number=f"PG-{uuid4()}",
+            wipo_reference=f"WIPO-{uuid4()}",
+            holder_name="PostgreSQL holder",
+            mark_name="ASTER",
+            classes_json=[9],
+            goods_services_json={"9": "Software"},
+            priority_claims_json=[],
+            wipo_status="recorded",
+            source_url="https://www.wipo.int/madrid/postgres",
+            source_reference="postgres:wipo:registration",
+            source_retrieved_at=now,
+            created_by_membership_id=fixture["owner_id"],
+            updated_by_membership_id=fixture["owner_id"],
+        )
+        designation = TrademarkInternationalRegistration(
+            company_id=fixture["company_id"],
+            docket_id=first_designation_docket.id,
+            record_kind="international_designation",
+            direction="inbound",
+            parent_registration_id=registration_id,
+            wipo_reference=f"WIPO-DES-{uuid4()}",
+            holder_name="PostgreSQL holder",
+            mark_name="ASTER",
+            designated_member_code="IN",
+            designated_office="IP India",
+            jurisdiction="IN",
+            designation_kind="original",
+            classes_json=[9],
+            goods_services_json={"9": "Software"},
+            priority_claims_json=[],
+            wipo_status="notified",
+            national_status="examined",
+            source_url="https://www.wipo.int/madrid/postgres/in",
+            source_reference="postgres:wipo:designation",
+            source_retrieved_at=now,
+            designation_effective_date=designation_date,
+            created_by_membership_id=fixture["owner_id"],
+            updated_by_membership_id=fixture["owner_id"],
+        )
+        session.add_all([registration, designation])
+        session.commit()
+        company_id = fixture["company_id"]
+        owner_id = fixture["owner_id"]
+        duplicate_docket_id = duplicate_designation_docket.id
+
+    with Session(pg_engine) as session:
+        session.add(
+            TrademarkInternationalRegistration(
+                company_id=company_id,
+                docket_id=duplicate_docket_id,
+                record_kind="international_designation",
+                direction="inbound",
+                parent_registration_id=registration_id,
+                wipo_reference=f"WIPO-DES-{uuid4()}",
+                holder_name="PostgreSQL holder",
+                mark_name="ASTER",
+                designated_member_code="IN",
+                designated_office="IP India",
+                jurisdiction="IN",
+                designation_kind="original",
+                classes_json=[9],
+                goods_services_json={"9": "Software"},
+                priority_claims_json=[],
+                wipo_status="notified",
+                national_status="protected",
+                source_url="https://www.wipo.int/madrid/postgres/in-duplicate",
+                source_reference="postgres:wipo:designation:duplicate",
+                source_retrieved_at=now,
+                designation_effective_date=designation_date,
+                created_by_membership_id=owner_id,
+                updated_by_membership_id=owner_id,
+            )
+        )
+        with pytest.raises(IntegrityError):
+            session.commit()
+        session.rollback()
+
+    with Session(pg_engine) as session:
+        other_company_id = _seed_company(session)
+        other_owner_id = _seed_membership(session, other_company_id)
+        other_docket = IpDocketRecord(
+            company_id=other_company_id,
+            record_type="international_registration",
+            title="Cross-tenant Madrid docket",
+            status="ready",
+            created_by_membership_id=other_owner_id,
+        )
+        session.add(other_docket)
+        session.commit()
+        other_docket_id = other_docket.id
+
+    with Session(pg_engine) as session:
+        session.add(
+            TrademarkInternationalRegistration(
+                company_id=company_id,
+                docket_id=other_docket_id,
+                record_kind="international_registration",
+                direction="inbound",
+                ir_number=f"PG-{uuid4()}",
+                wipo_reference=f"WIPO-{uuid4()}",
+                holder_name="Cross-tenant holder",
+                mark_name="ASTER",
+                classes_json=[],
+                goods_services_json={},
+                priority_claims_json=[],
+                source_url="https://www.wipo.int/madrid/postgres/cross-tenant",
+                source_reference="postgres:wipo:cross-tenant",
+                source_retrieved_at=now,
+                created_by_membership_id=owner_id,
+                updated_by_membership_id=owner_id,
+            )
+        )
+        with pytest.raises(IntegrityError):
+            session.commit()
+        session.rollback()
