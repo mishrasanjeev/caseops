@@ -10,6 +10,7 @@ import {
   FileSignature,
   FileText,
   Gavel,
+  GitBranch,
   Globe2,
   Landmark,
   Link2,
@@ -130,6 +131,11 @@ const platformMoves = [
     icon: Globe2,
     title: "Madrid international portfolio",
     body: "Docket an Indian basic mark, international registration and each original or subsequent designation without collapsing their legal states. Track WIPO and national-office snapshots as source-linked candidates, reconcile them explicitly, and connect versioned transactions to the right deadline, document, fee and local agent. WIPO automation remains fail-closed; the shipped workspace is manual sourced evidence, not a claim of live provider sync.",
+  },
+  {
+    icon: GitBranch,
+    title: "Post-registration recordals and title",
+    body: "Prepare assignment, transmission, registered-user, licence, name/address, association, division, limitation, disclaimer, certified-copy and well-known-mark recordals from the affected right, parties, dates, scope and canonical instruments. Preserve review, filing, defect, correction and Registry acceptance as separate transactions, then compare Registry-recorded and effective or pending title in a source-qualified dated report. Renewals and cancellation proceedings retain their own canonical workflows.",
   },
   {
     icon: Scale,

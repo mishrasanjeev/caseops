@@ -123,6 +123,10 @@ describe("SidebarBody resolved capability navigation", () => {
       "href",
       "/app/ip/madrid",
     );
+    expect(screen.getByRole("link", { name: "Post-registration" })).toHaveAttribute(
+      "href",
+      "/app/ip/recordals",
+    );
   });
 
   it("marks the centralized Notices destination active", () => {

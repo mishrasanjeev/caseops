@@ -781,6 +781,48 @@ export default function GuidePage() {
                     </li>
                   </ul>
                   <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
+                    Post-registration recordals and title
+                  </h3>
+                  <p>
+                    Open <a className="underline" href="/app/ip/recordals">Post-registration</a>{" "}
+                    for assignment, transmission, registered-user, licence, name/address,
+                    association, division, limitation, disclaimer, certified-copy and
+                    well-known-mark work. Renewal and restoration remain in Trademark renewals;
+                    cancellation, rectification and non-use remain separate proceedings.
+                  </p>
+                  <ul className="mt-4 space-y-2 text-[15px]">
+                    <li>
+                      Select the affected application or registration, whole-right or
+                      partial-class scope, parties, execution/effective dates, legal basis,
+                      form, docket-linked instruments and cost items. Every party cites a
+                      selected canonical instrument.
+                    </li>
+                    <li>
+                      An authorized reviewer approves the package before filing. Record the
+                      acknowledgement, defect, corrected instrument, rejection, withdrawal or
+                      Registry acceptance as a separate transaction; prior attempts remain in
+                      history.
+                    </li>
+                    <li>
+                      Registry acceptance requires a confirmed affected application or
+                      registration link, immutable snapshot, exact source, acceptance evidence,
+                      Registry-recorded date and IP approval. Source links open from evidence
+                      and history.
+                    </li>
+                    <li>
+                      The dated title view separates Registry-recorded ownership from effective,
+                      pending and beneficial interests. It surfaces overlapping title, partial
+                      scope, unavailable or restricted source documents, effective-but-unrecorded
+                      interests, title gaps and related-right cycles without changing another
+                      family member.
+                    </li>
+                    <li>
+                      Download the date-specific title report for the supported chain and its
+                      unresolved issues. The report is based only on records and sources visible
+                      to the signed-in user and remains subject to lawyer review.
+                    </li>
+                  </ul>
+                  <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
                     Trademark journal watch
                   </h3>
                   <p>

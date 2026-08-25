@@ -68,6 +68,37 @@ _TITLE_STATUS = {
 }
 
 
+def _registry_party_conflict(
+    recordal: IpPostRegistrationRecordal,
+    snapshot: IpRegistrySnapshot,
+) -> bool:
+    """Compare the instrument's resulting parties with a normalized registry snapshot."""
+
+    resulting_roles = {
+        "assignment": {"assignee"},
+        "transmission": {"transmittee"},
+        "licence": {"licensee"},
+        "registered_user": {"registered_user"},
+    }.get(recordal.recordal_type)
+    if not resulting_roles:
+        return False
+    instrument_names = {
+        str(party.get("name", "")).strip().casefold()
+        for party in recordal.parties_json
+        if str(party.get("role", "")) in resulting_roles
+        and str(party.get("name", "")).strip()
+    }
+    raw_registry_parties = snapshot.normalized_json.get("parties", [])
+    if not isinstance(raw_registry_parties, list):
+        return False
+    registry_names = {
+        str(party.get("name", "")).strip().casefold()
+        for party in raw_registry_parties
+        if isinstance(party, dict) and str(party.get("name", "")).strip()
+    }
+    return bool(instrument_names and registry_names and instrument_names != registry_names)
+
+
 def _visible_recordals_statement(session: Session, *, context: SessionContext):
     return (
         select(IpPostRegistrationRecordal)
@@ -402,6 +433,7 @@ def record_ip_recordal_transaction(
         deadline_refs=payload.deadline_refs,
     )
     registry_snapshot: IpRegistrySnapshot | None = None
+    registry_party_conflict = False
     if payload.registry_snapshot_id:
         registry_snapshot = _registry_snapshot_for_docket(
             session,
@@ -418,6 +450,18 @@ def record_ip_recordal_transaction(
             raise HTTPException(
                 status_code=422,
                 detail="Registry source URL must match the selected immutable snapshot.",
+            )
+        registry_party_conflict = _registry_party_conflict(row, registry_snapshot)
+        if (
+            registry_party_conflict
+            and payload.details.get("client_registry_conflict_reviewed") is not True
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Client and Registry party evidence conflict; an IP approver must "
+                    "record the conflict review before acceptance."
+                ),
             )
 
     status_before = row.status
@@ -465,6 +509,7 @@ def record_ip_recordal_transaction(
             resulting_deadline_refs=payload.deadline_refs,
             payload={
                 **payload.details,
+                "client_registry_conflict_detected": registry_party_conflict,
                 "recordal_id": row.id,
                 "transaction_kind": payload.transaction_kind,
                 "status_before": status_before,

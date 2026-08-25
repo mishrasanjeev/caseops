@@ -149,10 +149,12 @@ class IpRecordalTransactionRequest(BaseModel):
         if self.effective_at.utcoffset() is None:
             raise ValueError("Recordal transaction time must include a timezone.")
         if (
-            self.transaction_kind in {"filed", "defect_noted", "rejected"}
+            self.transaction_kind in {"filed", "defect_noted", "corrected", "rejected"}
             and not self.evidence_refs
         ):
             raise ValueError(f"{self.transaction_kind} requires evidence.")
+        if self.transaction_kind == "corrected" and not self.document_refs:
+            raise ValueError("Corrected recordal requires a docket-linked corrected instrument.")
         if self.transaction_kind == "accepted":
             if not self.evidence_refs:
                 raise ValueError("Accepted recordal requires acceptance evidence.")
