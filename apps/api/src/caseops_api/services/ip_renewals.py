@@ -94,9 +94,7 @@ def _conflict(code: str, message: str) -> HTTPException:
     )
 
 
-def _assert_reference_unchanged(
-    *, current: str | None, proposed: str | None, label: str
-) -> None:
+def _assert_reference_unchanged(*, current: str | None, proposed: str | None, label: str) -> None:
     if current is not None and proposed is not None and current != proposed:
         raise _conflict(
             "ip_renewal_evidence_immutable",
@@ -246,9 +244,7 @@ def _document(
     return row
 
 
-def _instructions(
-    session: Session, *, company_id: str, term_id: str
-) -> list[IpClientInstruction]:
+def _instructions(session: Session, *, company_id: str, term_id: str) -> list[IpClientInstruction]:
     return list(
         session.scalars(
             select(IpClientInstruction)
@@ -266,9 +262,7 @@ def _record(session: Session, row: IpRenewalTerm) -> IpRenewalTermRecord:
         update={
             "instructions": [
                 IpClientInstructionRecord.model_validate(instruction)
-                for instruction in _instructions(
-                    session, company_id=row.company_id, term_id=row.id
-                )
+                for instruction in _instructions(session, company_id=row.company_id, term_id=row.id)
             ]
         }
     )
@@ -411,9 +405,7 @@ def _workflow_record(
     today: date,
 ) -> IpRenewalWorkflowRecord:
     renewal_deadline = deadline_by_id[term.renewal_deadline_id]
-    grace_deadline = (
-        deadline_by_id.get(term.grace_deadline_id) if term.grace_deadline_id else None
-    )
+    grace_deadline = deadline_by_id.get(term.grace_deadline_id) if term.grace_deadline_id else None
     instructions = _instructions(session, company_id=term.company_id, term_id=term.id)
     phase = (
         "closed"
@@ -496,26 +488,32 @@ def list_renewal_portfolio(
     )
     deadline_by_id = {row.id: row for row in deadlines}
     cost_ids = {term.fee_cost_item_id for term in terms if term.fee_cost_item_id}
-    costs = list(
-        session.scalars(
-            select(IpCostItem).where(
-                IpCostItem.company_id == context.company.id,
-                IpCostItem.id.in_(sorted(cost_ids)),
-            )
-        ).all()
-    ) if cost_ids else []
+    costs = (
+        list(
+            session.scalars(
+                select(IpCostItem).where(
+                    IpCostItem.company_id == context.company.id,
+                    IpCostItem.id.in_(sorted(cost_ids)),
+                )
+            ).all()
+        )
+        if cost_ids
+        else []
+    )
     cost_by_id = {row.id: row for row in costs}
-    intents = list(
-        session.scalars(
-            select(NotificationDeliveryIntent).where(
-                NotificationDeliveryIntent.company_id == context.company.id,
-                NotificationDeliveryIntent.schedule_source_type == _REMINDER_SCHEDULE_SOURCE,
-                NotificationDeliveryIntent.schedule_source_id.in_(
-                    [term.id for term in terms]
-                ),
-            )
-        ).all()
-    ) if terms else []
+    intents = (
+        list(
+            session.scalars(
+                select(NotificationDeliveryIntent).where(
+                    NotificationDeliveryIntent.company_id == context.company.id,
+                    NotificationDeliveryIntent.schedule_source_type == _REMINDER_SCHEDULE_SOURCE,
+                    NotificationDeliveryIntent.schedule_source_id.in_([term.id for term in terms]),
+                )
+            ).all()
+        )
+        if terms
+        else []
+    )
     reminders_by_term: dict[str, list[NotificationDeliveryIntent]] = {}
     for intent in intents:
         reminders_by_term.setdefault(str(intent.schedule_source_id), []).append(intent)
@@ -640,20 +638,14 @@ def schedule_renewal_instruction_reminders(
             .order_by(IpResponsibilityAssignment.role, IpResponsibilityAssignment.id)
         ).all()
     )
-    recipient_assignments = [
-        row for row in assignments if row.role in _REMINDER_RECIPIENT_ROLES
-    ]
-    escalation_assignments = [
-        row for row in assignments if row.role in _ESCALATION_RECIPIENT_ROLES
-    ]
+    recipient_assignments = [row for row in assignments if row.role in _REMINDER_RECIPIENT_ROLES]
+    escalation_assignments = [row for row in assignments if row.role in _ESCALATION_RECIPIENT_ROLES]
     if not recipient_assignments:
         raise _conflict(
             "ip_renewal_responsibility_required",
             "Assign an active primary or backup owner to the renewal deadline first.",
         )
-    membership_ids = {
-        row.membership_id for row in recipient_assignments + escalation_assignments
-    }
+    membership_ids = {row.membership_id for row in recipient_assignments + escalation_assignments}
     memberships = {
         row.id: row
         for row in session.scalars(
@@ -664,9 +656,7 @@ def schedule_renewal_instruction_reminders(
             )
         ).all()
     }
-    active_recipients = [
-        row for row in recipient_assignments if row.membership_id in memberships
-    ]
+    active_recipients = [row for row in recipient_assignments if row.membership_id in memberships]
     if not active_recipients:
         raise _conflict(
             "ip_renewal_responsibility_required",
@@ -685,8 +675,7 @@ def schedule_renewal_instruction_reminders(
         session.scalars(
             select(NotificationDeliveryIntent.id).where(
                 NotificationDeliveryIntent.company_id == context.company.id,
-                NotificationDeliveryIntent.schedule_source_type
-                == _REMINDER_SCHEDULE_SOURCE,
+                NotificationDeliveryIntent.schedule_source_type == _REMINDER_SCHEDULE_SOURCE,
                 NotificationDeliveryIntent.schedule_source_id == term.id,
             )
         ).all()
@@ -748,8 +737,7 @@ def schedule_renewal_instruction_reminders(
             select(NotificationDeliveryIntent)
             .where(
                 NotificationDeliveryIntent.company_id == context.company.id,
-                NotificationDeliveryIntent.schedule_source_type
-                == _REMINDER_SCHEDULE_SOURCE,
+                NotificationDeliveryIntent.schedule_source_type == _REMINDER_SCHEDULE_SOURCE,
                 NotificationDeliveryIntent.schedule_source_id == term.id,
             )
             .order_by(
@@ -785,9 +773,7 @@ def schedule_renewal_instruction_reminders(
                 recipient_label=label_by_membership.get(
                     str(row.recipient_membership_id), "Assigned renewal owner"
                 ),
-                role=role_by_membership.get(
-                    str(row.recipient_membership_id), "assigned"
-                ),
+                role=role_by_membership.get(str(row.recipient_membership_id), "assigned"),
                 event_type=row.event_type,
                 status=str(row.status),
                 scheduled_for=row.scheduled_for,
@@ -816,9 +802,7 @@ def list_renewal_terms(
             .order_by(IpRenewalTerm.term_sequence, IpRenewalTerm.id)
         ).all()
     )
-    return IpRenewalTermListResponse(
-        items=[_record(session, row) for row in rows], total=len(rows)
-    )
+    return IpRenewalTermListResponse(items=[_record(session, row) for row in rows], total=len(rows))
 
 
 def create_renewal_term(
@@ -874,15 +858,18 @@ def create_renewal_term(
             "ip_renewal_term_exists",
             "A renewal term already exists for this registration event and deadline.",
         )
-    next_sequence = int(
-        session.scalar(
-            select(func.coalesce(func.max(IpRenewalTerm.term_sequence), 0)).where(
-                IpRenewalTerm.company_id == context.company.id,
-                IpRenewalTerm.docket_id == docket.id,
+    next_sequence = (
+        int(
+            session.scalar(
+                select(func.coalesce(func.max(IpRenewalTerm.term_sequence), 0)).where(
+                    IpRenewalTerm.company_id == context.company.id,
+                    IpRenewalTerm.docket_id == docket.id,
+                )
             )
+            or 0
         )
-        or 0
-    ) + 1
+        + 1
+    )
     row = IpRenewalTerm(
         company_id=context.company.id,
         docket_id=docket.id,
@@ -980,6 +967,8 @@ def create_client_instruction(
         company_id=context.company.id,
         docket_id=term.docket_id,
         renewal_term_id=term.id,
+        instruction_thread_key=f"renewal:{term.id}",
+        instruction_kind="renewal",
         instruction_version=instruction_version,
         row_version=1,
         decision=payload.decision,
@@ -997,6 +986,9 @@ def create_client_instruction(
         received_at=payload.received_at,
         supersedes_instruction_id=current.id if current is not None else None,
         created_by_membership_id=context.membership.id,
+        creator_label_snapshot=str(
+            context.user.full_name or context.user.email or context.membership.id
+        )[:255],
     )
     session.add(row)
     session.flush()
@@ -1082,11 +1074,7 @@ def acknowledge_client_instruction(
     instruction.acknowledgement_reason = payload.reason.strip()
     instruction.resulting_event_id = payload.resulting_event_id
     instruction.updated_at = now
-    if (
-        payload.status == "accepted"
-        and instruction.decision == "renew"
-        and term.state == "due"
-    ):
+    if payload.status == "accepted" and instruction.decision == "renew" and term.state == "due":
         term.state = "instructed"
         term.version += 1
         term.updated_by_membership_id = context.membership.id

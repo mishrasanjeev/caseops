@@ -663,6 +663,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/portal/ip-grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Admin Portal Ip Grants */
+        get: operations["get_admin_portal_ip_grants_api_admin_portal_ip_grants_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/portal/ip-grants/{grant_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Admin Portal Ip Grant Revoke */
+        post: operations["post_admin_portal_ip_grant_revoke_api_admin_portal_ip_grants__grant_id__revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/provider-operations/jobs": {
         parameters: {
             query?: never;
@@ -6528,6 +6562,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/portal/client-instructions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Portal Client Instructions */
+        get: operations["get_ip_portal_client_instructions_api_ip_portal_client_instructions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/portal/client-instructions/{instruction_id}/acknowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Portal Client Instruction Acknowledgement */
+        post: operations["post_ip_portal_client_instruction_acknowledgement_api_ip_portal_client_instructions__instruction_id__acknowledge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/portal/document-publications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Portal Document Publication */
+        post: operations["post_ip_portal_document_publication_api_ip_portal_document_publications_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/portal/report-publications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Portal Report Publication */
+        post: operations["post_ip_portal_report_publication_api_ip_portal_report_publications_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/portfolio": {
         parameters: {
             query?: never;
@@ -10751,6 +10853,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/portal/ip-records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Portal Ip Records */
+        get: operations["get_portal_ip_records_api_portal_ip_records_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/portal/ip-records/{docket_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Portal Ip Record Route */
+        get: operations["get_portal_ip_record_route_api_portal_ip_records__docket_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/portal/matters": {
         parameters: {
             query?: never;
@@ -10953,6 +11089,74 @@ export interface paths {
         put?: never;
         /** Upload work product (virus-scanned, OC-isolated) */
         post: operations["post_oc_work_product_api_portal_oc_matters__matter_id__work_product_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/portal/publications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Portal Publications */
+        get: operations["get_portal_publications_api_portal_publications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/portal/publications/{publication_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Portal Publication Route */
+        get: operations["get_portal_publication_route_api_portal_publications__publication_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/portal/publications/{publication_id}/document": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Portal Publication Document */
+        get: operations["download_portal_publication_document_api_portal_publications__publication_id__document_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/portal/publications/{publication_id}/instructions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Portal Publication Instruction */
+        post: operations["post_portal_publication_instruction_api_portal_publications__publication_id__instructions_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -35357,14 +35561,33 @@ export interface components {
             /** Subject */
             subject: string | null;
         };
+        /** PortalDocumentPublicationCreate */
+        PortalDocumentPublicationCreate: {
+            /** Document Id */
+            document_id: string;
+            /** Grant Id */
+            grant_id: string;
+            /** Portal User Id */
+            portal_user_id: string;
+            /** Scheduled For */
+            scheduled_for?: string | null;
+            /** Title */
+            title: string;
+            /** Version Number */
+            version_number: number;
+        };
         /** PortalGrantRecord */
         PortalGrantRecord: {
+            /** Expires At */
+            expires_at?: string | null;
             /** Granted At */
             granted_at: string;
             /** Id */
             id: string;
+            /** Ip Docket Record Id */
+            ip_docket_record_id: string | null;
             /** Matter Id */
-            matter_id: string;
+            matter_id: string | null;
             /** Revoked At */
             revoked_at?: string | null;
             /**
@@ -35372,10 +35595,26 @@ export interface components {
              * @enum {string}
              */
             role: "client" | "outside_counsel";
+            /** Row Version */
+            row_version: number;
             /** Scope Json */
             scope_json: {
                 [key: string]: unknown;
             } | null;
+            /** Target Id */
+            target_id: string;
+            /**
+             * Target Type
+             * @enum {string}
+             */
+            target_type: "matter" | "ip_docket";
+        };
+        /** PortalGrantRevokeRequest */
+        PortalGrantRevokeRequest: {
+            /** Expected Row Version */
+            expected_row_version: number;
+            /** Reason */
+            reason: string;
         };
         /** PortalHearingListResponse */
         PortalHearingListResponse: {
@@ -35399,6 +35638,93 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** PortalInstructionAcknowledgeRequest */
+        PortalInstructionAcknowledgeRequest: {
+            /** Expected Row Version */
+            expected_row_version: number;
+            /**
+             * Expected Status
+             * @default pending
+             * @constant
+             */
+            expected_status: "pending";
+            /** Reason */
+            reason: string;
+            /** Resulting Event Id */
+            resulting_event_id?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "accepted" | "rejected" | "clarification_required";
+        };
+        /** PortalInstructionListResponse */
+        PortalInstructionListResponse: {
+            /** Instructions */
+            instructions?: components["schemas"]["PortalInstructionRecord"][];
+        };
+        /** PortalInstructionRecord */
+        PortalInstructionRecord: {
+            /** Acknowledged At */
+            acknowledged_at: string | null;
+            /** Acknowledgement Reason */
+            acknowledgement_reason: string | null;
+            /** Decision */
+            decision: string;
+            /** Docket Id */
+            docket_id: string;
+            /** Docket Title */
+            docket_title: string;
+            /** Id */
+            id: string;
+            /** Instruction Kind */
+            instruction_kind: string;
+            /** Instruction Version */
+            instruction_version: number;
+            /** Note */
+            note: string;
+            /** Publication Id */
+            publication_id: string;
+            /**
+             * Received At
+             * Format: date-time
+             */
+            received_at: string;
+            /** Resulting Event Id */
+            resulting_event_id: string | null;
+            /** Row Version */
+            row_version: number;
+            /** Status */
+            status: string;
+            /** Submitted By */
+            submitted_by: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** PortalInstructionSubmitRequest */
+        PortalInstructionSubmitRequest: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "renew" | "do_not_renew" | "proceed" | "do_not_proceed" | "defer" | "clarification_required";
+            /** Docket Id */
+            docket_id?: string | null;
+            /** Expected Current Instruction Id */
+            expected_current_instruction_id?: string | null;
+            /** Expected Current Row Version */
+            expected_current_row_version?: number | null;
+            /**
+             * Instruction Kind
+             * @enum {string}
+             */
+            instruction_kind: "renewal" | "proceeding" | "filing" | "watch" | "general";
+            /** Note */
+            note: string;
+        };
         /** PortalInvitePayload */
         PortalInvitePayload: {
             /**
@@ -35412,17 +35738,32 @@ export interface components {
              */
             can_reply: boolean;
             /**
+             * Can Submit Instructions
+             * @default true
+             */
+            can_submit_instructions: boolean;
+            /**
              * Can Upload
              * @default false
              */
             can_upload: boolean;
+            /** Deadline Kinds */
+            deadline_kinds?: string[];
+            /** Document Categories */
+            document_categories?: string[];
             /**
              * Email
              * Format: email
              */
             email: string;
+            /** Event Kinds */
+            event_kinds?: string[];
+            /** Expires At */
+            expires_at?: string | null;
             /** Full Name */
             full_name: string;
+            /** Ip Docket Ids */
+            ip_docket_ids?: string[];
             /** Matter Ids */
             matter_ids?: string[];
             /**
@@ -35430,6 +35771,16 @@ export interface components {
              * @enum {string}
              */
             role: "client" | "outside_counsel";
+            /**
+             * Show Identifiers
+             * @default true
+             */
+            show_identifiers: boolean;
+            /**
+             * Show Status
+             * @default true
+             */
+            show_status: boolean;
         };
         /** PortalInviteResponse */
         PortalInviteResponse: {
@@ -35438,6 +35789,138 @@ export interface components {
             /** Grants */
             grants: components["schemas"]["PortalGrantRecord"][];
             portal_user: components["schemas"]["PortalUserRecord"];
+        };
+        /** PortalIpDeadlineRecord */
+        PortalIpDeadlineRecord: {
+            /** Certainty */
+            certainty: string;
+            /** Deadline Kind */
+            deadline_kind: string;
+            /** Due At */
+            due_at: string | null;
+            /** Due On */
+            due_on: string | null;
+            /** Id */
+            id: string;
+            /** State */
+            state: string;
+            /** Title */
+            title: string;
+        };
+        /** PortalIpEventRecord */
+        PortalIpEventRecord: {
+            /**
+             * Effective At
+             * Format: date-time
+             */
+            effective_at: string;
+            /** Event Kind */
+            event_kind: string;
+            /** Id */
+            id: string;
+            /** Resulting Stage */
+            resulting_stage: string | null;
+            /** Source */
+            source: string;
+        };
+        /** PortalIpGrantListResponse */
+        PortalIpGrantListResponse: {
+            /** Grants */
+            grants?: components["schemas"]["PortalIpGrantRecord"][];
+        };
+        /** PortalIpGrantRecord */
+        PortalIpGrantRecord: {
+            /** Active */
+            active: boolean;
+            /** Docket Title */
+            docket_title: string;
+            /** Expires At */
+            expires_at: string | null;
+            /**
+             * Granted At
+             * Format: date-time
+             */
+            granted_at: string;
+            /** Id */
+            id: string;
+            /** Ip Docket Record Id */
+            ip_docket_record_id: string;
+            /** Portal User Email */
+            portal_user_email: string;
+            /** Portal User Id */
+            portal_user_id: string;
+            /** Portal User Name */
+            portal_user_name: string;
+            /** Revoked At */
+            revoked_at: string | null;
+            /** Row Version */
+            row_version: number;
+            scope: components["schemas"]["PortalIpScope"];
+        };
+        /** PortalIpRecord */
+        PortalIpRecord: {
+            /** Events */
+            events?: components["schemas"]["PortalIpEventRecord"][];
+            /** Grant Expires At */
+            grant_expires_at: string | null;
+            /** Id */
+            id: string;
+            /** Identifiers */
+            identifiers?: string[];
+            /** Primary Identifier */
+            primary_identifier: string | null;
+            /** Record Type */
+            record_type: string;
+            /** Status */
+            status: string | null;
+            /** Title */
+            title: string;
+            /** Upcoming Dates */
+            upcoming_dates?: components["schemas"]["PortalIpDeadlineRecord"][];
+        };
+        /** PortalIpRecordListResponse */
+        PortalIpRecordListResponse: {
+            /** Records */
+            records?: components["schemas"]["PortalIpRecord"][];
+        };
+        /** PortalIpScope */
+        PortalIpScope: {
+            /**
+             * Can Invoice
+             * @default false
+             */
+            can_invoice: boolean;
+            /**
+             * Can Reply
+             * @default true
+             */
+            can_reply: boolean;
+            /**
+             * Can Submit Instructions
+             * @default true
+             */
+            can_submit_instructions: boolean;
+            /**
+             * Can Upload
+             * @default false
+             */
+            can_upload: boolean;
+            /** Deadline Kinds */
+            deadline_kinds?: string[];
+            /** Document Categories */
+            document_categories?: string[];
+            /** Event Kinds */
+            event_kinds?: string[];
+            /**
+             * Show Identifiers
+             * @default true
+             */
+            show_identifiers: boolean;
+            /**
+             * Show Status
+             * @default true
+             */
+            show_status: boolean;
         };
         /** PortalKycDocument */
         PortalKycDocument: {
@@ -35632,10 +36115,108 @@ export interface components {
             /** Submitted By Portal User Id */
             submitted_by_portal_user_id?: string | null;
         };
+        /** PortalPublicationListResponse */
+        PortalPublicationListResponse: {
+            /** Publications */
+            publications?: components["schemas"]["PortalPublicationRecord"][];
+        };
+        /** PortalPublicationRecord */
+        PortalPublicationRecord: {
+            /**
+             * Access State
+             * @enum {string}
+             */
+            access_state: "available" | "scheduled" | "review_required" | "revoked";
+            /** Accessed At */
+            accessed_at?: string | null;
+            /** Delivery Error */
+            delivery_error: string | null;
+            /** Delivery Status */
+            delivery_status: string | null;
+            /** Document Filename */
+            document_filename: string | null;
+            /** Document Id */
+            document_id: string | null;
+            /** Document Version */
+            document_version: number | null;
+            /** Freshness */
+            freshness: {
+                [key: string]: unknown;
+            } | null;
+            /** Generated At */
+            generated_at: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Publication Kind
+             * @enum {string}
+             */
+            publication_kind: "report" | "document";
+            /** Published At */
+            published_at: string | null;
+            /** Report Kind */
+            report_kind: string | null;
+            /** Rows */
+            rows: {
+                [key: string]: unknown;
+            }[] | null;
+            /** Scheduled For */
+            scheduled_for: string | null;
+            /** Schema Version */
+            schema_version: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "scheduled" | "published" | "revoked";
+            /** Summary */
+            summary: {
+                [key: string]: unknown;
+            } | null;
+            /** Targets */
+            targets?: components["schemas"]["PortalPublicationTargetRecord"][];
+            /** Title */
+            title: string;
+        };
+        /** PortalPublicationTargetRecord */
+        PortalPublicationTargetRecord: {
+            /** Current */
+            current: boolean;
+            /** Docket Title */
+            docket_title: string;
+            /** Ip Docket Record Id */
+            ip_docket_record_id: string;
+        };
         /** PortalReplyPayload */
         PortalReplyPayload: {
             /** Body */
             body: string;
+        };
+        /** PortalReportPublicationCreate */
+        PortalReportPublicationCreate: {
+            /** Expected Snapshot Sha256 */
+            expected_snapshot_sha256: string;
+            filters?: components["schemas"]["IpReportPortfolioFilters"];
+            /** Grant Ids */
+            grant_ids: string[];
+            /** Portal User Id */
+            portal_user_id: string;
+            /** Renewal States */
+            renewal_states?: ("due" | "instructed" | "filing_in_progress" | "filed" | "accepted" | "grace" | "overdue" | "completed" | "cancelled")[];
+            /**
+             * Report Kind
+             * @enum {string}
+             */
+            report_kind: "portfolio_register" | "application_status" | "opposition_status" | "deadline_control" | "renewal" | "watch" | "workload" | "data_quality" | "integration_freshness";
+            /**
+             * Row Limit
+             * @default 200
+             */
+            row_limit: number;
+            /** Scheduled For */
+            scheduled_for?: string | null;
+            /** Title */
+            title: string;
         };
         /** PortalRequestLinkPayload */
         PortalRequestLinkPayload: {
@@ -40607,6 +41188,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortalInviteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_admin_portal_ip_grants_api_admin_portal_ip_grants_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalIpGrantListResponse"];
+                };
+            };
+        };
+    };
+    post_admin_portal_ip_grant_revoke_api_admin_portal_ip_grants__grant_id__revoke_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                grant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortalGrantRevokeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalIpGrantRecord"];
                 };
             };
             /** @description Validation Error */
@@ -52489,6 +53125,127 @@ export interface operations {
             };
         };
     };
+    get_ip_portal_client_instructions_api_ip_portal_client_instructions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalInstructionListResponse"];
+                };
+            };
+        };
+    };
+    post_ip_portal_client_instruction_acknowledgement_api_ip_portal_client_instructions__instruction_id__acknowledge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instruction_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortalInstructionAcknowledgeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalInstructionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_portal_document_publication_api_ip_portal_document_publications_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortalDocumentPublicationCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalPublicationRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_portal_report_publication_api_ip_portal_report_publications_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortalReportPublicationCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalPublicationRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_ip_portfolio_api_ip_portfolio_get: {
         parameters: {
             query?: {
@@ -61130,6 +61887,57 @@ export interface operations {
             };
         };
     };
+    get_portal_ip_records_api_portal_ip_records_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalIpRecordListResponse"];
+                };
+            };
+        };
+    };
+    get_portal_ip_record_route_api_portal_ip_records__docket_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalIpRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_portal_matters_api_portal_matters_get: {
         parameters: {
             query?: never;
@@ -61600,6 +62408,123 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortalOcWorkProductRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_portal_publications_api_portal_publications_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalPublicationListResponse"];
+                };
+            };
+        };
+    };
+    get_portal_publication_route_api_portal_publications__publication_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                publication_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalPublicationRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_portal_publication_document_api_portal_publications__publication_id__document_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                publication_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_portal_publication_instruction_api_portal_publications__publication_id__instructions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                publication_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortalInstructionSubmitRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalInstructionRecord"];
                 };
             };
             /** @description Validation Error */

@@ -1072,10 +1072,31 @@ export default function GuidePage() {
                     </li>
                   </ul>
                   <Callout tone="warn" title="Current delivery boundary">
-                    IP reports are synchronous internal snapshots. Scheduled delivery,
-                    stored report artifacts, client publication, and automated IP watch
-                    operations are not available on this screen.
+                    Internal previews remain transient. An IP approver may publish or
+                    schedule a reviewed client-safe snapshot only to explicitly granted
+                    IP records. CaseOps regenerates the preview and rejects a changed
+                    snapshot; internal notes, strategy, privilege, work product, drafts,
+                    AI traces, provider errors, and ungranted records are excluded.
                   </Callout>
+                  <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
+                    IP client portal
+                  </h3>
+                  <p>
+                    Open <a className="underline" href="/app/ip/client-portal">IP client portal</a>{" "}
+                    to grant a named client selected dockets, identifier/status visibility,
+                    event and date categories, approved document categories, an expiry, and
+                    instruction rights. The same workspace lists active and historical grants,
+                    approved-document publication, delivery state, and client instructions.
+                  </p>
+                  <Steps
+                    items={[
+                      <>Grant only the required IP docket and categories, with an expiry when appropriate.</>,
+                      <>Generate and review an Internal report, select the client&apos;s active grants, then publish now or schedule delivery.</>,
+                      <>Publish only an approved, non-privileged internal document version whose taxonomy category and docket are granted.</>,
+                      <>Review each client instruction and accept, reject, or request clarification. A client instruction never changes legal state before firm acknowledgement.</>,
+                      <>Revoke access with a reason. Active sessions are invalidated and queued publication delivery is cancelled.</>,
+                    ]}
+                  />
                   <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
                     IP document workflow
                   </h3>

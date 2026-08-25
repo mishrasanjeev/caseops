@@ -4,12 +4,14 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { sessionMock, logoutMock, replaceMock, mattersMock } = vi.hoisted(
+const { sessionMock, logoutMock, replaceMock, mattersMock, ipRecordsMock, publicationsMock } = vi.hoisted(
   () => ({
     sessionMock: vi.fn(),
     logoutMock: vi.fn(),
     replaceMock: vi.fn(),
     mattersMock: vi.fn(),
+    ipRecordsMock: vi.fn(),
+    publicationsMock: vi.fn(),
   }),
 );
 
@@ -21,6 +23,8 @@ vi.mock("@/lib/api/portal", () => ({
   fetchPortalSession: sessionMock,
   logoutPortal: logoutMock,
   fetchPortalMatters: mattersMock,
+  fetchPortalIpRecords: ipRecordsMock,
+  fetchPortalPublications: publicationsMock,
 }));
 
 import PortalLandingPage from "@/app/portal/page";
@@ -41,7 +45,25 @@ describe("PortalLandingPage", () => {
     logoutMock.mockReset();
     replaceMock.mockReset();
     mattersMock.mockReset();
+    ipRecordsMock.mockReset();
+    publicationsMock.mockReset();
     mattersMock.mockResolvedValue({ matters: [] });
+    ipRecordsMock.mockResolvedValue({ records: [] });
+    publicationsMock.mockResolvedValue({ publications: [] });
+  });
+
+  it("shows explicitly granted IP records and approved publication state", async () => {
+    sessionMock.mockResolvedValue({
+      portal_user: { id: "pu-ip", company_id: "c-1", email: "ip@client.example", full_name: "IP Client", role: "client", last_signed_in_at: null },
+      grants: [],
+    });
+    ipRecordsMock.mockResolvedValue({ records: [{ id: "docket-1", title: "ASTER DEVICE", record_type: "trademark", status: "filed", primary_identifier: "TM-421", identifiers: ["TM-421", "OPP-88"], events: [], upcoming_dates: [], grant_expires_at: null }] });
+    publicationsMock.mockResolvedValue({ publications: [{ id: "pub-1", publication_kind: "report", title: "Opposition status", status: "published", access_state: "available", delivery_status: "delivered", targets: [] }] });
+    render(withClient(<PortalLandingPage />));
+    expect(await screen.findByTestId("portal-ip-docket-1")).toBeInTheDocument();
+    expect(screen.getByText("TM-421")).toBeInTheDocument();
+    expect(screen.getByText("Opposition status")).toBeInTheDocument();
+    expect(screen.getByText("available")).toBeInTheDocument();
   });
 
   it("renders signed-in greeting + matters list (C-2)", async () => {

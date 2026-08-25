@@ -14,8 +14,10 @@ internal ``get_current_context`` dependency; the public router
 either takes no auth (request/verify) or rides on
 ``get_current_portal_user``.
 """
+
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated, Literal
 
 from fastapi import (
@@ -84,7 +86,8 @@ admin_router = APIRouter()
 CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
 CurrentPortalUser = Annotated[PortalUser, Depends(get_current_portal_user)]
 PortalInviter = Annotated[
-    SessionContext, Depends(require_capability("portal:invite")),
+    SessionContext,
+    Depends(require_capability("portal:invite")),
 ]
 
 
@@ -109,9 +112,17 @@ class PortalInvitePayload(BaseModel):
     full_name: str = Field(min_length=1, max_length=255)
     role: Literal["client", "outside_counsel"]
     matter_ids: list[str] = Field(default_factory=list, max_length=50)
+    ip_docket_ids: list[str] = Field(default_factory=list, max_length=50)
     can_upload: bool = False
     can_invoice: bool = False
     can_reply: bool = True
+    show_status: bool = True
+    show_identifiers: bool = True
+    event_kinds: list[str] = Field(default_factory=list, max_length=40)
+    deadline_kinds: list[str] = Field(default_factory=list, max_length=40)
+    document_categories: list[str] = Field(default_factory=list, max_length=40)
+    can_submit_instructions: bool = True
+    expires_at: datetime | None = None
 
 
 # ---------- response schemas ----------
@@ -119,11 +130,16 @@ class PortalInvitePayload(BaseModel):
 
 class PortalGrantRecord(BaseModel):
     id: str
-    matter_id: str
+    target_type: Literal["matter", "ip_docket"]
+    target_id: str
+    matter_id: str | None
+    ip_docket_record_id: str | None
     role: Literal["client", "outside_counsel"]
     scope_json: dict | None
     granted_at: str
+    expires_at: str | None = None
     revoked_at: str | None = None
+    row_version: int
 
 
 class PortalUserRecord(BaseModel):
@@ -221,7 +237,8 @@ class PortalKycSubmitPayload(BaseModel):
     # maliciously) reset a co-client's KYC state.
     client_id: str = Field(min_length=10, max_length=64)
     documents: list[PortalKycDocument] = Field(
-        default_factory=list, max_length=20,
+        default_factory=list,
+        max_length=20,
     )
 
 
@@ -259,13 +276,20 @@ def _portal_user_record(user: PortalUser) -> PortalUserRecord:
 
 
 def _grant_record(grant) -> PortalGrantRecord:
+    target_type = "ip_docket" if grant.ip_docket_record_id else "matter"
+    target_id = grant.ip_docket_record_id or grant.matter_id
     return PortalGrantRecord(
         id=grant.id,
+        target_type=target_type,
+        target_id=target_id,
         matter_id=grant.matter_id,
+        ip_docket_record_id=grant.ip_docket_record_id,
         role=grant.role,  # type: ignore[arg-type]
         scope_json=grant.scope_json,
         granted_at=grant.granted_at.isoformat(),
+        expires_at=grant.expires_at.isoformat() if grant.expires_at else None,
         revoked_at=grant.revoked_at.isoformat() if grant.revoked_at else None,
+        row_version=grant.row_version,
     )
 
 
@@ -327,16 +351,12 @@ async def post_portal_request_link(
             action="portal.magic_link.requested",
             target_type="portal_user",
             target_id=portal_user.id,
-            result=(
-                AuditResult.SUCCESS if delivered else AuditResult.FAILED
-            ),
+            result=(AuditResult.SUCCESS if delivered else AuditResult.FAILED),
             metadata={
                 "delivered": delivered,
                 "error": error,
                 "ip": request_ip,
-                "verify_url_origin": portal_verify_url("REDACTED").split(
-                    "/portal/"
-                )[0],
+                "verify_url_origin": portal_verify_url("REDACTED").split("/portal/")[0],
             },
             ip=request_ip,
             user_agent=user_agent,
@@ -388,9 +408,13 @@ async def post_portal_verify_link(
     )
     return PortalSessionResponse(
         portal_user=_portal_user_record(portal_user),
-        grants=[_grant_record(g) for g in list_active_grants(
-            session, portal_user_id=portal_user.id,
-        )],
+        grants=[
+            _grant_record(g)
+            for g in list_active_grants(
+                session,
+                portal_user_id=portal_user.id,
+            )
+        ],
     )
 
 
@@ -452,7 +476,8 @@ async def get_portal_me(
         grants=[
             _grant_record(g)
             for g in list_active_grants(
-                session, portal_user_id=portal_user.id,
+                session,
+                portal_user_id=portal_user.id,
             )
         ],
     )
@@ -470,17 +495,12 @@ def _matter_record(matter) -> PortalMatterRecord:
         practice_area=matter.practice_area,
         forum_level=matter.forum_level,
         court_name=matter.court_name,
-        next_hearing_on=(
-            matter.next_hearing_on.isoformat()
-            if matter.next_hearing_on else None
-        ),
+        next_hearing_on=(matter.next_hearing_on.isoformat() if matter.next_hearing_on else None),
     )
 
 
 def _comm_record(comm) -> PortalCommunicationRecord:
-    posted_by_portal = bool(
-        comm.metadata_json and comm.metadata_json.get("portal_user_id")
-    )
+    posted_by_portal = bool(comm.metadata_json and comm.metadata_json.get("portal_user_id"))
     return PortalCommunicationRecord(
         id=comm.id,
         direction=comm.direction,
@@ -515,7 +535,9 @@ async def get_portal_matters(
     session: DbSession,
 ) -> PortalMatterListResponse:
     pairs = list_granted_matters(
-        session, portal_user=portal_user, role="client",
+        session,
+        portal_user=portal_user,
+        role="client",
     )
     return PortalMatterListResponse(
         matters=[_matter_record(m) for _g, m in pairs],
@@ -533,7 +555,9 @@ async def get_portal_matter(
     session: DbSession,
 ) -> PortalMatterRecord:
     matter = get_granted_matter(
-        session, portal_user=portal_user, matter_id=matter_id,
+        session,
+        portal_user=portal_user,
+        matter_id=matter_id,
     )
     return _matter_record(matter)
 
@@ -549,7 +573,9 @@ async def get_portal_matter_communications(
     session: DbSession,
 ) -> PortalCommunicationListResponse:
     rows = list_matter_communications(
-        session, portal_user=portal_user, matter_id=matter_id,
+        session,
+        portal_user=portal_user,
+        matter_id=matter_id,
     )
     return PortalCommunicationListResponse(
         communications=[_comm_record(c) for c in rows],
@@ -590,7 +616,9 @@ async def get_portal_matter_hearings(
     session: DbSession,
 ) -> PortalHearingListResponse:
     hearings = list_matter_hearings_for_portal(
-        session, portal_user=portal_user, matter_id=matter_id,
+        session,
+        portal_user=portal_user,
+        matter_id=matter_id,
     )
     return PortalHearingListResponse(
         hearings=[_hearing_record(h) for h in hearings],
@@ -608,7 +636,9 @@ async def get_portal_matter_clients(
     session: DbSession,
 ) -> PortalMatterClientListResponse:
     rows = list_matter_clients_for_portal(
-        session, portal_user=portal_user, matter_id=matter_id,
+        session,
+        portal_user=portal_user,
+        matter_id=matter_id,
     )
     return PortalMatterClientListResponse(
         clients=[
@@ -617,10 +647,7 @@ async def get_portal_matter_clients(
                 name=c.name,
                 client_type=c.client_type,
                 kyc_status=str(c.kyc_status),
-                kyc_submitted_at=(
-                    c.kyc_submitted_at.isoformat()
-                    if c.kyc_submitted_at else None
-                ),
+                kyc_submitted_at=(c.kyc_submitted_at.isoformat() if c.kyc_submitted_at else None),
             )
             for c in rows
         ]
@@ -651,10 +678,7 @@ async def post_portal_matter_kyc(
     return PortalKycSubmitResponse(
         matter_id=matter.id,
         client_id=target.id,
-        submitted_at=(
-            target.kyc_submitted_at.isoformat()
-            if target.kyc_submitted_at else ""
-        ),
+        submitted_at=(target.kyc_submitted_at.isoformat() if target.kyc_submitted_at else ""),
     )
 
 
@@ -774,6 +798,7 @@ def _oc_time_entry_record(t) -> PortalOcTimeEntryRecord:
 
 def _parse_iso_date(value: str, *, field: str):
     from datetime import date as _date
+
     try:
         return _date.fromisoformat(value)
     except (TypeError, ValueError) as exc:
@@ -811,7 +836,9 @@ async def get_oc_matter(
     session: DbSession,
 ) -> PortalMatterRecord:
     matter = get_oc_assigned_matter(
-        session, portal_user=portal_user, matter_id=matter_id,
+        session,
+        portal_user=portal_user,
+        matter_id=matter_id,
     )
     return _matter_record(matter)
 
@@ -854,7 +881,9 @@ async def get_oc_work_product(
     session: DbSession,
 ) -> PortalOcWorkProductListResponse:
     rows = list_oc_work_product(
-        session, portal_user=portal_user, matter_id=matter_id,
+        session,
+        portal_user=portal_user,
+        matter_id=matter_id,
     )
     return PortalOcWorkProductListResponse(
         items=[_oc_attachment_record(a) for a in rows],
@@ -904,7 +933,9 @@ async def get_oc_invoices(
     session: DbSession,
 ) -> PortalOcInvoiceListResponse:
     rows = list_oc_invoices(
-        session, portal_user=portal_user, matter_id=matter_id,
+        session,
+        portal_user=portal_user,
+        matter_id=matter_id,
     )
     return PortalOcInvoiceListResponse(
         invoices=[_oc_invoice_record(i) for i in rows],
@@ -953,7 +984,9 @@ async def get_oc_time_entries(
     session: DbSession,
 ) -> PortalOcTimeEntryListResponse:
     rows = list_oc_time_entries(
-        session, portal_user=portal_user, matter_id=matter_id,
+        session,
+        portal_user=portal_user,
+        matter_id=matter_id,
     )
     return PortalOcTimeEntryListResponse(
         entries=[_oc_time_entry_record(t) for t in rows],
@@ -974,10 +1007,26 @@ async def post_portal_invitation(
     context: PortalInviter,
     session: DbSession,
 ) -> PortalInviteResponse:
-    if not payload.matter_ids:
+    if not payload.matter_ids and not payload.ip_docket_ids:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="At least one matter_id is required for the invite scope.",
+            detail="At least one Matter or IP docket target is required.",
+        )
+    scope_json = {
+        "can_upload": bool(payload.can_upload),
+        "can_invoice": bool(payload.can_invoice),
+        "can_reply": bool(payload.can_reply),
+    }
+    if payload.ip_docket_ids:
+        scope_json.update(
+            {
+                "show_status": bool(payload.show_status),
+                "show_identifiers": bool(payload.show_identifiers),
+                "event_kinds": payload.event_kinds,
+                "deadline_kinds": payload.deadline_kinds,
+                "document_categories": payload.document_categories,
+                "can_submit_instructions": bool(payload.can_submit_instructions),
+            }
         )
     portal_user, grants, token = invite_portal_user(
         session,
@@ -987,11 +1036,10 @@ async def post_portal_invitation(
         full_name=payload.full_name,
         role=payload.role,
         matter_ids=payload.matter_ids,
-        scope_json={
-            "can_upload": bool(payload.can_upload),
-            "can_invoice": bool(payload.can_invoice),
-            "can_reply": bool(payload.can_reply),
-        },
+        ip_docket_ids=payload.ip_docket_ids,
+        scope_json=scope_json,
+        expires_at=payload.expires_at,
+        inviting_label=str(context.user.full_name or context.user.email or context.membership.id),
     )
     delivered, error = send_portal_magic_link(
         to_email=portal_user.email,
@@ -1007,7 +1055,8 @@ async def post_portal_invitation(
         target_id=portal_user.id,
         metadata={
             "role": portal_user.role,
-            "matter_ids": [g.matter_id for g in grants],
+            "matter_ids": [g.matter_id for g in grants if g.matter_id],
+            "ip_docket_ids": [g.ip_docket_record_id for g in grants if g.ip_docket_record_id],
             "magic_link_delivered": delivered,
             "magic_link_error": error,
         },

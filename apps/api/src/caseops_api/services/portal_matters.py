@@ -10,13 +10,14 @@ role only. Outside-counsel-specific reads/writes (work-product
 upload, invoice submission, time entries) live in a separate
 ``portal_outside_counsel.py`` (Phase C-3).
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
@@ -59,6 +60,10 @@ def _assert_grant(
             MatterPortalGrant.portal_user_id == portal_user.id,
             MatterPortalGrant.matter_id == matter_id,
             MatterPortalGrant.revoked_at.is_(None),
+            or_(
+                MatterPortalGrant.expires_at.is_(None),
+                MatterPortalGrant.expires_at > datetime.now(UTC),
+            ),
         )
     ).first()
     if grant is None:
@@ -88,6 +93,7 @@ def list_granted_matters(
 ) -> list[tuple[MatterPortalGrant, Matter]]:
     """Returns the matters the portal user is granted on, role-
     filtered. Newest grant first."""
+    now = datetime.now(UTC)
     rows = session.execute(
         select(MatterPortalGrant, Matter)
         .join(Matter, Matter.id == MatterPortalGrant.matter_id)
@@ -95,6 +101,10 @@ def list_granted_matters(
             MatterPortalGrant.portal_user_id == portal_user.id,
             MatterPortalGrant.role == role,
             MatterPortalGrant.revoked_at.is_(None),
+            or_(
+                MatterPortalGrant.expires_at.is_(None),
+                MatterPortalGrant.expires_at > now,
+            ),
             Matter.company_id == portal_user.company_id,
         )
         .order_by(MatterPortalGrant.granted_at.desc())
@@ -102,11 +112,12 @@ def list_granted_matters(
     return [(g, m) for g, m in rows]
 
 
-def get_granted_matter(
-    session: Session, *, portal_user: PortalUser, matter_id: str
-) -> Matter:
+def get_granted_matter(session: Session, *, portal_user: PortalUser, matter_id: str) -> Matter:
     matter, _ = _assert_grant(
-        session, portal_user=portal_user, matter_id=matter_id, role="client",
+        session,
+        portal_user=portal_user,
+        matter_id=matter_id,
+        role="client",
     )
     return matter
 
@@ -119,7 +130,10 @@ def list_matter_clients_for_portal(
     the matter that the portal user is granted on; same 404 shape on
     missing grant so listing never leaks existence."""
     _assert_grant(
-        session, portal_user=portal_user, matter_id=matter_id, role="client",
+        session,
+        portal_user=portal_user,
+        matter_id=matter_id,
+        role="client",
     )
     from caseops_api.db.models import MatterClientAssignment
 
@@ -135,7 +149,9 @@ def list_matter_clients_for_portal(
                 Client.company_id == portal_user.company_id,
             )
             .order_by(Client.name.asc())
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     )
 
 
@@ -155,7 +171,10 @@ def list_matter_communications(
     without metadata stay readable.
     """
     _assert_grant(
-        session, portal_user=portal_user, matter_id=matter_id, role="client",
+        session,
+        portal_user=portal_user,
+        matter_id=matter_id,
+        role="client",
     )
     rows = list(
         session.scalars(
@@ -202,12 +221,16 @@ def post_matter_reply(
     Communication row visible to the firm's internal Comms tab,
     with metadata pointing back to the originating PortalUser id."""
     matter, grant = _assert_grant(
-        session, portal_user=portal_user, matter_id=matter_id, role="client",
+        session,
+        portal_user=portal_user,
+        matter_id=matter_id,
+        role="client",
     )
-    can_reply = bool(
-        grant.scope_json
-        and grant.scope_json.get("can_reply", True)
-    ) if grant.scope_json else True
+    can_reply = (
+        bool(grant.scope_json and grant.scope_json.get("can_reply", True))
+        if grant.scope_json
+        else True
+    )
     if not can_reply:
         raise PortalReplyOutOfScope()
     text = (body or "").strip()
@@ -276,7 +299,10 @@ def list_matter_hearings_for_portal(
     portal user CANNOT add / edit / cancel hearings — that's a
     firm-side operation."""
     _assert_grant(
-        session, portal_user=portal_user, matter_id=matter_id, role="client",
+        session,
+        portal_user=portal_user,
+        matter_id=matter_id,
+        role="client",
     )
     return list(
         session.scalars(
@@ -318,7 +344,10 @@ def submit_matter_kyc(
     404 — same shape as missing-grant so a probe cannot enumerate.
     """
     matter, _ = _assert_grant(
-        session, portal_user=portal_user, matter_id=matter_id, role="client",
+        session,
+        portal_user=portal_user,
+        matter_id=matter_id,
+        role="client",
     )
     # Lock the Matter before reading or mutating client-side child state.  This
     # serialises KYC submission with lifecycle disposal and preserves the
@@ -330,18 +359,22 @@ def submit_matter_kyc(
     )
     from caseops_api.db.models import MatterClientAssignment
 
-    target = session.execute(
-        select(Client)
-        .join(
-            MatterClientAssignment,
-            MatterClientAssignment.client_id == Client.id,
+    target = (
+        session.execute(
+            select(Client)
+            .join(
+                MatterClientAssignment,
+                MatterClientAssignment.client_id == Client.id,
+            )
+            .where(
+                MatterClientAssignment.matter_id == matter_id,
+                Client.id == client_id,
+                Client.company_id == portal_user.company_id,
+            )
         )
-        .where(
-            MatterClientAssignment.matter_id == matter_id,
-            Client.id == client_id,
-            Client.company_id == portal_user.company_id,
-        )
-    ).scalars().first()
+        .scalars()
+        .first()
+    )
     if target is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

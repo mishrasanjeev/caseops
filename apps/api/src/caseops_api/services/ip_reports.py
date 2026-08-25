@@ -446,11 +446,13 @@ def preview_ip_report(
     snapshot = {
         "report_kind": payload.report_kind,
         "schema_version": definition.schema_version,
-        "generated_at": generated_at.isoformat(),
         "audience": payload.audience,
         "confidentiality": payload.confidentiality,
         "filters": filters,
-        "freshness": freshness.model_dump(mode="json"),
+        # The review fingerprint must remain stable when unchanged content is
+        # rendered twice. Source cutoffs remain part of the fingerprint, while
+        # the wall-clock render instant is response metadata only.
+        "freshness": freshness.model_dump(mode="json", exclude={"generated_at"}),
         "summary": summary,
         "rows": rows,
         "truncated": truncated,

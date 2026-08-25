@@ -33,6 +33,7 @@ import {
   Sparkles,
   Sun,
   Users,
+  UserRoundCheck,
   Wrench,
 } from "lucide-react";
 import Link from "next/link";
@@ -115,6 +116,13 @@ const NAV: NavItem[] = [
     icon: FileChartColumn,
     section: "ip",
     requiresCapability: "ip:read",
+  },
+  {
+    href: "/app/ip/client-portal",
+    label: "IP client portal",
+    icon: UserRoundCheck,
+    section: "ip",
+    requiresCapability: "portal:manage_grants",
   },
   { href: "/app/notices", label: "Notices", icon: Bell, section: "casework" },
   {
