@@ -227,6 +227,13 @@ def upgrade() -> None:
     for column in (
         "outside_counsel_id",
         "assignment_id",
+        "source_client_instruction_id",
+        "supersedes_instruction_id",
+        "responsible_membership_id",
+        "approved_by_membership_id",
+        "privileged_approved_by_membership_id",
+        "created_by_membership_id",
+        "updated_by_membership_id",
         "dispatch_communication_id",
         "estimate_cost_item_id",
         "actual_cost_item_id",
