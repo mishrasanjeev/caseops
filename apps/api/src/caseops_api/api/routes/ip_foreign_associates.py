@@ -10,6 +10,8 @@ from caseops_api.api.dependencies import DbSession, require_any_capability, requ
 from caseops_api.schemas.ip_foreign_associates import (
     IpForeignAssociateCreateRequest,
     IpForeignAssociatePageResponse,
+    IpForeignAssociateReminderRequest,
+    IpForeignAssociateReminderScheduleResponse,
     IpForeignAssociateResponse,
     IpForeignAssociateStatus,
     IpForeignAssociateTransactionRequest,
@@ -22,6 +24,7 @@ from caseops_api.services.ip_foreign_associates import (
     ip_foreign_associate_workspace,
     list_ip_foreign_associate_instructions,
     record_ip_foreign_associate_transaction,
+    schedule_ip_foreign_associate_reminders,
 )
 from caseops_api.services.session_context import SessionContext
 
@@ -116,6 +119,24 @@ def foreign_associate_instruction_transaction(
     ],
 ) -> IpForeignAssociateTransactionResponse:
     return record_ip_foreign_associate_transaction(
+        session,
+        context=context,
+        instruction_id=instruction_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/foreign-associate-instructions/{instruction_id}/reminders",
+    response_model=IpForeignAssociateReminderScheduleResponse,
+)
+def foreign_associate_instruction_reminders(
+    instruction_id: str,
+    payload: IpForeignAssociateReminderRequest,
+    session: DbSession,
+    context: Annotated[SessionContext, Depends(require_capability("ip:write"))],
+) -> IpForeignAssociateReminderScheduleResponse:
+    return schedule_ip_foreign_associate_reminders(
         session,
         context=context,
         instruction_id=instruction_id,

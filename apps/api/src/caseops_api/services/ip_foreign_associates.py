@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException
 from sqlalchemy import func, or_, select
@@ -24,6 +24,8 @@ from caseops_api.db.models import (
     IpForeignAssociateInstruction,
     Matter,
     MatterOutsideCounselAssignment,
+    NotificationDeliveryChannel,
+    NotificationDeliveryIntent,
     OutsideCounsel,
     OutsideCounselAssignmentStatus,
     OutsideCounselPanelStatus,
@@ -33,6 +35,9 @@ from caseops_api.db.models import (
 from caseops_api.schemas.ip_foreign_associates import (
     IpForeignAssociateCreateRequest,
     IpForeignAssociatePageResponse,
+    IpForeignAssociateReminderRecord,
+    IpForeignAssociateReminderRequest,
+    IpForeignAssociateReminderScheduleResponse,
     IpForeignAssociateResponse,
     IpForeignAssociateTransactionRequest,
     IpForeignAssociateTransactionResponse,
@@ -46,6 +51,10 @@ from caseops_api.services.ip_operations import (
     _lock_ip_writer_context,
 )
 from caseops_api.services.matter_access import visible_ip_dockets_filter
+from caseops_api.services.notification_delivery import (
+    cancel_pending_notification_intents,
+    enqueue_notification_delivery_intent,
+)
 from caseops_api.services.session_context import SessionContext
 
 _APPROVER_ACTIONS = {
@@ -984,6 +993,15 @@ def record_ip_foreign_associate_transaction(
         event_details["successor_instruction_id"] = successor.id
         event_details["replacement_outside_counsel_id"] = successor.outside_counsel_id
 
+    if payload.transaction_kind in {"acknowledge", "refuse", "cancel", "reassign"}:
+        event_details["cancelled_reminder_count"] = cancel_pending_notification_intents(
+            session,
+            company_id=context.company.id,
+            schedule_source_type="ip_foreign_associate_instruction",
+            schedule_source_id=row.id,
+            cancellation_reason=f"foreign_associate_{payload.transaction_kind}",
+        )
+
     row.status = target_status
     row.row_version += 1
     row.updated_by_membership_id = context.membership.id
@@ -1052,6 +1070,177 @@ def record_ip_foreign_associate_transaction(
     )
 
 
+def _reminder_record(intent: NotificationDeliveryIntent) -> IpForeignAssociateReminderRecord:
+    return IpForeignAssociateReminderRecord(
+        id=intent.id,
+        recipient_membership_id=intent.recipient_membership_id,
+        event_type=intent.event_type,
+        channel=str(intent.channel),
+        status=str(intent.status),
+        scheduled_for=intent.scheduled_for,
+        delivered_at=intent.delivered_at,
+        critical=intent.critical,
+    )
+
+
+def _foreign_associate_reminders(
+    session: Session, *, company_id: str, instruction_id: str
+) -> list[NotificationDeliveryIntent]:
+    return list(
+        session.scalars(
+            select(NotificationDeliveryIntent)
+            .where(
+                NotificationDeliveryIntent.company_id == company_id,
+                NotificationDeliveryIntent.schedule_source_type
+                == "ip_foreign_associate_instruction",
+                NotificationDeliveryIntent.schedule_source_id == instruction_id,
+            )
+            .order_by(
+                NotificationDeliveryIntent.scheduled_for,
+                NotificationDeliveryIntent.created_at,
+                NotificationDeliveryIntent.id,
+            )
+        ).all()
+    )
+
+
+def schedule_ip_foreign_associate_reminders(
+    session: Session,
+    *,
+    context: SessionContext,
+    instruction_id: str,
+    payload: IpForeignAssociateReminderRequest,
+) -> IpForeignAssociateReminderScheduleResponse:
+    visible = get_ip_foreign_associate_instruction(
+        session, context=context, instruction_id=instruction_id
+    )
+    context = _lock_ip_writer_context(
+        session, context=context, required_capability="ip:write"
+    )
+    docket = _lock_ip_dockets_in_stable_order(
+        session,
+        context=context,
+        docket_ids={visible.docket_id},
+        required_capability="ip:write",
+    )[visible.docket_id]
+    row = session.scalar(
+        select(IpForeignAssociateInstruction)
+        .where(
+            IpForeignAssociateInstruction.id == visible.id,
+            IpForeignAssociateInstruction.company_id == context.company.id,
+        )
+        .with_for_update()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Foreign-associate instruction not found.")
+    if row.row_version != payload.expected_version:
+        raise HTTPException(status_code=409, detail="Instruction version changed; reload.")
+    if docket.lifecycle_version != payload.expected_lifecycle_version:
+        raise HTTPException(status_code=409, detail="IP lifecycle version changed; reload.")
+    if row.status != "dispatched" or row.acknowledged_at is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Acknowledgement reminders require a dispatched, unanswered instruction.",
+        )
+    if row.response_due_at is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Set an associate response deadline before scheduling reminders.",
+        )
+
+    recipient = _require_membership(
+        session,
+        company_id=context.company.id,
+        membership_id=row.responsible_membership_id,
+    )
+    escalation = _require_membership(
+        session,
+        company_id=context.company.id,
+        membership_id=payload.escalation_membership_id or context.membership.id,
+    )
+    existing_ids = {
+        intent.id
+        for intent in _foreign_associate_reminders(
+            session, company_id=context.company.id, instruction_id=row.id
+        )
+    }
+    due_at = _as_utc(row.response_due_at)
+    for offset in sorted(payload.reminder_offsets_hours, reverse=True):
+        scheduled_for = due_at - timedelta(hours=offset)
+        for channel in payload.channels:
+            enqueue_notification_delivery_intent(
+                session,
+                context=context,
+                recipient_membership=recipient,
+                channel=NotificationDeliveryChannel(channel),
+                event_type="foreign_associate_acknowledgement_due",
+                source_type="ip_foreign_associate_instruction",
+                source_id=f"{row.id}:acknowledgement:{offset}",
+                ip_docket=docket,
+                title="Foreign associate acknowledgement due",
+                body=(
+                    f"{docket.title}: {row.target_jurisdiction} associate acknowledgement "
+                    f"is due {due_at.isoformat()}."
+                ),
+                scheduled_for=scheduled_for,
+                escalation_membership=escalation,
+                schedule_source_type="ip_foreign_associate_instruction",
+                schedule_source_id=row.id,
+            )
+
+    escalation_at = due_at + timedelta(hours=payload.escalation_after_hours)
+    for channel in payload.channels:
+        enqueue_notification_delivery_intent(
+            session,
+            context=context,
+            recipient_membership=escalation,
+            channel=NotificationDeliveryChannel(channel),
+            event_type="foreign_associate_acknowledgement_overdue",
+            source_type="ip_foreign_associate_instruction",
+            source_id=f"{row.id}:escalation:{payload.escalation_after_hours}",
+            ip_docket=docket,
+            title="Foreign associate acknowledgement overdue",
+            body=(
+                f"{docket.title}: escalate the unanswered {row.target_jurisdiction} "
+                "associate instruction."
+            ),
+            scheduled_for=escalation_at,
+            critical=True,
+            escalation_membership=escalation,
+            schedule_source_type="ip_foreign_associate_instruction",
+            schedule_source_id=row.id,
+        )
+
+    reminders = _foreign_associate_reminders(
+        session, company_id=context.company.id, instruction_id=row.id
+    )
+    created_count = sum(intent.id not in existing_ids for intent in reminders)
+    record_from_context(
+        session,
+        context,
+        action="ip_foreign_associate_instruction.reminders_scheduled",
+        target_type="ip_foreign_associate_instruction",
+        target_id=row.id,
+        matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
+        metadata={
+            "created_count": created_count,
+            "existing_count": len(reminders) - created_count,
+            "channels": list(payload.channels),
+            "reminder_offsets_hours": sorted(payload.reminder_offsets_hours, reverse=True),
+            "escalation_after_hours": payload.escalation_after_hours,
+            "escalation_membership_id": escalation.id,
+        },
+    )
+    session.commit()
+    return IpForeignAssociateReminderScheduleResponse(
+        instruction_id=row.id,
+        created_count=created_count,
+        existing_count=len(reminders) - created_count,
+        reminders=[_reminder_record(intent) for intent in reminders],
+    )
+
+
 def ip_foreign_associate_workspace(
     session: Session,
     *,
@@ -1116,6 +1305,9 @@ def ip_foreign_associate_workspace(
         if row.filing_reported_at
         else "not_reported"
     )
+    reminders = _foreign_associate_reminders(
+        session, company_id=context.company.id, instruction_id=row.id
+    )
     return IpForeignAssociateWorkspaceResponse(
         instruction=IpForeignAssociateResponse.model_validate(row),
         transactions=[IpDocketEventResponse.model_validate(event) for event in events],
@@ -1130,4 +1322,5 @@ def ip_foreign_associate_workspace(
             and _as_utc(row.response_due_at) < datetime.now(UTC)
             and row.acknowledged_at is None
         ),
+        reminders=[_reminder_record(intent) for intent in reminders],
     )

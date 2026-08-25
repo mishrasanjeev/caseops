@@ -823,6 +823,39 @@ export default function GuidePage() {
                     </li>
                   </ul>
                   <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
+                    Foreign-associate filings
+                  </h3>
+                  <p>
+                    Open <a className="underline" href="/app/ip/foreign-associates">Foreign associates</a>{" "}
+                    for application- or search-led instructions to approved local counsel.
+                  </p>
+                  <ul className="mt-4 space-y-2 text-[15px]">
+                    <li>
+                      Select the target jurisdiction, approved Matter assignment, client authority,
+                      scoped docket data, docket-linked documents, estimate, currency, tax evidence,
+                      budget policy, responsible lawyer and response deadline.
+                    </li>
+                    <li>
+                      Privileged or internal documents remain excluded unless selected explicitly by
+                      an IP approver. The selected source version opens from the instruction workspace.
+                    </li>
+                    <li>
+                      Record connector-backed or external dispatch separately from delivery and
+                      independent associate acknowledgement. Schedule idempotent in-app or email
+                      acknowledgement reminders with a named escalation owner.
+                    </li>
+                    <li>
+                      Preserve associate queries and lawyer-approved responses, approve later fee,
+                      tax or exchange-rate estimates, and reassign a refused instruction without
+                      deleting its correspondence or version history.
+                    </li>
+                    <li>
+                      A filing report remains unverified until independent evidence is recorded.
+                      Completion also requires the paid associate invoice, actual docket cost and
+                      matched client-billing reconciliation.
+                    </li>
+                  </ul>
+                  <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
                     Trademark journal watch
                   </h3>
                   <p>
