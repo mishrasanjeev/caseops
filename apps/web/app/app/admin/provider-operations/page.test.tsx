@@ -261,6 +261,89 @@ describe("ProviderOperationsPage", () => {
     expect(screen.queryByText(/secret-token/i)).not.toBeInTheDocument();
   });
 
+  it("renders IP registry, journal, and source-health failures without unsafe actions", async () => {
+    const ipOperations = [
+      {
+        ...operation,
+        id: "ip_registry_sync:attempt-1",
+        job_kind: "ip_registry_sync" as const,
+        provider: "ipindia-registry",
+        source_type: "ip_registry_link",
+        status: "failed",
+        response_class: "authentication" as const,
+        freshness_state: "stale" as const,
+        estimated_cost_basis: "recorded_registry_attempt",
+        retryable: false,
+        quarantined: false,
+        replay_available: false,
+        ignore_available: false,
+        mark_resolved_available: false,
+        automatic_replay_block_code: "provider_replay_not_activated",
+      },
+      {
+        ...operation,
+        id: "ip_journal_ingestion:run-1",
+        job_kind: "ip_journal_ingestion" as const,
+        provider: "ipindia-journal",
+        source_type: "ip_journal_publication",
+        status: "paused_cost_quota",
+        response_class: "rate_limit" as const,
+        freshness_state: "stale" as const,
+        estimated_cost_minor: 275,
+        estimated_cost_basis: "recorded_journal_ingestion",
+        retryable: false,
+        quarantined: false,
+        replay_available: false,
+        ignore_available: false,
+        mark_resolved_available: false,
+        automatic_replay_block_code: "journal_payload_not_retained_for_replay",
+      },
+      {
+        ...operation,
+        id: "source_link_health:report-1",
+        job_kind: "source_link_health" as const,
+        provider: "source-actions",
+        source_type: "authority_document",
+        status: "queued",
+        response_class: "changed_content" as const,
+        freshness_state: "blocked" as const,
+        estimated_cost_basis: "internal_source_health_review",
+        retryable: false,
+        quarantined: true,
+        replay_available: false,
+        ignore_available: true,
+        mark_resolved_available: true,
+        automatic_replay_block_code: "source_health_requires_fresh_inspection",
+      },
+    ];
+    listProviderOperationsMock.mockResolvedValue({
+      operations: ipOperations,
+      open_count: 3,
+      ignored_count: 0,
+      resolved_count: 0,
+      replayable_count: 0,
+    });
+
+    render(withClient(<ProviderOperationsPage />));
+
+    expect(
+      await screen.findByTestId("provider-operation-ip_registry_sync:attempt-1"),
+    ).toHaveTextContent("authentication");
+    expect(
+      screen.getByTestId("provider-operation-ip_journal_ingestion:run-1"),
+    ).toHaveTextContent("INR 2.75");
+    expect(
+      screen.getByTestId("provider-operation-source_link_health:report-1"),
+    ).toHaveTextContent("changed content");
+    expect(
+      screen.getByTestId("provider-operation-replay-ip_registry_sync:attempt-1"),
+    ).toBeDisabled();
+    expect(
+      screen.getByTestId("provider-operation-resolve-source_link_health:report-1"),
+    ).toBeEnabled();
+    expect(screen.queryByText(/provider\.example|bearer|lawyer@/i)).not.toBeInTheDocument();
+  });
+
   it("requests replay through the guarded provider operation endpoint", async () => {
     const user = userEvent.setup();
     render(withClient(<ProviderOperationsPage />));
