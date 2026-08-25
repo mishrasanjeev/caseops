@@ -9133,7 +9133,7 @@
         },
         "event_type": {
           "category_id": "lifecycle_or_audit_evidence",
-          "sql_type": "VARCHAR(40)",
+          "sql_type": "VARCHAR(80)",
           "nullable": false
         },
         "id": {
@@ -20751,7 +20751,7 @@
         },
         "event_type": {
           "category_id": "lifecycle_or_audit_evidence",
-          "sql_type": "VARCHAR(40)",
+          "sql_type": "VARCHAR(80)",
           "nullable": false
         },
         "id": {
@@ -20875,7 +20875,7 @@
         },
         "event_type": {
           "category_id": "lifecycle_or_audit_evidence",
-          "sql_type": "VARCHAR(40)",
+          "sql_type": "VARCHAR(80)",
           "nullable": false
         },
         "failed_at": {
@@ -21074,7 +21074,7 @@
         },
         "event_type": {
           "category_id": "lifecycle_or_audit_evidence",
-          "sql_type": "VARCHAR(40)",
+          "sql_type": "VARCHAR(80)",
           "nullable": false
         },
         "id": {
@@ -26377,7 +26377,7 @@
       }
     }
   ],
-  "schema_fingerprint": "8b9dcc0b302a77cbdc7158476956d6e351a971f276d81ccef8201398ae0a4ab2",
+  "schema_fingerprint": "14e9a2969c4444f8514150d01dad142b28d45dd3b3658ce70f560ba1c1c8bd40",
   "index_inventory": {
     "orm_index_count": 1354,
     "orm_index_fingerprint": "1867cb73802fae67a428c8e71d864a75dea69d2e9418de9bc773b2be388bfff3",

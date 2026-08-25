@@ -3945,7 +3945,7 @@ class NotificationRule(Base):
     )
     scope_type: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
     scope_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
-    event_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     channels_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     offset_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -3993,7 +3993,7 @@ class InAppNotification(Base):
         nullable=False,
         index=True,
     )
-    event_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     source_type: Mapped[str] = mapped_column(String(40), nullable=False)
     source_id: Mapped[str] = mapped_column(String(36), nullable=False)
     matter_id: Mapped[str | None] = mapped_column(
@@ -4129,7 +4129,7 @@ class NotificationDeliveryIntent(Base):
         index=True,
     )
     channel: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
-    event_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     source_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     source_id: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
     idempotency_key: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -4243,7 +4243,7 @@ class NotificationDeliveryEvent(Base):
     intent_id: Mapped[str] = mapped_column(
         ForeignKey("notification_delivery_intents.id", ondelete="CASCADE"), nullable=False
     )
-    event_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False)
     provider: Mapped[str | None] = mapped_column(String(40), nullable=True)
     provider_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     idempotency_key: Mapped[str] = mapped_column(String(64), nullable=False)
