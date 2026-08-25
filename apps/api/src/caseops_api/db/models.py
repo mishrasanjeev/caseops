@@ -14759,6 +14759,15 @@ class IpDocketEvent(Base):
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
+            ["foreign_associate_instruction_id", "company_id"],
+            [
+                "ip_foreign_associate_instructions.id",
+                "ip_foreign_associate_instructions.company_id",
+            ],
+            name="fk_ip_docket_event_foreign_associate_instruction_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
             ["responsible_membership_id", "company_id"],
             ["company_memberships.id", "company_memberships.company_id"],
             name="fk_ip_docket_event_responsible_company",
@@ -14813,6 +14822,12 @@ class IpDocketEvent(Base):
             "recordal_id",
             "sequence",
         ),
+        Index(
+            "ix_ip_docket_events_company_foreign_associate_sequence",
+            "company_id",
+            "foreign_associate_instruction_id",
+            "sequence",
+        ),
         CheckConstraint(
             "NOT (application_id IS NOT NULL AND proceeding_id IS NOT NULL)",
             name="ck_ip_docket_event_single_legal_target",
@@ -14820,6 +14835,11 @@ class IpDocketEvent(Base):
         CheckConstraint(
             "recordal_id IS NULL OR event_kind = 'post_registration_recordal_transaction'",
             name="ck_ip_docket_event_recordal_kind",
+        ),
+        CheckConstraint(
+            "foreign_associate_instruction_id IS NULL OR "
+            "event_kind = 'foreign_associate_instruction_transaction'",
+            name="ck_ip_docket_event_foreign_associate_kind",
         ),
         CheckConstraint(
             "sequence > 0",
@@ -14857,6 +14877,9 @@ class IpDocketEvent(Base):
     application_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     proceeding_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     recordal_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    foreign_associate_instruction_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
     event_kind: Mapped[str] = mapped_column(String(64), nullable=False)
     source: Mapped[str] = mapped_column(String(40), nullable=False)
     source_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -18210,6 +18233,204 @@ class IpClientInstruction(Base):
     resulting_event_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     creator_label_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class IpForeignAssociateInstruction(Base):
+    """Versioned coordination record linking existing legal-operation owners."""
+
+    __tablename__ = "ip_foreign_associate_instructions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_foreign_associate_docket_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["source_client_instruction_id", "company_id"],
+            ["ip_client_instructions.id", "ip_client_instructions.company_id"],
+            name="fk_ip_foreign_associate_client_instruction_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["supersedes_instruction_id", "company_id"],
+            [
+                "ip_foreign_associate_instructions.id",
+                "ip_foreign_associate_instructions.company_id",
+            ],
+            name="fk_ip_foreign_associate_supersedes_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["responsible_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_foreign_associate_responsible_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["approved_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_foreign_associate_approver_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["privileged_approved_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_foreign_associate_privileged_approver_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_foreign_associate_creator_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["updated_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_foreign_associate_updater_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_ip_foreign_associate_id_company"),
+        UniqueConstraint(
+            "company_id",
+            "instruction_thread_key",
+            "instruction_version",
+            name="uq_ip_foreign_associate_thread_version",
+        ),
+        CheckConstraint("instruction_version > 0", name="ck_ip_foreign_associate_version_positive"),
+        CheckConstraint("row_version > 0", name="ck_ip_foreign_associate_row_version_positive"),
+        CheckConstraint(
+            "status IN ('draft', 'approved', 'dispatched', 'acknowledged', 'in_progress', "
+            "'filing_reported', 'evidence_verified', 'invoiced', 'completed', 'refused', "
+            "'superseded', 'cancelled')",
+            name="ck_ip_foreign_associate_status",
+        ),
+        CheckConstraint(
+            "source_client_instruction_id IS NOT NULL OR "
+            "(client_authority_reference IS NOT NULL AND "
+            "length(trim(client_authority_reference)) > 0)",
+            name="ck_ip_foreign_associate_client_authority",
+        ),
+        CheckConstraint(
+            "supersedes_instruction_id IS NULL OR supersedes_instruction_id <> id",
+            name="ck_ip_foreign_associate_supersedes_not_self",
+        ),
+        CheckConstraint(
+            "status IN ('draft', 'cancelled') OR "
+            "(approved_at IS NOT NULL AND approved_by_membership_id IS NOT NULL)",
+            name="ck_ip_foreign_associate_approved_state",
+        ),
+        CheckConstraint(
+            "dispatch_communication_id IS NULL OR external_dispatch_reference IS NULL",
+            name="ck_ip_foreign_associate_single_dispatch_owner",
+        ),
+        CheckConstraint(
+            "status NOT IN ('dispatched', 'acknowledged', 'in_progress', 'filing_reported', "
+            "'evidence_verified', 'invoiced', 'completed', 'refused', 'superseded') OR "
+            "(dispatch_communication_id IS NOT NULL OR external_dispatch_reference IS NOT NULL)",
+            name="ck_ip_foreign_associate_dispatch_required",
+        ),
+        CheckConstraint(
+            "status NOT IN ('acknowledged', 'in_progress', 'filing_reported', "
+            "'evidence_verified', 'invoiced', 'completed') OR "
+            "(acknowledged_at IS NOT NULL AND acknowledgement_reference IS NOT NULL)",
+            name="ck_ip_foreign_associate_acknowledgement_required",
+        ),
+        Index(
+            "ix_ip_foreign_associate_company_docket_status",
+            "company_id",
+            "docket_id",
+            "status",
+        ),
+        Index(
+            "ix_ip_foreign_associate_company_response_due",
+            "company_id",
+            "response_due_at",
+            "status",
+        ),
+        Index("ix_ip_foreign_associate_outside_counsel_id", "outside_counsel_id"),
+        Index("ix_ip_foreign_associate_assignment_id", "assignment_id"),
+        Index("ix_ip_foreign_associate_dispatch_communication_id", "dispatch_communication_id"),
+        Index("ix_ip_foreign_associate_estimate_cost_item_id", "estimate_cost_item_id"),
+        Index("ix_ip_foreign_associate_actual_cost_item_id", "actual_cost_item_id"),
+        Index("ix_ip_foreign_associate_spend_record_id", "spend_record_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    instruction_thread_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    instruction_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    row_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    supersedes_instruction_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    source_client_instruction_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    client_authority_reference: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    target_jurisdiction: Mapped[str] = mapped_column(String(80), nullable=False)
+    outside_counsel_id: Mapped[str] = mapped_column(
+        ForeignKey("outside_counsel.id", ondelete="RESTRICT"), nullable=False
+    )
+    assignment_id: Mapped[str | None] = mapped_column(
+        ForeignKey("matter_outside_counsel_assignments.id", ondelete="RESTRICT"), nullable=True
+    )
+    responsible_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    scope_json: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+    selected_document_refs_json: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    privileged_document_refs_json: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    estimate_cost_item_id: Mapped[str] = mapped_column(
+        ForeignKey("ip_cost_items.id", ondelete="RESTRICT"), nullable=False
+    )
+    estimate_terms_json: Mapped[dict[str, object]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    budget_policy_reference: Mapped[str] = mapped_column(String(500), nullable=False)
+    approved_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    privileged_approved_by_membership_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    privileged_approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    dispatch_communication_id: Mapped[str | None] = mapped_column(
+        ForeignKey("communications.id", ondelete="RESTRICT"), nullable=True
+    )
+    external_dispatch_reference: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    external_delivery_reference: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    external_delivered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    dispatched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    acknowledgement_reference: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    response_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    filing_identifier: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    filing_reported_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    filing_evidence_refs_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    filing_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    actual_cost_item_id: Mapped[str | None] = mapped_column(
+        ForeignKey("ip_cost_items.id", ondelete="RESTRICT"), nullable=True
+    )
+    spend_record_id: Mapped[str | None] = mapped_column(
+        ForeignKey("outside_counsel_spend_records.id", ondelete="RESTRICT"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="draft")
+    created_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    updated_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )

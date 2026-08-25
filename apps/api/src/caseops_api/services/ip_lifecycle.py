@@ -449,6 +449,15 @@ def _same_event_duplicate_identity(
             and row.payload_json.get("recordal_version_before")
             == payload.payload.get("recordal_version_before")
         )
+    if payload.event_kind == "foreign_associate_instruction_transaction":
+        return (
+            row.payload_json.get("foreign_associate_instruction_id")
+            == payload.payload.get("foreign_associate_instruction_id")
+            and row.payload_json.get("transaction_kind")
+            == payload.payload.get("transaction_kind")
+            and row.payload_json.get("row_version_before")
+            == payload.payload.get("row_version_before")
+        )
     if payload.event_kind not in {
         "madrid_action",
         "opposition_applicant_action",
