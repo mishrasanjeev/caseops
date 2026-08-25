@@ -49,7 +49,7 @@ Generated; do not edit.
 | IPLF-028B | derived | IPLF-028 | M2 | DATA-GOV-01, DATA-GOV-02, DATA-GOV-03, DATA-GOV-04, DATA-GOV-05, DATA-GOV-06, DATA-GOV-07, DATA-GOV-08, DATA-GOV-09, DATA-GOV-10, DATA-GOV-11, DATA-GOV-12, DATA-GOV-13, DATA-GOV-14, DATA-GOV-15, DATA-GOV-16, DATA-GOV-17, DATA-GOV-18, RES-01, RES-02, RES-03, RES-04, RES-05, RES-06, RES-07, RES-08, RES-09, RES-10, RES-11, RES-12, RES-13, RES-14 | UJ-28-EXC-01, UJ-28-EXC-02, UJ-28-EXC-03, UJ-28-NORMAL, UJ-65-EXC-01, UJ-65-EXC-02, UJ-65-EXC-03, UJ-65-EXC-04, UJ-65-EXC-05, UJ-65-NORMAL | not_started | not_run | blocked |
 | IPLF-028C | derived | IPLF-028 | M2 | DATA-GOV-01, DATA-GOV-03 |  | implemented | passed | blocked |
 | IPLF-029A | derived | IPLF-029 | M2 |  |  | in_progress | not_run | blocked |
-| IPLF-029B | derived | IPLF-029 | M2 | ARCH-OPS-01, ARCH-OPS-02, ARCH-OPS-03, ARCH-OPS-04, ARCH-OPS-05, ARCH-OPS-06, ARCH-OPS-07, ARCH-OPS-08, ARCH-OPS-09, ARCH-OPS-10, ARCH-OPS-11, ARCH-OPS-12, ARCH-OPS-13, ARCH-OPS-14, ARCH-OPS-15, ARCH-OPS-16, ARCH-OPS-17, ARCH-OPS-18, ARCH-OPS-19, ARCH-OPS-20, ARCH-OPS-21, ARCH-OPS-22, ARCH-OPS-23, ARCH-OPS-24, ARCH-OPS-25, ARCH-OPS-26 |  | implemented | not_run | blocked |
+| IPLF-029B | derived | IPLF-029 | M2 | ARCH-OPS-01, ARCH-OPS-02, ARCH-OPS-03, ARCH-OPS-04, ARCH-OPS-05, ARCH-OPS-06, ARCH-OPS-07, ARCH-OPS-08, ARCH-OPS-09, ARCH-OPS-10, ARCH-OPS-11, ARCH-OPS-12, ARCH-OPS-13, ARCH-OPS-14, ARCH-OPS-15, ARCH-OPS-16, ARCH-OPS-17, ARCH-OPS-18, ARCH-OPS-19, ARCH-OPS-20, ARCH-OPS-21, ARCH-OPS-22, ARCH-OPS-23, ARCH-OPS-24, ARCH-OPS-25, ARCH-OPS-26 |  | not_started | not_run | blocked |
 | IPLF-030A | derived | IPLF-030 | M3 | IP-PORT-02, IP-PORT-05, IP-PORT-10 | UJ-04-EXC-02 | implemented | passed | blocked |
 | IPLF-030B | derived | IPLF-030 | M3 | COMP-01, COMP-02, COMP-03, COMP-04, COMP-05, COMP-06, COMP-07, COMP-08, IP-PORT-01, IP-PORT-02, IP-PORT-03, IP-PORT-04, IP-PORT-06, IP-PORT-07, IP-PORT-08, IP-PORT-09, IP-PORT-10 | UJ-04-EXC-01, UJ-04-EXC-03, UJ-04-NORMAL | implemented | passed | blocked |
 | IPLF-031A | derived | IPLF-031 | M3 | IP-ID-07 | UJ-05-NORMAL, UJ-05-EXC-01 | implemented | passed | blocked |
@@ -112,7 +112,7 @@ Generated; do not edit.
 | IPLF-056B | derived | IPLF-056 | M5 | IP-REG-01, IP-REG-02, IP-REG-03, IP-REG-04, IP-REG-05, SRC-01, SRC-02, SRC-03, SRC-04, SRC-05, SRC-06, SRC-07, SRC-08, SRC-09, SRC-10, SRC-11, SRC-12 | UJ-25-EXC-01, UJ-25-EXC-02, UJ-25-EXC-03, UJ-25-NORMAL, UJ-68-EXC-01, UJ-68-EXC-02, UJ-68-EXC-03, UJ-68-EXC-04, UJ-68-EXC-05, UJ-68-NORMAL | implemented | passed | deployment_verified |
 | IPLF-057A | derived | IPLF-057 | M5 |  |  | implemented | passed | deployment_verified |
 | IPLF-057B | derived | IPLF-057 | M5 | IP-MAD-01, IP-MAD-02, IP-MAD-03, IP-MAD-04 | UJ-35-EXC-01, UJ-35-EXC-02, UJ-35-EXC-03, UJ-35-EXC-04, UJ-35-NORMAL | implemented | passed | deployment_verified |
-| IPLF-058A | derived | IPLF-058 | M5 |  |  | not_started | not_run | blocked |
+| IPLF-058A | derived | IPLF-058 | M5 |  |  | implemented | passed | blocked |
 | IPLF-058B | derived | IPLF-058 | M5 | IP-POST-01, IP-POST-02, IP-POST-03, IP-POST-04 | UJ-36-EXC-01, UJ-36-EXC-02, UJ-36-EXC-03, UJ-36-EXC-04, UJ-36-NORMAL, UJ-61-EXC-01, UJ-61-EXC-02, UJ-61-NORMAL | not_started | not_run | blocked |
 | IPLF-059A | derived | IPLF-059 | M5 |  |  | not_started | not_run | blocked |
 | IPLF-059B | derived | IPLF-059 | M5 |  | UJ-37-EXC-01, UJ-37-EXC-02, UJ-37-EXC-03, UJ-37-EXC-04, UJ-37-NORMAL | not_started | not_run | blocked |
