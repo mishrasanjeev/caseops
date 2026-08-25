@@ -138,6 +138,46 @@ PROVIDER_ADAPTERS: tuple[ProviderAdapterDefinition, ...] = (
         ),
     ),
     ProviderAdapterDefinition(
+        provider="wipo-madrid",
+        display_name="WIPO Madrid Monitor",
+        domain="international_trademark_registry",
+        adapter_status="blocked_pending_provider_contract",
+        commercial_terms_status="not_approved",
+        required_capabilities=_FULL_PROVIDER_CAPABILITIES,
+        implemented_capabilities=(),
+        attribution_label="WIPO Madrid source (not activated)",
+        attribution_url="https://www.wipo.int/madrid/monitor/",
+        cost_categories=(
+            "madrid_record",
+            "madrid_document",
+            "madrid_status_refresh",
+        ),
+        health_path=None,
+        support_matrix_path=None,
+        operations_path="/api/admin/provider-operations/jobs",
+        endpoint_paths=(),
+        legal_coverage=(
+            ProviderAdapterLegalCoverageRecord(
+                jurisdiction="International",
+                office="WIPO International Bureau",
+                asset_types=["trademark"],
+                coverage_status="unverified",
+            ),
+        ),
+        activation_blockers=(
+            "provider_contract_not_approved",
+            "provider_licensing_not_approved",
+            "provider_credentials_not_configured",
+            "legal_coverage_not_verified",
+            "automated_sync_not_activated",
+        ),
+        limitations=(
+            "Madrid records accept manually sourced WIPO evidence only; no search, "
+            "record, document, or polling call is enabled.",
+            "National-office legal status remains separately sourced and reconciled.",
+        ),
+    ),
+    ProviderAdapterDefinition(
         provider="indian-kanoon",
         display_name="Indian Kanoon licensed API",
         domain="legal_research",

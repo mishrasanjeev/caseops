@@ -8285,3 +8285,160 @@ def test_iplf057a_madrid_tenant_fks_and_designation_identity_on_postgres(pg_engi
         with pytest.raises(IntegrityError):
             session.commit()
         session.rollback()
+
+
+@pytest.mark.postgres
+def test_iplf057b_madrid_projection_and_source_reconciliation_on_postgres(pg_engine):
+    from fastapi import HTTPException
+
+    from caseops_api.db.models import (
+        IpDocketRecord,
+        IpTrademarkParticularVersion,
+        TrademarkInternationalRegistration,
+    )
+    from caseops_api.schemas.ip_international import (
+        TrademarkInternationalActionRequest,
+        TrademarkInternationalRecordCreateRequest,
+    )
+    from caseops_api.services.ip_international import (
+        create_international_record,
+        international_workspace,
+        record_international_action,
+    )
+
+    now = datetime.now(UTC)
+    with Session(pg_engine) as session:
+        fixture = _seed_ip_coverage_lifecycle_fixture(session)
+        context = _ip_race_context(
+            session,
+            company_id=fixture["company_id"],
+            membership_id=fixture["owner_id"],
+        )
+
+        def create_record(**overrides):
+            data = {
+                "docket_title": f"PostgreSQL Madrid {uuid4()}",
+                "record_kind": "international_registration",
+                "direction": "inbound",
+                "parent_registration_id": None,
+                "wipo_reference": f"WIPO-PG-057B-{uuid4()}",
+                "holder_name": "PostgreSQL Madrid holder",
+                "mark_name": "ASTER",
+                "classes": [9],
+                "goods_services": {"9": "Legal software"},
+                "source_url": "https://www.wipo.int/madrid/monitor/pg-057b",
+                "source_reference": f"postgres:057b:{uuid4()}",
+                "source_retrieved_at": now,
+            }
+            data.update(overrides)
+            return create_international_record(
+                session,
+                context=context,
+                payload=TrademarkInternationalRecordCreateRequest(**data),
+            )
+
+        registration = create_record()
+        first = create_record(
+            record_kind="international_designation",
+            parent_registration_id=registration.id,
+            designated_member_code="IN",
+            designated_office="Trade Marks Registry India",
+            jurisdiction="IN",
+            designation_kind="original",
+            designation_effective_date=date(2026, 8, 25),
+        )
+        sibling = create_record(
+            record_kind="international_designation",
+            parent_registration_id=registration.id,
+            designated_member_code="EM",
+            designated_office="EUIPO",
+            jurisdiction="EM",
+            designation_kind="subsequent",
+            designation_effective_date=date(2026, 8, 26),
+        )
+
+        projection = session.scalar(
+            select(IpTrademarkParticularVersion).where(
+                IpTrademarkParticularVersion.docket_id == first.docket_id,
+                IpTrademarkParticularVersion.version == 1,
+            )
+        )
+        assert projection is not None
+        assert projection.classes_json == [
+            {"class_number": 9, "specification": "Legal software"}
+        ]
+
+        first_docket = session.get(IpDocketRecord, first.docket_id)
+        assert first_docket is not None
+        candidate = record_international_action(
+            session,
+            context=context,
+            record_id=first.id,
+            payload=TrademarkInternationalActionRequest(
+                expected_version=first.version,
+                expected_lifecycle_version=first_docket.lifecycle_version,
+                action_kind="source_snapshot",
+                authority="national_office",
+                effective_at=now,
+                responsible_membership_id=context.membership.id,
+                reason="PostgreSQL national-office source snapshot.",
+                source_url="https://ipindia.gov.in/trademark/pg-057b",
+                source_reference=f"postgres:057b:snapshot:{uuid4()}",
+                source_retrieved_at=now,
+                national_status="provisional_refusal",
+            ),
+        )
+        assert candidate.status_applied is False
+        assert candidate.record.national_status is None
+
+        reconciled = record_international_action(
+            session,
+            context=context,
+            record_id=first.id,
+            payload=TrademarkInternationalActionRequest(
+                expected_version=candidate.record.version,
+                expected_lifecycle_version=first_docket.lifecycle_version,
+                action_kind="source_reconciliation",
+                authority="internal",
+                effective_at=now,
+                responsible_membership_id=context.membership.id,
+                reason="PostgreSQL counsel accepted the source candidate.",
+                source_reference=f"postgres:057b:reconcile:{uuid4()}",
+                source_retrieved_at=now,
+                reconciles_event_id=candidate.event.id,
+                reconciliation_decision="same_fact",
+            ),
+        )
+        assert reconciled.status_applied is True
+        assert reconciled.record.national_status == "provisional_refusal"
+
+        sibling_row = session.get(TrademarkInternationalRegistration, sibling.id)
+        registration_row = session.get(
+            TrademarkInternationalRegistration,
+            registration.id,
+        )
+        assert sibling_row is not None and sibling_row.national_status is None
+        assert registration_row is not None and registration_row.wipo_status is None
+        workspace = international_workspace(session, context=context, record_id=first.id)
+        assert workspace.unresolved_source_candidates == []
+        assert workspace.provider_mode == "manual_sourced_only"
+        assert "provider_contract_not_approved" in workspace.provider_activation_blockers
+
+        with pytest.raises(HTTPException) as stale:
+            record_international_action(
+                session,
+                context=context,
+                record_id=first.id,
+                payload=TrademarkInternationalActionRequest(
+                    expected_version=1,
+                    expected_lifecycle_version=first_docket.lifecycle_version,
+                    action_kind="change_recorded",
+                    authority="internal",
+                    effective_at=now,
+                    responsible_membership_id=context.membership.id,
+                    reason="PostgreSQL stale Madrid writer must fail.",
+                    source_reference=f"postgres:057b:stale:{uuid4()}",
+                    source_retrieved_at=now,
+                ),
+            )
+        assert stale.value.status_code == 409

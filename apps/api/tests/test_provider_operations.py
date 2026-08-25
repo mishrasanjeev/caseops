@@ -1119,6 +1119,7 @@ def test_provider_readiness_is_names_only_and_fail_closed(
         "digest_delivery",
         "ecourtsindia",
         "ipindia-registry",
+        "wipo-madrid",
         "indian-kanoon",
     }
     assert providers["google_drive"]["configured"] is True
@@ -1130,6 +1131,12 @@ def test_provider_readiness_is_names_only_and_fail_closed(
     assert providers["ecourtsindia"]["adapter_contract"]["domain"] == "court_tracking"
     assert providers["ipindia-registry"]["configured"] is False
     assert providers["ipindia-registry"]["external_calls_enabled"] is False
+    assert providers["wipo-madrid"]["configured"] is False
+    assert providers["wipo-madrid"]["external_calls_enabled"] is False
+    assert providers["wipo-madrid"]["adapter_contract"]["endpoint_paths"] == []
+    assert "automated_sync_not_activated" in providers["wipo-madrid"][
+        "missing_approval_keys"
+    ]
     assert providers["indian-kanoon"]["state"] == "blocked_missing_config"
     assert providers["indian-kanoon"]["external_calls_enabled"] is False
     assert "INDIAN_KANOON_API_TOKEN" in providers["indian-kanoon"][

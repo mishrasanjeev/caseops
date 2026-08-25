@@ -22,3 +22,12 @@ def test_adapter_catalog_separates_shared_controls_from_ip_legal_coverage() -> N
     assert ipindia.legal_coverage[0].coverage_status == "unverified"
     assert ipindia.endpoint_paths == []
     assert "provider_contract_not_approved" in ipindia.activation_blockers
+
+    [wipo] = provider_adapter_contracts(domain="international_trademark_registry")
+    assert wipo.provider == "wipo-madrid"
+    assert wipo.adapter_status == "blocked_pending_provider_contract"
+    assert wipo.implemented_capabilities == []
+    assert wipo.endpoint_paths == []
+    assert wipo.attribution_url == "https://www.wipo.int/madrid/monitor/"
+    assert provider_supports("wipo-madrid", "record_fetch") is False
+    assert "automated_sync_not_activated" in wipo.activation_blockers

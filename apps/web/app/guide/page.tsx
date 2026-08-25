@@ -738,6 +738,49 @@ export default function GuidePage() {
                     </li>
                   </ul>
                   <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
+                    Madrid international registrations
+                  </h3>
+                  <p>
+                    Open <a className="underline" href="/app/ip/madrid">Madrid portfolio</a>{" "}
+                    to docket an outbound Indian basic-mark filing, an international
+                    registration, or each designated member as a separate controlled record.
+                    The international registration retains WIPO status; every designation
+                    retains its own national status, local agent, deadlines, documents, fees,
+                    and source history.
+                  </p>
+                  <ul className="mt-4 space-y-2 text-[15px]">
+                    <li>
+                      Outbound intake requires an eligible Indian trademark application,
+                      office of origin, MM2 or applicable form, classes and goods/services.
+                      Original and subsequent designations remain distinguishable and link to
+                      the same parent registration without sharing legal status.
+                    </li>
+                    <li>
+                      Record forms, fees, certification, irregularities, WIPO notification,
+                      national examination, provisional refusal, response, publication,
+                      opposition, grant or refusal statements, changes, renewals, and local-agent
+                      instructions as versioned transactions. Link the canonical deadline,
+                      document, or cost evidence used for the transaction.
+                    </li>
+                    <li>
+                      A WIPO or national-office snapshot is always a source candidate. Counsel
+                      opens the linked source and explicitly accepts, keeps separate, or rejects
+                      it before CaseOps changes the authority-owned status. A stale version is
+                      rejected and must be reviewed again.
+                    </li>
+                    <li>
+                      Basic-mark dependency and central-attack reviews record affected
+                      registrations, designations, deadlines, documents, and recommended work.
+                      They do not automatically cancel, narrow, or otherwise change legal status.
+                    </li>
+                    <li>
+                      WIPO live search, document retrieval, and polling remain disabled until an
+                      approved provider contract, licensing basis, credentials, verified legal
+                      coverage, and activation decision exist. The current workspace is manual,
+                      source-linked docketing and makes no provider call.
+                    </li>
+                  </ul>
+                  <h3 className="mt-8 font-display text-lg text-[var(--color-ink)]">
                     Trademark journal watch
                   </h3>
                   <p>

@@ -3021,9 +3021,11 @@ def provider_readiness_status(
     ecourts_enabled = not ecourts_missing_config and not ecourts_missing_approvals
     ecourts_adapter = provider_adapter_definition("ecourtsindia")
     ipindia_adapter = provider_adapter_definition("ipindia-registry")
+    wipo_madrid_adapter = provider_adapter_definition("wipo-madrid")
     indian_kanoon_adapter = provider_adapter_definition("indian-kanoon")
     assert ecourts_adapter is not None
     assert ipindia_adapter is not None
+    assert wipo_madrid_adapter is not None
     assert indian_kanoon_adapter is not None
     indian_kanoon_status = indian_kanoon_readiness(session)
 
@@ -3091,6 +3093,28 @@ def provider_readiness_status(
                 ),
                 limitations=list(ipindia_adapter.limitations),
                 adapter_contract=ipindia_adapter.record(),
+            ),
+            ProviderReadinessRecord(
+                provider="wipo-madrid",
+                display_name=wipo_madrid_adapter.display_name,
+                adp_slice="IPLF-057",
+                state="blocked_pending_admin_approval",
+                configured=False,
+                enabled=False,
+                external_calls_enabled=False,
+                durable_workflow_available=workflow.available,
+                required_approval_keys=list(wipo_madrid_adapter.activation_blockers),
+                missing_approval_keys=list(wipo_madrid_adapter.activation_blockers),
+                endpoint_paths=list(wipo_madrid_adapter.endpoint_paths),
+                idempotency_fields=[],
+                change_detection_fields=[],
+                review_queue="Manual sourced Madrid reconciliation",
+                retry_dead_letter=(
+                    "No external WIPO job can be created until the provider contract, "
+                    "licensing basis, legal coverage, credentials, and activation are approved."
+                ),
+                limitations=list(wipo_madrid_adapter.limitations),
+                adapter_contract=wipo_madrid_adapter.record(),
             ),
             ProviderReadinessRecord(
                 provider="indian-kanoon",

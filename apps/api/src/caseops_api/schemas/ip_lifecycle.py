@@ -25,6 +25,7 @@ IpEventKind = Literal[
     "opposition_shared_action",
     "post_registration_profile",
     "post_registration_action",
+    "madrid_action",
     "registry_change",
 ]
 IpEventSource = Literal["manual", "registry", "integration", "system"]

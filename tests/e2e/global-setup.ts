@@ -25,6 +25,8 @@ import {
  * through uv — only if the interpreter isn't materialised yet.
  */
 function apiVenvPython(): { cmd: string; prefixArgs: string[] } {
+  const override = process.env.CASEOPS_E2E_PYTHON?.trim();
+  if (override) return { cmd: override, prefixArgs: [] };
   const direct =
     process.platform === "win32"
       ? path.join(repoRoot, "apps", "api", ".venv", "Scripts", "python.exe")
