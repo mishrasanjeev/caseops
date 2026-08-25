@@ -11,8 +11,9 @@ access predicates, lifecycle and audit remain with their existing owners.
 MIGRATION-LOCK-RISK: acknowledged: one additive empty table plus additive
 nullable/defaulted columns, indexes and constraints; PostgreSQL lock timeout is
 five seconds. SQLite test upgrades may rebuild altered tables.
-MIGRATION-ROLLBACK: downgrade is allowed only before recordal/title/event data
-uses the new contract; otherwise restore-forward is required.
+MIGRATION-ROLLBACK: restore-forward: once recordal/title/event data uses the new
+contract. A downgrade is allowed only while every added legal-data field is
+still empty or at its migration default.
 DATA-GOVERNANCE-MAP: updated
 """
 
