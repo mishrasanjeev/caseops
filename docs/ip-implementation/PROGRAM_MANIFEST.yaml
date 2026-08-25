@@ -14,16 +14,16 @@
     "verification_status": "not_run",
     "release_status": "blocked",
     "execution_policy": "codex_owned_single_ordered_queue; implement first and run the automated check and exact-release verification batch at the end",
-    "active_slice": "IPLF-057A",
+    "active_slice": "IPLF-057B",
     "checkpoint": {
-      "recorded_at": "2026-08-25T10:12:00+05:30",
-      "repository_revision": "22707d102ba4ec2dac65f8544e7a09e2ea7d3c01",
-      "environment": "Canonical main and production serve exact IPLF-056A revision ec5846a; exact-release production workflow 32808381776 passed. IPLF-056B is locally verified on codex/iplf056b-workflows-20260825 and awaits hosted PR/release gates.",
-      "completed_scope": "IPLF-056A/B repository implementation is complete. Registry, journal-watch, source-health, provider readiness, cost visibility, bounded replay/quarantine, connector disconnection, credential-rotation evidence and manual IP fallback use existing canonical owners. Live IP India and Indian Kanoon activation remains fail-closed pending authorized external acceptance.",
+      "recorded_at": "2026-08-25T12:05:00+05:30",
+      "repository_revision": "c846287fb50cacc4b50ba19763219c761d86a8dc",
+      "environment": "Main and production serve exact IPLF-056B revision fdbfe8af. Production workflow 32814217518 verified identity, passed 82 broad tests plus A0/notices, and exposed two verifier defects remediated in c846287f. IPLF-057A is locally verified and awaits hosted/release gates.",
+      "completed_scope": "IPLF-057A adds one canonical Madrid international-registration/designation aggregate over existing docket, relationship, event, access, lifecycle, audit, governance and provider owners. Tenant isolation, independent designation state, migration rollback policy and bounded APIs are locally verified; no live WIPO call is enabled.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-057A",
-      "next_action": "Pass IPLF-056B hosted PR, exact-main, deployment and dated production gates, then begin the IPLF-057A Madrid/WIPO ownership and backend contract audit.",
-      "evidence_ref": "docs/ip-implementation/evidence/m5/IPLF-056/local-056b-2026-08-25.md"
+      "next_slice": "IPLF-057B",
+      "next_action": "Pass IPLF-057A hosted and PostgreSQL gates, merge and deploy the exact candidate, rerun the corrected production suite, then complete IPLF-057B UJ-35 workflows and exceptions.",
+      "evidence_ref": "docs/ip-implementation/evidence/m5/IPLF-057/local-057a-2026-08-25.md"
     },
     "work_owner": {
       "owner": "Codex",
@@ -2141,7 +2141,7 @@
         "IPLF-057A",
         "IPLF-057B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "evidence_refs": []
@@ -13312,7 +13312,7 @@
         }
       ],
       "next_actions": [
-        "Pass hosted PR gates, merge to main, deploy the exact candidate and run the dated IPLF-056B production acceptance before marking deployment verified."
+        "Merge and deploy candidate c846287f or its descendant, then rerun the corrected exact-production acceptance before marking deployment verified."
       ],
       "data_impact": [
         "No schema change. IP operation history remains immutable; source-report resolution, connector disconnect and credential evidence continue through their existing audited canonical writers."
@@ -13358,28 +13358,79 @@
         {
           "classification": "NEW",
           "component": "IPLF-057 canonical scope: Madrid international registration/designation and WIPO reconciliation.",
-          "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
-          "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
-          "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
+          "canonical_writer": "TrademarkInternationalRegistration owns type-specific IR/designation facts; existing ip_docket_records, ip_relationships, ip_docket_events and Section 11.2 shared services retain access, lifecycle, links, sourced events and operational state.",
+          "compatibility_path": "New specialized dockets are created atomically; existing generic IP records remain unchanged and controlled imports may supply a correctly typed docket.",
+          "retirement_gate": "No replacement path exists; destructive downgrade is refused after the first Madrid legal record."
+        },
+        {
+          "classification": "EXTEND",
+          "component": "Madrid access/lifecycle, links, sourced events, audit, deadlines, costs, documents and provider operations.",
+          "canonical_writer": "Existing ip_docket_records, ip_relationships, ip_docket_events and Section 11.2 shared owners.",
+          "compatibility_path": "The Madrid service composes canonical owners and uses the shared visibility, actor-fence, stable docket lock, lifecycle and audit contracts.",
+          "retirement_gate": "IPLF-057B must preserve one-writer behavior and pass UJ-35 and exact-production gates before activation."
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260825_0003_iplf057a_madrid_foundation.py",
+        "apps/api/src/caseops_api/db/models.py::TrademarkInternationalRegistration",
+        "apps/api/src/caseops_api/schemas/ip_international.py",
+        "apps/api/src/caseops_api/services/ip_international.py",
+        "apps/api/src/caseops_api/api/routes/ip_international.py",
+        "apps/api/src/caseops_api/api/router.py",
+        "apps/api/src/caseops_api/services/ip_operations.py::_lock_ip_dockets_in_stable_order",
+        "apps/api/src/caseops_api/services/ip_lifecycle.py::append_ip_docket_event"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_international.py",
+        "apps/api/tests/test_20260825_ip_madrid_migration.py",
+        "apps/api/tests/test_postgres_validation.py::test_iplf057a_madrid_tenant_fks_and_designation_identity_on_postgres",
+        "apps/api/tests/test_migration_order.py",
+        "apps/api/tests/test_schema_fk_indexes.py",
+        "apps/api/tests/test_ip_data_governance_map.py",
+        "apps/api/tests/test_ip_data_class_registry.py",
+        "apps/api/tests/test_openapi_quality.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-057/local-057a-2026-08-25.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m5/IPLF-057/local-057a-2026-08-25.md",
+          "revision": "c846287fb50cacc4b50ba19763219c761d86a8dc",
+          "environment": "local SQLite API/migration tests, repository governance/OpenAPI gates, TypeScript and Playwright discovery; PostgreSQL test collected for hosted CI",
+          "fixtures": "outbound Indian basic mark, two independent designations, sourced WIPO event, cross-tenant actor, terminal lifecycle, empty/populated migration databases",
+          "assertions": "single-owner composition, tenant composite FKs, independent WIPO/national state, relationship/event reuse, lifecycle suppression, bounded lists, audit, uniqueness and restore-forward",
+          "result": "passed",
+          "recorded_at": "2026-08-25T12:00:00+05:30"
+        }
+      ],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Pass hosted API/PostgreSQL/security gates, merge, deploy and verify the exact candidate; continue IPLF-057B user workflows on the same canonical aggregate."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Additive trademark_international_registrations table with tenant-composite parents, partial unique identities, typed registration/designation checks, five-second PostgreSQL lock timeout, empty rollback and populated restore-forward refusal.",
+        "No second event, relationship, deadline, cost, document, task, source, provider-operation, access, lifecycle or audit store is introduced."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/evidence/m5/IPLF-057/local-057a-2026-08-25.md",
+          "disposition": "created",
+          "owner": "Program control plane",
+          "evidence": "Ownership, data contract, migration policy, tests and release boundary"
+        },
+        {
+          "artifact": "apps/web/app/guide/page.tsx and apps/web/app/law-firms/page.tsx",
+          "disposition": "reviewed-no-change",
+          "owner": "User guidance and public claims",
+          "evidence": "Foundation has no released user workflow or live WIPO activation to advertise; IPLF-057B owns those updates"
+        }
+      ],
+      "allocation_review": "2026-08-25 brutal duplicate-work review: one PRD-named type-specific aggregate is new; dockets, relationships, events, access, lifecycle, audit, deadlines, costs, documents, sources and provider controls remain canonical existing owners.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
@@ -13415,7 +13466,7 @@
         {
           "classification": "NEW",
           "component": "IPLF-057 canonical scope: Madrid international registration/designation and WIPO reconciliation.",
-          "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
+          "canonical_writer": "TrademarkInternationalRegistration owns type-specific IR/designation facts; existing ip_docket_records, ip_relationships, ip_docket_events and Section 11.2 shared services retain access, lifecycle, links, sourced events and operational state.",
           "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
           "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
         }
