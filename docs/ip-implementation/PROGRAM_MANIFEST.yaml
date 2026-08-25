@@ -14,16 +14,16 @@
     "verification_status": "not_run",
     "release_status": "blocked",
     "execution_policy": "codex_owned_single_ordered_queue; implement first and run the automated check and exact-release verification batch at the end",
-    "active_slice": "IPLF-055A",
+    "active_slice": "IPLF-056A",
     "checkpoint": {
-      "recorded_at": "2026-08-25T18:30:00+05:30",
-      "repository_revision": "8ed5351374e194044e24abe773501f52f75b8c3c",
-      "environment": "Canonical main is exact-production verified through IPLF-053; IPLF-054 is locally verified on codex/iplf054-indian-kanoon-20260825 and awaits PR/release gates.",
-      "completed_scope": "IPLF-052A/B and IPLF-053A/B are exact-production verified. IPLF-054A/B are implemented and locally verified with licensed-provider activation fail-closed. External contract/provider/legal/UAT acceptance is not claimed.",
+      "recorded_at": "2026-08-25T20:30:00+05:30",
+      "repository_revision": "b319f845df9f9e467c64d638022f3a5357b0e196",
+      "environment": "Canonical main and production are exact-release verified through IPLF-054. IPLF-055 is implemented and locally verified on codex/iplf055-client-portal-20260825 and awaits PR/release gates.",
+      "completed_scope": "IPLF-054A/B are exact-production verified. IPLF-055A/B extend the existing portal, report, document, notification, and instruction owners and are locally verified. External legal/provider/UAT acceptance is not claimed.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-055A",
-      "next_action": "Pass IPLF-054 PR, CI, merge, deployment, and exact-production gates, then extend the existing portal identity/grant/publication owners for IPLF-055 without adding a parallel client portal.",
-      "evidence_ref": "docs/ip-implementation/evidence/m5/IPLF-054/local-2026-08-25.md"
+      "next_slice": "IPLF-056A",
+      "next_action": "Pass IPLF-055 PR, CI, merge, deployment, and exact-production gates, then register the remaining registry/watch/source operation kinds in the existing provider-operations owners for IPLF-056.",
+      "evidence_ref": "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
     },
     "work_owner": {
       "owner": "Codex",
@@ -2054,9 +2054,10 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-054/local-2026-08-25.md"
+        "docs/ip-implementation/evidence/m5/IPLF-054/local-2026-08-25.md",
+        "docs/ip-implementation/evidence/m5/IPLF-054/release-2026-08-25.md"
       ]
     },
     {
@@ -2076,10 +2077,12 @@
         "IPLF-055A",
         "IPLF-055B"
       ],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
-      "evidence_refs": []
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
+      ]
     },
     {
       "id": "IPLF-056",
@@ -12795,7 +12798,8 @@
         "apps/api/tests/test_statute_enrichment.py"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-054/local-2026-08-25.md"
+        "docs/ip-implementation/evidence/m5/IPLF-054/local-2026-08-25.md",
+        "docs/ip-implementation/evidence/m5/IPLF-054/release-2026-08-25.md"
       ],
       "evidence_metadata": [
         {
@@ -12810,19 +12814,20 @@
       ],
       "blockers": [],
       "next_actions": [
-        "Pass independent PR review, CI, merge, additive production migration, exact-release verification, and dated default-off production acceptance."
+        "Repository implementation is exact-production verified. Keep licensed provider calls disabled until contract, credential, legal, and provider acceptance are separately approved."
       ],
       "data_impact": [
         "Extends canonical authority documents and frozen research-report lineage with licensed-source version, attribution, review, and invalidation metadata; no parallel corpus or report owner."
       ],
       "documentation_impact": [
         "docs/runbooks/indian-kanoon-licensed-adapter.md",
-        "docs/ip-implementation/evidence/m5/IPLF-054/local-2026-08-25.md"
+        "docs/ip-implementation/evidence/m5/IPLF-054/local-2026-08-25.md",
+        "docs/ip-implementation/evidence/m5/IPLF-054/release-2026-08-25.md"
       ],
       "allocation_review": "2026-08-25 integrated review: extends authority, research-report, provider-readiness, provider-cost, billing, and source-action owners; removes the uncontracted public scrape and adds no duplicate corpus, report, cost, or provider dashboard.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_review",
+      "release_status": "deployment_verified",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
@@ -12893,7 +12898,8 @@
         "tests/e2e/iplf-054b-indian-kanoon-2026-08-25-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-054/local-2026-08-25.md"
+        "docs/ip-implementation/evidence/m5/IPLF-054/local-2026-08-25.md",
+        "docs/ip-implementation/evidence/m5/IPLF-054/release-2026-08-25.md"
       ],
       "evidence_metadata": [
         {
@@ -12908,7 +12914,7 @@
       ],
       "blockers": [],
       "next_actions": [
-        "Keep paid provider calls disabled in production; verify the exact deployed default-off API/UI and record release evidence."
+        "Keep paid provider calls disabled until contract, credential, legal, and provider acceptance are separately approved."
       ],
       "data_impact": [
         "Uses canonical licensed-source rows and report lineage from IPLF-054A; browser state does not own credentials, catalog identifiers, costs, or legal-source truth."
@@ -12916,12 +12922,13 @@
       "documentation_impact": [
         "apps/web/app/guide/page.tsx",
         "apps/web/app/law-firms/page.tsx",
-        "docs/ip-implementation/evidence/m5/IPLF-054/local-2026-08-25.md"
+        "docs/ip-implementation/evidence/m5/IPLF-054/local-2026-08-25.md",
+        "docs/ip-implementation/evidence/m5/IPLF-054/release-2026-08-25.md"
       ],
       "allocation_review": "2026-08-25 integrated review: the user workflow reuses the research page and source proxy; provider readiness and costs remain server-owned and all external activation remains fail-closed.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_review",
+      "release_status": "deployment_verified",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
@@ -12952,22 +12959,49 @@
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260825_0002_ip_client_portal_publications.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/api/routes/portal.py",
+        "apps/api/src/caseops_api/api/routes/portal_ip.py",
+        "apps/api/src/caseops_api/services/portal_auth.py",
+        "apps/api/src/caseops_api/services/portal_ip.py",
+        "apps/api/src/caseops_api/services/notification_delivery.py"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_20260825_ip_client_portal_migration.py",
+        "apps/api/tests/test_portal_ip.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md",
+          "revision": "22acb0b159dc2d8e538fee0387217c5c4ad18871",
+          "environment": "local SQLite API, Vitest, and generated OpenAPI/type checks",
+          "fixtures": "explicit IP grants, approved report/document publications, durable delivery, stale target versions, revocation, and portal instructions",
+          "assertions": "canonical-owner reuse, additive migration, tenant/grant scoping, field exclusion, immutable hashes, delivery recheck, session invalidation, and pending instructions",
+          "result": "passed",
+          "recorded_at": "2026-08-25T20:30:00+05:30"
+        }
+      ],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Pass review, CI, migration deployment, and exact-release production verification with IPLF-055B."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Additive extension of matter_portal_grants plus immutable report_artifacts, portal_publications, and portal_publication_targets; versioned IpClientInstruction remains canonical."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "documentation_impact": [
+        "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md",
+        "apps/web/app/guide/page.tsx",
+        "apps/web/app/law-firms/page.tsx"
+      ],
+      "allocation_review": "2026-08-25 duplicate-work review confirms one portal identity/session/grant path, one notification delivery owner, one document store, and one client-instruction ledger.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
@@ -13010,27 +13044,58 @@
       "dependencies": [
         "IPLF-055A"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-27-EXC-01",
-        "planned:IPLF-UJ-27-EXC-02",
-        "planned:IPLF-UJ-27-EXC-03",
-        "planned:IPLF-UJ-27-NORMAL"
+      "implementation_refs": [
+        "apps/web/app/app/ip/client-portal/page.tsx",
+        "apps/web/app/app/ip/reports/page.tsx",
+        "apps/web/app/portal/page.tsx",
+        "apps/web/app/portal/ip/[id]/page.tsx",
+        "apps/web/lib/api/portal.ts",
+        "apps/web/components/app/Sidebar.tsx"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "test_refs": [
+        "IPLF-UJ-27-NORMAL:apps/api/tests/test_portal_ip.py::test_ip_portal_report_instruction_acknowledgement_and_revoke",
+        "IPLF-UJ-27-EXC-01:apps/api/tests/test_portal_ip.py::test_ip_portal_report_instruction_acknowledgement_and_revoke",
+        "IPLF-UJ-27-EXC-02:apps/api/tests/test_portal_ip.py::test_document_publication_allows_only_granted_approved_nonprivileged_version",
+        "IPLF-UJ-27-EXC-03:apps/api/tests/test_portal_ip.py::test_ip_portal_report_instruction_acknowledgement_and_revoke",
+        "IPLF-UJ-27-NORMAL:tests/e2e/iplf-055-client-portal-2026-08-25.spec.ts::IPLF-055 completes UJ-27 grant, report, instruction, acknowledgement, and revoke",
+        "IPLF-UJ-27-EXC-01:tests/e2e/iplf-055-client-portal-2026-08-25.spec.ts::IPLF-055 completes UJ-27 grant, report, instruction, acknowledgement, and revoke",
+        "IPLF-UJ-27-EXC-02:tests/e2e/iplf-055-client-portal-2026-08-25.spec.ts::IPLF-055 completes UJ-27 grant, report, instruction, acknowledgement, and revoke",
+        "IPLF-UJ-27-EXC-03:tests/e2e/iplf-055-client-portal-2026-08-25.spec.ts::IPLF-055 completes UJ-27 grant, report, instruction, acknowledgement, and revoke",
+        "apps/web/app/app/ip/client-portal/page.test.tsx",
+        "apps/web/app/app/ip/reports/page.test.tsx",
+        "apps/web/app/portal/page.test.tsx",
+        "apps/web/app/portal/ip/[id]/page.test.tsx"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md",
+          "revision": "22acb0b159dc2d8e538fee0387217c5c4ad18871",
+          "environment": "local API and responsive React component tests",
+          "fixtures": "client-visible identifiers/events/dates, approved reports/documents, current/stale publications, and pending client decisions",
+          "assertions": "UJ-27 normal and three exception paths, explicit grants, sensitive exclusions, delivery escalation, revocation, and no automatic legal-state mutation",
+          "result": "passed",
+          "recorded_at": "2026-08-25T20:30:00+05:30"
+        }
+      ],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Pass PR, CI, production build/deploy, and exact-release portal E2E before marking deployment verified."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Portal publications snapshot approved data and target versions; instructions append versions and require firm acknowledgement before any controlled renewal effect."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked"
+      "documentation_impact": [
+        "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md",
+        "apps/web/app/guide/page.tsx",
+        "apps/web/app/law-firms/page.tsx"
+      ],
+      "allocation_review": "2026-08-25 workflow review confirms client UI consumes only server-owned grants/publications and cannot invent tenant, grant, target-version, or legal-state identifiers.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review"
     },
     {
       "id": "IPLF-056A",
@@ -23168,18 +23233,21 @@
       "journey_ids": [
         "UJ-27"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-CLIENT-01",
-        "planned:IPLF-UJ-27-EXC-01",
-        "planned:IPLF-UJ-27-EXC-02",
-        "planned:IPLF-UJ-27-EXC-03",
-        "planned:IPLF-UJ-27-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/portal_auth.py",
+        "apps/api/src/caseops_api/services/portal_ip.py",
+        "apps/web/app/app/ip/client-portal/page.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_portal_ip.py",
+        "apps/web/app/app/ip/client-portal/page.test.tsx"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-055B"
@@ -23194,18 +23262,21 @@
       "journey_ids": [
         "UJ-27"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-CLIENT-02",
-        "planned:IPLF-UJ-27-EXC-01",
-        "planned:IPLF-UJ-27-EXC-02",
-        "planned:IPLF-UJ-27-EXC-03",
-        "planned:IPLF-UJ-27-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/portal_ip.py",
+        "apps/web/app/app/ip/client-portal/page.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_portal_ip.py::test_ip_portal_report_instruction_acknowledgement_and_revoke",
+        "apps/api/tests/test_portal_ip.py::test_document_publication_allows_only_granted_approved_nonprivileged_version",
+        "apps/web/app/app/ip/client-portal/page.test.tsx"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-055B"
@@ -23220,18 +23291,22 @@
       "journey_ids": [
         "UJ-27"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-CLIENT-03",
-        "planned:IPLF-UJ-27-EXC-01",
-        "planned:IPLF-UJ-27-EXC-02",
-        "planned:IPLF-UJ-27-EXC-03",
-        "planned:IPLF-UJ-27-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/portal_ip.py",
+        "apps/web/app/portal/page.tsx",
+        "apps/web/app/portal/ip/[id]/page.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_portal_ip.py",
+        "apps/web/app/portal/page.test.tsx",
+        "apps/web/app/portal/ip/[id]/page.test.tsx"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-055B"
@@ -23246,18 +23321,22 @@
       "journey_ids": [
         "UJ-27"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-CLIENT-04",
-        "planned:IPLF-UJ-27-EXC-01",
-        "planned:IPLF-UJ-27-EXC-02",
-        "planned:IPLF-UJ-27-EXC-03",
-        "planned:IPLF-UJ-27-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/portal_ip.py",
+        "apps/web/app/app/ip/client-portal/page.tsx",
+        "apps/web/app/portal/ip/[id]/page.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_portal_ip.py::test_ip_portal_report_instruction_acknowledgement_and_revoke",
+        "apps/web/app/app/ip/client-portal/page.test.tsx",
+        "apps/web/app/portal/ip/[id]/page.test.tsx"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-055B"
@@ -40618,12 +40697,20 @@
         "REPORT-03"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-27-EXC-01",
-        "planned:IPLF-UJ-27-EXC-02",
-        "planned:IPLF-UJ-27-EXC-03",
-        "planned:IPLF-UJ-27-NORMAL"
+        "IPLF-UJ-27-EXC-01:apps/api/tests/test_portal_ip.py::test_ip_portal_report_instruction_acknowledgement_and_revoke",
+        "IPLF-UJ-27-EXC-01:tests/e2e/iplf-055-client-portal-2026-08-25.spec.ts::IPLF-055 completes UJ-27 grant, report, instruction, acknowledgement, and revoke",
+        "IPLF-UJ-27-EXC-02:apps/api/tests/test_portal_ip.py::test_document_publication_allows_only_granted_approved_nonprivileged_version",
+        "IPLF-UJ-27-EXC-02:tests/e2e/iplf-055-client-portal-2026-08-25.spec.ts::IPLF-055 completes UJ-27 grant, report, instruction, acknowledgement, and revoke",
+        "IPLF-UJ-27-EXC-03:apps/api/tests/test_portal_ip.py::test_ip_portal_report_instruction_acknowledgement_and_revoke",
+        "IPLF-UJ-27-EXC-03:tests/e2e/iplf-055-client-portal-2026-08-25.spec.ts::IPLF-055 completes UJ-27 grant, report, instruction, acknowledgement, and revoke",
+        "IPLF-UJ-27-NORMAL:apps/api/tests/test_portal_ip.py::test_ip_portal_report_instruction_acknowledgement_and_revoke",
+        "IPLF-UJ-27-NORMAL:apps/web/app/app/ip/reports/page.test.tsx",
+        "IPLF-UJ-27-NORMAL:apps/web/app/portal/ip/[id]/page.test.tsx",
+        "IPLF-UJ-27-NORMAL:tests/e2e/iplf-055-client-portal-2026-08-25.spec.ts::IPLF-055 completes UJ-27 grant, report, instruction, acknowledgement, and revoke"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
+      ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
@@ -48147,9 +48234,14 @@
         "REPORT-03"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-27-NORMAL"
+        "IPLF-UJ-27-NORMAL:apps/api/tests/test_portal_ip.py::test_ip_portal_report_instruction_acknowledgement_and_revoke",
+        "IPLF-UJ-27-NORMAL:apps/web/app/app/ip/reports/page.test.tsx",
+        "IPLF-UJ-27-NORMAL:apps/web/app/portal/ip/[id]/page.test.tsx",
+        "IPLF-UJ-27-NORMAL:tests/e2e/iplf-055-client-portal-2026-08-25.spec.ts::IPLF-055 completes UJ-27 grant, report, instruction, acknowledgement, and revoke"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
+      ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
@@ -48184,9 +48276,12 @@
         "REPORT-03"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-27-EXC-01"
+        "IPLF-UJ-27-EXC-01:apps/api/tests/test_portal_ip.py::test_ip_portal_report_instruction_acknowledgement_and_revoke",
+        "IPLF-UJ-27-EXC-01:tests/e2e/iplf-055-client-portal-2026-08-25.spec.ts::IPLF-055 completes UJ-27 grant, report, instruction, acknowledgement, and revoke"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
+      ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
@@ -48221,9 +48316,12 @@
         "REPORT-03"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-27-EXC-02"
+        "IPLF-UJ-27-EXC-02:apps/api/tests/test_portal_ip.py::test_document_publication_allows_only_granted_approved_nonprivileged_version",
+        "IPLF-UJ-27-EXC-02:tests/e2e/iplf-055-client-portal-2026-08-25.spec.ts::IPLF-055 completes UJ-27 grant, report, instruction, acknowledgement, and revoke"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
+      ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
@@ -48258,9 +48356,12 @@
         "REPORT-03"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-27-EXC-03"
+        "IPLF-UJ-27-EXC-03:apps/api/tests/test_portal_ip.py::test_ip_portal_report_instruction_acknowledgement_and_revoke",
+        "IPLF-UJ-27-EXC-03:tests/e2e/iplf-055-client-portal-2026-08-25.spec.ts::IPLF-055 completes UJ-27 grant, report, instruction, acknowledgement, and revoke"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
+      ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",

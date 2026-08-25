@@ -6,11 +6,11 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `dcb3a895bc1b7cef7f284fb7b16a7d34db7bc105ba2bca9dce32a434579f53f0`
-- SQL tables: `284`
-- SQL columns: `4489`
-- ORM indexes: `1288`
-- Alembic/raw index declarations: `596`
+- Canonical map SHA-256: `daa019982ddcc2e170aeabb8fa6295de0fc20699f1bd0d0a1a47b74d1b9171be`
+- SQL tables: `287`
+- SQL columns: `4554`
+- ORM indexes: `1312`
+- Alembic/raw index declarations: `609`
 - Non-SQL data classes: `11`
 
 ## Boundary
@@ -127,7 +127,7 @@ This inventory does not claim approved retention bounds, legal-hold activation, 
 | `inbound_email_aliases` | `tenant_operational_record` | 13 | `registry_fail_closed` |
 | `inbound_email_events` | `tenant_operational_record` | 21 | `registry_fail_closed` |
 | `ip_assets` | `tenant_restricted_legal_content` | 9 | `registry_fail_closed` |
-| `ip_client_instructions` | `tenant_restricted_legal_content` | 25 | `registry_fail_closed` |
+| `ip_client_instructions` | `tenant_restricted_legal_content` | 31 | `registry_fail_closed` |
 | `ip_control_review_exception_decisions` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
 | `ip_control_review_sample_evidence` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
 | `ip_control_review_signatures` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
@@ -230,7 +230,7 @@ This inventory does not claim approved retention bounds, legal-hold activation, 
 | `matter_next_hearing_suggestions` | `tenant_restricted_legal_content` | 18 | `registry_fail_closed` |
 | `matter_notes` | `tenant_restricted_legal_content` | 5 | `registry_fail_closed` |
 | `matter_outside_counsel_assignments` | `tenant_restricted_legal_content` | 12 | `registry_fail_closed` |
-| `matter_portal_grants` | `tenant_restricted_legal_content` | 8 | `registry_fail_closed` |
+| `matter_portal_grants` | `tenant_restricted_legal_content` | 16 | `registry_fail_closed` |
 | `matter_proceeding_signals` | `tenant_restricted_legal_content` | 22 | `registry_fail_closed` |
 | `matter_statute_references` | `public_or_licensed_legal_reference` | 8 | `registry_fail_closed` |
 | `matter_strategy_entries` | `tenant_restricted_legal_content` | 13 | `registry_fail_closed` |
@@ -256,6 +256,8 @@ This inventory does not claim approved retention bounds, legal-hold activation, 
 | `platform_admin_memberships` | `platform_operational_reference` | 10 | `registry_fail_closed` |
 | `platform_operational_readiness_evidence` | `platform_operational_reference` | 14 | `registry_fail_closed` |
 | `portal_magic_links` | `security_identity_control` | 8 | `registry_fail_closed` |
+| `portal_publication_targets` | `tenant_operational_record` | 9 | `registry_fail_closed` |
+| `portal_publications` | `tenant_operational_record` | 20 | `registry_fail_closed` |
 | `portal_users` | `tenant_operational_record` | 10 | `registry_fail_closed` |
 | `predictive_outcome_aggregate_snapshots` | `tenant_operational_record` | 26 | `registry_fail_closed` |
 | `predictive_outcome_classifications` | `tenant_operational_record` | 22 | `registry_fail_closed` |
@@ -268,6 +270,7 @@ This inventory does not claim approved retention bounds, legal-hold activation, 
 | `recommendation_decisions` | `tenant_restricted_legal_content` | 7 | `registry_fail_closed` |
 | `recommendation_options` | `tenant_restricted_legal_content` | 8 | `registry_fail_closed` |
 | `recommendations` | `tenant_restricted_legal_content` | 19 | `registry_fail_closed` |
+| `report_artifacts` | `tenant_operational_record` | 22 | `registry_fail_closed` |
 | `source_link_reports` | `tenant_operational_record` | 14 | `registry_fail_closed` |
 | `statute_change_events` | `public_or_licensed_legal_reference` | 12 | `registry_fail_closed` |
 | `statute_sections` | `public_or_licensed_legal_reference` | 40 | `registry_fail_closed` |
