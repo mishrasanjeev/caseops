@@ -119,6 +119,10 @@ describe("SidebarBody resolved capability navigation", () => {
       "href",
       "/app/ip/watch",
     );
+    expect(screen.getByRole("link", { name: "Madrid portfolio" })).toHaveAttribute(
+      "href",
+      "/app/ip/madrid",
+    );
   });
 
   it("marks the centralized Notices destination active", () => {

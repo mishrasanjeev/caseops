@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import BinaryIO
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
@@ -350,6 +350,59 @@ def list_ip_documents(
             raise
         visible.append(_serialize_document(session, document=row))
     return IpDocumentListResponse(items=visible, total=len(visible))
+
+
+def list_linked_ip_documents(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+    event_ids: set[str],
+    deadline_ids: set[str],
+    limit: int = 100,
+) -> list[IpDocumentRecord]:
+    """Return a bounded set of documents linked to one accessible workflow aggregate."""
+    target_filters = [
+        (IpDocumentLink.target_type == "docket")
+        & (IpDocumentLink.target_id == docket_id)
+    ]
+    if event_ids:
+        target_filters.append(
+            (IpDocumentLink.target_type == "event")
+            & (IpDocumentLink.target_id.in_(event_ids))
+        )
+    if deadline_ids:
+        target_filters.append(
+            (IpDocumentLink.target_type == "deadline")
+            & (IpDocumentLink.target_id.in_(deadline_ids))
+        )
+    rows = list(
+        session.scalars(
+            select(IpDocument)
+            .join(
+                IpDocumentLink,
+                (IpDocumentLink.document_id == IpDocument.id)
+                & (IpDocumentLink.company_id == IpDocument.company_id),
+            )
+            .where(
+                IpDocument.company_id == context.company.id,
+                or_(*target_filters),
+            )
+            .distinct()
+            .order_by(IpDocument.updated_at.desc(), IpDocument.id)
+            .limit(limit)
+        ).all()
+    )
+    visible: list[IpDocumentRecord] = []
+    for row in rows:
+        try:
+            _assert_document_targets_accessible(session, context=context, document_id=row.id)
+        except HTTPException as exc:
+            if exc.status_code == 404:
+                continue
+            raise
+        visible.append(_serialize_document(session, document=row))
+    return visible
 
 
 def get_ip_document(

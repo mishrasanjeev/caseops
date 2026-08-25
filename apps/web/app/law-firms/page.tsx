@@ -10,6 +10,7 @@ import {
   FileSignature,
   FileText,
   Gavel,
+  Globe2,
   Landmark,
   Link2,
   Lock,
@@ -124,6 +125,11 @@ const platformMoves = [
     icon: Radar,
     title: "Trademark journal watch",
     body: "Configure word, phonetic, device, class, proprietor and jurisdiction watches with named recipients, frequency and cost controls. Review source-linked journal hits with advisory similarity evidence, preserve correction and re-advertisement lineage, and send a confirmed hit into opposition, enforcement, task, deadline or client-report work without re-entering the evidence. Live provider polling stays fail-closed until licensing and credentials are approved.",
+  },
+  {
+    icon: Globe2,
+    title: "Madrid international portfolio",
+    body: "Docket an Indian basic mark, international registration and each original or subsequent designation without collapsing their legal states. Track WIPO and national-office snapshots as source-linked candidates, reconcile them explicitly, and connect versioned transactions to the right deadline, document, fee and local agent. WIPO automation remains fail-closed; the shipped workspace is manual sourced evidence, not a claim of live provider sync.",
   },
   {
     icon: Scale,

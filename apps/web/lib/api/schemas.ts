@@ -2624,7 +2624,12 @@ export const providerAdapterLegalCoverageRecord = z.object({
 export const providerAdapterContractRecord = z.object({
   provider: z.string(),
   display_name: z.string(),
-  domain: z.enum(["court_tracking", "ip_office_registry", "legal_research"]),
+  domain: z.enum([
+    "court_tracking",
+    "ip_office_registry",
+    "international_trademark_registry",
+    "legal_research",
+  ]),
   adapter_status: z.enum([
     "implemented",
     "implemented_default_off",

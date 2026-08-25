@@ -19,6 +19,11 @@ const browserExecutablePath = browserExecutableCandidates.find((candidate) =>
   fs.existsSync(candidate),
 );
 
+const apiPythonOverride = process.env.CASEOPS_E2E_PYTHON?.trim();
+const apiServerCommand = apiPythonOverride
+  ? `"${apiPythonOverride}" -m uvicorn caseops_api.main:app --host 127.0.0.1 --port ${process.env.CASEOPS_E2E_API_PORT ?? "8000"} --app-dir src`
+  : "uv --directory apps/api run --no-sync python -m uvicorn caseops_api.main:app --host 127.0.0.1 --port 8000 --app-dir src";
+
 export default defineConfig({
   testDir: path.join("tests", "e2e"),
   // Live-tenant mutation canaries are permitted only through their dedicated
@@ -79,9 +84,8 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command:
-        "uv --directory apps/api run --no-sync python -m uvicorn caseops_api.main:app --host 127.0.0.1 --port 8000 --app-dir src",
-      cwd: repoRoot,
+      command: apiServerCommand,
+      cwd: apiPythonOverride ? path.join(repoRoot, "apps", "api") : repoRoot,
       env: {
         ...process.env,
         ...e2eEnv,

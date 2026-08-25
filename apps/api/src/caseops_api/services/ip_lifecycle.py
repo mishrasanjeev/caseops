@@ -502,6 +502,7 @@ def preview_ip_docket_event(
             or
             payload.event_kind
             not in {
+                "madrid_action",
                 "opposition_applicant_action",
                 "opposition_opponent_action",
                 "post_registration_action",
@@ -509,9 +510,14 @@ def preview_ip_docket_event(
             or (
                 row.payload_json.get("action_kind") == payload.payload.get("action_kind")
                 and (
-                    payload.event_kind != "post_registration_action"
+                    payload.event_kind not in {"post_registration_action", "madrid_action"}
                     or row.payload_json.get("action_identity")
                     == payload.payload.get("action_identity")
+                    or (
+                        payload.event_kind == "madrid_action"
+                        and row.payload_json.get("source_reference")
+                        == payload.payload.get("source_reference")
+                    )
                 )
             )
         )
@@ -604,6 +610,7 @@ def _append_locked_event(
             or
             payload.event_kind
             not in {
+                "madrid_action",
                 "opposition_applicant_action",
                 "opposition_opponent_action",
                 "post_registration_action",
@@ -611,9 +618,14 @@ def _append_locked_event(
             or (
                 row.payload_json.get("action_kind") == payload.payload.get("action_kind")
                 and (
-                    payload.event_kind != "post_registration_action"
+                    payload.event_kind not in {"post_registration_action", "madrid_action"}
                     or row.payload_json.get("action_identity")
                     == payload.payload.get("action_identity")
+                    or (
+                        payload.event_kind == "madrid_action"
+                        and row.payload_json.get("source_reference")
+                        == payload.payload.get("source_reference")
+                    )
                 )
             )
         )

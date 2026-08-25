@@ -9563,6 +9563,88 @@ export type IpDocketEvent = {
   created_at: string;
 };
 
+export type MadridRecord = {
+  id: string;
+  company_id: string;
+  docket_id: string;
+  record_kind: "international_registration" | "international_designation";
+  direction: "outbound" | "inbound";
+  parent_registration_id: string | null;
+  basic_application_id: string | null;
+  international_application_number: string | null;
+  ir_number: string | null;
+  wipo_reference: string;
+  holder_name: string;
+  mark_name: string;
+  office_of_origin: string | null;
+  designated_member_code: string | null;
+  designated_office: string | null;
+  jurisdiction: string | null;
+  designation_kind: "original" | "subsequent" | null;
+  classes_json: number[];
+  goods_services_json: Record<string, string>;
+  priority_claims_json: Array<Record<string, unknown>>;
+  form_kind: string | null;
+  wipo_status: string | null;
+  national_status: string | null;
+  local_agent_name: string | null;
+  source_url: string;
+  source_reference: string;
+  source_retrieved_at: string;
+  application_date: string | null;
+  international_registration_date: string | null;
+  designation_effective_date: string | null;
+  notification_date: string | null;
+  publication_date: string | null;
+  statement_date: string | null;
+  dependency_end_date: string | null;
+  renewal_due_date: string | null;
+  version: number;
+  created_by_membership_id: string;
+  updated_by_membership_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MadridWorkspace = {
+  record: MadridRecord;
+  docket: IpDocket;
+  parent: MadridRecord | null;
+  designations: MadridRecord[];
+  events: IpDocketEvent[];
+  deadlines: IpLegalDeadline[];
+  documents: IpDocument[];
+  costs: IpDocket["cost_items"];
+  unresolved_source_candidates: IpDocketEvent[];
+  data_quality_gaps: string[];
+  next_required_actions: string[];
+  provider_mode: "manual_sourced_only" | "contracted_sync";
+  provider_activation_blockers: string[];
+};
+
+export type MadridActionKind =
+  | "form_prepared"
+  | "fee_recorded"
+  | "office_of_origin_certified"
+  | "wipo_irregularity"
+  | "international_registration_recorded"
+  | "wipo_notification_recorded"
+  | "national_examination_recorded"
+  | "provisional_refusal_recorded"
+  | "response_filed"
+  | "publication_recorded"
+  | "opposition_recorded"
+  | "grant_statement_recorded"
+  | "refusal_statement_recorded"
+  | "dependency_impact_review"
+  | "central_attack_impact_review"
+  | "source_snapshot"
+  | "source_reconciliation"
+  | "local_agent_instruction"
+  | "subsequent_designation_recorded"
+  | "change_recorded"
+  | "renewal_transaction";
+
 export type IpDocketEventInput = {
   lifecycleVersion: number;
   applicationId?: string | null;
@@ -10614,6 +10696,171 @@ export async function fetchIpDockets(): Promise<{ dockets: IpDocket[]; count: nu
 
 export async function fetchIpDocket(docketId: string): Promise<IpDocket> {
   return apiRequest(`/api/ip/dockets/${encodeURIComponent(docketId)}`);
+}
+
+export async function fetchMadridRecords(input?: {
+  recordKind?: MadridRecord["record_kind"];
+  parentRegistrationId?: string;
+}): Promise<{ items: MadridRecord[]; total: number; limit: number; offset: number }> {
+  const params = new URLSearchParams({ limit: "100", offset: "0" });
+  if (input?.recordKind) params.set("record_kind", input.recordKind);
+  if (input?.parentRegistrationId) {
+    params.set("parent_registration_id", input.parentRegistrationId);
+  }
+  return apiRequest(`/api/ip/international-registrations?${params.toString()}`);
+}
+
+export async function createMadridRecord(input: {
+  recordKind: MadridRecord["record_kind"];
+  direction: MadridRecord["direction"];
+  parentRegistrationId?: string | null;
+  basicApplicationId?: string | null;
+  docketTitle: string;
+  restricted?: boolean;
+  internationalApplicationNumber?: string | null;
+  irNumber?: string | null;
+  wipoReference: string;
+  holderName: string;
+  markName: string;
+  officeOfOrigin?: string | null;
+  designatedMemberCode?: string | null;
+  designatedOffice?: string | null;
+  jurisdiction?: string | null;
+  designationKind?: "original" | "subsequent" | null;
+  classes: number[];
+  goodsServices: Record<string, string>;
+  formKind?: string | null;
+  wipoStatus?: string | null;
+  nationalStatus?: string | null;
+  localAgentName?: string | null;
+  sourceUrl: string;
+  sourceReference: string;
+  sourceRetrievedAt: string;
+  applicationDate?: string | null;
+  internationalRegistrationDate?: string | null;
+  designationEffectiveDate?: string | null;
+  notificationDate?: string | null;
+  publicationDate?: string | null;
+  dependencyEndDate?: string | null;
+  renewalDueDate?: string | null;
+}): Promise<MadridRecord> {
+  return apiRequest("/api/ip/international-registrations", {
+    method: "POST",
+    body: {
+      docket_title: input.docketTitle,
+      restricted: input.restricted ?? false,
+      record_kind: input.recordKind,
+      direction: input.direction,
+      parent_registration_id: input.parentRegistrationId ?? null,
+      basic_application_id: input.basicApplicationId ?? null,
+      international_application_number: input.internationalApplicationNumber ?? null,
+      ir_number: input.irNumber ?? null,
+      wipo_reference: input.wipoReference,
+      holder_name: input.holderName,
+      mark_name: input.markName,
+      office_of_origin: input.officeOfOrigin ?? null,
+      designated_member_code: input.designatedMemberCode ?? null,
+      designated_office: input.designatedOffice ?? null,
+      jurisdiction: input.jurisdiction ?? null,
+      designation_kind: input.designationKind ?? null,
+      classes: input.classes,
+      goods_services: input.goodsServices,
+      priority_claims: [],
+      form_kind: input.formKind ?? null,
+      wipo_status: input.wipoStatus ?? null,
+      national_status: input.nationalStatus ?? null,
+      local_agent_name: input.localAgentName ?? null,
+      source_url: input.sourceUrl,
+      source_reference: input.sourceReference,
+      source_retrieved_at: input.sourceRetrievedAt,
+      application_date: input.applicationDate ?? null,
+      international_registration_date: input.internationalRegistrationDate ?? null,
+      designation_effective_date: input.designationEffectiveDate ?? null,
+      notification_date: input.notificationDate ?? null,
+      publication_date: input.publicationDate ?? null,
+      statement_date: null,
+      dependency_end_date: input.dependencyEndDate ?? null,
+      renewal_due_date: input.renewalDueDate ?? null,
+    },
+  });
+}
+
+export async function fetchMadridWorkspace(recordId: string): Promise<MadridWorkspace> {
+  return apiRequest(
+    `/api/ip/international-registrations/${encodeURIComponent(recordId)}/workspace`,
+  );
+}
+
+export async function recordMadridAction(input: {
+  recordId: string;
+  expectedVersion: number;
+  expectedLifecycleVersion: number;
+  actionKind: MadridActionKind;
+  authority: "wipo" | "office_of_origin" | "national_office" | "local_agent" | "client" | "internal";
+  effectiveAt: string;
+  responsibleMembershipId: string;
+  reason: string;
+  sourceUrl?: string | null;
+  sourceReference: string;
+  sourceRetrievedAt: string;
+  evidenceRefs?: string[];
+  documentRefs?: string[];
+  deadlineRefs?: string[];
+  costItemRefs?: string[];
+  wipoStatus?: string | null;
+  nationalStatus?: string | null;
+  localAgentName?: string | null;
+  irNumber?: string | null;
+  internationalRegistrationDate?: string | null;
+  notificationDate?: string | null;
+  publicationDate?: string | null;
+  statementDate?: string | null;
+  renewalDueDate?: string | null;
+  reconcilesEventId?: string | null;
+  reconciliationDecision?: "same_fact" | "keep_separate" | "reject_candidate" | null;
+  acknowledgedExceptionCodes?: string[];
+  details?: Record<string, unknown>;
+}): Promise<{
+  record: MadridRecord;
+  event: IpDocketEvent;
+  status_applied: boolean;
+  impact_review_only: boolean;
+}> {
+  return apiRequest(
+    `/api/ip/international-registrations/${encodeURIComponent(input.recordId)}/actions`,
+    {
+      method: "POST",
+      body: {
+        expected_version: input.expectedVersion,
+        expected_lifecycle_version: input.expectedLifecycleVersion,
+        action_kind: input.actionKind,
+        authority: input.authority,
+        effective_at: input.effectiveAt,
+        responsible_membership_id: input.responsibleMembershipId,
+        reason: input.reason,
+        source_url: input.sourceUrl ?? null,
+        source_reference: input.sourceReference,
+        source_retrieved_at: input.sourceRetrievedAt,
+        evidence_refs: input.evidenceRefs ?? [],
+        document_refs: input.documentRefs ?? [],
+        deadline_refs: input.deadlineRefs ?? [],
+        cost_item_refs: input.costItemRefs ?? [],
+        wipo_status: input.wipoStatus ?? null,
+        national_status: input.nationalStatus ?? null,
+        local_agent_name: input.localAgentName ?? null,
+        ir_number: input.irNumber ?? null,
+        international_registration_date: input.internationalRegistrationDate ?? null,
+        notification_date: input.notificationDate ?? null,
+        publication_date: input.publicationDate ?? null,
+        statement_date: input.statementDate ?? null,
+        renewal_due_date: input.renewalDueDate ?? null,
+        reconciles_event_id: input.reconcilesEventId ?? null,
+        reconciliation_decision: input.reconciliationDecision ?? null,
+        acknowledged_exception_codes: input.acknowledgedExceptionCodes ?? [],
+        details: input.details ?? {},
+      },
+    },
+  );
 }
 
 export async function fetchIpWatchWorkspace(

@@ -31,6 +31,7 @@ ProviderReadinessState = Literal[
 ProviderAdapterDomain = Literal[
     "court_tracking",
     "ip_office_registry",
+    "international_trademark_registry",
     "legal_research",
 ]
 ProviderAdapterStatus = Literal[
