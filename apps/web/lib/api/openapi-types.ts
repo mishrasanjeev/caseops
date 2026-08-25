@@ -6357,6 +6357,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/foreign-associate-instructions/{instruction_id}/reminders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Foreign Associate Instruction Reminders */
+        post: operations["foreign_associate_instruction_reminders_api_ip_foreign_associate_instructions__instruction_id__reminders_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/foreign-associate-instructions/{instruction_id}/transactions": {
         parameters: {
             query?: never;
@@ -23898,6 +23915,54 @@ export interface components {
             /** Total */
             total: number;
         };
+        /** IpForeignAssociateReminderRecord */
+        IpForeignAssociateReminderRecord: {
+            /** Channel */
+            channel: string;
+            /** Critical */
+            critical: boolean;
+            /** Delivered At */
+            delivered_at: string | null;
+            /** Event Type */
+            event_type: string;
+            /** Id */
+            id: string;
+            /** Recipient Membership Id */
+            recipient_membership_id: string | null;
+            /** Scheduled For */
+            scheduled_for: string | null;
+            /** Status */
+            status: string;
+        };
+        /** IpForeignAssociateReminderRequest */
+        IpForeignAssociateReminderRequest: {
+            /** Channels */
+            channels?: ("in_app" | "email")[];
+            /**
+             * Escalation After Hours
+             * @default 24
+             */
+            escalation_after_hours: number;
+            /** Escalation Membership Id */
+            escalation_membership_id?: string | null;
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version: number;
+            /** Expected Version */
+            expected_version: number;
+            /** Reminder Offsets Hours */
+            reminder_offsets_hours?: number[];
+        };
+        /** IpForeignAssociateReminderScheduleResponse */
+        IpForeignAssociateReminderScheduleResponse: {
+            /** Created Count */
+            created_count: number;
+            /** Existing Count */
+            existing_count: number;
+            /** Instruction Id */
+            instruction_id: string;
+            /** Reminders */
+            reminders: components["schemas"]["IpForeignAssociateReminderRecord"][];
+        };
         /** IpForeignAssociateResponse */
         IpForeignAssociateResponse: {
             /** Acknowledged At */
@@ -24094,6 +24159,8 @@ export interface components {
             instruction: components["schemas"]["IpForeignAssociateResponse"];
             /** Invoice Status */
             invoice_status: string | null;
+            /** Reminders */
+            reminders?: components["schemas"]["IpForeignAssociateReminderRecord"][];
             /** Response Overdue */
             response_overdue: boolean;
             /** Transactions */
@@ -53712,6 +53779,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpForeignAssociateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    foreign_associate_instruction_reminders_api_ip_foreign_associate_instructions__instruction_id__reminders_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instruction_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpForeignAssociateReminderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpForeignAssociateReminderScheduleResponse"];
                 };
             };
             /** @description Validation Error */

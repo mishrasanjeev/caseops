@@ -255,6 +255,47 @@ class IpForeignAssociateTransactionResponse(BaseModel):
     successor: IpForeignAssociateResponse | None = None
 
 
+class IpForeignAssociateReminderRequest(BaseModel):
+    expected_version: int = Field(ge=1)
+    expected_lifecycle_version: int = Field(ge=0)
+    reminder_offsets_hours: list[int] = Field(
+        default_factory=lambda: [72, 24, 0], min_length=1, max_length=10
+    )
+    channels: list[Literal["in_app", "email"]] = Field(
+        default_factory=lambda: ["in_app"], min_length=1, max_length=2
+    )
+    escalation_after_hours: int = Field(default=24, ge=1, le=168)
+    escalation_membership_id: str | None = None
+
+    @model_validator(mode="after")
+    def validate_reminder_policy(self) -> IpForeignAssociateReminderRequest:
+        if len(self.reminder_offsets_hours) != len(set(self.reminder_offsets_hours)):
+            raise ValueError("Reminder offsets must be unique.")
+        if any(value < 0 or value > 720 for value in self.reminder_offsets_hours):
+            raise ValueError("Reminder offsets must be between 0 and 720 hours.")
+        if len(self.channels) != len(set(self.channels)):
+            raise ValueError("Reminder channels must be unique.")
+        return self
+
+
+class IpForeignAssociateReminderRecord(BaseModel):
+    id: str
+    recipient_membership_id: str | None
+    event_type: str
+    channel: str
+    status: str
+    scheduled_for: datetime | None
+    delivered_at: datetime | None
+    critical: bool
+
+
+class IpForeignAssociateReminderScheduleResponse(BaseModel):
+    instruction_id: str
+    created_count: int
+    existing_count: int
+    reminders: list[IpForeignAssociateReminderRecord]
+
+
 class IpForeignAssociateWorkspaceResponse(BaseModel):
     instruction: IpForeignAssociateResponse
     transactions: list[IpDocketEventResponse]
@@ -265,3 +306,4 @@ class IpForeignAssociateWorkspaceResponse(BaseModel):
     filing_evidence_status: Literal["not_reported", "reported_unverified", "verified"]
     invoice_status: str | None
     response_overdue: bool
+    reminders: list[IpForeignAssociateReminderRecord] = Field(default_factory=list)

@@ -10808,6 +10808,308 @@ export async function fetchIpDocket(docketId: string): Promise<IpDocket> {
   return apiRequest(`/api/ip/dockets/${encodeURIComponent(docketId)}`);
 }
 
+export type IpForeignAssociateStatus =
+  | "draft"
+  | "approved"
+  | "dispatched"
+  | "acknowledged"
+  | "in_progress"
+  | "filing_reported"
+  | "evidence_verified"
+  | "invoiced"
+  | "completed"
+  | "refused"
+  | "superseded"
+  | "cancelled";
+
+export type IpForeignAssociateTransactionKind =
+  | "approve"
+  | "dispatch"
+  | "acknowledge"
+  | "record_query"
+  | "approve_substantive_response"
+  | "approve_fee_change"
+  | "report_filing"
+  | "verify_filing_evidence"
+  | "link_invoice"
+  | "complete"
+  | "refuse"
+  | "cancel"
+  | "reassign";
+
+export type IpForeignAssociateInstruction = {
+  id: string;
+  company_id: string;
+  docket_id: string;
+  instruction_thread_key: string;
+  instruction_version: number;
+  row_version: number;
+  supersedes_instruction_id: string | null;
+  source_client_instruction_id: string | null;
+  client_authority_reference: string | null;
+  target_jurisdiction: string;
+  outside_counsel_id: string;
+  assignment_id: string | null;
+  responsible_membership_id: string;
+  scope_json: {
+    source_kind?: "application" | "search";
+    source_reference?: string;
+    filing_kind?: string;
+    scoped_fields?: Record<string, unknown>;
+  };
+  selected_document_refs_json: string[];
+  privileged_document_refs_json: string[];
+  estimate_cost_item_id: string;
+  estimate_terms_json: Record<string, unknown>;
+  budget_policy_reference: string;
+  approved_by_membership_id: string | null;
+  approved_at: string | null;
+  privileged_approved_by_membership_id: string | null;
+  privileged_approved_at: string | null;
+  dispatch_communication_id: string | null;
+  external_dispatch_reference: string | null;
+  external_delivery_reference: string | null;
+  external_delivered_at: string | null;
+  dispatched_at: string | null;
+  acknowledged_at: string | null;
+  acknowledgement_reference: string | null;
+  response_due_at: string | null;
+  filing_identifier: string | null;
+  filing_reported_at: string | null;
+  filing_evidence_refs_json: string[];
+  filing_verified_at: string | null;
+  actual_cost_item_id: string | null;
+  spend_record_id: string | null;
+  status: IpForeignAssociateStatus;
+  created_by_membership_id: string;
+  updated_by_membership_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type IpForeignAssociateReminder = {
+  id: string;
+  recipient_membership_id: string | null;
+  event_type: string;
+  channel: string;
+  status: string;
+  scheduled_for: string | null;
+  delivered_at: string | null;
+  critical: boolean;
+};
+
+export type IpForeignAssociateWorkspace = {
+  instruction: IpForeignAssociateInstruction;
+  transactions: IpDocketEvent[];
+  associate_name: string;
+  delivery_status: string;
+  delivered_at: string | null;
+  acknowledgement_status: "outstanding" | "received";
+  filing_evidence_status: "not_reported" | "reported_unverified" | "verified";
+  invoice_status: string | null;
+  response_overdue: boolean;
+  reminders: IpForeignAssociateReminder[];
+};
+
+export type IpPortalClientInstruction = {
+  id: string;
+  docket_id: string;
+  docket_title: string;
+  publication_id: string;
+  instruction_version: number;
+  row_version: number;
+  instruction_kind: string;
+  decision: string;
+  status: string;
+  note: string;
+  submitted_by: string;
+  received_at: string;
+  acknowledged_at: string | null;
+  acknowledgement_reason: string | null;
+  resulting_event_id: string | null;
+  updated_at: string;
+};
+
+export async function fetchIpForeignAssociateInstructions(input?: {
+  docketId?: string | null;
+  status?: IpForeignAssociateStatus | null;
+  outstandingResponse?: boolean | null;
+  missingFilingEvidence?: boolean | null;
+}): Promise<{
+  items: IpForeignAssociateInstruction[];
+  total: number;
+  limit: number;
+  offset: number;
+}> {
+  const query = new URLSearchParams({ limit: "100", offset: "0" });
+  if (input?.docketId) query.set("docket_id", input.docketId);
+  if (input?.status) query.set("status", input.status);
+  if (input?.outstandingResponse !== undefined && input.outstandingResponse !== null) {
+    query.set("outstanding_response", String(input.outstandingResponse));
+  }
+  if (input?.missingFilingEvidence !== undefined && input.missingFilingEvidence !== null) {
+    query.set("missing_filing_evidence", String(input.missingFilingEvidence));
+  }
+  return apiRequest(`/api/ip/foreign-associate-instructions?${query.toString()}`);
+}
+
+export async function fetchIpForeignAssociateWorkspace(
+  instructionId: string,
+): Promise<IpForeignAssociateWorkspace> {
+  return apiRequest(
+    `/api/ip/foreign-associate-instructions/${encodeURIComponent(instructionId)}/workspace`,
+  );
+}
+
+export async function fetchIpPortalClientInstructions(): Promise<{
+  instructions: IpPortalClientInstruction[];
+}> {
+  return apiRequest("/api/ip/portal/client-instructions");
+}
+
+export async function createIpForeignAssociateInstruction(input: {
+  docketId: string;
+  expectedLifecycleVersion: number;
+  instructionThreadKey: string;
+  sourceClientInstructionId?: string | null;
+  clientAuthorityReference?: string | null;
+  targetJurisdiction: string;
+  outsideCounselId: string;
+  assignmentId?: string | null;
+  responsibleMembershipId: string;
+  sourceKind: "application" | "search";
+  sourceReference: string;
+  filingKind: string;
+  scopedFields: Record<string, unknown>;
+  selectedDocumentRefs: string[];
+  includePrivilegedDocuments: boolean;
+  estimateCostItemId: string;
+  estimateTerms: Record<string, unknown>;
+  budgetPolicyReference: string;
+  responseDueAt?: string | null;
+  reason: string;
+}): Promise<IpForeignAssociateInstruction> {
+  return apiRequest("/api/ip/foreign-associate-instructions", {
+    method: "POST",
+    body: {
+      docket_id: input.docketId,
+      expected_lifecycle_version: input.expectedLifecycleVersion,
+      instruction_thread_key: input.instructionThreadKey,
+      source_client_instruction_id: input.sourceClientInstructionId ?? null,
+      client_authority_reference: input.clientAuthorityReference ?? null,
+      target_jurisdiction: input.targetJurisdiction,
+      outside_counsel_id: input.outsideCounselId,
+      assignment_id: input.assignmentId ?? null,
+      responsible_membership_id: input.responsibleMembershipId,
+      scope: {
+        source_kind: input.sourceKind,
+        source_reference: input.sourceReference,
+        filing_kind: input.filingKind,
+        scoped_fields: input.scopedFields,
+      },
+      selected_document_refs: input.selectedDocumentRefs,
+      include_privileged_documents: input.includePrivilegedDocuments,
+      estimate_cost_item_id: input.estimateCostItemId,
+      estimate_terms: input.estimateTerms,
+      budget_policy_reference: input.budgetPolicyReference,
+      response_due_at: input.responseDueAt ?? null,
+      reason: input.reason,
+    },
+  });
+}
+
+export async function recordIpForeignAssociateTransaction(input: {
+  instructionId: string;
+  expectedVersion: number;
+  expectedLifecycleVersion: number;
+  transactionKind: IpForeignAssociateTransactionKind;
+  effectiveAt: string;
+  responsibleMembershipId: string;
+  reason: string;
+  evidenceRefs?: string[];
+  documentRefs?: string[];
+  deadlineRefs?: string[];
+  dispatchCommunicationId?: string | null;
+  externalDispatchReference?: string | null;
+  externalDeliveryReference?: string | null;
+  externalDeliveredAt?: string | null;
+  acknowledgementReference?: string | null;
+  replacementEstimateCostItemId?: string | null;
+  replacementEstimateTerms?: Record<string, unknown> | null;
+  filingIdentifier?: string | null;
+  actualCostItemId?: string | null;
+  spendRecordId?: string | null;
+  replacementOutsideCounselId?: string | null;
+  replacementAssignmentId?: string | null;
+  replacementResponseDueAt?: string | null;
+  details?: Record<string, unknown>;
+}): Promise<{
+  instruction: IpForeignAssociateInstruction;
+  event: IpDocketEvent;
+  successor: IpForeignAssociateInstruction | null;
+}> {
+  return apiRequest(
+    `/api/ip/foreign-associate-instructions/${encodeURIComponent(input.instructionId)}/transactions`,
+    {
+      method: "POST",
+      body: {
+        expected_version: input.expectedVersion,
+        expected_lifecycle_version: input.expectedLifecycleVersion,
+        transaction_kind: input.transactionKind,
+        effective_at: input.effectiveAt,
+        responsible_membership_id: input.responsibleMembershipId,
+        reason: input.reason,
+        evidence_refs: input.evidenceRefs ?? [],
+        document_refs: input.documentRefs ?? [],
+        deadline_refs: input.deadlineRefs ?? [],
+        dispatch_communication_id: input.dispatchCommunicationId ?? null,
+        external_dispatch_reference: input.externalDispatchReference ?? null,
+        external_delivery_reference: input.externalDeliveryReference ?? null,
+        external_delivered_at: input.externalDeliveredAt ?? null,
+        acknowledgement_reference: input.acknowledgementReference ?? null,
+        replacement_estimate_cost_item_id: input.replacementEstimateCostItemId ?? null,
+        replacement_estimate_terms: input.replacementEstimateTerms ?? null,
+        filing_identifier: input.filingIdentifier ?? null,
+        actual_cost_item_id: input.actualCostItemId ?? null,
+        spend_record_id: input.spendRecordId ?? null,
+        replacement_outside_counsel_id: input.replacementOutsideCounselId ?? null,
+        replacement_assignment_id: input.replacementAssignmentId ?? null,
+        replacement_response_due_at: input.replacementResponseDueAt ?? null,
+        details: input.details ?? {},
+      },
+    },
+  );
+}
+
+export async function scheduleIpForeignAssociateReminders(input: {
+  instruction: IpForeignAssociateInstruction;
+  expectedLifecycleVersion: number;
+  reminderOffsetsHours: number[];
+  channels: Array<"in_app" | "email">;
+  escalationAfterHours: number;
+  escalationMembershipId?: string | null;
+}): Promise<{
+  instruction_id: string;
+  created_count: number;
+  existing_count: number;
+  reminders: IpForeignAssociateReminder[];
+}> {
+  return apiRequest(
+    `/api/ip/foreign-associate-instructions/${encodeURIComponent(input.instruction.id)}/reminders`,
+    {
+      method: "POST",
+      body: {
+        expected_version: input.instruction.row_version,
+        expected_lifecycle_version: input.expectedLifecycleVersion,
+        reminder_offsets_hours: input.reminderOffsetsHours,
+        channels: input.channels,
+        escalation_after_hours: input.escalationAfterHours,
+        escalation_membership_id: input.escalationMembershipId ?? null,
+      },
+    },
+  );
+}
+
 export async function fetchIpRecordals(input?: {
   docketId?: string | null;
   recordalType?: IpRecordalType | null;

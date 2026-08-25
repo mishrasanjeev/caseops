@@ -138,6 +138,11 @@ const platformMoves = [
     body: "Prepare assignment, transmission, registered-user, licence, name/address, association, division, limitation, disclaimer, certified-copy and well-known-mark recordals from the affected right, parties, dates, scope and canonical instruments. Preserve review, filing, defect, correction and Registry acceptance as separate transactions, then compare Registry-recorded and effective or pending title in a source-qualified dated report. Renewals and cancellation proceedings retain their own canonical workflows.",
   },
   {
+    icon: Globe2,
+    title: "Foreign-associate filing control",
+    body: "Coordinate jurisdiction-specific instructions through approved associates and Matter assignments with explicit client authority, selected docket documents, estimate, currency, tax and budget evidence. Keep dispatch, delivery and independent acknowledgement separate; escalate unanswered work; preserve queries, lawyer-approved responses, fee changes and refusal reassignment; and close only after independently verified filing evidence, paid associate spend and matched client billing.",
+  },
+  {
     icon: Scale,
     title: "Post-registration trademark proceedings",
     body: "Docket rectification, cancellation and non-use removal separately from opposition. Record challenged classes, grounds, forum, form, fee, service and counsel-confirmed rule mappings; link parallel proceedings, enforce sourced stays, and review type-matched disposition candidates without automatically changing the registration.",

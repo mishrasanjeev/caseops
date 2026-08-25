@@ -113,6 +113,13 @@ const NAV: NavItem[] = [
     requiresCapability: "ip:read",
   },
   {
+    href: "/app/ip/foreign-associates",
+    label: "Foreign associates",
+    icon: Contact,
+    section: "ip",
+    requiresCapability: "ip:read",
+  },
+  {
     href: "/app/ip/registry",
     label: "Registry reconciliation",
     icon: Database,

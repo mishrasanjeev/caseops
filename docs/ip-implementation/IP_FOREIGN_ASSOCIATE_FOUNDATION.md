@@ -1,10 +1,11 @@
-# IP foreign-associate instruction foundation
+# IP foreign-associate instruction workflow
 
-**Slice:** IPLF-059A
+**Slices:** IPLF-059A and IPLF-059B
 
-**Journey boundary:** This slice supplies the canonical persistence and API
-contract used by UJ-37. IPLF-059B owns the operator page, reminders,
-notifications, guide and public claims, and the complete browser journey.
+**Journey boundary:** IPLF-059A supplies the canonical persistence and API
+contract used by UJ-37. IPLF-059B extends that owner with the operator page and
+shared-notification reminder projection, and proves the complete browser
+journey. Neither slice replaces a linked platform owner.
 
 ## Ownership contract
 
@@ -59,6 +60,7 @@ instruction reads, so controlled reopen cannot resurrect actionable work.
 - `GET /api/ip/foreign-associate-instructions/{instruction_id}`
 - `GET /api/ip/foreign-associate-instructions/{instruction_id}/workspace`
 - `POST /api/ip/foreign-associate-instructions/{instruction_id}/transactions`
+- `POST /api/ip/foreign-associate-instructions/{instruction_id}/reminders`
 
 The list supports explicit outstanding-response and missing-filing-evidence
 filters. All reads and commands resolve the authenticated company and existing
@@ -71,12 +73,24 @@ tenant-correlated event link with a five-second PostgreSQL lock timeout. Empty
 rollback is supported. Once instruction or linked event data exists, downgrade
 fails closed and the release must restore forward.
 
-## Deferred completion surface
+## Operator and reminder surface
 
-IPLF-059B must expose the aggregate through the complete UJ-37 operator journey,
-including intake/search entry, document selection, approvals, dispatch,
-acknowledgement and query handling, lawyer-reviewed substantive responses,
-filing evidence, invoice/payment reconciliation, outstanding-response and
-missing-evidence queues, reminders/escalations, source opening, responsive UI,
-guide and truthful law-firm landing-page coverage. IPLF-059A does not claim
-those journey paths complete.
+`/app/ip/foreign-associates` exposes intake/search entry, explicit document and
+privilege selection, authority, approved associate/assignment/budget, estimate
+and tax terms, approvals, dispatch, acknowledgement, queries, lawyer-reviewed
+responses, fee changes, filing report and independent verification, invoice and
+payment reconciliation, completion, refusal and reassignment. Separate queues
+identify outstanding acknowledgements and filing reports missing independent
+evidence. Selected documents and URL evidence open their canonical sources.
+
+Reminder requests project into `NotificationDeliveryIntent`; they do not add a
+second notification scheduler. Policies are version-checked, bounded to ten
+unique offsets from 0 to 720 hours and the existing in-app/email channels, and
+idempotent on replay. A critical overdue escalation is addressed to the named
+or configured responsible membership. Acknowledgement, refusal, cancellation
+or reassignment cancels still-actionable intents while preserving delivered or
+provider-blocked history for audit.
+
+The guide and law-firm page describe the implemented reviewed workflow without
+claiming automated foreign filing or provider delivery. Local and exact-release
+production Playwright tests own the dated UJ-37 acceptance boundary.

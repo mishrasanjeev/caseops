@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from caseops_api.schemas.ip_foreign_associates import (
     IpForeignAssociateCreateRequest,
     IpForeignAssociateEstimateTerms,
+    IpForeignAssociateReminderRequest,
     IpForeignAssociateTransactionRequest,
 )
 
@@ -199,6 +200,19 @@ def test_reassignment_requires_replacement_associate_and_estimate() -> None:
     )
 
 
+def test_filing_report_accepts_complete_source_and_document_evidence() -> None:
+    transaction = IpForeignAssociateTransactionRequest.model_validate(
+        _transaction_payload(
+            transaction_kind="report_filing",
+            filing_identifier="USPTO-101",
+            evidence_refs=["registry-receipt-1"],
+            document_refs=["filed-copy-1"],
+        )
+    )
+
+    assert transaction.filing_identifier == "USPTO-101"
+
+
 @pytest.mark.parametrize(
     "updates",
     [
@@ -215,3 +229,48 @@ def test_transaction_references_must_be_non_blank_and_unique(
         _transaction_payload(**updates),
         "references must be non-blank and unique",
     )
+
+
+def test_reminder_policy_defaults_are_explicit_and_bounded() -> None:
+    policy = IpForeignAssociateReminderRequest(
+        expected_version=1,
+        expected_lifecycle_version=0,
+    )
+
+    assert policy.reminder_offsets_hours == [72, 24, 0]
+    assert policy.channels == ["in_app"]
+    assert policy.escalation_after_hours == 24
+
+
+@pytest.mark.parametrize(
+    ("updates", "message"),
+    [
+        (
+            {"reminder_offsets_hours": [24, 24]},
+            "Reminder offsets must be unique",
+        ),
+        (
+            {"reminder_offsets_hours": [-1, 0]},
+            "Reminder offsets must be between 0 and 720 hours",
+        ),
+        (
+            {"reminder_offsets_hours": [721, 0]},
+            "Reminder offsets must be between 0 and 720 hours",
+        ),
+        (
+            {"channels": ["email", "email"]},
+            "Reminder channels must be unique",
+        ),
+    ],
+)
+def test_reminder_policy_rejects_duplicate_and_out_of_range_values(
+    updates: dict[str, object], message: str
+) -> None:
+    with pytest.raises(ValidationError, match=message):
+        IpForeignAssociateReminderRequest.model_validate(
+            {
+                "expected_version": 1,
+                "expected_lifecycle_version": 0,
+                **updates,
+            }
+        )

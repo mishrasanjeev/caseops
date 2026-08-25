@@ -14,16 +14,16 @@
     "verification_status": "not_run",
     "release_status": "blocked",
     "execution_policy": "codex_owned_single_ordered_queue; implement first and run the automated check and exact-release verification batch at the end",
-    "active_slice": "IPLF-059B",
+    "active_slice": "IPLF-060A",
     "checkpoint": {
-      "recorded_at": "2026-08-26T03:14:13+05:30",
-      "repository_revision": "f56e5a2f2c48f1e0e5149b5004568635c49793b3",
-      "environment": "Exact canonical main deployed migration-first to production API caseops-api-00357-cn7 and web caseops-web-00335-vwv at 100 percent latest-only traffic. Exact-main CI, Security, CodeQL and production verifier 32900844537 passed.",
-      "completed_scope": "IPLF-059A is deployment-verified. It provides the canonical foreign-associate instruction aggregate, migration, linked-owner APIs, independent acknowledgement/filing evidence, finance reconciliation, refusal/reassignment history and terminal-lifecycle hardening without duplicating shared owners.",
+      "recorded_at": "2026-08-26T03:50:00+05:30",
+      "repository_revision": "75480807f78cb0f396ba81d4f7ad452b515876a8",
+      "environment": "IPLF-059A is deployment-verified on canonical main. IPLF-059B passed locked local API, schema, component, typecheck, OpenAPI, Ruff and fresh-tenant desktop/mobile Playwright acceptance; hosted candidate gates and exact-release production acceptance remain pending.",
+      "completed_scope": "IPLF-059B implements the UJ-37 operator workspace, shared-notification acknowledgement reminders/escalation, all five normal/exception paths, source opening, finance reconciliation, responsive UI, guide and truthful law-firm claims without duplicating platform owners.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-059B",
-      "next_action": "Implement, test and release IPLF-059B and all five UJ-37 browser paths over the deployed canonical foundation, including reminders, responsive UX, guide and truthful law-firm claims.",
-      "evidence_ref": "docs/ip-implementation/evidence/m5/IPLF-059/release-059a-2026-08-26.md"
+      "next_slice": "IPLF-060A",
+      "next_action": "Release IPLF-059B through hosted gates, exact-main deployment and production UJ-37 acceptance while beginning IPLF-060A only after its ownership and duplicate-work boundary is re-audited.",
+      "evidence_ref": "docs/ip-implementation/evidence/m5/IPLF-059/local-059b-2026-08-26.md"
     },
     "work_owner": {
       "owner": "Codex",
@@ -167,8 +167,8 @@
       "deliverable": "Approved registry/WIPO boundary, IP snapshots/diffs, journal/watch, Madrid/post-registration, source proxy, foreign associates, client reports/instructions and extension of existing portal grants/publications",
       "exit_criteria": "Existing connector readiness/support/cost/provider-operations surfaces show every IP adapter; no court update is copied from `TrackedCase`; provider contracts/terms/support matrix, replay/cost/circuit breakers; UJ-07, UJ-19, UJ-21, UJ-27, UJ-35 through UJ-37 pass; 30-day provider/freshness evidence or explicit pilot exception",
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "epic_ids": [
         "IPLF-050",
@@ -2192,12 +2192,13 @@
         "IPLF-059A",
         "IPLF-059B"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "evidence_refs": [
         "docs/ip-implementation/evidence/m5/IPLF-059/local-059a-2026-08-26.md",
-        "docs/ip-implementation/evidence/m5/IPLF-059/release-059a-2026-08-26.md"
+        "docs/ip-implementation/evidence/m5/IPLF-059/release-059a-2026-08-26.md",
+        "docs/ip-implementation/evidence/m5/IPLF-059/local-059b-2026-08-26.md"
       ]
     },
     {
@@ -13982,27 +13983,81 @@
       "dependencies": [
         "IPLF-059A"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-37-EXC-01",
-        "planned:IPLF-UJ-37-EXC-02",
-        "planned:IPLF-UJ-37-EXC-03",
-        "planned:IPLF-UJ-37-EXC-04",
-        "planned:IPLF-UJ-37-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/api/routes/ip_foreign_associates.py",
+        "apps/api/src/caseops_api/schemas/ip_foreign_associates.py",
+        "apps/api/src/caseops_api/services/ip_foreign_associates.py",
+        "apps/web/app/app/ip/foreign-associates/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/lib/api/openapi-types.ts",
+        "apps/web/components/app/Sidebar.tsx",
+        "apps/web/app/guide/page.tsx",
+        "apps/web/app/law-firms/page.tsx",
+        "playwright.prod-ram.config.ts",
+        "docs/ip-implementation/IP_FOREIGN_ASSOCIATE_FOUNDATION.md"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "test_refs": [
+        "IPLF-UJ-37-NORMAL:tests/e2e/iplf-059b-foreign-associate-workflow-2026-08-26.spec.ts",
+        "IPLF-UJ-37-EXC-01:tests/e2e/iplf-059b-foreign-associate-workflow-2026-08-26.spec.ts",
+        "IPLF-UJ-37-EXC-02:tests/e2e/iplf-059b-foreign-associate-workflow-2026-08-26.spec.ts",
+        "IPLF-UJ-37-EXC-03:tests/e2e/iplf-059b-foreign-associate-workflow-2026-08-26.spec.ts",
+        "IPLF-UJ-37-EXC-04:apps/api/tests/test_ip_059a_foreign_associate_foundation.py::test_foreign_associate_contract_separates_delivery_ack_and_evidence",
+        "apps/api/tests/test_ip_059b_foreign_associate_journeys.py",
+        "apps/api/tests/test_ip_059a_foreign_associate_schemas.py",
+        "apps/web/app/app/ip/foreign-associates/page.test.tsx",
+        "tests/e2e/iplf-059b-foreign-associate-workflow-2026-08-26-prod.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-059/local-059b-2026-08-26.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m5/IPLF-059/local-059b-2026-08-26.md",
+          "revision": "75480807f78cb0f396ba81d4f7ad452b515876a8",
+          "environment": "Windows CPython 3.13 and Node 22 with locked dependencies, fresh local law-firm tenant, FastAPI and Next development servers, Chromium at 360x800 and 1440x1000",
+          "fixtures": "Synthetic Matter-linked trademark docket, public and privileged documents, preferred/replacement foreign associates, approved assignments and budgets, estimates/tax terms, outbound Communication, paid spend, canonical Matter invoice and matched actual IP cost",
+          "assertions": "All UJ-37 transitions and exceptions, bounded idempotent reminders, delivery distinct from acknowledgement, actionable reminder cancellation, source opening, foreign filing identifier, independent evidence, finance reconciliation, responsive controls, guide and truthful law-firm claim",
+          "result": "passed",
+          "recorded_at": "2026-08-26T03:50:00+05:30"
+        }
+      ],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Pass hosted CI, Security and CodeQL, merge the exact candidate to main, deploy it migration-first, and pass the dated exact-release production acceptance."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No schema change. Reminder policy projects idempotent, tenant-scoped intents into the existing NotificationDeliveryIntent owner and cancels only actionable rows when acknowledgement, refusal, cancellation or reassignment ends the response wait.",
+        "Instruction state continues to link canonical OutsideCounsel, assignment, Communication, document, deadline, IP cost, spend and Matter invoice identifiers under the docket lifecycle lock."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/IP_FOREIGN_ASSOCIATE_FOUNDATION.md",
+          "disposition": "updated",
+          "owner": "IP foreign-associate operating contract",
+          "evidence": "Operator, reminder, notification, finance and exact-release boundaries"
+        },
+        {
+          "artifact": "apps/web/app/guide/page.tsx and apps/web/app/law-firms/page.tsx",
+          "disposition": "updated",
+          "owner": "User guidance and public product claims",
+          "evidence": "Truthful reviewed foreign-associate workflow and source/evidence controls"
+        },
+        {
+          "artifact": "apps/web/lib/api/openapi-types.ts",
+          "disposition": "generated",
+          "owner": "Typed web API client",
+          "evidence": "Reminder request, records, response and workspace projection"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m5/IPLF-059/local-059b-2026-08-26.md",
+          "disposition": "created",
+          "owner": "Engineering/SRE",
+          "evidence": "Duplicate-work review, every UJ-37 path, local browser acceptance and remaining release boundary"
+        }
+      ],
+      "allocation_review": "2026-08-26 brutal duplicate-work review: IPLF-059B extends the IPLF-059A service and shared NotificationDeliveryIntent projection. It links existing outside-counsel, assignment/spend, Communication, document, deadline, cost, Matter invoice, access, audit and docket-event owners; no duplicate directory, mailer, store, ledger, scheduler, permission model or event log was added.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
@@ -41659,15 +41714,24 @@
       ],
       "requirement_ids": [],
       "test_refs": [
-        "planned:IPLF-UJ-37-EXC-01",
-        "planned:IPLF-UJ-37-EXC-02",
-        "planned:IPLF-UJ-37-EXC-03",
-        "planned:IPLF-UJ-37-EXC-04",
-        "planned:IPLF-UJ-37-NORMAL"
+        "IPLF-UJ-37-EXC-01:tests/e2e/iplf-059b-foreign-associate-workflow-2026-08-26.spec.ts",
+        "IPLF-UJ-37-EXC-02:tests/e2e/iplf-059b-foreign-associate-workflow-2026-08-26.spec.ts",
+        "IPLF-UJ-37-EXC-03:tests/e2e/iplf-059b-foreign-associate-workflow-2026-08-26.spec.ts",
+        "IPLF-UJ-37-EXC-04:apps/web/app/app/ip/foreign-associates/page.test.tsx",
+        "IPLF-UJ-37-NORMAL:tests/e2e/iplf-059b-foreign-associate-workflow-2026-08-26.spec.ts",
+        "apps/api/tests/test_ip_059a_foreign_associate_foundation.py::test_foreign_associate_contract_separates_delivery_ack_and_evidence#IPLF-UJ-37-EXC-02",
+        "apps/api/tests/test_ip_059a_foreign_associate_foundation.py::test_foreign_associate_contract_separates_delivery_ack_and_evidence#IPLF-UJ-37-EXC-03",
+        "apps/api/tests/test_ip_059a_foreign_associate_foundation.py::test_foreign_associate_contract_separates_delivery_ack_and_evidence#IPLF-UJ-37-EXC-04",
+        "apps/api/tests/test_ip_059a_foreign_associate_foundation.py::test_foreign_associate_contract_separates_delivery_ack_and_evidence#IPLF-UJ-37-NORMAL",
+        "apps/api/tests/test_ip_059a_foreign_associate_foundation.py::test_foreign_associate_refusal_reassignment_preserves_versioned_history#IPLF-UJ-37-EXC-01",
+        "apps/api/tests/test_ip_059b_foreign_associate_journeys.py::test_uj37_normal_reminders_are_idempotent_and_stop_on_acknowledgement#IPLF-UJ-37-EXC-03",
+        "apps/api/tests/test_ip_059b_foreign_associate_journeys.py::test_uj37_normal_reminders_are_idempotent_and_stop_on_acknowledgement#IPLF-UJ-37-NORMAL"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-059/local-059b-2026-08-26.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-059B"
@@ -50936,11 +51000,15 @@
       "test_id": "IPLF-UJ-37-NORMAL",
       "requirement_ids": [],
       "test_refs": [
-        "planned:IPLF-UJ-37-NORMAL"
+        "IPLF-UJ-37-NORMAL:tests/e2e/iplf-059b-foreign-associate-workflow-2026-08-26.spec.ts",
+        "apps/api/tests/test_ip_059a_foreign_associate_foundation.py::test_foreign_associate_contract_separates_delivery_ack_and_evidence#IPLF-UJ-37-NORMAL",
+        "apps/api/tests/test_ip_059b_foreign_associate_journeys.py::test_uj37_normal_reminders_are_idempotent_and_stop_on_acknowledgement#IPLF-UJ-37-NORMAL"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-059/local-059b-2026-08-26.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-059B"
@@ -50956,11 +51024,14 @@
       "test_id": "IPLF-UJ-37-EXC-01",
       "requirement_ids": [],
       "test_refs": [
-        "planned:IPLF-UJ-37-EXC-01"
+        "IPLF-UJ-37-EXC-01:tests/e2e/iplf-059b-foreign-associate-workflow-2026-08-26.spec.ts",
+        "apps/api/tests/test_ip_059a_foreign_associate_foundation.py::test_foreign_associate_refusal_reassignment_preserves_versioned_history#IPLF-UJ-37-EXC-01"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-059/local-059b-2026-08-26.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-059B"
@@ -50976,11 +51047,14 @@
       "test_id": "IPLF-UJ-37-EXC-02",
       "requirement_ids": [],
       "test_refs": [
-        "planned:IPLF-UJ-37-EXC-02"
+        "IPLF-UJ-37-EXC-02:tests/e2e/iplf-059b-foreign-associate-workflow-2026-08-26.spec.ts",
+        "apps/api/tests/test_ip_059a_foreign_associate_foundation.py::test_foreign_associate_contract_separates_delivery_ack_and_evidence#IPLF-UJ-37-EXC-02"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-059/local-059b-2026-08-26.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-059B"
@@ -50996,11 +51070,15 @@
       "test_id": "IPLF-UJ-37-EXC-03",
       "requirement_ids": [],
       "test_refs": [
-        "planned:IPLF-UJ-37-EXC-03"
+        "IPLF-UJ-37-EXC-03:tests/e2e/iplf-059b-foreign-associate-workflow-2026-08-26.spec.ts",
+        "apps/api/tests/test_ip_059a_foreign_associate_foundation.py::test_foreign_associate_contract_separates_delivery_ack_and_evidence#IPLF-UJ-37-EXC-03",
+        "apps/api/tests/test_ip_059b_foreign_associate_journeys.py::test_uj37_normal_reminders_are_idempotent_and_stop_on_acknowledgement#IPLF-UJ-37-EXC-03"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-059/local-059b-2026-08-26.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-059B"
@@ -51016,11 +51094,14 @@
       "test_id": "IPLF-UJ-37-EXC-04",
       "requirement_ids": [],
       "test_refs": [
-        "planned:IPLF-UJ-37-EXC-04"
+        "IPLF-UJ-37-EXC-04:apps/web/app/app/ip/foreign-associates/page.test.tsx",
+        "apps/api/tests/test_ip_059a_foreign_associate_foundation.py::test_foreign_associate_contract_separates_delivery_ack_and_evidence#IPLF-UJ-37-EXC-04"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-059/local-059b-2026-08-26.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-059B"
