@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 
-from caseops_api.api.dependencies import DbSession, get_current_context, require_capability
+from caseops_api.api.dependencies import DbSession, require_any_capability, require_capability
 from caseops_api.schemas.ip_recordals import (
     IpRecordalCreateRequest,
     IpRecordalPageResponse,
@@ -101,7 +101,10 @@ def recordal_transaction(
     recordal_id: str,
     payload: IpRecordalTransactionRequest,
     session: DbSession,
-    context: Annotated[SessionContext, Depends(get_current_context)],
+    context: Annotated[
+        SessionContext,
+        Depends(require_any_capability("ip:write", "ip:approve")),
+    ],
 ) -> IpRecordalTransactionResponse:
     return record_ip_recordal_transaction(
         session,
