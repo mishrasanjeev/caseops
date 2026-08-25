@@ -4,4 +4,4 @@ Generated; do not edit.
 
 | Slice | Release | Blockers | Next actions |
 | --- | --- | --- | --- |
-| IPLF-056B | blocked |  | Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues. |
+| IPLF-057A | blocked |  | Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues. |
