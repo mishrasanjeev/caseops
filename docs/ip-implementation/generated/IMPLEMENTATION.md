@@ -112,7 +112,7 @@ Generated; do not edit.
 | IPLF-056B | derived | IPLF-056 | M5 | IP-REG-01, IP-REG-02, IP-REG-03, IP-REG-04, IP-REG-05, SRC-01, SRC-02, SRC-03, SRC-04, SRC-05, SRC-06, SRC-07, SRC-08, SRC-09, SRC-10, SRC-11, SRC-12 | UJ-25-EXC-01, UJ-25-EXC-02, UJ-25-EXC-03, UJ-25-NORMAL, UJ-68-EXC-01, UJ-68-EXC-02, UJ-68-EXC-03, UJ-68-EXC-04, UJ-68-EXC-05, UJ-68-NORMAL | implemented | passed | deployment_verified |
 | IPLF-057A | derived | IPLF-057 | M5 |  |  | implemented | passed | deployment_verified |
 | IPLF-057B | derived | IPLF-057 | M5 | IP-MAD-01, IP-MAD-02, IP-MAD-03, IP-MAD-04 | UJ-35-EXC-01, UJ-35-EXC-02, UJ-35-EXC-03, UJ-35-EXC-04, UJ-35-NORMAL | implemented | passed | deployment_verified |
-| IPLF-058A | derived | IPLF-058 | M5 |  |  | implemented | passed | blocked |
+| IPLF-058A | derived | IPLF-058 | M5 |  |  | implemented | passed | deployment_verified |
 | IPLF-058B | derived | IPLF-058 | M5 | IP-POST-01, IP-POST-02, IP-POST-03, IP-POST-04 | UJ-36-EXC-01, UJ-36-EXC-02, UJ-36-EXC-03, UJ-36-EXC-04, UJ-36-NORMAL, UJ-61-EXC-01, UJ-61-EXC-02, UJ-61-NORMAL | not_started | not_run | blocked |
 | IPLF-059A | derived | IPLF-059 | M5 |  |  | not_started | not_run | blocked |
 | IPLF-059B | derived | IPLF-059 | M5 |  | UJ-37-EXC-01, UJ-37-EXC-02, UJ-37-EXC-03, UJ-37-EXC-04, UJ-37-NORMAL | not_started | not_run | blocked |
