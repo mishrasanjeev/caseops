@@ -15462,6 +15462,8 @@ class TrademarkInternationalRegistration(Base):
             "wipo_status",
             "national_status",
         ),
+        Index("ix_tm_international_created_by", "created_by_membership_id"),
+        Index("ix_tm_international_updated_by", "updated_by_membership_id"),
         CheckConstraint(
             "record_kind IN ('international_registration', 'international_designation')",
             name="ck_tm_international_record_kind",
@@ -15546,10 +15548,10 @@ class TrademarkInternationalRegistration(Base):
     renewal_due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_by_membership_id: Mapped[str] = mapped_column(
-        String(36), nullable=False, index=True
+        String(36), nullable=False
     )
     updated_by_membership_id: Mapped[str] = mapped_column(
-        String(36), nullable=False, index=True
+        String(36), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False

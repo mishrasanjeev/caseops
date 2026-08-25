@@ -12,6 +12,7 @@ MIGRATION-LOCK-RISK: acknowledged: one additive empty table plus indexes and
 constraints; PostgreSQL lock timeout is five seconds.
 MIGRATION-ROLLBACK: restore-forward after any Madrid row exists. An empty,
 pre-activation schema may downgrade.
+DATA-GOVERNANCE-MAP: updated
 """
 
 from __future__ import annotations
@@ -162,7 +163,7 @@ def upgrade() -> None:
         ["basic_application_id"],
     )
     op.create_index(
-        "ix_trademark_international_registrations_created_by_membership_id",
+        "ix_tm_international_created_by",
         "trademark_international_registrations",
         ["created_by_membership_id"],
     )
@@ -177,7 +178,7 @@ def upgrade() -> None:
         ["parent_registration_id"],
     )
     op.create_index(
-        "ix_trademark_international_registrations_updated_by_membership_id",
+        "ix_tm_international_updated_by",
         "trademark_international_registrations",
         ["updated_by_membership_id"],
     )
