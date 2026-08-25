@@ -6322,6 +6322,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/foreign-associate-instructions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Foreign Associate Instruction List */
+        get: operations["foreign_associate_instruction_list_api_ip_foreign_associate_instructions_get"];
+        put?: never;
+        /** Foreign Associate Instruction Create */
+        post: operations["foreign_associate_instruction_create_api_ip_foreign_associate_instructions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/foreign-associate-instructions/{instruction_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Foreign Associate Instruction Get */
+        get: operations["foreign_associate_instruction_get_api_ip_foreign_associate_instructions__instruction_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/foreign-associate-instructions/{instruction_id}/transactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Foreign Associate Instruction Transaction */
+        post: operations["foreign_associate_instruction_transaction_api_ip_foreign_associate_instructions__instruction_id__transactions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/foreign-associate-instructions/{instruction_id}/workspace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Foreign Associate Instruction Workspace */
+        get: operations["foreign_associate_instruction_workspace_api_ip_foreign_associate_instructions__instruction_id__workspace_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/hearings": {
         parameters: {
             query?: never;
@@ -22722,7 +22791,7 @@ export interface components {
              * Event Kind
              * @enum {string}
              */
-            event_kind: "filing" | "formalities" | "examination_report" | "response" | "show_cause_hearing" | "acceptance" | "publication" | "registration" | "renewal" | "refusal" | "abandonment" | "restoration" | "lifecycle_transition" | "opposition_profile" | "opposition_applicant_action" | "opposition_opponent_action" | "opposition_shared_action" | "post_registration_profile" | "post_registration_action" | "post_registration_recordal_transaction" | "madrid_action" | "registry_change";
+            event_kind: "filing" | "formalities" | "examination_report" | "response" | "show_cause_hearing" | "acceptance" | "publication" | "registration" | "renewal" | "refusal" | "abandonment" | "restoration" | "lifecycle_transition" | "opposition_profile" | "opposition_applicant_action" | "opposition_opponent_action" | "opposition_shared_action" | "post_registration_profile" | "post_registration_action" | "post_registration_recordal_transaction" | "foreign_associate_instruction_transaction" | "madrid_action" | "registry_change";
             /** Evidence Refs */
             evidence_refs?: string[];
             /** Expected Application Version */
@@ -22829,6 +22898,8 @@ export interface components {
             event_kind: string;
             /** Evidence Refs Json */
             evidence_refs_json: string[];
+            /** Foreign Associate Instruction Id */
+            foreign_associate_instruction_id: string | null;
             /** Id */
             id: string;
             /** Payload Json */
@@ -23761,6 +23832,272 @@ export interface components {
             rollout_expires_at: string | null;
             /** Rollout Flag */
             rollout_flag: string | null;
+        };
+        /** IpForeignAssociateCreateRequest */
+        IpForeignAssociateCreateRequest: {
+            /** Assignment Id */
+            assignment_id?: string | null;
+            /** Budget Policy Reference */
+            budget_policy_reference: string;
+            /** Client Authority Reference */
+            client_authority_reference?: string | null;
+            /** Docket Id */
+            docket_id: string;
+            /** Estimate Cost Item Id */
+            estimate_cost_item_id: string;
+            estimate_terms: components["schemas"]["IpForeignAssociateEstimateTerms"];
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version: number;
+            /**
+             * Include Privileged Documents
+             * @default false
+             */
+            include_privileged_documents: boolean;
+            /** Instruction Thread Key */
+            instruction_thread_key: string;
+            /** Outside Counsel Id */
+            outside_counsel_id: string;
+            /** Reason */
+            reason: string;
+            /** Response Due At */
+            response_due_at?: string | null;
+            /** Responsible Membership Id */
+            responsible_membership_id: string;
+            scope: components["schemas"]["IpForeignAssociateScope"];
+            /** Selected Document Refs */
+            selected_document_refs: string[];
+            /** Source Client Instruction Id */
+            source_client_instruction_id?: string | null;
+            /** Target Jurisdiction */
+            target_jurisdiction: string;
+        };
+        /** IpForeignAssociateEstimateTerms */
+        IpForeignAssociateEstimateTerms: {
+            /** Assumptions */
+            assumptions?: string[];
+            /** Tax Evidence Reference */
+            tax_evidence_reference?: string | null;
+            /**
+             * Tax Inclusive
+             * @default false
+             */
+            tax_inclusive: boolean;
+            /** Tax Rate Percent */
+            tax_rate_percent?: number | null;
+            /** Tax Type */
+            tax_type?: string | null;
+        };
+        /** IpForeignAssociatePageResponse */
+        IpForeignAssociatePageResponse: {
+            /** Items */
+            items: components["schemas"]["IpForeignAssociateResponse"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
+        /** IpForeignAssociateResponse */
+        IpForeignAssociateResponse: {
+            /** Acknowledged At */
+            acknowledged_at: string | null;
+            /** Acknowledgement Reference */
+            acknowledgement_reference: string | null;
+            /** Actual Cost Item Id */
+            actual_cost_item_id: string | null;
+            /** Approved At */
+            approved_at: string | null;
+            /** Approved By Membership Id */
+            approved_by_membership_id: string | null;
+            /** Assignment Id */
+            assignment_id: string | null;
+            /** Budget Policy Reference */
+            budget_policy_reference: string;
+            /** Client Authority Reference */
+            client_authority_reference: string | null;
+            /** Company Id */
+            company_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Membership Id */
+            created_by_membership_id: string;
+            /** Dispatch Communication Id */
+            dispatch_communication_id: string | null;
+            /** Dispatched At */
+            dispatched_at: string | null;
+            /** Docket Id */
+            docket_id: string;
+            /** Estimate Cost Item Id */
+            estimate_cost_item_id: string;
+            /** Estimate Terms Json */
+            estimate_terms_json: {
+                [key: string]: unknown;
+            };
+            /** External Delivered At */
+            external_delivered_at: string | null;
+            /** External Delivery Reference */
+            external_delivery_reference: string | null;
+            /** External Dispatch Reference */
+            external_dispatch_reference: string | null;
+            /** Filing Evidence Refs Json */
+            filing_evidence_refs_json: string[];
+            /** Filing Identifier */
+            filing_identifier: string | null;
+            /** Filing Reported At */
+            filing_reported_at: string | null;
+            /** Filing Verified At */
+            filing_verified_at: string | null;
+            /** Id */
+            id: string;
+            /** Instruction Thread Key */
+            instruction_thread_key: string;
+            /** Instruction Version */
+            instruction_version: number;
+            /** Outside Counsel Id */
+            outside_counsel_id: string;
+            /** Privileged Approved At */
+            privileged_approved_at: string | null;
+            /** Privileged Approved By Membership Id */
+            privileged_approved_by_membership_id: string | null;
+            /** Privileged Document Refs Json */
+            privileged_document_refs_json: string[];
+            /** Response Due At */
+            response_due_at: string | null;
+            /** Responsible Membership Id */
+            responsible_membership_id: string;
+            /** Row Version */
+            row_version: number;
+            /** Scope Json */
+            scope_json: {
+                [key: string]: unknown;
+            };
+            /** Selected Document Refs Json */
+            selected_document_refs_json: string[];
+            /** Source Client Instruction Id */
+            source_client_instruction_id: string | null;
+            /** Spend Record Id */
+            spend_record_id: string | null;
+            /** Status */
+            status: string;
+            /** Supersedes Instruction Id */
+            supersedes_instruction_id: string | null;
+            /** Target Jurisdiction */
+            target_jurisdiction: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Updated By Membership Id */
+            updated_by_membership_id: string;
+        };
+        /** IpForeignAssociateScope */
+        IpForeignAssociateScope: {
+            /** Filing Kind */
+            filing_kind: string;
+            /** Scoped Fields */
+            scoped_fields?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Source Kind
+             * @enum {string}
+             */
+            source_kind: "application" | "search";
+            /** Source Reference */
+            source_reference: string;
+        };
+        /** IpForeignAssociateTransactionRequest */
+        IpForeignAssociateTransactionRequest: {
+            /** Acknowledgement Reference */
+            acknowledgement_reference?: string | null;
+            /** Actual Cost Item Id */
+            actual_cost_item_id?: string | null;
+            /** Deadline Refs */
+            deadline_refs?: string[];
+            /** Details */
+            details?: {
+                [key: string]: unknown;
+            };
+            /** Dispatch Communication Id */
+            dispatch_communication_id?: string | null;
+            /** Document Refs */
+            document_refs?: string[];
+            /**
+             * Effective At
+             * Format: date-time
+             */
+            effective_at: string;
+            /** Evidence Refs */
+            evidence_refs?: string[];
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version: number;
+            /** Expected Version */
+            expected_version: number;
+            /** External Delivered At */
+            external_delivered_at?: string | null;
+            /** External Delivery Reference */
+            external_delivery_reference?: string | null;
+            /** External Dispatch Reference */
+            external_dispatch_reference?: string | null;
+            /** Filing Identifier */
+            filing_identifier?: string | null;
+            /** Reason */
+            reason: string;
+            /** Replacement Assignment Id */
+            replacement_assignment_id?: string | null;
+            /** Replacement Estimate Cost Item Id */
+            replacement_estimate_cost_item_id?: string | null;
+            replacement_estimate_terms?: components["schemas"]["IpForeignAssociateEstimateTerms"] | null;
+            /** Replacement Outside Counsel Id */
+            replacement_outside_counsel_id?: string | null;
+            /** Replacement Response Due At */
+            replacement_response_due_at?: string | null;
+            /** Responsible Membership Id */
+            responsible_membership_id: string;
+            /** Spend Record Id */
+            spend_record_id?: string | null;
+            /**
+             * Transaction Kind
+             * @enum {string}
+             */
+            transaction_kind: "approve" | "dispatch" | "acknowledge" | "record_query" | "approve_substantive_response" | "approve_fee_change" | "report_filing" | "verify_filing_evidence" | "link_invoice" | "complete" | "refuse" | "cancel" | "reassign";
+        };
+        /** IpForeignAssociateTransactionResponse */
+        IpForeignAssociateTransactionResponse: {
+            event: components["schemas"]["IpDocketEventResponse"];
+            instruction: components["schemas"]["IpForeignAssociateResponse"];
+            successor?: components["schemas"]["IpForeignAssociateResponse"] | null;
+        };
+        /** IpForeignAssociateWorkspaceResponse */
+        IpForeignAssociateWorkspaceResponse: {
+            /**
+             * Acknowledgement Status
+             * @enum {string}
+             */
+            acknowledgement_status: "outstanding" | "received";
+            /** Associate Name */
+            associate_name: string;
+            /** Delivered At */
+            delivered_at: string | null;
+            /** Delivery Status */
+            delivery_status: string;
+            /**
+             * Filing Evidence Status
+             * @enum {string}
+             */
+            filing_evidence_status: "not_reported" | "reported_unverified" | "verified";
+            instruction: components["schemas"]["IpForeignAssociateResponse"];
+            /** Invoice Status */
+            invoice_status: string | null;
+            /** Response Overdue */
+            response_overdue: boolean;
+            /** Transactions */
+            transactions: components["schemas"]["IpDocketEventResponse"][];
         };
         /** IpHearingReminderPolicyRequest */
         IpHearingReminderPolicyRequest: {
@@ -53275,6 +53612,172 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpDocumentUploadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    foreign_associate_instruction_list_api_ip_foreign_associate_instructions_get: {
+        parameters: {
+            query?: {
+                docket_id?: string | null;
+                limit?: number;
+                missing_filing_evidence?: boolean | null;
+                offset?: number;
+                outstanding_response?: boolean | null;
+                status?: ("draft" | "approved" | "dispatched" | "acknowledged" | "in_progress" | "filing_reported" | "evidence_verified" | "invoiced" | "completed" | "refused" | "superseded" | "cancelled") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpForeignAssociatePageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    foreign_associate_instruction_create_api_ip_foreign_associate_instructions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpForeignAssociateCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpForeignAssociateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    foreign_associate_instruction_get_api_ip_foreign_associate_instructions__instruction_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instruction_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpForeignAssociateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    foreign_associate_instruction_transaction_api_ip_foreign_associate_instructions__instruction_id__transactions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instruction_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpForeignAssociateTransactionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpForeignAssociateTransactionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    foreign_associate_instruction_workspace_api_ip_foreign_associate_instructions__instruction_id__workspace_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                instruction_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpForeignAssociateWorkspaceResponse"];
                 };
             };
             /** @description Validation Error */

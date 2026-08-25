@@ -14,15 +14,15 @@
     "verification_status": "not_run",
     "release_status": "blocked",
     "execution_policy": "codex_owned_single_ordered_queue; implement first and run the automated check and exact-release verification batch at the end",
-    "active_slice": "IPLF-059A",
+    "active_slice": "IPLF-059B",
     "checkpoint": {
       "recorded_at": "2026-08-25T22:59:33+05:30",
       "repository_revision": "7809ed33c0b26f7f3b8e84d3a107d6ef690c8c56",
       "environment": "Exact canonical main deployed migration-first to production API caseops-api-00355-8rn and web caseops-web-00333-jls at 100 percent latest-only traffic. Exact-main CI, Security, CodeQL and production verifier 32874739889 passed.",
       "completed_scope": "IPLF-058 is deployment-verified. IPLF-058B provides the post-registration operator workspace, all UJ-36 paths, bounded IPLF-039E-owned UJ-61 title presentation, correction/conflict-review hardening, navigation, guide and law-firm claims without duplicating renewal, proceeding, title, Registry, document, deadline or cost owners.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-059A",
-      "next_action": "Implement IPLF-059A from the canonical ownership boundary, then run its complete local, hosted and exact-production release gates before promotion.",
+      "next_slice": "IPLF-059B",
+      "next_action": "Release IPLF-059A migration-first, then implement IPLF-059B and all UJ-37 paths over the canonical foundation without duplicating shared owners.",
       "evidence_ref": "docs/ip-implementation/evidence/m5/IPLF-058/release-058b-2026-08-25.md"
     },
     "work_owner": {
@@ -2192,10 +2192,12 @@
         "IPLF-059A",
         "IPLF-059B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
-      "evidence_refs": []
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-059/local-059a-2026-08-26.md"
+      ]
     },
     {
       "id": "IPLF-060",
@@ -13834,29 +13836,98 @@
       "journey_path_ids": [],
       "ownership": [
         {
-          "classification": "LINK",
+          "classification": "NEW",
           "component": "IPLF-059 canonical scope: Foreign-associate instruction, acknowledgement, invoice, and filing-evidence workflow.",
-          "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
-          "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
-          "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
+          "canonical_writer": "apps/api/src/caseops_api/services/ip_foreign_associates.py",
+          "compatibility_path": "The aggregate links existing client-instruction, outside-counsel assignment, Communication, IP document, IP cost, spend, docket-event, access and audit owners; it does not copy their state.",
+          "retirement_gate": "Restore forward after legal data exists; no shared owner or compatibility route is retired by this additive foundation."
+        },
+        {
+          "classification": "LINK",
+          "component": "Client authority, associate panel/assignment, dispatch, documents, estimates, invoices, payment, deadlines, access and audit",
+          "canonical_writer": "Existing Section 11.2 platform owners named in IP_FOREIGN_ASSOCIATE_FOUNDATION.md",
+          "compatibility_path": "Tenant-correlated identifiers are validated under the parent docket lock and remain queryable through their existing routes and services.",
+          "retirement_gate": "No link may become a copied directory, mailer, document store, cost/invoice ledger, deadline engine, notification dispatcher, access system or event log."
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260825_0006_iplf059a_foreign_associate_foundation.py",
+        "apps/api/src/caseops_api/api/routes/ip_foreign_associates.py",
+        "apps/api/src/caseops_api/schemas/ip_foreign_associates.py",
+        "apps/api/src/caseops_api/services/ip_foreign_associates.py",
+        "apps/api/src/caseops_api/services/ip_lifecycle.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/governance/generated_data_class_projection.py",
+        "apps/web/lib/api/openapi-types.ts",
+        "docs/ip-implementation/IP_FOREIGN_ASSOCIATE_FOUNDATION.md"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_059a_foreign_associate_foundation.py",
+        "apps/api/tests/test_ip_059a_foreign_associate_schemas.py",
+        "apps/api/tests/test_20260825_ip_foreign_associate_migration.py",
+        "apps/api/tests/test_schema_fk_indexes.py",
+        "apps/api/tests/test_ip_lifecycle_service.py",
+        "apps/api/tests/test_openapi_quality.py",
+        "apps/api/tests/test_route_coverage_matrix.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m5/IPLF-059/local-059a-2026-08-26.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m5/IPLF-059/local-059a-2026-08-26.md",
+          "revision": "96eeb0902e3da69fa97ac0c40aa71424ba52f4e5",
+          "environment": "Windows CPython 3.13, locked uv dependencies, ephemeral SQLite migration/API fixtures, generated OpenAPI client and repository governance validators",
+          "fixtures": "fresh entitled law-firm tenants, canonical client authority fallback, panel associates and approved Matter assignments, docket-linked public/privileged documents, estimates, delivered and misdirected Communications, foreign filing evidence, actual costs and outside-counsel spend",
+          "assertions": "typed lifecycle, stale-write rejection, durable terminal neutralization with no reopen resurrection, sent/manual dispatch state, delivery versus acknowledgement, wrong-recipient rejection, privileged approval, required assignment budget and fee/tax approval, independent filing verification, amount/currency/client-billing reconciliation, refusal/reassignment version history, audit/event lineage, tenant isolation and migration restore-forward refusal",
+          "result": "passed",
+          "recorded_at": "2026-08-26T00:33:11+05:30"
+        }
+      ],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Pass hosted CI, merge and deploy this foundation migration-first, then implement IPLF-059B and every UJ-37 browser path without duplicating the linked canonical owners."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Add ip_foreign_associate_instructions as a versioned, tenant-scoped coordination aggregate and add its optional tenant-correlated link to ip_docket_events.",
+        "Preserve client instructions, panel associates, Matter assignments, Communications, IP documents, IP costs, outside-counsel spend, deadlines, access and audit as links to their existing canonical owners."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/IP_FOREIGN_ASSOCIATE_FOUNDATION.md",
+          "disposition": "created",
+          "owner": "IP foreign-associate operating contract",
+          "evidence": "State, evidence, finance, ownership, migration and IPLF-059B boundaries"
+        },
+        {
+          "artifact": "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml and generated/DATA_GOVERNANCE_MAP.md",
+          "disposition": "generated",
+          "owner": "Data governance control plane",
+          "evidence": "Current ORM inventory and sensitivity/retention classification for the additive aggregate"
+        },
+        {
+          "artifact": "apps/web/lib/api/openapi-types.ts",
+          "disposition": "generated",
+          "owner": "Typed web API client",
+          "evidence": "Foreign-associate list, detail, workspace and transaction contracts"
+        },
+        {
+          "artifact": "apps/api/src/caseops_api/governance/generated_data_class_projection.py",
+          "disposition": "generated",
+          "owner": "Runtime data governance projection",
+          "evidence": "Current map, registry and ORM fingerprints plus inventory membership for the additive table"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m5/IPLF-059/local-059a-2026-08-26.md",
+          "disposition": "created",
+          "owner": "Engineering/SRE",
+          "evidence": "Duplicate-work review, local acceptance and explicit release boundary"
+        }
+      ],
+      "allocation_review": "2026-08-26 brutal duplicate-work review: one new coordination aggregate links the existing client-instruction, outside-counsel, Communication, document, cost/spend, deadline, docket-event, access and audit owners. It adds no second directory, mailer, document store, financial ledger, deadline/notification engine, permission model or event log. IPLF-059B retains all UJ-37 paths and public/user documentation claims.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
@@ -13888,8 +13959,8 @@
         {
           "classification": "LINK",
           "component": "IPLF-059 canonical scope: Foreign-associate instruction, acknowledgement, invoice, and filing-evidence workflow.",
-          "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
-          "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
+          "canonical_writer": "apps/api/src/caseops_api/services/ip_foreign_associates.py",
+          "compatibility_path": "IPLF-059B presentation and reminder adapters delegate instruction state to the IPLF-059A service while linked Matter/platform records remain canonical.",
           "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
         }
       ],

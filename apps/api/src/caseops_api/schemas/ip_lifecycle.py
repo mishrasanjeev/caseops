@@ -26,6 +26,7 @@ IpEventKind = Literal[
     "post_registration_profile",
     "post_registration_action",
     "post_registration_recordal_transaction",
+    "foreign_associate_instruction_transaction",
     "madrid_action",
     "registry_change",
 ]
@@ -148,6 +149,7 @@ class IpDocketEventResponse(BaseModel):
     application_id: str | None
     proceeding_id: str | None
     recordal_id: str | None
+    foreign_associate_instruction_id: str | None
     event_kind: str
     source: str
     source_reference: str | None

@@ -24,6 +24,7 @@ from caseops_api.api.routes import (
     health,
     intake,
     integrations,
+    ip_foreign_associates,
     ip_international,
     ip_operations,
     ip_recordals,
@@ -57,6 +58,11 @@ api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(billing.router, prefix="/billing", tags=["billing"])
 api_router.include_router(bulk_imports.router, prefix="/imports", tags=["bulk-imports"])
 api_router.include_router(companies.router, prefix="/companies", tags=["companies"])
+api_router.include_router(
+    ip_foreign_associates.router,
+    prefix="/ip",
+    tags=["ip-foreign-associates"],
+)
 api_router.include_router(ip_international.router, prefix="/ip", tags=["ip-international"])
 api_router.include_router(ip_operations.router, prefix="/ip", tags=["ip-operations"])
 api_router.include_router(ip_recordals.router, prefix="/ip", tags=["ip-recordals"])
