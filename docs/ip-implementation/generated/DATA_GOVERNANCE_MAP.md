@@ -6,7 +6,7 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `034ed0976ba963f3f7b499ecefd68d2ad19a68b99af7a8ca0236e901310e57c6`
+- Canonical map SHA-256: `1c4a4a633291fe26e473d7bd148f944ca877611d45533ae5653feed1471c2636`
 - SQL tables: `288`
 - SQL columns: `4594`
 - ORM indexes: `1325`
@@ -15,7 +15,7 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 ## Boundary
 
-This inventory does not claim approved retention bounds, legal-hold activation, tenant export, purge, offboarding, provider deletion, backup recovery/restore, residency, or data-governance/recovery milestone completion. The only current disposition behavior is fail-closed Definition-of-Ready validation. This release's tenant-scoped company-user lookup, deadline-coverage guards, standalone-deadline offboarding serialization, and bounded Today IP coverage stream expose existing registered SQL classes only. The Today stream is a read projection over ip_deadline_coverages, ip_docket_records, and matter_deadlines that reuses the existing IP docket access predicate; the web endpoint and generated OpenAPI contract changes add no SQL or non-SQL data class, new storage, or disposition authority. EG-009 narrows what failure paths persist: audit-export, authority-ingestion, court-sync, document-job, document-processing, embedding and legal-update errors now store redacted text instead of raw exception strings. This removes infrastructure detail from already-registered columns; it adds no SQL or non-SQL data class, no new storage, and no disposition authority.
+This inventory does not claim approved retention bounds, legal-hold activation, tenant export, purge, offboarding, provider deletion, backup recovery/restore, residency, or data-governance/recovery milestone completion. The only current disposition behavior is fail-closed Definition-of-Ready validation. This release's tenant-scoped company-user lookup, deadline-coverage guards, standalone-deadline offboarding serialization, and bounded Today IP coverage stream expose existing registered SQL classes only. The Today stream is a read projection over ip_deadline_coverages, ip_docket_records, and matter_deadlines that reuses the existing IP docket access predicate; the web endpoint and generated OpenAPI contract changes add no SQL or non-SQL data class, new storage, or disposition authority. IPLF-057B backfills the required ip_trademark_particular_versions compatibility projection for existing trademark_international_registrations dockets; both tables are already registered, Madrid facts retain their canonical owner, and the bounded restore-forward migration adds no data class, storage boundary, retention authority, or disposition handler. EG-009 narrows what failure paths persist: audit-export, authority-ingestion, court-sync, document-job, document-processing, embedding and legal-update errors now store redacted text instead of raw exception strings. This removes infrastructure detail from already-registered columns; it adds no SQL or non-SQL data class, no new storage, and no disposition authority.
 
 ## SQL table inventory
 
