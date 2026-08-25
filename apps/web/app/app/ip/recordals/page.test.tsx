@@ -16,8 +16,10 @@ const mocks = vi.hoisted(() => ({
   capability: vi.fn(),
   create: vi.fn(),
   deadlines: vi.fn(),
+  docket: vi.fn(),
   dockets: vi.fn(),
   documents: vi.fn(),
+  documentsForDocket: vi.fn(),
   recordals: vi.fn(),
   registry: vi.fn(),
   transaction: vi.fn(),
@@ -32,8 +34,10 @@ vi.mock("@/lib/api/endpoints", async () => {
     ...actual,
     createIpRecordal: mocks.create,
     fetchIpDeadlineWorkspace: mocks.deadlines,
+    fetchIpDocket: mocks.docket,
     fetchIpDockets: mocks.dockets,
     fetchIpDocuments: mocks.documents,
+    fetchIpDocumentsForDocket: mocks.documentsForDocket,
     fetchIpRecordals: mocks.recordals,
     fetchIpRecordalWorkspace: mocks.workspace,
     fetchIpRegistryWorkspaces: mocks.registry,
@@ -201,8 +205,10 @@ describe("post-registration workspace", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.capability.mockReturnValue(true);
+    mocks.docket.mockResolvedValue(DOCKET);
     mocks.dockets.mockResolvedValue({ dockets: [DOCKET], count: 1 });
     mocks.documents.mockResolvedValue({ items: [DOCUMENT], total: 1 });
+    mocks.documentsForDocket.mockResolvedValue({ items: [DOCUMENT], total: 1 });
     mocks.recordals.mockResolvedValue({ items: [RECORDAL], total: 1, limit: 100, offset: 0 });
     mocks.workspace.mockResolvedValue(WORKSPACE);
     mocks.registry.mockResolvedValue({ items: [REGISTRY], total: 1, limit: 25, offset: 0 });
@@ -253,6 +259,24 @@ describe("post-registration workspace", () => {
       registryRecordedOn: "2026-08-25",
       details: expect.objectContaining({ client_registry_conflict_reviewed: true }),
     })));
+  });
+
+  it("renders the selected recordal before corpus-wide catalogs resolve", async () => {
+    const user = userEvent.setup();
+    const pendingCatalog = new Promise<never>(() => undefined);
+    mocks.dockets.mockReturnValue(pendingCatalog);
+    mocks.documents.mockReturnValue(pendingCatalog);
+
+    render(<RecordalsPage />, { wrapper: wrapper() });
+
+    expect(await screen.findByRole("heading", { name: "Assignment" })).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Recordal" })).toBeVisible();
+    expect(mocks.dockets).not.toHaveBeenCalled();
+    expect(mocks.documentsForDocket).toHaveBeenCalledWith("docket-1");
+
+    await user.click(screen.getByRole("tab", { name: "Title at date" }));
+    expect(screen.getByRole("heading", { name: "Registry-recorded position" })).toBeVisible();
+    expect(mocks.dockets).toHaveBeenCalledTimes(1);
   });
 
   it("does not call recordal APIs without IP read access", () => {

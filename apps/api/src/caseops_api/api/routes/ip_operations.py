@@ -928,8 +928,9 @@ async def post_ip_document_naming_preview(
 async def get_ip_documents(
     context: IpViewer,
     session: DbSession,
+    docket_id: Annotated[str | None, Query(max_length=36)] = None,
 ) -> IpDocumentListResponse:
-    return list_ip_documents(session, context=context)
+    return list_ip_documents(session, context=context, docket_id=docket_id)
 
 
 @router.post("/documents/upload", response_model=IpDocumentUploadResponse)

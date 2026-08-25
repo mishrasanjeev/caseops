@@ -35,8 +35,10 @@ import { apiErrorMessage } from "@/lib/api/config";
 import {
   createIpRecordal,
   fetchIpDeadlineWorkspace,
+  fetchIpDocket,
   fetchIpDockets,
   fetchIpDocuments,
+  fetchIpDocumentsForDocket,
   fetchIpRecordals,
   fetchIpRecordalWorkspace,
   fetchIpRegistryWorkspaces,
@@ -173,6 +175,8 @@ export default function RecordalsPage() {
   const [selectedId, setSelectedId] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
+  const [docketCatalogRequested, setDocketCatalogRequested] = useState(false);
+  const [documentCatalogRequested, setDocumentCatalogRequested] = useState(false);
 
   const recordals = useQuery({
     queryKey: ["ip", "recordals", statusFilter, typeFilter],
@@ -183,34 +187,41 @@ export default function RecordalsPage() {
       }),
     enabled: canRead,
   });
+  const selectedRecordal = recordals.data?.items.find((row) => row.id === selectedId) ?? null;
+  const selectedDocket = useQuery({
+    queryKey: ["ip", "dockets", selectedRecordal?.docket_id],
+    queryFn: () => fetchIpDocket(selectedRecordal!.docket_id),
+    enabled: canRead && Boolean(selectedRecordal),
+  });
   const dockets = useQuery({
-    queryKey: ["ip", "dockets"],
+    queryKey: ["ip", "dockets", "catalog"],
     queryFn: fetchIpDockets,
-    enabled: canRead,
+    enabled: canRead && docketCatalogRequested,
   });
   const documents = useQuery({
-    queryKey: ["ip", "documents"],
-    queryFn: fetchIpDocuments,
-    enabled: canRead,
+    queryKey: ["ip", "documents", selectedRecordal?.docket_id],
+    queryFn: () => fetchIpDocumentsForDocket(selectedRecordal!.docket_id),
+    enabled: canRead && Boolean(selectedRecordal),
+  });
+  const catalogDocuments = useQuery({
+    queryKey: ["ip", "documents", "catalog"],
+    queryFn: () => fetchIpDocuments(),
+    enabled: canRead && documentCatalogRequested,
   });
   const workspace = useQuery({
     queryKey: ["ip", "recordals", selectedId, "workspace"],
     queryFn: () => fetchIpRecordalWorkspace(selectedId),
     enabled: canRead && Boolean(selectedId),
   });
-  const selectedRecordal = recordals.data?.items.find((row) => row.id === selectedId) ?? null;
-  const selectedDocket = dockets.data?.dockets.find(
-    (row) => row.id === (workspace.data?.recordal.docket_id ?? selectedRecordal?.docket_id),
-  ) ?? null;
   const registry = useQuery({
-    queryKey: ["ip", "registry-links", selectedDocket?.id],
-    queryFn: () => fetchIpRegistryWorkspaces(selectedDocket?.id),
-    enabled: canRead && Boolean(selectedDocket),
+    queryKey: ["ip", "registry-links", selectedDocket.data?.id],
+    queryFn: () => fetchIpRegistryWorkspaces(selectedDocket.data?.id),
+    enabled: canRead && Boolean(selectedDocket.data),
   });
   const deadlines = useQuery({
-    queryKey: ["ip", "deadline-workspace", selectedDocket?.id],
-    queryFn: () => fetchIpDeadlineWorkspace(selectedDocket!.id),
-    enabled: canRead && Boolean(selectedDocket),
+    queryKey: ["ip", "deadline-workspace", selectedDocket.data?.id],
+    queryFn: () => fetchIpDeadlineWorkspace(selectedDocket.data!.id),
+    enabled: canRead && Boolean(selectedDocket.data),
   });
 
   useEffect(() => {
@@ -254,10 +265,18 @@ export default function RecordalsPage() {
         </Link>
       </nav>
 
-      {canWrite && dockets.data && documents.data ? (
+      {canWrite ? (
         <CreateRecordal
-          dockets={dockets.data.dockets}
-          documents={documents.data.items}
+          dockets={dockets.data?.dockets ?? []}
+          documents={catalogDocuments.data?.items ?? []}
+          catalogPending={
+            (docketCatalogRequested && dockets.isPending)
+            || (documentCatalogRequested && catalogDocuments.isPending)
+          }
+          onCatalogRequested={() => {
+            setDocketCatalogRequested(true);
+            setDocumentCatalogRequested(true);
+          }}
           membershipId={session.context?.membership.id ?? null}
           onCreated={async (id) => {
             await refresh();
@@ -281,7 +300,7 @@ export default function RecordalsPage() {
         </Field>
       </div>
 
-      {recordals.isPending || dockets.isPending || documents.isPending ? (
+      {recordals.isPending ? (
         <div className="grid gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
           <Skeleton className="h-80" />
           <Skeleton className="h-[560px]" />
@@ -292,25 +311,26 @@ export default function RecordalsPage() {
         <div className="grid min-w-0 gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
           <RecordalList
             rows={recordals.data.items}
-            dockets={dockets.data?.dockets ?? []}
+            dockets={dockets.data?.dockets ?? (selectedDocket.data ? [selectedDocket.data] : [])}
             selectedId={selectedId}
             onSelect={setSelectedId}
           />
-          {workspace.isPending ? (
+          {workspace.isPending || selectedDocket.isPending ? (
             <Skeleton className="h-[560px]" />
           ) : workspace.isError ? (
             <QueryErrorState error={workspace.error} onRetry={() => workspace.refetch()} />
-          ) : workspace.data && selectedDocket ? (
+          ) : workspace.data && selectedDocket.data ? (
             <RecordalDetail
               workspace={workspace.data}
-              docket={selectedDocket}
-              allDockets={dockets.data?.dockets ?? []}
+              docket={selectedDocket.data}
+              allDockets={dockets.data?.dockets ?? [selectedDocket.data]}
               documents={documents.data?.items ?? []}
               registry={registry.data?.items ?? []}
               deadlines={deadlines.data?.deadlines ?? []}
               membershipId={session.context?.membership.id ?? null}
               canWrite={canWrite}
               canApprove={canApprove}
+              onFamilyCatalogRequested={() => setDocketCatalogRequested(true)}
               onChanged={refresh}
             />
           ) : (
@@ -327,11 +347,15 @@ export default function RecordalsPage() {
 function CreateRecordal({
   dockets,
   documents,
+  catalogPending,
+  onCatalogRequested,
   membershipId,
   onCreated,
 }: {
   dockets: IpDocket[];
   documents: IpDocument[];
+  catalogPending: boolean;
+  onCatalogRequested: () => void;
   membershipId: string | null;
   onCreated: (id: string) => Promise<void>;
 }) {
@@ -428,12 +452,21 @@ function CreateRecordal({
     <Card className="min-w-0">
       <CardHeader className="flex-row items-center justify-between gap-3">
         <CardTitle as="h2">New recordal</CardTitle>
-        <Button size="sm" variant={open ? "ghost" : "outline"} onClick={() => setOpen((value) => !value)}>
+        <Button
+          size="sm"
+          variant={open ? "ghost" : "outline"}
+          onClick={() => {
+            if (!open) onCatalogRequested();
+            setOpen((value) => !value);
+          }}
+        >
           <Plus className="h-4 w-4" />
           {open ? "Close" : "Create"}
         </Button>
       </CardHeader>
-      {open ? (
+      {open && catalogPending ? (
+        <CardContent><Skeleton className="h-44" /></CardContent>
+      ) : open ? (
         <CardContent>
           <form className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-3" onSubmit={(event) => { event.preventDefault(); mutation.mutate(); }}>
             <Field label="IP docket">
@@ -533,7 +566,7 @@ function RecordalList({ rows, dockets, selectedId, onSelect }: { rows: IpRecorda
   );
 }
 
-function RecordalDetail({ workspace, docket, allDockets, documents, registry, deadlines, membershipId, canWrite, canApprove, onChanged }: {
+function RecordalDetail({ workspace, docket, allDockets, documents, registry, deadlines, membershipId, canWrite, canApprove, onFamilyCatalogRequested, onChanged }: {
   workspace: IpRecordalWorkspace;
   docket: IpDocket;
   allDockets: IpDocket[];
@@ -543,6 +576,7 @@ function RecordalDetail({ workspace, docket, allDockets, documents, registry, de
   membershipId: string | null;
   canWrite: boolean;
   canApprove: boolean;
+  onFamilyCatalogRequested: () => void;
   onChanged: () => Promise<unknown>;
 }) {
   const recordal = workspace.recordal;
@@ -553,7 +587,13 @@ function RecordalDetail({ workspace, docket, allDockets, documents, registry, de
         <div className="min-w-0"><p className="text-sm text-[var(--color-mute)]">{docket.title}</p><h2 className="break-words text-xl font-semibold">{TYPE_OPTIONS.find((option) => option.value === recordal.recordal_type)?.label ?? readable(recordal.recordal_type)}</h2><div className="mt-2 flex flex-wrap gap-2"><Badge tone={recordal.status === "accepted" ? "success" : recordal.status === "defective" || recordal.status === "rejected" ? "warning" : "neutral"}>{readable(recordal.status)}</Badge><Badge tone="neutral">Version {recordal.version}</Badge></div></div>
         <Link className="inline-flex items-center gap-1 text-sm font-medium underline" href="/app/ip">Open IP docket <ArrowUpRight className="h-3.5 w-3.5" /></Link>
       </header>
-      <Tabs defaultValue="recordal" className="min-w-0">
+      <Tabs
+        defaultValue="recordal"
+        className="min-w-0"
+        onValueChange={(value) => {
+          if (value === "title") onFamilyCatalogRequested();
+        }}
+      >
         <TabsList className="flex h-auto min-w-0 flex-wrap justify-start gap-1 border-b border-[var(--color-line)] p-3">
           <TabsTrigger value="recordal">Recordal</TabsTrigger>
           <TabsTrigger value="title">Title at date</TabsTrigger>

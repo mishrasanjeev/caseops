@@ -10293,6 +10293,12 @@ export async function fetchIpDocuments(): Promise<{ items: IpDocument[]; total: 
   return apiRequest("/api/ip/documents");
 }
 
+export async function fetchIpDocumentsForDocket(
+  docketId: string,
+): Promise<{ items: IpDocument[]; total: number }> {
+  return apiRequest(`/api/ip/documents?docket_id=${encodeURIComponent(docketId)}`);
+}
+
 export async function fetchIpDocumentTaxonomy(): Promise<{
   taxonomy_version: string;
   entries: Array<{ key: string; label: string; is_active: boolean; version: number }>;
