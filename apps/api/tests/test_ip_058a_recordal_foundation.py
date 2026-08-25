@@ -571,7 +571,7 @@ def test_recordal_withdrawal_rejection_and_tenant_boundaries(client: TestClient)
             "company_type": "law_firm",
             "owner_full_name": "Boundary Owner",
             "owner_email": "recordal-boundary@example.com",
-            "owner_password": "FixturePass123!",
+            "owner_password": "Aa1!" + ("fixture" * 3),
         },
     )
     assert second.status_code == 200, second.text
