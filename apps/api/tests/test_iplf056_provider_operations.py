@@ -120,6 +120,20 @@ def test_ip_provider_attempts_use_shared_operations_contract_without_secret_leak
     assert operations["source_link_health"]["response_class"] == "changed_content"
     assert operations["source_link_health"]["mark_resolved_available"] is True
 
+    readiness_response = client.get(
+        "/api/admin/provider-operations/readiness",
+        headers=headers,
+    )
+    assert readiness_response.status_code == 200, readiness_response.text
+    readiness = {row["provider"]: row for row in readiness_response.json()["providers"]}
+    assert readiness["ipindia-registry"]["enabled"] is False
+    assert readiness["ipindia-registry"]["external_calls_enabled"] is False
+    assert readiness["ipindia-registry"]["adapter_contract"]["implemented_capabilities"] == []
+    assert readiness["indian-kanoon"]["external_calls_enabled"] is False
+    assert "replay" not in readiness["indian-kanoon"]["adapter_contract"][
+        "implemented_capabilities"
+    ]
+
     exact = client.get(
         f"/api/admin/provider-operations/jobs/ip_registry_sync:{registry_attempt_id}",
         headers=headers,
@@ -151,6 +165,15 @@ def test_ip_provider_attempts_use_shared_operations_contract_without_secret_leak
     assert resolved.status_code == 200, resolved.text
     assert resolved.json()["operation"]["status"] == "resolved"
     assert resolved.json()["operation"]["operator_state"] == "resolved"
+
+    open_after_resolution = client.get(
+        "/api/admin/provider-operations/jobs",
+        headers=headers,
+    )
+    assert open_after_resolution.status_code == 200, open_after_resolution.text
+    assert f"source_link_health:{source_report_id}" not in {
+        row["id"] for row in open_after_resolution.json()["operations"]
+    }
 
     replay_preview = client.post(
         "/api/admin/provider-operations/jobs/replay-preview",

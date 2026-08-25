@@ -543,6 +543,16 @@ function OperationRow({
               : ` - records affected ${operation.records_affected}`}
             {operation.correlation_ref ? ` - correlation ${operation.correlation_ref}` : ""}
           </div>
+          <div
+            className="mt-1 text-xs text-[var(--color-mute)]"
+            data-testid={`provider-operation-cost-${operation.id}`}
+          >
+            cost {operation.estimated_cost_currency} {(
+              operation.estimated_cost_minor / 100
+            ).toFixed(2)}
+            {" - "}
+            {operation.estimated_cost_basis.replaceAll("_", " ")}
+          </div>
           {operation.error_redacted ? (
             <div className="mt-1 text-xs text-[var(--color-warn-700,#a55400)]">
               {operation.error_redacted}
