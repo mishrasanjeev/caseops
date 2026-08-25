@@ -108,6 +108,13 @@ PUBLIC_MUTATING_ROUTES: set[tuple[str, str]] = {
     # exercised by tests/test_portal_matters.py.
     ("POST", "/api/portal/matters/{matter_id}/communications"),
     ("POST", "/api/portal/matters/{matter_id}/kyc"),
+    # IPLF-055 client instructions use the same portal principal boundary:
+    # get_current_portal_user authenticates the cookie, while the service
+    # requires an active matching grant, a visible non-stale publication,
+    # and target/version alignment. Portal users are not memberships, so a
+    # firm capability dependency cannot apply. Authorization, revocation,
+    # stale-target, and cross-tenant paths are covered by test_portal_ip.py.
+    ("POST", "/api/portal/publications/{publication_id}/instructions"),
     # Phase C-3 (2026-04-25, MOD-TS-016) — outside-counsel portal
     # mutations. Same justification as the C-2 entries above:
     # get_current_portal_user + role='outside_counsel' grant gate
