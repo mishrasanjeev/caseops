@@ -16,6 +16,9 @@ ProviderOperationKind = Literal[
     "calendar_event_candidate",
     "inbound_email_event",
     "connector_health",
+    "ip_registry_sync",
+    "ip_journal_ingestion",
+    "source_link_health",
 ]
 ProviderOperatorState = Literal["open", "ignored", "resolved"]
 ProviderOperationAction = Literal["replay", "ignore", "mark_resolved"]
@@ -115,6 +118,10 @@ class ProviderOperationRecord(BaseModel):
         "rate_limit",
         "parse_error",
         "provider_outage",
+        "url_failure",
+        "removed_document",
+        "changed_content",
+        "unsupported_access",
         "configuration",
         "policy",
         "unknown",

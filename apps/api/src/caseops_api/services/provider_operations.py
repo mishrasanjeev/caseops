@@ -24,6 +24,8 @@ from caseops_api.db.models import (
     ConnectorHealthRecord,
     DriveFileCandidate,
     InboundEmailEvent,
+    IpJournalIngestionRun,
+    IpRegistrySyncAttempt,
     MailboxImportStatus,
     MailboxMessageImport,
     MailboxWebhookEvent,
@@ -32,6 +34,7 @@ from caseops_api.db.models import (
     NotificationDeliveryIntent,
     NotificationDeliveryStatus,
     ProviderCostCategory,
+    SourceLinkReport,
     TrackedCasePollRun,
     TrackedCaseProviderOperation,
     UserCalendarConnection,
@@ -173,6 +176,9 @@ def _split_operation_id(operation_id: str) -> tuple[str, str]:
             "case_tracking_record",
             "mailbox_message_import",
             "mailbox_webhook",
+            "ip_registry_sync",
+            "ip_journal_ingestion",
+            "source_link_health",
         }
         or not row_id
     ):
@@ -207,6 +213,14 @@ def _classify_response(record: ProviderOperationRecord) -> str:
         return "parse_error"
     if "outage" in value or "unavailable" in value:
         return "provider_outage"
+    if "broken" in value or "url" in value:
+        return "url_failure"
+    if "removed" in value or "gone" in value:
+        return "removed_document"
+    if "changed" in value or "stale" in value or "wrong_document" in value:
+        return "changed_content"
+    if "unsupported" in value or "access_denied" in value:
+        return "unsupported_access"
     if "config" in value or "disabled" in value:
         return "configuration"
     if "policy" in value or "suppression" in value:
@@ -818,6 +832,137 @@ def _connector_health_record(row: ConnectorHealthRecord) -> ProviderOperationRec
     )
 
 
+def _ip_registry_sync_record(row: IpRegistrySyncAttempt) -> ProviderOperationRecord:
+    updated_at = row.completed_at or row.started_at or row.created_at
+    return ProviderOperationRecord(
+        id=_operation_id("ip_registry_sync", row.id),
+        job_kind="ip_registry_sync",
+        provider=row.provider_key,
+        company_id=row.company_id,
+        matter_id=None,
+        source_type="ip_registry_link",
+        source_ref=redact_identifier(row.link_id),
+        provider_item_ref=None,
+        status=row.status,
+        operator_state="open",
+        error_redacted=(redact_provider_error(row.error_redacted) if row.error_redacted else None),
+        dead_letter_reason=None,
+        attempts=max(1, row.attempts),
+        max_attempts=max(1, row.attempts),
+        next_attempt_at=None,
+        created_at=row.created_at,
+        updated_at=updated_at,
+        response_class=row.response_class,  # type: ignore[arg-type]
+        last_attempted_at=row.started_at,
+        last_successful_at=(updated_at if row.status in {"succeeded", "no_change"} else None),
+        last_good_at=(updated_at if row.status in {"succeeded", "no_change"} else None),
+        freshness_state="blocked" if row.status == "blocked" else "stale",
+        estimated_cost_minor=max(0, row.cost_minor),
+        estimated_cost_currency=row.currency,
+        estimated_cost_basis="recorded_registry_attempt",
+        replay_available=False,
+        ignore_available=False,
+        mark_resolved_available=False,
+        automatic_replay_block_code="provider_replay_not_activated",
+        notes=[
+            f"operation_kind={row.operation_kind}",
+            "Registry attempt evidence is append-only operational history.",
+            "Replay stays disabled until the registered adapter supports replay; "
+            "manual sourced docketing remains available.",
+        ],
+    )
+
+
+def _ip_journal_ingestion_record(row: IpJournalIngestionRun) -> ProviderOperationRecord:
+    updated_at = row.completed_at or row.started_at or row.created_at
+    response_class = "rate_limit" if row.status == "paused_cost_quota" else "unknown"
+    return ProviderOperationRecord(
+        id=_operation_id("ip_journal_ingestion", row.id),
+        job_kind="ip_journal_ingestion",
+        provider=row.provider_key,
+        company_id=row.company_id,
+        matter_id=None,
+        source_type="ip_journal_ingestion_run",
+        source_ref=redact_identifier(row.idempotency_key),
+        provider_item_ref=None,
+        status=row.status,
+        operator_state="open",
+        error_redacted=(redact_provider_error(row.error_redacted) if row.error_redacted else None),
+        dead_letter_reason=("cost_quota_exhausted" if row.status == "paused_cost_quota" else None),
+        attempts=1,
+        max_attempts=1,
+        next_attempt_at=None,
+        created_at=row.created_at,
+        updated_at=updated_at,
+        response_class=response_class,
+        last_attempted_at=row.started_at,
+        freshness_state="blocked" if row.status == "paused_cost_quota" else "stale",
+        records_affected=row.publications_created + row.hits_created,
+        estimated_cost_minor=max(0, row.cost_minor),
+        estimated_cost_currency=row.currency,
+        estimated_cost_basis="recorded_journal_ingestion",
+        replay_available=False,
+        ignore_available=False,
+        mark_resolved_available=False,
+        automatic_replay_block_code="journal_payload_not_retained_for_replay",
+        notes=[
+            f"publications_seen={row.publications_seen}",
+            f"publications_created={row.publications_created}",
+            f"hits_created={row.hits_created}",
+            "The immutable source payload is not retained in provider operations; "
+            "ingest a newly verified journal source instead of replaying stale input.",
+        ],
+    )
+
+
+def _source_link_health_record(row: SourceLinkReport) -> ProviderOperationRecord:
+    response_class = {
+        "broken": "url_failure",
+        "wrong_document": "changed_content",
+        "access_denied": "unsupported_access",
+        "stale": "changed_content",
+    }.get(row.issue_type, "unknown")
+    operator_state = (
+        "resolved"
+        if row.status == "resolved"
+        else "ignored"
+        if row.status == "dismissed"
+        else "open"
+    )
+    open_action = operator_state == "open"
+    return ProviderOperationRecord(
+        id=_operation_id("source_link_health", row.id),
+        job_kind="source_link_health",
+        provider="source-actions",
+        company_id=row.company_id,
+        matter_id=None,
+        source_type=row.target_type,
+        source_ref=redact_identifier(row.target_id),
+        provider_item_ref=None,
+        status=row.status,
+        operator_state=operator_state,
+        error_redacted=(redact_provider_error(row.description) if row.description else None),
+        dead_letter_reason=row.issue_type,
+        attempts=1,
+        max_attempts=1,
+        next_attempt_at=None,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+        response_class=response_class,  # type: ignore[arg-type]
+        last_attempted_at=row.updated_at,
+        freshness_state=("blocked" if row.source_state in {"blocked", "quarantined"} else "stale"),
+        replay_available=False,
+        ignore_available=open_action,
+        mark_resolved_available=open_action,
+        automatic_replay_block_code="source_health_requires_fresh_inspection",
+        notes=[
+            f"origin_surface={row.origin_surface}",
+            f"destination_class={row.destination_class}",
+            "Provider credentials and raw destination URLs are not stored in this queue.",
+        ],
+    )
+
+
 def list_provider_operations(
     session: Session,
     *,
@@ -1021,6 +1166,50 @@ def list_provider_operations(
             .limit(source_limit)
         )
     )
+    registry_attempt_rows = list(
+        session.scalars(
+            select(IpRegistrySyncAttempt)
+            .where(
+                IpRegistrySyncAttempt.company_id == context.company.id,
+                IpRegistrySyncAttempt.status.in_(("failed", "blocked")),
+            )
+            .order_by(
+                IpRegistrySyncAttempt.created_at.desc(),
+                IpRegistrySyncAttempt.id.desc(),
+            )
+            .limit(source_limit)
+        )
+    )
+    journal_ingestion_rows = list(
+        session.scalars(
+            select(IpJournalIngestionRun)
+            .where(
+                IpJournalIngestionRun.company_id == context.company.id,
+                IpJournalIngestionRun.status.in_(("failed", "paused_cost_quota")),
+            )
+            .order_by(
+                IpJournalIngestionRun.created_at.desc(),
+                IpJournalIngestionRun.id.desc(),
+            )
+            .limit(source_limit)
+        )
+    )
+    source_health_statuses = (
+        ("queued", "investigating", "resolved", "dismissed")
+        if include_resolved
+        else ("queued", "investigating")
+    )
+    source_health_rows = list(
+        session.scalars(
+            select(SourceLinkReport)
+            .where(
+                SourceLinkReport.company_id == context.company.id,
+                SourceLinkReport.status.in_(source_health_statuses),
+            )
+            .order_by(SourceLinkReport.updated_at.desc(), SourceLinkReport.id.desc())
+            .limit(source_limit)
+        )
+    )
     records = [
         *(_calendar_record(row) for row in calendar_rows),
         *(_notification_record(row) for row in notification_rows),
@@ -1032,6 +1221,9 @@ def list_provider_operations(
         *(_calendar_candidate_record(row) for row in calendar_candidate_rows),
         *(_inbound_email_event_record(row) for row in inbound_email_event_rows),
         *(_connector_health_record(row) for row in connector_health_rows),
+        *(_ip_registry_sync_record(row) for row in registry_attempt_rows),
+        *(_ip_journal_ingestion_record(row) for row in journal_ingestion_rows),
+        *(_source_link_health_record(row) for row in source_health_rows),
     ]
     if not include_resolved:
         records = [row for row in records if row.operator_state == "open"]
@@ -1237,6 +1429,70 @@ def _load_mailbox_webhook_operation(
     return row
 
 
+def _load_ip_registry_sync_operation(
+    session: Session,
+    *,
+    context: SessionContext,
+    row_id: str,
+) -> IpRegistrySyncAttempt:
+    row = session.scalar(
+        select(IpRegistrySyncAttempt).where(
+            IpRegistrySyncAttempt.id == row_id,
+            IpRegistrySyncAttempt.company_id == context.company.id,
+        )
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Provider operation not found.",
+        )
+    return row
+
+
+def _load_ip_journal_ingestion_operation(
+    session: Session,
+    *,
+    context: SessionContext,
+    row_id: str,
+) -> IpJournalIngestionRun:
+    row = session.scalar(
+        select(IpJournalIngestionRun).where(
+            IpJournalIngestionRun.id == row_id,
+            IpJournalIngestionRun.company_id == context.company.id,
+        )
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Provider operation not found.",
+        )
+    return row
+
+
+def _load_source_link_health_operation(
+    session: Session,
+    *,
+    context: SessionContext,
+    row_id: str,
+    for_update: bool = False,
+) -> SourceLinkReport:
+    statement = select(SourceLinkReport).where(
+        SourceLinkReport.id == row_id,
+        SourceLinkReport.company_id == context.company.id,
+    )
+    if for_update:
+        statement = statement.with_for_update(of=SourceLinkReport).execution_options(
+            populate_existing=True
+        )
+    row = session.scalar(statement)
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Provider operation not found.",
+        )
+    return row
+
+
 def _load_operation_record(
     session: Session,
     *,
@@ -1270,6 +1526,24 @@ def _load_operation_record(
         return _enrich_operation(
             _mailbox_import_record(
                 _load_mailbox_import_operation(session, context=context, row_id=row_id)
+            )
+        )
+    if kind == "ip_registry_sync":
+        return _enrich_operation(
+            _ip_registry_sync_record(
+                _load_ip_registry_sync_operation(session, context=context, row_id=row_id)
+            )
+        )
+    if kind == "ip_journal_ingestion":
+        return _enrich_operation(
+            _ip_journal_ingestion_record(
+                _load_ip_journal_ingestion_operation(session, context=context, row_id=row_id)
+            )
+        )
+    if kind == "source_link_health":
+        return _enrich_operation(
+            _source_link_health_record(
+                _load_source_link_health_operation(session, context=context, row_id=row_id)
             )
         )
     return _enrich_operation(
@@ -2225,6 +2499,78 @@ def update_provider_operation_state(
     kind, row_id = _split_operation_id(operation_id)
     marker = _OPERATOR_IGNORE_REASON if action == "ignore" else _OPERATOR_RESOLVE_REASON
     current_time = _now()
+
+    if kind == "source_link_health":
+        row = _load_source_link_health_operation(
+            session,
+            context=context,
+            row_id=row_id,
+            for_update=True,
+        )
+        previous_status = row.status
+        next_status = "dismissed" if action == "ignore" else "resolved"
+        changed = row.status not in {"resolved", "dismissed"}
+        if changed:
+            row.status = next_status
+            row.updated_at = current_time
+            session.add(row)
+        _audit_operation_action(
+            session,
+            context=context,
+            action=action,
+            target_type="source_link_report",
+            target_id=row.id,
+            provider="source-actions",
+            previous_status=previous_status,
+            next_status=row.status,
+            changed=changed,
+            reason=reason,
+        )
+        session.commit()
+        return ProviderOperationActionResponse(
+            action=action,
+            changed=changed,
+            message=(
+                "Source-health report was dismissed."
+                if action == "ignore"
+                else "Source-health report was marked resolved."
+            ),
+            operation=_source_link_health_record(row),
+        )
+
+    if kind in {"ip_registry_sync", "ip_journal_ingestion"}:
+        current = _load_operation_record(
+            session,
+            context=context,
+            operation_id=operation_id,
+        )
+        _audit_operation_action(
+            session,
+            context=context,
+            action=action,
+            target_type=(
+                "ip_registry_sync_attempt"
+                if kind == "ip_registry_sync"
+                else "ip_journal_ingestion_run"
+            ),
+            target_id=row_id,
+            provider=current.provider,
+            previous_status=current.status,
+            next_status=current.status,
+            changed=False,
+            result=AuditResult.DENIED,
+            reason=reason,
+        )
+        session.commit()
+        return ProviderOperationActionResponse(
+            action=action,
+            changed=False,
+            message=(
+                "Registry and journal attempt evidence is immutable; resolve the active "
+                "link, profile, or source-health workflow instead."
+            ),
+            operation=current,
+        )
 
     if kind == "calendar_sync":
         row = _lock_calendar_operation_with_source_parent(

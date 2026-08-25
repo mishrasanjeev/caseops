@@ -36949,7 +36949,7 @@ export interface components {
              * Job Kind
              * @enum {string}
              */
-            job_kind: "calendar_sync" | "notification_delivery" | "case_tracking_poll" | "case_tracking_record" | "mailbox_message_import" | "mailbox_webhook" | "drive_file_candidate" | "calendar_event_candidate" | "inbound_email_event" | "connector_health";
+            job_kind: "calendar_sync" | "notification_delivery" | "case_tracking_poll" | "case_tracking_record" | "mailbox_message_import" | "mailbox_webhook" | "drive_file_candidate" | "calendar_event_candidate" | "inbound_email_event" | "connector_health" | "ip_registry_sync" | "ip_journal_ingestion" | "source_link_health";
             /** Last Attempted At */
             last_attempted_at?: string | null;
             /** Last Good At */
@@ -36997,7 +36997,7 @@ export interface components {
              * @default unknown
              * @enum {string}
              */
-            response_class: "success" | "no_change" | "timeout" | "authentication" | "rate_limit" | "parse_error" | "provider_outage" | "configuration" | "policy" | "unknown";
+            response_class: "success" | "no_change" | "timeout" | "authentication" | "rate_limit" | "parse_error" | "provider_outage" | "url_failure" | "removed_document" | "changed_content" | "unsupported_access" | "configuration" | "policy" | "unknown";
             /**
              * Retryable
              * @default false
