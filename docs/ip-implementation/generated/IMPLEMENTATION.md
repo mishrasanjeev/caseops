@@ -113,7 +113,7 @@ Generated; do not edit.
 | IPLF-057A | derived | IPLF-057 | M5 |  |  | implemented | passed | deployment_verified |
 | IPLF-057B | derived | IPLF-057 | M5 | IP-MAD-01, IP-MAD-02, IP-MAD-03, IP-MAD-04 | UJ-35-EXC-01, UJ-35-EXC-02, UJ-35-EXC-03, UJ-35-EXC-04, UJ-35-NORMAL | implemented | passed | deployment_verified |
 | IPLF-058A | derived | IPLF-058 | M5 |  |  | implemented | passed | deployment_verified |
-| IPLF-058B | derived | IPLF-058 | M5 | IP-POST-01, IP-POST-02, IP-POST-03, IP-POST-04 | UJ-36-EXC-01, UJ-36-EXC-02, UJ-36-EXC-03, UJ-36-EXC-04, UJ-36-NORMAL, UJ-61-EXC-01, UJ-61-EXC-02, UJ-61-NORMAL | implemented | passed | blocked |
+| IPLF-058B | derived | IPLF-058 | M5 | IP-POST-01, IP-POST-02, IP-POST-03, IP-POST-04 | UJ-36-EXC-01, UJ-36-EXC-02, UJ-36-EXC-03, UJ-36-EXC-04, UJ-36-NORMAL, UJ-61-EXC-01, UJ-61-EXC-02, UJ-61-NORMAL | implemented | passed | deployment_verified |
 | IPLF-059A | derived | IPLF-059 | M5 |  |  | not_started | not_run | blocked |
 | IPLF-059B | derived | IPLF-059 | M5 |  | UJ-37-EXC-01, UJ-37-EXC-02, UJ-37-EXC-03, UJ-37-EXC-04, UJ-37-NORMAL | not_started | not_run | blocked |
 | IPLF-060A | derived | IPLF-060 | M6 |  |  | not_started | not_run | blocked |
