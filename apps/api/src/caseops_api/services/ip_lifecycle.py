@@ -20,6 +20,7 @@ from caseops_api.db.models import (
     IpDeadlineIncident,
     IpDocketEvent,
     IpDocketRecord,
+    IpForeignAssociateInstruction,
     IpIdentifier,
     IpProceeding,
     IpRelatedRightObligation,
@@ -1209,6 +1210,31 @@ def _neutralize_direct_docket_work_and_projections(
     become actionable again when the parent is reopened.
     """
 
+    foreign_associate_instructions = list(
+        session.scalars(
+            select(IpForeignAssociateInstruction)
+            .where(
+                IpForeignAssociateInstruction.company_id == docket.company_id,
+                IpForeignAssociateInstruction.docket_id == docket.id,
+                IpForeignAssociateInstruction.status.notin_(
+                    ("completed", "superseded", "cancelled")
+                ),
+                IpForeignAssociateInstruction.neutralized_at.is_(None),
+            )
+            .order_by(IpForeignAssociateInstruction.id)
+            .with_for_update(of=IpForeignAssociateInstruction)
+            .execution_options(populate_existing=True)
+        )
+    )
+    for instruction in foreign_associate_instructions:
+        instruction.status = "cancelled"
+        instruction.row_version += 1
+        instruction.updated_by_membership_id = event.entered_by_membership_id
+        instruction.neutralized_by_ip_lifecycle_event_id = event.id
+        instruction.neutralized_by_ip_lifecycle_version = lifecycle_version
+        instruction.neutralized_at = now
+        instruction.updated_at = now
+
     tasks = list(
         session.scalars(
             select(MatterTask)
@@ -1499,6 +1525,9 @@ def _neutralize_direct_docket_work_and_projections(
             created_syncs += 1
 
     return {
+        "cancelled_foreign_associate_instructions": len(
+            foreign_associate_instructions
+        ),
         "cancelled_shared_tasks": len(tasks),
         "cancelled_shared_hearings": len(hearings),
         "cancelled_hearing_reminders": len(reminders),

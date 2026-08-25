@@ -236,6 +236,18 @@ def _foundation_records(
             external_message_id="associate-dispatch-wrong-recipient",
             created_by_membership_id=membership_id,
         )
+        pending_communication = Communication(
+            company_id=company_id,
+            matter_id=matter.id,
+            direction="outbound",
+            channel="email",
+            subject="ASTER US filing instruction",
+            body="Instruction awaiting dispatch.",
+            recipient_email="filings@liberty-ip.example",
+            status="queued",
+            occurred_at=datetime.now(UTC),
+            created_by_membership_id=membership_id,
+        )
         session.add_all(
             [
                 assignment,
@@ -260,7 +272,7 @@ def _foundation_records(
             amount_minor=265000,
             status="submitted",
         )
-        session.add(spend)
+        session.add_all([spend, pending_communication])
         session.commit()
         return {
             "filing_document_id": documents[0].id,
@@ -274,6 +286,7 @@ def _foundation_records(
             "actual_id": actual.id,
             "communication_id": communication.id,
             "wrong_recipient_communication_id": wrong_recipient_communication.id,
+            "pending_communication_id": pending_communication.id,
             "spend_id": spend.id,
         }
 
@@ -394,7 +407,25 @@ def test_foreign_associate_contract_separates_delivery_ack_and_evidence(
         assert membership is not None
         membership.role = MembershipRole.OWNER
         estimate = session.get(IpCostItem, records["estimate_id"])
-        assert estimate is not None
+        assignment = session.get(
+            MatterOutsideCounselAssignment, records["assignment_id"]
+        )
+        assert estimate is not None and assignment is not None
+        assignment.budget_amount_minor = None
+        session.commit()
+
+    missing_assignment_budget = client.post(
+        "/api/ip/foreign-associate-instructions", headers=headers, json=payload
+    )
+    assert missing_assignment_budget.status_code == 422
+    assert "budget ceiling" in missing_assignment_budget.text
+    with get_session_factory()() as session:
+        estimate = session.get(IpCostItem, records["estimate_id"])
+        assignment = session.get(
+            MatterOutsideCounselAssignment, records["assignment_id"]
+        )
+        assert estimate is not None and assignment is not None
+        assignment.budget_amount_minor = 250000
         estimate.amount_minor = 250001
         session.commit()
 
@@ -465,6 +496,36 @@ def test_foreign_associate_contract_separates_delivery_ack_and_evidence(
     )
     assert stale.status_code == 409
     assert "version changed" in stale.text
+
+    pending_dispatch = _transaction(
+        client,
+        headers=headers,
+        docket_id=docket["id"],
+        instruction_id=instruction["id"],
+        version=2,
+        membership_id=membership_id,
+        kind="dispatch",
+        extra={"dispatch_communication_id": records["pending_communication_id"]},
+    )
+    assert pending_dispatch.status_code == 422
+    assert "sent or manual-dispatch state" in pending_dispatch.text
+    with get_session_factory()() as session:
+        pending = session.get(Communication, records["pending_communication_id"])
+        assert pending is not None
+        pending.status = "failed"
+        session.commit()
+    failed_dispatch = _transaction(
+        client,
+        headers=headers,
+        docket_id=docket["id"],
+        instruction_id=instruction["id"],
+        version=2,
+        membership_id=membership_id,
+        kind="dispatch",
+        extra={"dispatch_communication_id": records["pending_communication_id"]},
+    )
+    assert failed_dispatch.status_code == 422
+    assert "sent or manual-dispatch state" in failed_dispatch.text
 
     wrong_recipient = _transaction(
         client,
@@ -804,3 +865,127 @@ def test_foreign_associate_refusal_reassignment_preserves_versioned_history(
     assert body["successor"]["selected_document_refs_json"] == sorted(
         [records["filing_document_id"], records["privileged_document_id"]]
     )
+
+
+def test_terminal_docket_neutralizes_instruction_without_reopen_resurrection(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    company_id = str(bootstrap["company"]["id"])
+    membership_id = str(bootstrap["membership"]["id"])
+    matter, docket = _matter_and_docket(
+        client,
+        headers=headers,
+        company_id=company_id,
+        membership_id=membership_id,
+    )
+    records = _foundation_records(
+        client,
+        headers=headers,
+        company_id=company_id,
+        membership_id=membership_id,
+        matter=matter,
+        docket_id=docket["id"],
+    )
+    created = client.post(
+        "/api/ip/foreign-associate-instructions",
+        headers=headers,
+        json=_create_payload(
+            docket_id=docket["id"],
+            membership_id=membership_id,
+            records=records,
+            thread="ASTER-US-LIFECYCLE-2026",
+        ),
+    )
+    assert created.status_code == 201, created.text
+    instruction_id = created.json()["id"]
+    approved = _transaction(
+        client,
+        headers=headers,
+        docket_id=docket["id"],
+        instruction_id=instruction_id,
+        version=1,
+        membership_id=membership_id,
+        kind="approve",
+    )
+    assert approved.status_code == 201, approved.text
+    dispatched = _transaction(
+        client,
+        headers=headers,
+        docket_id=docket["id"],
+        instruction_id=instruction_id,
+        version=2,
+        membership_id=membership_id,
+        kind="dispatch",
+        extra={"dispatch_communication_id": records["communication_id"]},
+    )
+    assert dispatched.status_code == 201, dispatched.text
+
+    lifecycle_payload = {
+        "expected_lifecycle_version": 0,
+        "to_status": "closed",
+        "effective_at": datetime.now(UTC).isoformat(),
+        "reason": "Client instructed the firm to close the foreign filing docket.",
+        "outcome": "closed",
+        "source": "client_instruction",
+        "evidence_ref": "attachment:foreign-filing-closure",
+        "linked_matter_handling": "reviewed",
+        "client_report_handling": "retain",
+    }
+    closed = client.post(
+        f"/api/ip/dockets/{docket['id']}/lifecycle",
+        headers=headers,
+        json=lifecycle_payload,
+    )
+    assert closed.status_code == 200, closed.text
+    close_event = closed.json()["event"]
+    assert close_event["payload_json"]["cancelled_foreign_associate_instructions"] == 1
+
+    with get_session_factory()() as session:
+        stored = session.get(IpForeignAssociateInstruction, instruction_id)
+        assert stored is not None
+        assert stored.status == "cancelled"
+        assert stored.row_version == 4
+        assert stored.neutralized_by_ip_lifecycle_event_id == close_event["id"]
+        assert stored.neutralized_by_ip_lifecycle_version == 1
+        assert stored.neutralized_at is not None
+
+    reopened = client.post(
+        f"/api/ip/dockets/{docket['id']}/lifecycle",
+        headers=headers,
+        json={
+            **lifecycle_payload,
+            "expected_lifecycle_version": 1,
+            "to_status": "ready",
+            "reason": "Authorized lawyer approved controlled reopening.",
+            "outcome": "reopened",
+            "evidence_ref": "attachment:foreign-filing-reopen",
+        },
+    )
+    assert reopened.status_code == 200, reopened.text
+    assert (
+        reopened.json()["event"]["payload_json"][
+            "cancelled_foreign_associate_instructions"
+        ]
+        == 0
+    )
+    assert (
+        client.get(
+            f"/api/ip/foreign-associate-instructions/{instruction_id}",
+            headers=headers,
+        ).status_code
+        == 404
+    )
+    listing = client.get(
+        "/api/ip/foreign-associate-instructions",
+        headers=headers,
+        params={"outstanding_response": True},
+    )
+    assert listing.status_code == 200, listing.text
+    assert listing.json()["items"] == []
+    with get_session_factory()() as session:
+        stored = session.get(IpForeignAssociateInstruction, instruction_id)
+        assert stored is not None
+        assert stored.status == "cancelled"
+        assert stored.neutralized_by_ip_lifecycle_event_id == close_event["id"]

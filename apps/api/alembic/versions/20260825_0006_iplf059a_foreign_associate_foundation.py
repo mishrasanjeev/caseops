@@ -77,6 +77,11 @@ def upgrade() -> None:
         sa.Column("filing_verified_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("actual_cost_item_id", sa.String(length=36), nullable=True),
         sa.Column("spend_record_id", sa.String(length=36), nullable=True),
+        sa.Column(
+            "neutralized_by_ip_lifecycle_event_id", sa.String(length=36), nullable=True
+        ),
+        sa.Column("neutralized_by_ip_lifecycle_version", sa.Integer(), nullable=True),
+        sa.Column("neutralized_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("status", sa.String(length=24), nullable=False),
         sa.Column("created_by_membership_id", sa.String(length=36), nullable=False),
         sa.Column("updated_by_membership_id", sa.String(length=36), nullable=False),
@@ -126,6 +131,22 @@ def upgrade() -> None:
             "'evidence_verified', 'invoiced', 'completed') OR "
             "(acknowledged_at IS NOT NULL AND acknowledgement_reference IS NOT NULL)",
             name="ck_ip_foreign_associate_acknowledgement_required",
+        ),
+        sa.CheckConstraint(
+            "(neutralized_by_ip_lifecycle_event_id IS NULL AND "
+            "neutralized_by_ip_lifecycle_version IS NULL AND neutralized_at IS NULL) OR "
+            "(neutralized_by_ip_lifecycle_event_id IS NOT NULL AND "
+            "neutralized_by_ip_lifecycle_version IS NOT NULL AND neutralized_at IS NOT NULL)",
+            name="ck_ip_foreign_associate_lifecycle_provenance_complete",
+        ),
+        sa.CheckConstraint(
+            "neutralized_by_ip_lifecycle_version IS NULL OR "
+            "neutralized_by_ip_lifecycle_version > 0",
+            name="ck_ip_foreign_associate_lifecycle_version_positive",
+        ),
+        sa.CheckConstraint(
+            "neutralized_by_ip_lifecycle_event_id IS NULL OR status = 'cancelled'",
+            name="ck_ip_foreign_associate_lifecycle_terminal_state",
         ),
         sa.ForeignKeyConstraint(
             ["docket_id", "company_id"],
@@ -179,6 +200,22 @@ def upgrade() -> None:
             ondelete="RESTRICT",
         ),
         sa.ForeignKeyConstraint(
+            [
+                "neutralized_by_ip_lifecycle_event_id",
+                "company_id",
+                "docket_id",
+                "neutralized_by_ip_lifecycle_version",
+            ],
+            [
+                "ip_docket_events.id",
+                "ip_docket_events.company_id",
+                "ip_docket_events.docket_id",
+                "ip_docket_events.resulting_lifecycle_version",
+            ],
+            name="fk_ip_foreign_associate_neutralized_event_company",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
             ["outside_counsel_id"], ["outside_counsel.id"], ondelete="RESTRICT"
         ),
         sa.ForeignKeyConstraint(
@@ -223,6 +260,21 @@ def upgrade() -> None:
         "ix_ip_foreign_associate_company_response_due",
         "ip_foreign_associate_instructions",
         ["company_id", "response_due_at", "status"],
+    )
+    op.create_index(
+        "ix_ip_foreign_associate_ip_lifecycle_event",
+        "ip_foreign_associate_instructions",
+        [
+            "neutralized_by_ip_lifecycle_event_id",
+            "company_id",
+            "docket_id",
+            "neutralized_by_ip_lifecycle_version",
+        ],
+    )
+    op.create_index(
+        "ix_ip_foreign_associate_neutralized_lifecycle_version",
+        "ip_foreign_associate_instructions",
+        ["neutralized_by_ip_lifecycle_version"],
     )
     for column in (
         "outside_counsel_id",

@@ -6,11 +6,11 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `9ad8bb4b716b9dba32ec3f280c5169152abffa54e8bfef8de903d0ae4cf48a03`
+- Canonical map SHA-256: `41c9499d10577822e3d4bf388388f35bf6f4968468720a2180cfe0fe975f2f87`
 - SQL tables: `290`
-- SQL columns: `4669`
-- ORM indexes: `1352`
-- Alembic/raw index declarations: `630`
+- SQL columns: `4672`
+- ORM indexes: `1354`
+- Alembic/raw index declarations: `632`
 - Non-SQL data classes: `11`
 
 ## Boundary
@@ -148,7 +148,7 @@ This inventory does not claim approved retention bounds, legal-hold activation, 
 | `ip_document_versions` | `tenant_restricted_legal_content` | 21 | `registry_fail_closed` |
 | `ip_documents` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
 | `ip_evidence_candidates` | `tenant_restricted_legal_content` | 15 | `registry_fail_closed` |
-| `ip_foreign_associate_instructions` | `tenant_restricted_legal_content` | 42 | `registry_fail_closed` |
+| `ip_foreign_associate_instructions` | `tenant_restricted_legal_content` | 45 | `registry_fail_closed` |
 | `ip_identifiers` | `tenant_restricted_legal_content` | 19 | `registry_fail_closed` |
 | `ip_import_rows` | `tenant_restricted_legal_content` | 16 | `registry_fail_closed` |
 | `ip_incident_kill_switches` | `tenant_restricted_legal_content` | 14 | `registry_fail_closed` |

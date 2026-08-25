@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
     Communication,
+    CommunicationStatus,
     CompanyMembership,
     IpClientInstruction,
     IpCostItem,
@@ -120,6 +121,7 @@ def _visible_statement(session: Session, *, context: SessionContext):
         )
         .where(
             IpForeignAssociateInstruction.company_id == context.company.id,
+            IpForeignAssociateInstruction.neutralized_at.is_(None),
             IpDocketRecord.is_active.is_(True),
             IpDocketRecord.archived_by_matter_disposal.is_(False),
             or_(IpDocketRecord.matter_id.is_(None), Matter.is_active.is_(True)),
@@ -357,6 +359,11 @@ def _validate_initial_estimate_budget(
         raise HTTPException(
             status_code=422,
             detail="Initial associate estimate currency does not match the approved assignment.",
+        )
+    if assignment.budget_amount_minor is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Approved outside-counsel assignment requires a budget ceiling.",
         )
     if estimate.amount_minor > assignment.budget_amount_minor:
         raise HTTPException(
@@ -635,6 +642,16 @@ def _require_dispatch_communication(
         raise HTTPException(
             status_code=422,
             detail="Dispatch Communication is missing, inbound, or belongs to another company.",
+        )
+    if row.status not in {
+        CommunicationStatus.LOGGED,
+        CommunicationStatus.SENT,
+        CommunicationStatus.DELIVERED,
+        CommunicationStatus.OPENED,
+    }:
+        raise HTTPException(
+            status_code=422,
+            detail="Dispatch Communication has not reached a sent or manual-dispatch state.",
         )
     if matter_id is not None and row.matter_id != matter_id:
         raise HTTPException(status_code=422, detail="Dispatch Communication belongs elsewhere.")

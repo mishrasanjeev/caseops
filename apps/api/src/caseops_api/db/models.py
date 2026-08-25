@@ -18297,6 +18297,22 @@ class IpForeignAssociateInstruction(Base):
             name="fk_ip_foreign_associate_updater_company",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            [
+                "neutralized_by_ip_lifecycle_event_id",
+                "company_id",
+                "docket_id",
+                "neutralized_by_ip_lifecycle_version",
+            ],
+            [
+                "ip_docket_events.id",
+                "ip_docket_events.company_id",
+                "ip_docket_events.docket_id",
+                "ip_docket_events.resulting_lifecycle_version",
+            ],
+            name="fk_ip_foreign_associate_neutralized_event_company",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint("id", "company_id", name="uq_ip_foreign_associate_id_company"),
         UniqueConstraint(
             "company_id",
@@ -18342,6 +18358,22 @@ class IpForeignAssociateInstruction(Base):
             "'evidence_verified', 'invoiced', 'completed') OR "
             "(acknowledged_at IS NOT NULL AND acknowledgement_reference IS NOT NULL)",
             name="ck_ip_foreign_associate_acknowledgement_required",
+        ),
+        CheckConstraint(
+            "(neutralized_by_ip_lifecycle_event_id IS NULL AND "
+            "neutralized_by_ip_lifecycle_version IS NULL AND neutralized_at IS NULL) OR "
+            "(neutralized_by_ip_lifecycle_event_id IS NOT NULL AND "
+            "neutralized_by_ip_lifecycle_version IS NOT NULL AND neutralized_at IS NOT NULL)",
+            name="ck_ip_foreign_associate_lifecycle_provenance_complete",
+        ),
+        CheckConstraint(
+            "neutralized_by_ip_lifecycle_version IS NULL OR "
+            "neutralized_by_ip_lifecycle_version > 0",
+            name="ck_ip_foreign_associate_lifecycle_version_positive",
+        ),
+        CheckConstraint(
+            "neutralized_by_ip_lifecycle_event_id IS NULL OR status = 'cancelled'",
+            name="ck_ip_foreign_associate_lifecycle_terminal_state",
         ),
         Index(
             "ix_ip_foreign_associate_company_docket_status",
@@ -18389,6 +18421,17 @@ class IpForeignAssociateInstruction(Base):
         Index("ix_ip_foreign_associate_estimate_cost_item_id", "estimate_cost_item_id"),
         Index("ix_ip_foreign_associate_actual_cost_item_id", "actual_cost_item_id"),
         Index("ix_ip_foreign_associate_spend_record_id", "spend_record_id"),
+        Index(
+            "ix_ip_foreign_associate_ip_lifecycle_event",
+            "neutralized_by_ip_lifecycle_event_id",
+            "company_id",
+            "docket_id",
+            "neutralized_by_ip_lifecycle_version",
+        ),
+        Index(
+            "ix_ip_foreign_associate_neutralized_lifecycle_version",
+            "neutralized_by_ip_lifecycle_version",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -18455,6 +18498,15 @@ class IpForeignAssociateInstruction(Base):
     )
     spend_record_id: Mapped[str | None] = mapped_column(
         ForeignKey("outside_counsel_spend_records.id", ondelete="RESTRICT"), nullable=True
+    )
+    neutralized_by_ip_lifecycle_event_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
+    neutralized_by_ip_lifecycle_version: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    neutralized_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="draft")
     created_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
