@@ -16,14 +16,14 @@
     "execution_policy": "codex_owned_single_ordered_queue; implement first and run the automated check and exact-release verification batch at the end",
     "active_slice": "IPLF-058B",
     "checkpoint": {
-      "recorded_at": "2026-08-25T16:36:40+05:30",
-      "repository_revision": "57706e9bb51fd17e495ecc9cd9f4533bb7511010",
-      "environment": "Main and production serve exact merge 57706e9b. IPLF-057B passed hosted CI/security/CodeQL, migration-first deployment, exact identity/health, dedicated UJ-35 production acceptance and the complete corrected production Playwright batch.",
-      "completed_scope": "IPLF-057B is deployment-verified for the full Madrid registration/designation workspace, typed transactions, source-candidate reconciliation, exception paths, bounded canonical evidence projection, fail-closed WIPO readiness, guide and truthful law-firm claims without introducing a duplicate owner.",
+      "recorded_at": "2026-08-25T19:52:02+05:30",
+      "repository_revision": "1880b81648df7603d7f0e3313873d9c3bcbf9b5a",
+      "environment": "Main and production serve exact merge 1880b816. IPLF-058A passed hosted and exact-main CI/security/CodeQL, migration-first deployment, immutable scheduler reconciliation, latest-only traffic, exact identity/health and the complete production Playwright verification batch.",
+      "completed_scope": "IPLF-058A is deployment-verified for the canonical post-registration recordal aggregate, typed lifecycle and transactions, writer/approver RBAC, optimistic concurrency, canonical instrument and Registry evidence, effective-dated title projections, tenant isolation and additive migration without duplicating shared owners.",
       "program_state": "PROGRAM INCOMPLETE",
       "next_slice": "IPLF-058B",
-      "next_action": "Release IPLF-058A only after hosted and exact-production proof, then implement IPLF-058B UJ-36/UJ-61 workflows over its canonical recordal foundation.",
-      "evidence_ref": "docs/ip-implementation/evidence/m5/IPLF-057/release-057b-2026-08-25.md"
+      "next_action": "Implement IPLF-058B UJ-36/UJ-61 operator workflows, exception paths, chain-of-title experience, truthful guide and landing-page claims, and dedicated exact-production journey over the released IPLF-058A foundation.",
+      "evidence_ref": "docs/ip-implementation/evidence/m5/IPLF-058/release-058a-2026-08-25.md"
     },
     "work_owner": {
       "owner": "Codex",
@@ -13625,7 +13625,8 @@
         "apps/api/tests/test_ip_039e_chain_of_title.py"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-058/local-058a-2026-08-25.md"
+        "docs/ip-implementation/evidence/m5/IPLF-058/local-058a-2026-08-25.md",
+        "docs/ip-implementation/evidence/m5/IPLF-058/release-058a-2026-08-25.md"
       ],
       "evidence_metadata": [
         {
@@ -13636,12 +13637,20 @@
           "assertions": "typed recordal lifecycle, writer-versus-approver RBAC, optimistic concurrency, canonical party evidence, confirmed affected registry identity, exact source URL, title projections, rejection/withdrawal history, tenant isolation, migration rollback refusal and 68-test neighboring IP regression matrix",
           "result": "passed",
           "recorded_at": "2026-08-25T17:55:00+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m5/IPLF-058/release-058a-2026-08-25.md",
+          "revision": "1880b81648df7603d7f0e3313873d9c3bcbf9b5a",
+          "environment": "GitHub hosted exact-main gates and production Cloud Run API/web, PostgreSQL migration job, recurring-job inventory, dedicated QA tenant and Chromium",
+          "fixtures": "synthetic foundation fixtures from local acceptance plus the dedicated production QA regression workspace; no live Registry mutation, filing, payment, provider call, external recipient or client record",
+          "assertions": "exact serving SHA, immutable image digests, successful additive migration, latest-only traffic, scheduler convergence, health, 85-test RAM batch, A0 quiescence and notice regression coverage",
+          "result": "passed",
+          "recorded_at": "2026-08-25T19:52:02+05:30"
         }
       ],
       "blockers": [],
       "next_actions": [
-        "Merge only on green hosted checks, deploy the exact merge migration-first, and record production evidence before releasing IPLF-058A.",
-        "Then implement IPLF-058B UJ-36/UJ-61 user workflows without duplicating title, proceeding, renewal, document, cost, deadline, registry, access or audit owners."
+        "Implement IPLF-058B UJ-36/UJ-61 user workflows without duplicating title, proceeding, renewal, document, cost, deadline, Registry, access or audit owners."
       ],
       "data_impact": [
         "Add ip_post_registration_recordals as the typed aggregate and extend ip_title_interests/ip_docket_events with tenant-correlated recordal projection and event links.",
@@ -13682,7 +13691,7 @@
       "allocation_review": "2026-08-25 brutal implementation review: one typed recordal aggregate extends the existing title and event writers and links every shared concern to its current owner. IPLF-049 proceedings and IPLF-037 renewal state remain separate by design; IPLF-058B retains every UJ-36/UJ-61 path and public claim.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
