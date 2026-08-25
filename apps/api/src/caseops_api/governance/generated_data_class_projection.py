@@ -24,16 +24,16 @@ from caseops_api.governance.types import ReviewedDataClass
 PROJECTION_SCHEMA_VERSION = 1
 
 # Fingerprints of the exact artifacts this projection was rendered from.
-MAP_DOCUMENT_FINGERPRINT = "dcb3a895bc1b7cef7f284fb7b16a7d34db7bc105ba2bca9dce32a434579f53f0"
-MAP_SCHEMA_FINGERPRINT = "58759b406b13991a96a45220dea9b0049fbde730d1ae08d4a820bad8b5907308"
+MAP_DOCUMENT_FINGERPRINT = "daa019982ddcc2e170aeabb8fa6295de0fc20699f1bd0d0a1a47b74d1b9171be"
+MAP_SCHEMA_FINGERPRINT = "33a605b6af3d1832bbf6374701e20b5db78121d03acd4c7058ed3a1a17842a49"
 REGISTRY_028A_FINGERPRINT = "dd3c30cf69a9b498cea3820acb485a0368a72bf6d9348c2f0d430b5efa99802d"
 REGISTRY_027A_FINGERPRINT = "10b97a818b23d4fae8fe7f54b63edb50b0e04c16778cf0e646ef907f40e1ad96"
 # The ORM schema at render time. Compared against the live models at runtime, so
 # an image whose models moved after this file was rendered reports stale rather
 # than answering from a projection that no longer describes it.
-ORM_SCHEMA_FINGERPRINT = "77968e038c50d38a5681bb78fd1e920a30f8f429618bc3998e0b600d7b3d25f0"
+ORM_SCHEMA_FINGERPRINT = "2e56595dcbc48a73e666e4f7a8c8b7f5e59cebaa477eec32f9d1e5fb50ce32e4"
 
-PROJECTION_ID = "546afdb33fb80c82148dd1b56ec5b525e60a559768ce8dd15d24709d84ce3f28"
+PROJECTION_ID = "19f991ac97f4f5c4df3162c8a83591d50964e7242f524f4440e8e85f26c9b2c3"
 
 # Every SQL table the repository-wide map inventories. Membership here is what
 # separates "inventoried but never reviewed" from "no such data class", which
@@ -275,6 +275,8 @@ INVENTORIED_SQL_TABLES = frozenset(
         "platform_admin_memberships",
         "platform_operational_readiness_evidence",
         "portal_magic_links",
+        "portal_publication_targets",
+        "portal_publications",
         "portal_users",
         "predictive_outcome_aggregate_snapshots",
         "predictive_outcome_classifications",
@@ -287,6 +289,7 @@ INVENTORIED_SQL_TABLES = frozenset(
         "recommendation_decisions",
         "recommendation_options",
         "recommendations",
+        "report_artifacts",
         "source_link_reports",
         "statute_change_events",
         "statute_sections",
