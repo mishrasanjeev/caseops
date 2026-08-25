@@ -70,11 +70,16 @@ export type PortalUserProfile = {
 
 export type PortalGrant = {
   id: string;
-  matter_id: string;
+  target_type: "matter" | "ip_docket";
+  target_id: string;
+  matter_id: string | null;
+  ip_docket_record_id: string | null;
   role: PortalUserRole;
-  scope_json: { can_upload?: boolean; can_invoice?: boolean; can_reply?: boolean } | null;
+  scope_json: Record<string, unknown> | null;
   granted_at: string;
+  expires_at: string | null;
   revoked_at: string | null;
+  row_version: number;
 };
 
 export type PortalSession = {
@@ -129,10 +134,18 @@ export async function invitePortalUser(input: {
   email: string;
   fullName: string;
   role: PortalUserRole;
-  matterIds: string[];
+  matterIds?: string[];
+  ipDocketIds?: string[];
   canUpload?: boolean;
   canInvoice?: boolean;
   canReply?: boolean;
+  showStatus?: boolean;
+  showIdentifiers?: boolean;
+  eventKinds?: string[];
+  deadlineKinds?: string[];
+  documentCategories?: string[];
+  canSubmitInstructions?: boolean;
+  expiresAt?: string | null;
 }): Promise<PortalInviteResult> {
   return apiRequest<PortalInviteResult>("/api/admin/portal/invitations", {
     method: "POST",
@@ -140,12 +153,219 @@ export async function invitePortalUser(input: {
       email: input.email,
       full_name: input.fullName,
       role: input.role,
-      matter_ids: input.matterIds,
+      matter_ids: input.matterIds ?? [],
+      ip_docket_ids: input.ipDocketIds ?? [],
       can_upload: Boolean(input.canUpload),
       can_invoice: Boolean(input.canInvoice),
       can_reply: input.canReply ?? true,
+      show_status: input.showStatus ?? true,
+      show_identifiers: input.showIdentifiers ?? true,
+      event_kinds: input.eventKinds ?? [],
+      deadline_kinds: input.deadlineKinds ?? [],
+      document_categories: input.documentCategories ?? [],
+      can_submit_instructions: input.canSubmitInstructions ?? true,
+      expires_at: input.expiresAt ?? null,
     },
   });
+}
+
+export type PortalIpScope = {
+  show_status: boolean;
+  show_identifiers: boolean;
+  event_kinds: string[];
+  deadline_kinds: string[];
+  document_categories: string[];
+  can_submit_instructions: boolean;
+};
+
+export type PortalIpGrant = {
+  id: string;
+  portal_user_id: string;
+  portal_user_name: string;
+  portal_user_email: string;
+  ip_docket_record_id: string;
+  docket_title: string;
+  scope: PortalIpScope;
+  granted_at: string;
+  expires_at: string | null;
+  revoked_at: string | null;
+  row_version: number;
+  active: boolean;
+};
+
+export async function fetchAdminPortalIpGrants(): Promise<{ grants: PortalIpGrant[] }> {
+  return apiRequest("/api/admin/portal/ip-grants");
+}
+
+export async function revokePortalIpGrant(input: {
+  grantId: string;
+  rowVersion: number;
+  reason: string;
+}): Promise<PortalIpGrant> {
+  return apiRequest(`/api/admin/portal/ip-grants/${encodeURIComponent(input.grantId)}/revoke`, {
+    method: "POST",
+    body: { expected_row_version: input.rowVersion, reason: input.reason },
+  });
+}
+
+export type PortalPublication = {
+  id: string;
+  publication_kind: "report" | "document";
+  title: string;
+  status: "scheduled" | "published" | "revoked";
+  access_state: "available" | "scheduled" | "review_required" | "revoked";
+  scheduled_for: string | null;
+  published_at: string | null;
+  delivery_status: string | null;
+  delivery_error: string | null;
+  report_kind: string | null;
+  schema_version: string | null;
+  generated_at: string | null;
+  freshness: Record<string, unknown> | null;
+  summary: Record<string, unknown> | null;
+  rows: Record<string, unknown>[] | null;
+  document_id: string | null;
+  document_version: number | null;
+  document_filename: string | null;
+  targets: Array<{ ip_docket_record_id: string; docket_title: string; current: boolean }>;
+  accessed_at: string | null;
+};
+
+export async function publishIpReportToPortal(input: {
+  portalUserId: string;
+  grantIds: string[];
+  title: string;
+  reportKind: string;
+  filters: Record<string, unknown>;
+  renewalStates: string[];
+  rowLimit: number;
+  expectedSnapshotSha256: string;
+  scheduledFor?: string | null;
+}): Promise<PortalPublication> {
+  return apiRequest("/api/ip/portal/report-publications", {
+    method: "POST",
+    body: {
+      portal_user_id: input.portalUserId,
+      grant_ids: input.grantIds,
+      title: input.title,
+      report_kind: input.reportKind,
+      filters: input.filters,
+      renewal_states: input.renewalStates,
+      row_limit: input.rowLimit,
+      expected_snapshot_sha256: input.expectedSnapshotSha256,
+      scheduled_for: input.scheduledFor ?? null,
+    },
+  });
+}
+
+export async function publishIpDocumentToPortal(input: {
+  portalUserId: string;
+  grantId: string;
+  documentId: string;
+  versionNumber: number;
+  title: string;
+  scheduledFor?: string | null;
+}): Promise<PortalPublication> {
+  return apiRequest("/api/ip/portal/document-publications", {
+    method: "POST",
+    body: {
+      portal_user_id: input.portalUserId,
+      grant_id: input.grantId,
+      document_id: input.documentId,
+      version_number: input.versionNumber,
+      title: input.title,
+      scheduled_for: input.scheduledFor ?? null,
+    },
+  });
+}
+
+export type PortalInstruction = {
+  id: string;
+  docket_id: string;
+  docket_title: string;
+  publication_id: string;
+  instruction_version: number;
+  row_version: number;
+  instruction_kind: string;
+  decision: string;
+  status: string;
+  note: string;
+  submitted_by: string;
+  received_at: string;
+  acknowledged_at: string | null;
+  acknowledgement_reason: string | null;
+  resulting_event_id: string | null;
+  updated_at: string;
+};
+
+export async function fetchFirmPortalInstructions(): Promise<{ instructions: PortalInstruction[] }> {
+  return apiRequest("/api/ip/portal/client-instructions");
+}
+
+export async function acknowledgePortalInstruction(input: {
+  instructionId: string;
+  rowVersion: number;
+  status: "accepted" | "rejected" | "clarification_required";
+  reason: string;
+}): Promise<PortalInstruction> {
+  return apiRequest(
+    `/api/ip/portal/client-instructions/${encodeURIComponent(input.instructionId)}/acknowledge`,
+    {
+      method: "POST",
+      body: {
+        expected_status: "pending",
+        expected_row_version: input.rowVersion,
+        status: input.status,
+        reason: input.reason,
+      },
+    },
+  );
+}
+
+export type PortalIpRecord = {
+  id: string;
+  title: string;
+  record_type: string;
+  status: string | null;
+  primary_identifier: string | null;
+  identifiers: string[];
+  events: Array<{ id: string; event_kind: string; effective_at: string; resulting_stage: string | null; source: string }>;
+  upcoming_dates: Array<{ id: string; deadline_kind: string; title: string; due_on: string | null; due_at: string | null; certainty: string; state: string }>;
+  grant_expires_at: string | null;
+};
+
+export async function fetchPortalIpRecords(): Promise<{ records: PortalIpRecord[] }> {
+  return apiRequest("/api/portal/ip-records");
+}
+
+export async function fetchPortalIpRecord(docketId: string): Promise<PortalIpRecord> {
+  return apiRequest(`/api/portal/ip-records/${encodeURIComponent(docketId)}`);
+}
+
+export async function fetchPortalPublications(): Promise<{ publications: PortalPublication[] }> {
+  return apiRequest("/api/portal/publications");
+}
+
+export async function fetchPortalPublication(publicationId: string): Promise<PortalPublication> {
+  return apiRequest(`/api/portal/publications/${encodeURIComponent(publicationId)}`);
+}
+
+export async function submitPortalInstruction(input: {
+  publicationId: string;
+  decision: "renew" | "do_not_renew" | "proceed" | "do_not_proceed" | "defer" | "clarification_required";
+  instructionKind: "renewal" | "proceeding" | "filing" | "watch" | "general";
+  docketId: string;
+  note: string;
+}): Promise<PortalInstruction> {
+  return portalMutate(
+    `/api/portal/publications/${encodeURIComponent(input.publicationId)}/instructions`,
+    {
+      decision: input.decision,
+      instruction_kind: input.instructionKind,
+      docket_id: input.docketId,
+      note: input.note,
+    },
+  );
 }
 
 // ---------- Phase C-2 (MOD-TS-015) — client portal matter surface ----------

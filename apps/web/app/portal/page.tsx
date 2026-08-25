@@ -5,6 +5,8 @@ import {
   ArrowUpRight,
   Briefcase,
   CalendarDays,
+  FileCheck2,
+  Fingerprint,
   Loader2,
   LogOut,
   ShieldCheck,
@@ -27,9 +29,12 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import {
   fetchPortalMatters,
+  fetchPortalIpRecords,
+  fetchPortalPublications,
   fetchPortalSession,
   logoutPortal,
   type PortalMatter,
+  type PortalIpRecord,
 } from "@/lib/api/portal";
 import { formatLegalDate } from "@/lib/dates";
 
@@ -62,6 +67,18 @@ export default function PortalLandingPage() {
         ? "Client"
         : "Portal user";
   const matters: PortalMatter[] = mattersQuery.data?.matters ?? [];
+  const ipRecordsQuery = useQuery({
+    queryKey: ["portal", "ip-records"],
+    queryFn: fetchPortalIpRecords,
+    enabled: Boolean(portalUser) && !isOutsideCounsel,
+  });
+  const publicationsQuery = useQuery({
+    queryKey: ["portal", "publications"],
+    queryFn: fetchPortalPublications,
+    enabled: Boolean(portalUser) && !isOutsideCounsel,
+  });
+  const ipRecords: PortalIpRecord[] = ipRecordsQuery.data?.records ?? [];
+  const publications = publicationsQuery.data?.publications ?? [];
 
   useEffect(() => {
     if (isOutsideCounsel) {
@@ -183,6 +200,16 @@ export default function PortalLandingPage() {
             </ul>
           )}
         </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Fingerprint className="h-4 w-4" /> Your IP records</CardTitle><CardDescription>Trademark and IP records expressly shared by your firm.</CardDescription></CardHeader>
+        <CardContent>{ipRecordsQuery.isError ? <QueryErrorState error={ipRecordsQuery.error} title="Could not load IP records" onRetry={() => ipRecordsQuery.refetch()} /> : !ipRecords.length ? <EmptyState title="No IP records yet" /> : <ul className="space-y-2">{ipRecords.map((record) => <li key={record.id} className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--color-line)] px-3 py-3" data-testid={`portal-ip-${record.id}`}><Link href={`/portal/ip/${record.id}`} className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{record.title}</span><span className="block truncate text-xs text-[var(--color-mute)]">{record.primary_identifier ?? record.identifiers[0] ?? record.record_type}</span></Link><div className="flex items-center gap-2">{record.status ? <Badge tone="brand">{record.status}</Badge> : null}<Link href={`/portal/ip/${record.id}`}><Button size="sm" variant="outline">Open <ArrowUpRight className="h-3.5 w-3.5" /></Button></Link></div></li>)}</ul>}</CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="flex items-center gap-2 text-base"><FileCheck2 className="h-4 w-4" /> Approved updates</CardTitle></CardHeader>
+        <CardContent>{publicationsQuery.isError ? <QueryErrorState error={publicationsQuery.error} title="Could not load approved updates" onRetry={() => publicationsQuery.refetch()} /> : !publications.length ? <EmptyState title="No approved updates" /> : <ul className="space-y-2">{publications.map((publication) => <li key={publication.id} className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-b border-[var(--color-line)] pb-3"><div className="min-w-0"><p className="truncate text-sm font-semibold">{publication.title}</p><p className="text-xs text-[var(--color-mute)]">{publication.publication_kind} · {publication.delivery_status ?? "delivery pending"}</p></div><Badge tone={publication.access_state === "available" ? "success" : "warning"}>{publication.access_state.replaceAll("_", " ")}</Badge></li>)}</ul>}</CardContent>
       </Card>
 
       <p className="flex items-center gap-1.5 text-xs text-[var(--color-mute)]">

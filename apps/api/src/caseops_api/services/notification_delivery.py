@@ -28,6 +28,7 @@ from caseops_api.db.models import (
     NotificationDeliveryEvent,
     NotificationDeliveryIntent,
     NotificationDeliveryStatus,
+    PortalPublicationTarget,
     PortalUser,
 )
 from caseops_api.services.assignment_memberships import (
@@ -126,9 +127,7 @@ def notification_dispatch_claim_state(
 
     if str(intent.dead_letter_reason or "") in NOTIFICATION_PROVIDER_OUTCOME_UNKNOWN_REASONS:
         return "manual_reconciliation"
-    if not str(intent.provider_event_id or "").startswith(
-        _NOTIFICATION_DISPATCH_CLAIM_PREFIX
-    ):
+    if not str(intent.provider_event_id or "").startswith(_NOTIFICATION_DISPATCH_CLAIM_PREFIX):
         return "none"
     current_time = now or _now()
     if intent.next_attempt_at is not None and _as_utc(intent.next_attempt_at) > current_time:
@@ -246,17 +245,17 @@ def _delivery_result(intent: NotificationDeliveryIntent) -> NotificationDelivery
             1
             if intent.channel != NotificationDeliveryChannel.IN_APP
             and intent.provider_event_id is not None
-            and not str(intent.provider_event_id).startswith(
-                _NOTIFICATION_DISPATCH_CLAIM_PREFIX
-            )
+            and not str(intent.provider_event_id).startswith(_NOTIFICATION_DISPATCH_CLAIM_PREFIX)
             else 0
         ),
         retry_scheduled=intent.status == NotificationDeliveryStatus.RETRY_SCHEDULED,
-        dead_lettered=intent.status in {
+        dead_lettered=intent.status
+        in {
             NotificationDeliveryStatus.DEAD_LETTER,
             NotificationDeliveryStatus.BOUNCED,
         },
-        blocked=intent.status in {
+        blocked=intent.status
+        in {
             NotificationDeliveryStatus.BLOCKED,
             NotificationDeliveryStatus.SUPPRESSED,
             NotificationDeliveryStatus.CANCELLED,
@@ -278,27 +277,27 @@ def _record_delivery_event(
     applied_to_state: bool = True,
 ) -> NotificationDeliveryEvent:
     event = NotificationDeliveryEvent(
-            company_id=intent.company_id,
-            intent_id=intent.id,
-            event_type=event_type,
-            provider=provider,
-            provider_event_id=provider_event_id,
-            idempotency_key=(
-                idempotency_key
-                or sha256(
-                    f"{intent.id}|{event_type}|{status_value}|{intent.attempts}|{uuid4()}".encode()
-                ).hexdigest()
-            ),
-            status=status_value,
-            applied_to_state=applied_to_state,
-            error_redacted=redact_provider_error(error) if error else None,
-            metadata_json={
-                "channel": str(intent.channel),
-                "dispatch_owner": intent.dispatch_owner,
-                "source_ref": redact_identifier(intent.source_id),
-                **(metadata or {}),
-            },
-        )
+        company_id=intent.company_id,
+        intent_id=intent.id,
+        event_type=event_type,
+        provider=provider,
+        provider_event_id=provider_event_id,
+        idempotency_key=(
+            idempotency_key
+            or sha256(
+                f"{intent.id}|{event_type}|{status_value}|{intent.attempts}|{uuid4()}".encode()
+            ).hexdigest()
+        ),
+        status=status_value,
+        applied_to_state=applied_to_state,
+        error_redacted=redact_provider_error(error) if error else None,
+        metadata_json={
+            "channel": str(intent.channel),
+            "dispatch_owner": intent.dispatch_owner,
+            "source_ref": redact_identifier(intent.source_id),
+            **(metadata or {}),
+        },
+    )
     session.add(event)
     return event
 
@@ -349,9 +348,7 @@ def _recipient_still_permitted(
     ip_target = _intent_ip_deadline_target(session, intent=intent)
     resolved_docket_id = ip_target.docket_id or intent.ip_docket_id
     ip_docket = (
-        session.get(IpDocketRecord, resolved_docket_id)
-        if resolved_docket_id is not None
-        else None
+        session.get(IpDocketRecord, resolved_docket_id) if resolved_docket_id is not None else None
     )
     linked_ip_matter = (
         session.get(Matter, ip_docket.matter_id)
@@ -422,19 +419,81 @@ def _recipient_still_permitted(
             or not portal_user.is_active
         ):
             return False
-        # IP portal grants are deliberately not part of the M2 internal-access
-        # slice. A portal recipient linked to an IP docket therefore fails
-        # closed until the existing portal-grant owner is generalized later.
-        if ip_docket is not None or intent.ip_docket_id is not None:
+        now = _now()
+        if ip_docket is not None:
+            if (
+                ip_docket.company_id != intent.company_id
+                or not ip_docket.is_active
+                or ip_docket.archived_by_matter_disposal
+            ):
+                return False
+            primary_grant_exists = (
+                session.scalar(
+                    select(MatterPortalGrant.id).where(
+                        MatterPortalGrant.company_id == intent.company_id,
+                        MatterPortalGrant.portal_user_id == portal_user.id,
+                        MatterPortalGrant.ip_docket_record_id == ip_docket.id,
+                        MatterPortalGrant.revoked_at.is_(None),
+                        or_(
+                            MatterPortalGrant.expires_at.is_(None),
+                            MatterPortalGrant.expires_at > now,
+                        ),
+                    )
+                )
+                is not None
+            )
+            if not primary_grant_exists:
+                return False
+            if intent.source_type == "portal_publication":
+                publication_targets = session.execute(
+                    select(PortalPublicationTarget, MatterPortalGrant, IpDocketRecord)
+                    .join(
+                        MatterPortalGrant,
+                        MatterPortalGrant.id == PortalPublicationTarget.portal_grant_id,
+                    )
+                    .join(
+                        IpDocketRecord,
+                        IpDocketRecord.id == PortalPublicationTarget.ip_docket_record_id,
+                    )
+                    .where(
+                        PortalPublicationTarget.company_id == intent.company_id,
+                        PortalPublicationTarget.publication_id == intent.source_id,
+                        MatterPortalGrant.portal_user_id == portal_user.id,
+                    )
+                ).all()
+                if not publication_targets:
+                    return False
+                return all(
+                    grant.revoked_at is None
+                    and (grant.expires_at is None or _as_utc(grant.expires_at) > now)
+                    and docket.company_id == intent.company_id
+                    and docket.is_active
+                    and not docket.archived_by_matter_disposal
+                    and docket.current_version == target.docket_version
+                    and docket.lifecycle_version == target.lifecycle_version
+                    and docket.access_policy_version == target.access_policy_version
+                    for target, grant, docket in publication_targets
+                )
+            return True
+        if intent.ip_docket_id is not None:
             return False
         if intent.matter_id is None:
             return True
-        return session.scalar(
-            select(MatterPortalGrant.id).where(
-                MatterPortalGrant.portal_user_id == portal_user.id,
-                MatterPortalGrant.matter_id == intent.matter_id,
+        return (
+            session.scalar(
+                select(MatterPortalGrant.id).where(
+                    MatterPortalGrant.company_id == intent.company_id,
+                    MatterPortalGrant.portal_user_id == portal_user.id,
+                    MatterPortalGrant.matter_id == intent.matter_id,
+                    MatterPortalGrant.revoked_at.is_(None),
+                    or_(
+                        MatterPortalGrant.expires_at.is_(None),
+                        MatterPortalGrant.expires_at > now,
+                    ),
+                )
             )
-        ) is not None
+            is not None
+        )
     if ip_docket is not None or intent.ip_docket_id is not None:
         # Approved external destinations do not carry an internal IP grant.
         return False
@@ -455,8 +514,7 @@ def _intent_ip_deadline_target(
     """Resolve legacy legal reminders that were queued as Matter-only work."""
 
     declares_ip_deadline = bool(
-        intent.schedule_source_type == "ip_deadline"
-        or intent.source_type == "ip_deadline"
+        intent.schedule_source_type == "ip_deadline" or intent.source_type == "ip_deadline"
     )
     if not declares_ip_deadline:
         return _IpDeadlineDeliveryTarget(
@@ -577,8 +635,14 @@ def enqueue_notification_delivery_intent(
         elif recipient_portal_user is not None:
             grant = session.scalar(
                 select(MatterPortalGrant.id).where(
+                    MatterPortalGrant.company_id == context.company.id,
                     MatterPortalGrant.portal_user_id == recipient_portal_user.id,
                     MatterPortalGrant.matter_id == matter.id,
+                    MatterPortalGrant.revoked_at.is_(None),
+                    or_(
+                        MatterPortalGrant.expires_at.is_(None),
+                        MatterPortalGrant.expires_at > _now(),
+                    ),
                 )
             )
             if grant is None:
@@ -619,10 +683,20 @@ def enqueue_notification_delivery_intent(
                 ):
                     return None
         elif recipient_portal_user is not None:
-            # The later portal-owner slice must add an explicit target-aware
-            # portal grant. Internal access and linked-Matter visibility never
-            # substitute for it.
-            return None
+            grant = session.scalar(
+                select(MatterPortalGrant.id).where(
+                    MatterPortalGrant.company_id == context.company.id,
+                    MatterPortalGrant.portal_user_id == recipient_portal_user.id,
+                    MatterPortalGrant.ip_docket_record_id == ip_docket.id,
+                    MatterPortalGrant.revoked_at.is_(None),
+                    or_(
+                        MatterPortalGrant.expires_at.is_(None),
+                        MatterPortalGrant.expires_at > _now(),
+                    ),
+                )
+            )
+            if grant is None:
+                return None
 
     target_key = (
         f"membership:{recipient_membership.id}"
@@ -685,9 +759,7 @@ def enqueue_notification_delivery_intent(
     # that is explicitly enabled to dispatch from the durable queue.
     retain_content = is_in_app or external_ready
     safe_title = title if is_in_app else "CaseOps notification"
-    safe_body = (
-        body if is_in_app else "Open CaseOps to review this notification securely."
-    )
+    safe_body = body if is_in_app else "Open CaseOps to review this notification securely."
     snapshot = dict(destination_snapshot or {})
     if recipient_membership is not None:
         snapshot.update(
@@ -759,8 +831,7 @@ def enqueue_notification_delivery_intent(
             triggered_by_membership_id=context.membership.id,
         ),
         schedule_source_type=(
-            schedule_source_type
-            or ("notification_rule" if notification_rule_id else source_type)
+            schedule_source_type or ("notification_rule" if notification_rule_id else source_type)
         ),
         schedule_source_id=schedule_source_id or notification_rule_id or source_id,
         recipient_snapshot_json=snapshot,
@@ -1057,8 +1128,7 @@ def process_notification_delivery_intent(
             membership_ids=delivery_membership_ids,
         )
         locked_users = {
-            membership.user_id: membership.user
-            for membership in locked_memberships.values()
+            membership.user_id: membership.user for membership in locked_memberships.values()
         }
     else:
         # Court-order writers deliver in-app notices synchronously while they
@@ -1192,19 +1262,14 @@ def process_notification_delivery_intent(
         else None
     )
     recipient_user = (
-        locked_users.get(recipient_membership.user_id)
-        if recipient_membership is not None
-        else None
+        locked_users.get(recipient_membership.user_id) if recipient_membership is not None else None
     )
     ip_deadline_target_invalid = ip_deadline_target.declared and (
         locked_ip_deadline is None
         or str(locked_ip_deadline.state) not in {"confirmed", "overdue"}
         or ip_docket is None
         or locked_ip_deadline.docket_id != ip_docket.id
-        or (
-            intent.ip_docket_id is not None
-            and intent.ip_docket_id != ip_docket.id
-        )
+        or (intent.ip_docket_id is not None and intent.ip_docket_id != ip_docket.id)
     )
     if ip_deadline_target_invalid:
         intent.status = NotificationDeliveryStatus.BLOCKED
@@ -1223,15 +1288,11 @@ def process_notification_delivery_intent(
         session.flush()
         return _delivery_result(intent)
     matter_disposed = (
-        intent.matter_id is not None
-        and (matter is None or not matter_is_operational(matter))
+        intent.matter_id is not None and (matter is None or not matter_is_operational(matter))
     ) or (
         ip_docket is not None
         and ip_docket.matter_id is not None
-        and (
-            linked_ip_matter is None
-            or not matter_is_operational(linked_ip_matter)
-        )
+        and (linked_ip_matter is None or not matter_is_operational(linked_ip_matter))
     )
     if matter_disposed:
         intent.status = NotificationDeliveryStatus.BLOCKED
@@ -1580,10 +1641,7 @@ def drain_notification_delivery_intents(
                             NotificationDeliveryStatus.RETRY_SCHEDULED,
                         )
                     ),
-                    (
-                        NotificationDeliveryIntent.status
-                        == NotificationDeliveryStatus.SENT
-                    )
+                    (NotificationDeliveryIntent.status == NotificationDeliveryStatus.SENT)
                     & NotificationDeliveryIntent.provider_event_id.startswith(
                         _NOTIFICATION_DISPATCH_CLAIM_PREFIX
                     )
@@ -1665,12 +1723,8 @@ def cancel_pending_notification_intents(
     if intent_ids is not None:
         if not selected_intent_ids:
             return 0
-        statement = statement.where(
-            NotificationDeliveryIntent.id.in_(selected_intent_ids)
-        )
-    intents = list(
-        session.scalars(statement.execution_options(populate_existing=True))
-    )
+        statement = statement.where(NotificationDeliveryIntent.id.in_(selected_intent_ids))
+    intents = list(session.scalars(statement.execution_options(populate_existing=True)))
     now = _now()
     for intent in intents:
         intent.status = NotificationDeliveryStatus.CANCELLED
@@ -1746,9 +1800,7 @@ def _project_legacy_hearing_reminders(session: Session, *, intent_id: str) -> No
             continue
         permission_revoked = intent.dead_letter_reason == "recipient_permission_revoked"
         reminder.status = (
-            "cancelled"
-            if permission_revoked
-            else projection.get(str(intent.status), "failed")
+            "cancelled" if permission_revoked else projection.get(str(intent.status), "failed")
         )
         reminder.provider = "sendgrid" if intent.provider_event_id else reminder.provider
         reminder.provider_message_id = intent.provider_event_id or reminder.provider_message_id
@@ -1949,8 +2001,17 @@ def apply_notification_provider_event(session: Session, *, event: dict) -> bool:
             return False
     event_type = str(event.get("event") or "").lower()
     supported = {
-        "delivered", "bounce", "dropped", "blocked", "spamreport",
-        "unsubscribe", "group_unsubscribe", "open", "click", "deferred", "processed",
+        "delivered",
+        "bounce",
+        "dropped",
+        "blocked",
+        "spamreport",
+        "unsubscribe",
+        "group_unsubscribe",
+        "open",
+        "click",
+        "deferred",
+        "processed",
     }
     if event_type not in supported:
         return False

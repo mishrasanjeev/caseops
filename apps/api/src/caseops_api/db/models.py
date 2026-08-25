@@ -10015,9 +10015,7 @@ class AuthorityDocument(Base):
     decision_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
     canonical_key: Mapped[str] = mapped_column(String(255), nullable=False)
     source_reference: Mapped[str | None] = mapped_column(String(500), nullable=True, index=True)
-    provider_document_id: Mapped[str | None] = mapped_column(
-        String(120), nullable=True, index=True
-    )
+    provider_document_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     publisher_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     jurisdiction: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     issuing_body: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -13320,6 +13318,11 @@ class PortalUser(Base):
     __tablename__ = "portal_users"
     __table_args__ = (
         UniqueConstraint(
+            "id",
+            "company_id",
+            name="uq_portal_user_id_company",
+        ),
+        UniqueConstraint(
             "company_id",
             "email",
             name="uq_portal_user_company_email",
@@ -13425,20 +13428,66 @@ class PortalMagicLink(Base):
 
 
 class MatterPortalGrant(Base):
-    """Explicit per-matter scope for a PortalUser.
+    """Canonical explicit Matter-or-IP scope for a ``PortalUser``.
 
-    Without a live (non-revoked) grant for a given matter, the
-    PortalUser sees nothing on it — even if the matter belongs to the
-    PortalUser's company. The role on the grant must match the parent
-    PortalUser's role; service code enforces this.
+    The physical table name remains for compatibility. A live grant owns
+    exactly one target and never derives access from a Client association.
     """
 
     __tablename__ = "matter_portal_grants"
     __table_args__ = (
-        UniqueConstraint(
+        UniqueConstraint("id", "company_id", name="uq_portal_grant_id_company"),
+        ForeignKeyConstraint(
+            ["portal_user_id", "company_id"],
+            ["portal_users.id", "portal_users.company_id"],
+            name="fk_portal_grant_user_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["matter_id", "company_id"],
+            ["matters.id", "matters.company_id"],
+            name="fk_portal_grant_matter_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["ip_docket_record_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_portal_grant_ip_docket_company",
+            ondelete="CASCADE",
+        ),
+        CheckConstraint(
+            "(CASE WHEN matter_id IS NOT NULL THEN 1 ELSE 0 END + "
+            "CASE WHEN ip_docket_record_id IS NOT NULL THEN 1 ELSE 0 END) = 1",
+            name="ck_portal_grant_exactly_one_target",
+        ),
+        CheckConstraint(
+            "row_version > 0",
+            name="ck_portal_grant_row_version_positive",
+        ),
+        CheckConstraint(
+            "expires_at IS NULL OR expires_at > granted_at",
+            name="ck_portal_grant_expiry_after_grant",
+        ),
+        CheckConstraint(
+            "revoked_at IS NULL OR ip_docket_record_id IS NULL OR "
+            "(revoked_by_label_snapshot IS NOT NULL AND revoked_reason IS NOT NULL)",
+            name="ck_portal_grant_revocation_evidence",
+        ),
+        Index(
+            "uq_portal_grant_user_matter_active",
             "portal_user_id",
             "matter_id",
-            name="uq_matter_portal_grant_user_matter",
+            unique=True,
+            postgresql_where=text("matter_id IS NOT NULL AND revoked_at IS NULL"),
+            sqlite_where=text("matter_id IS NOT NULL AND revoked_at IS NULL"),
+        ),
+        Index(
+            "uq_portal_grant_user_ip_active",
+            "portal_user_id",
+            "ip_docket_record_id",
+            unique=True,
+            postgresql_where=text("ip_docket_record_id IS NOT NULL AND revoked_at IS NULL"),
+            sqlite_where=text("ip_docket_record_id IS NOT NULL AND revoked_at IS NULL"),
         ),
     )
 
@@ -13447,22 +13496,25 @@ class MatterPortalGrant(Base):
         primary_key=True,
         default=lambda: str(uuid4()),
     )
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     portal_user_id: Mapped[str] = mapped_column(
-        ForeignKey("portal_users.id", ondelete="CASCADE"),
+        String(36),
         nullable=False,
         index=True,
     )
-    matter_id: Mapped[str] = mapped_column(
-        ForeignKey("matters.id", ondelete="CASCADE"),
-        nullable=False,
+    matter_id: Mapped[str | None] = mapped_column(
+        String(36),
+        nullable=True,
         index=True,
     )
+    ip_docket_record_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     role: Mapped[str] = mapped_column(String(32), nullable=False)
     scope_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     granted_by_membership_id: Mapped[str | None] = mapped_column(
         ForeignKey("company_memberships.id", ondelete="SET NULL"),
         nullable=True,
     )
+    granted_by_label_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
     granted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -13472,8 +13524,229 @@ class MatterPortalGrant(Base):
         DateTime(timezone=True),
         nullable=True,
     )
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    revoked_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    revoked_by_label_snapshot: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    revoked_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    row_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
 
     portal_user: Mapped[PortalUser] = relationship(back_populates="grants")
+
+
+class ReportArtifact(Base):
+    """Immutable neutral business-report artifact used for client publication."""
+
+    __tablename__ = "report_artifacts"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["generated_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_report_artifact_generator_company",
+            ondelete="SET NULL",
+        ),
+        ForeignKeyConstraint(
+            ["approved_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_report_artifact_approver_company",
+            ondelete="SET NULL",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_report_artifact_id_company"),
+        UniqueConstraint(
+            "company_id", "snapshot_sha256", name="uq_report_artifact_company_snapshot"
+        ),
+        CheckConstraint("length(snapshot_sha256) = 64", name="ck_report_artifact_sha256"),
+        CheckConstraint("row_count >= 0", name="ck_report_artifact_row_count"),
+        CheckConstraint(
+            "audience = 'client_portal'",
+            name="ck_report_artifact_client_portal_audience",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    report_kind: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    schema_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    audience: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="client_portal", server_default="client_portal"
+    )
+    confidentiality: Mapped[str] = mapped_column(String(32), nullable=False)
+    filters_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    freshness_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    summary_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    rows_json: Mapped[list] = mapped_column(JSON, nullable=False)
+    exclusions_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    source_versions_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    row_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    truncated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    snapshot_sha256: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    generated_by_membership_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    generated_by_label_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
+    approved_by_membership_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    approved_by_label_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
+    approved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class PortalPublication(Base):
+    """Approved portal projection over one canonical report or document version."""
+
+    __tablename__ = "portal_publications"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["portal_user_id", "company_id"],
+            ["portal_users.id", "portal_users.company_id"],
+            name="fk_portal_publication_user_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["report_artifact_id", "company_id"],
+            ["report_artifacts.id", "report_artifacts.company_id"],
+            name="fk_portal_publication_report_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["document_version_id", "company_id"],
+            ["ip_document_versions.id", "ip_document_versions.company_id"],
+            name="fk_portal_publication_document_version_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["approved_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_portal_publication_approver_company",
+            ondelete="SET NULL",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_portal_publication_id_company"),
+        CheckConstraint(
+            "(CASE WHEN report_artifact_id IS NOT NULL THEN 1 ELSE 0 END + "
+            "CASE WHEN document_version_id IS NOT NULL THEN 1 ELSE 0 END) = 1",
+            name="ck_portal_publication_exactly_one_content",
+        ),
+        CheckConstraint(
+            "status IN ('scheduled', 'published', 'revoked')",
+            name="ck_portal_publication_status",
+        ),
+        CheckConstraint(
+            "status <> 'scheduled' OR scheduled_for IS NOT NULL",
+            name="ck_portal_publication_schedule_required",
+        ),
+        CheckConstraint(
+            "status <> 'revoked' OR "
+            "(revoked_at IS NOT NULL AND revoked_by_label_snapshot IS NOT NULL "
+            "AND revocation_reason IS NOT NULL)",
+            name="ck_portal_publication_revocation_evidence",
+        ),
+        Index(
+            "ix_portal_publications_user_status",
+            "portal_user_id",
+            "status",
+            "scheduled_for",
+        ),
+        Index("ix_portal_publications_report_artifact_id", "report_artifact_id"),
+        Index("ix_portal_publications_document_version_id", "document_version_id"),
+        Index("ix_portal_publications_revoked_by_membership_id", "revoked_by_membership_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    portal_user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    report_artifact_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    document_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    scheduled_for: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    delivery_intent_id: Mapped[str | None] = mapped_column(
+        ForeignKey("notification_delivery_intents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    approved_by_membership_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    approved_by_label_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
+    approved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True
+    )
+    revoked_by_label_snapshot: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    revocation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    access_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_accessed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class PortalPublicationTarget(Base):
+    """Grant and record-version evidence for each published IP target."""
+
+    __tablename__ = "portal_publication_targets"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["publication_id", "company_id"],
+            ["portal_publications.id", "portal_publications.company_id"],
+            name="fk_portal_publication_target_publication_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["ip_docket_record_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_portal_publication_target_docket_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["portal_grant_id", "company_id"],
+            ["matter_portal_grants.id", "matter_portal_grants.company_id"],
+            name="fk_portal_publication_target_grant_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "publication_id",
+            "ip_docket_record_id",
+            name="uq_portal_publication_target_docket",
+        ),
+        CheckConstraint("docket_version > 0", name="ck_portal_publication_docket_version"),
+        CheckConstraint("lifecycle_version >= 0", name="ck_portal_publication_lifecycle_version"),
+        CheckConstraint(
+            "access_policy_version >= 0",
+            name="ck_portal_publication_access_policy_version",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    publication_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    portal_grant_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    ip_docket_record_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    docket_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    lifecycle_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    access_policy_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -15150,8 +15423,7 @@ class IpRegistryLink(Base):
             name="ck_ip_registry_link_match_status",
         ),
         CheckConstraint(
-            "freshness_status IN "
-            "('never_succeeded', 'current', 'stale', 'failed', 'blocked')",
+            "freshness_status IN ('never_succeeded', 'current', 'stale', 'failed', 'blocked')",
             name="ck_ip_registry_link_freshness_status",
         ),
         CheckConstraint(
@@ -15209,9 +15481,7 @@ class IpRegistryLink(Base):
     last_normalized_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     last_error_redacted: Mapped[str | None] = mapped_column(Text, nullable=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    created_by_membership_id: Mapped[str] = mapped_column(
-        String(36), nullable=False, index=True
-    )
+    created_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
@@ -15291,9 +15561,7 @@ class IpRegistrySyncAttempt(Base):
     currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR")
     error_redacted: Mapped[str | None] = mapped_column(Text, nullable=True)
     metadata_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
-    requested_by_membership_id: Mapped[str] = mapped_column(
-        String(36), nullable=False, index=True
-    )
+    requested_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
@@ -15411,13 +15679,11 @@ class IpRegistryDiff(Base):
             name="ck_ip_registry_diff_risk",
         ),
         CheckConstraint(
-            "resolution_status IN "
-            "('pending', 'accepted', 'rejected', 'mapped', 'deferred')",
+            "resolution_status IN ('pending', 'accepted', 'rejected', 'mapped', 'deferred')",
             name="ck_ip_registry_diff_resolution",
         ),
         CheckConstraint(
-            "deadline_recalculation_state IN "
-            "('not_applicable', 'required', 'proposed', 'blocked')",
+            "deadline_recalculation_state IN ('not_applicable', 'required', 'proposed', 'blocked')",
             name="ck_ip_registry_diff_deadline_state",
         ),
         CheckConstraint("version > 0", name="ck_ip_registry_diff_version"),
@@ -15520,9 +15786,7 @@ class IpTrackedCaseLink(Base):
     link_status: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
     purpose: Mapped[str] = mapped_column(String(120), nullable=False)
     evidence_reference: Mapped[str] = mapped_column(String(800), nullable=False)
-    created_by_membership_id: Mapped[str] = mapped_column(
-        String(36), nullable=False, index=True
-    )
+    created_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
@@ -15635,9 +15899,7 @@ class IpJournalIngestionRun(Base):
             "length(request_sha256) = 64",
             name="ck_ip_journal_ingestion_request_sha256",
         ),
-        Index(
-            "ix_ip_journal_ingestion_company_created", "company_id", "created_at"
-        ),
+        Index("ix_ip_journal_ingestion_company_created", "company_id", "created_at"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -15657,9 +15919,7 @@ class IpJournalIngestionRun(Base):
     hit_ids_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     stale_source_alert: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     error_redacted: Mapped[str | None] = mapped_column(String(1000), nullable=True)
-    requested_by_membership_id: Mapped[str] = mapped_column(
-        String(36), nullable=False, index=True
-    )
+    requested_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -15699,9 +15959,7 @@ class IpWatchProfile(Base):
     company_id: Mapped[str] = mapped_column(String(36), nullable=False)
     docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    provider_key: Mapped[str] = mapped_column(
-        String(80), nullable=False, default="manual-journal"
-    )
+    provider_key: Mapped[str] = mapped_column(String(80), nullable=False, default="manual-journal")
     word_terms_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     phonetic_terms_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     device_references_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
@@ -15709,9 +15967,7 @@ class IpWatchProfile(Base):
     proprietor_terms_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     jurisdictions_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     frequency: Mapped[str] = mapped_column(String(24), nullable=False)
-    recipient_membership_ids_json: Mapped[list] = mapped_column(
-        JSON, nullable=False, default=list
-    )
+    recipient_membership_ids_json: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     max_cost_minor_per_period: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     spent_cost_minor_in_period: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     cost_currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR")
@@ -15721,9 +15977,7 @@ class IpWatchProfile(Base):
     next_poll_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     criteria_version: Mapped[str] = mapped_column(String(80), nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    created_by_membership_id: Mapped[str] = mapped_column(
-        String(36), nullable=False, index=True
-    )
+    created_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
@@ -15844,9 +16098,7 @@ class IpWatchHandoff(Base):
     reviewer_decision_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     request_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     error_redacted: Mapped[str | None] = mapped_column(String(1000), nullable=True)
-    created_by_membership_id: Mapped[str] = mapped_column(
-        String(36), nullable=False, index=True
-    )
+    created_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
@@ -17476,7 +17728,25 @@ class IpClientInstruction(Base):
             ["renewal_term_id", "company_id"],
             ["ip_renewal_terms.id", "ip_renewal_terms.company_id"],
             name="fk_ip_client_instruction_renewal_company",
-            ondelete="CASCADE",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["source_portal_user_id", "company_id"],
+            ["portal_users.id", "portal_users.company_id"],
+            name="fk_ip_client_instruction_portal_user_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["source_portal_grant_id", "company_id"],
+            ["matter_portal_grants.id", "matter_portal_grants.company_id"],
+            name="fk_ip_client_instruction_portal_grant_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["portal_publication_id", "company_id"],
+            ["portal_publications.id", "portal_publications.company_id"],
+            name="fk_ip_client_instruction_publication_company",
+            ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
             ["supersedes_instruction_id", "company_id"],
@@ -17504,9 +17774,10 @@ class IpClientInstruction(Base):
         ),
         UniqueConstraint("id", "company_id", name="uq_ip_client_instruction_id_company"),
         UniqueConstraint(
-            "renewal_term_id",
+            "company_id",
+            "instruction_thread_key",
             "instruction_version",
-            name="uq_ip_client_instruction_term_version",
+            name="uq_ip_client_instruction_thread_version",
         ),
         CheckConstraint(
             "instruction_version > 0",
@@ -17514,8 +17785,13 @@ class IpClientInstruction(Base):
         ),
         CheckConstraint("row_version > 0", name="ck_ip_client_instruction_row_version_positive"),
         CheckConstraint(
-            "decision IN ('renew', 'do_not_renew', 'defer', 'clarification_required')",
+            "decision IN ('renew', 'do_not_renew', 'proceed', 'do_not_proceed', "
+            "'defer', 'clarification_required')",
             name="ck_ip_client_instruction_decision",
+        ),
+        CheckConstraint(
+            "instruction_kind IN ('renewal', 'proceeding', 'filing', 'watch', 'general')",
+            name="ck_ip_client_instruction_kind",
         ),
         CheckConstraint(
             "status IN ('pending', 'accepted', 'rejected', 'clarification_required', 'superseded')",
@@ -17534,12 +17810,24 @@ class IpClientInstruction(Base):
             "resulting_event_id IS NULL OR status = 'accepted'",
             name="ck_ip_client_instruction_result_requires_acceptance",
         ),
+        CheckConstraint(
+            "(source_portal_user_id IS NULL AND source_portal_grant_id IS NULL "
+            "AND portal_publication_id IS NULL) OR "
+            "(source_portal_user_id IS NOT NULL AND source_portal_grant_id IS NOT NULL "
+            "AND portal_publication_id IS NOT NULL)",
+            name="ck_ip_client_instruction_portal_source_complete",
+        ),
+        CheckConstraint(
+            "created_by_membership_id IS NOT NULL OR source_portal_user_id IS NOT NULL",
+            name="ck_ip_client_instruction_creator_required",
+        ),
         Index(
             "ix_ip_client_instructions_company_term_status",
             "company_id",
             "renewal_term_id",
             "status",
         ),
+        Index("ix_ip_client_instructions_renewal_term_id", "renewal_term_id"),
         Index("ix_ip_client_instructions_docket_id", "docket_id", "company_id"),
         Index(
             "ix_ip_client_instructions_source_communication_id",
@@ -17571,7 +17859,11 @@ class IpClientInstruction(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(String(36), nullable=False)
     docket_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    renewal_term_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    renewal_term_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    instruction_thread_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    instruction_kind: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="renewal", server_default="renewal"
+    )
     instruction_version: Mapped[int] = mapped_column(Integer, nullable=False)
     row_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     decision: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -17585,6 +17877,11 @@ class IpClientInstruction(Base):
     source_communication_id: Mapped[str | None] = mapped_column(
         ForeignKey("communications.id", ondelete="RESTRICT"), nullable=True
     )
+    source_portal_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    source_portal_grant_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    portal_publication_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     authority_name: Mapped[str] = mapped_column(String(255), nullable=False)
     authority_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
     evidence_refs_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
@@ -17594,7 +17891,8 @@ class IpClientInstruction(Base):
     acknowledgement_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     supersedes_instruction_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     resulting_event_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    created_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    created_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    creator_label_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )

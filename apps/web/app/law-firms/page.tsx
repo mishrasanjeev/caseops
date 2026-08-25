@@ -148,7 +148,7 @@ const platformMoves = [
   {
     icon: FileChartColumn,
     title: "IP operational reports",
-    body: "Generate permission-scoped internal snapshots for portfolio, application, opposition, deadline, renewal, workload, data quality and integration freshness. Each result carries its filters, confidentiality, generated time, source availability and snapshot hash; unavailable watch-provider data is identified instead of inferred.",
+    body: "Generate permission-scoped snapshots for portfolio, application, opposition, deadline, renewal, workload, data quality and integration freshness. Review the exact snapshot hash, then publish or schedule a client-safe artifact only to selected active IP grants; delivery and access remain auditable and version-invalidated data is withheld.",
   },
   {
     icon: FileText,
@@ -173,7 +173,7 @@ const platformMoves = [
   {
     icon: ShieldCheck,
     title: "Client portal + KYC — shipped",
-    body: "Each client gets their own /portal view of the matter with Comms, Hearings and KYC tabs. Magic-link auth on a separate cookie scope; matter-grant scoping; full audit trail on KYC + reply state.",
+    body: "Each client gets one magic-link /portal identity for expressly granted Matters and IP dockets. Clients see approved status, identifiers, events, dates, reports and documents, then submit structured proceed, do-not-proceed or renewal instructions for firm acknowledgement. Expiry, revocation, delivery and every access are audited.",
   },
   {
     icon: Users,

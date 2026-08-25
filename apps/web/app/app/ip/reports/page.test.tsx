@@ -4,11 +4,13 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { contractMock, previewMock, capabilityMock, errorToastMock } = vi.hoisted(() => ({
+const { contractMock, previewMock, capabilityMock, errorToastMock, grantsMock, publishMock } = vi.hoisted(() => ({
   contractMock: vi.fn(),
   previewMock: vi.fn(),
   capabilityMock: vi.fn(),
   errorToastMock: vi.fn(),
+  grantsMock: vi.fn(),
+  publishMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
@@ -18,6 +20,11 @@ vi.mock("@/lib/api/endpoints", () => ({
 
 vi.mock("@/lib/capabilities", () => ({
   useCapability: (capability: string) => capabilityMock(capability),
+}));
+
+vi.mock("@/lib/api/portal", () => ({
+  fetchAdminPortalIpGrants: grantsMock,
+  publishIpReportToPortal: publishMock,
 }));
 
 vi.mock("sonner", () => ({ toast: { error: errorToastMock } }));
@@ -97,6 +104,21 @@ describe("IpReportsPage", () => {
     capabilityMock.mockReturnValue(true);
     contractMock.mockResolvedValue(CONTRACT);
     previewMock.mockResolvedValue(REPORT);
+    grantsMock.mockResolvedValue({ grants: [] });
+    publishMock.mockResolvedValue({ id: "publication-1" });
+  });
+
+  it("publishes only an internal reviewed snapshot to selected active grants", async () => {
+    const user = userEvent.setup();
+    previewMock.mockResolvedValue({ ...REPORT, confidentiality: "internal" });
+    grantsMock.mockResolvedValue({ grants: [{ id: "grant-1", portal_user_id: "portal-user-1", portal_user_name: "Asha Rao", portal_user_email: "asha@example.com", docket_title: "ASTER DEVICE", active: true }] });
+    render(withClient(<IpReportsPage />));
+    await user.click(await screen.findByRole("button", { name: "Generate" }));
+    await user.selectOptions(await screen.findByLabelText("Client"), "portal-user-1");
+    await user.type(screen.getByLabelText("Client title"), "Opposition update");
+    await user.click(screen.getByLabelText("ASTER DEVICE"));
+    await user.click(screen.getByRole("button", { name: "Publish" }));
+    await waitFor(() => expect(publishMock).toHaveBeenCalledWith(expect.objectContaining({ portalUserId: "portal-user-1", grantIds: ["grant-1"], expectedSnapshotSha256: "a".repeat(64) })));
   });
 
   it("generates a filtered, classified report with identifier and freshness evidence", async () => {

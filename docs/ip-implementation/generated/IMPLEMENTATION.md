@@ -104,10 +104,10 @@ Generated; do not edit.
 | IPLF-052B | derived | IPLF-052 | M5 | IP-WATCH-01, IP-WATCH-02, IP-WATCH-03, IP-WATCH-04, IP-WATCH-05 | UJ-21-EXC-01, UJ-21-EXC-02, UJ-21-EXC-03, UJ-21-NORMAL, UJ-33-EXC-01, UJ-33-EXC-02, UJ-33-EXC-03, UJ-33-EXC-04, UJ-33-NORMAL | implemented | passed | deployment_verified |
 | IPLF-053A | derived | IPLF-053 | M5 |  |  | implemented | passed | deployment_verified |
 | IPLF-053B | derived | IPLF-053 | M5 | IP-WATCH-01, IP-WATCH-02, IP-WATCH-03, IP-WATCH-04, IP-WATCH-05 | UJ-21-EXC-01, UJ-21-EXC-02, UJ-21-EXC-03, UJ-21-NORMAL, UJ-33-EXC-01, UJ-33-EXC-02, UJ-33-EXC-03, UJ-33-EXC-04, UJ-33-NORMAL | implemented | passed | deployment_verified |
-| IPLF-054A | derived | IPLF-054 | M5 |  |  | implemented | passed | ready_for_review |
-| IPLF-054B | derived | IPLF-054 | M5 | LEGAL-SRC-01, LEGAL-SRC-02, LEGAL-SRC-03, LEGAL-SRC-04, LEGAL-SRC-05, LEGAL-SRC-06, LEGAL-SRC-07, LEGAL-SRC-08, LEGAL-SRC-09, LEGAL-SRC-10, SRC-01, SRC-02, SRC-03, SRC-04, SRC-05, SRC-06, SRC-07, SRC-08, SRC-09, SRC-10, SRC-11, SRC-12 |  | implemented | passed | ready_for_review |
-| IPLF-055A | derived | IPLF-055 | M5 |  |  | not_started | not_run | blocked |
-| IPLF-055B | derived | IPLF-055 | M5 | CLIENT-01, CLIENT-02, CLIENT-03, CLIENT-04 | UJ-27-EXC-01, UJ-27-EXC-02, UJ-27-EXC-03, UJ-27-NORMAL | not_started | not_run | blocked |
+| IPLF-054A | derived | IPLF-054 | M5 |  |  | implemented | passed | deployment_verified |
+| IPLF-054B | derived | IPLF-054 | M5 | LEGAL-SRC-01, LEGAL-SRC-02, LEGAL-SRC-03, LEGAL-SRC-04, LEGAL-SRC-05, LEGAL-SRC-06, LEGAL-SRC-07, LEGAL-SRC-08, LEGAL-SRC-09, LEGAL-SRC-10, SRC-01, SRC-02, SRC-03, SRC-04, SRC-05, SRC-06, SRC-07, SRC-08, SRC-09, SRC-10, SRC-11, SRC-12 |  | implemented | passed | deployment_verified |
+| IPLF-055A | derived | IPLF-055 | M5 |  |  | implemented | passed | ready_for_review |
+| IPLF-055B | derived | IPLF-055 | M5 | CLIENT-01, CLIENT-02, CLIENT-03, CLIENT-04 | UJ-27-EXC-01, UJ-27-EXC-02, UJ-27-EXC-03, UJ-27-NORMAL | implemented | passed | ready_for_review |
 | IPLF-056A | derived | IPLF-056 | M5 |  |  | not_started | not_run | blocked |
 | IPLF-056B | derived | IPLF-056 | M5 | IP-REG-01, IP-REG-02, IP-REG-03, IP-REG-04, IP-REG-05, SRC-01, SRC-02, SRC-03, SRC-04, SRC-05, SRC-06, SRC-07, SRC-08, SRC-09, SRC-10, SRC-11, SRC-12 | UJ-25-EXC-01, UJ-25-EXC-02, UJ-25-EXC-03, UJ-25-NORMAL, UJ-68-EXC-01, UJ-68-EXC-02, UJ-68-EXC-03, UJ-68-EXC-04, UJ-68-EXC-05, UJ-68-NORMAL | not_started | not_run | blocked |
 | IPLF-057A | derived | IPLF-057 | M5 |  |  | not_started | not_run | blocked |

@@ -39,6 +39,7 @@ from caseops_api.api.routes import (
     payments,
     platform_admin,
     portal,
+    portal_ip,
     provider_operations,
     recommendations,
     source_actions,
@@ -112,7 +113,9 @@ api_router.include_router(courts.router, prefix="/courts", tags=["courts"])
 # reference write API mounted under /api/matters/.
 api_router.include_router(statutes.router, prefix="/statutes", tags=["statutes"])
 api_router.include_router(
-    statutes.matter_scoped_router, prefix="/matters", tags=["statutes"],
+    statutes.matter_scoped_router,
+    prefix="/matters",
+    tags=["statutes"],
 )
 api_router.include_router(intake.router, prefix="/intake", tags=["intake"])
 api_router.include_router(teams.router, prefix="/teams", tags=["teams"])
@@ -125,20 +128,28 @@ api_router.include_router(drive.router, prefix="/drive", tags=["drive"])
 # Phase B / J12 / M11 - communications log mounted under /matters
 # so the URL shape stays consistent with the cockpit's other tabs.
 api_router.include_router(
-    communications.router, prefix="/matters", tags=["communications"],
+    communications.router,
+    prefix="/matters",
+    tags=["communications"],
 )
 # Phase B M11 slice 2 - AutoMail templates admin surface.
 api_router.include_router(
-    email_templates.router, prefix="/admin", tags=["email-templates"],
+    email_templates.router,
+    prefix="/admin",
+    tags=["email-templates"],
 )
 # Per-matter client-assignment endpoints mount under /matters/... to
 # keep the URL shape consistent with the rest of the matter surface.
 api_router.include_router(
-    clients.matter_scoped_router, prefix="/matters", tags=["clients"],
+    clients.matter_scoped_router,
+    prefix="/matters",
+    tags=["clients"],
 )
 # Hearing-reminders surface (BUG-013): admin list + SendGrid webhook.
 api_router.include_router(
-    notifications.admin_router, prefix="/admin", tags=["notifications"],
+    notifications.admin_router,
+    prefix="/admin",
+    tags=["notifications"],
 )
 api_router.include_router(
     notifications.rules_router,
@@ -151,13 +162,20 @@ api_router.include_router(
     tags=["notification-preferences"],
 )
 api_router.include_router(
-    notifications.webhook_router, prefix="/webhooks", tags=["webhooks"],
+    notifications.webhook_router,
+    prefix="/webhooks",
+    tags=["webhooks"],
 )
 # Phase C-1 (2026-04-24, MOD-TS-014) - portal scaffold.
 # /api/portal/auth/* + /api/portal/me are the external surface
 # (PortalUser session); /api/admin/portal/invitations is the
 # internal owner-driven invite endpoint.
 api_router.include_router(portal.router, prefix="/portal", tags=["portal"])
+api_router.include_router(portal_ip.public_router, prefix="/portal", tags=["portal-ip"])
 api_router.include_router(
-    portal.admin_router, prefix="/admin", tags=["portal-admin"],
+    portal.admin_router,
+    prefix="/admin",
+    tags=["portal-admin"],
 )
+api_router.include_router(portal_ip.admin_router, prefix="/admin", tags=["portal-admin"])
+api_router.include_router(portal_ip.internal_router, prefix="/ip", tags=["portal-ip-admin"])

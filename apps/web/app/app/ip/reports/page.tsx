@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, FileChartColumn, LoaderCircle, Play, RefreshCw } from "lucide-react";
+import { AlertTriangle, FileChartColumn, LoaderCircle, Play, RefreshCw, Send } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -22,6 +22,10 @@ import {
   type IpReportPreview,
 } from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
+import {
+  fetchAdminPortalIpGrants,
+  publishIpReportToPortal,
+} from "@/lib/api/portal";
 
 const REPORT_LABEL: Record<IpReportKind, string> = {
   portfolio_register: "Portfolio register",
@@ -79,6 +83,9 @@ function freshnessTone(status: IpReportPreview["freshness"]["status"]) {
 
 export default function IpReportsPage() {
   const canRead = useCapability("ip:read");
+  const canManagePortal = useCapability("portal:manage_grants");
+  const canApprove = useCapability("ip:approve");
+  const canPublish = canManagePortal && canApprove;
   const [reportKind, setReportKind] = useState<IpReportKind>("portfolio_register");
   const [query, setQuery] = useState("");
   const [jurisdiction, setJurisdiction] = useState("");
@@ -86,6 +93,10 @@ export default function IpReportsPage() {
   const [confidentiality, setConfidentiality] = useState<"internal" | "restricted">("internal");
   const [rowLimitInput, setRowLimitInput] = useState("50");
   const [report, setReport] = useState<IpReportPreview | null>(null);
+  const [portalUserId, setPortalUserId] = useState("");
+  const [selectedGrantIds, setSelectedGrantIds] = useState<string[]>([]);
+  const [publicationTitle, setPublicationTitle] = useState("");
+  const [scheduledFor, setScheduledFor] = useState("");
 
   const contract = useQuery({
     queryKey: ["ip", "reports", "foundation"],
@@ -109,6 +120,38 @@ export default function IpReportsPage() {
       }),
     onSuccess: setReport,
     onError: (error) => toast.error(apiErrorMessage(error, "Could not generate the report.")),
+  });
+  const grants = useQuery({
+    queryKey: ["ip", "portal", "grants"],
+    queryFn: fetchAdminPortalIpGrants,
+    enabled: canPublish,
+  });
+  const activeGrants = grants.data?.grants.filter((grant) => grant.active) ?? [];
+  const portalUsers = Array.from(
+    new Map(activeGrants.map((grant) => [grant.portal_user_id, grant])).values(),
+  );
+  const publication = useMutation({
+    mutationFn: () => {
+      if (!report) throw new Error("Generate and review the report first.");
+      return publishIpReportToPortal({
+        portalUserId,
+        grantIds: selectedGrantIds,
+        title: publicationTitle.trim(),
+        reportKind: report.report_kind,
+        filters: (report.filters.portfolio as Record<string, unknown> | undefined) ?? {},
+        renewalStates: (report.filters.renewal_states as string[] | undefined) ?? [],
+        rowLimit: Number(report.filters.row_limit) || report.row_count || 1,
+        expectedSnapshotSha256: report.snapshot_sha256,
+        scheduledFor: scheduledFor ? new Date(scheduledFor).toISOString() : null,
+      });
+    },
+    onSuccess: () => {
+      toast.success(scheduledFor ? "Client report scheduled." : "Client report published.");
+      setSelectedGrantIds([]);
+      setPublicationTitle("");
+      setScheduledFor("");
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not publish the client report.")),
   });
   const columns = useMemo(
     () => Array.from(new Set((report?.rows ?? []).flatMap((row) => Object.keys(row)))).slice(0, 10),
@@ -170,6 +213,20 @@ export default function IpReportsPage() {
 
       {report ? <ReportResult report={report} columns={columns} /> : !contract.isPending && !contract.isError ? (
         <EmptyState icon={FileChartColumn} title="No report generated" description="Select a report scope and generate a current snapshot." />
+      ) : null}
+
+      {report && canPublish && ["portfolio_register", "application_status", "opposition_status", "renewal"].includes(report.report_kind) ? (
+        <Card data-testid="portal-report-publication">
+          <CardHeader><CardTitle as="h2">Publish reviewed report</CardTitle></CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <Field label="Client" htmlFor="report-client"><select id="report-client" className="h-10 w-full rounded-md border border-[var(--color-line)] bg-white px-3 text-sm" value={portalUserId} onChange={(event) => { setPortalUserId(event.target.value); setSelectedGrantIds([]); }}><option value="">Select client</option>{portalUsers.map((grant) => <option key={grant.portal_user_id} value={grant.portal_user_id}>{grant.portal_user_name} · {grant.portal_user_email}</option>)}</select></Field>
+            <Field label="Client title" htmlFor="report-client-title"><Input id="report-client-title" value={publicationTitle} onChange={(event) => setPublicationTitle(event.target.value)} /></Field>
+            <Field label="Publish at" htmlFor="report-publish-at"><Input id="report-publish-at" type="datetime-local" value={scheduledFor} onChange={(event) => setScheduledFor(event.target.value)} /></Field>
+            <div className="flex items-end"><Button className="w-full" onClick={() => publication.mutate()} disabled={publication.isPending || !portalUserId || !selectedGrantIds.length || publicationTitle.trim().length < 2 || report.confidentiality !== "internal"}><Send className="h-4 w-4" />{scheduledFor ? "Schedule" : "Publish"}</Button></div>
+            <fieldset className="md:col-span-2 xl:col-span-4"><legend className="mb-2 text-sm font-semibold">Granted IP records</legend><div className="flex flex-wrap gap-3">{activeGrants.filter((grant) => grant.portal_user_id === portalUserId).map((grant) => <label key={grant.id} className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={selectedGrantIds.includes(grant.id)} onChange={(event) => setSelectedGrantIds((current) => event.target.checked ? [...current, grant.id] : current.filter((id) => id !== grant.id))} />{grant.docket_title}</label>)}</div></fieldset>
+            {report.confidentiality !== "internal" ? <p className="md:col-span-2 xl:col-span-4 text-sm text-amber-800">Generate an Internal preview before publishing. Restricted previews cannot be shared.</p> : null}
+          </CardContent>
+        </Card>
       ) : null}
     </div>
   );

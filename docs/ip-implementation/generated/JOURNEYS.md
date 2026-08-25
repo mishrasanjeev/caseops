@@ -30,7 +30,7 @@ Generated; do not edit.
 | UJ-24 | Generate and approve IP pleading | 4 | IPLF-045B, IPLF-046B, IPLF-047B | 5 | 5 | implemented | passed | true |
 | UJ-25 | Operate failed integration | 4 | IPLF-001A, IPLF-001B, IPLF-002B, IPLF-056B | 4 | 2 | in_progress | not_run | false |
 | UJ-26 | Manage renewal | 4 | IPLF-037B | 4 | 1 | implemented | passed | false |
-| UJ-27 | Share client report and instruction | 4 | IPLF-038B, IPLF-055B | 4 | 0 | in_progress | not_run | false |
+| UJ-27 | Share client report and instruction | 4 | IPLF-038B, IPLF-055B | 10 | 1 | in_progress | not_run | false |
 | UJ-28 | Export or offboard portfolio | 4 | IPLF-028B, IPLF-071B | 4 | 0 | not_started | not_run | false |
 | UJ-29 | Manage patent family | 4 | IPLF-080B | 4 | 0 | not_started | not_run | false |
 | UJ-30 | Manage design, copyright, or licence | 3 | IPLF-090B | 3 | 0 | not_started | not_run | false |

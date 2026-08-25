@@ -80,7 +80,7 @@ export default defineConfig({
   webServer: [
     {
       command:
-        "uv --directory apps/api run uvicorn caseops_api.main:app --host 127.0.0.1 --port 8000 --app-dir src",
+        "uv --directory apps/api run --no-sync python -m uvicorn caseops_api.main:app --host 127.0.0.1 --port 8000 --app-dir src",
       cwd: repoRoot,
       env: {
         ...process.env,

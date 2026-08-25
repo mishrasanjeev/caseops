@@ -209,10 +209,10 @@ Generated; do not edit.
 | IP-DRAFT-08 | IP-DRAFT | IPLF-045B, IPLF-046B, IPLF-047B | 6 | 2 | implemented | passed | deployment_verified | true |
 | IP-DRAFT-09 | IP-DRAFT | IPLF-045B, IPLF-046B, IPLF-047B | 6 | 2 | implemented | passed | deployment_verified | true |
 | IP-DRAFT-10 | IP-DRAFT | IPLF-045B, IPLF-046B, IPLF-047B | 6 | 2 | implemented | passed | deployment_verified | true |
-| CLIENT-01 | CLIENT | IPLF-055B | 5 | 0 | not_started | not_run | blocked | false |
-| CLIENT-02 | CLIENT | IPLF-055B | 5 | 0 | not_started | not_run | blocked | false |
-| CLIENT-03 | CLIENT | IPLF-055B | 5 | 0 | not_started | not_run | blocked | false |
-| CLIENT-04 | CLIENT | IPLF-055B | 5 | 0 | not_started | not_run | blocked | false |
+| CLIENT-01 | CLIENT | IPLF-055B | 2 | 1 | implemented | passed | blocked | false |
+| CLIENT-02 | CLIENT | IPLF-055B | 3 | 1 | implemented | passed | blocked | false |
+| CLIENT-03 | CLIENT | IPLF-055B | 3 | 1 | implemented | passed | blocked | false |
+| CLIENT-04 | CLIENT | IPLF-055B | 3 | 1 | implemented | passed | blocked | false |
 | REPORT-01 | REPORT | IPLF-038B, IPLF-100B | 12 | 1 | in_progress | not_run | blocked | false |
 | REPORT-02 | REPORT | IPLF-038B, IPLF-100B | 12 | 1 | in_progress | not_run | blocked | false |
 | REPORT-03 | REPORT | IPLF-038B, IPLF-039F, IPLF-100B | 19 | 1 | in_progress | not_run | blocked | false |

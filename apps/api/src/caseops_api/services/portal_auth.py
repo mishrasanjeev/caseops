@@ -8,6 +8,7 @@ re-hashes the user-supplied token and compares.
 All branchy logic in ``request_link`` returns the same shape on hit
 or miss to defeat email-existence enumeration.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -21,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
     Company,
+    IpDocketRecord,
     Matter,
     MatterPortalGrant,
     PortalMagicLink,
@@ -107,9 +109,7 @@ class InvalidMagicLink(HTTPException):
         )
 
 
-def verify_magic_link(
-    session: Session, *, token: str
-) -> PortalUser:
+def verify_magic_link(session: Session, *, token: str) -> PortalUser:
     """Consume a magic link, returning the PortalUser on success.
 
     Single-use: the row is marked ``consumed_at`` on first use; a
@@ -154,15 +154,15 @@ def verify_magic_link(
     return portal_user
 
 
-def list_active_grants(
-    session: Session, *, portal_user_id: str
-) -> list[MatterPortalGrant]:
+def list_active_grants(session: Session, *, portal_user_id: str) -> list[MatterPortalGrant]:
+    now = _utcnow()
     return list(
         session.scalars(
             select(MatterPortalGrant)
             .where(
                 MatterPortalGrant.portal_user_id == portal_user_id,
                 MatterPortalGrant.revoked_at.is_(None),
+                (MatterPortalGrant.expires_at.is_(None) | (MatterPortalGrant.expires_at > now)),
             )
             .order_by(MatterPortalGrant.granted_at.desc())
         )
@@ -178,7 +178,10 @@ def invite_portal_user(
     full_name: str,
     role: str,
     matter_ids: list[str],
+    ip_docket_ids: list[str] | None = None,
     scope_json: dict | None = None,
+    expires_at: datetime | None = None,
+    inviting_label: str | None = None,
 ) -> tuple[PortalUser, list[MatterPortalGrant], str]:
     """Internal-membership-driven invite. Creates the PortalUser if
     none exists for (company, email); creates one MatterPortalGrant
@@ -190,9 +193,7 @@ def invite_portal_user(
     if role not in {r.value for r in PortalUserRole}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                "Unknown portal role. Use 'client' or 'outside_counsel'."
-            ),
+            detail=("Unknown portal role. Use 'client' or 'outside_counsel'."),
         )
     email_norm = (email or "").strip().lower()
     if not email_norm or "@" not in email_norm:
@@ -208,11 +209,30 @@ def invite_portal_user(
         )
 
     unique_matter_ids = list(dict.fromkeys(matter_ids))
-    if not unique_matter_ids:
+    unique_ip_docket_ids = list(dict.fromkeys(ip_docket_ids or []))
+    if not unique_matter_ids and not unique_ip_docket_ids:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="At least one matter_id is required for the invite scope.",
+            detail="At least one Matter or IP docket target is required.",
         )
+    if unique_ip_docket_ids and role != PortalUserRole.CLIENT.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="IP docket grants are available only to client portal users.",
+        )
+    now = _utcnow()
+    if expires_at is not None:
+        normalized_expiry = (
+            expires_at.replace(tzinfo=UTC)
+            if expires_at.tzinfo is None
+            else expires_at.astimezone(UTC)
+        )
+        if normalized_expiry <= now:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Grant expiry must be in the future.",
+            )
+        expires_at = normalized_expiry
     owned_matter_ids = set(
         session.scalars(
             select(Matter.id).where(
@@ -226,6 +246,18 @@ def invite_portal_user(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Matter not found.",
         )
+    owned_ip_docket_ids = set(
+        session.scalars(
+            select(IpDocketRecord.id).where(
+                IpDocketRecord.company_id == company_id,
+                IpDocketRecord.id.in_(unique_ip_docket_ids),
+                IpDocketRecord.is_active.is_(True),
+                IpDocketRecord.archived_by_matter_disposal.is_(False),
+            )
+        )
+    )
+    if len(owned_ip_docket_ids) != len(unique_ip_docket_ids):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="IP record not found.")
 
     portal_user = session.scalars(
         select(PortalUser).where(
@@ -249,38 +281,48 @@ def invite_portal_user(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "This email is already invited to the workspace under a "
-                "different portal role."
+                "This email is already invited to the workspace under a different portal role."
             ),
         )
 
     grants: list[MatterPortalGrant] = []
-    for matter_id in unique_matter_ids:
+    targets = [("matter", target_id) for target_id in unique_matter_ids] + [
+        ("ip_docket", target_id) for target_id in unique_ip_docket_ids
+    ]
+    actor_label = (inviting_label or f"membership:{inviting_membership_id}").strip()[:255]
+    for target_kind, target_id in targets:
         existing = session.scalars(
             select(MatterPortalGrant).where(
                 MatterPortalGrant.portal_user_id == portal_user.id,
-                MatterPortalGrant.matter_id == matter_id,
+                (
+                    MatterPortalGrant.matter_id == target_id
+                    if target_kind == "matter"
+                    else MatterPortalGrant.ip_docket_record_id == target_id
+                ),
+                MatterPortalGrant.revoked_at.is_(None),
             )
         ).first()
         if existing is None:
             grant = MatterPortalGrant(
                 id=str(uuid4()),
+                company_id=company_id,
                 portal_user_id=portal_user.id,
-                matter_id=matter_id,
+                matter_id=target_id if target_kind == "matter" else None,
+                ip_docket_record_id=(target_id if target_kind == "ip_docket" else None),
                 role=role,
                 scope_json=dict(scope_json) if scope_json is not None else None,
                 granted_by_membership_id=inviting_membership_id,
+                granted_by_label_snapshot=actor_label,
+                expires_at=expires_at,
             )
             session.add(grant)
             grants.append(grant)
         else:
-            if existing.revoked_at is not None:
-                existing.revoked_at = None
-                existing.granted_at = _utcnow()
-                existing.granted_by_membership_id = inviting_membership_id
-            existing.scope_json = (
-                dict(scope_json) if scope_json is not None else None
-            )
+            existing.scope_json = dict(scope_json) if scope_json is not None else None
+            existing.expires_at = expires_at
+            existing.granted_by_membership_id = inviting_membership_id
+            existing.granted_by_label_snapshot = actor_label
+            existing.row_version += 1
             grants.append(existing)
     session.flush()
 
