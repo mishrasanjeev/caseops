@@ -13858,6 +13858,7 @@
         "apps/api/src/caseops_api/services/ip_foreign_associates.py",
         "apps/api/src/caseops_api/services/ip_lifecycle.py",
         "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/governance/generated_data_class_projection.py",
         "apps/web/lib/api/openapi-types.ts",
         "docs/ip-implementation/IP_FOREIGN_ASSOCIATE_FOUNDATION.md"
       ],
@@ -13873,7 +13874,7 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m5/IPLF-059/local-059a-2026-08-26.md",
-          "revision": "817c708a9b1b1ec9ab33aca627d57e25c3dc4452",
+          "revision": "69781116757549c34990848e3ea2964e8d946b04",
           "environment": "Windows CPython 3.13, locked uv dependencies, ephemeral SQLite migration/API fixtures, generated OpenAPI client and repository governance validators",
           "fixtures": "fresh entitled law-firm tenants, canonical client authority fallback, panel associates and approved Matter assignments, docket-linked public/privileged documents, estimates, delivered and misdirected Communications, foreign filing evidence, actual costs and outside-counsel spend",
           "assertions": "typed lifecycle, stale-write rejection, delivery versus acknowledgement, wrong-recipient rejection, privileged approval, budget and fee/tax approval, independent filing verification, amount/currency/client-billing reconciliation, refusal/reassignment version history, audit/event lineage, tenant isolation and migration restore-forward refusal",
@@ -13907,6 +13908,12 @@
           "disposition": "generated",
           "owner": "Typed web API client",
           "evidence": "Foreign-associate list, detail, workspace and transaction contracts"
+        },
+        {
+          "artifact": "apps/api/src/caseops_api/governance/generated_data_class_projection.py",
+          "disposition": "generated",
+          "owner": "Runtime data governance projection",
+          "evidence": "Current map, registry and ORM fingerprints plus inventory membership for the additive table"
         },
         {
           "artifact": "docs/ip-implementation/evidence/m5/IPLF-059/local-059a-2026-08-26.md",
