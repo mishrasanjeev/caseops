@@ -28,16 +28,23 @@ RUN apt-get update \
 
 RUN pip install --no-cache-dir uv==0.11.6
 
-COPY pyproject.toml README.md alembic.ini ./
-COPY src ./src
-COPY alembic ./alembic
+COPY pyproject.toml uv.lock README.md ./
 
 # Install the package with the [ocr] extra so rapidocr + pytesseract
 # ship to Cloud Run by default. Without these, the prod image silently
 # skips OCR fallback when pdfminer returns sparse text — and scanned
 # matter attachments + older judgment PDFs then miss chunking / embed.
 # Add `[observability]` here if/when we wire OTel in prod.
-RUN uv pip install --system ".[ocr]"
+RUN uv export \
+      --frozen \
+      --no-dev \
+      --extra ocr \
+      --no-emit-project \
+      --no-header \
+      --no-hashes \
+      --output-file /tmp/requirements.lock \
+  && uv pip install --system --requirements /tmp/requirements.lock \
+  && rm /tmp/requirements.lock
 
 # Voyage token counting uses Hugging Face's tokenizer cache before every
 # embedding request. Download the production tokenizer while the image is
@@ -50,6 +57,14 @@ RUN python -c "from tokenizers import Tokenizer; tokenizer = Tokenizer.from_pret
 # multi-second download on the first reranked query. The model caches
 # under /root/.cache/fastembed and stays in the image layer.
 RUN python -c "from fastembed.rerank.cross_encoder import TextCrossEncoder; TextCrossEncoder(model_name='jinaai/jina-reranker-v1-tiny-en')"
+
+# Keep dependency and embedded-model layers independent of application source.
+# The project install creates console entry points used by Cloud Run jobs and
+# workers; runtime dependencies above remain locked and are not re-resolved.
+COPY alembic.ini ./
+COPY src ./src
+COPY alembic ./alembic
+RUN uv pip install --system --no-deps .
 
 # Both model families are now baked into immutable image layers. Force runtime
 # resolution through those caches so cold workers never probe the public Hub.

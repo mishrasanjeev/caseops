@@ -267,6 +267,7 @@ test("IPLF-033B completes family and prosecution exception journeys", async ({ p
   await page.goto(`/app/ip?docket=${first.docket.id}`);
   const prosecution = page.getByTestId("ip-prosecution-workspace");
   await expect(prosecution.getByText("response filed", { exact: true })).toBeVisible();
+  await prosecution.getByLabel("Application").selectOption(first.applications[0].id);
   await prosecution.getByLabel("Event type").selectOption("examination_report");
   await prosecution.getByLabel("Effective date and time").fill("2026-08-20T10:00");
   await prosecution.getByLabel("Reason").fill("Backdated registry examination report reviewed.");

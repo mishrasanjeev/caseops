@@ -359,6 +359,20 @@ def test_release_images_carry_exact_revision_label(dockerfile: str) -> None:
     assert "LABEL org.opencontainers.image.revision=$CASEOPS_RELEASE_SHA" in image
 
 
+def test_api_release_image_uses_frozen_dependencies_before_source_layers() -> None:
+    image = _read_repo_text("apps/api/Dockerfile")
+
+    assert "COPY pyproject.toml uv.lock README.md ./" in image
+    assert "uv export \\" in image
+    assert "--frozen" in image
+    assert "--no-emit-project" in image
+    assert "uv pip install --system --requirements /tmp/requirements.lock" in image
+    assert "uv pip install --system --no-deps ." in image
+    assert image.index("--frozen") < image.index("COPY src ./src")
+    assert image.index("Tokenizer.from_pretrained") < image.index("COPY src ./src")
+    assert image.index("TextCrossEncoder") < image.index("COPY src ./src")
+
+
 def test_deploy_prod_uses_api_gcloudignore_explicitly() -> None:
     script = _read_repo_text("scripts/deploy-prod.sh")
     cloudbuild = _read_repo_text("apps/api/cloudbuild.yaml")

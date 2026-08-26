@@ -1,9 +1,10 @@
 import { expect, request, test } from "@playwright/test";
 import type { APIRequestContext } from "@playwright/test";
 
-import { apiBaseUrl } from "./support/env";
+import { apiBaseUrl, webBaseUrl } from "./support/env";
 
 const PASSWORD = "StatuteTrust123!";
+const WEB_ORIGIN = new URL(webBaseUrl).origin;
 
 function unique(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
@@ -74,7 +75,7 @@ test("IPLF-UJ-15/UJ-48: verified text, separated material, fail-closed exception
       status: 200,
       contentType: "application/json",
       headers: {
-        "Access-Control-Allow-Origin": "http://127.0.0.1:3100",
+        "Access-Control-Allow-Origin": WEB_ORIGIN,
         "Access-Control-Allow-Credentials": "true",
       },
       body: JSON.stringify({
@@ -158,7 +159,7 @@ test("IPLF-UJ-15/UJ-48: verified text, separated material, fail-closed exception
       status: 200,
       contentType: "application/json",
       headers: {
-        "Access-Control-Allow-Origin": "http://127.0.0.1:3100",
+        "Access-Control-Allow-Origin": WEB_ORIGIN,
         "Access-Control-Allow-Credentials": "true",
       },
       body: JSON.stringify({
