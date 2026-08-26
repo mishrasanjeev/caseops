@@ -83,11 +83,13 @@ test("IPLF-060B production proves UJ-20, pilot mappings, source actions, and res
       headers,
     );
     const judge = listing.judges.find(
-      (item: { mapped_authority_count: number }) => item.mapped_authority_count > 0,
+      (item: { full_name: string; mapped_authority_count: number }) =>
+        item.full_name.startsWith("Justice CaseOps QA Pilot -") &&
+        item.mapped_authority_count > 0,
     );
     expect(
       judge,
-      `${court.name} must have at least one canonically mapped judge for JUDGE-10`,
+      `${court.name} must have its bounded production QA judge mapping for JUDGE-10`,
     ).toBeTruthy();
     const authorities = await getJson(
       page.request,
