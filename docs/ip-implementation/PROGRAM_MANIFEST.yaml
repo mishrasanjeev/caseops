@@ -16,14 +16,14 @@
     "execution_policy": "codex_owned_single_ordered_queue; implement first and run the automated check and exact-release verification batch at the end",
     "active_slice": "IPLF-061A",
     "checkpoint": {
-      "recorded_at": "2026-08-26T16:15:00+05:30",
-      "repository_revision": "f746d6923144a72abd9f8318f53ce2b611bdca1f",
-      "environment": "The deployment-verified predecessor is canonical main f746d6923144a72abd9f8318f53ce2b611bdca1f. API caseops-api-00366-f2n and web caseops-web-00345-2qf serve exact immutable images at 100 percent latest-only traffic; migration caseops-migrate-job-7lst7, eight-job scheduler reconciliation, health, exact-main CI 32954590105, Security 32954590078, CodeQL 32954590020, and production workflow 32954590068 passed.",
-      "completed_scope": "IPLF-060B is repository implemented and locally verified without adding schema or duplicate owners. Canonical judge browsing, source-backed cursor pagination, confidence and coverage states, descriptive analytics fences, curator collision/alias/merge/reprocess UI, mobile UJ-20 normal/exception E2E, and Delhi/Bombay/Madras deterministic source smoke pass. IPLF-003B's stale planned source-action references are replaced by passing concrete tests. Exact merged CI, immutable production deployment, real production three-pilot-court acceptance, and independent legal/provider/UAT acceptance remain open.",
+      "recorded_at": "2026-08-26T19:25:00+05:30",
+      "repository_revision": "60328f48514ce1006c655bb274c2b1289c6a51c0",
+      "environment": "Canonical main 60328f48514ce1006c655bb274c2b1289c6a51c0 is deployed as API caseops-api-00368-gz2 and web caseops-web-00347-6pk at 100 percent latest-only traffic with immutable digests sha256:36e33ffafd506b837957683d20eae142960991100e6795188b78db579ac2692f and sha256:645248871d68158d0f23e6e3e421cdbd60e5348194ea022ebe754710a577faa7. Migration caseops-migrate-job-2kbqw, QA bootstrap caseops-ip-qa-bootstrap-228pp, eight-job scheduler reconciliation, health, exact-main CI 32973181583, Security, CodeQL, and production workflow 32973181645 passed. Judge refresh remains PAUSED.",
+      "completed_scope": "IPLF-060B, parent IPLF-060, IPLF-003B, and UJ-20 normal/exception paths are deployment-verified. The exact production release proves IPLF-060B's JUDGE-01 through JUDGE-10 behavior and TRUST-RSCH-02 source preservation on the judge workflow, including canonical browsing, source-backed pagination, confidence and coverage states, descriptive analytics fences, curator workflows, responsive UI, and deterministic non-analytics QA source canaries for Delhi, Bombay, and Madras. Aggregate JUDGE and TRUST-RSCH-02 requirement rows remain blocked because other allocating slices retain separate exact-release gates. The first release gate failed honestly on legacy production data; the corrective release preserved the fail-closed source boundary and then passed the unchanged production suite. Independent legal/provider/source and law-firm UAT acceptance remains external and is not claimed.",
       "program_state": "PROGRAM INCOMPLETE",
       "next_slice": "IPLF-061A",
-      "next_action": "Complete IPLF-060B's exact release gate, retain the judge refresh as PAUSED until external activation approvals pass, then implement IPLF-061A against the existing /guide content owner.",
-      "evidence_ref": "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+      "next_action": "Implement IPLF-061A against the existing /guide content owner without creating a second help corpus. Independently obtain legal/provider/source and law-firm UAT approval before any judge-refresh activation; retain the scheduler as PAUSED until then.",
+      "evidence_ref": "docs/ip-implementation/evidence/m6/IPLF-060B/release-2026-08-26.md"
     },
     "work_owner": {
       "owner": "Codex",
@@ -2229,10 +2229,11 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "evidence_refs": [
         "docs/ip-implementation/evidence/m6/IPLF-060A/release-2026-08-26.md",
-        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md",
+        "docs/ip-implementation/evidence/m6/IPLF-060B/release-2026-08-26.md"
       ]
     },
     {
@@ -3320,15 +3321,23 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
-        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md",
+        "docs/ip-implementation/evidence/m6/IPLF-060B/release-2026-08-26.md"
       ],
       "blockers": [],
       "next_actions": [],
       "data_impact": [],
-      "documentation_impact": [],
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/evidence/m6/IPLF-060B/release-2026-08-26.md",
+          "disposition": "created",
+          "owner": "Engineering/SRE",
+          "evidence": "Exact production release, source-action canaries, responsive UJ-20 acceptance, and activation boundary"
+        }
+      ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "source_kind": "prd_explicit",
       "scope_source": "IPLF-003B",
       "primary_behavior": "Render source action on research, uploaded-case, intelligent-review, and judge surfaces with typed failure states and E2E.",
@@ -3345,7 +3354,7 @@
           "recorded_at": "2026-08-02T06:25:00+05:30"
         }
       ],
-      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14 reset verification because the row cited unwritten journey tests. Closure 2026-08-26: concrete API, component, saved-research, judge-profile, local browser, and production browser references now cover typed available/missing/unverified/blocked/quarantined source states, opaque authenticated opens, reporting, responsive judge source actions, and all stable UJ-17/UJ-20 test IDs. Focused API (23), web (14), and IPLF-060B E2E (1) runs passed. Release remains blocked pending the exact merged IPLF-060B production gate."
+      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14 reset verification because the row cited unwritten journey tests. Closure 2026-08-26: concrete API, component, saved-research, judge-profile, local browser, and production browser references cover typed available/missing/unverified/blocked/quarantined source states, opaque authenticated opens, reporting, responsive judge source actions, and all stable UJ-17/UJ-20 test IDs. Exact main 60328f48514ce1006c655bb274c2b1289c6a51c0 and unchanged production workflow 32973181645 passed; no duplicate source-action owner was introduced."
     },
     {
       "id": "IPLF-003C",
@@ -14345,7 +14354,8 @@
         "tests/e2e/iplf-060b-judge-workflow-2026-08-26-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md",
+        "docs/ip-implementation/evidence/m6/IPLF-060B/release-2026-08-26.md"
       ],
       "evidence_metadata": [
         {
@@ -14356,22 +14366,30 @@
           "assertions": "canonical-only mapping, cursor pagination, source actions, coverage states, descriptive analytics fence, curator normal/exception mutations, no prohibited inference, 360px responsive controls, public guidance, and production-spec discovery",
           "result": "passed",
           "recorded_at": "2026-08-26T16:10:00+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m6/IPLF-060B/release-2026-08-26.md",
+          "revision": "60328f48514ce1006c655bb274c2b1289c6a51c0",
+          "environment": "production API caseops-api-00368-gz2 and web caseops-web-00347-6pk on immutable exact-main images at 100 percent latest-only traffic",
+          "fixtures": "isolated QA tenant; bounded non-analytics Delhi, Bombay, and Madras source canaries; real-data Justice Yashwant Varma bench probe",
+          "assertions": "exact-main CI, migration-first deployment, health, scheduler digest reconciliation, three-court canonical mapping and opaque official source opens, responsive UJ-20 workflow, public documentation, and unchanged complete production batch",
+          "result": "passed",
+          "recorded_at": "2026-08-26T19:25:00+05:30"
         }
       ],
       "blockers": [
         {
           "state": "open",
-          "summary": "Exact merged-main CI, immutable deployment, and unchanged production acceptance have not yet run for IPLF-060B."
-        },
-        {
-          "state": "open",
-          "summary": "The production QA corpus must prove at least one canonical mapped authority with an available source action for Delhi, Bombay, and Madras High Courts; independent legal/provider/source and law-firm UAT acceptance remain external."
+          "summary": "Independent legal, provider/source, and law-firm UAT approval is required before activating the judge refresh scheduler.",
+          "owner": "Human legal, provider/source, law-firm UAT, and release owners",
+          "evidence_needed": "Approved production source roster and coverage review, legal acceptance of mapping presentation and source labels, law-firm UAT sign-off, and an explicit scheduler activation decision.",
+          "safe_fallback": "Keep caseops-judge-mapping-refresh-daily PAUSED and use the deployed source-backed manual curator workflows.",
+          "milestone_impact": "Blocks scheduled refresh activation and external acceptance claims only; repository implementation, release, and independent IPLF-061A work remain unblocked."
         }
       ],
       "next_actions": [
-        "Open and merge the IPLF-060B PR only after CI, Security, CodeQL, generated-contract, API, web, and local UJ-20 gates pass.",
-        "Deploy the exact merged SHA migration-first, reconcile immutable scheduler digests while preserving judge refresh PAUSED, clear stale tags, and retain latest-only traffic.",
-        "Run the unchanged exact-release production spec and record exact identity, three-pilot-court source coverage, responsive UI, public documentation, and any external acceptance boundary."
+        "Implement IPLF-061A against the existing /guide content owner without duplicating the help corpus, page, or search owner.",
+        "Obtain independent legal/provider/source and law-firm UAT approval before an explicit judge-refresh activation change; keep the scheduler PAUSED until then."
       ],
       "data_impact": [
         "No schema change or new writer. Reads use canonical Court, Judge, JudgeAlias, JudgeAppointment, AuthorityDocument, and JudgeDecisionIndex records; curator writes delegate to IPLF-060A services and audits."
@@ -14390,16 +14408,22 @@
           "evidence": "Local implementation, duplicate-work audit, JUDGE/UJ-20 tests, responsive browser acceptance, defect correction, and release gates"
         },
         {
+          "artifact": "docs/ip-implementation/evidence/m6/IPLF-060B/release-2026-08-26.md",
+          "disposition": "created",
+          "owner": "Engineering/SRE",
+          "evidence": "Exact release identity, honest first-gate failure, corrective production canaries, full production acceptance, and paused activation boundary"
+        },
+        {
           "artifact": "apps/web/app/guide/page.tsx, apps/web/app/law-firms/page.tsx, apps/web/app/llms.txt/route.ts, apps/web/app/llms-full.txt/route.ts",
           "disposition": "updated",
           "owner": "Product/Marketing/Legal",
           "evidence": "Truthful source-backed judge workflow, confidence, coverage, curator, no-prediction, and paused-refresh descriptions"
         }
       ],
-      "allocation_review": "2026-08-26 brutal duplicate-work review against IPLF-060A, PRD Sections 11, 15 UJ-20, 23, and 25: extend the existing canonical identity, authority, source-action, capability, audit, worker, and scheduler owners. Add only bounded authority pagination, grouped court-list counts, server-owned curator catalogs, workflow UI, and acceptance. No schema, corpus, profile owner, analytics store, writer, worker, or schedule was duplicated. Local implementation and UJ-20 normal/exception proof pass; exact production and approved real three-pilot-court coverage remain fail-closed.",
+      "allocation_review": "2026-08-26 brutal duplicate-work review against IPLF-060A, PRD Sections 11, 15 UJ-20, 23, and 25: extend the existing canonical identity, authority, source-action, capability, audit, worker, and scheduler owners. Add only bounded authority pagination, grouped court-list counts, server-owned curator catalogs, workflow UI, and acceptance. No schema, corpus, profile owner, analytics store, writer, worker, or schedule was duplicated. Exact main 60328f48514ce1006c655bb274c2b1289c6a51c0 and production workflow 32973181645 passed, including deterministic non-analytics Delhi/Bombay/Madras source proof. External activation acceptance remains fail-closed and does not duplicate or defer repository work.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked"
+      "release_status": "deployment_verified"
     },
     {
       "id": "IPLF-061A",
@@ -16747,7 +16771,8 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
-        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md",
+        "docs/ip-implementation/evidence/m6/IPLF-060B/release-2026-08-26.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
@@ -22646,7 +22671,8 @@
         "tests/e2e/iplf-060b-judge-workflow-2026-08-26-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md",
+        "docs/ip-implementation/evidence/m6/IPLF-060B/release-2026-08-26.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
@@ -22684,7 +22710,8 @@
         "tests/e2e/iplf-060b-judge-workflow-2026-08-26-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md",
+        "docs/ip-implementation/evidence/m6/IPLF-060B/release-2026-08-26.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
@@ -22722,7 +22749,8 @@
         "tests/e2e/iplf-060b-judge-workflow-2026-08-26-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md",
+        "docs/ip-implementation/evidence/m6/IPLF-060B/release-2026-08-26.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
@@ -22760,7 +22788,8 @@
         "tests/e2e/iplf-060b-judge-workflow-2026-08-26-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md",
+        "docs/ip-implementation/evidence/m6/IPLF-060B/release-2026-08-26.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
@@ -22798,7 +22827,8 @@
         "tests/e2e/iplf-060b-judge-workflow-2026-08-26-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md",
+        "docs/ip-implementation/evidence/m6/IPLF-060B/release-2026-08-26.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
@@ -22836,7 +22866,8 @@
         "tests/e2e/iplf-060b-judge-workflow-2026-08-26-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md",
+        "docs/ip-implementation/evidence/m6/IPLF-060B/release-2026-08-26.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
@@ -22874,7 +22905,8 @@
         "tests/e2e/iplf-060b-judge-workflow-2026-08-26-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md",
+        "docs/ip-implementation/evidence/m6/IPLF-060B/release-2026-08-26.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
@@ -22912,7 +22944,8 @@
         "tests/e2e/iplf-060b-judge-workflow-2026-08-26-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md",
+        "docs/ip-implementation/evidence/m6/IPLF-060B/release-2026-08-26.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
@@ -22950,7 +22983,8 @@
         "tests/e2e/iplf-060b-judge-workflow-2026-08-26-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md",
+        "docs/ip-implementation/evidence/m6/IPLF-060B/release-2026-08-26.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
@@ -22988,7 +23022,8 @@
         "tests/e2e/iplf-060b-judge-workflow-2026-08-26-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md",
+        "docs/ip-implementation/evidence/m6/IPLF-060B/release-2026-08-26.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
@@ -41073,11 +41108,12 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md",
+        "docs/ip-implementation/evidence/m6/IPLF-060B/release-2026-08-26.md",
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-003B",
         "IPLF-060B"
@@ -47867,11 +47903,12 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
-        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md",
+        "docs/ip-implementation/evidence/m6/IPLF-060B/release-2026-08-26.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-003B",
         "IPLF-060B"
@@ -47909,11 +47946,12 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
-        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md",
+        "docs/ip-implementation/evidence/m6/IPLF-060B/release-2026-08-26.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-003B",
         "IPLF-060B"
@@ -47951,11 +47989,12 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
-        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md",
+        "docs/ip-implementation/evidence/m6/IPLF-060B/release-2026-08-26.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-003B",
         "IPLF-060B"
@@ -47993,11 +48032,12 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
-        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md",
+        "docs/ip-implementation/evidence/m6/IPLF-060B/release-2026-08-26.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-003B",
         "IPLF-060B"
