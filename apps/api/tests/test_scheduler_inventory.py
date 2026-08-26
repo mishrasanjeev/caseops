@@ -52,6 +52,7 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
     )
     assert mapping_job["schedule"] == "15 1 * * *"
     assert mapping_job["time_zone"] == "Asia/Kolkata"
+    assert mapping_job["desired_state"] == "PAUSED"
     assert mapping_job["task_timeout_seconds"] == 3_600
     assert mapping_job["image_policy"] == "release_digest"
     assert mapping_job["canary_policy"] == "manual_safe"
@@ -62,7 +63,7 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
     assert all(
         job["desired_state"] == "ENABLED"
         for job in inventory["jobs"]
-        if job is not authority_job
+        if job not in (authority_job, mapping_job)
     )
     assert inventory["legacy_schedulers_to_pause"] == [
         "caseops-case-tracking-poll-midnight"
@@ -412,6 +413,11 @@ def test_existence_probe_distinguishes_not_found_from_control_plane_failure(
         "run",
         lambda *_args, **_kwargs: _Completed(),
     )
+    assert not scheduler_inventory.run_job_exists(
+        "missing", project="project", region="region"
+    )
+
+    _Completed.stderr = "Cannot find job [missing]."
     assert not scheduler_inventory.run_job_exists(
         "missing", project="project", region="region"
     )

@@ -96,7 +96,7 @@
       "run_job_name": "caseops-judge-mapping-refresh",
       "schedule": "15 1 * * *",
       "time_zone": "Asia/Kolkata",
-      "desired_state": "ENABLED",
+      "desired_state": "PAUSED",
       "task_timeout_seconds": 3600,
       "image_policy": "release_digest",
       "canary_policy": "manual_safe",
