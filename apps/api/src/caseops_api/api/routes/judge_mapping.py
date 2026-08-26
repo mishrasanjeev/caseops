@@ -6,12 +6,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 
 from caseops_api.api.dependencies import DbSession, require_capability
-from caseops_api.db.models import AuthorityDocument, Court, Judge, JudgeMappingReview
+from caseops_api.db.models import AuthorityDocument, Bench, Court, Judge, JudgeMappingReview
 from caseops_api.schemas.judge_mapping import (
     AuthorityRemapResponse,
     BenchAliasCreateRequest,
+    BenchCatalogListResponse,
     CatalogAliasRecord,
     JudgeAliasCreateRequest,
+    JudgeCatalogListResponse,
     JudgeIdentityRecord,
     JudgeMappingCandidateRecord,
     JudgeMappingReviewListResponse,
@@ -32,9 +34,7 @@ from caseops_api.services.judge_mapping import (
 from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
-CourtCurator = Annotated[
-    SessionContext, Depends(require_capability("court_sync:run"))
-]
+CourtCurator = Annotated[SessionContext, Depends(require_capability("court_sync:run"))]
 
 
 def _raise_mapping_error(exc: JudgeMappingError) -> None:
@@ -70,9 +70,7 @@ def list_mapping_reviews(
     authority_ids = {row.authority_document_id for row in page}
     court_ids = {row.court_id for row in page if row.court_id}
     candidate_ids = {
-        candidate_id
-        for row in page
-        for candidate_id in (row.candidate_judge_ids_json or [])
+        candidate_id for row in page for candidate_id in (row.candidate_judge_ids_json or [])
     }
     authorities = {
         item.id: item
@@ -81,12 +79,10 @@ def list_mapping_reviews(
         )
     }
     courts = {
-        item.id: item
-        for item in session.scalars(select(Court).where(Court.id.in_(court_ids)))
+        item.id: item for item in session.scalars(select(Court).where(Court.id.in_(court_ids)))
     }
     judges = {
-        item.id: item
-        for item in session.scalars(select(Judge).where(Judge.id.in_(candidate_ids)))
+        item.id: item for item in session.scalars(select(Judge).where(Judge.id.in_(candidate_ids)))
     }
     records: list[JudgeMappingReviewRecord] = []
     for row in page:
@@ -169,8 +165,7 @@ def list_mapping_reviews_by_id(
     court = session.get(Court, review.court_id) if review.court_id else None
     candidate_ids = review.candidate_judge_ids_json or []
     candidates = {
-        row.id: row
-        for row in session.scalars(select(Judge).where(Judge.id.in_(candidate_ids)))
+        row.id: row for row in session.scalars(select(Judge).where(Judge.id.in_(candidate_ids)))
     }
     return JudgeMappingReviewRecord(
         id=review.id,
@@ -195,6 +190,65 @@ def list_mapping_reviews_by_id(
         record_version=review.record_version,
         created_at=review.created_at,
         updated_at=review.updated_at,
+    )
+
+
+def _escaped_contains(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
+@router.get(
+    "/catalog/judges",
+    response_model=JudgeCatalogListResponse,
+    summary="List a bounded canonical judge catalog for curator actions.",
+)
+def list_curator_judges(
+    context: CourtCurator,
+    session: DbSession,
+    court_id: Annotated[str | None, Query(max_length=36)] = None,
+    q: Annotated[str | None, Query(max_length=120)] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+) -> JudgeCatalogListResponse:
+    del context
+    stmt = select(Judge).where(Judge.is_active.is_(True), Judge.merged_into_judge_id.is_(None))
+    if court_id:
+        stmt = stmt.where(Judge.court_id == court_id)
+    if q and q.strip():
+        stmt = stmt.where(Judge.full_name.ilike(_escaped_contains(q.strip()), escape="\\"))
+    rows = list(session.scalars(stmt.order_by(Judge.full_name, Judge.id).limit(limit + 1)))
+    return JudgeCatalogListResponse(
+        judges=rows[:limit],
+        returned_count=min(len(rows), limit),
+        limit=limit,
+        has_more=len(rows) > limit,
+    )
+
+
+@router.get(
+    "/catalog/benches",
+    response_model=BenchCatalogListResponse,
+    summary="List a bounded canonical bench catalog for curator actions.",
+)
+def list_curator_benches(
+    context: CourtCurator,
+    session: DbSession,
+    court_id: Annotated[str | None, Query(max_length=36)] = None,
+    q: Annotated[str | None, Query(max_length=120)] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+) -> BenchCatalogListResponse:
+    del context
+    stmt = select(Bench)
+    if court_id:
+        stmt = stmt.where(Bench.court_id == court_id)
+    if q and q.strip():
+        stmt = stmt.where(Bench.name.ilike(_escaped_contains(q.strip()), escape="\\"))
+    rows = list(session.scalars(stmt.order_by(Bench.name, Bench.id).limit(limit + 1)))
+    return BenchCatalogListResponse(
+        benches=rows[:limit],
+        returned_count=min(len(rows), limit),
+        limit=limit,
+        has_more=len(rows) > limit,
     )
 
 
@@ -234,9 +288,7 @@ def post_bench_alias(
     session: DbSession,
 ) -> CatalogAliasRecord:
     try:
-        alias = add_bench_alias(
-            session, bench_id=bench_id, **payload.model_dump(), commit=False
-        )
+        alias = add_bench_alias(session, bench_id=bench_id, **payload.model_dump(), commit=False)
     except JudgeMappingError as exc:
         _raise_mapping_error(exc)
     record_from_context(

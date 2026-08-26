@@ -3733,6 +3733,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/courts/judges/{judge_id}/authorities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Browse bounded, canonical source-backed authorities mapped to one judge. */
+        get: operations["list_judge_authorities_api_courts_judges__judge_id__authorities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/courts/judges/aliases": {
         parameters: {
             query?: never;
@@ -7551,6 +7568,40 @@ export interface paths {
         put?: never;
         /** Post Bench Alias */
         post: operations["post_bench_alias_api_judge_mapping_benches__bench_id__aliases_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/judge-mapping/catalog/benches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List a bounded canonical bench catalog for curator actions. */
+        get: operations["list_curator_benches_api_judge_mapping_catalog_benches_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/judge-mapping/catalog/judges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List a bounded canonical judge catalog for curator actions. */
+        get: operations["list_curator_judges_api_judge_mapping_catalog_judges_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -13372,6 +13423,17 @@ export interface components {
             /** Source Url */
             source_url?: string | null;
         };
+        /** BenchCatalogListResponse */
+        BenchCatalogListResponse: {
+            /** Benches */
+            benches: components["schemas"]["BenchIdentityRecord"][];
+            /** Has More */
+            has_more: boolean;
+            /** Limit */
+            limit: number;
+            /** Returned Count */
+            returned_count: number;
+        };
         /** BenchContextCitableAuthorityResponse */
         BenchContextCitableAuthorityResponse: {
             /** Bench Name */
@@ -13481,6 +13543,23 @@ export interface components {
              * @enum {string}
              */
             status: "supported" | "limited_context" | "insufficient_evidence";
+        };
+        /** BenchIdentityRecord */
+        BenchIdentityRecord: {
+            /** Court Id */
+            court_id: string;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Record Version */
+            record_version: number;
+            /** Source Name */
+            source_name: string | null;
+            /** Source Reference */
+            source_reference: string | null;
+            /** Source Url */
+            source_url: string | null;
         };
         /** BenchMatchJudge */
         BenchMatchJudge: {
@@ -17277,7 +17356,7 @@ export interface components {
             authority_document_count: number;
             court: components["schemas"]["CourtRecord"];
             /** Judges */
-            judges: components["schemas"]["JudgeRecord"][];
+            judges: components["schemas"]["JudgeListRecord"][];
             /** Portfolio Matter Count */
             portfolio_matter_count: number;
             /** Recent Authorities */
@@ -29689,6 +29768,44 @@ export interface components {
             /** Start Date */
             start_date: string | null;
         };
+        /** JudgeAuthoritiesResponse */
+        JudgeAuthoritiesResponse: {
+            /** Analytics Eligible Authority Count */
+            analytics_eligible_authority_count: number;
+            /** Authorities */
+            authorities: components["schemas"]["MappedJudgeAuthorityRecord"][];
+            /**
+             * Coverage Disclaimer
+             * @default Coverage is limited to source records mapped to this canonical judge identity. Low-confidence mappings remain visible for review but are excluded from analytics.
+             */
+            coverage_disclaimer: string;
+            /**
+             * Coverage State
+             * @enum {string}
+             */
+            coverage_state: "mapped_results" | "no_filter_matches" | "no_judgments_for_judge" | "no_mapped_corpus";
+            /** Has More */
+            has_more: boolean;
+            /** Judge Id */
+            judge_id: string;
+            /** Mapped Authority Count */
+            mapped_authority_count: number;
+            /** Next Cursor */
+            next_cursor: string | null;
+            /** Returned Count */
+            returned_count: number;
+        };
+        /** JudgeCatalogListResponse */
+        JudgeCatalogListResponse: {
+            /** Has More */
+            has_more: boolean;
+            /** Judges */
+            judges: components["schemas"]["JudgeIdentityRecord"][];
+            /** Limit */
+            limit: number;
+            /** Returned Count */
+            returned_count: number;
+        };
         /** JudgeIdentityRecord */
         JudgeIdentityRecord: {
             /** Court Id */
@@ -29711,6 +29828,31 @@ export interface components {
             source_reference: string | null;
             /** Source Url */
             source_url: string | null;
+        };
+        /** JudgeListRecord */
+        JudgeListRecord: {
+            /**
+             * Analytics Eligible Authority Count
+             * @default 0
+             */
+            analytics_eligible_authority_count: number;
+            /** Court Id */
+            court_id: string;
+            /** Current Position */
+            current_position: string | null;
+            /** Full Name */
+            full_name: string;
+            /** Honorific */
+            honorific: string | null;
+            /** Id */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /**
+             * Mapped Authority Count
+             * @default 0
+             */
+            mapped_authority_count: number;
         };
         /** JudgeMappingCandidateRecord */
         JudgeMappingCandidateRecord: {
@@ -29793,27 +29935,63 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /** JudgeProfileAliasRecord */
+        JudgeProfileAliasRecord: {
+            /** Alias Text */
+            alias_text: string;
+            /** Id */
+            id: string;
+            /** Source */
+            source: string;
+            source_action: components["schemas"]["SourceActionRecord"];
+            /** Source Url */
+            source_url: string | null;
+        };
         /** JudgeProfileResponse */
         JudgeProfileResponse: {
+            /** Aliases */
+            aliases?: components["schemas"]["JudgeProfileAliasRecord"][];
             analytics?: components["schemas"]["DescriptiveAnalytics"] | null;
+            /** Analytics Eligible Authority Count */
+            analytics_eligible_authority_count: number;
             /** Authority Document Count */
             authority_document_count: number;
             /** Career */
             career?: components["schemas"]["JudgeAppointmentRecord"][];
             court: components["schemas"]["CourtRecord"];
+            /**
+             * Coverage Disclaimer
+             * @default Coverage is limited to source records mapped to this canonical judge identity. Low-confidence mappings remain visible for review but are excluded from analytics.
+             */
+            coverage_disclaimer: string;
+            /**
+             * Coverage State
+             * @enum {string}
+             */
+            coverage_state: "mapped_results" | "no_filter_matches" | "no_judgments_for_judge" | "no_mapped_corpus";
             /** Decision Volume */
             decision_volume?: components["schemas"]["DecisionVolumePoint"][];
             /** Earliest Decision Date */
             earliest_decision_date?: string | null;
+            identity_source_action: components["schemas"]["SourceActionRecord"];
             judge: components["schemas"]["JudgeRecord"];
             /** Latest Decision Date */
             latest_decision_date?: string | null;
+            /** Mapping Coverage Percent */
+            mapping_coverage_percent: number;
             /** Portfolio Matter Count */
             portfolio_matter_count: number;
             /** Practice Areas */
             practice_areas?: components["schemas"]["PracticeAreaCount"][];
             /** Recent Authorities */
-            recent_authorities: components["schemas"]["AuthorityStub"][];
+            recent_authorities: components["schemas"]["MappedJudgeAuthorityRecord"][];
+            /**
+             * Recent Authorities Has More
+             * @default false
+             */
+            recent_authorities_has_more: boolean;
+            /** Recent Authorities Next Cursor */
+            recent_authorities_next_cursor?: string | null;
             /**
              * Structured Match Coverage Percent
              * @default 0
@@ -29840,7 +30018,7 @@ export interface components {
             /** Court Id */
             court_id: string;
             /** Judges */
-            judges: components["schemas"]["JudgeRecord"][];
+            judges: components["schemas"]["JudgeListRecord"][];
         };
         /** JudgmentAlertAuthorityRecord */
         JudgmentAlertAuthorityRecord: {
@@ -31275,6 +31453,42 @@ export interface components {
             /** Duplicate Candidates */
             duplicate_candidates?: components["schemas"]["IpIdentifierResponse"][];
             identifier: components["schemas"]["IpIdentifierResponse"] | null;
+        };
+        /** MappedJudgeAuthorityRecord */
+        MappedJudgeAuthorityRecord: {
+            /** Analytics Eligible */
+            analytics_eligible: boolean;
+            /** Bench Name */
+            bench_name: string | null;
+            /** Case Reference */
+            case_reference: string | null;
+            /** Court Name */
+            court_name: string;
+            /** Decision Date */
+            decision_date: string | null;
+            /** Id */
+            id: string;
+            /** Mapping Confidence */
+            mapping_confidence: string;
+            /** Mapping Evidence */
+            mapping_evidence?: {
+                [key: string]: unknown;
+            } | null;
+            /** Mapping Status */
+            mapping_status: string;
+            /** Neutral Citation */
+            neutral_citation: string | null;
+            /** Raw Judge Name */
+            raw_judge_name: string | null;
+            /** Role */
+            role: string;
+            /** Source */
+            source: string;
+            source_action: components["schemas"]["SourceActionRecord"];
+            /** Source Reference */
+            source_reference: string | null;
+            /** Title */
+            title: string;
         };
         /** MarginReadinessResponse */
         MarginReadinessResponse: {
@@ -48640,6 +48854,43 @@ export interface operations {
             };
         };
     };
+    list_judge_authorities_api_courts_judges__judge_id__authorities_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+                mapping_confidence?: string | null;
+                year_from?: number | null;
+                year_to?: number | null;
+            };
+            header?: never;
+            path: {
+                judge_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JudgeAuthoritiesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_judge_aliases_api_courts_judges_aliases_get: {
         parameters: {
             query?: never;
@@ -56587,6 +56838,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CatalogAliasRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_curator_benches_api_judge_mapping_catalog_benches_get: {
+        parameters: {
+            query?: {
+                court_id?: string | null;
+                limit?: number;
+                q?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchCatalogListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_curator_judges_api_judge_mapping_catalog_judges_get: {
+        parameters: {
+            query?: {
+                court_id?: string | null;
+                limit?: number;
+                q?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JudgeCatalogListResponse"];
                 };
             };
             /** @description Validation Error */

@@ -29,6 +29,7 @@ const body = `# CaseOps - Indian legal operating system
 - **Drafting**: bail applications, quashing petitions, civil reviews, arbitration submissions, and more with no invented facts, no invented authorities, and statute-guidance-aware BNS vs BNSS
 - **Hearing prep**: structured packs with chronology, last order, pending compliance, issues, opposition points, authority cards, and oral-submission notes
 - **Research**: shared public authority corpus, structured extraction, reranking, and tenant-private workspace notebook entries
+- **Judge research**: canonical judge identities and aliases, bounded mapped-judgment browsing, source actions, confidence evidence, coverage-qualified descriptive analytics, and a staff-only audited mapping-review queue; low-confidence mappings are excluded from analytics and no judge scoring or outcome forecasts are offered
 - **Trademark oppositions**: distinct application/opposition identifiers, applicant and opponent TM-O work, Rules 45-47 affidavit packages, authorized deadline replacement, shared hearing preparation, sourced orders, compliance directions, and order-linked appeal records
 - **IP and Matter linkage**: effective-dated operational, litigation, advisory, appeal, enforcement, billing, and other relationships; side-by-side independent lifecycle state; access-mismatch warnings; and accessible IP events referenced in Matter timelines without copied activity
 - **Outside counsel**: panel profiles, matter assignments, budgets/fee arrangements, spend logging, and payment state where supported

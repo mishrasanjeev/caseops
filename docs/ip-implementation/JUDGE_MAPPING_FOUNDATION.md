@@ -1,8 +1,9 @@
-# IPLF-060A Judge Mapping Foundation
+# IPLF-060 Judge Mapping Foundation and Workflow
 
 Status: repository implementation and exact-production release verified at
-`527adb8d48043b7a6087a4bce7c0026aa95e5cc6`. IPLF-060B, JUDGE-01 through
-JUDGE-10, and UJ-20 remain pending.
+`527adb8d48043b7a6087a4bce7c0026aa95e5cc6` for IPLF-060A. IPLF-060B,
+JUDGE-01 through JUDGE-10, and UJ-20 are implemented and locally verified on
+26 August 2026; their exact-production release remains pending.
 
 ## Scope boundary
 
@@ -108,27 +109,37 @@ and first-candidate behavior. Its production scheduler is deployed and
 digest-pinned but remains paused until IPLF-060B and independent source,
 pilot-court, legal, provider, and UAT acceptance pass.
 
-## IPLF-060B remains pending
+## IPLF-060B workflow extension
 
-The following work is intentionally not claimed by this foundation:
+IPLF-060B extends, without duplicating, the foundation above:
 
-- a complete curator UI for review, split-collision, merge, alias, and reprocess;
-- paginated judge-profile judgments with citation, date, bench, source action,
-  mapping label, and coverage metadata;
-- UJ-20 normal and exception browser journeys, accessibility, and responsive QA;
-- descriptive, coverage-qualified analytics copy and prohibited-inference tests;
-- Delhi plus two additional approved pilot-court source/mapping smoke tests;
-- exact-production UI and source-link acceptance for the IPLF-060B journeys.
+- Judge profiles now read only canonical `JudgeDecisionIndex` mappings, embed the
+  first bounded page, and provide opaque-cursor pagination with citation, date,
+  court/bench, source, mapping confidence, raw evidence, and analytics status.
+- Court judge listings expose grouped mapped and analytics-eligible counts
+  without per-judge query fan-out.
+- Coverage states distinguish no mapped court corpus, no judgments for the
+  selected judge, and no filter matches.
+- The staff curator UI resolves review evidence, creates sourced judge and bench
+  aliases from server-owned catalogs, merges duplicate identities with record
+  versions, and reprocesses affected authorities.
+- Low-confidence mappings remain visible and labelled but are excluded from
+  analytics. Descriptive copy is coverage-qualified and prohibits personality,
+  bias, emotion, outcome probability, favoritism, and judge-shopping claims.
+- Local UJ-20 normal and three exception journeys pass at a 360px viewport, and
+  deterministic source-action smoke tests cover Delhi, Bombay, and Madras High
+  Courts.
 
-IPLF-060B must extend the owners above and must not create another identity
-catalog, authority corpus, profile route, source-link mechanism, analytics
-store, capability, audit log, or scheduler.
+IPLF-060B adds no schema or writer. Exact-main CI, immutable deployment, real
+production pilot-court data/source acceptance, legal/provider acceptance, and
+law-firm UAT remain release gates. The refresh scheduler stays paused.
 
 ## Verification and rollback
 
 Local evidence is recorded in
-`evidence/m6/IPLF-060A/local-2026-08-26.md`; exact-release evidence is recorded
-in `evidence/m6/IPLF-060A/release-2026-08-26.md`. CI proved a single Alembic
+`evidence/m6/IPLF-060A/local-2026-08-26.md` and
+`evidence/m6/IPLF-060B/local-2026-08-26.md`; IPLF-060A exact-release evidence is
+recorded in `evidence/m6/IPLF-060A/release-2026-08-26.md`. CI proved a single Alembic
 head, PostgreSQL upgrade/backfill behavior, generated OpenAPI parity,
 data-governance parity, API/web tests, and scheduler inventory. Production
 proved exact API/web SHA identity, immutable image digests, idempotent migration,

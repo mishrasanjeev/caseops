@@ -1683,6 +1683,45 @@ export default function GuidePage() {
                   </Callout>
                 </Section>
 
+                <Section id="judge-mapping" title="Judge mapping and authority review">
+                  <p>
+                    Judge profiles use canonical judge-to-judgment mappings rather than a
+                    free-text name coincidence. Each mapped judgment shows the court,
+                    citation, date, source action, mapping confidence, and retained source
+                    evidence. Filters and bounded pagination keep longer decision histories
+                    usable without scanning the authority corpus in the browser.
+                  </p>
+                  <ul className="mt-3 space-y-2 text-[15px]">
+                    <li>
+                      <strong>Coverage is explicit.</strong> The profile distinguishes a
+                      court with no mapped corpus from a mapped court with no judgments for
+                      the selected judge, and separately labels filters with no matches.
+                    </li>
+                    <li>
+                      <strong>Analytics fail closed.</strong> Low-confidence mappings remain
+                      visible for review but do not enter descriptive analytics. Counts carry
+                      sample and coverage limitations and never become judge scores or outcome
+                      forecasts.
+                    </li>
+                    <li>
+                      <strong>Curator controls.</strong> Staff can resolve each collision
+                      evidence slot, add sourced judge or bench aliases, merge duplicate
+                      identities with record versions, and reprocess an authority. Every write
+                      remains capability-gated and audited.
+                    </li>
+                    <li>
+                      <strong>Research handoff.</strong> A judge profile can start a research
+                      query constrained by the canonical judge and court, while every listed
+                      judgment retains its own source action.
+                    </li>
+                  </ul>
+                  <Callout tone="warn" title="Automated refresh remains governed">
+                    The judge-mapping refresh job is deployed but paused until source,
+                    provider, legal, and UAT approval is complete. CaseOps does not bypass
+                    captcha, login, or session-gated court sources.
+                  </Callout>
+                </Section>
+
                 <Section id="statutes" title="17 · Statutes and sections">
                   <p>
                     Visit <code>/app/statutes</code> to browse the structured

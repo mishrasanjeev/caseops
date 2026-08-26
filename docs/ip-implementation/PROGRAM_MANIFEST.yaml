@@ -14,16 +14,16 @@
     "verification_status": "not_run",
     "release_status": "blocked",
     "execution_policy": "codex_owned_single_ordered_queue; implement first and run the automated check and exact-release verification batch at the end",
-    "active_slice": "IPLF-060B",
+    "active_slice": "IPLF-061A",
     "checkpoint": {
-      "recorded_at": "2026-08-26T14:41:00+05:30",
-      "repository_revision": "3ce3e93e7ee07161c396344e0fe24d7a162216c2",
-      "environment": "IPLF-059A, IPLF-059B, and IPLF-060A are deployment-verified on canonical main through exact release 3ce3e93e7ee07161c396344e0fe24d7a162216c2. API caseops-api-00365-gqq and web caseops-web-00344-hkp serve 100 percent latest-only traffic; migration caseops-migrate-job-qv5m4 and eight-job scheduler reconciliation passed, including governed paused jobs; exact-main CI 32948328688 and production workflow 32948328870 passed.",
-      "completed_scope": "IPLF-060A extends the existing judge/bench/authority owners with sourced aliases, fail-closed mapping review, atomic curator resolution and merge, raw mapping lineage, analytics admission, migration replay/restore-forward controls, governed OpenAPI/data inventory, and a deployed but paused bounded refresh job. PR #356 additionally deployment-verifies the IPLF-058B bounded recordal workspace correction and removes its selected-detail request fan-out. Exact-main and production release gates passed. This checkpoint makes no IPLF-060B, JUDGE, or UJ-20 completion claim.",
+      "recorded_at": "2026-08-26T16:15:00+05:30",
+      "repository_revision": "f746d6923144a72abd9f8318f53ce2b611bdca1f",
+      "environment": "The deployment-verified predecessor is canonical main f746d6923144a72abd9f8318f53ce2b611bdca1f. API caseops-api-00366-f2n and web caseops-web-00345-2qf serve exact immutable images at 100 percent latest-only traffic; migration caseops-migrate-job-7lst7, eight-job scheduler reconciliation, health, exact-main CI 32954590105, Security 32954590078, CodeQL 32954590020, and production workflow 32954590068 passed.",
+      "completed_scope": "IPLF-060B is repository implemented and locally verified without adding schema or duplicate owners. Canonical judge browsing, source-backed cursor pagination, confidence and coverage states, descriptive analytics fences, curator collision/alias/merge/reprocess UI, mobile UJ-20 normal/exception E2E, and Delhi/Bombay/Madras deterministic source smoke pass. IPLF-003B's stale planned source-action references are replaced by passing concrete tests. Exact merged CI, immutable production deployment, real production three-pilot-court acceptance, and independent legal/provider/UAT acceptance remain open.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-060B",
-      "next_action": "Implement IPLF-060B only against the deployment-verified one-writer foundation, retaining the paused activation boundary until all allocated journeys and external approvals pass.",
-      "evidence_ref": "docs/ip-implementation/evidence/m5/IPLF-058/release-058b-recordal-workspace-reconcile-2026-08-26.md"
+      "next_slice": "IPLF-061A",
+      "next_action": "Complete IPLF-060B's exact release gate, retain the judge refresh as PAUSED until external activation approvals pass, then implement IPLF-061A against the existing /guide content owner.",
+      "evidence_ref": "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
     },
     "work_owner": {
       "owner": "Codex",
@@ -2227,10 +2227,13 @@
         "IPLF-060A",
         "IPLF-060B"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
-      "evidence_refs": []
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-060A/release-2026-08-26.md",
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+      ]
     },
     {
       "id": "IPLF-061",
@@ -3295,25 +3298,36 @@
         "apps/api/src/caseops_api/api/routes/source_actions.py"
       ],
       "test_refs": [
+        "IPLF-UJ-17-NORMAL",
+        "IPLF-UJ-17-EXC-01",
+        "IPLF-UJ-17-EXC-02",
+        "IPLF-UJ-17-EXC-03",
+        "IPLF-UJ-20-NORMAL",
+        "IPLF-UJ-20-EXC-01",
+        "IPLF-UJ-20-EXC-02",
+        "IPLF-UJ-20-EXC-03",
         "apps/api/tests/test_ip_prd_slices.py",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL",
-        "planned:IPLF-UJ-20-EXC-01",
-        "planned:IPLF-UJ-20-EXC-02",
-        "planned:IPLF-UJ-20-EXC-03",
-        "planned:IPLF-UJ-20-NORMAL"
+        "apps/api/tests/test_source_access.py",
+        "apps/api/tests/test_authority_annotations.py",
+        "apps/api/tests/test_ip_060b_judge_workflow.py",
+        "apps/web/components/app/SourceAction.test.tsx",
+        "apps/web/app/app/research/saved/page.test.tsx",
+        "apps/web/app/app/courts/judges/[judge_id]/page.test.tsx",
+        "tests/e2e/ram-2026-08-03-bugs.spec.ts",
+        "tests/e2e/ram-2026-08-03-prod.spec.ts",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26.spec.ts",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
       ],
       "blockers": [],
       "next_actions": [],
       "data_impact": [],
       "documentation_impact": [],
       "implementation_status": "implemented",
-      "verification_status": "not_run",
+      "verification_status": "passed",
       "release_status": "blocked",
       "source_kind": "prd_explicit",
       "scope_source": "IPLF-003B",
@@ -3331,7 +3345,7 @@
           "recorded_at": "2026-08-02T06:25:00+05:30"
         }
       ],
-      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written."
+      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14 reset verification because the row cited unwritten journey tests. Closure 2026-08-26: concrete API, component, saved-research, judge-profile, local browser, and production browser references now cover typed available/missing/unverified/blocked/quarantined source states, opaque authenticated opens, reporting, responsive judge source actions, and all stable UJ-17/UJ-20 test IDs. Focused API (23), web (14), and IPLF-060B E2E (1) runs passed. Release remains blocked pending the exact merged IPLF-060B production gate."
     },
     {
       "id": "IPLF-003C",
@@ -14290,26 +14304,101 @@
       "dependencies": [
         "IPLF-060A"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-20-EXC-01",
-        "planned:IPLF-UJ-20-EXC-02",
-        "planned:IPLF-UJ-20-EXC-03",
-        "planned:IPLF-UJ-20-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/api/routes/courts.py",
+        "apps/api/src/caseops_api/api/routes/judge_mapping.py",
+        "apps/api/src/caseops_api/schemas/judge_mapping.py",
+        "apps/web/app/app/admin/judge-aliases/page.tsx",
+        "apps/web/app/app/courts/[id]/page.tsx",
+        "apps/web/app/app/courts/judges/[judge_id]/page.tsx",
+        "apps/web/lib/api/endpoints.ts",
+        "apps/web/lib/api/openapi-types.ts",
+        "apps/web/app/guide/page.tsx",
+        "apps/web/app/law-firms/page.tsx",
+        "apps/web/app/llms.txt/route.ts",
+        "apps/web/app/llms-full.txt/route.ts",
+        "playwright.prod-ram.config.ts"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
-      "blockers": [],
+      "test_refs": [
+        "IPLF-REQ-JUDGE-01",
+        "IPLF-REQ-JUDGE-02",
+        "IPLF-REQ-JUDGE-03",
+        "IPLF-REQ-JUDGE-04",
+        "IPLF-REQ-JUDGE-05",
+        "IPLF-REQ-JUDGE-06",
+        "IPLF-REQ-JUDGE-07",
+        "IPLF-REQ-JUDGE-08",
+        "IPLF-REQ-JUDGE-09",
+        "IPLF-REQ-JUDGE-10",
+        "IPLF-UJ-20-NORMAL",
+        "IPLF-UJ-20-EXC-01",
+        "IPLF-UJ-20-EXC-02",
+        "IPLF-UJ-20-EXC-03",
+        "apps/api/tests/test_ip_060b_judge_workflow.py",
+        "apps/api/tests/test_courts_registry.py",
+        "apps/api/tests/test_ip_060a_judge_mapping.py",
+        "apps/api/tests/test_judge_appointments.py",
+        "apps/api/tests/test_judge_aliases_admin_route.py",
+        "apps/web/app/app/courts/judges/[judge_id]/page.test.tsx",
+        "apps/web/app/app/admin/judge-aliases/page.test.tsx",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26.spec.ts",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26-prod.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md",
+          "revision": "pending-branch-head",
+          "environment": "local production-mode API/web candidate with isolated deterministic legal fixtures",
+          "fixtures": "canonical Delhi/Bombay/Madras judges and authorities, low-confidence mapping, unmapped judge, unmapped court corpus, alias collision, duplicate identity, sourced aliases, and versioned curator records",
+          "assertions": "canonical-only mapping, cursor pagination, source actions, coverage states, descriptive analytics fence, curator normal/exception mutations, no prohibited inference, 360px responsive controls, public guidance, and production-spec discovery",
+          "result": "passed",
+          "recorded_at": "2026-08-26T16:10:00+05:30"
+        }
+      ],
+      "blockers": [
+        {
+          "state": "open",
+          "summary": "Exact merged-main CI, immutable deployment, and unchanged production acceptance have not yet run for IPLF-060B."
+        },
+        {
+          "state": "open",
+          "summary": "The production QA corpus must prove at least one canonical mapped authority with an available source action for Delhi, Bombay, and Madras High Courts; independent legal/provider/source and law-firm UAT acceptance remain external."
+        }
+      ],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Open and merge the IPLF-060B PR only after CI, Security, CodeQL, generated-contract, API, web, and local UJ-20 gates pass.",
+        "Deploy the exact merged SHA migration-first, reconcile immutable scheduler digests while preserving judge refresh PAUSED, clear stale tags, and retain latest-only traffic.",
+        "Run the unchanged exact-release production spec and record exact identity, three-pilot-court source coverage, responsive UI, public documentation, and any external acceptance boundary."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No schema change or new writer. Reads use canonical Court, Judge, JudgeAlias, JudgeAppointment, AuthorityDocument, and JudgeDecisionIndex records; curator writes delegate to IPLF-060A services and audits."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/JUDGE_MAPPING_FOUNDATION.md",
+          "disposition": "updated",
+          "owner": "Engineering/Product/Legal Operations",
+          "evidence": "Canonical ownership, workflow extension, analytics boundary, paused activation, and remaining production acceptance"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md",
+          "disposition": "created",
+          "owner": "Engineering/SRE",
+          "evidence": "Local implementation, duplicate-work audit, JUDGE/UJ-20 tests, responsive browser acceptance, defect correction, and release gates"
+        },
+        {
+          "artifact": "apps/web/app/guide/page.tsx, apps/web/app/law-firms/page.tsx, apps/web/app/llms.txt/route.ts, apps/web/app/llms-full.txt/route.ts",
+          "disposition": "updated",
+          "owner": "Product/Marketing/Legal",
+          "evidence": "Truthful source-backed judge workflow, confidence, coverage, curator, no-prediction, and paused-refresh descriptions"
+        }
+      ],
+      "allocation_review": "2026-08-26 brutal duplicate-work review against IPLF-060A, PRD Sections 11, 15 UJ-20, 23, and 25: extend the existing canonical identity, authority, source-action, capability, audit, worker, and scheduler owners. Add only bounded authority pagination, grouped court-list counts, server-owned curator catalogs, workflow UI, and acceptance. No schema, corpus, profile owner, analytics store, writer, worker, or schedule was duplicated. Local implementation and UJ-20 normal/exception proof pass; exact production and approved real three-pilot-court coverage remain fail-closed.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked"
     },
     {
@@ -16631,27 +16720,38 @@
         "apps/web/components/app/SourceAction.tsx"
       ],
       "test_refs": [
+        "IPLF-REQ-TRUST-RSCH-02",
+        "IPLF-UJ-16-NORMAL",
+        "IPLF-UJ-16-EXC-01",
+        "IPLF-UJ-16-EXC-02",
+        "IPLF-UJ-16-EXC-03",
+        "IPLF-UJ-17-NORMAL",
+        "IPLF-UJ-17-EXC-01",
+        "IPLF-UJ-17-EXC-02",
+        "IPLF-UJ-17-EXC-03",
+        "IPLF-UJ-20-NORMAL",
+        "IPLF-UJ-20-EXC-01",
+        "IPLF-UJ-20-EXC-02",
+        "IPLF-UJ-20-EXC-03",
         "apps/api/tests/test_ip_prd_slices.py",
-        "planned:IPLF-REQ-TRUST-RSCH-02",
-        "planned:IPLF-UJ-16-EXC-01",
-        "planned:IPLF-UJ-16-EXC-02",
-        "planned:IPLF-UJ-16-EXC-03",
-        "planned:IPLF-UJ-16-NORMAL",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL",
-        "planned:IPLF-UJ-20-EXC-01",
-        "planned:IPLF-UJ-20-EXC-02",
-        "planned:IPLF-UJ-20-EXC-03",
-        "planned:IPLF-UJ-20-NORMAL"
+        "apps/api/tests/test_source_access.py",
+        "apps/api/tests/test_authority_annotations.py",
+        "apps/api/tests/test_ip_060b_judge_workflow.py",
+        "apps/web/components/app/SourceAction.test.tsx",
+        "apps/web/app/app/research/saved/page.test.tsx",
+        "apps/web/app/app/courts/judges/[judge_id]/page.test.tsx",
+        "tests/e2e/ram-2026-08-03-bugs.spec.ts",
+        "tests/e2e/ram-2026-08-03-prod.spec.ts",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26.spec.ts",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
-      "verification_status": "not_run",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-003B",
@@ -22531,20 +22631,26 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-JUDGE-01",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL",
-        "planned:IPLF-UJ-20-EXC-01",
-        "planned:IPLF-UJ-20-EXC-02",
-        "planned:IPLF-UJ-20-EXC-03",
-        "planned:IPLF-UJ-20-NORMAL"
+        "IPLF-REQ-JUDGE-01",
+        "IPLF-UJ-20-NORMAL",
+        "IPLF-UJ-20-EXC-01",
+        "IPLF-UJ-20-EXC-02",
+        "IPLF-UJ-20-EXC-03",
+        "apps/api/tests/test_ip_060b_judge_workflow.py",
+        "apps/api/tests/test_courts_registry.py",
+        "apps/api/tests/test_ip_060a_judge_mapping.py",
+        "apps/web/app/app/courts/judges/[judge_id]/page.test.tsx",
+        "apps/web/app/app/admin/judge-aliases/page.test.tsx",
+        "apps/web/components/app/SourceAction.test.tsx",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26.spec.ts",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26-prod.spec.ts"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-003C",
@@ -22563,20 +22669,26 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-JUDGE-02",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL",
-        "planned:IPLF-UJ-20-EXC-01",
-        "planned:IPLF-UJ-20-EXC-02",
-        "planned:IPLF-UJ-20-EXC-03",
-        "planned:IPLF-UJ-20-NORMAL"
+        "IPLF-REQ-JUDGE-02",
+        "IPLF-UJ-20-NORMAL",
+        "IPLF-UJ-20-EXC-01",
+        "IPLF-UJ-20-EXC-02",
+        "IPLF-UJ-20-EXC-03",
+        "apps/api/tests/test_ip_060b_judge_workflow.py",
+        "apps/api/tests/test_courts_registry.py",
+        "apps/api/tests/test_ip_060a_judge_mapping.py",
+        "apps/web/app/app/courts/judges/[judge_id]/page.test.tsx",
+        "apps/web/app/app/admin/judge-aliases/page.test.tsx",
+        "apps/web/components/app/SourceAction.test.tsx",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26.spec.ts",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26-prod.spec.ts"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-003C",
@@ -22595,20 +22707,26 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-JUDGE-03",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL",
-        "planned:IPLF-UJ-20-EXC-01",
-        "planned:IPLF-UJ-20-EXC-02",
-        "planned:IPLF-UJ-20-EXC-03",
-        "planned:IPLF-UJ-20-NORMAL"
+        "IPLF-REQ-JUDGE-03",
+        "IPLF-UJ-20-NORMAL",
+        "IPLF-UJ-20-EXC-01",
+        "IPLF-UJ-20-EXC-02",
+        "IPLF-UJ-20-EXC-03",
+        "apps/api/tests/test_ip_060b_judge_workflow.py",
+        "apps/api/tests/test_courts_registry.py",
+        "apps/api/tests/test_ip_060a_judge_mapping.py",
+        "apps/web/app/app/courts/judges/[judge_id]/page.test.tsx",
+        "apps/web/app/app/admin/judge-aliases/page.test.tsx",
+        "apps/web/components/app/SourceAction.test.tsx",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26.spec.ts",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26-prod.spec.ts"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-003C",
@@ -22627,20 +22745,26 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-JUDGE-04",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL",
-        "planned:IPLF-UJ-20-EXC-01",
-        "planned:IPLF-UJ-20-EXC-02",
-        "planned:IPLF-UJ-20-EXC-03",
-        "planned:IPLF-UJ-20-NORMAL"
+        "IPLF-REQ-JUDGE-04",
+        "IPLF-UJ-20-NORMAL",
+        "IPLF-UJ-20-EXC-01",
+        "IPLF-UJ-20-EXC-02",
+        "IPLF-UJ-20-EXC-03",
+        "apps/api/tests/test_ip_060b_judge_workflow.py",
+        "apps/api/tests/test_courts_registry.py",
+        "apps/api/tests/test_ip_060a_judge_mapping.py",
+        "apps/web/app/app/courts/judges/[judge_id]/page.test.tsx",
+        "apps/web/app/app/admin/judge-aliases/page.test.tsx",
+        "apps/web/components/app/SourceAction.test.tsx",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26.spec.ts",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26-prod.spec.ts"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-003C",
@@ -22659,20 +22783,26 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-JUDGE-05",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL",
-        "planned:IPLF-UJ-20-EXC-01",
-        "planned:IPLF-UJ-20-EXC-02",
-        "planned:IPLF-UJ-20-EXC-03",
-        "planned:IPLF-UJ-20-NORMAL"
+        "IPLF-REQ-JUDGE-05",
+        "IPLF-UJ-20-NORMAL",
+        "IPLF-UJ-20-EXC-01",
+        "IPLF-UJ-20-EXC-02",
+        "IPLF-UJ-20-EXC-03",
+        "apps/api/tests/test_ip_060b_judge_workflow.py",
+        "apps/api/tests/test_courts_registry.py",
+        "apps/api/tests/test_ip_060a_judge_mapping.py",
+        "apps/web/app/app/courts/judges/[judge_id]/page.test.tsx",
+        "apps/web/app/app/admin/judge-aliases/page.test.tsx",
+        "apps/web/components/app/SourceAction.test.tsx",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26.spec.ts",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26-prod.spec.ts"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-003C",
@@ -22691,20 +22821,26 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-JUDGE-06",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL",
-        "planned:IPLF-UJ-20-EXC-01",
-        "planned:IPLF-UJ-20-EXC-02",
-        "planned:IPLF-UJ-20-EXC-03",
-        "planned:IPLF-UJ-20-NORMAL"
+        "IPLF-REQ-JUDGE-06",
+        "IPLF-UJ-20-NORMAL",
+        "IPLF-UJ-20-EXC-01",
+        "IPLF-UJ-20-EXC-02",
+        "IPLF-UJ-20-EXC-03",
+        "apps/api/tests/test_ip_060b_judge_workflow.py",
+        "apps/api/tests/test_courts_registry.py",
+        "apps/api/tests/test_ip_060a_judge_mapping.py",
+        "apps/web/app/app/courts/judges/[judge_id]/page.test.tsx",
+        "apps/web/app/app/admin/judge-aliases/page.test.tsx",
+        "apps/web/components/app/SourceAction.test.tsx",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26.spec.ts",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26-prod.spec.ts"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-003C",
@@ -22723,20 +22859,26 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-JUDGE-07",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL",
-        "planned:IPLF-UJ-20-EXC-01",
-        "planned:IPLF-UJ-20-EXC-02",
-        "planned:IPLF-UJ-20-EXC-03",
-        "planned:IPLF-UJ-20-NORMAL"
+        "IPLF-REQ-JUDGE-07",
+        "IPLF-UJ-20-NORMAL",
+        "IPLF-UJ-20-EXC-01",
+        "IPLF-UJ-20-EXC-02",
+        "IPLF-UJ-20-EXC-03",
+        "apps/api/tests/test_ip_060b_judge_workflow.py",
+        "apps/api/tests/test_courts_registry.py",
+        "apps/api/tests/test_ip_060a_judge_mapping.py",
+        "apps/web/app/app/courts/judges/[judge_id]/page.test.tsx",
+        "apps/web/app/app/admin/judge-aliases/page.test.tsx",
+        "apps/web/components/app/SourceAction.test.tsx",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26.spec.ts",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26-prod.spec.ts"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-003C",
@@ -22755,20 +22897,26 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-JUDGE-08",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL",
-        "planned:IPLF-UJ-20-EXC-01",
-        "planned:IPLF-UJ-20-EXC-02",
-        "planned:IPLF-UJ-20-EXC-03",
-        "planned:IPLF-UJ-20-NORMAL"
+        "IPLF-REQ-JUDGE-08",
+        "IPLF-UJ-20-NORMAL",
+        "IPLF-UJ-20-EXC-01",
+        "IPLF-UJ-20-EXC-02",
+        "IPLF-UJ-20-EXC-03",
+        "apps/api/tests/test_ip_060b_judge_workflow.py",
+        "apps/api/tests/test_courts_registry.py",
+        "apps/api/tests/test_ip_060a_judge_mapping.py",
+        "apps/web/app/app/courts/judges/[judge_id]/page.test.tsx",
+        "apps/web/app/app/admin/judge-aliases/page.test.tsx",
+        "apps/web/components/app/SourceAction.test.tsx",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26.spec.ts",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26-prod.spec.ts"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-003C",
@@ -22787,20 +22935,26 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-JUDGE-09",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL",
-        "planned:IPLF-UJ-20-EXC-01",
-        "planned:IPLF-UJ-20-EXC-02",
-        "planned:IPLF-UJ-20-EXC-03",
-        "planned:IPLF-UJ-20-NORMAL"
+        "IPLF-REQ-JUDGE-09",
+        "IPLF-UJ-20-NORMAL",
+        "IPLF-UJ-20-EXC-01",
+        "IPLF-UJ-20-EXC-02",
+        "IPLF-UJ-20-EXC-03",
+        "apps/api/tests/test_ip_060b_judge_workflow.py",
+        "apps/api/tests/test_courts_registry.py",
+        "apps/api/tests/test_ip_060a_judge_mapping.py",
+        "apps/web/app/app/courts/judges/[judge_id]/page.test.tsx",
+        "apps/web/app/app/admin/judge-aliases/page.test.tsx",
+        "apps/web/components/app/SourceAction.test.tsx",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26.spec.ts",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26-prod.spec.ts"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-003C",
@@ -22819,20 +22973,26 @@
       ],
       "implementation_refs": [],
       "test_refs": [
-        "planned:IPLF-REQ-JUDGE-10",
-        "planned:IPLF-UJ-17-EXC-01",
-        "planned:IPLF-UJ-17-EXC-02",
-        "planned:IPLF-UJ-17-EXC-03",
-        "planned:IPLF-UJ-17-NORMAL",
-        "planned:IPLF-UJ-20-EXC-01",
-        "planned:IPLF-UJ-20-EXC-02",
-        "planned:IPLF-UJ-20-EXC-03",
-        "planned:IPLF-UJ-20-NORMAL"
+        "IPLF-REQ-JUDGE-10",
+        "IPLF-UJ-20-NORMAL",
+        "IPLF-UJ-20-EXC-01",
+        "IPLF-UJ-20-EXC-02",
+        "IPLF-UJ-20-EXC-03",
+        "apps/api/tests/test_ip_060b_judge_workflow.py",
+        "apps/api/tests/test_courts_registry.py",
+        "apps/api/tests/test_ip_060a_judge_mapping.py",
+        "apps/web/app/app/courts/judges/[judge_id]/page.test.tsx",
+        "apps/web/app/app/admin/judge-aliases/page.test.tsx",
+        "apps/web/components/app/SourceAction.test.tsx",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26.spec.ts",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26-prod.spec.ts"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-003C",
@@ -40899,16 +41059,24 @@
         "JUDGE-10"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-20-EXC-01",
-        "planned:IPLF-UJ-20-EXC-02",
-        "planned:IPLF-UJ-20-EXC-03",
-        "planned:IPLF-UJ-20-NORMAL"
+        "IPLF-UJ-20-EXC-01",
+        "IPLF-UJ-20-EXC-02",
+        "IPLF-UJ-20-EXC-03",
+        "IPLF-UJ-20-NORMAL",
+        "apps/api/tests/test_ip_060b_judge_workflow.py",
+        "apps/api/tests/test_source_access.py",
+        "apps/web/app/app/admin/judge-aliases/page.test.tsx",
+        "apps/web/app/app/courts/judges/[judge_id]/page.test.tsx",
+        "apps/web/components/app/SourceAction.test.tsx",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26-prod.spec.ts",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26.spec.ts"
       ],
       "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md",
         "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-003B",
@@ -47688,13 +47856,21 @@
         "JUDGE-10"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-20-NORMAL"
+        "IPLF-UJ-20-NORMAL",
+        "apps/api/tests/test_ip_060b_judge_workflow.py",
+        "apps/api/tests/test_source_access.py",
+        "apps/web/app/app/courts/judges/[judge_id]/page.test.tsx",
+        "apps/web/app/app/admin/judge-aliases/page.test.tsx",
+        "apps/web/components/app/SourceAction.test.tsx",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26.spec.ts",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-003B",
@@ -47722,13 +47898,21 @@
         "JUDGE-10"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-20-EXC-01"
+        "IPLF-UJ-20-EXC-01",
+        "apps/api/tests/test_ip_060b_judge_workflow.py",
+        "apps/api/tests/test_source_access.py",
+        "apps/web/app/app/courts/judges/[judge_id]/page.test.tsx",
+        "apps/web/app/app/admin/judge-aliases/page.test.tsx",
+        "apps/web/components/app/SourceAction.test.tsx",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26.spec.ts",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-003B",
@@ -47756,13 +47940,21 @@
         "JUDGE-10"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-20-EXC-02"
+        "IPLF-UJ-20-EXC-02",
+        "apps/api/tests/test_ip_060b_judge_workflow.py",
+        "apps/api/tests/test_source_access.py",
+        "apps/web/app/app/courts/judges/[judge_id]/page.test.tsx",
+        "apps/web/app/app/admin/judge-aliases/page.test.tsx",
+        "apps/web/components/app/SourceAction.test.tsx",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26.spec.ts",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-003B",
@@ -47790,13 +47982,21 @@
         "JUDGE-10"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-20-EXC-03"
+        "IPLF-UJ-20-EXC-03",
+        "apps/api/tests/test_ip_060b_judge_workflow.py",
+        "apps/api/tests/test_source_access.py",
+        "apps/web/app/app/courts/judges/[judge_id]/page.test.tsx",
+        "apps/web/app/app/admin/judge-aliases/page.test.tsx",
+        "apps/web/components/app/SourceAction.test.tsx",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26.spec.ts",
+        "tests/e2e/iplf-060b-judge-workflow-2026-08-26-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md"
+        "docs/ip-implementation/evidence/release-2026-08-01-remaining-slices.md",
+        "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-003B",

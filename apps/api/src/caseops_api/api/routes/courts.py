@@ -5,17 +5,20 @@ judges per tenant come later — there's no product need until a firm
 has a matter in a court we haven't catalogued, and when that happens
 the `Matter.court_name` freeform column still works.
 """
+
 from __future__ import annotations
 
 import json
 import re
+from base64 import urlsafe_b64decode, urlsafe_b64encode
+from binascii import Error as BinasciiError
 from collections import Counter
-from datetime import datetime
-from typing import Annotated, Any
+from datetime import date, datetime
+from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 
 from caseops_api.api.dependencies import DbSession, get_current_context
 from caseops_api.db.models import (
@@ -26,13 +29,16 @@ from caseops_api.db.models import (
     Judge,
     JudgeAlias,
     JudgeAppointment,
+    JudgeDecisionIndex,
     Matter,
 )
 from caseops_api.schemas.source_actions import SourceActionRecord
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.source_actions import (
     authority_source_verified,
+    inspect_source_action,
     inspect_source_target_action,
+    is_official_source_reference,
     judge_appointment_source_verified,
 )
 
@@ -48,87 +54,93 @@ _ANALYTICS_DISCLAIMER = (
     "Descriptive historical context from indexed source records only; not legal "
     "advice, not a forecast, and not a forum-selection recommendation."
 )
-
-
-_HONORIFIC_RE = re.compile(
-    r"^(?:Hon'?ble\s+)?(?:Mr\.|Ms\.|Mrs\.|Dr\.|The\s+)?\s*"
-    r"(?:Chief\s+Justice|Justice|J\.\s+|J)\s*",
-    flags=re.IGNORECASE,
+_JUDGE_COVERAGE_DISCLAIMER = (
+    "Coverage is limited to source records mapped to this canonical judge identity. "
+    "Low-confidence mappings remain visible for review but are excluded from analytics."
 )
-_J_SUFFIX_RE = re.compile(r"[,\s]+J\.?$", flags=re.IGNORECASE)
-
-
-def _strip_judge_honorific(name: str) -> str:
-    """Normalise 'Justice Vikram Nath' / 'Hon'ble Mr. Justice Vikram Nath'
-    → 'Vikram Nath', so the string matches entries in judges_json (which
-    may be 'Vikram Nath J.' or 'Vikram Nath') and in bench_name
-    ('Vikram Nath, J.')."""
-    if not name:
-        return ""
-    out = _HONORIFIC_RE.sub("", name).strip()
-    out = _J_SUFFIX_RE.sub("", out).strip()
-    return out
-
-
-def _judge_surname(name: str) -> str:
-    """Last token of the stripped name. Useful as a looser ILIKE when
-    the full-name match returns nothing."""
-    stripped = _strip_judge_honorific(name)
-    parts = stripped.split()
-    return parts[-1] if parts else stripped
 
 
 # Section-header → practice-area mapping. Narrow on purpose: we'd
 # rather label 60 % of authorities accurately than label 100 %
 # badly. Users can click through to see actual sections cited.
 _PRACTICE_AREAS: list[tuple[str, re.Pattern[str]]] = [
-    ("Bail / Custody", re.compile(
-        r"\b(?:bail|438|439|437|482|483|bnss\s+sec(?:tion)?\s+(?:43[789]|48[23])|"
-        r"crpc\s+sec(?:tion)?\s+(?:43[789]|48[23]))\b",
-        re.IGNORECASE,
-    )),
-    ("Criminal (other)", re.compile(
-        r"\b(?:ipc|bns\b|indian\s+penal\s+code|bharatiya\s+nyaya|"
-        r"pocso|ndps|pmla|uapa|mcoca)\b",
-        re.IGNORECASE,
-    )),
-    ("Civil / Contract", re.compile(
-        r"\b(?:specific\s+relief|indian\s+contract\s+act|transfer\s+of\s+property|"
-        r"cpc|civil\s+procedure)\b",
-        re.IGNORECASE,
-    )),
-    ("Constitutional", re.compile(
-        r"\b(?:art(?:icle)?\s*(?:14|19|21|32|226|227)|constitution\s+of\s+india)\b",
-        re.IGNORECASE,
-    )),
-    ("Commercial / Arbitration", re.compile(
-        r"\b(?:arbitration|commercial\s+courts|companies\s+act|ibc|"
-        r"insolvency\s+and\s+bankruptcy)\b",
-        re.IGNORECASE,
-    )),
-    ("Family / Matrimonial", re.compile(
-        r"\b(?:hindu\s+marriage|special\s+marriage|domestic\s+violence|"
-        r"guardian|cpc\s+sec(?:tion)?\s+125|498a|498\-?a)\b",
-        re.IGNORECASE,
-    )),
-    ("Tax / Revenue", re.compile(
-        r"\b(?:income\s+tax|gst|customs|excise|service\s+tax)\b",
-        re.IGNORECASE,
-    )),
-    ("Service / Employment", re.compile(
-        r"\b(?:service\s+rules|industrial\s+disputes|id\s+act|"
-        r"cat|central\s+administrative\s+tribunal)\b",
-        re.IGNORECASE,
-    )),
-    ("Writ / PIL", re.compile(
-        r"\b(?:writ\s+petition|public\s+interest\s+litigation|pil)\b",
-        re.IGNORECASE,
-    )),
-    ("Property / Land", re.compile(
-        r"\b(?:land\s+acquisition|ceiling\s+act|registration\s+act|"
-        r"benami|evacuee\s+property)\b",
-        re.IGNORECASE,
-    )),
+    (
+        "Bail / Custody",
+        re.compile(
+            r"\b(?:bail|438|439|437|482|483|bnss\s+sec(?:tion)?\s+(?:43[789]|48[23])|"
+            r"crpc\s+sec(?:tion)?\s+(?:43[789]|48[23]))\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "Criminal (other)",
+        re.compile(
+            r"\b(?:ipc|bns\b|indian\s+penal\s+code|bharatiya\s+nyaya|"
+            r"pocso|ndps|pmla|uapa|mcoca)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "Civil / Contract",
+        re.compile(
+            r"\b(?:specific\s+relief|indian\s+contract\s+act|transfer\s+of\s+property|"
+            r"cpc|civil\s+procedure)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "Constitutional",
+        re.compile(
+            r"\b(?:art(?:icle)?\s*(?:14|19|21|32|226|227)|constitution\s+of\s+india)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "Commercial / Arbitration",
+        re.compile(
+            r"\b(?:arbitration|commercial\s+courts|companies\s+act|ibc|"
+            r"insolvency\s+and\s+bankruptcy)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "Family / Matrimonial",
+        re.compile(
+            r"\b(?:hindu\s+marriage|special\s+marriage|domestic\s+violence|"
+            r"guardian|cpc\s+sec(?:tion)?\s+125|498a|498\-?a)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "Tax / Revenue",
+        re.compile(
+            r"\b(?:income\s+tax|gst|customs|excise|service\s+tax)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "Service / Employment",
+        re.compile(
+            r"\b(?:service\s+rules|industrial\s+disputes|id\s+act|"
+            r"cat|central\s+administrative\s+tribunal)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "Writ / PIL",
+        re.compile(
+            r"\b(?:writ\s+petition|public\s+interest\s+litigation|pil)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "Property / Land",
+        re.compile(
+            r"\b(?:land\s+acquisition|ceiling\s+act|registration\s+act|"
+            r"benami|evacuee\s+property)\b",
+            re.IGNORECASE,
+        ),
+    ),
 ]
 
 
@@ -137,25 +149,32 @@ def _practice_area_histogram(
 ) -> list[tuple[str, int]]:
     """Bucket this judge's authorities by practice area.
 
-    Pulls every doc's concatenated ``sections_cited_json`` from the
-    chunks table, classifies against the ``_PRACTICE_AREAS`` patterns,
-    and returns (area, count) sorted by count desc. Any unclassifiable
-    doc rolls up under "Other".
+    Pulls the bounded latest working set's concatenated ``sections_cited_json``
+    from the chunks table, classifies against the ``_PRACTICE_AREAS`` patterns,
+    and returns (area, count) sorted by count desc. Any unclassifiable document
+    rolls up under "Other".
     """
+    bounded_authorities = (
+        select(AuthorityDocument.id)
+        .where(judge_filter)
+        .order_by(
+            AuthorityDocument.decision_date.desc().nulls_last(),
+            AuthorityDocument.id.desc(),
+        )
+        .limit(_ANALYTICS_WORKING_SET_LIMIT)
+        .subquery()
+    )
     rows = session.execute(
         select(
-            AuthorityDocument.id,
-            func.string_agg(
-                AuthorityDocumentChunk.sections_cited_json, " "
-            ).label("sections_blob"),
+            bounded_authorities.c.id,
+            func.string_agg(AuthorityDocumentChunk.sections_cited_json, " ").label("sections_blob"),
         )
         .join(
             AuthorityDocumentChunk,
-            AuthorityDocumentChunk.authority_document_id == AuthorityDocument.id,
+            AuthorityDocumentChunk.authority_document_id == bounded_authorities.c.id,
         )
-        .where(judge_filter)
         .where(AuthorityDocumentChunk.sections_cited_json.is_not(None))
-        .group_by(AuthorityDocument.id)
+        .group_by(bounded_authorities.c.id)
     ).all()
 
     tally: Counter[str] = Counter()
@@ -301,9 +320,7 @@ def _analytics_limitations(
     analyzed_document_count: int,
     missing_source_reference_count: int,
 ) -> list[str]:
-    limitations = [
-        "Counts are descriptive metadata from indexed authority records."
-    ]
+    limitations = ["Counts are descriptive metadata from indexed authority records."]
     if sample_size < _ANALYTICS_MIN_SAMPLE_SIZE:
         limitations.append(
             "Sample size is below the threshold for pattern language; review the "
@@ -315,9 +332,7 @@ def _analytics_limitations(
             f"of {sample_size} indexed authorities."
         )
     if missing_source_reference_count:
-        limitations.append(
-            "Some authorities do not yet have source links in the catalog metadata."
-        )
+        limitations.append("Some authorities do not yet have source links in the catalog metadata.")
     return limitations
 
 
@@ -376,9 +391,7 @@ def _build_descriptive_analytics(
                     title=row.title,
                     court_name=row.court_name,
                     bench_name=row.bench_name,
-                    decision_date=(
-                        row.decision_date.isoformat() if row.decision_date else None
-                    ),
+                    decision_date=(row.decision_date.isoformat() if row.decision_date else None),
                     case_reference=row.case_reference,
                     neutral_citation=row.neutral_citation,
                     source=row.source,
@@ -411,9 +424,7 @@ def _build_descriptive_analytics(
         sample_size=sample_size,
         analyzed_document_count=len(rows),
         sample_size_threshold=_ANALYTICS_MIN_SAMPLE_SIZE,
-        sample_size_label=(
-            "insufficient" if pattern_claims_suppressed else "descriptive"
-        ),
+        sample_size_label=("insufficient" if pattern_claims_suppressed else "descriptive"),
         pattern_claims_suppressed=pattern_claims_suppressed,
         limitations=_analytics_limitations(
             sample_size=sample_size,
@@ -453,13 +464,18 @@ class JudgeRecord(BaseModel):
     is_active: bool
 
 
+class JudgeListRecord(JudgeRecord):
+    mapped_authority_count: int = 0
+    analytics_eligible_authority_count: int = 0
+
+
 class CourtsListResponse(BaseModel):
     courts: list[CourtRecord]
 
 
 class JudgesListResponse(BaseModel):
     court_id: str
-    judges: list[JudgeRecord]
+    judges: list[JudgeListRecord]
 
 
 class ForumCatalogEntryRecord(BaseModel):
@@ -500,9 +516,7 @@ def list_courts(
     # explicit parameter so the role-guard sweep sees a SessionContext
     # dependency on the route.
     _ = context
-    stmt = select(Court).where(Court.is_active.is_(True)).order_by(
-        Court.forum_level, Court.name
-    )
+    stmt = select(Court).where(Court.is_active.is_(True)).order_by(Court.forum_level, Court.name)
     if forum_level:
         stmt = stmt.where(Court.forum_level == forum_level)
     courts = list(session.scalars(stmt))
@@ -542,6 +556,47 @@ def list_forum_catalog(
     )
 
 
+def _court_judge_records(session: Any, *, court_id: str) -> list[JudgeListRecord]:
+    court_judge_ids = select(Judge.id).where(Judge.court_id == court_id)
+    mapping_counts = (
+        select(
+            JudgeDecisionIndex.judge_id.label("judge_id"),
+            func.count(JudgeDecisionIndex.id).label("mapped_count"),
+            func.sum(
+                case(
+                    (JudgeDecisionIndex.is_analytics_eligible.is_(True), 1),
+                    else_=0,
+                )
+            ).label("eligible_count"),
+        )
+        .where(JudgeDecisionIndex.judge_id.in_(court_judge_ids))
+        .group_by(JudgeDecisionIndex.judge_id)
+        .subquery()
+    )
+    rows = session.execute(
+        select(
+            Judge,
+            func.coalesce(mapping_counts.c.mapped_count, 0),
+            func.coalesce(mapping_counts.c.eligible_count, 0),
+        )
+        .outerjoin(mapping_counts, mapping_counts.c.judge_id == Judge.id)
+        .where(
+            Judge.court_id == court_id,
+            Judge.is_active.is_(True),
+            Judge.merged_into_judge_id.is_(None),
+        )
+        .order_by(Judge.full_name)
+    ).all()
+    return [
+        JudgeListRecord(
+            **JudgeRecord.model_validate(judge).model_dump(),
+            mapped_authority_count=int(mapped_count),
+            analytics_eligible_authority_count=int(eligible_count),
+        )
+        for judge, mapped_count, eligible_count in rows
+    ]
+
+
 @router.get(
     "/{court_id}/judges",
     response_model=JudgesListResponse,
@@ -553,16 +608,9 @@ def list_court_judges(
     session: DbSession,
 ) -> JudgesListResponse:
     _ = context
-    judges = list(
-        session.scalars(
-            select(Judge)
-            .where(Judge.court_id == court_id, Judge.is_active.is_(True))
-            .order_by(Judge.full_name)
-        )
-    )
     return JudgesListResponse(
         court_id=court_id,
-        judges=[JudgeRecord.model_validate(judge) for judge in judges],
+        judges=_court_judge_records(session, court_id=court_id),
     )
 
 
@@ -575,6 +623,40 @@ class AuthorityStub(BaseModel):
     decision_date: str | None
     case_reference: str | None
     neutral_citation: str | None
+
+
+class MappedJudgeAuthorityRecord(AuthorityStub):
+    court_name: str
+    bench_name: str | None
+    source: str
+    source_reference: str | None
+    source_action: SourceActionRecord
+    mapping_confidence: str
+    mapping_status: str
+    mapping_evidence: dict[str, Any] | None = None
+    raw_judge_name: str | None
+    role: str
+    analytics_eligible: bool
+
+
+JudgeCoverageState = Literal[
+    "mapped_results",
+    "no_filter_matches",
+    "no_judgments_for_judge",
+    "no_mapped_corpus",
+]
+
+
+class JudgeAuthoritiesResponse(BaseModel):
+    judge_id: str
+    authorities: list[MappedJudgeAuthorityRecord]
+    returned_count: int
+    has_more: bool
+    next_cursor: str | None
+    mapped_authority_count: int
+    analytics_eligible_authority_count: int
+    coverage_state: JudgeCoverageState
+    coverage_disclaimer: str = _JUDGE_COVERAGE_DISCLAIMER
 
 
 class AnalyticsCount(BaseModel):
@@ -621,7 +703,7 @@ class DescriptiveAnalytics(BaseModel):
 
 class CourtProfileResponse(BaseModel):
     court: CourtRecord
-    judges: list[JudgeRecord]
+    judges: list[JudgeListRecord]
     portfolio_matter_count: int
     authority_document_count: int
     recent_authorities: list[AuthorityStub]
@@ -654,12 +736,28 @@ class JudgeAppointmentRecord(BaseModel):
     source_action: SourceActionRecord
 
 
+class JudgeProfileAliasRecord(BaseModel):
+    id: str
+    alias_text: str
+    source: str
+    source_url: str | None
+    source_action: SourceActionRecord
+
+
 class JudgeProfileResponse(BaseModel):
     judge: JudgeRecord
     court: CourtRecord
+    identity_source_action: SourceActionRecord
+    aliases: list[JudgeProfileAliasRecord] = Field(default_factory=list)
     portfolio_matter_count: int
     authority_document_count: int
-    recent_authorities: list[AuthorityStub]
+    analytics_eligible_authority_count: int
+    mapping_coverage_percent: int
+    coverage_state: JudgeCoverageState
+    coverage_disclaimer: str = _JUDGE_COVERAGE_DISCLAIMER
+    recent_authorities: list[MappedJudgeAuthorityRecord]
+    recent_authorities_has_more: bool = False
+    recent_authorities_next_cursor: str | None = None
     analytics: DescriptiveAnalytics | None = None
     # Layer-2 derived tiles. `practice_areas` is a histogram of sections /
     # statutes cited in this judge's judgments (pulled from
@@ -672,8 +770,8 @@ class JudgeProfileResponse(BaseModel):
     # "tenure" tile). ISO yyyy-mm-dd.
     earliest_decision_date: str | None = None
     latest_decision_date: str | None = None
-    # Transparency: what share of the authority-count comes from
-    # structured Layer-2 matches (vs. the bench_name ILIKE fallback).
+    # Compatibility alias for older web bundles. It now means the share of
+    # canonical mappings eligible for descriptive analytics.
     structured_match_coverage_percent: int = 0
     # Slice A (MOD-TS-001-B, 2026-04-25). Career history per
     # judge_appointments table, oldest-first. Empty array when no
@@ -767,6 +865,235 @@ def list_judge_aliases(
     )
 
 
+def _judge_authority_columns() -> tuple[Any, ...]:
+    return (
+        AuthorityDocument.id,
+        AuthorityDocument.title,
+        AuthorityDocument.court_name,
+        AuthorityDocument.bench_name,
+        AuthorityDocument.decision_date,
+        AuthorityDocument.case_reference,
+        AuthorityDocument.neutral_citation,
+        AuthorityDocument.source,
+        AuthorityDocument.source_reference,
+        JudgeDecisionIndex.match_confidence,
+        JudgeDecisionIndex.mapping_status,
+        JudgeDecisionIndex.evidence_json,
+        JudgeDecisionIndex.raw_judge_name,
+        JudgeDecisionIndex.role,
+        JudgeDecisionIndex.is_analytics_eligible,
+    )
+
+
+def _serialize_mapped_authority(row: Any) -> MappedJudgeAuthorityRecord:
+    return MappedJudgeAuthorityRecord(
+        id=row.id,
+        title=row.title,
+        court_name=row.court_name,
+        bench_name=row.bench_name,
+        decision_date=row.decision_date.isoformat() if row.decision_date else None,
+        case_reference=row.case_reference,
+        neutral_citation=row.neutral_citation,
+        source=row.source,
+        source_reference=row.source_reference,
+        source_action=inspect_source_target_action(
+            row.source_reference,
+            target_type="authority_document",
+            target_id=row.id,
+            verified=authority_source_verified(row.source, row.source_reference),
+        ),
+        mapping_confidence=row.match_confidence or "unrated",
+        mapping_status=row.mapping_status,
+        mapping_evidence=row.evidence_json,
+        raw_judge_name=row.raw_judge_name,
+        role=row.role,
+        analytics_eligible=bool(row.is_analytics_eligible),
+    )
+
+
+def _encode_judge_authority_cursor(row: Any) -> str:
+    payload = {
+        "decision_date": row.decision_date.isoformat() if row.decision_date else None,
+        "authority_id": row.id,
+    }
+    return (
+        urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+        .decode("ascii")
+        .rstrip("=")
+    )
+
+
+def _decode_judge_authority_cursor(cursor: str) -> tuple[date | None, str]:
+    try:
+        padding = "=" * (-len(cursor) % 4)
+        payload = json.loads(urlsafe_b64decode(cursor + padding).decode("utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError("payload")
+        authority_id = payload["authority_id"]
+        raw_date = payload.get("decision_date")
+        if not isinstance(authority_id, str) or not authority_id:
+            raise ValueError("authority_id")
+        return (date.fromisoformat(raw_date) if raw_date else None, authority_id)
+    except (
+        AttributeError,
+        BinasciiError,
+        KeyError,
+        TypeError,
+        ValueError,
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+    ) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Invalid judge-authority cursor.",
+        ) from exc
+
+
+def _judge_mapping_counts(session: Any, *, judge: Judge) -> tuple[int, int, int]:
+    mapped, eligible = session.execute(
+        select(
+            func.count(JudgeDecisionIndex.id),
+            func.sum(
+                case(
+                    (JudgeDecisionIndex.is_analytics_eligible.is_(True), 1),
+                    else_=0,
+                )
+            ),
+        ).where(JudgeDecisionIndex.judge_id == judge.id)
+    ).one()
+    court_mapped = int(
+        session.scalar(
+            select(func.count(JudgeDecisionIndex.id))
+            .join(Judge, Judge.id == JudgeDecisionIndex.judge_id)
+            .where(Judge.court_id == judge.court_id)
+        )
+        or 0
+    )
+    return int(mapped or 0), int(eligible or 0), court_mapped
+
+
+def _judge_coverage_state(
+    *, mapped_count: int, court_mapped_count: int, returned_count: int, filtered: bool
+) -> JudgeCoverageState:
+    if returned_count:
+        return "mapped_results"
+    if filtered and mapped_count:
+        return "no_filter_matches"
+    if court_mapped_count:
+        return "no_judgments_for_judge"
+    return "no_mapped_corpus"
+
+
+def _judge_authority_page(
+    session: Any,
+    *,
+    judge: Judge,
+    limit: int,
+    cursor: str | None = None,
+    year_from: int | None = None,
+    year_to: int | None = None,
+    mapping_confidence: str | None = None,
+) -> tuple[list[Any], bool, str | None]:
+    stmt = (
+        select(*_judge_authority_columns())
+        .join(
+            JudgeDecisionIndex,
+            JudgeDecisionIndex.authority_document_id == AuthorityDocument.id,
+        )
+        .where(JudgeDecisionIndex.judge_id == judge.id)
+    )
+    if year_from is not None:
+        stmt = stmt.where(AuthorityDocument.decision_date >= date(year_from, 1, 1))
+    if year_to is not None:
+        stmt = stmt.where(AuthorityDocument.decision_date <= date(year_to, 12, 31))
+    if mapping_confidence:
+        stmt = stmt.where(JudgeDecisionIndex.match_confidence == mapping_confidence)
+    if cursor:
+        cursor_date, cursor_id = _decode_judge_authority_cursor(cursor)
+        if cursor_date is None:
+            stmt = stmt.where(
+                AuthorityDocument.decision_date.is_(None),
+                AuthorityDocument.id < cursor_id,
+            )
+        else:
+            stmt = stmt.where(
+                or_(
+                    AuthorityDocument.decision_date < cursor_date,
+                    AuthorityDocument.decision_date.is_(None),
+                    and_(
+                        AuthorityDocument.decision_date == cursor_date,
+                        AuthorityDocument.id < cursor_id,
+                    ),
+                )
+            )
+    rows = list(
+        session.execute(
+            stmt.order_by(
+                AuthorityDocument.decision_date.desc().nulls_last(),
+                AuthorityDocument.id.desc(),
+            ).limit(limit + 1)
+        ).all()
+    )
+    has_more = len(rows) > limit
+    page = rows[:limit]
+    next_cursor = _encode_judge_authority_cursor(page[-1]) if has_more and page else None
+    return page, has_more, next_cursor
+
+
+@router.get(
+    "/judges/{judge_id}/authorities",
+    response_model=JudgeAuthoritiesResponse,
+    summary="Browse bounded, canonical source-backed authorities mapped to one judge.",
+)
+def list_judge_authorities(
+    judge_id: str,
+    context: CurrentContext,
+    session: DbSession,
+    limit: Annotated[int, Query(ge=1, le=50)] = 20,
+    cursor: Annotated[str | None, Query(max_length=1000)] = None,
+    year_from: Annotated[int | None, Query(ge=1900, le=2100)] = None,
+    year_to: Annotated[int | None, Query(ge=1900, le=2100)] = None,
+    mapping_confidence: Annotated[str | None, Query(max_length=24)] = None,
+) -> JudgeAuthoritiesResponse:
+    del context
+    if year_from is not None and year_to is not None and year_from > year_to:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="year_from must be less than or equal to year_to.",
+        )
+    judge = session.scalar(
+        select(Judge).where(Judge.id == judge_id, Judge.merged_into_judge_id.is_(None))
+    )
+    if judge is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Judge not found.")
+    mapped_count, eligible_count, court_mapped_count = _judge_mapping_counts(session, judge=judge)
+    rows, has_more, next_cursor = _judge_authority_page(
+        session,
+        judge=judge,
+        limit=limit,
+        cursor=cursor,
+        year_from=year_from,
+        year_to=year_to,
+        mapping_confidence=mapping_confidence,
+    )
+    filtered = bool(cursor or year_from or year_to or mapping_confidence)
+    return JudgeAuthoritiesResponse(
+        judge_id=judge.id,
+        authorities=[_serialize_mapped_authority(row) for row in rows],
+        returned_count=len(rows),
+        has_more=has_more,
+        next_cursor=next_cursor,
+        mapped_authority_count=mapped_count,
+        analytics_eligible_authority_count=eligible_count,
+        coverage_state=_judge_coverage_state(
+            mapped_count=mapped_count,
+            court_mapped_count=court_mapped_count,
+            returned_count=len(rows),
+            filtered=filtered,
+        ),
+    )
+
+
 # Declared BEFORE the catch-all /{court_id} route so FastAPI's
 # in-order matching picks "judges" as a literal segment instead of
 # treating it as a court id.
@@ -780,11 +1107,11 @@ def get_judge_profile(
     context: CurrentContext,
     session: DbSession,
 ) -> JudgeProfileResponse:
-    judge = session.scalar(select(Judge).where(Judge.id == judge_id))
+    judge = session.scalar(
+        select(Judge).where(Judge.id == judge_id, Judge.merged_into_judge_id.is_(None))
+    )
     if judge is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Judge not found."
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Judge not found.")
     court = session.scalar(select(Court).where(Court.id == judge.court_id))
     if court is None:
         # Defensive — Judge.court_id is a FK with ON DELETE CASCADE,
@@ -805,58 +1132,23 @@ def get_judge_profile(
         )
         or 0
     )
-    # Authorities where the judge sat on the bench. Two signals:
-    #   1) structured — `judges_json` is a Layer-2-populated JSON array
-    #      of judge names for that document. Matches here are high
-    #      confidence.
-    #   2) fallback — `bench_name` is a freeform string. ILIKE catches
-    #      pre-Layer-2 docs.
-    # A doc may match either or both; the OR is deduplicated via
-    # DISTINCT on the doc id.
-    stripped = _strip_judge_honorific(judge.full_name)
-    json_pattern = f'%"{stripped}%'
-    bench_pattern = f"%{stripped}%"
-    structured_filter = AuthorityDocument.judges_json.ilike(json_pattern)
-    fallback_filter = AuthorityDocument.bench_name.ilike(bench_pattern)
-    authority_filter = or_(structured_filter, fallback_filter)
-
-    authority_count = int(
-        session.scalar(
-            select(func.count(AuthorityDocument.id.distinct()))
-            .where(authority_filter)
-        ) or 0
+    authority_count, eligible_count, court_mapped_count = _judge_mapping_counts(
+        session, judge=judge
     )
-    structured_count = int(
-        session.scalar(
-            select(func.count(AuthorityDocument.id.distinct()))
-            .where(structured_filter)
-        ) or 0
+    coverage_pct = int(round(100 * eligible_count / authority_count)) if authority_count else 0
+    analytics_authority_ids = select(JudgeDecisionIndex.authority_document_id).where(
+        JudgeDecisionIndex.judge_id == judge.id,
+        JudgeDecisionIndex.is_analytics_eligible.is_(True),
     )
-    coverage_pct = (
-        int(round(100 * structured_count / authority_count))
-        if authority_count else 0
-    )
-    analytics_rows = _authority_rows_for_filter(session, authority_filter)
+    analytics_filter = AuthorityDocument.id.in_(analytics_authority_ids)
+    analytics_rows = _authority_rows_for_filter(session, analytics_filter)
     analytics = _build_descriptive_analytics(
         rows=analytics_rows,
-        sample_size=authority_count,
+        sample_size=eligible_count,
         include_court_counts=True,
     )
-
-    # Recent authorities: dedup by doc id; order by date desc.
-    recent_authorities = list(
-        session.execute(
-            select(
-                AuthorityDocument.id,
-                AuthorityDocument.title,
-                AuthorityDocument.decision_date,
-                AuthorityDocument.case_reference,
-                AuthorityDocument.neutral_citation,
-            )
-            .where(authority_filter)
-            .order_by(AuthorityDocument.decision_date.desc().nulls_last())
-            .limit(10)
-        ).all()
+    recent_authorities, recent_has_more, recent_next_cursor = _judge_authority_page(
+        session, judge=judge, limit=10
     )
 
     # Tenure tiles. Pull earliest + latest decision dates.
@@ -864,7 +1156,15 @@ def get_judge_profile(
         select(
             func.min(AuthorityDocument.decision_date),
             func.max(AuthorityDocument.decision_date),
-        ).where(authority_filter)
+        )
+        .join(
+            JudgeDecisionIndex,
+            JudgeDecisionIndex.authority_document_id == AuthorityDocument.id,
+        )
+        .where(
+            JudgeDecisionIndex.judge_id == judge.id,
+            JudgeDecisionIndex.is_analytics_eligible.is_(True),
+        )
     ).one()
 
     # Decision-volume histogram, by year. NULL decision_date rows are
@@ -874,8 +1174,15 @@ def get_judge_profile(
             func.extract("year", AuthorityDocument.decision_date).label("yr"),
             func.count(AuthorityDocument.id),
         )
-        .where(authority_filter)
-        .where(AuthorityDocument.decision_date.is_not(None))
+        .join(
+            JudgeDecisionIndex,
+            JudgeDecisionIndex.authority_document_id == AuthorityDocument.id,
+        )
+        .where(
+            JudgeDecisionIndex.judge_id == judge.id,
+            JudgeDecisionIndex.is_analytics_eligible.is_(True),
+            AuthorityDocument.decision_date.is_not(None),
+        )
         .group_by("yr")
         .order_by("yr")
     ).all()
@@ -885,8 +1192,15 @@ def get_judge_profile(
     # 483", "CrPC Section 439", ...]" after Layer 2. We stringify to
     # an ILIKE so SQLite (tests) and Postgres (prod) both work without
     # JSONB-specific operators. Top 8.
-    practice_rows = _practice_area_histogram(
-        session, judge_filter=authority_filter, limit=8
+    practice_rows = _practice_area_histogram(session, judge_filter=analytics_filter, limit=8)
+
+    alias_rows = list(
+        session.scalars(
+            select(JudgeAlias)
+            .where(JudgeAlias.judge_id == judge.id, JudgeAlias.is_active.is_(True))
+            .order_by(JudgeAlias.alias_text)
+            .limit(100)
+        )
     )
 
     # Slice A (MOD-TS-001-B): career timeline. Join JudgeAppointment
@@ -919,25 +1233,40 @@ def get_judge_profile(
     return JudgeProfileResponse(
         judge=JudgeRecord.model_validate(judge),
         court=CourtRecord.model_validate(court),
+        identity_source_action=inspect_source_action(
+            judge.source_url or judge.source_reference,
+            verified=is_official_source_reference(judge.source_url or judge.source_reference),
+        ),
+        aliases=[
+            JudgeProfileAliasRecord(
+                id=alias.id,
+                alias_text=alias.alias_text,
+                source=alias.source,
+                source_url=alias.source_url,
+                source_action=inspect_source_action(
+                    alias.source_url,
+                    verified=is_official_source_reference(alias.source_url),
+                ),
+            )
+            for alias in alias_rows
+        ],
         portfolio_matter_count=int(portfolio_count),
         authority_document_count=authority_count,
+        analytics_eligible_authority_count=eligible_count,
+        mapping_coverage_percent=coverage_pct,
+        coverage_state=_judge_coverage_state(
+            mapped_count=authority_count,
+            court_mapped_count=court_mapped_count,
+            returned_count=len(recent_authorities),
+            filtered=False,
+        ),
         analytics=analytics,
-        recent_authorities=[
-            AuthorityStub(
-                id=row.id,
-                title=row.title,
-                decision_date=row.decision_date.isoformat() if row.decision_date else None,
-                case_reference=row.case_reference,
-                neutral_citation=row.neutral_citation,
-            )
-            for row in recent_authorities
-        ],
-        practice_areas=[
-            PracticeAreaCount(area=area, count=count) for area, count in practice_rows
-        ],
+        recent_authorities=[_serialize_mapped_authority(row) for row in recent_authorities],
+        recent_authorities_has_more=recent_has_more,
+        recent_authorities_next_cursor=recent_next_cursor,
+        practice_areas=[PracticeAreaCount(area=area, count=count) for area, count in practice_rows],
         decision_volume=[
-            DecisionVolumePoint(year=int(yr), count=int(cnt))
-            for yr, cnt in volume_rows
+            DecisionVolumePoint(year=int(yr), count=int(cnt)) for yr, cnt in volume_rows
         ],
         career=[
             JudgeAppointmentRecord(
@@ -977,16 +1306,8 @@ def get_court_profile(
 ) -> CourtProfileResponse:
     court = session.scalar(select(Court).where(Court.id == court_id))
     if court is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Court not found."
-        )
-    judges = list(
-        session.scalars(
-            select(Judge)
-            .where(Judge.court_id == court_id, Judge.is_active.is_(True))
-            .order_by(Judge.full_name)
-        )
-    )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Court not found.")
+    judges = _court_judge_records(session, court_id=court_id)
     # Matters from this tenant's portfolio that reference the court —
     # either via the structured FK or the freeform court_name fallback.
     portfolio_count = (
@@ -994,10 +1315,7 @@ def get_court_profile(
             select(func.count())
             .select_from(Matter)
             .where(Matter.company_id == context.company.id)
-            .where(
-                (Matter.court_id == court.id)
-                | (Matter.court_name == court.name)
-            )
+            .where((Matter.court_id == court.id) | (Matter.court_name == court.name))
         )
         or 0
     )
@@ -1032,7 +1350,7 @@ def get_court_profile(
     )
     return CourtProfileResponse(
         court=CourtRecord.model_validate(court),
-        judges=[JudgeRecord.model_validate(j) for j in judges],
+        judges=judges,
         portfolio_matter_count=int(portfolio_count),
         authority_document_count=int(authority_count),
         analytics=analytics,
