@@ -105,9 +105,9 @@ export default function JudgeAliasesAdminPage() {
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader
-        eyebrow="Admin"
-        title="Judge mapping curator"
-        description={`${aliases.alias_count} aliases across ${aliases.judge_count} canonical judges.`}
+        eyebrow="Admin · Mapping curator"
+        title="Judge aliases"
+        description={`${aliases.alias_count} aliases across ${aliases.judge_count} canonical judges, with collision review and reprocessing controls.`}
       />
 
       {!canCurate ? (

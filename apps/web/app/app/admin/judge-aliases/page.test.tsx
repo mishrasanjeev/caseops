@@ -103,6 +103,9 @@ describe("JudgeAliasesAdminPage", () => {
     const profileLinks = await screen.findAllByRole("link", {
       name: /Atul Sharachchandra Chandurkar/i,
     });
+    expect(
+      screen.getByRole("heading", { name: "Judge aliases" }),
+    ).toBeInTheDocument();
     expect(profileLinks[0]).toHaveAttribute(
       "href",
       "/app/courts/judges/j1",
