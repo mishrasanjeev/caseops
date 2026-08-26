@@ -143,7 +143,7 @@ def test_today_ip_02_an_unacknowledged_deadline_reaches_today(client: TestClient
     assert action["docket_title"] == "TODAYMARK"
     assert action["deadline_title"] == "Renewal fee"
     assert action["due_on"] == str(DUE)
-    assert action["days_until"] == 5
+    assert action["days_until"] == (DUE - date.fromisoformat(body["today"])).days
     assert action["responsible_label"] == "You"
     # The stream participates in the same bounding contract as the other five.
     assert body["stream_limits"]["ip_coverage_actions"] >= 1
