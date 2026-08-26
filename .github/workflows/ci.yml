@@ -51,6 +51,7 @@ jobs:
           uv --directory apps/api run python ../../scripts/ip_data_governance_map.py validate
           uv --directory apps/api run python ../../scripts/ip_data_governance_map.py check-change --base origin/main
           uv --directory apps/api run python ../../scripts/ip_data_class_projection.py validate
+          uv --directory apps/api run python ../../scripts/product_guide_catalog.py validate
           uv --directory apps/api run python ../../scripts/migration_preflight.py validate
           uv --directory apps/api run python ../../scripts/migration_preflight.py check-change --base origin/main
           uv --directory apps/api run python ../../scripts/ip_m2_ownership_audit.py validate

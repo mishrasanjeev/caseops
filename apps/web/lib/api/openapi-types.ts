@@ -11540,6 +11540,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/product-guide/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the approved, versioned Product Guide section index. */
+        get: operations["get_product_guide_catalog_api_product_guide_catalog_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/product-guide/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search approved help topics and capability-filtered navigation commands. */
+        get: operations["search_product_guide_catalog_api_product_guide_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/recommendations/{recommendation_id}/decisions": {
         parameters: {
             query?: never;
@@ -37790,6 +37824,91 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** ProductGuideCatalogResponse */
+        ProductGuideCatalogResponse: {
+            /** Canonical Path */
+            canonical_path: string;
+            /** Catalog Fingerprint */
+            catalog_fingerprint: string;
+            /** Content Version */
+            content_version: string;
+            /** Corpus Id */
+            corpus_id: string;
+            /** Display Version */
+            display_version: string;
+            /** Language */
+            language: string;
+            /** Schema Version */
+            schema_version: number;
+            /** Sections */
+            sections: components["schemas"]["ProductGuideSectionResponse"][];
+            /** Updated On */
+            updated_on: string;
+        };
+        /** ProductGuidePermissionResponse */
+        ProductGuidePermissionResponse: {
+            /** Message */
+            message: string;
+            /** Required Capabilities */
+            required_capabilities: string[];
+        };
+        /** ProductGuideSearchResponse */
+        ProductGuideSearchResponse: {
+            /** Catalog Fingerprint */
+            catalog_fingerprint: string;
+            /** Content Version */
+            content_version: string;
+            permission: components["schemas"]["ProductGuidePermissionResponse"] | null;
+            /** Query */
+            query: string;
+            /** Results */
+            results: components["schemas"]["ProductGuideSearchResultResponse"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "matched" | "permission_required" | "no_match";
+            /** Suggested Queries */
+            suggested_queries: string[];
+            /**
+             * Version Status
+             * @enum {string}
+             */
+            version_status: "current" | "stale";
+        };
+        /** ProductGuideSearchResultResponse */
+        ProductGuideSearchResultResponse: {
+            /** Href */
+            href: string;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "guide" | "command";
+            /** Required Capabilities */
+            required_capabilities: string[];
+            /** Summary */
+            summary: string;
+            /** Title */
+            title: string;
+        };
+        /** ProductGuideSectionResponse */
+        ProductGuideSectionResponse: {
+            /** Aliases */
+            aliases: string[];
+            /** Href */
+            href: string;
+            /** Id */
+            id: string;
+            /** Keywords */
+            keywords: string[];
+            /** Summary */
+            summary: string;
+            /** Title */
+            title: string;
         };
         /** ProductionBillingSignoffCheckStatus */
         ProductionBillingSignoffCheckStatus: {
@@ -64937,6 +65056,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortalInstructionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_product_guide_catalog_api_product_guide_catalog_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductGuideCatalogResponse"];
+                };
+            };
+        };
+    };
+    search_product_guide_catalog_api_product_guide_search_get: {
+        parameters: {
+            query: {
+                client_version?: string | null;
+                limit?: number;
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductGuideSearchResponse"];
                 };
             };
             /** @description Validation Error */
