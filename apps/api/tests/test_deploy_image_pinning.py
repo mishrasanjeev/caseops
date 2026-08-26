@@ -36,6 +36,22 @@ def test_api_image_preloads_production_embedding_tokenizer() -> None:
     assert "Tokenizer.from_pretrained('voyageai/voyage-4-large')" in dockerfile
 
 
+def test_api_image_forces_runtime_model_resolution_offline_after_preloads() -> None:
+    dockerfile = (REPO_ROOT / "apps" / "api" / "Dockerfile").read_text(encoding="utf-8")
+
+    tokenizer_preload = dockerfile.index(
+        "Tokenizer.from_pretrained('voyageai/voyage-4-large')"
+    )
+    reranker_preload = dockerfile.index(
+        "TextCrossEncoder(model_name='jinaai/jina-reranker-v1-tiny-en')"
+    )
+    offline_runtime = dockerfile.index("HF_HUB_OFFLINE=1")
+
+    assert offline_runtime > tokenizer_preload
+    assert offline_runtime > reranker_preload
+    assert "TRANSFORMERS_OFFLINE=1" in dockerfile[offline_runtime:]
+
+
 def test_production_deploy_converges_clamav_startup_probe() -> None:
     script = (REPO_ROOT / "scripts" / "deploy-prod.sh").read_text(encoding="utf-8")
 
