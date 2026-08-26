@@ -2,7 +2,9 @@
 
 **Date:** 2026-08-26
 
-**State:** local correction verified; exact-production verification pending.
+**State:** local correction and exact-production verification passed. Release
+evidence is recorded in
+`release-058b-recordal-workspace-reconcile-2026-08-26.md`.
 
 ## Trigger
 
@@ -41,6 +43,8 @@ deadline automation.
   deadline supporting request occurs.
 - OpenAPI client types were regenerated from the application schema.
 
-This document does not claim deployment, exact-serving identity, provider or
-legal-SME acceptance, or independent UAT. Those remain gated on merge,
-migration-first deployment, and the complete exact-production verifier.
+PR #356 merged the correction to canonical main at
+`3ce3e93e7ee07161c396344e0fe24d7a162216c2`. The exact release passed
+migration-first deployment, identity verification, exact-main CI, and the
+complete production verifier. Independent provider, legal-SME, and law-firm
+UAT remain external acceptance and are not represented as repository work.
