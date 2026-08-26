@@ -767,15 +767,58 @@ def _normalize_custom_goal(value: str | None) -> str | None:
     return normalized or None
 
 
+_NEGATED_UNSAFE_PREFIX = re.compile(
+    r"(?:\b(?:do|does|did|is|are|was|were|must|should|can|could|will|would) "
+    r"not\b|\b(?:cannot|can't|won't|never|without|avoid(?:s|ed|ing)?|no)\b)"
+    r"\s+(?:(?:provide|include|offer|make|give|state|estimate|calculate|assess|"
+    r"predict|recommend|use|constitute|present|suggest|claim|imply|promise|"
+    r"select|perform|commit|create|endorse|engage in|rely on)\s+)?"
+    r"(?:any\s+|a\s+|an\s+|the\s+)?$",
+    re.IGNORECASE,
+)
+_NEGATED_GUARANTEE_PREFIX = re.compile(
+    r"(?:\bno\s+(?:outcome|result|recommendation)\s+"
+    r"(?:can|may|should|will)\s+be|\b(?:the\s+)?(?:outcome|result)\s+"
+    r"(?:cannot|can't)\s+be)\s+$",
+    re.IGNORECASE,
+)
+_NEGATED_UNSAFE_SUFFIX = re.compile(
+    r"^\s+(?:(?:is|are|was|were|will be|can be)\s+not\s+|"
+    r"(?:cannot be|can't be)\s+)"
+    r"(?:provided|included|offered|given|stated|estimated|calculated|assessed|"
+    r"predicted|available|recommended|permitted|supported|allowed|endorsed)\b",
+    re.IGNORECASE,
+)
+
+
+def _unsafe_match_is_negated(value: str, match: re.Match[str]) -> bool:
+    """Recognize explicit safety disclaimers without masking nearby assertions."""
+
+    clause_start = max(
+        value.rfind(separator, 0, match.start())
+        for separator in ("\n", ".", ",", ";", ":", "!", "?")
+    )
+    prefix = value[clause_start + 1 : match.start()][-120:]
+    suffix = value[match.end() : match.end() + 120]
+    return bool(
+        _NEGATED_UNSAFE_PREFIX.search(prefix)
+        or _NEGATED_GUARANTEE_PREFIX.search(prefix)
+        or _NEGATED_UNSAFE_SUFFIX.search(suffix)
+    )
+
+
 def _classify_unsafe_text(
     value: str | None,
     *,
     patterns: tuple[tuple[str, re.Pattern[str]], ...],
+    allow_negated_mentions: bool = False,
 ) -> str | None:
     if not value:
         return None
     for category, pattern in patterns:
-        if pattern.search(value):
+        for match in pattern.finditer(value):
+            if allow_negated_mentions and _unsafe_match_is_negated(value, match):
+                continue
             return category
     return None
 
@@ -925,6 +968,7 @@ def _classify_unsafe_response(parsed: _LLMResponse) -> str | None:
     return _classify_unsafe_text(
         "\n".join(_response_text_parts(parsed)),
         patterns=_UNSAFE_OUTPUT_PATTERNS,
+        allow_negated_mentions=True,
     )
 
 
@@ -1675,6 +1719,10 @@ def generate_recommendation(
 
     unsafe_output_category = _classify_unsafe_response(parsed)
     if unsafe_output_category is not None:
+        logger.warning(
+            "recommendation generation: unsafe output rejected category=%s",
+            unsafe_output_category,
+        )
         run = _write_model_run(
             session,
             context=context,
