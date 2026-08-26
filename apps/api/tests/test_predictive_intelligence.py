@@ -206,6 +206,7 @@ def _seed_source_backed_bench(matter_id: str) -> dict[str, str]:
                     year=2026,
                     matched_alias=judge.full_name,
                     match_confidence="high",
+                    is_analytics_eligible=True,
                 )
             )
         session.commit()

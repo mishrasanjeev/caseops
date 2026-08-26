@@ -90,6 +90,7 @@ def _seed_doc(
                     year=decision_year,
                     matched_alias="Justice Outcome",
                     match_confidence="high",
+                    is_analytics_eligible=True,
                 )
             )
         session.commit()
@@ -612,6 +613,7 @@ def test_scoped_refresh_does_not_overwrite_unrelated_matter_type_snapshot(
                     year=2026,
                     matched_alias="Justice Outcome",
                     match_confidence="high",
+                    is_analytics_eligible=True,
                 )
             )
             classify_authority_document(session, doc)

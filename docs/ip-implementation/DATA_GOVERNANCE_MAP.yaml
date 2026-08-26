@@ -2042,6 +2042,65 @@
       }
     },
     {
+      "id": "bench_aliases",
+      "table_name": "bench_aliases",
+      "purpose": "Repository SQL persistence class `bench_aliases`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "platform_operational_reference",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "alias_normalised": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(255)",
+          "nullable": false
+        },
+        "alias_text": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "VARCHAR(255)",
+          "nullable": false
+        },
+        "bench_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "is_active": {
+          "category_id": "domain_attribute",
+          "sql_type": "BOOLEAN",
+          "nullable": false
+        },
+        "record_version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "source": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "source_url": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(500)",
+          "nullable": true
+        },
+        "updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        }
+      }
+    },
+    {
       "id": "benches",
       "table_name": "benches",
       "purpose": "Repository SQL persistence class `benches`; its exact column inventory is intentionally versioned below.",
@@ -2068,9 +2127,29 @@
           "sql_type": "VARCHAR(255)",
           "nullable": false
         },
+        "record_version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
         "seat_city": {
           "category_id": "domain_attribute",
           "sql_type": "VARCHAR(120)",
+          "nullable": true
+        },
+        "source_name": {
+          "category_id": "personal_or_contact_data",
+          "sql_type": "VARCHAR(160)",
+          "nullable": true
+        },
+        "source_reference": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(500)",
+          "nullable": true
+        },
+        "source_url": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(500)",
           "nullable": true
         },
         "updated_at": {
@@ -14854,15 +14933,35 @@
           "sql_type": "VARCHAR(36)",
           "nullable": false
         },
+        "is_active": {
+          "category_id": "domain_attribute",
+          "sql_type": "BOOLEAN",
+          "nullable": false
+        },
         "judge_id": {
           "category_id": "tenant_or_access_identifier",
           "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "record_version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "INTEGER",
           "nullable": false
         },
         "source": {
           "category_id": "external_or_provider_identifier",
           "sql_type": "VARCHAR(64)",
           "nullable": false
+        },
+        "source_evidence_text": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "source_url": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(500)",
+          "nullable": true
         },
         "updated_at": {
           "category_id": "temporal_or_version_metadata",
@@ -14991,14 +15090,29 @@
           "sql_type": "DATETIME",
           "nullable": false
         },
+        "evidence_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": true
+        },
         "id": {
           "category_id": "tenant_or_access_identifier",
           "sql_type": "VARCHAR(36)",
           "nullable": false
         },
+        "is_analytics_eligible": {
+          "category_id": "domain_attribute",
+          "sql_type": "BOOLEAN",
+          "nullable": false
+        },
         "judge_id": {
           "category_id": "tenant_or_access_identifier",
           "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "mapping_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(32)",
           "nullable": false
         },
         "match_confidence": {
@@ -15011,15 +15125,129 @@
           "sql_type": "VARCHAR(255)",
           "nullable": true
         },
+        "raw_judge_name": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "VARCHAR(255)",
+          "nullable": true
+        },
+        "resolver_version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "VARCHAR(64)",
+          "nullable": false
+        },
         "role": {
           "category_id": "domain_attribute",
           "sql_type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "source_ordinal": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "INTEGER",
+          "nullable": true
+        },
+        "updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
           "nullable": false
         },
         "year": {
           "category_id": "domain_attribute",
           "sql_type": "INTEGER",
           "nullable": true
+        }
+      }
+    },
+    {
+      "id": "judge_mapping_reviews",
+      "table_name": "judge_mapping_reviews",
+      "purpose": "Repository SQL persistence class `judge_mapping_reviews`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "public_or_licensed_legal_reference",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "authority_document_id": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "candidate_judge_ids_json": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "JSON",
+          "nullable": true
+        },
+        "court_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "raw_judge_name": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "VARCHAR(255)",
+          "nullable": false
+        },
+        "raw_judge_name_normalised": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "VARCHAR(255)",
+          "nullable": false
+        },
+        "reason": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(32)",
+          "nullable": false
+        },
+        "record_version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "resolution_note": {
+          "category_id": "domain_attribute",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "resolved_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "resolved_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "resolved_judge_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "resolver_version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "source_ordinal": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
         }
       }
     },
@@ -15104,10 +15332,40 @@
           "sql_type": "VARCHAR(36)",
           "nullable": false
         },
+        "identity_version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
         "is_active": {
           "category_id": "domain_attribute",
           "sql_type": "BOOLEAN",
           "nullable": false
+        },
+        "merged_into_judge_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "record_version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "source_name": {
+          "category_id": "personal_or_contact_data",
+          "sql_type": "VARCHAR(160)",
+          "nullable": true
+        },
+        "source_reference": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(500)",
+          "nullable": true
+        },
+        "source_url": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(500)",
+          "nullable": true
         },
         "updated_at": {
           "category_id": "temporal_or_version_metadata",
@@ -26377,12 +26635,12 @@
       }
     }
   ],
-  "schema_fingerprint": "14e9a2969c4444f8514150d01dad142b28d45dd3b3658ce70f560ba1c1c8bd40",
+  "schema_fingerprint": "3cda3c3ce2a661e60c7805b27c60fb5df1eedd3a8eeefd7ce75a57c0111c0249",
   "index_inventory": {
-    "orm_index_count": 1354,
-    "orm_index_fingerprint": "1867cb73802fae67a428c8e71d864a75dea69d2e9418de9bc773b2be388bfff3",
-    "migration_index_count": 632,
-    "migration_index_fingerprint": "a6729ec242a3bbbf3cc0a709b728e415c733647d6d787d606502f36f3f59475e",
+    "orm_index_count": 1364,
+    "orm_index_fingerprint": "7d78082ad4932cb37349ff5be4a4662275eb2a2a295d426c6af930d53d8a7565",
+    "migration_index_count": 637,
+    "migration_index_fingerprint": "4aff41848cd0326b3049e94590c94d79c784d993e6c886c8578da00eaf55e84d",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."
   }
 }

@@ -7523,6 +7523,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/judge-mapping/authorities/{authority_document_id}/reprocess": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Authority Reprocess */
+        post: operations["post_authority_reprocess_api_judge_mapping_authorities__authority_document_id__reprocess_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/judge-mapping/benches/{bench_id}/aliases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Bench Alias */
+        post: operations["post_bench_alias_api_judge_mapping_benches__bench_id__aliases_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/judge-mapping/judges/{judge_id}/aliases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Judge Alias */
+        post: operations["post_judge_alias_api_judge_mapping_judges__judge_id__aliases_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/judge-mapping/judges/{source_judge_id}/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Judge Merge */
+        post: operations["post_judge_merge_api_judge_mapping_judges__source_judge_id__merge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/judge-mapping/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List bounded unresolved or historical judge-mapping reviews. */
+        get: operations["list_mapping_reviews_api_judge_mapping_reviews_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/judge-mapping/reviews/{review_id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolve one judge-mapping review with optimistic concurrency. */
+        post: operations["post_mapping_review_resolution_api_judge_mapping_reviews__review_id__resolve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/mailbox/attachment-candidates": {
         parameters: {
             query?: never;
@@ -12877,6 +12979,21 @@ export interface components {
             /** Second Reviewed By Membership Id */
             second_reviewed_by_membership_id: string | null;
         };
+        /** AuthorityRemapResponse */
+        AuthorityRemapResponse: {
+            /** Authority Document Id */
+            authority_document_id: string;
+            /** Collisions */
+            collisions: number;
+            /** Inserted */
+            inserted: number;
+            /** Mapped */
+            mapped: number;
+            /** Review Ids */
+            review_ids?: string[];
+            /** Unresolved */
+            unresolved: number;
+        };
         /** AuthorityResearchReportCreateRequest */
         AuthorityResearchReportCreateRequest: {
             /** Criteria */
@@ -13242,6 +13359,18 @@ export interface components {
              */
             token_type: "bearer";
             user: components["schemas"]["UserSummary"];
+        };
+        /** BenchAliasCreateRequest */
+        BenchAliasCreateRequest: {
+            /** Alias Text */
+            alias_text: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "manual_curator" | "official_court" | "source_correction";
+            /** Source Url */
+            source_url?: string | null;
         };
         /** BenchContextCitableAuthorityResponse */
         BenchContextCitableAuthorityResponse: {
@@ -15298,6 +15427,23 @@ export interface components {
              * @enum {string}
              */
             update_type: "new_order" | "new_judgment" | "hearing_update" | "status_change" | "case_metadata_change";
+        };
+        /** CatalogAliasRecord */
+        CatalogAliasRecord: {
+            /** Alias Normalised */
+            alias_normalised: string;
+            /** Alias Text */
+            alias_text: string;
+            /** Id */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Record Version */
+            record_version: number;
+            /** Source */
+            source: string;
+            /** Source Url */
+            source_url: string | null;
         };
         /** CauseListPreviewRequest */
         CauseListPreviewRequest: {
@@ -29472,6 +29618,20 @@ export interface components {
              */
             test_kind: "connection" | "notification" | "source_open" | "deadline_calculation";
         };
+        /** JudgeAliasCreateRequest */
+        JudgeAliasCreateRequest: {
+            /** Alias Text */
+            alias_text: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "manual_curator" | "official_court" | "source_correction";
+            /** Source Evidence Text */
+            source_evidence_text?: string | null;
+            /** Source Url */
+            source_url?: string | null;
+        };
         /** JudgeAliasListResponse */
         JudgeAliasListResponse: {
             /** Alias Count */
@@ -29522,6 +29682,110 @@ export interface components {
             source_url: string | null;
             /** Start Date */
             start_date: string | null;
+        };
+        /** JudgeIdentityRecord */
+        JudgeIdentityRecord: {
+            /** Court Id */
+            court_id: string;
+            /** Full Name */
+            full_name: string;
+            /** Id */
+            id: string;
+            /** Identity Version */
+            identity_version: number;
+            /** Is Active */
+            is_active: boolean;
+            /** Merged Into Judge Id */
+            merged_into_judge_id: string | null;
+            /** Record Version */
+            record_version: number;
+            /** Source Name */
+            source_name: string | null;
+            /** Source Reference */
+            source_reference: string | null;
+            /** Source Url */
+            source_url: string | null;
+        };
+        /** JudgeMappingCandidateRecord */
+        JudgeMappingCandidateRecord: {
+            /** Court Id */
+            court_id: string;
+            /** Full Name */
+            full_name: string;
+            /** Id */
+            id: string;
+        };
+        /** JudgeMappingReviewListResponse */
+        JudgeMappingReviewListResponse: {
+            /** Has More */
+            has_more: boolean;
+            /** Limit */
+            limit: number;
+            /** Returned Count */
+            returned_count: number;
+            /** Reviews */
+            reviews: components["schemas"]["JudgeMappingReviewRecord"][];
+        };
+        /** JudgeMappingReviewRecord */
+        JudgeMappingReviewRecord: {
+            /** Authority Document Id */
+            authority_document_id: string;
+            /** Authority Title */
+            authority_title: string;
+            /** Candidates */
+            candidates?: components["schemas"]["JudgeMappingCandidateRecord"][];
+            /** Court Id */
+            court_id: string | null;
+            /** Court Name */
+            court_name: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Raw Judge Name */
+            raw_judge_name: string;
+            /** Reason */
+            reason: string;
+            /** Record Version */
+            record_version: number;
+            /** Resolution Note */
+            resolution_note: string | null;
+            /** Resolved Judge Id */
+            resolved_judge_id: string | null;
+            /** Resolver Version */
+            resolver_version: string;
+            /** Source Ordinal */
+            source_ordinal: number;
+            /** Status */
+            status: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** JudgeMappingReviewResolveRequest */
+        JudgeMappingReviewResolveRequest: {
+            /** Expected Record Version */
+            expected_record_version: number;
+            /** Judge Id */
+            judge_id: string;
+            /** Note */
+            note: string;
+        };
+        /** JudgeMergeRequest */
+        JudgeMergeRequest: {
+            /** Destination Judge Id */
+            destination_judge_id: string;
+            /** Expected Destination Version */
+            expected_destination_version: number;
+            /** Expected Source Version */
+            expected_source_version: number;
+            /** Reason */
+            reason: string;
         };
         /** JudgeProfileResponse */
         JudgeProfileResponse: {
@@ -56251,6 +56515,209 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpWorkspaceTestResultResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_authority_reprocess_api_judge_mapping_authorities__authority_document_id__reprocess_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                authority_document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthorityRemapResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_bench_alias_api_judge_mapping_benches__bench_id__aliases_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bench_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BenchAliasCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogAliasRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_judge_alias_api_judge_mapping_judges__judge_id__aliases_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                judge_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JudgeAliasCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogAliasRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_judge_merge_api_judge_mapping_judges__source_judge_id__merge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_judge_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JudgeMergeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JudgeIdentityRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_mapping_reviews_api_judge_mapping_reviews_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                status?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JudgeMappingReviewListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_mapping_review_resolution_api_judge_mapping_reviews__review_id__resolve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                review_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JudgeMappingReviewResolveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JudgeMappingReviewRecord"];
                 };
             };
             /** @description Validation Error */
