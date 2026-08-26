@@ -14350,7 +14350,7 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m6/IPLF-060B/local-2026-08-26.md",
-          "revision": "afc3cc80ed5cfcc7970dfd9870cdfd9b0258cbb5",
+          "revision": "e772a53b32621f17cc84b4525aad9d3636eaa1a0",
           "environment": "local production-mode API/web candidate with isolated deterministic legal fixtures",
           "fixtures": "canonical Delhi/Bombay/Madras judges and authorities, low-confidence mapping, unmapped judge, unmapped court corpus, alias collision, duplicate identity, sourced aliases, and versioned curator records",
           "assertions": "canonical-only mapping, cursor pagination, source actions, coverage states, descriptive analytics fence, curator normal/exception mutations, no prohibited inference, 360px responsive controls, public guidance, and production-spec discovery",
