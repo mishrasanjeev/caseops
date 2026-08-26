@@ -16,14 +16,14 @@
     "execution_policy": "codex_owned_single_ordered_queue; implement first and run the automated check and exact-release verification batch at the end",
     "active_slice": "IPLF-060B",
     "checkpoint": {
-      "recorded_at": "2026-08-26T10:11:11+05:30",
-      "repository_revision": "c599eee92ffeb22bcf761b888c12062a8cee7235",
-      "environment": "IPLF-059A and IPLF-059B are deployment-verified on canonical main through exact release fd928899840d81cb02c46323a4a4f09a45bcf60a. IPLF-060A is implemented and locally verified; rebased PR gates, exact-main CI, migration-first deployment, scheduler reconciliation, and production release proof remain pending.",
-      "completed_scope": "IPLF-060A extends the existing judge/bench/authority owners with sourced aliases, fail-closed mapping review, atomic curator resolution and merge, raw mapping lineage, analytics admission, migration replay/restore-forward controls, governed OpenAPI/data inventory, and a paused bounded refresh job. It makes no IPLF-060B, JUDGE, or UJ-20 completion claim.",
+      "recorded_at": "2026-08-26T12:02:00+05:30",
+      "repository_revision": "527adb8d48043b7a6087a4bce7c0026aa95e5cc6",
+      "environment": "IPLF-059A, IPLF-059B, and IPLF-060A are deployment-verified on canonical main through exact release 527adb8d48043b7a6087a4bce7c0026aa95e5cc6. API caseops-api-00363-qrp and web caseops-web-00342-2f9 serve 100 percent latest-only traffic; migration and eight-job scheduler reconciliation passed, including the paused exact-digest judge refresh job; exact-main CI 32935750625 and production workflow 32935750622 passed.",
+      "completed_scope": "IPLF-060A extends the existing judge/bench/authority owners with sourced aliases, fail-closed mapping review, atomic curator resolution and merge, raw mapping lineage, analytics admission, migration replay/restore-forward controls, governed OpenAPI/data inventory, and a deployed but paused bounded refresh job. Exact-main and production release gates passed. It makes no IPLF-060B, JUDGE, or UJ-20 completion claim.",
       "program_state": "PROGRAM INCOMPLETE",
       "next_slice": "IPLF-060B",
-      "next_action": "Publish IPLF-060A through rebased PR and exact-release gates, then implement IPLF-060B only against the reviewed one-writer foundation.",
-      "evidence_ref": "docs/ip-implementation/evidence/m6/IPLF-060A/local-2026-08-26.md"
+      "next_action": "Implement IPLF-060B only against the deployment-verified one-writer foundation, retaining the paused activation boundary until all allocated journeys and external approvals pass.",
+      "evidence_ref": "docs/ip-implementation/evidence/m6/IPLF-060A/release-2026-08-26.md"
     },
     "work_owner": {
       "owner": "Codex",
@@ -14151,7 +14151,8 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/JUDGE_MAPPING_FOUNDATION.md",
-        "docs/ip-implementation/evidence/m6/IPLF-060A/local-2026-08-26.md"
+        "docs/ip-implementation/evidence/m6/IPLF-060A/local-2026-08-26.md",
+        "docs/ip-implementation/evidence/m6/IPLF-060A/release-2026-08-26.md"
       ],
       "evidence_metadata": [
         {
@@ -14162,22 +14163,20 @@
           "assertions": "One-writer extension, deterministic fail-closed mapping, raw evidence retention, curator concurrency and audit, duplicate merge atomicity, low-confidence exclusion across every predictive consumer, migration replay and restore-forward fence, bounded scheduler inventory, OpenAPI parity, and data-governance parity",
           "result": "passed",
           "recorded_at": "2026-08-26T07:04:09+05:30"
-        }
-      ],
-      "blockers": [
+        },
         {
-          "id": "IPLF-060A-EXACT-RELEASE-GATE",
-          "summary": "The repository candidate has not yet passed PR/exact-main CI, migration-first deployment, scheduler reconciliation, and exact-release production acceptance.",
-          "owner": "Engineering/SRE and QA",
-          "evidence_needed": "Green PR and exact-main gates, immutable API/web image digests, successful 20260826_0002 migration execution, paused judge-refresh scheduler bound to the exact API digest, latest-only traffic, health, and unchanged production acceptance at one exact serving SHA.",
-          "safe_fallback": "Keep the new scheduler paused and do not claim IPLF-060A release or any IPLF-060B/JUDGE/UJ-20 completion; existing judge and authority paths remain authoritative.",
-          "milestone_impact": "Blocks IPLF-060A release closure without blocking independent documentation and IPLF-060B design work.",
-          "next_independent_slice": "IPLF-060B user workflow may begin only against this reviewed owner contract and must retain all release claims fail-closed."
+          "ref": "docs/ip-implementation/evidence/m6/IPLF-060A/release-2026-08-26.md",
+          "revision": "527adb8d48043b7a6087a4bce7c0026aa95e5cc6",
+          "environment": "GitHub hosted PR and exact-main gates, PostgreSQL migration-first Cloud Run deployment, API caseops-api-00363-qrp, web caseops-web-00342-2f9, eight recurring jobs on the exact API digest, dedicated production QA tenants, and Chromium exact-release acceptance",
+          "fixtures": "Synthetic production QA records and the existing governed real-data bench probe only; no client filing, provider mutation, external recipient, fee, payment, scheduler activation, or legal effect",
+          "assertions": "Exact merged identity, idempotent 20260826_0002 migration, paused bounded judge-refresh bootstrap, immutable scheduler digest, latest-only traffic, health, canonical CI, RAM/IP regression, real-data bench mapping, A0 quiescence, Notice workflow, and explicit IPLF-060B/JUDGE/UJ-20 exclusions",
+          "result": "passed",
+          "recorded_at": "2026-08-26T12:02:00+05:30"
         }
       ],
+      "blockers": [],
       "next_actions": [
-        "Pass final local controls, PR review and hosted gates, merge to canonical main, pass exact-main CI, and deploy the exact immutable release migration-first.",
-        "Reconcile the paused judge-mapping refresh job to the exact API digest and record exact production identity, health, traffic, migration, scheduler, and acceptance evidence before changing release status.",
+        "Implement IPLF-060B only against the deployment-verified one-writer foundation; do not duplicate identity, corpus, source, analytics, capability, audit, worker, or scheduler owners.",
         "Keep IPLF-060B, JUDGE-01 through JUDGE-10, and UJ-20 pending until their full UI, source, pilot-court, exception, and production journeys pass."
       ],
       "data_impact": [
@@ -14199,6 +14198,12 @@
           "evidence": "Functional revision, fixtures, local commands/results, duplicate-work audit, non-effects, and exact release gates still required"
         },
         {
+          "artifact": "docs/ip-implementation/evidence/m6/IPLF-060A/release-2026-08-26.md",
+          "disposition": "created",
+          "owner": "Engineering/SRE and QA",
+          "evidence": "PR and exact-main gates, migration-first deployment and repair, paused exact-digest scheduler bootstrap, immutable release identity, production acceptance, and explicit remaining boundaries"
+        },
+        {
           "artifact": "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml",
           "disposition": "updated",
           "owner": "Data governance control plane",
@@ -14211,10 +14216,10 @@
           "evidence": "Concrete implementation/test/evidence traceability with a truthful release blocker and no optimistic IPLF-060B or requirement claim"
         }
       ],
-      "allocation_review": "2026-08-26 brutal duplicate-work review against PRD Sections 11, 23, and 25 plus IPLF-003C/IPLF-060B allocations: extend existing Court, Bench, Judge, JudgeAlias, JudgeAppointment, AuthorityDocument, JudgeDecisionIndex, profile, source-action, predictive, capability, audit, Cloud Run job, and scheduler owners. Add only missing bench-alias and mapping-review records; do not duplicate the catalog, corpus, profile, source-link mechanism, analytics store, permission model, audit log, worker platform, or scheduler. IPLF-060A carries no direct JUDGE or UJ-20 allocation and makes no user-workflow completion claim.",
+      "allocation_review": "2026-08-26 brutal duplicate-work review against PRD Sections 11, 23, and 25 plus IPLF-003C/IPLF-060B allocations: extend existing Court, Bench, Judge, JudgeAlias, JudgeAppointment, AuthorityDocument, JudgeDecisionIndex, profile, source-action, predictive, capability, audit, Cloud Run job, and scheduler owners. Add only missing bench-alias and mapping-review records; do not duplicate the catalog, corpus, profile, source-link mechanism, analytics store, permission model, audit log, worker platform, or scheduler. IPLF-060A carries no direct JUDGE or UJ-20 allocation and makes no user-workflow completion claim. Exact release 527adb8d and workflow 32935750622 close only the IPLF-060A engineering release boundary; the paused scheduler and pending IPLF-060B/JUDGE/UJ-20 allocations preserve the activation boundary.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
