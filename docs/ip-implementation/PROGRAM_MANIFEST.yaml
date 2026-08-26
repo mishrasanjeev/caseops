@@ -14478,10 +14478,10 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m6/IPLF-061A/local-2026-08-26.md",
-          "revision": "2e80706d53bd47cea14bea6dc9418cf6d803c841",
+          "revision": "e84289d6c5433a73cc36c1773b3d64286465ecf6",
           "environment": "local API, web, deterministic catalog service, generated projections, and responsive browser candidate",
           "fixtures": "27 approved guide sections, 43 navigation commands, fixed owner, capability-limited custom role, stale client version, denied command, punctuation-only query, and unsupported keyword query",
-          "assertions": "single-source projection parity, dead-route and unknown-capability rejection, public catalog privacy, server permission filtering, denied-command sanitization, abstention, no writes, bounded work, 360px and 1280px guide rendering, and production-spec discovery",
+          "assertions": "single-source projection parity, dead-route and unknown-capability rejection, public catalog privacy, anonymous search rejection, server permission filtering and immediate custom-role revocation, denied-command sanitization, abstention, no writes, bounded work, 360px and 1280px guide rendering, and production-spec discovery",
           "result": "passed",
           "recorded_at": "2026-08-26T20:25:00+05:30"
         }
