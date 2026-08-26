@@ -16,6 +16,35 @@ CATALOG_PATH = (
 MAX_RESULTS = 10
 MAX_QUERY_CHARS = 160
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
+_SEARCH_STOPWORDS = frozenset(
+    {
+        "a",
+        "an",
+        "and",
+        "are",
+        "can",
+        "do",
+        "find",
+        "for",
+        "go",
+        "how",
+        "i",
+        "in",
+        "is",
+        "me",
+        "my",
+        "need",
+        "of",
+        "on",
+        "open",
+        "the",
+        "to",
+        "use",
+        "what",
+        "where",
+        "with",
+    }
+)
 
 
 @lru_cache(maxsize=1)
@@ -36,22 +65,30 @@ def _normalize(value: str) -> str:
 
 def _score(query: str, *, title: str, keywords: list[str], aliases: list[str], summary: str) -> int:
     normalized_query = _normalize(query)
-    tokens = tuple(dict.fromkeys(_TOKEN_RE.findall(normalized_query)))
+    tokens = tuple(
+        token
+        for token in dict.fromkeys(_TOKEN_RE.findall(normalized_query))
+        if len(token) >= 2 and token not in _SEARCH_STOPWORDS
+    )
     normalized_title = _normalize(title)
     normalized_keywords = [_normalize(value) for value in keywords]
     normalized_aliases = [_normalize(value) for value in aliases]
     normalized_summary = _normalize(summary)
     indexed = " ".join([normalized_title, *normalized_keywords, *normalized_aliases])
+    indexed_tokens = set(_TOKEN_RE.findall(indexed))
+    summary_tokens = set(_TOKEN_RE.findall(normalized_summary))
 
     if normalized_query == normalized_title:
         return 180
     score = 0
-    if normalized_query in normalized_title:
+    if tokens and f" {normalized_query} " in f" {normalized_title} ":
         score += 120
     if normalized_query in normalized_keywords or normalized_query in normalized_aliases:
         score += 110
-    indexed_matches = sum(token in indexed for token in tokens)
-    summary_matches = sum(token in normalized_summary for token in tokens)
+    if not tokens:
+        return score
+    indexed_matches = sum(token in indexed_tokens for token in tokens)
+    summary_matches = sum(token in summary_tokens for token in tokens)
     if indexed_matches == len(tokens):
         score += 80 + indexed_matches
     elif indexed_matches:

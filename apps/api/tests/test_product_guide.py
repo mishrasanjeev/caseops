@@ -144,7 +144,7 @@ def test_search_abstains_without_writes_and_rejects_unbounded_inputs(
     response = client.get(
         "/api/product-guide/search",
         headers=auth_headers(token),
-        params={"q": "xylophone nebula quasar"},
+        params={"q": "i need xylophone nebula quasar"},
     )
     assert response.status_code == 200, response.text
     assert response.json()["status"] == "no_match"

@@ -789,6 +789,10 @@ _NEGATED_UNSAFE_SUFFIX = re.compile(
     r"predicted|available|recommended|permitted|supported|allowed|endorsed)\b",
     re.IGNORECASE,
 )
+_NEGATION_MARKER = re.compile(
+    r"\b(?:not|no|never|cannot|can't|won't|without|avoid(?:s|ed|ing)?)\b",
+    re.IGNORECASE,
+)
 
 
 def _unsafe_match_is_negated(value: str, match: re.Match[str]) -> bool:
@@ -800,11 +804,18 @@ def _unsafe_match_is_negated(value: str, match: re.Match[str]) -> bool:
     )
     prefix = value[clause_start + 1 : match.start()][-120:]
     suffix = value[match.end() : match.end() + 120]
-    return bool(
+    prefix_is_negated = bool(
         _NEGATED_UNSAFE_PREFIX.search(prefix)
         or _NEGATED_GUARANTEE_PREFIX.search(prefix)
-        or _NEGATED_UNSAFE_SUFFIX.search(suffix)
     )
+    if prefix_is_negated:
+        return len(_NEGATION_MARKER.findall(prefix)) == 1
+
+    suffix_match = _NEGATED_UNSAFE_SUFFIX.search(suffix)
+    if suffix_match is None:
+        return False
+    local_clause = prefix + suffix[: suffix_match.end()]
+    return len(_NEGATION_MARKER.findall(local_clause)) == 1
 
 
 def _classify_unsafe_text(

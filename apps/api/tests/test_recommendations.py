@@ -1759,6 +1759,74 @@ def test_negated_safety_mentions_do_not_reject_grounded_recommendation(
     assert rejected_run is None
 
 
+def test_double_negated_unsafe_output_remains_fail_closed(
+    client: TestClient, monkeypatch,
+) -> None:
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    token, _, matter_id = _setup_matter(client)
+    _seed_relevant_authority()
+
+    class _DoubleNegativeProvider:
+        name = "mock"
+        model = "mock-double-negative"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            payload = {
+                "title": "Source-backed options for lawyer review",
+                "options": [
+                    {
+                        "label": "Review the Section 34 authority",
+                        "rationale": (
+                            "Patent illegality under Section 34 can support setting "
+                            "aside an arbitral award."
+                        ),
+                        "confidence": "medium",
+                        "supporting_citations": [
+                            "[1] Ssangyong Engg v. NHAI (2019)"
+                        ],
+                        "risk_notes": "Do not avoid judge shopping.",
+                    }
+                ],
+                "primary_recommendation_label": "Review the Section 34 authority",
+                "rationale": "Lawyer review remains required.",
+                "assumptions": [],
+                "missing_facts": [],
+                "confidence": "medium",
+                "next_action": None,
+            }
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=12,
+                completion_tokens=22,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: _DoubleNegativeProvider(),
+    )
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "authority"},
+    )
+
+    assert response.status_code == 422, response.text
+    with get_session_factory()() as session:
+        recommendation = session.scalar(
+            select(Recommendation).where(Recommendation.matter_id == matter_id)
+        )
+        rejected_run = session.scalar(
+            select(ModelRun).where(ModelRun.status == "rejected_unsafe_output")
+        )
+    assert recommendation is None
+    assert rejected_run is not None
+    assert "judge_shopping" in (rejected_run.error or "")
+
+
 def test_ai_token_quota_blocks_objective_recommendation_before_provider_call(
     client: TestClient, monkeypatch,
 ) -> None:
