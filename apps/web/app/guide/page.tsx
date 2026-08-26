@@ -4,6 +4,7 @@ import { Footer } from "@/components/marketing/Footer";
 import { Nav } from "@/components/marketing/Nav";
 import { Container } from "@/components/ui/Container";
 import { SkipLink } from "@/components/ui/SkipLink";
+import { formatGuideDate, PRODUCT_GUIDE_CATALOG } from "@/lib/product-guide";
 import { siteConfig } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -20,34 +21,7 @@ export const metadata: Metadata = {
   },
 };
 
-const sections: { id: string; title: string }[] = [
-  { id: "getting-started", title: "Getting started" },
-  { id: "status-labels", title: "Product status labels" },
-  { id: "daily-operations", title: "Today, calendar and portfolio" },
-  { id: "workspace", title: "Workspace and roles" },
-  { id: "intake-conflicts", title: "Intake, clients and optional conflict review" },
-  { id: "matters", title: "Opening and running a matter" },
-  { id: "documents", title: "Documents and indexing" },
-  { id: "notices", title: "Notices and reply deadlines" },
-  { id: "communications", title: "Communications and review queues" },
-  { id: "drafting", title: "Drafting with citations" },
-  { id: "hearings", title: "Hearing preparation" },
-  { id: "case-tracking", title: "Case tracking refresh" },
-  { id: "compliance", title: "Court-order compliance review" },
-  { id: "cause-list", title: "Date-wise cause lists" },
-  { id: "litigation-intelligence", title: "Litigation Intelligence" },
-  { id: "bench-strategy", title: "Bench-aware appeal drafting" },
-  { id: "statutes", title: "Statutes and sections" },
-  { id: "research", title: "Research and authorities" },
-  { id: "contracts", title: "Contracts and playbooks" },
-  { id: "recommendations", title: "Recommendations" },
-  { id: "outside-counsel", title: "Outside counsel and spend" },
-  { id: "billing", title: "Matter billing and invoices" },
-  { id: "admin", title: "Admin, audit and access controls" },
-  { id: "security", title: "Security and data boundaries" },
-  { id: "troubleshooting", title: "Troubleshooting" },
-  { id: "glossary", title: "Glossary" },
-];
+const guideSections = PRODUCT_GUIDE_CATALOG.sections;
 
 function Section({
   id,
@@ -124,16 +98,19 @@ export default function GuidePage() {
       <main id="main" tabIndex={-1} className="focus:outline-none">
         <header className="border-b border-[var(--color-line)] bg-[var(--color-bg-2)] pb-14 pt-16 md:pb-16 md:pt-20">
           <Container>
-            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--color-brand-600)]">
-              User guide · v3 · 2026
+            <span
+              className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--color-brand-600)]"
+              data-guide-version={PRODUCT_GUIDE_CATALOG.content_version}
+            >
+              User guide · {PRODUCT_GUIDE_CATALOG.display_version} · 2026
             </span>
             <h1 className="mt-3 max-w-4xl font-display text-4xl font-normal leading-[1.1] tracking-tight text-[var(--color-ink)] md:text-[3.25rem]">
               How to run your practice on CaseOps.
             </h1>
             <p className="mt-5 max-w-2xl text-[17px] leading-relaxed text-[var(--color-mute)]">
               A linear, end-to-end read for partners, associates, general counsel and legal
-              ops. Twenty-six sections. Read front to back the first time; return for the
-              section that matches the task in front of you after that.
+              ops. {guideSections.length} sections. Read front to back the first time;
+              return for the section that matches the task in front of you after that.
             </p>
             <div className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-[var(--color-ink-2)]">
               <span>
@@ -146,7 +123,7 @@ export default function GuidePage() {
               </span>
               <span>
                 <span className="font-mono text-[var(--color-ink-2)]">Updated</span>{" "}
-                22 August 2026
+                {formatGuideDate(PRODUCT_GUIDE_CATALOG.updated_on)}
               </span>
             </div>
           </Container>
@@ -162,7 +139,7 @@ export default function GuidePage() {
                 Contents
               </div>
               <ol className="mt-3 space-y-1.5 text-[13.5px]">
-                {sections.map((s, i) => (
+                {guideSections.map((s, i) => (
                   <li key={s.id}>
                     <a
                       href={`#${s.id}`}
@@ -184,7 +161,7 @@ export default function GuidePage() {
                   Contents
                 </summary>
                 <ol className="mt-3 space-y-1.5 text-[13.5px] text-[var(--color-ink-2)]">
-                  {sections.map((s, i) => (
+                  {guideSections.map((s, i) => (
                     <li key={s.id}>
                       <a href={`#${s.id}`}>
                         <span className="font-mono tabular-nums text-[var(--color-mute-2)]">

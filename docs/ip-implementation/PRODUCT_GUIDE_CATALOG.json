@@ -1,0 +1,253 @@
+{
+  "schema_version": 1,
+  "corpus_id": "caseops-product-guide",
+  "content_version": "2026.08.26.1",
+  "display_version": "v3",
+  "language": "en-IN",
+  "canonical_path": "/guide",
+  "updated_on": "2026-08-26",
+  "navigation_groups": {
+    "overview": "Overview",
+    "schedule": "Schedule",
+    "casework": "Casework",
+    "ip": "Intellectual property",
+    "intel": "Intelligence",
+    "admin": "Workspace"
+  },
+  "sections": [
+    {
+      "id": "getting-started",
+      "title": "Getting started",
+      "summary": "Create or join a workspace, sign in, recover access, and learn the main navigation used to begin daily legal work.",
+      "keywords": ["sign in", "workspace", "account", "password", "navigation"],
+      "aliases": ["onboarding", "setup", "login"]
+    },
+    {
+      "id": "status-labels",
+      "title": "Product status labels",
+      "summary": "Understand live, preview, limited, unavailable, stale, and source-status labels before relying on a workflow.",
+      "keywords": ["status", "availability", "preview", "stale", "source"],
+      "aliases": ["product labels", "workflow status"]
+    },
+    {
+      "id": "daily-operations",
+      "title": "Today, calendar and portfolio",
+      "summary": "Review urgent work, hearings, deadlines, tasks, docket coverage, and portfolio activity from the daily operating views.",
+      "keywords": ["today", "calendar", "portfolio", "deadline", "task", "hearing"],
+      "aliases": ["daily queue", "daily priorities", "morning review"]
+    },
+    {
+      "id": "workspace",
+      "title": "Workspace and roles",
+      "summary": "Manage the tenant workspace, memberships, fixed and custom roles, capabilities, teams, and access boundaries.",
+      "keywords": ["workspace", "role", "capability", "team", "member", "permission"],
+      "aliases": ["access control", "user administration", "staff access"]
+    },
+    {
+      "id": "intake-conflicts",
+      "title": "Intake, clients and optional conflict review",
+      "summary": "Capture a legal request, identify the client and parties, run an optional conflict review, and promote approved intake into a matter.",
+      "keywords": ["intake", "client", "conflict", "party", "request", "promote"],
+      "aliases": ["new instruction", "new client", "conflict check"]
+    },
+    {
+      "id": "matters",
+      "title": "Opening and running a matter",
+      "summary": "Create, assign, update, dispose, reopen, and operate a matter while preserving lifecycle, access, and audit controls.",
+      "keywords": ["matter", "case", "lifecycle", "dispose", "reopen", "assignment"],
+      "aliases": ["open case", "case file", "legal matter"]
+    },
+    {
+      "id": "documents",
+      "title": "Documents and indexing",
+      "summary": "Upload governed files, follow processing and indexing states, inspect source metadata, and use matter or IP document views.",
+      "keywords": ["document", "upload", "index", "processing", "source", "attachment"],
+      "aliases": ["file", "pleading", "evidence"]
+    },
+    {
+      "id": "notices",
+      "title": "Notices and reply deadlines",
+      "summary": "Record notices, calculate and review response deadlines, assign responsibility, and preserve deadline evidence and overrides.",
+      "keywords": ["notice", "reply", "response", "deadline", "override", "reminder"],
+      "aliases": ["legal notice", "response due date"]
+    },
+    {
+      "id": "communications",
+      "title": "Communications and review queues",
+      "summary": "Log client and matter communications, use approved templates, and work through governed review and follow-up queues.",
+      "keywords": ["communication", "email", "mailbox", "template", "review", "follow up"],
+      "aliases": ["message", "correspondence", "client call"]
+    },
+    {
+      "id": "drafting",
+      "title": "Drafting with citations",
+      "summary": "Create legal drafts, supply facts and source material, generate cited content, compare revisions, review, and finalize.",
+      "keywords": ["draft", "citation", "pleading", "revision", "review", "finalize"],
+      "aliases": ["legal drafting", "document generation"]
+    },
+    {
+      "id": "hearings",
+      "title": "Hearing preparation",
+      "summary": "Schedule hearings, prepare source-backed packs and coaching material, and synchronize permitted calendar events.",
+      "keywords": ["hearing", "hearing pack", "calendar", "judge", "argument", "court date"],
+      "aliases": ["court hearing", "hearing preparation"]
+    },
+    {
+      "id": "case-tracking",
+      "title": "Case tracking refresh",
+      "summary": "Track supported court cases, request or review refreshes, and inspect source, freshness, and provider status.",
+      "keywords": ["case tracking", "ecourt", "refresh", "court case", "source", "freshness"],
+      "aliases": ["eCourts", "case status", "court sync"]
+    },
+    {
+      "id": "compliance",
+      "title": "Court-order compliance review",
+      "summary": "Extract and review obligations from court orders, assign action owners, and preserve the source and lawyer checks.",
+      "keywords": ["court order", "compliance", "obligation", "action", "review"],
+      "aliases": ["order compliance", "directions"]
+    },
+    {
+      "id": "cause-list",
+      "title": "Date-wise cause lists",
+      "summary": "Review supported date-wise cause-list entries, court and bench context, source coverage, and matching status.",
+      "keywords": ["cause list", "court list", "bench", "listing", "hearing date"],
+      "aliases": ["daily board", "court board"]
+    },
+    {
+      "id": "litigation-intelligence",
+      "title": "Litigation Intelligence",
+      "summary": "Use matter-scoped source-backed analysis for issues, proceedings, evidence gaps, authorities, and lawyer review.",
+      "keywords": ["litigation", "intelligence", "issue", "proceeding", "evidence", "authority"],
+      "aliases": ["case analysis", "matter intelligence"]
+    },
+    {
+      "id": "bench-strategy",
+      "title": "Bench-aware appeal drafting",
+      "summary": "Review judge and bench context, mapped decisions, confidence and coverage before using the material in appeal strategy.",
+      "keywords": ["judge", "bench", "appeal", "strategy", "decision", "confidence"],
+      "aliases": ["judge mapping", "bench analysis", "appeal drafting"]
+    },
+    {
+      "id": "judge-mapping",
+      "title": "Judge mapping and decision browsing",
+      "summary": "Browse canonical judge identities, appointments, aliases, source-backed decisions, coverage, and curator review without predictive scoring.",
+      "keywords": ["judge", "decision", "appointment", "alias", "coverage", "court"],
+      "aliases": ["judge listing", "mapped judgments", "judge profile"]
+    },
+    {
+      "id": "statutes",
+      "title": "Statutes and sections",
+      "summary": "Browse bare acts and sections, inspect complete text and sources, and link relevant provisions to a matter.",
+      "keywords": ["statute", "section", "bare act", "provision", "legislation", "source"],
+      "aliases": ["bareacts", "act", "law text"]
+    },
+    {
+      "id": "research",
+      "title": "Research and authorities",
+      "summary": "Search judgments and legal authorities, inspect citations and source links, save research, and annotate permitted records.",
+      "keywords": ["research", "judgment", "authority", "citation", "case law", "source link"],
+      "aliases": ["legal search", "precedent", "Indian Kanoon"]
+    },
+    {
+      "id": "contracts",
+      "title": "Contracts and playbooks",
+      "summary": "Create and review contracts, apply governed playbooks, inspect clause findings, and retain source and decision context.",
+      "keywords": ["contract", "playbook", "clause", "review", "agreement"],
+      "aliases": ["agreement review", "contract intelligence"]
+    },
+    {
+      "id": "recommendations",
+      "title": "Recommendations",
+      "summary": "Generate source-backed recommendations, review cited support and counter-material, and record an authorized decision.",
+      "keywords": ["recommendation", "citation", "decision", "review", "authority"],
+      "aliases": ["suggested cases", "legal recommendation"]
+    },
+    {
+      "id": "outside-counsel",
+      "title": "Outside counsel and spend",
+      "summary": "Manage external counsel panels, matter assignments, recommendations, budgets, performance context, and spend review.",
+      "keywords": ["outside counsel", "law firm", "panel", "spend", "budget", "assignment"],
+      "aliases": ["external counsel", "panel counsel"]
+    },
+    {
+      "id": "billing",
+      "title": "Matter billing and invoices",
+      "summary": "Record time and costs, review matter billing, issue invoices, track payment status, and apply finance permissions.",
+      "keywords": ["billing", "invoice", "payment", "time entry", "cost", "fee"],
+      "aliases": ["matter billing", "legal spend"]
+    },
+    {
+      "id": "admin",
+      "title": "Admin, audit and access controls",
+      "summary": "Configure workspace settings, users, integrations, notifications, audit exports, and governed administrative controls.",
+      "keywords": ["admin", "audit", "access", "integration", "notification", "workspace"],
+      "aliases": ["settings", "administration", "access control"]
+    },
+    {
+      "id": "security",
+      "title": "Security and data boundaries",
+      "summary": "Understand tenant isolation, permissions, source access, upload scanning, auditability, retention, and fail-closed behavior.",
+      "keywords": ["security", "tenant", "permission", "retention", "audit", "virus scan"],
+      "aliases": ["data boundary", "privacy", "access security"]
+    },
+    {
+      "id": "troubleshooting",
+      "title": "Troubleshooting",
+      "summary": "Resolve common sign-in, upload, indexing, source, permission, notification, calendar, and stale-data problems.",
+      "keywords": ["troubleshoot", "error", "not working", "stale", "permission", "notification"],
+      "aliases": ["help", "problem", "fix"]
+    },
+    {
+      "id": "glossary",
+      "title": "Glossary",
+      "summary": "Find plain-language definitions and approved aliases for CaseOps, litigation, IP, registry, deadline, and governance terms.",
+      "keywords": ["glossary", "definition", "meaning", "terminology", "alias"],
+      "aliases": ["terms", "plain language", "legal words"]
+    }
+  ],
+  "commands": [
+    {"id":"home","label":"Home","href":"/app","icon":"LayoutDashboard","group":"overview","summary":"Open the workspace dashboard.","keywords":["dashboard","workspace home"],"required_capabilities":[]},
+    {"id":"today","label":"Today","href":"/app/today","icon":"Sun","group":"overview","summary":"Open the prioritized daily work queue.","keywords":["daily work","urgent","due today"],"required_capabilities":[]},
+    {"id":"matters","label":"Matters","href":"/app/matters","icon":"Briefcase","group":"casework","summary":"Open the matter list and matter workflows.","keywords":["cases","case files","legal matters"],"required_capabilities":[]},
+    {"id":"import-activity","label":"Import activity","href":"/app/imports","icon":"History","group":"casework","summary":"Review current and historical import activity.","keywords":["imports","bulk upload","import history"],"required_capabilities":[]},
+    {"id":"ip-docket","label":"IP docket","href":"/app/ip","icon":"BookOpenCheck","group":"ip","summary":"Open the intellectual-property operations workspace.","keywords":["ip","trademark docket","intellectual property"],"required_capabilities":["ip:read"]},
+    {"id":"trademark-portfolio","label":"Trademark portfolio","href":"/app/ip/portfolio","icon":"PanelsTopLeft","group":"ip","summary":"Browse trademark applications, registrations, and proceedings.","keywords":["trade mark","application number","registration"],"required_capabilities":["ip:read"]},
+    {"id":"deadline-control","label":"Deadline control","href":"/app/ip/docket","icon":"CalendarClock","group":"ip","summary":"Review IP deadlines, responsibility, acknowledgement, and escalation.","keywords":["docket deadline","critical date","coverage"],"required_capabilities":["ip:read"]},
+    {"id":"trademark-renewals","label":"Trademark renewals","href":"/app/ip/renewals","icon":"Repeat2","group":"ip","summary":"Review trademark renewal eligibility, evidence, instructions, and status.","keywords":["renewal","renew trade mark","expiry"],"required_capabilities":["ip:read"]},
+    {"id":"madrid-portfolio","label":"Madrid portfolio","href":"/app/ip/madrid","icon":"Globe2","group":"ip","summary":"Review Madrid Protocol designations, events, deadlines, and sources.","keywords":["madrid","wipo","international registration"],"required_capabilities":["ip:read"]},
+    {"id":"post-registration","label":"Post-registration","href":"/app/ip/recordals","icon":"FileClock","group":"ip","summary":"Manage recordals and post-registration changes.","keywords":["recordal","assignment","name change","address change"],"required_capabilities":["ip:read"]},
+    {"id":"foreign-associates","label":"Foreign associates","href":"/app/ip/foreign-associates","icon":"Contact","group":"ip","summary":"Manage foreign-associate instructions, acknowledgements, and costs.","keywords":["foreign counsel","associate","instruction"],"required_capabilities":["ip:read"]},
+    {"id":"registry-reconciliation","label":"Registry reconciliation","href":"/app/ip/registry","icon":"Database","group":"ip","summary":"Compare registry evidence with canonical IP records.","keywords":["registry sync","application number","opposition number"],"required_capabilities":["ip:read"]},
+    {"id":"journal-watch","label":"Journal watch","href":"/app/ip/watch","icon":"Radar","group":"ip","summary":"Review trademark-journal watch candidates and decisions.","keywords":["journal","watch","similar mark","opposition candidate"],"required_capabilities":["ip:read"]},
+    {"id":"ip-reports","label":"IP reports","href":"/app/ip/reports","icon":"FileChartColumn","group":"ip","summary":"Build governed IP portfolio and operations reports.","keywords":["ip report","portfolio report","client report"],"required_capabilities":["ip:read"]},
+    {"id":"ip-client-portal","label":"IP client portal","href":"/app/ip/client-portal","icon":"UserRoundCheck","group":"ip","summary":"Manage client-portal grants for IP records.","keywords":["client access","portal grant","external user"],"required_capabilities":["portal:manage_grants"]},
+    {"id":"notices","label":"Notices","href":"/app/notices","icon":"Bell","group":"casework","summary":"Open notices and response-deadline workflows.","keywords":["legal notice","reply deadline","response"],"required_capabilities":[]},
+    {"id":"intake","label":"Intake","href":"/app/intake","icon":"Inbox","group":"casework","summary":"Submit or review new legal-work intake.","keywords":["new request","new client","conflict check"],"required_capabilities":["intake:submit"]},
+    {"id":"hearings","label":"Hearings","href":"/app/hearings","icon":"Gavel","group":"schedule","summary":"Open upcoming hearings and hearing preparation.","keywords":["court date","hearing pack","argument"],"required_capabilities":[]},
+    {"id":"cause-list","label":"Cause list","href":"/app/cause-list","icon":"ListChecks","group":"schedule","summary":"Browse supported date-wise court cause lists.","keywords":["court list","daily board","listing"],"required_capabilities":[]},
+    {"id":"calendar","label":"Calendar","href":"/app/calendar","icon":"CalendarDays","group":"schedule","summary":"Open the unified hearings, tasks, and deadlines calendar.","keywords":["schedule","court calendar","due dates"],"required_capabilities":[]},
+    {"id":"mailbox","label":"Mailbox","href":"/app/mailbox","icon":"Inbox","group":"casework","summary":"Open the workspace mailbox.","keywords":["email","inbound mail","message"],"required_capabilities":[]},
+    {"id":"drive","label":"Drive","href":"/app/drive","icon":"HardDrive","group":"casework","summary":"Open connected-drive imports and files.","keywords":["google drive","files","cloud documents"],"required_capabilities":[]},
+    {"id":"research","label":"Research","href":"/app/research","icon":"LibraryBig","group":"intel","summary":"Search judgments and legal authorities with source links.","keywords":["case law","judgment search","Indian Kanoon","citation"],"required_capabilities":[]},
+    {"id":"drafting","label":"Drafting","href":"/app/drafting","icon":"FileSignature","group":"intel","summary":"Open legal drafting and review workflows.","keywords":["draft pleading","generate draft","citation"],"required_capabilities":[]},
+    {"id":"recommendations","label":"Recommendations","href":"/app/recommendations","icon":"Sparkles","group":"intel","summary":"Open source-backed legal recommendations.","keywords":["recommended cases","legal checks","authority"],"required_capabilities":[]},
+    {"id":"contracts","label":"Contracts","href":"/app/contracts","icon":"Scale","group":"casework","summary":"Open contract records, review, and playbooks.","keywords":["agreement","clause review","playbook"],"required_capabilities":[]},
+    {"id":"clients","label":"Clients","href":"/app/clients","icon":"Contact","group":"casework","summary":"Open client records and assignments.","keywords":["client list","company","contact"],"required_capabilities":["clients:view"]},
+    {"id":"outside-counsel","label":"Outside Counsel","href":"/app/outside-counsel","icon":"Users","group":"casework","summary":"Open external-counsel panels, matters, and spend.","keywords":["external counsel","law firm panel","legal spend"],"required_capabilities":[]},
+    {"id":"portfolio","label":"Portfolio","href":"/app/portfolio","icon":"PanelsTopLeft","group":"intel","summary":"Open the cross-matter portfolio view.","keywords":["matter portfolio","overview","reporting"],"required_capabilities":[]},
+    {"id":"courts","label":"Courts","href":"/app/courts","icon":"Gavel","group":"intel","summary":"Browse courts, judges, and mapped decisions.","keywords":["judge list","court directory","bench"],"required_capabilities":[]},
+    {"id":"statutes","label":"Statutes","href":"/app/statutes","icon":"BookOpenCheck","group":"intel","summary":"Browse bare acts, statutes, and sections with sources.","keywords":["bareacts","law text","provision"],"required_capabilities":[]},
+    {"id":"case-tracking","label":"Case tracking","href":"/app/case-tracking","icon":"Bookmark","group":"intel","summary":"Track supported court cases and refresh status.","keywords":["ecourts","case status","court sync"],"required_capabilities":["authorities:search"]},
+    {"id":"admin","label":"Admin","href":"/app/admin","icon":"Wrench","group":"admin","summary":"Open workspace administration.","keywords":["settings","users","workspace administration"],"required_capabilities":["workspace:admin"]},
+    {"id":"billing","label":"Billing","href":"/app/admin/billing","icon":"CreditCard","group":"admin","summary":"Manage workspace plan and billing settings.","keywords":["subscription","plan","payment"],"required_capabilities":["workspace:admin"]},
+    {"id":"integrations","label":"Integrations","href":"/app/admin/integrations","icon":"PlugZap","group":"admin","summary":"Configure workspace integrations.","keywords":["provider","connection","api"],"required_capabilities":["workspace:admin"]},
+    {"id":"microsoft-365","label":"Microsoft 365","href":"/app/admin/microsoft365","icon":"PlugZap","group":"admin","summary":"Configure Microsoft 365 integration.","keywords":["outlook","office 365","microsoft"],"required_capabilities":["workspace:admin"]},
+    {"id":"inbound-email","label":"Inbound email","href":"/app/admin/inbound-email","icon":"Inbox","group":"admin","summary":"Configure inbound-email routing.","keywords":["email ingestion","mail routing","inbound"],"required_capabilities":["workspace:admin"]},
+    {"id":"matter-billing","label":"Matter billing","href":"/app/admin/matter-billing","icon":"CreditCard","group":"admin","summary":"Configure matter billing and invoice controls.","keywords":["invoice settings","time entry","fees"],"required_capabilities":["workspace:admin"]},
+    {"id":"judge-aliases","label":"Judge aliases","href":"/app/admin/judge-aliases","icon":"Languages","group":"admin","summary":"Curate judge aliases and mapping review.","keywords":["judge mapping","name alias","curation"],"required_capabilities":["workspace:admin"]},
+    {"id":"platform-admin","label":"Platform admin","href":"/app/platform-admin","icon":"ShieldCheck","group":"admin","summary":"Open platform administration.","keywords":["platform operations","super admin"],"required_capabilities":["platform:admin"]},
+    {"id":"platform-costs","label":"Platform costs","href":"/app/platform-admin/costs","icon":"CreditCard","group":"admin","summary":"Review platform provider costs.","keywords":["provider spend","platform billing","costs"],"required_capabilities":["platform:admin"]},
+    {"id":"notifications","label":"Notifications","href":"/app/notification-preferences","icon":"ListTodo","group":"admin","summary":"Set personal notification preferences.","keywords":["reminder","email alert","preference"],"required_capabilities":[]},
+    {"id":"user-guide","label":"User guide","href":"/guide","icon":"BookOpenText","group":"admin","summary":"Open the complete CaseOps product guide.","keywords":["help","documentation","how to"],"required_capabilities":[]}
+  ]
+}

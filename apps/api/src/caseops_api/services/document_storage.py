@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import hashlib
 import os
 import re
@@ -155,6 +156,37 @@ def _write_stream_to_temp_file(stream: BinaryIO) -> tuple[Path, int, str]:
     return temp_path, size_bytes, hasher.hexdigest()
 
 
+def _place_local_temp_file(temp_path: Path, target_path: Path) -> None:
+    """Atomically expose an upload even when temp and storage use different mounts."""
+
+    try:
+        temp_path.replace(target_path)
+        return
+    except OSError as exc:
+        if exc.errno != errno.EXDEV:
+            raise
+
+    staging_path: Path | None = None
+    try:
+        with temp_path.open("rb") as source_file:
+            with tempfile.NamedTemporaryFile(
+                suffix=".staging",
+                prefix=f".{target_path.name}.",
+                dir=str(target_path.parent),
+                delete=False,
+            ) as staging_file:
+                staging_path = Path(staging_file.name)
+                while chunk := source_file.read(1024 * 1024):
+                    staging_file.write(chunk)
+                staging_file.flush()
+                os.fsync(staging_file.fileno())
+        os.replace(staging_path, target_path)
+        staging_path = None
+    finally:
+        if staging_path is not None:
+            staging_path.unlink(missing_ok=True)
+
+
 def persist_matter_attachment(
     *,
     company_id: str,
@@ -240,7 +272,7 @@ def persist_workspace_attachment(
                     detail="Invalid storage key.",
                 )
             target_path.parent.mkdir(parents=True, exist_ok=True)
-            temp_path.replace(target_path)
+            _place_local_temp_file(temp_path, target_path)
         else:
             bucket = _gcs_client().bucket(_gcs_bucket_name())
             blob = bucket.blob(_gcs_blob_name(storage_key))

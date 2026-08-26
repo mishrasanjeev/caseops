@@ -44,6 +44,7 @@ from caseops_api.api.routes import (
     platform_admin,
     portal,
     portal_ip,
+    product_guide,
     provider_operations,
     recommendations,
     source_actions,
@@ -73,6 +74,11 @@ api_router.include_router(matters.router, prefix="/matters", tags=["matters"])
 api_router.include_router(notices.router, prefix="/notices", tags=["notices"])
 api_router.include_router(matter_tags.router, prefix="/matter-tags", tags=["matter-tags"])
 api_router.include_router(me.router, prefix="/me", tags=["me"])
+api_router.include_router(
+    product_guide.router,
+    prefix="/product-guide",
+    tags=["product-guide"],
+)
 api_router.include_router(drafting.router, prefix="/drafting", tags=["drafting"])
 api_router.include_router(contracts.router, prefix="/contracts", tags=["contracts"])
 api_router.include_router(

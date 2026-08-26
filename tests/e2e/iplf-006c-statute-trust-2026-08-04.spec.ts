@@ -26,9 +26,14 @@ async function bootstrap(api: APIRequestContext, slug: string): Promise<string> 
 }
 
 test("IPLF-UJ-15/UJ-48: verified text, separated material, fail-closed exceptions, and 360px curator controls", async ({
+  baseURL,
   page,
 }) => {
   test.setTimeout(90_000);
+  if (!baseURL) {
+    throw new Error("Playwright baseURL is required for statute trust E2E.");
+  }
+  const webOrigin = new URL(baseURL).origin;
   const api = await request.newContext();
   const slug = unique("iplf006c");
   const email = await bootstrap(api, slug);
@@ -74,7 +79,7 @@ test("IPLF-UJ-15/UJ-48: verified text, separated material, fail-closed exception
       status: 200,
       contentType: "application/json",
       headers: {
-        "Access-Control-Allow-Origin": "http://127.0.0.1:3100",
+        "Access-Control-Allow-Origin": webOrigin,
         "Access-Control-Allow-Credentials": "true",
       },
       body: JSON.stringify({
@@ -158,7 +163,7 @@ test("IPLF-UJ-15/UJ-48: verified text, separated material, fail-closed exception
       status: 200,
       contentType: "application/json",
       headers: {
-        "Access-Control-Allow-Origin": "http://127.0.0.1:3100",
+        "Access-Control-Allow-Origin": webOrigin,
         "Access-Control-Allow-Credentials": "true",
       },
       body: JSON.stringify({

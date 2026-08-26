@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import io
 from pathlib import Path
 
@@ -238,6 +239,69 @@ def test_local_storage_key_does_not_embed_a_long_original_filename(
 
     assert stored.storage_key == "company-1/matters/matter-1/attachment-1.txt"
     assert resolve_storage_path(stored.storage_key).read_bytes() == b"portable local storage path"
+
+
+def test_local_storage_handles_cross_filesystem_temp_move_atomically(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    reset_storage_settings,
+) -> None:
+    storage_root = tmp_path / "documents"
+    observed_temp_path: Path | None = None
+    monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_BACKEND", "local")
+    monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_PATH", storage_root.as_posix())
+
+    def reject_cross_filesystem_replace(source: Path, target: Path) -> Path:
+        nonlocal observed_temp_path
+        observed_temp_path = source
+        raise OSError(errno.EXDEV, "Invalid cross-device link", source, target)
+
+    monkeypatch.setattr(Path, "replace", reject_cross_filesystem_replace)
+
+    stored = persist_workspace_attachment(
+        company_id="company-1",
+        workspace_id="matter-1",
+        attachment_id="attachment-1",
+        filename="court-order.txt",
+        stream=io.BytesIO(b"cross-volume court order"),
+    )
+
+    stored_path = resolve_storage_path(stored.storage_key)
+    assert stored_path.read_bytes() == b"cross-volume court order"
+    assert observed_temp_path is not None
+    assert not observed_temp_path.exists()
+    assert list(stored_path.parent.glob("*.staging")) == []
+
+
+def test_local_storage_does_not_mask_non_cross_filesystem_move_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    reset_storage_settings,
+) -> None:
+    observed_temp_path: Path | None = None
+    monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_BACKEND", "local")
+    monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_PATH", (tmp_path / "documents").as_posix())
+
+    def reject_replace(source: Path, target: Path) -> Path:
+        nonlocal observed_temp_path
+        observed_temp_path = source
+        raise OSError(errno.EACCES, "Permission denied", source, target)
+
+    monkeypatch.setattr(Path, "replace", reject_replace)
+
+    with pytest.raises(OSError) as exc_info:
+        persist_workspace_attachment(
+            company_id="company-1",
+            workspace_id="matter-1",
+            attachment_id="attachment-1",
+            filename="court-order.txt",
+            stream=io.BytesIO(b"must not be persisted"),
+        )
+
+    assert exc_info.value.errno == errno.EACCES
+    assert observed_temp_path is not None
+    assert not observed_temp_path.exists()
+    assert [path for path in (tmp_path / "documents").rglob("*") if path.is_file()] == []
 
 
 def test_resolve_storage_path_rejects_path_traversal(

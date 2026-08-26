@@ -11,7 +11,8 @@ export const uvCacheDir = path.join(repoRoot, ".uv-cache");
 // API already bound to 8000 (e.g. a second agent's dev server). Default
 // is unchanged.
 export const apiPort = process.env.CASEOPS_E2E_API_PORT ?? "8000";
-export const webBaseUrl = "http://127.0.0.1:3000";
+export const webBaseUrl =
+  process.env.CASEOPS_WEB_BASE_URL ?? "http://127.0.0.1:3000";
 export const apiBaseUrl = `http://127.0.0.1:${apiPort}`;
 
 function toPosixPath(targetPath: string): string {
@@ -19,13 +20,16 @@ function toPosixPath(targetPath: string): string {
 }
 
 const databasePath = toPosixPath(path.join(repoRoot, "caseops-e2e.db"));
+const databaseUrl =
+  process.env.CASEOPS_E2E_DATABASE_URL?.trim() ||
+  `sqlite+pysqlite:///${databasePath}`;
 
 export const e2eEnv: Record<string, string> = {
   CASEOPS_ENV: "e2e",
   CASEOPS_API_HOST: "127.0.0.1",
   CASEOPS_API_PORT: apiPort,
   CASEOPS_AUTO_MIGRATE: "false",
-  CASEOPS_DATABASE_URL: `sqlite+pysqlite:///${databasePath}`,
+  CASEOPS_DATABASE_URL: databaseUrl,
   CASEOPS_AUTH_SECRET: "caseops-e2e-secret-caseops-e2e-secret",
   CASEOPS_PUBLIC_APP_URL: webBaseUrl,
   CASEOPS_CORS_ORIGINS: JSON.stringify([

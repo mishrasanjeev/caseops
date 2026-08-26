@@ -14,16 +14,16 @@
     "verification_status": "not_run",
     "release_status": "blocked",
     "execution_policy": "codex_owned_single_ordered_queue; implement first and run the automated check and exact-release verification batch at the end",
-    "active_slice": "IPLF-061A",
+    "active_slice": "IPLF-061B",
     "checkpoint": {
-      "recorded_at": "2026-08-26T19:25:00+05:30",
-      "repository_revision": "60328f48514ce1006c655bb274c2b1289c6a51c0",
-      "environment": "Canonical main 60328f48514ce1006c655bb274c2b1289c6a51c0 is deployed as API caseops-api-00368-gz2 and web caseops-web-00347-6pk at 100 percent latest-only traffic with immutable digests sha256:36e33ffafd506b837957683d20eae142960991100e6795188b78db579ac2692f and sha256:645248871d68158d0f23e6e3e421cdbd60e5348194ea022ebe754710a577faa7. Migration caseops-migrate-job-2kbqw, QA bootstrap caseops-ip-qa-bootstrap-228pp, eight-job scheduler reconciliation, health, exact-main CI 32973181583, Security, CodeQL, and production workflow 32973181645 passed. Judge refresh remains PAUSED.",
-      "completed_scope": "IPLF-060B, parent IPLF-060, IPLF-003B, and UJ-20 normal/exception paths are deployment-verified. The exact production release proves IPLF-060B's JUDGE-01 through JUDGE-10 behavior and TRUST-RSCH-02 source preservation on the judge workflow, including canonical browsing, source-backed pagination, confidence and coverage states, descriptive analytics fences, curator workflows, responsive UI, and deterministic non-analytics QA source canaries for Delhi, Bombay, and Madras. Aggregate JUDGE and TRUST-RSCH-02 requirement rows remain blocked because other allocating slices retain separate exact-release gates. The first release gate failed honestly on legacy production data; the corrective release preserved the fail-closed source boundary and then passed the unchanged production suite. Independent legal/provider/source and law-firm UAT acceptance remains external and is not claimed.",
+      "recorded_at": "2026-08-26T21:25:00+05:30",
+      "repository_revision": "bf223d8691f13c3f02fed5dcace901fe954d38b0",
+      "environment": "Canonical main bf223d8691f13c3f02fed5dcace901fe954d38b0 is deployed as API caseops-api-00369-29s and web caseops-web-00348-sls at 100 percent latest-only traffic with immutable digests sha256:eb60f829194fd135e7958b48e4dfcede0e5ce2001d49e1ce052905b07881eea2 and sha256:593cee6d253b7e7c36c349de770e89dbe43dd298ebf6622ff3256b3ce2221c69. Migration caseops-migrate-job-654ml, eight-job scheduler reconciliation, health, exact-main CI 32980337508, Security, and CodeQL passed. Production workflow 32980337509 completed with 87 passed, 4 skipped, and 1 failed: the independent recommendation-grounding path returned a false-positive unsafe-wording refusal for a safety disclaimer. Reviewed corrective candidate 989cd3ba6be9a1f2a6eef184c449e5ddb1e78e30 distinguishes explicit single negations from prohibited or double-negated assertions and requires whole meaningful Guide-token matches; 10 Guide tests, 34 recommendation tests, and 17 AI safety/token-governance tests pass locally. Judge refresh remains PAUSED. IPLF-061A is not yet merged or deployed.",
+      "completed_scope": "IPLF-060B, parent IPLF-060, IPLF-003B, and UJ-20 normal/exception paths remain deployment-verified. IPLF-061A is implemented and locally verified without claiming AI-GUIDE or UJ-22 completion: one reviewed Product Guide catalog now projects into both application build contexts, drives the existing /guide index and Sidebar, and provides bounded public catalog plus server-capability-filtered search contracts. Exact merged-main deployment proof for IPLF-061A remains pending. Independent legal/provider/source and law-firm UAT acceptance for judge-refresh activation remains external and is not claimed.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-061A",
-      "next_action": "Implement IPLF-061A against the existing /guide content owner without creating a second help corpus. Independently obtain legal/provider/source and law-firm UAT approval before any judge-refresh activation; retain the scheduler as PAUSED until then.",
-      "evidence_ref": "docs/ip-implementation/evidence/m6/IPLF-060B/release-2026-08-26.md"
+      "next_slice": "IPLF-061B",
+      "next_action": "Pass the complete PR matrix for the integrated IPLF-061A and recommendation correction candidate, merge to canonical main, deploy migration-first, and require the unchanged full production batch to pass before marking IPLF-061A deployment_verified. Then implement IPLF-061B's complete UJ-22 guidance workflow while preserving IPLF-062/064/065/066 ownership. Independently obtain legal/provider/source and law-firm UAT approval before any judge-refresh activation; retain the scheduler as PAUSED until then.",
+      "evidence_ref": "docs/ip-implementation/evidence/m6/IPLF-061A/local-2026-08-26.md"
     },
     "work_owner": {
       "owner": "Codex",
@@ -2261,10 +2261,12 @@
         "IPLF-061A",
         "IPLF-061B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
-      "evidence_refs": []
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-061A/local-2026-08-26.md"
+      ]
     },
     {
       "id": "IPLF-062",
@@ -14447,21 +14449,74 @@
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "docs/ip-implementation/PRODUCT_GUIDE_CATALOG.json",
+        "scripts/product_guide_catalog.py",
+        "apps/api/src/caseops_api/product_guide/catalog.generated.json",
+        "apps/api/src/caseops_api/services/product_guide.py",
+        "apps/api/src/caseops_api/api/routes/product_guide.py",
+        "apps/api/src/caseops_api/api/router.py",
+        "apps/web/lib/product-guide.generated.json",
+        "apps/web/lib/product-guide.ts",
+        "apps/web/components/app/Sidebar.tsx",
+        "apps/web/app/guide/page.tsx",
+        "apps/web/lib/api/openapi-types.ts",
+        ".github/workflows/ci.yml",
+        "playwright.prod-ram.config.ts"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_product_guide_catalog_gate.py",
+        "apps/api/tests/test_product_guide.py",
+        "apps/web/components/app/Sidebar.test.tsx",
+        "tests/e2e/public-content.spec.ts",
+        "tests/e2e/iplf-061a-product-guide-foundation-2026-08-26.spec.ts",
+        "tests/e2e/iplf-061a-product-guide-foundation-2026-08-26-prod.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-061A/local-2026-08-26.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m6/IPLF-061A/local-2026-08-26.md",
+          "revision": "989cd3ba6be9a1f2a6eef184c449e5ddb1e78e30",
+          "environment": "local API, web, deterministic catalog service, generated projections, and responsive browser candidate",
+          "fixtures": "27 approved guide sections, 43 navigation commands, fixed owner, capability-limited custom role, stale client version, denied command, punctuation-only query, and unsupported keyword query",
+          "assertions": "single-source projection parity, dead-route and unknown-capability rejection, public catalog privacy, anonymous search rejection, server permission filtering and immediate custom-role revocation, denied-command sanitization, abstention, no writes, bounded work, 360px and 1280px guide rendering, production-spec discovery, and integrated release-blocker correction preserving recommendation safety while accepting explicit negated disclaimers",
+          "result": "passed",
+          "recorded_at": "2026-08-26T20:25:00+05:30"
+        }
+      ],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Merge only after the complete CI matrix passes, deploy the exact main revision migration-first, and run the dated production guide acceptance before marking deployment_verified.",
+        "After exact-release proof, advance to IPLF-061B without adding assistant sessions, workspace retrieval, write proposals, feedback persistence, or analytics that belong to IPLF-062, IPLF-064, IPLF-065, or IPLF-066."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No schema change, migration, backfill, writer, audit event, analytics event, worker, scheduler, model call, or provider call. Runtime reads a bounded immutable catalog compiled into both application images."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/PRODUCT_GUIDE_FOUNDATION.md",
+          "disposition": "created",
+          "owner": "Engineering/Product/Security",
+          "evidence": "Canonical ownership, generated projection topology, read-only API contract, bounds, non-duplication boundaries, and rollback"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m6/IPLF-061A/local-2026-08-26.md",
+          "disposition": "created",
+          "owner": "Engineering/SRE",
+          "evidence": "Local implementation, negative gate cases, API/web tests, responsive browser acceptance, and exact-release gates"
+        },
+        {
+          "artifact": "apps/web/app/guide/page.tsx",
+          "disposition": "updated",
+          "owner": "Product/Marketing/Legal",
+          "evidence": "Versioned catalog metadata and reconciled 27-section contents including judge mapping"
+        }
+      ],
+      "allocation_review": "2026-08-26 brutal duplicate-work review against the current /guide, Sidebar, server capability resolver, PRD Sections 11, 15 UJ-22, 23, and 25, plus future IPLF-062/064/065/066 owners: extend the existing long-form guide and navigation catalog through one reviewed source and deterministic generated projections. Add only read-only versioned catalog/search contracts and server-owned command filtering. Do not create assistant sessions, workspace-record retrieval, model runs, action writers, feedback queues, analytics stores, workers, schedulers, or schema. The mechanically allocated AI-GUIDE rows and UJ-22 paths remain entirely with IPLF-061B and later reciprocal owners; this derived slice claims none. Local exact-source validation and dated responsive browser acceptance passed; merged-main deployment remains pending.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",

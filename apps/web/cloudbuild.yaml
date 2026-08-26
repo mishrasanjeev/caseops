@@ -1,0 +1,17 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --file
+      - apps/web/Dockerfile
+      - --tag
+      - ${_WEB_IMAGE}
+      - --build-arg
+      - CASEOPS_RELEASE_SHA=${_RELEASE_SHA}
+      - .
+
+images:
+  - ${_WEB_IMAGE}
+
+substitutions:
+  _RELEASE_SHA: unavailable

@@ -49,222 +49,67 @@ import {
   useRole,
 } from "@/lib/capabilities";
 import { cn } from "@/lib/cn";
+import {
+  PRODUCT_GUIDE_CATALOG,
+  type ProductGuideNavigationGroup,
+} from "@/lib/product-guide";
 
 type NavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
-  section: "overview" | "schedule" | "casework" | "ip" | "intel" | "admin";
-  placeholder?: boolean;
-  requiresCapability?: Capability;
+  section: ProductGuideNavigationGroup;
+  requiredCapabilities: readonly Capability[];
 };
 
-const NAV: NavItem[] = [
-  { href: "/app", label: "Home", icon: LayoutDashboard, section: "overview" },
-  // PG-004 (2026-05-01) — daily command center. Aggregates hearings
-  // / tasks / drafts in review / overdue invoices / deadlines for
-  // the current user. Pinned at the top of "Work" because most
-  // sessions start with "what must I do today".
-  { href: "/app/today", label: "Today", icon: Sun, section: "overview" },
-  { href: "/app/matters", label: "Matters", icon: Briefcase, section: "casework" },
-  { href: "/app/imports", label: "Import activity", icon: History, section: "casework" },
-  {
-    href: "/app/ip",
-    label: "IP docket",
-    icon: BookOpenCheck,
-    section: "ip",
-    requiresCapability: "ip:read",
-  },
-  {
-    href: "/app/ip/portfolio",
-    label: "Trademark portfolio",
-    icon: PanelsTopLeft,
-    section: "ip",
-    requiresCapability: "ip:read",
-  },
-  // CAL-OPS-09 / CAL-OPS-13 — deadline control: who holds what, what is
-  // unacknowledged, what is escalating, and the signed daily control review.
-  {
-    href: "/app/ip/docket",
-    label: "Deadline control",
-    icon: CalendarClock,
-    section: "ip",
-    requiresCapability: "ip:read",
-  },
-  {
-    href: "/app/ip/renewals",
-    label: "Trademark renewals",
-    icon: Repeat2,
-    section: "ip",
-    requiresCapability: "ip:read",
-  },
-  {
-    href: "/app/ip/madrid",
-    label: "Madrid portfolio",
-    icon: Globe2,
-    section: "ip",
-    requiresCapability: "ip:read",
-  },
-  {
-    href: "/app/ip/recordals",
-    label: "Post-registration",
-    icon: FileClock,
-    section: "ip",
-    requiresCapability: "ip:read",
-  },
-  {
-    href: "/app/ip/foreign-associates",
-    label: "Foreign associates",
-    icon: Contact,
-    section: "ip",
-    requiresCapability: "ip:read",
-  },
-  {
-    href: "/app/ip/registry",
-    label: "Registry reconciliation",
-    icon: Database,
-    section: "ip",
-    requiresCapability: "ip:read",
-  },
-  {
-    href: "/app/ip/watch",
-    label: "Journal watch",
-    icon: Radar,
-    section: "ip",
-    requiresCapability: "ip:read",
-  },
-  {
-    href: "/app/ip/reports",
-    label: "IP reports",
-    icon: FileChartColumn,
-    section: "ip",
-    requiresCapability: "ip:read",
-  },
-  {
-    href: "/app/ip/client-portal",
-    label: "IP client portal",
-    icon: UserRoundCheck,
-    section: "ip",
-    requiresCapability: "portal:manage_grants",
-  },
-  { href: "/app/notices", label: "Notices", icon: Bell, section: "casework" },
-  {
-    href: "/app/intake",
-    label: "Intake",
-    icon: Inbox,
-    section: "casework",
-    requiresCapability: "intake:submit",
-  },
-  { href: "/app/hearings", label: "Hearings", icon: Gavel, section: "schedule" },
-  { href: "/app/cause-list", label: "Cause list", icon: ListChecks, section: "schedule" },
-  // Phase B / J08 / M08 — unified view across hearings + tasks +
-  // matter_deadlines. Closes BUG-029.
-  { href: "/app/calendar", label: "Calendar", icon: CalendarDays, section: "schedule" },
-  { href: "/app/mailbox", label: "Mailbox", icon: Inbox, section: "casework" },
-  { href: "/app/drive", label: "Drive", icon: HardDrive, section: "casework" },
-  { href: "/app/research", label: "Research", icon: LibraryBig, section: "intel" },
-  { href: "/app/drafting", label: "Drafting", icon: FileSignature, section: "intel" },
-  {
-    href: "/app/recommendations",
-    label: "Recommendations",
-    icon: Sparkles,
-    section: "intel",
-  },
-  { href: "/app/contracts", label: "Contracts", icon: Scale, section: "casework" },
-  {
-    href: "/app/clients",
-    label: "Clients",
-    icon: Contact,
-    section: "casework",
-    requiresCapability: "clients:view",
-  },
-  {
-    href: "/app/outside-counsel",
-    label: "Outside Counsel",
-    icon: Users,
-    section: "casework",
-  },
-  { href: "/app/portfolio", label: "Portfolio", icon: PanelsTopLeft, section: "intel" },
-  { href: "/app/courts", label: "Courts", icon: Gavel, section: "intel" },
-  { href: "/app/statutes", label: "Statutes", icon: BookOpenCheck, section: "intel" },
-  {
-    href: "/app/case-tracking",
-    label: "Case tracking",
-    icon: Bookmark,
-    section: "intel",
-    requiresCapability: "authorities:search",
-  },
-  {
-    href: "/app/admin",
-    label: "Admin",
-    icon: Wrench,
-    section: "admin",
-    requiresCapability: "workspace:admin",
-  },
-  {
-    href: "/app/admin/billing",
-    label: "Billing",
-    icon: CreditCard,
-    section: "admin",
-    requiresCapability: "workspace:admin",
-  },
-  {
-    href: "/app/admin/integrations",
-    label: "Integrations",
-    icon: PlugZap,
-    section: "admin",
-    requiresCapability: "workspace:admin",
-  },
-  {
-    href: "/app/admin/microsoft365",
-    label: "Microsoft 365",
-    icon: PlugZap,
-    section: "admin",
-    requiresCapability: "workspace:admin",
-  },
-  {
-    href: "/app/admin/inbound-email",
-    label: "Inbound email",
-    icon: Inbox,
-    section: "admin",
-    requiresCapability: "workspace:admin",
-  },
-  {
-    href: "/app/admin/matter-billing",
-    label: "Matter billing",
-    icon: CreditCard,
-    section: "admin",
-    requiresCapability: "workspace:admin",
-  },
-  {
-    href: "/app/admin/judge-aliases",
-    label: "Judge aliases",
-    icon: Languages,
-    section: "admin",
-    requiresCapability: "workspace:admin",
-  },
-  {
-    href: "/app/platform-admin",
-    label: "Platform admin",
-    icon: ShieldCheck,
-    section: "admin",
-    requiresCapability: "platform:admin",
-  },
-  {
-    href: "/app/platform-admin/costs",
-    label: "Platform costs",
-    icon: CreditCard,
-    section: "admin",
-    requiresCapability: "platform:admin",
-  },
-  {
-    href: "/app/notification-preferences",
-    label: "Notifications",
-    icon: ListTodo,
-    section: "admin",
-  },
-  { href: "/guide", label: "User guide", icon: BookOpenText, section: "admin" },
-];
+const ICON_BY_NAME: Record<string, LucideIcon> = {
+  Bell,
+  Bookmark,
+  BookOpenCheck,
+  BookOpenText,
+  Briefcase,
+  CalendarClock,
+  CalendarDays,
+  Contact,
+  CreditCard,
+  Database,
+  FileChartColumn,
+  FileClock,
+  FileSignature,
+  Gavel,
+  Globe2,
+  HardDrive,
+  History,
+  Inbox,
+  Languages,
+  LayoutDashboard,
+  LibraryBig,
+  ListChecks,
+  ListTodo,
+  PanelsTopLeft,
+  PlugZap,
+  Radar,
+  Repeat2,
+  Scale,
+  ShieldCheck,
+  Sparkles,
+  Sun,
+  UserRoundCheck,
+  Users,
+  Wrench,
+};
+
+const NAV_ITEMS: NavItem[] = PRODUCT_GUIDE_CATALOG.commands.map((command) => {
+  const icon = ICON_BY_NAME[command.icon];
+  if (!icon) throw new Error(`Unknown Product Guide icon: ${command.icon}`);
+  return {
+    href: command.href,
+    label: command.label,
+    icon,
+    section: command.group,
+    requiredCapabilities: command.required_capabilities,
+  };
+});
 
 // Order is the reading order of the sidebar. "Work" previously held 17 of the
 // 33 destinations in one flat list, which is more than anyone scans, and it mixed
@@ -272,14 +117,7 @@ const NAV: NavItem[] = [
 // below separate *what must I do* from *when is it* from *what is it about*, so
 // a lawyer arriving in the morning has one obvious starting point rather than
 // six plausible ones.
-const SECTION_LABEL: Record<NavItem["section"], string> = {
-  overview: "Overview",
-  schedule: "Schedule",
-  casework: "Casework",
-  ip: "Intellectual property",
-  intel: "Intelligence",
-  admin: "Workspace",
-};
+const SECTION_LABEL = PRODUCT_GUIDE_CATALOG.navigation_groups;
 
 // Ram-BUG-005 (2026-04-22): the inner nav body is split out so the
 // mobile hamburger trigger in Topbar can render the same content
@@ -293,12 +131,14 @@ export function SidebarBody({
 }) {
   const role = useRole();
   const resolvedCapabilities = useResolvedCapabilities();
-  const visible = NAV.filter((item) => {
-    if (!item.requiresCapability) return true;
+  const visible = NAV_ITEMS.filter((item) => {
+    if (item.requiredCapabilities.length === 0) return true;
     if (resolvedCapabilities) {
-      return resolvedCapabilities.includes(item.requiresCapability);
+      return item.requiredCapabilities.every((capability) =>
+        resolvedCapabilities.includes(capability),
+      );
     }
-    return can(role, item.requiresCapability);
+    return item.requiredCapabilities.every((capability) => can(role, capability));
   });
   const grouped = Object.entries(SECTION_LABEL)
     .map(([key, label]) => ({
@@ -388,17 +228,6 @@ function NavLink({
       <span className="flex-1" aria-hidden>
         {item.label}
       </span>
-      {item.placeholder ? (
-        <span
-          aria-hidden
-          className={cn(
-            "rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
-            active ? "bg-white/10 text-white" : "bg-[var(--color-bg-2)] text-[var(--color-mute)]",
-          )}
-        >
-          Preview
-        </span>
-      ) : null}
       <ChevronsRight
         aria-hidden
         className={cn(
@@ -416,6 +245,6 @@ function isActive(pathname: string | null, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export const APP_NAV = NAV;
+export const APP_NAV = NAV_ITEMS;
 export const APP_SECTIONS = SECTION_LABEL;
 export { ListTodo };

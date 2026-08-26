@@ -234,7 +234,7 @@ test("IPLF-037B completes UJ-26 and renewal exception paths", async ({ page }) =
         "session=get_session_factory()()",
         "renewal=session.get(IpDeadline,os.environ['RENEWAL_ID'])",
         "grace=session.get(IpDeadline,os.environ['GRACE_ID'])",
-        "renewal.result_on=date.today()-timedelta(days=1)",
+        "renewal.result_on=date.today()-timedelta(days=7)",
         "grace.result_on=date.today()+timedelta(days=30)",
         "session.commit()",
         "session.close()",
