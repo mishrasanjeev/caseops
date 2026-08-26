@@ -16,13 +16,13 @@
     "execution_policy": "codex_owned_single_ordered_queue; implement first and run the automated check and exact-release verification batch at the end",
     "active_slice": "IPLF-061B",
     "checkpoint": {
-      "recorded_at": "2026-08-26T20:35:00+05:30",
+      "recorded_at": "2026-08-26T21:25:00+05:30",
       "repository_revision": "bf223d8691f13c3f02fed5dcace901fe954d38b0",
-      "environment": "Canonical main bf223d8691f13c3f02fed5dcace901fe954d38b0 is deployed as API caseops-api-00369-29s and web caseops-web-00348-sls at 100 percent latest-only traffic with immutable digests sha256:eb60f829194fd135e7958b48e4dfcede0e5ce2001d49e1ce052905b07881eea2 and sha256:593cee6d253b7e7c36c349de770e89dbe43dd298ebf6622ff3256b3ce2221c69. Migration caseops-migrate-job-654ml, eight-job scheduler reconciliation, health, exact-main CI 32980337508, Security, and CodeQL passed; production workflow 32980337509 is still running its unchanged full batch. Judge refresh remains PAUSED. IPLF-061A local candidate 2e80706d53bd47cea14bea6dc9418cf6d803c841 passed focused API/web, projection, production-build, and responsive browser checks but is not yet merged or deployed.",
+      "environment": "Canonical main bf223d8691f13c3f02fed5dcace901fe954d38b0 is deployed as API caseops-api-00369-29s and web caseops-web-00348-sls at 100 percent latest-only traffic with immutable digests sha256:eb60f829194fd135e7958b48e4dfcede0e5ce2001d49e1ce052905b07881eea2 and sha256:593cee6d253b7e7c36c349de770e89dbe43dd298ebf6622ff3256b3ce2221c69. Migration caseops-migrate-job-654ml, eight-job scheduler reconciliation, health, exact-main CI 32980337508, Security, and CodeQL passed. Production workflow 32980337509 completed with 87 passed, 4 skipped, and 1 failed: the independent recommendation-grounding path returned a false-positive unsafe-wording refusal for a safety disclaimer. Corrective candidate 30a23bad7dffb4dae02bff45edb74126f3ee32ae distinguishes explicit negated safety mentions from prohibited assertions; 33 recommendation tests and 17 AI safety/token-governance tests pass locally. Judge refresh remains PAUSED. IPLF-061A is not yet merged or deployed.",
       "completed_scope": "IPLF-060B, parent IPLF-060, IPLF-003B, and UJ-20 normal/exception paths remain deployment-verified. IPLF-061A is implemented and locally verified without claiming AI-GUIDE or UJ-22 completion: one reviewed Product Guide catalog now projects into both application build contexts, drives the existing /guide index and Sidebar, and provides bounded public catalog plus server-capability-filtered search contracts. Exact merged-main deployment proof for IPLF-061A remains pending. Independent legal/provider/source and law-firm UAT acceptance for judge-refresh activation remains external and is not claimed.",
       "program_state": "PROGRAM INCOMPLETE",
       "next_slice": "IPLF-061B",
-      "next_action": "Merge and exact-release verify IPLF-061A, then implement IPLF-061B's complete UJ-22 guidance workflow while preserving IPLF-062/064/065/066 ownership. Independently obtain legal/provider/source and law-firm UAT approval before any judge-refresh activation; retain the scheduler as PAUSED until then.",
+      "next_action": "Pass the complete PR matrix for the integrated IPLF-061A and recommendation correction candidate, merge to canonical main, deploy migration-first, and require the unchanged full production batch to pass before marking IPLF-061A deployment_verified. Then implement IPLF-061B's complete UJ-22 guidance workflow while preserving IPLF-062/064/065/066 ownership. Independently obtain legal/provider/source and law-firm UAT approval before any judge-refresh activation; retain the scheduler as PAUSED until then.",
       "evidence_ref": "docs/ip-implementation/evidence/m6/IPLF-061A/local-2026-08-26.md"
     },
     "work_owner": {
@@ -14478,10 +14478,10 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m6/IPLF-061A/local-2026-08-26.md",
-          "revision": "e84289d6c5433a73cc36c1773b3d64286465ecf6",
+          "revision": "30a23bad7dffb4dae02bff45edb74126f3ee32ae",
           "environment": "local API, web, deterministic catalog service, generated projections, and responsive browser candidate",
           "fixtures": "27 approved guide sections, 43 navigation commands, fixed owner, capability-limited custom role, stale client version, denied command, punctuation-only query, and unsupported keyword query",
-          "assertions": "single-source projection parity, dead-route and unknown-capability rejection, public catalog privacy, anonymous search rejection, server permission filtering and immediate custom-role revocation, denied-command sanitization, abstention, no writes, bounded work, 360px and 1280px guide rendering, and production-spec discovery",
+          "assertions": "single-source projection parity, dead-route and unknown-capability rejection, public catalog privacy, anonymous search rejection, server permission filtering and immediate custom-role revocation, denied-command sanitization, abstention, no writes, bounded work, 360px and 1280px guide rendering, production-spec discovery, and integrated release-blocker correction preserving recommendation safety while accepting explicit negated disclaimers",
           "result": "passed",
           "recorded_at": "2026-08-26T20:25:00+05:30"
         }
