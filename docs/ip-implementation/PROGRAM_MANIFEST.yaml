@@ -16,14 +16,14 @@
     "execution_policy": "codex_owned_single_ordered_queue; implement first and run the automated check and exact-release verification batch at the end",
     "active_slice": "IPLF-060A",
     "checkpoint": {
-      "recorded_at": "2026-08-26T03:50:00+05:30",
-      "repository_revision": "75480807f78cb0f396ba81d4f7ad452b515876a8",
-      "environment": "IPLF-059A is deployment-verified on canonical main. IPLF-059B passed locked local API, schema, component, typecheck, OpenAPI, Ruff and fresh-tenant desktop/mobile Playwright acceptance; hosted candidate gates and exact-release production acceptance remain pending.",
-      "completed_scope": "IPLF-059B implements the UJ-37 operator workspace, shared-notification acknowledgement reminders/escalation, all five normal/exception paths, source opening, finance reconciliation, responsive UI, guide and truthful law-firm claims without duplicating platform owners.",
+      "recorded_at": "2026-08-26T08:32:47+05:30",
+      "repository_revision": "a3de6fc41c9b4cb8abcb4b376b774938f633f1b5",
+      "environment": "IPLF-059A and IPLF-059B are deployment-verified on canonical main. Exact-release production workflow 32922870509 passed UJ-37, the complete RAM batch, IPLF-027B quiescence and the Notice upload module on API revision caseops-api-00360-8c6 and web revision caseops-web-00338-vjf.",
+      "completed_scope": "IPLF-059B and parent IPLF-059 now have hosted, migration-first, latest-only and dated production proof for the UJ-37 operator workspace, shared-notification acknowledgement reminders/escalation, all five normal/exception paths, source opening, finance reconciliation, responsive UI, guide and truthful law-firm claims without duplicating platform owners.",
       "program_state": "PROGRAM INCOMPLETE",
       "next_slice": "IPLF-060A",
-      "next_action": "Release IPLF-059B through hosted gates, exact-main deployment and production UJ-37 acceptance while beginning IPLF-060A only after its ownership and duplicate-work boundary is re-audited.",
-      "evidence_ref": "docs/ip-implementation/evidence/m5/IPLF-059/local-059b-2026-08-26.md"
+      "next_action": "Complete IPLF-060A canonical judge/bench mapping release proof, then implement IPLF-060B user workflow and exception coverage without creating a second authority or judgement owner.",
+      "evidence_ref": "docs/ip-implementation/evidence/m5/IPLF-059/release-059b-2026-08-26.md"
     },
     "work_owner": {
       "owner": "Codex",
@@ -2194,11 +2194,12 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "evidence_refs": [
         "docs/ip-implementation/evidence/m5/IPLF-059/local-059a-2026-08-26.md",
         "docs/ip-implementation/evidence/m5/IPLF-059/release-059a-2026-08-26.md",
-        "docs/ip-implementation/evidence/m5/IPLF-059/local-059b-2026-08-26.md"
+        "docs/ip-implementation/evidence/m5/IPLF-059/local-059b-2026-08-26.md",
+        "docs/ip-implementation/evidence/m5/IPLF-059/release-059b-2026-08-26.md"
       ]
     },
     {
@@ -14012,7 +14013,8 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m5/IPLF-059/local-059b-2026-08-26.md",
-        "docs/ip-implementation/evidence/m5/IPLF-059/production-reminder-fix-local-2026-08-26.md"
+        "docs/ip-implementation/evidence/m5/IPLF-059/production-reminder-fix-local-2026-08-26.md",
+        "docs/ip-implementation/evidence/m5/IPLF-059/release-059b-2026-08-26.md"
       ],
       "evidence_metadata": [
         {
@@ -14032,21 +14034,20 @@
           "assertions": "PostgreSQL production failure root cause, four-owner event-type width correction, guarded migration/rollback, idempotent eight-reminder journey, and complete mobile grouped navigation",
           "result": "passed",
           "recorded_at": "2026-08-26T05:15:00+05:30"
-        }
-      ],
-      "blockers": [
+        },
         {
-          "id": "IPLF-059B-PROD-GATE-32908466923",
-          "summary": "Production verifier 32908466923 failed the IPLF-059B reminder request on release 398c822 and exposed a stale navigation oracle; implementation revision 91c902fa fixes both but is not yet merged, deployed or production-verified.",
-          "owner": "Engineering/SRE",
-          "evidence_needed": "Pass hosted CI, Security and CodeQL for the exact fix, merge it to main, deploy the migration-first candidate, and pass the unchanged complete dated exact-release production acceptance including UJ-37 and mobile navigation.",
-          "safe_fallback": "Keep IPLF-059B release claims blocked and do not schedule source-qualified foreign-associate reminders on the failed production revision; retain the existing fail-closed API error until the widened shared notification contract is deployed.",
-          "milestone_impact": "Blocks IPLF-059B, UJ-37, parent IPLF-059 and M5 release closure while leaving the locally verified implementation available for independent review.",
-          "next_independent_slice": "IPLF-060A canonical judge/bench mapping foundation."
+          "ref": "docs/ip-implementation/evidence/m5/IPLF-059/release-059b-2026-08-26.md",
+          "revision": "a3de6fc41c9b4cb8abcb4b376b774938f633f1b5",
+          "environment": "Canonical main deployed migration-first to caseops-api-00360-8c6 and caseops-web-00338-vjf with latest-only traffic; GitHub exact-release production workflow 32922870509",
+          "fixtures": "Dedicated law-firm QA tenant with synthetic Matter-linked trademark docket, foreign-associate instruction and reminder schedule, public/privileged sources, finance records, A0 governance fixtures, and received/reply/sent Notice uploads",
+          "assertions": "Hosted gates, exact release identity, all five UJ-37 paths, responsive source-backed UI, 87-test RAM batch, A0 quiescence, three successful Notice attachment uploads, zero Notice-window 5xx and zero current-revision deadlocks",
+          "result": "passed",
+          "recorded_at": "2026-08-26T08:32:47+05:30"
         }
       ],
+      "blockers": [],
       "next_actions": [
-        "Pass hosted CI, Security and CodeQL for the production fix, merge the exact candidate to main, deploy it migration-first, and pass the complete dated exact-release production acceptance."
+        "Keep independent legal/provider/law-firm UAT tracked as external acceptance and advance the single Codex queue to IPLF-060A."
       ],
       "data_impact": [
         "Widen the shared notification event_type contract from VARCHAR(40) to VARCHAR(80) across rules, in-app rows, durable intents and delivery events so source-qualified IPLF-059B names persist consistently; no new data class or owner is added.",
@@ -14083,12 +14084,18 @@
           "disposition": "created",
           "owner": "Engineering/SRE",
           "evidence": "Failed production run, exact PostgreSQL root cause, guarded width migration, corrected navigation oracle and local rerun evidence"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m5/IPLF-059/release-059b-2026-08-26.md",
+          "disposition": "created",
+          "owner": "Engineering/SRE",
+          "evidence": "Hosted gates, exact migration-first deployment, UJ-37 production acceptance, Notice deadlock repair and remaining external acceptance boundary"
         }
       ],
-      "allocation_review": "2026-08-26 brutal duplicate-work review: IPLF-059B extends the IPLF-059A service and shared NotificationDeliveryIntent projection. It links existing outside-counsel, assignment/spend, Communication, document, deadline, cost, Matter invoice, access, audit and docket-event owners; no duplicate directory, mailer, store, ledger, scheduler, permission model or event log was added.",
+      "allocation_review": "2026-08-26 brutal duplicate-work review: IPLF-059B extends the IPLF-059A service and shared NotificationDeliveryIntent projection. It links existing outside-counsel, assignment/spend, Communication, document, deadline, cost, Matter invoice, access, audit and docket-event owners; no duplicate directory, mailer, store, ledger, scheduler, permission model or event log was added. Exact release a3de6fc and workflow 32922870509 close the engineering release boundary without converting independent legal/provider/law-firm UAT into repository work.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
@@ -41758,11 +41765,12 @@
         "apps/api/tests/test_ip_059b_foreign_associate_journeys.py::test_uj37_normal_reminders_are_idempotent_and_stop_on_acknowledgement#IPLF-UJ-37-NORMAL"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-059/local-059b-2026-08-26.md"
+        "docs/ip-implementation/evidence/m5/IPLF-059/local-059b-2026-08-26.md",
+        "docs/ip-implementation/evidence/m5/IPLF-059/release-059b-2026-08-26.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-059B"
       ]
@@ -51035,11 +51043,12 @@
         "apps/api/tests/test_ip_059b_foreign_associate_journeys.py::test_uj37_normal_reminders_are_idempotent_and_stop_on_acknowledgement#IPLF-UJ-37-NORMAL"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-059/local-059b-2026-08-26.md"
+        "docs/ip-implementation/evidence/m5/IPLF-059/local-059b-2026-08-26.md",
+        "docs/ip-implementation/evidence/m5/IPLF-059/release-059b-2026-08-26.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-059B"
       ],
@@ -51058,11 +51067,12 @@
         "apps/api/tests/test_ip_059a_foreign_associate_foundation.py::test_foreign_associate_refusal_reassignment_preserves_versioned_history#IPLF-UJ-37-EXC-01"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-059/local-059b-2026-08-26.md"
+        "docs/ip-implementation/evidence/m5/IPLF-059/local-059b-2026-08-26.md",
+        "docs/ip-implementation/evidence/m5/IPLF-059/release-059b-2026-08-26.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-059B"
       ],
@@ -51081,11 +51091,12 @@
         "apps/api/tests/test_ip_059a_foreign_associate_foundation.py::test_foreign_associate_contract_separates_delivery_ack_and_evidence#IPLF-UJ-37-EXC-02"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-059/local-059b-2026-08-26.md"
+        "docs/ip-implementation/evidence/m5/IPLF-059/local-059b-2026-08-26.md",
+        "docs/ip-implementation/evidence/m5/IPLF-059/release-059b-2026-08-26.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-059B"
       ],
@@ -51105,11 +51116,12 @@
         "apps/api/tests/test_ip_059b_foreign_associate_journeys.py::test_uj37_normal_reminders_are_idempotent_and_stop_on_acknowledgement#IPLF-UJ-37-EXC-03"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-059/local-059b-2026-08-26.md"
+        "docs/ip-implementation/evidence/m5/IPLF-059/local-059b-2026-08-26.md",
+        "docs/ip-implementation/evidence/m5/IPLF-059/release-059b-2026-08-26.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-059B"
       ],
@@ -51128,11 +51140,12 @@
         "apps/api/tests/test_ip_059a_foreign_associate_foundation.py::test_foreign_associate_contract_separates_delivery_ack_and_evidence#IPLF-UJ-37-EXC-04"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-059/local-059b-2026-08-26.md"
+        "docs/ip-implementation/evidence/m5/IPLF-059/local-059b-2026-08-26.md",
+        "docs/ip-implementation/evidence/m5/IPLF-059/release-059b-2026-08-26.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-059B"
       ],
