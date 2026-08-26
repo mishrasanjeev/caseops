@@ -157,6 +157,13 @@ def test_recordal_workspace_can_load_only_selected_docket_documents(
         membership_id=membership_id,
         docket_id=other["id"],
     )
+    reviewed = _reviewed_assignment(
+        client,
+        headers=headers,
+        membership_id=membership_id,
+        docket=docket,
+        document_id=document_id,
+    )
 
     response = client.get(
         "/api/ip/documents",
@@ -168,3 +175,15 @@ def test_recordal_workspace_can_load_only_selected_docket_documents(
     assert response.json()["total"] == 1
     assert [row["id"] for row in response.json()["items"]] == [document_id]
     assert other_document_id not in {row["id"] for row in response.json()["items"]}
+
+    workspace = client.get(
+        f"/api/ip/recordals/{reviewed['recordal']['id']}/workspace",
+        headers=headers,
+    )
+
+    assert workspace.status_code == 200, workspace.text
+    aggregate = workspace.json()
+    assert aggregate["docket"]["id"] == docket["id"]
+    assert [row["id"] for row in aggregate["documents"]] == [document_id]
+    assert other_document_id not in {row["id"] for row in aggregate["documents"]}
+    assert aggregate["deadline_workspace"]["docket_id"] == docket["id"]

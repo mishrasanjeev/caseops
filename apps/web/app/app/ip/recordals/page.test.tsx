@@ -15,13 +15,9 @@ import type {
 const mocks = vi.hoisted(() => ({
   capability: vi.fn(),
   create: vi.fn(),
-  deadlines: vi.fn(),
-  docket: vi.fn(),
   dockets: vi.fn(),
   documents: vi.fn(),
-  documentsForDocket: vi.fn(),
   recordals: vi.fn(),
-  registry: vi.fn(),
   transaction: vi.fn(),
   workspace: vi.fn(),
 }));
@@ -33,14 +29,10 @@ vi.mock("@/lib/api/endpoints", async () => {
   return {
     ...actual,
     createIpRecordal: mocks.create,
-    fetchIpDeadlineWorkspace: mocks.deadlines,
-    fetchIpDocket: mocks.docket,
     fetchIpDockets: mocks.dockets,
     fetchIpDocuments: mocks.documents,
-    fetchIpDocumentsForDocket: mocks.documentsForDocket,
     fetchIpRecordals: mocks.recordals,
     fetchIpRecordalWorkspace: mocks.workspace,
-    fetchIpRegistryWorkspaces: mocks.registry,
     recordIpRecordalTransaction: mocks.transaction,
   };
 });
@@ -162,7 +154,10 @@ const DOCKET = {
   updated_at: "2026-07-20T00:00:00Z",
 } as unknown as IpDocket;
 
-const WORKSPACE: IpRecordalWorkspace = {
+const WORKSPACE_CORE: Omit<
+  IpRecordalWorkspace,
+  "docket" | "documents" | "registry_workspaces" | "deadline_workspace"
+> = {
   recordal: RECORDAL,
   transactions: [{
     id: "event-1", company_id: "company-1", docket_id: "docket-1", sequence: 1,
@@ -196,6 +191,21 @@ const REGISTRY = {
   snapshots: [{ id: "snapshot-1", company_id: "company-1", link_id: "registry-link-1", attempt_id: "attempt-1", source_url: "https://ipindia.gov.in/fixture/TM-10001", source_retrieved_at: "2026-08-25T00:00:00Z", parser_version: "manual-v1", schema_version: 1, attribution_json: {}, terms_version: null, raw_sha256: "raw", normalized_sha256: "normalized", supersedes_snapshot_id: null, correction_reason: null, created_at: "2026-08-25T00:00:00Z" }],
 } as unknown as IpRegistryWorkspace;
 
+const WORKSPACE: IpRecordalWorkspace = {
+  ...WORKSPACE_CORE,
+  docket: DOCKET,
+  documents: [DOCUMENT],
+  registry_workspaces: [REGISTRY],
+  deadline_workspace: {
+    docket_id: "docket-1",
+    rules: [],
+    calendars: [],
+    deadlines: [],
+    exceptions: [],
+    automation_state: "explicit_confirmation_only",
+  },
+};
+
 function wrapper() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
@@ -205,14 +215,10 @@ describe("post-registration workspace", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.capability.mockReturnValue(true);
-    mocks.docket.mockResolvedValue(DOCKET);
     mocks.dockets.mockResolvedValue({ dockets: [DOCKET], count: 1 });
     mocks.documents.mockResolvedValue({ items: [DOCUMENT], total: 1 });
-    mocks.documentsForDocket.mockResolvedValue({ items: [DOCUMENT], total: 1 });
     mocks.recordals.mockResolvedValue({ items: [RECORDAL], total: 1, limit: 100, offset: 0 });
     mocks.workspace.mockResolvedValue(WORKSPACE);
-    mocks.registry.mockResolvedValue({ items: [REGISTRY], total: 1, limit: 25, offset: 0 });
-    mocks.deadlines.mockResolvedValue({ docket_id: "docket-1", rules: [], calendars: [], deadlines: [], exceptions: [], automation_state: "explicit_confirmation_only" });
     mocks.transaction.mockResolvedValue({ recordal: { ...RECORDAL, status: "accepted", version: 4 }, event: WORKSPACE.transactions[0], projected_title_interests: [DOCKET.title_interests[1]], registry_projection_applied: true });
   });
 
@@ -272,11 +278,27 @@ describe("post-registration workspace", () => {
     expect(await screen.findByRole("heading", { name: "Assignment" })).toBeVisible();
     expect(screen.getByRole("tab", { name: "Recordal" })).toBeVisible();
     expect(mocks.dockets).not.toHaveBeenCalled();
-    expect(mocks.documentsForDocket).toHaveBeenCalledWith("docket-1");
+    expect(mocks.workspace).toHaveBeenCalledWith("recordal-1");
 
     await user.click(screen.getByRole("tab", { name: "Title at date" }));
     expect(screen.getByRole("heading", { name: "Registry-recorded position" })).toBeVisible();
     expect(mocks.dockets).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps responsive tabs available while one aggregate request is pending", async () => {
+    const pendingWorkspace = new Promise<never>(() => undefined);
+    mocks.workspace.mockReturnValue(pendingWorkspace);
+
+    render(<RecordalsPage />, { wrapper: wrapper() });
+
+    expect(await screen.findByRole("heading", { name: "Assignment" })).toBeVisible();
+    for (const name of ["Recordal", "Title at date", "Evidence and controls", "History"]) {
+      expect(screen.getByRole("tab", { name })).toBeVisible();
+    }
+    expect(screen.getByTestId("recordal-workspace-loading")).toBeVisible();
+    expect(mocks.workspace).toHaveBeenCalledTimes(1);
+    expect(mocks.dockets).not.toHaveBeenCalled();
+    expect(mocks.documents).not.toHaveBeenCalled();
   });
 
   it("does not call recordal APIs without IP read access", () => {

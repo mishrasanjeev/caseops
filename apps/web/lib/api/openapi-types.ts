@@ -27337,9 +27337,15 @@ export interface components {
         IpRecordalWorkspaceResponse: {
             /** Current Registered Interests */
             current_registered_interests: components["schemas"]["IpTitleInterestRecord"][];
+            deadline_workspace: components["schemas"]["IpDeadlineWorkspaceResponse"];
+            docket: components["schemas"]["IpDocketRecordResponse"];
+            /** Documents */
+            documents?: components["schemas"]["IpDocumentRecord"][];
             /** Pending Interests */
             pending_interests: components["schemas"]["IpTitleInterestRecord"][];
             recordal: components["schemas"]["IpRecordalResponse"];
+            /** Registry Workspaces */
+            registry_workspaces?: components["schemas"]["IpRegistryWorkspaceResponse"][];
             /** Title Interests */
             title_interests: components["schemas"]["IpTitleInterestRecord"][];
             /** Transactions */
