@@ -12,6 +12,8 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = (Resolve-Path "$PSScriptRoot\..").Path
 $ComposeProject = "caseops-acceptance"
 $ComposeFile = Join-Path $RepoRoot "docker-compose.yml"
+$ApiDir = Join-Path $RepoRoot "apps\api"
+$ApiPython = Join-Path $ApiDir ".venv\Scripts\python.exe"
 $ApiPort = "18000"
 $WebPort = "13100"
 $PostgresPort = "25432"
@@ -60,6 +62,14 @@ foreach ($Name in $AcceptanceEnvironment.Keys) {
 $Succeeded = $false
 try {
     Write-Host "[docker-acceptance] exact candidate $ReleaseSha"
+    Write-Host "[docker-acceptance] preparing frozen host test dependencies"
+    & npm ci --no-audit --no-fund
+    if ($LASTEXITCODE -ne 0) { throw "Host Node dependency sync failed." }
+    & uv sync --project $ApiDir --frozen
+    if ($LASTEXITCODE -ne 0) { throw "Host API dependency sync failed." }
+    & $ApiPython -c "import caseops_api, psycopg, sqlalchemy"
+    if ($LASTEXITCODE -ne 0) { throw "Host API fixture dependencies or project package are unavailable." }
+
     Write-Host "[docker-acceptance] resetting isolated project $ComposeProject"
     & docker compose --project-name $ComposeProject --file $ComposeFile down --volumes --remove-orphans
     if ($LASTEXITCODE -ne 0) { throw "Could not reset the isolated Compose project." }
