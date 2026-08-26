@@ -16,14 +16,14 @@
     "execution_policy": "codex_owned_single_ordered_queue; implement first and run the automated check and exact-release verification batch at the end",
     "active_slice": "IPLF-060B",
     "checkpoint": {
-      "recorded_at": "2026-08-26T12:02:00+05:30",
-      "repository_revision": "527adb8d48043b7a6087a4bce7c0026aa95e5cc6",
-      "environment": "IPLF-059A, IPLF-059B, and IPLF-060A are deployment-verified on canonical main through exact release 527adb8d48043b7a6087a4bce7c0026aa95e5cc6. API caseops-api-00363-qrp and web caseops-web-00342-2f9 serve 100 percent latest-only traffic; migration and eight-job scheduler reconciliation passed, including the paused exact-digest judge refresh job; exact-main CI 32935750625 and production workflow 32935750622 passed.",
-      "completed_scope": "IPLF-060A extends the existing judge/bench/authority owners with sourced aliases, fail-closed mapping review, atomic curator resolution and merge, raw mapping lineage, analytics admission, migration replay/restore-forward controls, governed OpenAPI/data inventory, and a deployed but paused bounded refresh job. Exact-main and production release gates passed. It makes no IPLF-060B, JUDGE, or UJ-20 completion claim.",
+      "recorded_at": "2026-08-26T14:41:00+05:30",
+      "repository_revision": "3ce3e93e7ee07161c396344e0fe24d7a162216c2",
+      "environment": "IPLF-059A, IPLF-059B, and IPLF-060A are deployment-verified on canonical main through exact release 3ce3e93e7ee07161c396344e0fe24d7a162216c2. API caseops-api-00365-gqq and web caseops-web-00344-hkp serve 100 percent latest-only traffic; migration caseops-migrate-job-qv5m4 and eight-job scheduler reconciliation passed, including governed paused jobs; exact-main CI 32948328688 and production workflow 32948328870 passed.",
+      "completed_scope": "IPLF-060A extends the existing judge/bench/authority owners with sourced aliases, fail-closed mapping review, atomic curator resolution and merge, raw mapping lineage, analytics admission, migration replay/restore-forward controls, governed OpenAPI/data inventory, and a deployed but paused bounded refresh job. PR #356 additionally deployment-verifies the IPLF-058B bounded recordal workspace correction and removes its selected-detail request fan-out. Exact-main and production release gates passed. This checkpoint makes no IPLF-060B, JUDGE, or UJ-20 completion claim.",
       "program_state": "PROGRAM INCOMPLETE",
       "next_slice": "IPLF-060B",
       "next_action": "Implement IPLF-060B only against the deployment-verified one-writer foundation, retaining the paused activation boundary until all allocated journeys and external approvals pass.",
-      "evidence_ref": "docs/ip-implementation/evidence/m6/IPLF-060A/release-2026-08-26.md"
+      "evidence_ref": "docs/ip-implementation/evidence/m5/IPLF-058/release-058b-recordal-workspace-reconcile-2026-08-26.md"
     },
     "work_owner": {
       "owner": "Codex",
@@ -2177,7 +2177,9 @@
         "docs/ip-implementation/evidence/m5/IPLF-058/local-058a-2026-08-25.md",
         "docs/ip-implementation/evidence/m5/IPLF-058/release-058a-2026-08-25.md",
         "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-2026-08-25.md",
-        "docs/ip-implementation/evidence/m5/IPLF-058/release-058b-2026-08-25.md"
+        "docs/ip-implementation/evidence/m5/IPLF-058/release-058b-2026-08-25.md",
+        "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-recordal-workspace-reconcile-2026-08-26.md",
+        "docs/ip-implementation/evidence/m5/IPLF-058/release-058b-recordal-workspace-reconcile-2026-08-26.md"
       ]
     },
     {
@@ -13772,7 +13774,9 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-2026-08-25.md",
-        "docs/ip-implementation/evidence/m5/IPLF-058/release-058b-2026-08-25.md"
+        "docs/ip-implementation/evidence/m5/IPLF-058/release-058b-2026-08-25.md",
+        "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-recordal-workspace-reconcile-2026-08-26.md",
+        "docs/ip-implementation/evidence/m5/IPLF-058/release-058b-recordal-workspace-reconcile-2026-08-26.md"
       ],
       "evidence_metadata": [
         {
@@ -13792,6 +13796,24 @@
           "assertions": "PR and exact-main hosted gates; immutable builds; migration-first deployment; scheduler reconciliation; exact release identity; 90-test RAM batch including the dated IPLF-058B workflow; A0 quiescence; notice module; bounded selected-docket loading at production corpus scale",
           "result": "passed",
           "recorded_at": "2026-08-25T22:59:33+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m5/IPLF-058/local-058b-recordal-workspace-reconcile-2026-08-26.md",
+          "revision": "2b98474ac59b33eb3ca7fd3019137ee78167be07",
+          "environment": "Windows local API/web, fresh production build and Chromium at 360px with bounded recordal fixtures",
+          "fixtures": "Synthetic selected recordal, accessible docket, bounded docket documents, Registry workspaces, deadline workspace, title interests and history",
+          "assertions": "One aggregate selected-detail request, no duplicate supporting fan-out, four tabs mounted while pending, lazy corpus catalogues, API/component/build/OpenAPI regressions",
+          "result": "passed",
+          "recorded_at": "2026-08-26T13:45:00+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m5/IPLF-058/release-058b-recordal-workspace-reconcile-2026-08-26.md",
+          "revision": "3ce3e93e7ee07161c396344e0fe24d7a162216c2",
+          "environment": "Exact canonical main on production API caseops-api-00365-gqq and web caseops-web-00344-hkp with 100 percent latest-only traffic",
+          "fixtures": "Dedicated production QA workspace and synthetic recordal records only; no live Registry mutation, filing, payment, provider call, external recipient or client record",
+          "assertions": "Exact-main CI, immutable builds, migration-first deployment, scheduler reconciliation, exact identity, 87-pass RAM batch including the IPLF-058B responsive request-count oracle, A0 quiescence and Notice module",
+          "result": "passed",
+          "recorded_at": "2026-08-26T14:41:00+05:30"
         }
       ],
       "blockers": [],
