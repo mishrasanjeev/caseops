@@ -32,13 +32,17 @@ from caseops_api.schemas.ip_recordals import (
     IpRecordalWorkspaceResponse,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.ip_deadline_workflow import deadline_workspace
+from caseops_api.services.ip_document_workflow import list_ip_documents
 from caseops_api.services.ip_identifier_rules import normalize_ip_identifier
 from caseops_api.services.ip_lifecycle import append_ip_docket_event
 from caseops_api.services.ip_operations import (
     _lock_ip_dockets_in_stable_order,
     _lock_ip_writer_context,
+    get_ip_docket,
     project_ip_recordal_title_interests,
 )
+from caseops_api.services.ip_registry import list_registry_workspaces
 from caseops_api.services.matter_access import visible_ip_dockets_filter
 from caseops_api.services.session_context import SessionContext
 
@@ -607,8 +611,28 @@ def ip_recordal_workspace(
     pending = [
         interest for interest in interests if interest.recordal_status in {"pending", "filed"}
     ]
+    docket = get_ip_docket(session, context=context, docket_id=row.docket_id)
+    documents = list_ip_documents(
+        session,
+        context=context,
+        docket_id=row.docket_id,
+    )
+    registry_workspaces = list_registry_workspaces(
+        session,
+        context=context,
+        docket_id=row.docket_id,
+    )
+    deadlines = deadline_workspace(
+        session,
+        context=context,
+        docket_id=row.docket_id,
+    )
     return IpRecordalWorkspaceResponse(
         recordal=IpRecordalResponse.model_validate(row),
+        docket=docket,
+        documents=documents.items,
+        registry_workspaces=registry_workspaces.items,
+        deadline_workspace=deadlines,
         transactions=[IpDocketEventResponse.model_validate(event) for event in events],
         title_interests=[IpTitleInterestRecord.model_validate(interest) for interest in interests],
         current_registered_interests=[

@@ -34,14 +34,10 @@ import { Textarea } from "@/components/ui/Textarea";
 import { apiErrorMessage } from "@/lib/api/config";
 import {
   createIpRecordal,
-  fetchIpDeadlineWorkspace,
-  fetchIpDocket,
   fetchIpDockets,
   fetchIpDocuments,
-  fetchIpDocumentsForDocket,
   fetchIpRecordals,
   fetchIpRecordalWorkspace,
-  fetchIpRegistryWorkspaces,
   recordIpRecordalTransaction,
   type IpDocket,
   type IpDocument,
@@ -188,20 +184,10 @@ export default function RecordalsPage() {
     enabled: canRead,
   });
   const selectedRecordal = recordals.data?.items.find((row) => row.id === selectedId) ?? null;
-  const selectedDocket = useQuery({
-    queryKey: ["ip", "dockets", selectedRecordal?.docket_id],
-    queryFn: () => fetchIpDocket(selectedRecordal!.docket_id),
-    enabled: canRead && Boolean(selectedRecordal),
-  });
   const dockets = useQuery({
     queryKey: ["ip", "dockets", "catalog"],
     queryFn: fetchIpDockets,
     enabled: canRead && docketCatalogRequested,
-  });
-  const documents = useQuery({
-    queryKey: ["ip", "documents", selectedRecordal?.docket_id],
-    queryFn: () => fetchIpDocumentsForDocket(selectedRecordal!.docket_id),
-    enabled: canRead && Boolean(selectedRecordal),
   });
   const catalogDocuments = useQuery({
     queryKey: ["ip", "documents", "catalog"],
@@ -212,16 +198,6 @@ export default function RecordalsPage() {
     queryKey: ["ip", "recordals", selectedId, "workspace"],
     queryFn: () => fetchIpRecordalWorkspace(selectedId),
     enabled: canRead && Boolean(selectedId),
-  });
-  const registry = useQuery({
-    queryKey: ["ip", "registry-links", selectedDocket.data?.id],
-    queryFn: () => fetchIpRegistryWorkspaces(selectedDocket.data?.id),
-    enabled: canRead && Boolean(selectedDocket.data),
-  });
-  const deadlines = useQuery({
-    queryKey: ["ip", "deadline-workspace", selectedDocket.data?.id],
-    queryFn: () => fetchIpDeadlineWorkspace(selectedDocket.data!.id),
-    enabled: canRead && Boolean(selectedDocket.data),
   });
 
   useEffect(() => {
@@ -311,22 +287,18 @@ export default function RecordalsPage() {
         <div className="grid min-w-0 gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
           <RecordalList
             rows={recordals.data.items}
-            dockets={dockets.data?.dockets ?? (selectedDocket.data ? [selectedDocket.data] : [])}
+            dockets={dockets.data?.dockets ?? (workspace.data ? [workspace.data.docket] : [])}
             selectedId={selectedId}
             onSelect={setSelectedId}
           />
-          {workspace.isPending || selectedDocket.isPending ? (
-            <Skeleton className="h-[560px]" />
-          ) : workspace.isError ? (
-            <QueryErrorState error={workspace.error} onRetry={() => workspace.refetch()} />
-          ) : workspace.data && selectedDocket.data ? (
+          {selectedRecordal ? (
             <RecordalDetail
-              workspace={workspace.data}
-              docket={selectedDocket.data}
-              allDockets={dockets.data?.dockets ?? [selectedDocket.data]}
-              documents={documents.data?.items ?? []}
-              registry={registry.data?.items ?? []}
-              deadlines={deadlines.data?.deadlines ?? []}
+              recordal={workspace.data?.recordal ?? selectedRecordal}
+              workspace={workspace.data ?? null}
+              allDockets={dockets.data?.dockets ?? (workspace.data ? [workspace.data.docket] : [])}
+              workspacePending={workspace.isPending}
+              workspaceError={workspace.isError ? workspace.error : null}
+              onWorkspaceRetry={() => workspace.refetch()}
               membershipId={session.context?.membership.id ?? null}
               canWrite={canWrite}
               canApprove={canApprove}
@@ -566,25 +538,35 @@ function RecordalList({ rows, dockets, selectedId, onSelect }: { rows: IpRecorda
   );
 }
 
-function RecordalDetail({ workspace, docket, allDockets, documents, registry, deadlines, membershipId, canWrite, canApprove, onFamilyCatalogRequested, onChanged }: {
-  workspace: IpRecordalWorkspace;
-  docket: IpDocket;
+function RecordalDetail({ recordal, workspace, allDockets, workspacePending, workspaceError, onWorkspaceRetry, membershipId, canWrite, canApprove, onFamilyCatalogRequested, onChanged }: {
+  recordal: IpRecordal;
+  workspace: IpRecordalWorkspace | null;
   allDockets: IpDocket[];
-  documents: IpDocument[];
-  registry: IpRegistryWorkspace[];
-  deadlines: IpLegalDeadline[];
+  workspacePending: boolean;
+  workspaceError: unknown;
+  onWorkspaceRetry: () => Promise<unknown>;
   membershipId: string | null;
   canWrite: boolean;
   canApprove: boolean;
   onFamilyCatalogRequested: () => void;
   onChanged: () => Promise<unknown>;
 }) {
-  const recordal = workspace.recordal;
-  const linkedDocuments = documentsForDocket(documents, docket.id);
+  const docket = workspace?.docket ?? null;
+  const documents = workspace?.documents ?? [];
+  const registry = workspace?.registry_workspaces ?? [];
+  const deadlines = workspace?.deadline_workspace.deadlines ?? [];
+  const linkedDocuments = docket ? documentsForDocket(documents, docket.id) : [];
+  const loadState = (
+    <RecordalWorkspaceState
+      pending={workspacePending}
+      error={workspaceError}
+      onRetry={onWorkspaceRetry}
+    />
+  );
   return (
     <section className="min-w-0 border border-[var(--color-line)] bg-white">
       <header className="flex min-w-0 flex-col gap-3 border-b border-[var(--color-line)] p-5 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0"><p className="text-sm text-[var(--color-mute)]">{docket.title}</p><h2 className="break-words text-xl font-semibold">{TYPE_OPTIONS.find((option) => option.value === recordal.recordal_type)?.label ?? readable(recordal.recordal_type)}</h2><div className="mt-2 flex flex-wrap gap-2"><Badge tone={recordal.status === "accepted" ? "success" : recordal.status === "defective" || recordal.status === "rejected" ? "warning" : "neutral"}>{readable(recordal.status)}</Badge><Badge tone="neutral">Version {recordal.version}</Badge></div></div>
+        <div className="min-w-0"><p className="break-words text-sm text-[var(--color-mute)]">{docket?.title ?? recordal.docket_id}</p><h2 className="break-words text-xl font-semibold">{TYPE_OPTIONS.find((option) => option.value === recordal.recordal_type)?.label ?? readable(recordal.recordal_type)}</h2><div className="mt-2 flex flex-wrap gap-2"><Badge tone={recordal.status === "accepted" ? "success" : recordal.status === "defective" || recordal.status === "rejected" ? "warning" : "neutral"}>{readable(recordal.status)}</Badge><Badge tone="neutral">Version {recordal.version}</Badge></div></div>
         <Link className="inline-flex items-center gap-1 text-sm font-medium underline" href="/app/ip">Open IP docket <ArrowUpRight className="h-3.5 w-3.5" /></Link>
       </header>
       <Tabs
@@ -603,15 +585,33 @@ function RecordalDetail({ workspace, docket, allDockets, documents, registry, de
         <TabsContent value="recordal" className="m-0 min-w-0 p-5">
           <RecordalOverview recordal={recordal} documents={linkedDocuments} />
           <div className="mt-6 border-t border-[var(--color-line)] pt-5">
-            <TransactionPanel workspace={workspace} docket={docket} documents={linkedDocuments} registry={registry} deadlines={deadlines} membershipId={membershipId} canWrite={canWrite} canApprove={canApprove} onChanged={onChanged} />
+            {workspace && docket ? <TransactionPanel workspace={workspace} docket={docket} documents={linkedDocuments} registry={registry} deadlines={deadlines} membershipId={membershipId} canWrite={canWrite} canApprove={canApprove} onChanged={onChanged} /> : loadState}
           </div>
         </TabsContent>
-        <TabsContent value="title" className="m-0 min-w-0 p-5"><TitleAssessment docket={docket} allDockets={allDockets} documents={documents} /></TabsContent>
-        <TabsContent value="evidence" className="m-0 min-w-0 p-5"><EvidencePanel recordal={recordal} docket={docket} documents={linkedDocuments} registry={registry} deadlines={deadlines} /></TabsContent>
-        <TabsContent value="history" className="m-0 min-w-0 p-5"><HistoryPanel events={workspace.transactions} /></TabsContent>
+        <TabsContent value="title" className="m-0 min-w-0 p-5">{docket ? <TitleAssessment docket={docket} allDockets={allDockets} documents={documents} /> : loadState}</TabsContent>
+        <TabsContent value="evidence" className="m-0 min-w-0 p-5">{docket ? <EvidencePanel recordal={recordal} docket={docket} documents={linkedDocuments} registry={registry} deadlines={deadlines} /> : loadState}</TabsContent>
+        <TabsContent value="history" className="m-0 min-w-0 p-5">{workspace ? <HistoryPanel events={workspace.transactions} /> : loadState}</TabsContent>
       </Tabs>
     </section>
   );
+}
+
+function RecordalWorkspaceState({ pending, error, onRetry }: {
+  pending: boolean;
+  error: unknown;
+  onRetry: () => Promise<unknown>;
+}) {
+  if (pending) return <Skeleton className="h-44" data-testid="recordal-workspace-loading" />;
+  if (error) {
+    return (
+      <QueryErrorState
+        error={error}
+        title="Could not load recordal evidence"
+        onRetry={onRetry}
+      />
+    );
+  }
+  return null;
 }
 
 function RecordalOverview({ recordal, documents }: { recordal: IpRecordal; documents: IpDocument[] }) {

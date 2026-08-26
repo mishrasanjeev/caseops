@@ -7,8 +7,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
+from caseops_api.schemas.ip_deadlines import IpDeadlineWorkspaceResponse
+from caseops_api.schemas.ip_documents import IpDocumentRecord
 from caseops_api.schemas.ip_lifecycle import IpDocketEventResponse
-from caseops_api.schemas.ip_operations import IpTitleInterestRecord
+from caseops_api.schemas.ip_operations import IpDocketRecordResponse, IpTitleInterestRecord
+from caseops_api.schemas.ip_registry import IpRegistryWorkspaceResponse
 
 IpRecordalType = Literal[
     "renewal",
@@ -218,6 +221,10 @@ class IpRecordalTransactionResponse(BaseModel):
 
 class IpRecordalWorkspaceResponse(BaseModel):
     recordal: IpRecordalResponse
+    docket: IpDocketRecordResponse
+    documents: list[IpDocumentRecord] = Field(default_factory=list)
+    registry_workspaces: list[IpRegistryWorkspaceResponse] = Field(default_factory=list)
+    deadline_workspace: IpDeadlineWorkspaceResponse
     transactions: list[IpDocketEventResponse]
     title_interests: list[IpTitleInterestRecord]
     current_registered_interests: list[IpTitleInterestRecord]

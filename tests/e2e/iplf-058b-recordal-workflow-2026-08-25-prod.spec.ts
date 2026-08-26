@@ -131,6 +131,16 @@ test("IPLF-058B production proves every UJ-36 path and the dated UJ-61 view", as
     client_registry_conflict_reviewed: true,
   }));
 
+  const recordalPageRequests: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.startsWith("/api/ip/")) recordalPageRequests.push(url.toString());
+  });
+  const aggregateResponse = page.waitForResponse(
+    (response) => new URL(response.url()).pathname
+      === `/api/ip/recordals/${fixture.recordal.id}/workspace`,
+    { timeout: 60_000 },
+  );
   await page.setViewportSize({ width: 360, height: 800 });
   await page.goto(`${WEB}/app/ip/recordals`);
   await expect(page.getByRole("heading", { name: "Post-registration" })).toBeVisible();
@@ -143,6 +153,16 @@ test("IPLF-058B production proves every UJ-36 path and the dated UJ-61 view", as
     expect(box!.x + box!.width).toBeLessThanOrEqual(360);
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1)).toBe(false);
+  expect((await aggregateResponse).ok()).toBe(true);
+  expect(recordalPageRequests.filter((requestUrl) => new URL(requestUrl).pathname
+    === `/api/ip/recordals/${fixture.recordal.id}/workspace`)).toHaveLength(1);
+  expect(recordalPageRequests.some((requestUrl) => {
+    const url = new URL(requestUrl);
+    return url.pathname === `/api/ip/dockets/${fixture.docket.id}`
+      || (url.pathname === "/api/ip/documents" && url.searchParams.has("docket_id"))
+      || url.pathname === "/api/ip/registry-links"
+      || url.pathname === `/api/ip/dockets/${fixture.docket.id}/deadline-workspace`;
+  })).toBe(false);
 
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole("tab", { name: "Title at date" }).click();

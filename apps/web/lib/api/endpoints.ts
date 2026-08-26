@@ -9661,6 +9661,10 @@ export type IpRecordal = {
 
 export type IpRecordalWorkspace = {
   recordal: IpRecordal;
+  docket: IpDocket;
+  documents: IpDocument[];
+  registry_workspaces: IpRegistryWorkspace[];
+  deadline_workspace: IpDeadlineWorkspace;
   transactions: IpDocketEvent[];
   title_interests: IpTitleInterest[];
   current_registered_interests: IpTitleInterest[];
