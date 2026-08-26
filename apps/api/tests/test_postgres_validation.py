@@ -61,7 +61,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import inspect, select, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 pytestmark = pytest.mark.postgres
 
@@ -7328,6 +7328,149 @@ def test_login_releases_identity_fence_before_background_audit_on_postgres(
         )
         assert audit is not None
         assert profile is not None and profile.last_login_at is not None
+
+
+# ---------- document worker / Notice upload lock order (2026-08-26) ----------
+
+
+def test_document_worker_fences_actor_before_matter_on_postgres(
+    pg_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A reply upload and its first document worker must never deadlock.
+
+    Interactive attachment writes fence Membership/User before Matter. The
+    processor writes MatterActivity with the same membership foreign key, so it
+    must use that order too. Holding the actor fence here makes the worker wait;
+    the upload transaction must still be able to lock Matter while it waits.
+    """
+
+    from caseops_api.db.models import (
+        DocumentProcessingAction,
+        DocumentProcessingJob,
+        DocumentProcessingJobStatus,
+        DocumentProcessingStatus,
+        DocumentProcessingTargetType,
+        Matter,
+        MatterActivity,
+        MatterAttachment,
+    )
+    from caseops_api.services import document_jobs
+    from caseops_api.services.assignment_memberships import (
+        lock_company_memberships_for_assignment,
+    )
+
+    with Session(pg_engine) as seed:
+        company_id = _seed_company(seed)
+        membership_id = _seed_membership(seed, company_id, role="admin")
+        matter_id = _seed_matter(seed, company_id)
+        attachment = MatterAttachment(
+            matter_id=matter_id,
+            uploaded_by_membership_id=membership_id,
+            original_filename="notice-lock-order.txt",
+            storage_key=f"postgres-validation/{uuid4()}/notice-lock-order.txt",
+            content_type="text/plain",
+            size_bytes=23,
+            sha256_hex="a" * 64,
+            document_type="notice",
+            notice_document_role="notice",
+        )
+        seed.add(attachment)
+        seed.flush()
+        job = DocumentProcessingJob(
+            company_id=company_id,
+            requested_by_membership_id=membership_id,
+            target_type=DocumentProcessingTargetType.MATTER_ATTACHMENT,
+            attachment_id=attachment.id,
+            action=DocumentProcessingAction.INITIAL_INDEX,
+            status=DocumentProcessingJobStatus.QUEUED,
+        )
+        seed.add(job)
+        seed.commit()
+        job_id = job.id
+        attachment_id = attachment.id
+
+    worker_session_factory = sessionmaker(bind=pg_engine, expire_on_commit=False)
+    monkeypatch.setattr(document_jobs, "get_session_factory", lambda: worker_session_factory)
+
+    def index_without_storage(target: MatterAttachment) -> None:
+        target.processing_status = DocumentProcessingStatus.INDEXED
+        target.extracted_text = "Notice lock-order regression"
+        target.extracted_char_count = len(target.extracted_text)
+        target.extraction_error = None
+
+    def embed_without_provider(_session, _attachment, *, before_flush=None) -> int:
+        assert before_flush is not None
+        before_flush()
+        return 0
+
+    monkeypatch.setattr(document_jobs, "index_matter_attachment", index_without_storage)
+    monkeypatch.setattr(
+        document_jobs,
+        "embed_matter_attachment_chunks",
+        embed_without_provider,
+    )
+
+    application_name = f"pg-document-worker-{uuid4()}"
+    actor_lock_attempted = Event()
+    original_actor_lock = document_jobs.lock_company_memberships_for_assignment
+
+    def named_actor_lock(session, **kwargs):
+        session.execute(
+            text("SELECT set_config('application_name', :name, true)"),
+            {"name": application_name},
+        )
+        actor_lock_attempted.set()
+        return original_actor_lock(session, **kwargs)
+
+    monkeypatch.setattr(
+        document_jobs,
+        "lock_company_memberships_for_assignment",
+        named_actor_lock,
+    )
+
+    with Session(pg_engine) as upload_session:
+        lock_company_memberships_for_assignment(
+            upload_session,
+            company_id=company_id,
+            membership_ids={membership_id},
+        )
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            worker = executor.submit(document_jobs.run_document_processing_job, job_id)
+            try:
+                assert actor_lock_attempted.wait(timeout=10)
+                _wait_for_postgres_lock_wait(
+                    pg_engine,
+                    application_name=application_name,
+                )
+                locked_matter = upload_session.scalar(
+                    select(Matter)
+                    .where(Matter.id == matter_id)
+                    .with_for_update(of=Matter, nowait=True)
+                )
+                assert locked_matter is not None
+                upload_session.add(
+                    MatterActivity(
+                        matter_id=matter_id,
+                        actor_membership_id=membership_id,
+                        event_type="attachment_added",
+                        title="Concurrent reply upload",
+                    )
+                )
+                upload_session.commit()
+            finally:
+                if upload_session.in_transaction():
+                    upload_session.rollback()
+            worker.result(timeout=15)
+
+    with Session(pg_engine) as verify:
+        completed_job = verify.get(DocumentProcessingJob, job_id)
+        processed_attachment = verify.get(MatterAttachment, attachment_id)
+        assert completed_job is not None
+        assert completed_job.status == DocumentProcessingJobStatus.COMPLETED
+        assert processed_attachment is not None
+        assert processed_attachment.processing_status == DocumentProcessingStatus.INDEXED
+        assert verify.scalar(select(Matter.id).where(Matter.id == matter_id)) == matter_id
 
 
 # ---------------------------------------------------------------------------

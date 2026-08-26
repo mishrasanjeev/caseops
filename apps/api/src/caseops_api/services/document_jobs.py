@@ -21,6 +21,9 @@ from caseops_api.db.models import (
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.schemas.document_processing import DocumentProcessingJobRecord
+from caseops_api.services.assignment_memberships import (
+    lock_company_memberships_for_assignment,
+)
 from caseops_api.services.document_processing import (
     embed_matter_attachment_chunks,
     index_contract_attachment,
@@ -474,15 +477,27 @@ def _process_matter_attachment_job(session: Session, job: DocumentProcessingJob)
     index_matter_attachment(attachment)
 
     parent_locked_for_persist = False
+    activity_actor_membership_id: str | None = None
 
     def lock_operational_parent_for_persist() -> None:
-        nonlocal parent_locked_for_persist
+        nonlocal activity_actor_membership_id, parent_locked_for_persist
         if parent_locked_for_persist:
             return
         # The attachment and replacement chunks are dirty at this point.
-        # Suppress autoflush so the lifecycle row is checked and locked before
-        # any child write becomes visible.
+        # Suppress autoflush while acquiring the canonical Membership/User ->
+        # Matter lock order. MatterActivity's actor foreign key otherwise lets
+        # this worker hold Matter and wait for the actor while an upload holds
+        # the actor fence and waits for Matter.
         with session.no_autoflush:
+            requested_actor_id = job.requested_by_membership_id
+            if requested_actor_id:
+                locked_memberships = lock_company_memberships_for_assignment(
+                    session,
+                    company_id=job.company_id,
+                    membership_ids={requested_actor_id},
+                )
+                if requested_actor_id in locked_memberships:
+                    activity_actor_membership_id = requested_actor_id
             assert_operational_matter(session, matter=attachment.matter)
         parent_locked_for_persist = True
 
@@ -520,7 +535,7 @@ def _process_matter_attachment_job(session: Session, job: DocumentProcessingJob)
                 matter=attachment.matter,
                 attachment=attachment,
                 trigger="attachment_processed",
-                actor_membership_id=job.requested_by_membership_id,
+                actor_membership_id=activity_actor_membership_id,
             )
         except Exception as exc:  # noqa: BLE001
             from caseops_api.services.notification_delivery import redact_provider_error
@@ -529,7 +544,7 @@ def _process_matter_attachment_job(session: Session, job: DocumentProcessingJob)
     session.add(
         MatterActivity(
             matter_id=attachment.matter_id,
-            actor_membership_id=job.requested_by_membership_id,
+            actor_membership_id=activity_actor_membership_id,
             event_type=(
                 "attachment_processed"
                 if job.status == DocumentProcessingJobStatus.COMPLETED
