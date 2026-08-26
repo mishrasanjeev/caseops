@@ -5,7 +5,12 @@ from datetime import UTC, datetime
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from caseops_api.db.models import NotificationDeliveryIntent
+from caseops_api.db.models import (
+    InAppNotification,
+    NotificationDeliveryEvent,
+    NotificationDeliveryIntent,
+    NotificationRule,
+)
 from caseops_api.db.session import get_session_factory
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_ip_059a_foreign_associate_foundation import (
@@ -70,6 +75,17 @@ def _dispatched_instruction(client: TestClient) -> tuple[dict, dict[str, str], s
     )
     assert dispatched.status_code == 201, dispatched.text
     return dispatched.json()["instruction"], headers, membership_id, company_id
+
+
+def test_foreign_associate_event_names_fit_every_notification_owner() -> None:
+    longest = len("foreign_associate_acknowledgement_overdue")
+    for model in (
+        NotificationRule,
+        InAppNotification,
+        NotificationDeliveryIntent,
+        NotificationDeliveryEvent,
+    ):
+        assert model.__table__.c.event_type.type.length >= longest
 
 
 def test_uj37_normal_reminders_are_idempotent_and_stop_on_acknowledgement(

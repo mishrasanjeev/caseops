@@ -252,6 +252,11 @@ const NAV_GROUPS: ReadonlyArray<{
         capability: "ip:read",
       },
       {
+        label: "Foreign associates",
+        href: "/app/ip/foreign-associates",
+        capability: "ip:read",
+      },
+      {
         label: "Registry reconciliation",
         href: "/app/ip/registry",
         capability: "ip:read",

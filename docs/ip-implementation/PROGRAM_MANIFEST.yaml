@@ -13984,6 +13984,8 @@
         "IPLF-059A"
       ],
       "implementation_refs": [
+        "apps/api/alembic/versions/20260826_0001_notification_event_type_width.py",
+        "apps/api/src/caseops_api/db/models.py",
         "apps/api/src/caseops_api/api/routes/ip_foreign_associates.py",
         "apps/api/src/caseops_api/schemas/ip_foreign_associates.py",
         "apps/api/src/caseops_api/services/ip_foreign_associates.py",
@@ -14003,12 +14005,14 @@
         "IPLF-UJ-37-EXC-03:tests/e2e/iplf-059b-foreign-associate-workflow-2026-08-26.spec.ts",
         "IPLF-UJ-37-EXC-04:apps/api/tests/test_ip_059a_foreign_associate_foundation.py::test_foreign_associate_contract_separates_delivery_ack_and_evidence",
         "apps/api/tests/test_ip_059b_foreign_associate_journeys.py",
+        "apps/api/tests/test_20260826_notification_event_type_width_migration.py",
         "apps/api/tests/test_ip_059a_foreign_associate_schemas.py",
         "apps/web/app/app/ip/foreign-associates/page.test.tsx",
         "tests/e2e/iplf-059b-foreign-associate-workflow-2026-08-26-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m5/IPLF-059/local-059b-2026-08-26.md"
+        "docs/ip-implementation/evidence/m5/IPLF-059/local-059b-2026-08-26.md",
+        "docs/ip-implementation/evidence/m5/IPLF-059/production-reminder-fix-local-2026-08-26.md"
       ],
       "evidence_metadata": [
         {
@@ -14019,14 +14023,34 @@
           "assertions": "All UJ-37 transitions and exceptions, bounded idempotent reminders, delivery distinct from acknowledgement, actionable reminder cancellation, source opening, foreign filing identifier, independent evidence, finance reconciliation, responsive controls, guide and truthful law-firm claim",
           "result": "passed",
           "recorded_at": "2026-08-26T03:50:00+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m5/IPLF-059/production-reminder-fix-local-2026-08-26.md",
+          "revision": "91c902fa88bc1c47eccc2db8238c9b2bfd195b95",
+          "environment": "Windows CPython 3.13 and Node 22 with locked dependencies, isolated SQLite migration round trip, fresh local law-firm tenant, FastAPI/Next and Chromium at 360x800",
+          "fixtures": "Synthetic Matter-linked foreign-associate instruction and acknowledgement reminder schedule; loopback-only mobile navigation proof with exact local release identity",
+          "assertions": "PostgreSQL production failure root cause, four-owner event-type width correction, guarded migration/rollback, idempotent eight-reminder journey, and complete mobile grouped navigation",
+          "result": "passed",
+          "recorded_at": "2026-08-26T05:15:00+05:30"
         }
       ],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-059B-PROD-GATE-32908466923",
+          "summary": "Production verifier 32908466923 failed the IPLF-059B reminder request on release 398c822 and exposed a stale navigation oracle; implementation revision 91c902fa fixes both but is not yet merged, deployed or production-verified.",
+          "owner": "Engineering/SRE",
+          "evidence_needed": "Pass hosted CI, Security and CodeQL for the exact fix, merge it to main, deploy the migration-first candidate, and pass the unchanged complete dated exact-release production acceptance including UJ-37 and mobile navigation.",
+          "safe_fallback": "Keep IPLF-059B release claims blocked and do not schedule source-qualified foreign-associate reminders on the failed production revision; retain the existing fail-closed API error until the widened shared notification contract is deployed.",
+          "milestone_impact": "Blocks IPLF-059B, UJ-37, parent IPLF-059 and M5 release closure while leaving the locally verified implementation available for independent review.",
+          "next_independent_slice": "IPLF-060A canonical judge/bench mapping foundation."
+        }
+      ],
       "next_actions": [
-        "Pass hosted CI, Security and CodeQL, merge the exact candidate to main, deploy it migration-first, and pass the dated exact-release production acceptance."
+        "Pass hosted CI, Security and CodeQL for the production fix, merge the exact candidate to main, deploy it migration-first, and pass the complete dated exact-release production acceptance."
       ],
       "data_impact": [
-        "No schema change. Reminder policy projects idempotent, tenant-scoped intents into the existing NotificationDeliveryIntent owner and cancels only actionable rows when acknowledgement, refusal, cancellation or reassignment ends the response wait.",
+        "Widen the shared notification event_type contract from VARCHAR(40) to VARCHAR(80) across rules, in-app rows, durable intents and delivery events so source-qualified IPLF-059B names persist consistently; no new data class or owner is added.",
+        "Reminder policy projects idempotent, tenant-scoped intents into the existing NotificationDeliveryIntent owner and cancels only actionable rows when acknowledgement, refusal, cancellation or reassignment ends the response wait.",
         "Instruction state continues to link canonical OutsideCounsel, assignment, Communication, document, deadline, IP cost, spend and Matter invoice identifiers under the docket lifecycle lock."
       ],
       "documentation_impact": [
@@ -14053,6 +14077,12 @@
           "disposition": "created",
           "owner": "Engineering/SRE",
           "evidence": "Duplicate-work review, every UJ-37 path, local browser acceptance and remaining release boundary"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m5/IPLF-059/production-reminder-fix-local-2026-08-26.md",
+          "disposition": "created",
+          "owner": "Engineering/SRE",
+          "evidence": "Failed production run, exact PostgreSQL root cause, guarded width migration, corrected navigation oracle and local rerun evidence"
         }
       ],
       "allocation_review": "2026-08-26 brutal duplicate-work review: IPLF-059B extends the IPLF-059A service and shared NotificationDeliveryIntent projection. It links existing outside-counsel, assignment/spend, Communication, document, deadline, cost, Matter invoice, access, audit and docket-event owners; no duplicate directory, mailer, store, ledger, scheduler, permission model or event log was added.",
