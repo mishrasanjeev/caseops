@@ -1,10 +1,9 @@
 import { expect, request, test } from "@playwright/test";
 import type { APIRequestContext } from "@playwright/test";
 
-import { apiBaseUrl, webBaseUrl } from "./support/env";
+import { apiBaseUrl } from "./support/env";
 
 const PASSWORD = "StatuteTrust123!";
-const WEB_ORIGIN = new URL(webBaseUrl).origin;
 
 function unique(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
@@ -27,9 +26,14 @@ async function bootstrap(api: APIRequestContext, slug: string): Promise<string> 
 }
 
 test("IPLF-UJ-15/UJ-48: verified text, separated material, fail-closed exceptions, and 360px curator controls", async ({
+  baseURL,
   page,
 }) => {
   test.setTimeout(90_000);
+  if (!baseURL) {
+    throw new Error("Playwright baseURL is required for statute trust E2E.");
+  }
+  const webOrigin = new URL(baseURL).origin;
   const api = await request.newContext();
   const slug = unique("iplf006c");
   const email = await bootstrap(api, slug);
@@ -75,7 +79,7 @@ test("IPLF-UJ-15/UJ-48: verified text, separated material, fail-closed exception
       status: 200,
       contentType: "application/json",
       headers: {
-        "Access-Control-Allow-Origin": WEB_ORIGIN,
+        "Access-Control-Allow-Origin": webOrigin,
         "Access-Control-Allow-Credentials": "true",
       },
       body: JSON.stringify({
@@ -159,7 +163,7 @@ test("IPLF-UJ-15/UJ-48: verified text, separated material, fail-closed exception
       status: 200,
       contentType: "application/json",
       headers: {
-        "Access-Control-Allow-Origin": WEB_ORIGIN,
+        "Access-Control-Allow-Origin": webOrigin,
         "Access-Control-Allow-Credentials": "true",
       },
       body: JSON.stringify({
