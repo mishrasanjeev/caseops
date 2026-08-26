@@ -2,9 +2,6 @@
 # Built for Cloud Run: binds to ${PORT} (default 8000 for local).
 FROM python:3.13-slim
 
-ARG CASEOPS_RELEASE_SHA=unavailable
-LABEL org.opencontainers.image.revision=$CASEOPS_RELEASE_SHA
-
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
@@ -58,6 +55,9 @@ RUN python -c "from fastembed.rerank.cross_encoder import TextCrossEncoder; Text
 # resolution through those caches so cold workers never probe the public Hub.
 ENV HF_HUB_OFFLINE=1 \
     TRANSFORMERS_OFFLINE=1
+
+ARG CASEOPS_RELEASE_SHA=unavailable
+LABEL org.opencontainers.image.revision=$CASEOPS_RELEASE_SHA
 
 # Cloud Run injects PORT (default 8080); local uses the ENV default
 # above. Bind to all interfaces so the container is reachable from

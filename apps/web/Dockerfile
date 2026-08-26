@@ -47,9 +47,6 @@ RUN npm run build
 FROM node:22.14.0-alpine AS runner
 WORKDIR /app/apps/web
 
-ARG CASEOPS_RELEASE_SHA=unavailable
-LABEL org.opencontainers.image.revision=$CASEOPS_RELEASE_SHA
-
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000
@@ -69,6 +66,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next ./.next
 COPY --from=prod-deps --chown=nextjs:nodejs /app/node_modules /app/node_modules
 COPY --from=prod-deps --chown=nextjs:nodejs /app/apps/web/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/package.json ./package.json
+
+ARG CASEOPS_RELEASE_SHA=unavailable
+LABEL org.opencontainers.image.revision=$CASEOPS_RELEASE_SHA
 
 USER nextjs
 
