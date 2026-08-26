@@ -14,16 +14,16 @@ Covers four fixes / features shipped in a tight commit cluster:
    per the 2026-04-20 bias directive, authorities whose outcome_label
    supports the user's typical position are promoted in retrieval.
 
-4. **Judge profile rewrite** (commit `73fc94a`) — /api/courts/judges/{id}
-   matches via structured judges_json first (bench_name fallback),
-   and the response adds practice-area histogram, decision-volume,
-   tenure bounds, and structured_match_coverage_percent.
+4. **Judge profile workflow** — /api/courts/judges/{id} reads only the
+   canonical JudgeDecisionIndex mapping, excludes coincidental raw judge text,
+   and retains the descriptive practice-area classifier.
 
 Tests use the ``client`` fixture from conftest.py (SQLite + mock LLM /
 embedding) where HTTP or DB is needed. Pure-function helpers (honorific
 stripper, source resolver, bias mapping) are unit-tested without a
 fixture.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -39,6 +39,7 @@ from caseops_api.db.models import (
     AuthorityDocumentType,
     Court,
     Judge,
+    JudgeDecisionIndex,
 )
 from caseops_api.db.session import get_session_factory
 
@@ -46,10 +47,9 @@ from caseops_api.db.session import get_session_factory
 # Shared seed helpers
 # ---------------------------------------------------------------
 
+
 def _canonical(title: str, ref: str | None) -> str:
-    return hashlib.sha256(
-        (title + "|" + (ref or "")).encode("utf-8")
-    ).hexdigest()[:40]
+    return hashlib.sha256((title + "|" + (ref or "")).encode("utf-8")).hexdigest()[:40]
 
 
 def _seed_authority(
@@ -145,6 +145,7 @@ def _seed_judge(court_id: str, full_name: str) -> str:
 # 1. court-sync 422 fix — unit-test the source resolver directly
 # ---------------------------------------------------------------
 
+
 def test_resolve_source_for_court_maps_known_courts() -> None:
     """Each court with a live adapter resolves to its key."""
     from caseops_api.services.court_sync_sources import resolve_source_for_court
@@ -193,6 +194,7 @@ def test_matter_court_sync_pull_request_source_is_optional() -> None:
 # 3. Outcome-bias rerank
 # ---------------------------------------------------------------
 
+
 def test_outcome_bias_mapping_covers_common_practice_areas() -> None:
     """The bias table includes the practice areas we regularly ship."""
     from caseops_api.services.recommendations import _OUTCOME_BIAS
@@ -209,15 +211,18 @@ def test_outcome_bias_rerank_promotes_preferred(client: TestClient) -> None:
     from caseops_api.services.recommendations import _rerank_by_outcome_bias
 
     doc_granted = _seed_authority(
-        title="A Granted", court_name="Delhi High Court",
+        title="A Granted",
+        court_name="Delhi High Court",
         outcome_label="bail granted",
     )
     doc_dismissed = _seed_authority(
-        title="B Dismissed", court_name="Delhi High Court",
+        title="B Dismissed",
+        court_name="Delhi High Court",
         outcome_label="dismissed",
     )
     doc_neutral = _seed_authority(
-        title="C Neutral", court_name="Delhi High Court",
+        title="C Neutral",
+        court_name="Delhi High Court",
         outcome_label=None,
     )
 
@@ -263,7 +268,9 @@ def test_outcome_bias_rerank_noop_for_unknown_practice_area(
     from caseops_api.services.recommendations import _rerank_by_outcome_bias
 
     doc = _seed_authority(
-        title="Z", court_name="Delhi High Court", outcome_label="dismissed",
+        title="Z",
+        court_name="Delhi High Court",
+        outcome_label="dismissed",
     )
     results = [
         AuthoritySearchResult(
@@ -306,36 +313,32 @@ def test_outcome_bias_rerank_empty_results_returns_empty(
 
 
 # ---------------------------------------------------------------
-# 4. Judge profile v2 — honorific stripping, judges_json match,
-#    practice-area histogram, decision-volume, tenure bounds.
+# 4. Judge profile — canonical mapping and descriptive classification.
 # ---------------------------------------------------------------
 
-def test_strip_judge_honorific_normalises_common_forms() -> None:
-    """Prefix / suffix normaliser covers the usual judicial honorifics."""
-    from caseops_api.api.routes.courts import (
-        _judge_surname,
-        _strip_judge_honorific,
-    )
 
-    assert _strip_judge_honorific("Justice Vikram Nath") == "Vikram Nath"
-    assert _strip_judge_honorific(
-        "Hon'ble Mr. Justice Vikram Nath"
-    ) == "Vikram Nath"
-    assert _strip_judge_honorific("Vikram Nath, J.") == "Vikram Nath"
-    assert _strip_judge_honorific("Chief Justice B.R. Gavai") == "B.R. Gavai"
-    assert _strip_judge_honorific("") == ""
-    assert _judge_surname("Justice Vikram Nath") == "Nath"
-    assert _judge_surname("") == ""
+def test_judge_alias_normaliser_is_stable_and_conservative() -> None:
+    """Alias normalization preserves identity tokens for catalog matching."""
+    from caseops_api.services.judge_aliases import normalise
+
+    assert normalise("Justice Vikram Nath") == "justice vikram nath"
+    assert normalise("Hon'ble Mr. Justice Vikram Nath") == "hon ble mr justice vikram nath"
+    assert normalise("Vikram Nath, J.") == "vikram nath j"
+    assert normalise(normalise("Vikram Nath, J.")) == "vikram nath j"
+    assert normalise("Chief Justice B.R. Gavai") == "chief justice b r gavai"
+    assert normalise("") == ""
 
 
-def test_judge_profile_structured_and_fallback_match_dedup(
+def test_judge_profile_uses_only_canonical_decision_mappings(
     client: TestClient,
 ) -> None:
-    """Docs matched via judges_json AND bench_name are counted once."""
-    # Direct service call — no HTTP route needed for this unit.
+    """Coincidental judges_json or bench text cannot enter a judge profile."""
+    from tests.test_auth_company import auth_headers, bootstrap_company
+
+    token = str(bootstrap_company(client)["access_token"])
     court_id = _seed_court("Delhi High Court")
-    _seed_judge(court_id, "Vikram Nath")
-    _seed_authority(
+    judge_id = _seed_judge(court_id, "Vikram Nath")
+    structured_id = _seed_authority(
         title="Structured match",
         court_name="Delhi High Court",
         judges_json=["Vikram Nath J."],
@@ -348,7 +351,7 @@ def test_judge_profile_structured_and_fallback_match_dedup(
         bench_name="Vikram Nath, J.",
         judges_json=None,
     )
-    _seed_authority(
+    both_id = _seed_authority(
         title="Both match",
         court_name="Delhi High Court",
         judges_json=["Vikram Nath J."],
@@ -356,21 +359,32 @@ def test_judge_profile_structured_and_fallback_match_dedup(
     )
 
     with get_session_factory()() as session:
-        # Confirm the 'both match' doc counts once, not twice.
-        from caseops_api.api.routes.courts import _strip_judge_honorific
-        stripped = _strip_judge_honorific("Vikram Nath")
-        from sqlalchemy import func, or_
+        for authority_id in (structured_id, both_id):
+            session.add(
+                JudgeDecisionIndex(
+                    judge_id=judge_id,
+                    authority_document_id=authority_id,
+                    year=2024,
+                    matched_alias="Vikram Nath",
+                    match_confidence="exact",
+                    mapping_status="auto_confirmed",
+                    resolver_version="judge-alias-v2-test",
+                    is_analytics_eligible=True,
+                )
+            )
+        session.commit()
 
-        structured_filter = AuthorityDocument.judges_json.ilike(
-            f'%"{stripped}%'
-        )
-        fallback_filter = AuthorityDocument.bench_name.ilike(f"%{stripped}%")
-        combined = or_(structured_filter, fallback_filter)
-
-        n = session.scalar(
-            select(func.count(AuthorityDocument.id.distinct())).where(combined)
-        )
-        assert n == 3  # three distinct docs, 'Both match' not double-counted
+    response = client.get(
+        f"/api/courts/judges/{judge_id}",
+        headers=auth_headers(token),
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["authority_document_count"] == 2
+    assert {row["title"] for row in body["recent_authorities"]} == {
+        "Structured match",
+        "Both match",
+    }
 
 
 # ---------------------------------------------------------------
@@ -480,38 +494,36 @@ def test_intake_promote_returns_400_on_duplicate_matter_code(
 
 def test_practice_area_classifier_buckets_sections(client: TestClient) -> None:
     """Practice-area regex buckets BNSS/CrPC as Bail, IPC as Criminal."""
-    from sqlalchemy import or_
-
     from caseops_api.api.routes.courts import _practice_area_histogram
 
     court_id = _seed_court("Delhi High Court")
     _seed_judge(court_id, "Surya Kant")
 
-    _seed_authority(
-        title="Bail one",
-        court_name="Delhi High Court",
-        judges_json=["Surya Kant"],
-        sections='["BNSS Section 483", "CrPC Section 439"]',
+    authority_ids = [
+        _seed_authority(
+            title="Bail one",
+            court_name="Delhi High Court",
+            judges_json=["Surya Kant"],
+            sections='["BNSS Section 483", "CrPC Section 439"]',
+        )
+    ]
+    authority_ids.append(
+        _seed_authority(
+            title="IPC one",
+            court_name="Delhi High Court",
+            judges_json=["Surya Kant"],
+            sections='["IPC Section 302"]',
+        )
     )
-    _seed_authority(
-        title="IPC one",
-        court_name="Delhi High Court",
-        judges_json=["Surya Kant"],
-        sections='["IPC Section 302"]',
+    authority_ids.append(
+        _seed_authority(
+            title="Civil one",
+            court_name="Delhi High Court",
+            judges_json=["Surya Kant"],
+            sections='["Specific Relief Act"]',
+        )
     )
-    _seed_authority(
-        title="Civil one",
-        court_name="Delhi High Court",
-        judges_json=["Surya Kant"],
-        sections='["Specific Relief Act"]',
-    )
-
-    from caseops_api.api.routes.courts import _strip_judge_honorific
-    stripped = _strip_judge_honorific("Surya Kant")
-    jfilter = or_(
-        AuthorityDocument.judges_json.ilike(f'%"{stripped}%'),
-        AuthorityDocument.bench_name.ilike(f"%{stripped}%"),
-    )
+    jfilter = AuthorityDocument.id.in_(authority_ids)
 
     with get_session_factory()() as session:
         hist = dict(_practice_area_histogram(session, judge_filter=jfilter))

@@ -111,6 +111,32 @@ class JudgeIdentityRecord(BaseModel):
     is_active: bool
 
 
+class JudgeCatalogListResponse(BaseModel):
+    judges: list[JudgeIdentityRecord]
+    returned_count: int = Field(ge=0)
+    limit: int = Field(ge=1, le=200)
+    has_more: bool
+
+
+class BenchIdentityRecord(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    court_id: str
+    name: str
+    source_name: str | None
+    source_url: str | None
+    source_reference: str | None
+    record_version: int
+
+
+class BenchCatalogListResponse(BaseModel):
+    benches: list[BenchIdentityRecord]
+    returned_count: int = Field(ge=0)
+    limit: int = Field(ge=1, le=200)
+    has_more: bool
+
+
 class AuthorityRemapResponse(BaseModel):
     authority_document_id: str
     mapped: int = Field(ge=0)

@@ -3242,6 +3242,8 @@ export type JudgeRecord = {
   honorific: string | null;
   current_position: string | null;
   is_active: boolean;
+  mapped_authority_count?: number;
+  analytics_eligible_authority_count?: number;
 };
 
 export type CourtAuthorityStub = {
@@ -3338,12 +3340,60 @@ export type JudgeAppointmentRecord = {
   source_action: import("@/components/app/SourceAction").SourceActionContract;
 };
 
+export type JudgeProfileAliasRecord = {
+  id: string;
+  alias_text: string;
+  source: string;
+  source_url: string | null;
+  source_action: import("@/components/app/SourceAction").SourceActionContract;
+};
+
+export type JudgeMappedAuthority = CourtAuthorityStub & {
+  court_name: string;
+  bench_name: string | null;
+  source: string;
+  source_reference: string | null;
+  source_action: import("@/components/app/SourceAction").SourceActionContract;
+  mapping_confidence: string;
+  mapping_status: string;
+  mapping_evidence: Record<string, unknown> | null;
+  raw_judge_name: string | null;
+  role: string;
+  analytics_eligible: boolean;
+};
+
+export type JudgeCoverageState =
+  | "mapped_results"
+  | "no_filter_matches"
+  | "no_judgments_for_judge"
+  | "no_mapped_corpus";
+
+export type JudgeAuthoritiesResponse = {
+  judge_id: string;
+  authorities: JudgeMappedAuthority[];
+  returned_count: number;
+  has_more: boolean;
+  next_cursor: string | null;
+  mapped_authority_count: number;
+  analytics_eligible_authority_count: number;
+  coverage_state: JudgeCoverageState;
+  coverage_disclaimer: string;
+};
+
 export type JudgeProfile = {
   judge: JudgeRecord;
   court: CourtRecord;
+  identity_source_action: import("@/components/app/SourceAction").SourceActionContract;
+  aliases: JudgeProfileAliasRecord[];
   portfolio_matter_count: number;
   authority_document_count: number;
-  recent_authorities: CourtAuthorityStub[];
+  analytics_eligible_authority_count: number;
+  mapping_coverage_percent: number;
+  coverage_state: JudgeCoverageState;
+  coverage_disclaimer: string;
+  recent_authorities: JudgeMappedAuthority[];
+  recent_authorities_has_more: boolean;
+  recent_authorities_next_cursor: string | null;
   analytics?: CourtDescriptiveAnalytics | null;
   // P1 (Sprint P, 2026-04-25). Backend ships these today; the web
   // page just needs to render them. Optional with default fallback so
@@ -3361,6 +3411,28 @@ export type JudgeProfile = {
 
 export async function fetchJudgeProfile(judgeId: string): Promise<JudgeProfile> {
   return apiRequest(`/api/courts/judges/${judgeId}`);
+}
+
+export async function fetchJudgeAuthorities(
+  judgeId: string,
+  params: {
+    cursor?: string | null;
+    limit?: number;
+    yearFrom?: number;
+    yearTo?: number;
+    mappingConfidence?: string;
+  } = {},
+): Promise<JudgeAuthoritiesResponse> {
+  const query = new URLSearchParams();
+  if (params.cursor) query.set("cursor", params.cursor);
+  if (params.limit) query.set("limit", String(params.limit));
+  if (params.yearFrom) query.set("year_from", String(params.yearFrom));
+  if (params.yearTo) query.set("year_to", String(params.yearTo));
+  if (params.mappingConfidence) {
+    query.set("mapping_confidence", params.mappingConfidence);
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return apiRequest(`/api/courts/judges/${judgeId}/authorities${suffix}`);
 }
 
 // MOD-TS-017 Slice S2 (2026-04-25) — bare-acts browser API.
@@ -4128,6 +4200,169 @@ export type JudgeAliasListResponse = {
 
 export async function listJudgeAliases(): Promise<JudgeAliasListResponse> {
   return apiRequest("/api/courts/judges/aliases");
+}
+
+export type JudgeMappingCandidate = {
+  id: string;
+  full_name: string;
+  court_id: string;
+};
+
+export type JudgeMappingReview = {
+  id: string;
+  authority_document_id: string;
+  authority_title: string;
+  court_id: string | null;
+  court_name: string | null;
+  raw_judge_name: string;
+  source_ordinal: number;
+  reason: string;
+  status: string;
+  resolver_version: string;
+  candidates: JudgeMappingCandidate[];
+  resolved_judge_id: string | null;
+  resolution_note: string | null;
+  record_version: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type JudgeIdentityRecord = {
+  id: string;
+  court_id: string;
+  full_name: string;
+  source_name: string | null;
+  source_url: string | null;
+  source_reference: string | null;
+  identity_version: number;
+  record_version: number;
+  merged_into_judge_id: string | null;
+  is_active: boolean;
+};
+
+export type BenchIdentityRecord = {
+  id: string;
+  court_id: string;
+  name: string;
+  source_name: string | null;
+  source_url: string | null;
+  source_reference: string | null;
+  record_version: number;
+};
+
+export async function listJudgeMappingReviews(
+  status = "open",
+  limit = 100,
+): Promise<{
+  reviews: JudgeMappingReview[];
+  returned_count: number;
+  limit: number;
+  has_more: boolean;
+}> {
+  const query = new URLSearchParams({ status, limit: String(limit) });
+  return apiRequest(`/api/judge-mapping/reviews?${query.toString()}`);
+}
+
+export async function listCuratorJudges(params: {
+  courtId?: string;
+  q?: string;
+  limit?: number;
+} = {}): Promise<{
+  judges: JudgeIdentityRecord[];
+  returned_count: number;
+  limit: number;
+  has_more: boolean;
+}> {
+  const query = new URLSearchParams();
+  if (params.courtId) query.set("court_id", params.courtId);
+  if (params.q) query.set("q", params.q);
+  query.set("limit", String(params.limit ?? 100));
+  return apiRequest(`/api/judge-mapping/catalog/judges?${query.toString()}`);
+}
+
+export async function listCuratorBenches(params: {
+  courtId?: string;
+  q?: string;
+  limit?: number;
+} = {}): Promise<{
+  benches: BenchIdentityRecord[];
+  returned_count: number;
+  limit: number;
+  has_more: boolean;
+}> {
+  const query = new URLSearchParams();
+  if (params.courtId) query.set("court_id", params.courtId);
+  if (params.q) query.set("q", params.q);
+  query.set("limit", String(params.limit ?? 100));
+  return apiRequest(`/api/judge-mapping/catalog/benches?${query.toString()}`);
+}
+
+export async function resolveJudgeMappingReview(
+  reviewId: string,
+  payload: { judge_id: string; expected_record_version: number; note: string },
+): Promise<JudgeMappingReview> {
+  return apiRequest(
+    `/api/judge-mapping/reviews/${encodeURIComponent(reviewId)}/resolve`,
+    { method: "POST", body: payload },
+  );
+}
+
+export async function createJudgeAlias(
+  judgeId: string,
+  payload: {
+    alias_text: string;
+    source: "manual_curator" | "official_court" | "source_correction";
+    source_url?: string | null;
+    source_evidence_text?: string | null;
+  },
+): Promise<unknown> {
+  return apiRequest(
+    `/api/judge-mapping/judges/${encodeURIComponent(judgeId)}/aliases`,
+    { method: "POST", body: payload },
+  );
+}
+
+export async function createBenchAlias(
+  benchId: string,
+  payload: {
+    alias_text: string;
+    source: "manual_curator" | "official_court" | "source_correction";
+    source_url?: string | null;
+  },
+): Promise<unknown> {
+  return apiRequest(
+    `/api/judge-mapping/benches/${encodeURIComponent(benchId)}/aliases`,
+    { method: "POST", body: payload },
+  );
+}
+
+export async function mergeJudgeIdentities(
+  sourceJudgeId: string,
+  payload: {
+    destination_judge_id: string;
+    expected_source_version: number;
+    expected_destination_version: number;
+    reason: string;
+  },
+): Promise<JudgeIdentityRecord> {
+  return apiRequest(
+    `/api/judge-mapping/judges/${encodeURIComponent(sourceJudgeId)}/merge`,
+    { method: "POST", body: payload },
+  );
+}
+
+export async function reprocessJudgeAuthority(authorityId: string): Promise<{
+  authority_document_id: string;
+  mapped: number;
+  inserted: number;
+  collisions: number;
+  unresolved: number;
+  review_ids: string[];
+}> {
+  return apiRequest(
+    `/api/judge-mapping/authorities/${encodeURIComponent(authorityId)}/reprocess`,
+    { method: "POST" },
+  );
 }
 
 // --- LW-S5: employee directory + secure setup/reset links ---

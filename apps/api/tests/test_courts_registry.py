@@ -1,4 +1,5 @@
 """§7.1 — courts master table + read-only routes."""
+
 from __future__ import annotations
 
 import json
@@ -29,9 +30,7 @@ def test_courts_listing_returns_seeded_rows(client: TestClient) -> None:
 
 def test_courts_listing_respects_forum_level_filter(client: TestClient) -> None:
     token = str(bootstrap_company(client)["access_token"])
-    resp = client.get(
-        "/api/courts/?forum_level=high_court", headers=auth_headers(token)
-    )
+    resp = client.get("/api/courts/?forum_level=high_court", headers=auth_headers(token))
     assert resp.status_code == 200
     body = resp.json()
     assert all(court["forum_level"] == "high_court" for court in body["courts"])
@@ -51,12 +50,8 @@ def test_judges_endpoint_returns_empty_list_when_none_seeded(
 ) -> None:
     token = str(bootstrap_company(client)["access_token"])
     courts_resp = client.get("/api/courts/", headers=auth_headers(token))
-    sc_id = next(
-        c["id"] for c in courts_resp.json()["courts"] if c["short_name"] == "SC"
-    )
-    resp = client.get(
-        f"/api/courts/{sc_id}/judges", headers=auth_headers(token)
-    )
+    sc_id = next(c["id"] for c in courts_resp.json()["courts"] if c["short_name"] == "SC")
+    resp = client.get(f"/api/courts/{sc_id}/judges", headers=auth_headers(token))
     assert resp.status_code == 200
     body = resp.json()
     assert body["court_id"] == sc_id
@@ -100,9 +95,7 @@ def test_judge_profile_returns_full_shape_when_seeded(client: TestClient) -> Non
         session.commit()
         judge_id = judge.id
 
-    resp = client.get(
-        f"/api/courts/judges/{judge_id}", headers=auth_headers(token)
-    )
+    resp = client.get(f"/api/courts/judges/{judge_id}", headers=auth_headers(token))
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["judge"]["id"] == judge_id
@@ -116,7 +109,7 @@ def test_judge_profile_returns_full_shape_when_seeded(client: TestClient) -> Non
 def test_judge_profile_returns_source_backed_descriptive_analytics(
     client: TestClient,
 ) -> None:
-    from caseops_api.db.models import AuthorityDocument, Court, Judge
+    from caseops_api.db.models import AuthorityDocument, Court, Judge, JudgeDecisionIndex
     from caseops_api.db.session import get_session_factory
 
     token = str(bootstrap_company(client)["access_token"])
@@ -134,43 +127,48 @@ def test_judge_profile_returns_source_backed_descriptive_analytics(
         session.add(judge)
         session.flush()
         for index in range(5):
+            document = AuthorityDocument(
+                source="adp06_test_source",
+                adapter_name="adp06-test-authorities-v1",
+                court_name=sc_court.name,
+                forum_level=sc_court.forum_level,
+                document_type="judgment",
+                title=f"Section 138 descriptive authority {index}",
+                case_reference=f"CRL.A. 13{index}/2026",
+                bench_name="Justice ADP Analytics",
+                neutral_citation=f"2026 INSC {index}",
+                decision_date=date(2026, 1, index + 1),
+                canonical_key=f"adp06-judge-analytics-{index}",
+                source_reference=(f"https://official.example.test/adp06-{index}.pdf"),
+                summary=("Bounded source-backed summary for indexed authority metadata only."),
+                document_text=(
+                    "FULL JUDGMENT TEXT SHOULD NEVER BE RETURNED BY THE COURT CONTEXT EXPLORER."
+                ),
+                extracted_char_count=2000,
+                judges_json=json.dumps(["ADP Analytics"]),
+                sections_cited_json=json.dumps(["Section 138 Negotiable Instruments Act"]),
+            )
+            session.add(document)
+            session.flush()
             session.add(
-                AuthorityDocument(
-                    source="adp06_test_source",
-                    adapter_name="adp06-test-authorities-v1",
-                    court_name=sc_court.name,
-                    forum_level=sc_court.forum_level,
-                    document_type="judgment",
-                    title=f"Section 138 descriptive authority {index}",
-                    case_reference=f"CRL.A. 13{index}/2026",
-                    bench_name="Justice ADP Analytics",
-                    neutral_citation=f"2026 INSC {index}",
-                    decision_date=date(2026, 1, index + 1),
-                    canonical_key=f"adp06-judge-analytics-{index}",
-                    source_reference=(
-                        f"https://official.example.test/adp06-{index}.pdf"
-                    ),
-                    summary=(
-                        "Bounded source-backed summary for indexed authority "
-                        "metadata only."
-                    ),
-                    document_text=(
-                        "FULL JUDGMENT TEXT SHOULD NEVER BE RETURNED BY THE "
-                        "COURT CONTEXT EXPLORER."
-                    ),
-                    extracted_char_count=2000,
-                    judges_json=json.dumps(["ADP Analytics"]),
-                    sections_cited_json=json.dumps(
-                        ["Section 138 Negotiable Instruments Act"]
-                    ),
+                JudgeDecisionIndex(
+                    judge_id=judge.id,
+                    authority_document_id=document.id,
+                    year=2026,
+                    matched_alias="ADP Analytics",
+                    match_confidence="exact",
+                    raw_judge_name="ADP Analytics",
+                    source_ordinal=0,
+                    mapping_status="auto_confirmed",
+                    resolver_version="test-060b",
+                    evidence_json={"source": "judges_json", "ordinal": 0},
+                    is_analytics_eligible=True,
                 )
             )
         session.commit()
         judge_id = judge.id
 
-    resp = client.get(
-        f"/api/courts/judges/{judge_id}", headers=auth_headers(token)
-    )
+    resp = client.get(f"/api/courts/judges/{judge_id}", headers=auth_headers(token))
 
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -182,15 +180,12 @@ def test_judge_profile_returns_source_backed_descriptive_analytics(
     assert analytics["case_list"][0]["source_reference"].startswith(
         "https://official.example.test/adp06-"
     )
-    assert analytics["case_list"][0]["source_action"]["target_type"] == (
-        "authority_document"
-    )
+    assert analytics["case_list"][0]["source_action"]["target_type"] == ("authority_document")
     assert analytics["case_list"][0]["source_action"]["target_id"]
     assert analytics["case_list"][0]["summary_preview"]
     assert "document_text" not in analytics["case_list"][0]
     assert any(
-        item["label"] == "Negotiable Instruments Act"
-        for item in analytics["statute_counts"]
+        item["label"] == "Negotiable Instruments Act" for item in analytics["statute_counts"]
     )
     assert any(
         item["label"] == "Supreme Court of India" and item["count"] == 5
@@ -221,7 +216,7 @@ def test_judge_profile_returns_source_backed_descriptive_analytics(
 def test_judge_profile_suppresses_pattern_language_for_low_sample(
     client: TestClient,
 ) -> None:
-    from caseops_api.db.models import AuthorityDocument, Court, Judge
+    from caseops_api.db.models import AuthorityDocument, Court, Judge, JudgeDecisionIndex
     from caseops_api.db.session import get_session_factory
 
     token = str(bootstrap_company(client)["access_token"])
@@ -238,32 +233,45 @@ def test_judge_profile_suppresses_pattern_language_for_low_sample(
         )
         session.add(judge)
         session.flush()
+        document = AuthorityDocument(
+            source="adp06_test_source",
+            adapter_name="adp06-test-authorities-v1",
+            court_name=sc_court.name,
+            forum_level=sc_court.forum_level,
+            document_type="judgment",
+            title="Single descriptive authority",
+            case_reference="CRL.A. 1/2026",
+            bench_name="Justice ADP Low Sample",
+            neutral_citation=None,
+            decision_date=date(2026, 2, 1),
+            canonical_key="adp06-low-sample-judge-analytics",
+            source_reference="https://official.example.test/adp06-low.pdf",
+            summary="One indexed authority is not enough for pattern language.",
+            extracted_char_count=120,
+            judges_json=json.dumps(["ADP Low Sample"]),
+            sections_cited_json=json.dumps(["Section 438 CrPC"]),
+        )
+        session.add(document)
+        session.flush()
         session.add(
-            AuthorityDocument(
-                source="adp06_test_source",
-                adapter_name="adp06-test-authorities-v1",
-                court_name=sc_court.name,
-                forum_level=sc_court.forum_level,
-                document_type="judgment",
-                title="Single descriptive authority",
-                case_reference="CRL.A. 1/2026",
-                bench_name="Justice ADP Low Sample",
-                neutral_citation=None,
-                decision_date=date(2026, 2, 1),
-                canonical_key="adp06-low-sample-judge-analytics",
-                source_reference="https://official.example.test/adp06-low.pdf",
-                summary="One indexed authority is not enough for pattern language.",
-                extracted_char_count=120,
-                judges_json=json.dumps(["ADP Low Sample"]),
-                sections_cited_json=json.dumps(["Section 438 CrPC"]),
+            JudgeDecisionIndex(
+                judge_id=judge.id,
+                authority_document_id=document.id,
+                year=2026,
+                matched_alias="ADP Low Sample",
+                match_confidence="exact",
+                raw_judge_name="ADP Low Sample",
+                source_ordinal=0,
+                mapping_status="auto_confirmed",
+                resolver_version="test-060b",
+                evidence_json={"source": "judges_json", "ordinal": 0},
+                is_analytics_eligible=True,
             )
         )
         session.commit()
         judge_id = judge.id
 
-    resp = client.get(
-        f"/api/courts/judges/{judge_id}", headers=auth_headers(token)
-    )
+    resp = client.get(f"/api/courts/judges/{judge_id}", headers=auth_headers(token))
 
     assert resp.status_code == 200, resp.text
     analytics = resp.json()["analytics"]
@@ -286,7 +294,7 @@ def test_judge_profile_case_list_marks_official_and_mirror_sources_differently(
     and the fix is invisible to it. The verdicts only diverge for a document that
     is genuinely official: a registry-classified source key AND a .gov.in URL.
     """
-    from caseops_api.db.models import AuthorityDocument, Court, Judge
+    from caseops_api.db.models import AuthorityDocument, Court, Judge, JudgeDecisionIndex
     from caseops_api.db.session import get_session_factory
 
     token = str(bootstrap_company(client)["access_token"])
@@ -311,29 +319,40 @@ def test_judge_profile_case_list_marks_official_and_mirror_sources_differently(
         # called that verified and offered it as openable.
         for index in range(5):
             official = index < 3
+            document = AuthorityDocument(
+                source=("supreme_court_latest_orders" if official else "mirror_scrape"),
+                adapter_name="source-trust-test-v1",
+                court_name=sc_court.name,
+                forum_level=sc_court.forum_level,
+                document_type="judgment",
+                title=f"Source trust authority {index}",
+                case_reference=f"CRL.A. 90{index}/2026",
+                bench_name="Justice Source Trust",
+                neutral_citation=f"2026 INSC 90{index}",
+                decision_date=date(2026, 2, index + 1),
+                canonical_key=f"source-trust-{index}",
+                # Both groups carry an official host on purpose.
+                source_reference=(f"https://main.sci.gov.in/supremecourt/2026/90{index}.pdf"),
+                summary="Bounded summary for source trust assertion.",
+                extracted_char_count=1200,
+                judges_json=json.dumps(["Source Trust"]),
+                sections_cited_json=json.dumps(["Section 138 Negotiable Instruments Act"]),
+            )
+            session.add(document)
+            session.flush()
             session.add(
-                AuthorityDocument(
-                    source=(
-                        "supreme_court_latest_orders" if official else "mirror_scrape"
-                    ),
-                    adapter_name="source-trust-test-v1",
-                    court_name=sc_court.name,
-                    forum_level=sc_court.forum_level,
-                    document_type="judgment",
-                    title=f"Source trust authority {index}",
-                    case_reference=f"CRL.A. 90{index}/2026",
-                    bench_name="Justice Source Trust",
-                    neutral_citation=f"2026 INSC 90{index}",
-                    decision_date=date(2026, 2, index + 1),
-                    canonical_key=f"source-trust-{index}",
-                    # Both groups carry an official host on purpose.
-                    source_reference=(
-                        f"https://main.sci.gov.in/supremecourt/2026/90{index}.pdf"
-                    ),
-                    summary="Bounded summary for source trust assertion.",
-                    extracted_char_count=1200,
-                    judges_json=json.dumps(["Source Trust"]),
-                    sections_cited_json=json.dumps(["Section 138 Negotiable Instruments Act"]),
+                JudgeDecisionIndex(
+                    judge_id=judge.id,
+                    authority_document_id=document.id,
+                    year=2026,
+                    matched_alias="Source Trust",
+                    match_confidence="exact",
+                    raw_judge_name="Source Trust",
+                    source_ordinal=0,
+                    mapping_status="auto_confirmed",
+                    resolver_version="test-060b",
+                    evidence_json={"source": "judges_json", "ordinal": 0},
+                    is_analytics_eligible=True,
                 )
             )
         session.commit()
@@ -346,18 +365,14 @@ def test_judge_profile_case_list_marks_official_and_mirror_sources_differently(
 
     # Both groups share an official host, so they are told apart by case
     # reference: 900-902 came from the registry source, 903-904 from a scrape.
-    states = {
-        item["case_reference"]: item["source_action"]["state"] for item in case_list
-    }
+    states = {item["case_reference"]: item["source_action"]["state"] for item in case_list}
     registry_states = {
         ref: state
         for ref, state in states.items()
         if ref in {"CRL.A. 900/2026", "CRL.A. 901/2026", "CRL.A. 902/2026"}
     }
     scrape_states = {
-        ref: state
-        for ref, state in states.items()
-        if ref in {"CRL.A. 903/2026", "CRL.A. 904/2026"}
+        ref: state for ref, state in states.items() if ref in {"CRL.A. 903/2026", "CRL.A. 904/2026"}
     }
     assert registry_states, "expected the registry-sourced documents in the case list"
     assert scrape_states, "expected the scrape-sourced documents in the case list"

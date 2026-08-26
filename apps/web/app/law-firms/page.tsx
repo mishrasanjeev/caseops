@@ -407,6 +407,18 @@ export default function LawFirmPitchPage() {
               </div>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
+              <div className="border-y border-[var(--color-line)] py-5 md:col-span-2">
+                <h3 className="text-lg font-semibold text-[var(--color-ink)]">
+                  Source-backed judge research
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-[var(--color-mute)]">
+                  Browse canonical judge identities and mapped judgments with court,
+                  citation, date, source action, confidence evidence, bounded filters, and
+                  honest corpus-coverage states. Low-confidence mappings stay visible for
+                  review and out of analytics; CaseOps does not score judges or forecast
+                  outcomes.
+                </p>
+              </div>
               <PitchCard
                 icon={BookOpen}
                 title="Authorities attached"

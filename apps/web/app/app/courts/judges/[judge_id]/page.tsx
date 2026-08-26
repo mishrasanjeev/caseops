@@ -1,18 +1,23 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
   BarChart3,
   Briefcase,
   CalendarRange,
+  Filter,
   Gavel,
   LibraryBig,
   Milestone,
+  RotateCcw,
+  Search,
   ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import type { FormEvent } from "react";
 
 import {
   Card,
@@ -26,7 +31,12 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { SourceAction } from "@/components/app/SourceAction";
-import { fetchJudgeProfile } from "@/lib/api/endpoints";
+import { Button } from "@/components/ui/Button";
+import {
+  fetchJudgeAuthorities,
+  fetchJudgeProfile,
+  type JudgeAuthoritiesResponse,
+} from "@/lib/api/endpoints";
 
 export default function JudgeProfilePage() {
   const params = useParams<{ judge_id: string }>();
@@ -35,6 +45,67 @@ export default function JudgeProfilePage() {
     queryKey: ["judges", judgeId, "profile"],
     queryFn: () => fetchJudgeProfile(judgeId),
     enabled: Boolean(judgeId),
+  });
+  const [yearFrom, setYearFrom] = useState("");
+  const [yearTo, setYearTo] = useState("");
+  const [mappingConfidence, setMappingConfidence] = useState("");
+  const [appliedFilters, setAppliedFilters] = useState<{
+    yearFrom?: number;
+    yearTo?: number;
+    mappingConfidence?: string;
+  } | null>(null);
+  const [authorityView, setAuthorityView] = useState<JudgeAuthoritiesResponse | null>(
+    null,
+  );
+  useEffect(() => {
+    setAuthorityView(null);
+    setAppliedFilters(null);
+    setYearFrom("");
+    setYearTo("");
+    setMappingConfidence("");
+  }, [judgeId]);
+  const authoritiesMutation = useMutation({
+    mutationFn: (variables: {
+      mode: "replace" | "append";
+      cursor?: string | null;
+      filters: {
+        yearFrom?: number;
+        yearTo?: number;
+        mappingConfidence?: string;
+      };
+    }) =>
+      fetchJudgeAuthorities(judgeId, {
+        cursor: variables.cursor,
+        limit: 20,
+        ...variables.filters,
+      }),
+    onSuccess: (data, variables) => {
+      setAuthorityView((current) => {
+        if (variables.mode !== "append") return data;
+        const profile = profileQuery.data;
+        const initialPage = profile
+          ? {
+              judge_id: judgeId,
+              authorities: profile.recent_authorities,
+              returned_count: profile.recent_authorities.length,
+              has_more: profile.recent_authorities_has_more,
+              next_cursor: profile.recent_authorities_next_cursor,
+              mapped_authority_count: profile.authority_document_count,
+              analytics_eligible_authority_count:
+                profile.analytics_eligible_authority_count,
+              coverage_state: profile.coverage_state,
+              coverage_disclaimer: profile.coverage_disclaimer,
+            }
+          : null;
+        const previous = current ?? initialPage;
+        if (!previous) return data;
+        return {
+          ...data,
+          authorities: [...previous.authorities, ...data.authorities],
+          returned_count: previous.returned_count + data.returned_count,
+        };
+      });
+    },
   });
 
   if (profileQuery.isPending) {
@@ -58,6 +129,39 @@ export default function JudgeProfilePage() {
   if (!profile) return null;
 
   const fullName = `${profile.judge.honorific ? `${profile.judge.honorific} ` : ""}${profile.judge.full_name}`;
+  const visibleAuthorities: JudgeAuthoritiesResponse = authorityView ?? {
+    judge_id: judgeId,
+    authorities: profile.recent_authorities,
+    returned_count: profile.recent_authorities.length,
+    has_more: profile.recent_authorities_has_more,
+    next_cursor: profile.recent_authorities_next_cursor,
+    mapped_authority_count: profile.authority_document_count,
+    analytics_eligible_authority_count: profile.analytics_eligible_authority_count,
+    coverage_state: profile.coverage_state,
+    coverage_disclaimer: profile.coverage_disclaimer,
+  };
+  const researchQuery = new URLSearchParams({
+    q: `${profile.judge.full_name} ${profile.court.name}`,
+  });
+
+  function applyAuthorityFilters(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const filters = {
+      yearFrom: yearFrom ? Number(yearFrom) : undefined,
+      yearTo: yearTo ? Number(yearTo) : undefined,
+      mappingConfidence: mappingConfidence || undefined,
+    };
+    setAppliedFilters(filters);
+    authoritiesMutation.mutate({ mode: "replace", filters });
+  }
+
+  function resetAuthorityFilters() {
+    setYearFrom("");
+    setYearTo("");
+    setMappingConfidence("");
+    setAppliedFilters(null);
+    setAuthorityView(null);
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -73,6 +177,35 @@ export default function JudgeProfilePage() {
         title={fullName}
         description={profile.judge.current_position ?? "Active judge"}
       />
+
+      <section className="flex min-w-0 flex-col gap-3 border-y border-[var(--color-line)] py-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="text-xs font-semibold uppercase text-[var(--color-mute-2)]">
+            Canonical identity
+          </div>
+          <div className="mt-1 flex min-w-0 flex-wrap gap-1.5">
+            {profile.aliases.length > 0 ? (
+              profile.aliases.map((alias) => (
+                <span
+                  key={alias.id}
+                  className="rounded-md border border-[var(--color-line)] bg-white px-2 py-1 text-xs text-[var(--color-ink-2)]"
+                >
+                  {alias.alias_text}
+                </span>
+              ))
+            ) : (
+              <span className="text-xs text-[var(--color-mute)]">No active aliases</span>
+            )}
+          </div>
+        </div>
+        <div className="flex min-w-0 shrink-0 flex-wrap">
+          <SourceAction
+            action={profile.identity_source_action}
+            compact
+            originSurface="judge_profile"
+          />
+        </div>
+      </section>
 
       <section className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
         <KpiCard
@@ -96,14 +229,14 @@ export default function JudgeProfilePage() {
         />
         <KpiCard
           icon={ShieldCheck}
-          label="Structured match"
-          value={
-            profile.structured_match_coverage_percent !== undefined
-              ? `${profile.structured_match_coverage_percent}%`
-              : "—"
-          }
+          label="Analytics eligible"
+          value={`${profile.mapping_coverage_percent}%`}
         />
       </section>
+
+      <p className="text-xs leading-5 text-[var(--color-mute)]">
+        {profile.coverage_disclaimer}
+      </p>
 
       {profile.analytics ? (
         <Card data-testid="judge-context-explorer">
@@ -276,24 +409,109 @@ export default function JudgeProfilePage() {
         </Card>
       ) : null}
 
-      <Card>
+      <Card data-testid="judge-mapped-authorities">
         <CardHeader>
-          <CardTitle>Recent authorities</CardTitle>
+          <CardTitle>Mapped authorities</CardTitle>
           <CardDescription>
-            Most recent indexed judgments where this judge sat on the bench. The
-            match is on bench-name string — review before relying for citation.
+            Canonical judge mappings with source and confidence evidence.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          {profile.recent_authorities.length === 0 ? (
+        <CardContent className="flex flex-col gap-4">
+          <form
+            className="grid min-w-0 gap-3 border-b border-[var(--color-line)] pb-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)_auto] sm:items-end"
+            onSubmit={applyAuthorityFilters}
+          >
+            <label className="min-w-0 text-xs font-medium text-[var(--color-ink-2)]">
+              From year
+              <input
+                type="number"
+                min={1900}
+                max={2100}
+                value={yearFrom}
+                onChange={(event) => setYearFrom(event.target.value)}
+                className="mt-1 h-9 w-full min-w-0 rounded-md border border-[var(--color-line)] bg-white px-2 text-sm"
+              />
+            </label>
+            <label className="min-w-0 text-xs font-medium text-[var(--color-ink-2)]">
+              To year
+              <input
+                type="number"
+                min={1900}
+                max={2100}
+                value={yearTo}
+                onChange={(event) => setYearTo(event.target.value)}
+                className="mt-1 h-9 w-full min-w-0 rounded-md border border-[var(--color-line)] bg-white px-2 text-sm"
+              />
+            </label>
+            <label className="min-w-0 text-xs font-medium text-[var(--color-ink-2)]">
+              Mapping confidence
+              <select
+                value={mappingConfidence}
+                onChange={(event) => setMappingConfidence(event.target.value)}
+                className="mt-1 h-9 w-full min-w-0 rounded-md border border-[var(--color-line)] bg-white px-2 text-sm"
+              >
+                <option value="">All mappings</option>
+                <option value="exact">Exact</option>
+                <option value="initial_surname">Initial and surname</option>
+                <option value="high">High</option>
+                <option value="low">Low</option>
+                <option value="curator_confirmed">Curator confirmed</option>
+              </select>
+            </label>
+            <div className="flex min-w-0 flex-wrap gap-2 sm:justify-end">
+              {appliedFilters ? (
+                <Button type="button" variant="secondary" onClick={resetAuthorityFilters}>
+                  <RotateCcw className="h-4 w-4" aria-hidden /> Reset
+                </Button>
+              ) : null}
+              <Button type="submit" disabled={authoritiesMutation.isPending}>
+                <Filter className="h-4 w-4" aria-hidden /> Filter
+              </Button>
+            </div>
+          </form>
+
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-xs text-[var(--color-mute)]">
+            <span>
+              {visibleAuthorities.returned_count.toLocaleString()} shown of{" "}
+              {visibleAuthorities.mapped_authority_count.toLocaleString()} mapped
+            </span>
+            <Link
+              href={`/app/research?${researchQuery.toString()}`}
+              className="inline-flex items-center gap-1.5 font-medium text-[var(--color-brand-700)] hover:underline"
+            >
+              <Search className="h-3.5 w-3.5" aria-hidden /> Research this judge
+            </Link>
+          </div>
+
+          {authoritiesMutation.isError ? (
+            <QueryErrorState
+              title="Could not load mapped authorities"
+              error={authoritiesMutation.error}
+              onRetry={() =>
+                authoritiesMutation.mutate({
+                  mode: authorityView ? "append" : "replace",
+                  cursor: authorityView?.next_cursor,
+                  filters: appliedFilters ?? {},
+                })
+              }
+            />
+          ) : null}
+
+          {visibleAuthorities.authorities.length === 0 ? (
             <EmptyState
               icon={Gavel}
-              title="No authorities indexed yet"
-              description="No judgments in the corpus reference this judge. They'll appear here as the ingest catches up."
+              title={
+                visibleAuthorities.coverage_state === "no_mapped_corpus"
+                  ? "No mapped court corpus"
+                  : visibleAuthorities.coverage_state === "no_judgments_for_judge"
+                    ? "No mapped judgments for this judge"
+                    : "No authorities match these filters"
+              }
+              description={visibleAuthorities.coverage_disclaimer}
             />
           ) : (
             <ul className="flex flex-col gap-2">
-              {profile.recent_authorities.map((authority) => (
+              {visibleAuthorities.authorities.map((authority) => (
                 <li
                   key={authority.id}
                   className="rounded-md border border-[var(--color-line)] bg-white p-3"
@@ -310,14 +528,47 @@ export default function JudgeProfilePage() {
                     ) : null}
                     {authority.neutral_citation ? (
                       <span className="font-mono">
-                        · {authority.neutral_citation}
+                        {authority.neutral_citation}
                       </span>
                     ) : null}
+                    <span className="rounded border border-[var(--color-line)] px-1.5 py-0.5 uppercase">
+                      {authority.mapping_confidence.replace(/_/g, " ")}
+                    </span>
+                    {!authority.analytics_eligible ? (
+                      <span className="font-medium text-[var(--color-warning-700)]">
+                        Excluded from analytics
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="mt-2 flex min-w-0 flex-wrap">
+                    <SourceAction
+                      action={authority.source_action}
+                      compact
+                      originSurface="judge_profile"
+                    />
                   </div>
                 </li>
               ))}
             </ul>
           )}
+          {visibleAuthorities.has_more ? (
+            <div className="flex justify-center border-t border-[var(--color-line)] pt-4">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={authoritiesMutation.isPending}
+                onClick={() =>
+                  authoritiesMutation.mutate({
+                    mode: "append",
+                    cursor: visibleAuthorities.next_cursor,
+                    filters: appliedFilters ?? {},
+                  })
+                }
+              >
+                <LibraryBig className="h-4 w-4" aria-hidden /> Load more
+              </Button>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
     </div>

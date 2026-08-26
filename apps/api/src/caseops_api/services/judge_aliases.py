@@ -49,7 +49,7 @@ def normalise(text: str) -> str:
         return ""
     cleaned = text.replace("\u00a0", " ").strip()
     cleaned = _STRIP_PUNCT_RE.sub(" ", cleaned)
-    cleaned = re.sub(r"\s+", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
     return cleaned.lower()
 
 

@@ -165,9 +165,14 @@ export default function CourtProfilePage() {
                       href={`/app/courts/judges/${judge.id}`}
                       className="block hover:text-[var(--color-brand-600)]"
                     >
-                      <div className="text-sm font-medium text-[var(--color-ink)] hover:underline">
-                        {judge.honorific ? `${judge.honorific} ` : ""}
-                        {judge.full_name}
+                      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                        <div className="text-sm font-medium text-[var(--color-ink)] hover:underline">
+                          {judge.honorific ? `${judge.honorific} ` : ""}
+                          {judge.full_name}
+                        </div>
+                        <span className="shrink-0 text-xs tabular text-[var(--color-mute)]">
+                          {(judge.mapped_authority_count ?? 0).toLocaleString()} mapped
+                        </span>
                       </div>
                       {judge.current_position ? (
                         <div className="text-xs text-[var(--color-mute)]">

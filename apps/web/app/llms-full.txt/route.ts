@@ -125,6 +125,16 @@ Every public claim is classified as one of: live, review-first, provider-gated, 
 - Litigation Intelligence reviews proceeding signals, affidavit gaps, mock-hearing feedback, bench context, source readiness, knowledge-graph links, and transcript-first coaching with source links and confidence
 - Decision-support surfaces do not provide legal advice, outcome forecasts, judge scoring, biometric analysis, or unsupported court-strategy claims
 
+### 7C. Canonical judge research
+
+- Judge profiles use canonical judge-decision mappings, not free-text name coincidence
+- Mapped judgments expose court, citation, date, source action, mapping confidence, retained evidence, bounded filters, and cursor pagination
+- Coverage states distinguish no mapped court corpus, no mapped judgments for the selected judge, and no filter matches
+- Low-confidence mappings remain visible for review but are excluded from descriptive analytics
+- Staff curators can resolve individual collision evidence slots, add sourced judge and bench aliases, merge duplicate identities with optimistic concurrency, and reprocess authority mappings; writes are capability-gated and audited
+- The automated judge-mapping refresh is deployed but remains paused until source, provider, legal, and UAT approval
+- Judge profiles do not provide personality, bias, emotion, lawyer-favoritism, success-probability, or outcome-forecast claims
+
 ### 7A. Trademark opposition docketing
 
 - Application and opposition identifiers remain separate, including explicit pending Registry allocation
