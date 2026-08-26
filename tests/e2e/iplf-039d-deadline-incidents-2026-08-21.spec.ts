@@ -139,11 +139,20 @@ test("IPLF-039D opens, assesses, communicates and resolves an incident", async (
   await expect(workspace.getByText("open", { exact: true })).toBeVisible();
 
   for (const actionType of ["containment", "corrective_task", "prevention"] as const) {
+    const actionReference = workspace.getByLabel("Action reference", { exact: true });
+    const actionButton = workspace.getByRole("button", { name: "Record action" });
     await workspace.getByRole("combobox", { name: /^Action/ }).first().selectOption(actionType);
-    await workspace.getByLabel("Action reference", { exact: true }).fill(`task:${actionType}:1`);
+    await actionReference.fill(`task:${actionType}:1`);
     await workspace.getByLabel("Evidence reference", { exact: true }).fill(`evidence:${actionType}:1`);
     await workspace.getByLabel("Action details", { exact: true }).fill(`Risk partner completed ${actionType}.`);
-    await workspace.getByRole("button", { name: "Record action" }).click();
+    await expect(actionButton).toBeEnabled();
+    const responsePromise = page.waitForResponse((response) =>
+      response.url().endsWith("/actions") && response.request().method() === "POST",
+    );
+    await actionButton.click();
+    const response = await responsePromise;
+    expect(response.status(), await response.text()).toBe(200);
+    await expect(actionReference).toHaveValue("");
   }
 
   await workspace.getByRole("button", { name: "Impact" }).click();
