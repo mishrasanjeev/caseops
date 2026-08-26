@@ -1,8 +1,8 @@
 # IPLF-060A Judge Mapping Foundation
 
-Status: repository implementation candidate at `c599eee92ffeb22bcf761b888c12062a8cee7235`.
-Release status remains blocked until PR review, exact-main CI, migration-first deployment,
-scheduler reconciliation, and exact-release production verification pass.
+Status: repository implementation and exact-production release verified at
+`527adb8d48043b7a6087a4bce7c0026aa95e5cc6`. IPLF-060B, JUDGE-01 through
+JUDGE-10, and UJ-20 remain pending.
 
 ## Scope boundary
 
@@ -104,8 +104,9 @@ The additive `/api/judge-mapping` contract provides bounded staff-only routes to
 
 Every mutation is audited. The nightly `caseops-judge-mapping-refresh` Cloud Run
 job uses keyset pagination and bounded batches, replacing the prior offset scan
-and first-candidate behavior. Its production scheduler remains paused until the
-foundation is deployed, migrated, reconciled, and independently accepted.
+and first-candidate behavior. Its production scheduler is deployed and
+digest-pinned but remains paused until IPLF-060B and independent source,
+pilot-court, legal, provider, and UAT acceptance pass.
 
 ## IPLF-060B remains pending
 
@@ -117,7 +118,7 @@ The following work is intentionally not claimed by this foundation:
 - UJ-20 normal and exception browser journeys, accessibility, and responsive QA;
 - descriptive, coverage-qualified analytics copy and prohibited-inference tests;
 - Delhi plus two additional approved pilot-court source/mapping smoke tests;
-- exact-production migration, scheduler, API, UI, and source-link acceptance.
+- exact-production UI and source-link acceptance for the IPLF-060B journeys.
 
 IPLF-060B must extend the owners above and must not create another identity
 catalog, authority corpus, profile route, source-link mechanism, analytics
@@ -126,12 +127,13 @@ store, capability, audit log, or scheduler.
 ## Verification and rollback
 
 Local evidence is recorded in
-`evidence/m6/IPLF-060A/local-2026-08-26.md`. CI must additionally prove a single
-Alembic head, PostgreSQL upgrade/backfill behavior, generated OpenAPI parity,
+`evidence/m6/IPLF-060A/local-2026-08-26.md`; exact-release evidence is recorded
+in `evidence/m6/IPLF-060A/release-2026-08-26.md`. CI proved a single Alembic
+head, PostgreSQL upgrade/backfill behavior, generated OpenAPI parity,
 data-governance parity, API/web tests, and scheduler inventory. Production
-release requires exact API/web SHA identity, immutable image digests, successful
-migration execution, exact scheduler image reconciliation, latest-only traffic,
-health, and unchanged production acceptance.
+proved exact API/web SHA identity, immutable image digests, idempotent migration,
+paused exact-digest scheduler reconciliation, latest-only traffic, health, and
+unchanged production acceptance.
 
 Before any new lineage is written, rollback may return services and migration to
 the predecessor. After lineage is written, keep the additive schema, disable or
