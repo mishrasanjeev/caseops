@@ -51,6 +51,11 @@ RUN python -c "from tokenizers import Tokenizer; tokenizer = Tokenizer.from_pret
 # under /root/.cache/fastembed and stays in the image layer.
 RUN python -c "from fastembed.rerank.cross_encoder import TextCrossEncoder; TextCrossEncoder(model_name='jinaai/jina-reranker-v1-tiny-en')"
 
+# Both model families are now baked into immutable image layers. Force runtime
+# resolution through those caches so cold workers never probe the public Hub.
+ENV HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1
+
 # Cloud Run injects PORT (default 8080); local uses the ENV default
 # above. Bind to all interfaces so the container is reachable from
 # the proxy.
