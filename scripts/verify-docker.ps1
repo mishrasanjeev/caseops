@@ -82,7 +82,8 @@ try {
 
     foreach ($Service in @("api", "web")) {
         $ImageId = ((& docker compose --project-name $ComposeProject --file $ComposeFile images --quiet $Service | Out-String).Trim())
-        $ImageRevision = ((& docker image inspect --format "{{index .Config.Labels `"org.opencontainers.image.revision`"}}" $ImageId | Out-String).Trim())
+        $ImageMetadata = (& docker image inspect $ImageId | ConvertFrom-Json)
+        $ImageRevision = $ImageMetadata[0].Config.Labels.'org.opencontainers.image.revision'
         if ($ImageRevision -ne $ReleaseSha) {
             throw "$Service image revision $ImageRevision does not match $ReleaseSha."
         }

@@ -333,6 +333,7 @@ def test_workstation_docker_gate_is_migration_first_and_exact_release() -> None:
     assert "building API and web production images" in docker_script
     assert "MigrationExitCode" in docker_script
     assert "org.opencontainers.image.revision" in docker_script
+    assert "docker image inspect $ImageId | ConvertFrom-Json" in docker_script
     assert "ApiIdentity.release_sha" in docker_script
     assert "WebIdentity.release_sha" in docker_script
     assert "PostTestHealth" in docker_script
