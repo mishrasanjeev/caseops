@@ -226,7 +226,15 @@ def _gcloud_resource_exists(arguments: list[str]) -> bool:
         return True
     detail = (completed.stderr or completed.stdout).strip()
     lowered = detail.lower()
-    if any(marker in lowered for marker in ("not found", "could not be found", "does not exist")):
+    if any(
+        marker in lowered
+        for marker in (
+            "not found",
+            "cannot find",
+            "could not be found",
+            "does not exist",
+        )
+    ):
         return False
     raise InventoryError(f"gcloud {' '.join(arguments)} failed: {detail}")
 
