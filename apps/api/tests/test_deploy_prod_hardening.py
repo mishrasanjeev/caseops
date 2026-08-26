@@ -327,6 +327,8 @@ def test_workstation_docker_gate_is_migration_first_and_exact_release() -> None:
     assert '${CASEOPS_DOCKER_VALKEY_PORT:-16379}:6379' in compose
 
     assert '$ComposeProject = "caseops-acceptance"' in docker_script
+    assert "git -C $RepoRoot status" in docker_script
+    assert "| Out-String).Trim()" in docker_script
     assert "down --volumes --remove-orphans" in docker_script
     assert "building API and web production images" in docker_script
     assert "MigrationExitCode" in docker_script

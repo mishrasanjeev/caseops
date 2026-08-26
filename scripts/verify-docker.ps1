@@ -16,13 +16,13 @@ $ApiPort = "18000"
 $WebPort = "13100"
 $PostgresPort = "25432"
 $ValkeyPort = "26379"
-$ReleaseSha = (& git -C $RepoRoot rev-parse HEAD).Trim()
+$ReleaseSha = ((& git -C $RepoRoot rev-parse HEAD | Out-String).Trim())
 
 if ($LASTEXITCODE -ne 0 -or $ReleaseSha -notmatch "^[0-9a-f]{40}$") {
     throw "Could not resolve the exact candidate SHA."
 }
 
-$DirtyContext = (& git -C $RepoRoot status --porcelain --untracked-files=all -- apps/api apps/web docker-compose.yml package.json package-lock.json .dockerignore .gcloudignore playwright.docker.config.ts scripts/verify-docker.ps1).Trim()
+$DirtyContext = ((& git -C $RepoRoot status --porcelain --untracked-files=all -- apps/api apps/web docker-compose.yml package.json package-lock.json .dockerignore .gcloudignore playwright.docker.config.ts scripts/verify-docker.ps1 | Out-String).Trim())
 if ($DirtyContext) {
     throw "Docker acceptance requires a committed, clean build context. Commit the candidate first.`n$DirtyContext"
 }
@@ -74,15 +74,15 @@ try {
     & docker compose --project-name $ComposeProject --file $ComposeFile up --detach --wait --wait-timeout 300
     if ($LASTEXITCODE -ne 0) { throw "Docker stack did not become healthy." }
 
-    $MigrationId = (& docker compose --project-name $ComposeProject --file $ComposeFile ps --all --quiet migrate).Trim()
-    $MigrationExitCode = (& docker inspect --format "{{.State.ExitCode}}" $MigrationId).Trim()
+    $MigrationId = ((& docker compose --project-name $ComposeProject --file $ComposeFile ps --all --quiet migrate | Out-String).Trim())
+    $MigrationExitCode = ((& docker inspect --format "{{.State.ExitCode}}" $MigrationId | Out-String).Trim())
     if ($MigrationExitCode -ne "0") {
         throw "Migration container exited with code $MigrationExitCode."
     }
 
     foreach ($Service in @("api", "web")) {
-        $ImageId = (& docker compose --project-name $ComposeProject --file $ComposeFile images --quiet $Service).Trim()
-        $ImageRevision = (& docker image inspect --format "{{index .Config.Labels `"org.opencontainers.image.revision`"}}" $ImageId).Trim()
+        $ImageId = ((& docker compose --project-name $ComposeProject --file $ComposeFile images --quiet $Service | Out-String).Trim())
+        $ImageRevision = ((& docker image inspect --format "{{index .Config.Labels `"org.opencontainers.image.revision`"}}" $ImageId | Out-String).Trim())
         if ($ImageRevision -ne $ReleaseSha) {
             throw "$Service image revision $ImageRevision does not match $ReleaseSha."
         }
