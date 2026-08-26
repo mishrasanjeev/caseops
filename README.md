@@ -211,7 +211,27 @@ Option A — full Docker stack (recommended):
 docker compose up --build
 ```
 
-Starts `web` (port 3000), `api` (port 8000), `worker`, `postgres` (5432), `valkey` (6379).
+Starts `web` (port 3000), `api` (port 8000), `worker`, `postgres` (host port
+15432), and `valkey` (host port 16379). The API and worker start only after a
+single migration container has completed successfully; the web starts only
+after the API is healthy. The browser bundle is built against the local API,
+so this command never silently sends local browser traffic to production.
+
+The canonical workstation release gate uses isolated ports and a fresh
+Postgres volume, builds SHA-labelled production images, verifies both runtime
+release identities, and runs the full app Playwright suite against those
+containers:
+
+```powershell
+npm run verify:docker
+```
+
+Pass Playwright selectors after `--`, or keep a passing stack available for
+inspection with `-KeepRunning`:
+
+```powershell
+npm run verify:docker -- -KeepRunning -g "recommendations grounding"
+```
 
 CaseOps local runtime is Postgres-first. SQLite is only a test fallback and should not be
 used for seeded corpora or normal development.

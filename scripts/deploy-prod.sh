@@ -34,11 +34,13 @@ REGISTRY="${REGION}-docker.pkg.dev/${PROJECT}/${REPO}"
 API_CPU=2
 API_MEMORY=4Gi
 API_SOURCE_DIR=apps/api
-WEB_SOURCE_DIR=apps/web
+WEB_SOURCE_DIR=.
 API_GCLOUDIGNORE_FILE=.gcloudignore
 API_GCLOUDIGNORE_PATH="${API_SOURCE_DIR}/${API_GCLOUDIGNORE_FILE}"
+API_CLOUD_BUILD_CONFIG=apps/api/cloudbuild.yaml
 WEB_GCLOUDIGNORE_FILE=.gcloudignore
-WEB_GCLOUDIGNORE_PATH="${WEB_SOURCE_DIR}/${WEB_GCLOUDIGNORE_FILE}"
+WEB_GCLOUDIGNORE_PATH=.gcloudignore
+WEB_CLOUD_BUILD_CONFIG=apps/web/cloudbuild.yaml
 MIGRATION_TASK_TIMEOUT=30m
 # 2026-06-08 incident: a blocking request pinned the single Uvicorn
 # event loop and Cloud Run kept routing unrelated API calls to that
@@ -122,7 +124,9 @@ if [[ "$#" -eq 1 ]]; then
   fi
 fi
 
-DIRTY_BUILD_CONTEXT=$(git status --porcelain --untracked-files=all -- "${API_SOURCE_DIR}" "${WEB_SOURCE_DIR}")
+DIRTY_BUILD_CONTEXT=$(git status --porcelain --untracked-files=all -- \
+  "${API_SOURCE_DIR}" "apps/web" package.json package-lock.json \
+  .dockerignore .gcloudignore)
 if [[ -n "${DIRTY_BUILD_CONTEXT}" ]]; then
   echo "ERROR: API/web build context is dirty; refusing to label it as ${HEAD_SHA}."
   printf '%s\n' "${DIRTY_BUILD_CONTEXT}"
@@ -148,14 +152,19 @@ if [[ ! -f "${WEB_GCLOUDIGNORE_PATH}" ]]; then
   exit 1
 fi
 
-gcloud builds submit "${API_SOURCE_DIR}" --ignore-file "${API_GCLOUDIGNORE_FILE}" --tag "${API_IMAGE}" --project "${PROJECT}" &
+gcloud builds submit "${API_SOURCE_DIR}" \
+  --ignore-file "${API_GCLOUDIGNORE_FILE}" \
+  --config "${API_CLOUD_BUILD_CONFIG}" \
+  --substitutions "_API_IMAGE=${API_IMAGE},_RELEASE_SHA=${HEAD_SHA}" \
+  --project "${PROJECT}" &
 API_BUILD_PID=$!
-# Explicitly pass the web .gcloudignore. The source directory has local
-# node_modules/.next on Windows deploy hosts, and relying on Docker's
-# .dockerignore is too late because gcloud creates the upload archive first.
+# Submit a narrowly filtered repository-root context so the web Dockerfile can
+# install from the committed workspace lockfile. The Cloud Build config names
+# the nested Dockerfile and immutable output image explicitly.
 gcloud builds submit "${WEB_SOURCE_DIR}" \
   --ignore-file "${WEB_GCLOUDIGNORE_FILE}" \
-  --tag "${WEB_IMAGE}" \
+  --config "${WEB_CLOUD_BUILD_CONFIG}" \
+  --substitutions "_WEB_IMAGE=${WEB_IMAGE},_RELEASE_SHA=${HEAD_SHA}" \
   --project "${PROJECT}" &
 WEB_BUILD_PID=$!
 wait "${API_BUILD_PID}" || { echo "API build FAILED"; exit 1; }

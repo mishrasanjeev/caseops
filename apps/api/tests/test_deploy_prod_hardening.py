@@ -282,18 +282,93 @@ def test_deploy_prod_uses_web_gcloudignore_explicitly() -> None:
     script = _read_repo_text("scripts/deploy-prod.sh")
 
     assert "WEB_GCLOUDIGNORE_FILE=.gcloudignore" in script
-    assert 'WEB_GCLOUDIGNORE_PATH="${WEB_SOURCE_DIR}/${WEB_GCLOUDIGNORE_FILE}"' in script
+    assert "WEB_GCLOUDIGNORE_PATH=.gcloudignore" in script
+    assert "WEB_CLOUD_BUILD_CONFIG=apps/web/cloudbuild.yaml" in script
     assert '--ignore-file "${WEB_GCLOUDIGNORE_FILE}"' in script
+    assert '--config "${WEB_CLOUD_BUILD_CONFIG}"' in script
+    assert '"_WEB_IMAGE=${WEB_IMAGE},_RELEASE_SHA=${HEAD_SHA}"' in script
     assert '[[ ! -f "${WEB_GCLOUDIGNORE_PATH}" ]]' in script
+
+
+def test_web_image_uses_committed_workspace_lockfile() -> None:
+    dockerfile = _read_repo_text("apps/web/Dockerfile")
+    compose = _read_repo_text("docker-compose.yml")
+    cloudbuild = _read_repo_text("apps/web/cloudbuild.yaml")
+    dockerignore = _read_repo_text(".dockerignore")
+    gcloudignore = _read_repo_text(".gcloudignore")
+
+    assert "COPY package.json package-lock.json ./" in dockerfile
+    assert "RUN npm ci --no-audit --no-fund" in dockerfile
+    assert "npm install" not in dockerfile
+    assert "npm prune --omit=dev" in dockerfile
+    assert "context: ." in compose
+    assert "dockerfile: apps/web/Dockerfile" in compose
+    assert "apps/web/Dockerfile" in cloudbuild
+    assert "CASEOPS_RELEASE_SHA=${_RELEASE_SHA}" in cloudbuild
+    for ignore in (dockerignore, gcloudignore):
+        assert "!package-lock.json" in ignore
+        assert "!apps/web/**" in ignore
+        assert "apps/web/node_modules/" in ignore
+
+
+def test_workstation_docker_gate_is_migration_first_and_exact_release() -> None:
+    compose = _read_repo_text("docker-compose.yml")
+    docker_script = _read_repo_text("scripts/verify-docker.ps1")
+    playwright_config = _read_repo_text("playwright.docker.config.ts")
+    e2e_env = _read_repo_text("tests/e2e/support/env.ts")
+    e2e_helpers = _read_repo_text("tests/e2e/support/helpers.ts")
+
+    assert 'NEXT_PUBLIC_API_BASE_URL: ${CASEOPS_DOCKER_PUBLIC_API_URL' in compose
+    assert 'command: ["alembic", "upgrade", "head"]' in compose
+    assert compose.count("condition: service_completed_successfully") == 2
+    assert compose.count('CASEOPS_AUTO_MIGRATE: "false"') == 3
+    assert compose.count("org.opencontainers.image.revision") == 0
+    assert "condition: service_healthy" in compose
+    assert '${CASEOPS_DOCKER_VALKEY_PORT:-16379}:6379' in compose
+
+    assert '$ComposeProject = "caseops-acceptance"' in docker_script
+    assert "down --volumes --remove-orphans" in docker_script
+    assert "building API and web production images" in docker_script
+    assert "MigrationExitCode" in docker_script
+    assert "org.opencontainers.image.revision" in docker_script
+    assert "ApiIdentity.release_sha" in docker_script
+    assert "WebIdentity.release_sha" in docker_script
+    assert "PostTestHealth" in docker_script
+    assert "CASEOPS_E2E_DATABASE_URL" in docker_script
+    assert "CASEOPS_E2E_DOCKER_PROJECT" in docker_script
+    assert "CASEOPS_E2E_DOCKER_COMPOSE_FILE" in docker_script
+
+    assert "globalSetup: undefined" in playwright_config
+    assert "webServer: undefined" in playwright_config
+    assert "CASEOPS_WEB_BASE_URL" in playwright_config
+    assert "process.env.CASEOPS_E2E_DATABASE_URL" in e2e_env
+    assert "process.env.CASEOPS_WEB_BASE_URL" in e2e_env
+    assert "CASEOPS_E2E_DOCKER_PROJECT" in e2e_helpers
+    assert '"caseops-document-worker"' in e2e_helpers
+    assert '"--skip-migrations"' in e2e_helpers
+
+
+@pytest.mark.parametrize("dockerfile", ["apps/api/Dockerfile", "apps/web/Dockerfile"])
+def test_release_images_carry_exact_revision_label(dockerfile: str) -> None:
+    image = _read_repo_text(dockerfile)
+
+    assert "ARG CASEOPS_RELEASE_SHA=unavailable" in image
+    assert "LABEL org.opencontainers.image.revision=$CASEOPS_RELEASE_SHA" in image
 
 
 def test_deploy_prod_uses_api_gcloudignore_explicitly() -> None:
     script = _read_repo_text("scripts/deploy-prod.sh")
+    cloudbuild = _read_repo_text("apps/api/cloudbuild.yaml")
 
     assert "API_GCLOUDIGNORE_FILE=.gcloudignore" in script
     assert 'API_GCLOUDIGNORE_PATH="${API_SOURCE_DIR}/${API_GCLOUDIGNORE_FILE}"' in script
+    assert "API_CLOUD_BUILD_CONFIG=apps/api/cloudbuild.yaml" in script
     assert '--ignore-file "${API_GCLOUDIGNORE_FILE}"' in script
+    assert '--config "${API_CLOUD_BUILD_CONFIG}"' in script
+    assert '"_API_IMAGE=${API_IMAGE},_RELEASE_SHA=${HEAD_SHA}"' in script
     assert '[[ ! -f "${API_GCLOUDIGNORE_PATH}" ]]' in script
+    assert "CASEOPS_RELEASE_SHA=${_RELEASE_SHA}" in cloudbuild
+    assert "${_API_IMAGE}" in cloudbuild
 
 
 def test_deploy_prod_uses_service_minimums_and_clears_stale_revision_tags() -> None:

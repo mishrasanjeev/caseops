@@ -29,6 +29,40 @@ export function makeUploadFixture(filename: string, contents: string): string {
 }
 
 export async function runDocumentWorkerOnce(): Promise<void> {
+  const dockerProject = process.env.CASEOPS_E2E_DOCKER_PROJECT?.trim();
+  if (dockerProject) {
+    const composeFile = process.env.CASEOPS_E2E_DOCKER_COMPOSE_FILE?.trim();
+    if (!composeFile) {
+      throw new Error(
+        "CASEOPS_E2E_DOCKER_COMPOSE_FILE is required with CASEOPS_E2E_DOCKER_PROJECT",
+      );
+    }
+    const result = spawnSync(
+      "docker",
+      [
+        "compose",
+        "--project-name",
+        dockerProject,
+        "--file",
+        composeFile,
+        "run",
+        "--rm",
+        "--no-deps",
+        "worker",
+        "caseops-document-worker",
+        "--once",
+        "--skip-migrations",
+      ],
+      { cwd: repoRoot, encoding: "utf8" },
+    );
+    if (result.status !== 0) {
+      throw new Error(
+        `Docker document worker failed with status ${result.status}.\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`,
+      );
+    }
+    return;
+  }
+
   // Strict Ledger #10 follow-up (2026-04-22): bypass `uv run`'s
   // implicit sync (EBUSY on Windows when a long-running process
   // holds a lock on a .venv/Scripts/*.exe wrapper). Invoke the

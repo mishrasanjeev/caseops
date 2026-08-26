@@ -2,30 +2,28 @@
 # production image. Runs `next start` in production mode (NOT
 # `next dev`); Cloud Run injects PORT.
 #
-# Build context is apps/web/. .dockerignore keeps Docker COPY layers
-# lean; .gcloudignore keeps the source upload archive lean before the
-# context reaches Cloud Build.
+# Build context is the repository root so the immutable workspace lockfile is
+# available. Root .dockerignore/.gcloudignore files admit only package metadata
+# and apps/web, keeping both the Docker context and Cloud Build upload narrow.
 
 # ---- deps ---------------------------------------------------------
 FROM node:22.14.0-alpine AS deps
 WORKDIR /app
 
-# In this monorepo the package-lock.json lives at the repo root
-# (npm workspaces). `gcloud builds submit apps/web` uses apps/web
-# as the build context, so the lockfile isn't present here — hence
-# `npm install` (not `npm ci`). A future refactor could submit the
-# repo root as build context and keep `npm ci` for determinism.
-#
 # Installing *all* deps (including dev) is intentional here: tailwind,
 # postcss, typescript, and next's build plugins are in devDependencies
 # but are REQUIRED by the builder stage below. The final runtime
-# stage prunes back to prod-only via `npm prune --omit=dev`.
-COPY package.json ./
-RUN npm install --no-audit --no-fund
+# stage copies a separately pruned dependency tree.
+COPY package.json package-lock.json ./
+COPY apps/web/package.json ./apps/web/package.json
+RUN npm ci --no-audit --no-fund
+
+FROM deps AS prod-deps
+RUN npm prune --omit=dev --no-audit --no-fund
 
 # ---- builder ------------------------------------------------------
-FROM node:22.14.0-alpine AS builder
-WORKDIR /app
+FROM deps AS builder
+WORKDIR /app/apps/web
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
@@ -41,14 +39,16 @@ ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
 ENV NEXT_PUBLIC_GA_MEASUREMENT_ID=$NEXT_PUBLIC_GA_MEASUREMENT_ID
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+COPY apps/web ./
 
 RUN npm run build
 
 # ---- runner -------------------------------------------------------
 FROM node:22.14.0-alpine AS runner
-WORKDIR /app
+WORKDIR /app/apps/web
+
+ARG CASEOPS_RELEASE_SHA=unavailable
+LABEL org.opencontainers.image.revision=$CASEOPS_RELEASE_SHA
 
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
@@ -62,18 +62,14 @@ RUN addgroup -g 1001 -S nodejs \
 # server. We're not on standalone yet — copy the full build + node_
 # modules. Switch to standalone in `next.config.js` later for a
 # smaller image.
-COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next ./.next
 # This project has no /public directory — Next.js serves assets via
 # app/icon.tsx, app/opengraph-image.tsx, app/robots.txt, app/sitemap.xml
 # (file-based conventions). Nothing to copy.
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
-
-# Prune devDependencies in the runtime layer — they were needed by
-# the builder stage (tailwind, postcss, typescript, next plugins)
-# but not at runtime. Drops the final image by ~200 MB.
-RUN npm prune --omit=dev --no-audit --no-fund 2>/dev/null || true
+COPY --from=prod-deps --chown=nextjs:nodejs /app/node_modules /app/node_modules
+COPY --from=prod-deps --chown=nextjs:nodejs /app/apps/web/node_modules ./node_modules
+COPY --from=builder --chown=nextjs:nodejs /app/apps/web/package.json ./package.json
 
 USER nextjs
 
-CMD ["sh", "-c", "npx next start -p ${PORT}"]
+CMD ["sh", "-c", "node /app/node_modules/next/dist/bin/next start -p ${PORT}"]

@@ -1,54 +1,125 @@
 services:
   web:
+    image: caseops-web-local:${CASEOPS_RELEASE_SHA:-dev}
     build:
-      context: ./apps/web
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        CASEOPS_RELEASE_SHA: ${CASEOPS_RELEASE_SHA:-unavailable}
+        NEXT_PUBLIC_API_BASE_URL: ${CASEOPS_DOCKER_PUBLIC_API_URL:-http://localhost:8000}
+        NEXT_PUBLIC_APP_URL: ${CASEOPS_DOCKER_PUBLIC_APP_URL:-http://localhost:3000}
     ports:
-      - "3000:3000"
+      - "127.0.0.1:${CASEOPS_DOCKER_WEB_PORT:-3000}:3000"
     environment:
-      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+      CASEOPS_RELEASE_SHA: ${CASEOPS_RELEASE_SHA:-unavailable}
+      NEXT_PUBLIC_API_BASE_URL: ${CASEOPS_DOCKER_PUBLIC_API_URL:-http://localhost:8000}
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/release-identity').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 20s
 
   api:
+    image: caseops-api-local:${CASEOPS_RELEASE_SHA:-dev}
     build:
       context: ./apps/api
+      args:
+        CASEOPS_RELEASE_SHA: ${CASEOPS_RELEASE_SHA:-unavailable}
     ports:
-      - "8000:8000"
+      - "127.0.0.1:${CASEOPS_DOCKER_API_PORT:-8000}:8000"
     environment:
-      CASEOPS_ENV: local
+      CASEOPS_ENV: ${CASEOPS_DOCKER_ENV:-local}
       CASEOPS_API_HOST: 0.0.0.0
       CASEOPS_API_PORT: 8000
       CASEOPS_API_NAME: CaseOps API
       CASEOPS_API_VERSION: 0.1.0
       CASEOPS_API_DOCS_ENABLED: "true"
-      CASEOPS_PUBLIC_APP_URL: http://localhost:3000
+      CASEOPS_PUBLIC_APP_URL: ${CASEOPS_DOCKER_PUBLIC_APP_URL:-http://localhost:3000}
+      CASEOPS_CORS_ORIGINS: '${CASEOPS_DOCKER_CORS_ORIGINS:-["http://localhost:3000"]}'
       CASEOPS_DATABASE_URL: postgresql+psycopg://caseops:caseops@postgres:5432/caseops
       CASEOPS_AUTH_SECRET: change-me-change-me-change-me-2026
+      CASEOPS_AUTO_MIGRATE: "false"
+      CASEOPS_RELEASE_SHA: ${CASEOPS_RELEASE_SHA:-unavailable}
+      CASEOPS_AUTH_RATE_LIMIT_ENABLED: ${CASEOPS_AUTH_RATE_LIMIT_ENABLED:-true}
+      CASEOPS_CASE_TRACKING_ENABLED: ${CASEOPS_CASE_TRACKING_ENABLED:-false}
+      CASEOPS_IP_WORKSPACE_ENABLED: ${CASEOPS_IP_WORKSPACE_ENABLED:-false}
+      CASEOPS_IP_RULE_GOVERNANCE_ENABLED: ${CASEOPS_IP_RULE_GOVERNANCE_ENABLED:-false}
+      CASEOPS_CASE_TRACKING_PROVIDER: ${CASEOPS_CASE_TRACKING_PROVIDER:-disabled}
+      CASEOPS_ECOURTSINDIA_API_BASE_URL: ${CASEOPS_ECOURTSINDIA_API_BASE_URL:-}
+      CASEOPS_ECOURTSINDIA_API_TOKEN: ${CASEOPS_ECOURTSINDIA_API_TOKEN:-}
       CASEOPS_DOCUMENT_STORAGE_BACKEND: local
       CASEOPS_DOCUMENT_STORAGE_PATH: /app/storage/documents
       CASEOPS_DOCUMENT_STORAGE_CACHE_PATH: /app/storage/document-cache
       CASEOPS_TESSERACT_COMMAND: /usr/bin/tesseract
     depends_on:
-      - postgres
-      - valkey
+      migrate:
+        condition: service_completed_successfully
+      valkey:
+        condition: service_healthy
     volumes:
       - document_data:/app/storage
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 30s
 
-  worker:
+  migrate:
+    image: caseops-api-local:${CASEOPS_RELEASE_SHA:-dev}
     build:
       context: ./apps/api
-    command: ["uv", "run", "caseops-document-worker"]
+      args:
+        CASEOPS_RELEASE_SHA: ${CASEOPS_RELEASE_SHA:-unavailable}
+    command: ["alembic", "upgrade", "head"]
     environment:
-      CASEOPS_ENV: local
+      CASEOPS_ENV: ${CASEOPS_DOCKER_ENV:-local}
       CASEOPS_DATABASE_URL: postgresql+psycopg://caseops:caseops@postgres:5432/caseops
       CASEOPS_AUTH_SECRET: change-me-change-me-change-me-2026
+      CASEOPS_AUTO_MIGRATE: "false"
+      CASEOPS_RELEASE_SHA: ${CASEOPS_RELEASE_SHA:-unavailable}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  worker:
+    image: caseops-api-local:${CASEOPS_RELEASE_SHA:-dev}
+    build:
+      context: ./apps/api
+      args:
+        CASEOPS_RELEASE_SHA: ${CASEOPS_RELEASE_SHA:-unavailable}
+    command: ["caseops-document-worker", "--skip-migrations"]
+    environment:
+      CASEOPS_ENV: ${CASEOPS_DOCKER_ENV:-local}
+      CASEOPS_DATABASE_URL: postgresql+psycopg://caseops:caseops@postgres:5432/caseops
+      CASEOPS_AUTH_SECRET: change-me-change-me-change-me-2026
+      CASEOPS_AUTO_MIGRATE: "false"
+      CASEOPS_RELEASE_SHA: ${CASEOPS_RELEASE_SHA:-unavailable}
       CASEOPS_DOCUMENT_STORAGE_BACKEND: local
       CASEOPS_DOCUMENT_STORAGE_PATH: /app/storage/documents
       CASEOPS_DOCUMENT_STORAGE_CACHE_PATH: /app/storage/document-cache
       CASEOPS_TESSERACT_COMMAND: /usr/bin/tesseract
     depends_on:
-      - postgres
-      - valkey
+      migrate:
+        condition: service_completed_successfully
+      valkey:
+        condition: service_healthy
     volumes:
       - document_data:/app/storage
 
@@ -58,7 +129,7 @@ services:
     # Postgres services on 5432/5433. Inside the docker network the port
     # stays at 5432 so the api/worker containers continue to work.
     ports:
-      - "15432:5432"
+      - "127.0.0.1:${CASEOPS_DOCKER_POSTGRES_PORT:-15432}:5432"
     environment:
       POSTGRES_DB: caseops
       POSTGRES_USER: caseops
@@ -76,7 +147,12 @@ services:
   valkey:
     image: valkey/valkey:8.1
     ports:
-      - "6379:6379"
+      - "127.0.0.1:${CASEOPS_DOCKER_VALKEY_PORT:-16379}:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
 
 volumes:
   postgres_data:
