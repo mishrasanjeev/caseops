@@ -317,6 +317,7 @@ def _load_bench_documents(
             AuthorityDocument.id == JudgeDecisionIndex.authority_document_id,
         )
         .where(JudgeDecisionIndex.judge_id.in_(bench_judge_ids))
+        .where(JudgeDecisionIndex.is_analytics_eligible.is_(True))
         .order_by(
             AuthorityDocument.decision_date.desc().nullslast(),
             AuthorityDocument.created_at.desc(),

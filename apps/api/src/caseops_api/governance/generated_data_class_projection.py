@@ -24,16 +24,16 @@ from caseops_api.governance.types import ReviewedDataClass
 PROJECTION_SCHEMA_VERSION = 1
 
 # Fingerprints of the exact artifacts this projection was rendered from.
-MAP_DOCUMENT_FINGERPRINT = "ee2cb41f54dfd030b185f9364a3ce6e2808118febc7acb5dde0e4bcb34ab5a4f"
-MAP_SCHEMA_FINGERPRINT = "14e9a2969c4444f8514150d01dad142b28d45dd3b3658ce70f560ba1c1c8bd40"
+MAP_DOCUMENT_FINGERPRINT = "0fc27866e519672534f2ad9a0399e4a7dd70002f2f17854ed68dfba49993ce71"
+MAP_SCHEMA_FINGERPRINT = "3cda3c3ce2a661e60c7805b27c60fb5df1eedd3a8eeefd7ce75a57c0111c0249"
 REGISTRY_028A_FINGERPRINT = "dd3c30cf69a9b498cea3820acb485a0368a72bf6d9348c2f0d430b5efa99802d"
 REGISTRY_027A_FINGERPRINT = "10b97a818b23d4fae8fe7f54b63edb50b0e04c16778cf0e646ef907f40e1ad96"
 # The ORM schema at render time. Compared against the live models at runtime, so
 # an image whose models moved after this file was rendered reports stale rather
 # than answering from a projection that no longer describes it.
-ORM_SCHEMA_FINGERPRINT = "9ace723de023bc4339abf226f1180a68e53f4c0baad40f1fdd03511cca6b501c"
+ORM_SCHEMA_FINGERPRINT = "d7b55850b06eab40bdc74fc8bed1edaec87a7a89e5df616dcb5b859f744cc82b"
 
-PROJECTION_ID = "6375e6a8ac04d11dbe4950d2a16d98f95e8ea5ecea8e5fcfae80282d9cf77dbf"
+PROJECTION_ID = "e6beac0554760ee4ac08c03539f382e81e7750bd590fb018bf3cd351d77da01b"
 
 # Every SQL table the repository-wide map inventories. Membership here is what
 # separates "inventoried but never reviewed" from "no such data class", which
@@ -60,6 +60,7 @@ INVENTORIED_SQL_TABLES = frozenset(
         "authority_research_reports",
         "authority_search_observations",
         "authority_statute_references",
+        "bench_aliases",
         "benches",
         "billing_accounts",
         "billing_admin_notes",
@@ -203,6 +204,7 @@ INVENTORIED_SQL_TABLES = frozenset(
         "judge_appointments",
         "judge_authority_affinity",
         "judge_decision_index",
+        "judge_mapping_reviews",
         "judge_statute_focus",
         "judges",
         "judgment_alert_rules",

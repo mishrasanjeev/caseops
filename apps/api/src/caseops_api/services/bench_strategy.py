@@ -165,7 +165,8 @@ def build_bench_strategy(
     total = int(session.scalar(
         text(
             "SELECT COUNT(*) FROM judge_decision_index "
-            "WHERE judge_id = ANY(:ids)"
+            "WHERE judge_id = ANY(:ids) "
+            "AND is_analytics_eligible IS TRUE"
         ),
         {"ids": bench_judge_ids},
     ) or 0)

@@ -20,7 +20,7 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
     inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
 
     assert scheduler_inventory.validate_inventory(inventory) == []
-    assert len(inventory["jobs"]) == 7
+    assert len(inventory["jobs"]) == 8
     assert {job["run_job_name"] for job in inventory["jobs"]} == {
         "caseops-legal-update-sync",
         "caseops-case-tracking-poll",
@@ -29,6 +29,7 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
         "caseops-extract-authority-metadata",
         "caseops-db-index-health",
         "caseops-ip-journal-watch",
+        "caseops-judge-mapping-refresh",
     }
     authority_job = next(
         job
@@ -44,6 +45,20 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
     )
     assert watch_job["bootstrap"]["command"] == ["uv"]
     assert watch_job["bootstrap"]["args"] == ["run", "caseops-ip-journal-watch"]
+    mapping_job = next(
+        job
+        for job in inventory["jobs"]
+        if job["run_job_name"] == "caseops-judge-mapping-refresh"
+    )
+    assert mapping_job["schedule"] == "15 1 * * *"
+    assert mapping_job["time_zone"] == "Asia/Kolkata"
+    assert mapping_job["task_timeout_seconds"] == 3_600
+    assert mapping_job["image_policy"] == "release_digest"
+    assert mapping_job["canary_policy"] == "manual_safe"
+    assert mapping_job["bootstrap"]["args"] == [
+        "run",
+        "caseops-refresh-bench-analysis-layers",
+    ]
     assert all(
         job["desired_state"] == "ENABLED"
         for job in inventory["jobs"]

@@ -10458,9 +10458,27 @@ class JudgeDecisionIndex(Base):
     year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     matched_alias: Mapped[str | None] = mapped_column(String(255), nullable=True)
     match_confidence: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    raw_judge_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_ordinal: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    mapping_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="auto_confirmed"
+    )
+    resolver_version: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="judge-alias-v1"
+    )
+    evidence_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    is_analytics_eligible: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
         nullable=False,
     )
 
@@ -11964,6 +11982,12 @@ class Bench(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     seat_city: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    source_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    source_reference: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    record_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -11997,6 +12021,20 @@ class Judge(Base):
     full_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     honorific: Mapped[str | None] = mapped_column(String(80), nullable=True)
     current_position: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    source_reference: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    identity_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    record_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    merged_into_judge_id: Mapped[str | None] = mapped_column(
+        ForeignKey("judges.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -12049,6 +12087,12 @@ class JudgeAlias(Base):
     )
     # One of: sci_gov_in, hc_scrape, manual, auto_extract.
     source: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    source_evidence_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    record_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
@@ -12059,6 +12103,98 @@ class JudgeAlias(Base):
         default=utcnow,
         onupdate=utcnow,
         nullable=False,
+    )
+
+
+class BenchAlias(Base):
+    """Alternate sourced names for one canonical bench."""
+
+    __tablename__ = "bench_aliases"
+    __table_args__ = (
+        UniqueConstraint(
+            "bench_id",
+            "alias_normalised",
+            name="uq_bench_aliases_unique",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    bench_id: Mapped[str] = mapped_column(
+        ForeignKey("benches.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    alias_text: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    alias_normalised: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    record_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class JudgeMappingReview(Base):
+    """Curator queue for unresolved or colliding authority judge evidence."""
+
+    __tablename__ = "judge_mapping_reviews"
+    __table_args__ = (
+        UniqueConstraint(
+            "authority_document_id",
+            "source_ordinal",
+            "raw_judge_name_normalised",
+            name="uq_judge_mapping_reviews_evidence",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    authority_document_id: Mapped[str] = mapped_column(
+        ForeignKey("authority_documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    court_id: Mapped[str | None] = mapped_column(
+        ForeignKey("courts.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    raw_judge_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    raw_judge_name_normalised: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    reason: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    candidate_judge_ids_json: Mapped[list[str] | None] = mapped_column(
+        JSON, nullable=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="open", index=True
+    )
+    resolver_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    resolved_judge_id: Mapped[str | None] = mapped_column(
+        ForeignKey("judges.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    resolved_by_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    record_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )
 
 

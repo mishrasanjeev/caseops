@@ -17,7 +17,7 @@ from datetime import date
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import and_, delete, or_, select
+from sqlalchemy import and_, delete, exists, or_, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
@@ -263,7 +263,8 @@ def classify_authority_document(
     judge_ids = tuple(
         session.scalars(
             select(JudgeDecisionIndex.judge_id).where(
-                JudgeDecisionIndex.authority_document_id == document.id
+                JudgeDecisionIndex.authority_document_id == document.id,
+                JudgeDecisionIndex.is_analytics_eligible.is_(True),
             )
         )
     )
@@ -561,7 +562,10 @@ def _select_authority_documents(
         stmt = stmt.join(
             JudgeDecisionIndex,
             JudgeDecisionIndex.authority_document_id == AuthorityDocument.id,
-        ).where(JudgeDecisionIndex.judge_id == judge_id)
+        ).where(
+            JudgeDecisionIndex.judge_id == judge_id,
+            JudgeDecisionIndex.is_analytics_eligible.is_(True),
+        )
     if matter_type:
         token = f"%{matter_type.lower()}%"
         stmt = stmt.where(
@@ -628,6 +632,21 @@ def _select_classifications_for_aggregation(
         stmt = stmt.where(
             PredictiveOutcomeClassification.decision_year >= start,
             PredictiveOutcomeClassification.decision_year <= end,
+        )
+    if judge_id:
+        eligible_authority_mapping = exists(
+            select(JudgeDecisionIndex.id).where(
+                JudgeDecisionIndex.authority_document_id
+                == PredictiveOutcomeClassification.source_id,
+                JudgeDecisionIndex.judge_id == judge_id,
+                JudgeDecisionIndex.is_analytics_eligible.is_(True),
+            )
+        )
+        stmt = stmt.where(
+            or_(
+                PredictiveOutcomeClassification.source_type != "authority_document",
+                eligible_authority_mapping,
+            )
         )
     rows = list(session.scalars(stmt))
     if judge_id:

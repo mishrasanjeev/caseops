@@ -144,22 +144,28 @@ def match_candidates(
         return []
 
     # 1. Exact alias hit (highest confidence).
+    exact_needles = {normalise(raw_text), needle}
     exact_rows = session.execute(
         select(JudgeAlias.judge_id, Judge.full_name, JudgeAlias.alias_text)
         .join(Judge, Judge.id == JudgeAlias.judge_id)
-        .where(JudgeAlias.alias_normalised == needle)
+        .where(JudgeAlias.alias_normalised.in_(exact_needles))
+        .where(JudgeAlias.is_active.is_(True))
         .where(Judge.court_id == court_id)
         .where(Judge.is_active.is_(True))
+        .order_by(Judge.id, JudgeAlias.id)
     ).all()
-    out: list[MatchResult] = [
-        MatchResult(
-            judge_id=row.judge_id,
-            judge_full_name=row.full_name,
-            confidence="exact",
-            matched_alias=row.alias_text,
+    exact_by_judge: dict[str, MatchResult] = {}
+    for row in exact_rows:
+        exact_by_judge.setdefault(
+            row.judge_id,
+            MatchResult(
+                judge_id=row.judge_id,
+                judge_full_name=row.full_name,
+                confidence="exact",
+                matched_alias=row.alias_text,
+            ),
         )
-        for row in exact_rows
-    ]
+    out = list(exact_by_judge.values())
     if out:
         return out
 

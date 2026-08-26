@@ -116,7 +116,7 @@ Generated; do not edit.
 | IPLF-058B | derived | IPLF-058 | M5 | IP-POST-01, IP-POST-02, IP-POST-03, IP-POST-04 | UJ-36-EXC-01, UJ-36-EXC-02, UJ-36-EXC-03, UJ-36-EXC-04, UJ-36-NORMAL, UJ-61-EXC-01, UJ-61-EXC-02, UJ-61-NORMAL | implemented | passed | deployment_verified |
 | IPLF-059A | derived | IPLF-059 | M5 |  |  | implemented | passed | deployment_verified |
 | IPLF-059B | derived | IPLF-059 | M5 |  | UJ-37-EXC-01, UJ-37-EXC-02, UJ-37-EXC-03, UJ-37-EXC-04, UJ-37-NORMAL | implemented | passed | deployment_verified |
-| IPLF-060A | derived | IPLF-060 | M6 |  |  | not_started | not_run | blocked |
+| IPLF-060A | derived | IPLF-060 | M6 |  |  | implemented | passed | blocked |
 | IPLF-060B | derived | IPLF-060 | M6 | JUDGE-01, JUDGE-02, JUDGE-03, JUDGE-04, JUDGE-05, JUDGE-06, JUDGE-07, JUDGE-08, JUDGE-09, JUDGE-10 | UJ-20-EXC-01, UJ-20-EXC-02, UJ-20-EXC-03, UJ-20-NORMAL | not_started | not_run | blocked |
 | IPLF-061A | derived | IPLF-061 | M6 |  |  | not_started | not_run | blocked |
 | IPLF-061B | derived | IPLF-061 | M6 | AI-GUIDE-01, AI-GUIDE-02, AI-GUIDE-03, AI-GUIDE-04, AI-GUIDE-05, AI-GUIDE-06, AI-GUIDE-07, AI-GUIDE-08, AI-GUIDE-09, AI-GUIDE-10, AI-GUIDE-11, AI-GUIDE-12 | UJ-22-EXC-01, UJ-22-EXC-02, UJ-22-NORMAL | not_started | not_run | blocked |

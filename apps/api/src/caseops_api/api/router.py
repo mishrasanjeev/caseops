@@ -30,6 +30,7 @@ from caseops_api.api.routes import (
     ip_recordals,
     ip_registry,
     ip_watch,
+    judge_mapping,
     mailbox,
     matter_billing,
     matter_tags,
@@ -118,6 +119,11 @@ api_router.include_router(
     tags=["matter-billing"],
 )
 api_router.include_router(courts.router, prefix="/courts", tags=["courts"])
+api_router.include_router(
+    judge_mapping.router,
+    prefix="/judge-mapping",
+    tags=["judge-mapping"],
+)
 # MOD-TS-017 Slice S2 (2026-04-25) - bare-acts read API powering
 # /app/statutes browser. Slice S4 (2026-04-25) - matter statute
 # reference write API mounted under /api/matters/.

@@ -6,11 +6,11 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `ee2cb41f54dfd030b185f9364a3ce6e2808118febc7acb5dde0e4bcb34ab5a4f`
-- SQL tables: `290`
-- SQL columns: `4672`
-- ORM indexes: `1354`
-- Alembic/raw index declarations: `632`
+- Canonical map SHA-256: `0fc27866e519672534f2ad9a0399e4a7dd70002f2f17854ed68dfba49993ce71`
+- SQL tables: `292`
+- SQL columns: `4720`
+- ORM indexes: `1364`
+- Alembic/raw index declarations: `637`
 - Non-SQL data classes: `11`
 
 ## Boundary
@@ -41,7 +41,8 @@ This inventory does not claim approved retention bounds, legal-hold activation, 
 | `authority_research_reports` | `tenant_operational_record` | 13 | `registry_fail_closed` |
 | `authority_search_observations` | `tenant_operational_record` | 12 | `registry_fail_closed` |
 | `authority_statute_references` | `public_or_licensed_legal_reference` | 7 | `registry_fail_closed` |
-| `benches` | `platform_operational_reference` | 6 | `registry_fail_closed` |
+| `bench_aliases` | `platform_operational_reference` | 10 | `registry_fail_closed` |
+| `benches` | `platform_operational_reference` | 10 | `registry_fail_closed` |
 | `billing_accounts` | `billing_provider_evidence` | 10 | `registry_fail_closed` |
 | `billing_admin_notes` | `billing_provider_evidence` | 8 | `registry_fail_closed` |
 | `billing_chargeback_disputes` | `billing_provider_evidence` | 17 | `registry_fail_closed` |
@@ -180,12 +181,13 @@ This inventory does not claim approved retention bounds, legal-hold activation, 
 | `ip_workflow_versions` | `tenant_restricted_legal_content` | 38 | `registry_fail_closed` |
 | `ip_workspace_configurations` | `tenant_restricted_legal_content` | 24 | `registry_fail_closed` |
 | `ip_workspace_test_results` | `tenant_restricted_legal_content` | 12 | `registry_fail_closed` |
-| `judge_aliases` | `public_or_licensed_legal_reference` | 7 | `registry_fail_closed` |
+| `judge_aliases` | `public_or_licensed_legal_reference` | 11 | `registry_fail_closed` |
 | `judge_appointments` | `public_or_licensed_legal_reference` | 10 | `registry_fail_closed` |
 | `judge_authority_affinity` | `public_or_licensed_legal_reference` | 7 | `registry_fail_closed` |
-| `judge_decision_index` | `public_or_licensed_legal_reference` | 8 | `registry_fail_closed` |
+| `judge_decision_index` | `public_or_licensed_legal_reference` | 15 | `registry_fail_closed` |
+| `judge_mapping_reviews` | `public_or_licensed_legal_reference` | 17 | `registry_fail_closed` |
 | `judge_statute_focus` | `public_or_licensed_legal_reference` | 7 | `registry_fail_closed` |
-| `judges` | `public_or_licensed_legal_reference` | 8 | `registry_fail_closed` |
+| `judges` | `public_or_licensed_legal_reference` | 14 | `registry_fail_closed` |
 | `judgment_alert_rules` | `tenant_operational_record` | 17 | `registry_fail_closed` |
 | `judgment_alerts` | `tenant_operational_record` | 11 | `registry_fail_closed` |
 | `legal_hold_items` | `tenant_operational_record` | 8 | `registry_fail_closed` |
