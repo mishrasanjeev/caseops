@@ -14,16 +14,16 @@
     "verification_status": "not_run",
     "release_status": "blocked",
     "execution_policy": "codex_owned_single_ordered_queue; implement first and run the automated check and exact-release verification batch at the end",
-    "active_slice": "IPLF-060A",
+    "active_slice": "IPLF-060B",
     "checkpoint": {
-      "recorded_at": "2026-08-26T08:32:47+05:30",
-      "repository_revision": "a3de6fc41c9b4cb8abcb4b376b774938f633f1b5",
-      "environment": "IPLF-059A and IPLF-059B are deployment-verified on canonical main. Exact-release production workflow 32922870509 passed UJ-37, the complete RAM batch, IPLF-027B quiescence and the Notice upload module on API revision caseops-api-00360-8c6 and web revision caseops-web-00338-vjf.",
-      "completed_scope": "IPLF-059B and parent IPLF-059 now have hosted, migration-first, latest-only and dated production proof for the UJ-37 operator workspace, shared-notification acknowledgement reminders/escalation, all five normal/exception paths, source opening, finance reconciliation, responsive UI, guide and truthful law-firm claims without duplicating platform owners.",
+      "recorded_at": "2026-08-26T10:11:11+05:30",
+      "repository_revision": "c599eee92ffeb22bcf761b888c12062a8cee7235",
+      "environment": "IPLF-059A and IPLF-059B are deployment-verified on canonical main through exact release fd928899840d81cb02c46323a4a4f09a45bcf60a. IPLF-060A is implemented and locally verified; rebased PR gates, exact-main CI, migration-first deployment, scheduler reconciliation, and production release proof remain pending.",
+      "completed_scope": "IPLF-060A extends the existing judge/bench/authority owners with sourced aliases, fail-closed mapping review, atomic curator resolution and merge, raw mapping lineage, analytics admission, migration replay/restore-forward controls, governed OpenAPI/data inventory, and a paused bounded refresh job. It makes no IPLF-060B, JUDGE, or UJ-20 completion claim.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-060A",
-      "next_action": "Complete IPLF-060A canonical judge/bench mapping release proof, then implement IPLF-060B user workflow and exception coverage without creating a second authority or judgement owner.",
-      "evidence_ref": "docs/ip-implementation/evidence/m5/IPLF-059/release-059b-2026-08-26.md"
+      "next_slice": "IPLF-060B",
+      "next_action": "Publish IPLF-060A through rebased PR and exact-release gates, then implement IPLF-060B only against the reviewed one-writer foundation.",
+      "evidence_ref": "docs/ip-implementation/evidence/m6/IPLF-060A/local-2026-08-26.md"
     },
     "work_owner": {
       "owner": "Codex",
@@ -192,7 +192,7 @@
       "deliverable": "Guide, workspace Q&A, intelligent review, canonical judge projection, private retrieval controls, source-grounded drafting improvements",
       "exit_criteria": "Citation/abstention/prompt-injection/security eval gates; permission/revocation red team; UJ-15 through UJ-18, UJ-20/UJ-22/UJ-23/UJ-66 pass; no inaccessible citation in release sample",
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "epic_ids": [
@@ -2225,7 +2225,7 @@
         "IPLF-060A",
         "IPLF-060B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "evidence_refs": []
@@ -14126,21 +14126,94 @@
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
-      "blockers": [],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260826_0002_judge_mapping_foundation.py",
+        "apps/api/src/caseops_api/api/routes/judge_mapping.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/judge_mapping.py",
+        "apps/api/src/caseops_api/services/bench_analysis_layers.py",
+        "apps/api/src/caseops_api/services/bench_strategy.py",
+        "apps/api/src/caseops_api/services/judge_aliases.py",
+        "apps/api/src/caseops_api/services/judge_mapping.py",
+        "apps/api/src/caseops_api/services/predictive_intelligence.py",
+        "apps/api/src/caseops_api/services/predictive_outcomes.py",
+        "apps/web/lib/api/openapi-types.ts",
+        "infra/cloudrun/scheduler-inventory.json",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml",
+        "docs/ip-implementation/JUDGE_MAPPING_FOUNDATION.md"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_20260826_judge_mapping_foundation_migration.py",
+        "apps/api/tests/test_ip_060a_judge_mapping.py",
+        "apps/api/tests/test_predictive_intelligence.py",
+        "apps/api/tests/test_predictive_outcomes.py",
+        "apps/api/tests/test_scheduler_inventory.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/JUDGE_MAPPING_FOUNDATION.md",
+        "docs/ip-implementation/evidence/m6/IPLF-060A/local-2026-08-26.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m6/IPLF-060A/local-2026-08-26.md",
+          "revision": "c599eee92ffeb22bcf761b888c12062a8cee7235",
+          "environment": "Windows 11 with CPython 3.13, locked API dependencies, isolated FastAPI/SQLite fixtures, empty and populated Alembic replay, generated OpenAPI client types, and the governed schema inventory; independent PostgreSQL CI and exact production release remain required",
+          "fixtures": "Synthetic courts, judges, aliases, benches, authorities, collisions, review decisions, predictive classifications, appointments, and audit actors; no real client, filing, provider mutation, recipient, fee, payment, or legal effect",
+          "assertions": "One-writer extension, deterministic fail-closed mapping, raw evidence retention, curator concurrency and audit, duplicate merge atomicity, low-confidence exclusion across every predictive consumer, migration replay and restore-forward fence, bounded scheduler inventory, OpenAPI parity, and data-governance parity",
+          "result": "passed",
+          "recorded_at": "2026-08-26T07:04:09+05:30"
+        }
+      ],
+      "blockers": [
+        {
+          "id": "IPLF-060A-EXACT-RELEASE-GATE",
+          "summary": "The repository candidate has not yet passed PR/exact-main CI, migration-first deployment, scheduler reconciliation, and exact-release production acceptance.",
+          "owner": "Engineering/SRE and QA",
+          "evidence_needed": "Green PR and exact-main gates, immutable API/web image digests, successful 20260826_0002 migration execution, paused judge-refresh scheduler bound to the exact API digest, latest-only traffic, health, and unchanged production acceptance at one exact serving SHA.",
+          "safe_fallback": "Keep the new scheduler paused and do not claim IPLF-060A release or any IPLF-060B/JUDGE/UJ-20 completion; existing judge and authority paths remain authoritative.",
+          "milestone_impact": "Blocks IPLF-060A release closure without blocking independent documentation and IPLF-060B design work.",
+          "next_independent_slice": "IPLF-060B user workflow may begin only against this reviewed owner contract and must retain all release claims fail-closed."
+        }
+      ],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Pass final local controls, PR review and hosted gates, merge to canonical main, pass exact-main CI, and deploy the exact immutable release migration-first.",
+        "Reconcile the paused judge-mapping refresh job to the exact API digest and record exact production identity, health, traffic, migration, scheduler, and acceptance evidence before changing release status.",
+        "Keep IPLF-060B, JUDGE-01 through JUDGE-10, and UJ-20 pending until their full UI, source, pilot-court, exception, and production journeys pass."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Additive migration 20260826_0002 extends the existing Judge, Bench, JudgeAlias, and JudgeDecisionIndex owners with provenance, optimistic versions, raw mapping evidence, resolver lineage, and fail-closed analytics eligibility; it adds only BenchAlias and JudgeMappingReview records.",
+        "Legacy mappings are analytics-eligible only for exact, initial_surname, or curator_confirmed confidence. New unreviewed rows default false, while raw AuthorityDocument.judges_json remains unchanged.",
+        "Downgrade is permitted only before new provenance, review, alias, or mapping evidence is written; afterward rollback is restore-forward to preserve legal-source lineage."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/JUDGE_MAPPING_FOUNDATION.md",
+          "disposition": "created",
+          "owner": "Court/judge catalog and authority-mapping owners",
+          "evidence": "One-writer boundary, data and resolver contracts, curator concurrency, analytics fence, migration, scheduler, rollback, and explicit IPLF-060B exclusions"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m6/IPLF-060A/local-2026-08-26.md",
+          "disposition": "created",
+          "owner": "Program control plane",
+          "evidence": "Functional revision, fixtures, local commands/results, duplicate-work audit, non-effects, and exact release gates still required"
+        },
+        {
+          "artifact": "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml",
+          "disposition": "updated",
+          "owner": "Data governance control plane",
+          "evidence": "Reviewed inventory for additive judge/bench provenance, bench aliases, mapping reviews, and analytics-admission columns"
+        },
+        {
+          "artifact": "docs/ip-implementation/PROGRAM_MANIFEST.yaml",
+          "disposition": "updated",
+          "owner": "Program control plane",
+          "evidence": "Concrete implementation/test/evidence traceability with a truthful release blocker and no optimistic IPLF-060B or requirement claim"
+        }
+      ],
+      "allocation_review": "2026-08-26 brutal duplicate-work review against PRD Sections 11, 23, and 25 plus IPLF-003C/IPLF-060B allocations: extend existing Court, Bench, Judge, JudgeAlias, JudgeAppointment, AuthorityDocument, JudgeDecisionIndex, profile, source-action, predictive, capability, audit, Cloud Run job, and scheduler owners. Add only missing bench-alias and mapping-review records; do not duplicate the catalog, corpus, profile, source-link mechanism, analytics store, permission model, audit log, worker platform, or scheduler. IPLF-060A carries no direct JUDGE or UJ-20 allocation and makes no user-workflow completion claim.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",

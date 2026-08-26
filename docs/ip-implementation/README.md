@@ -91,6 +91,14 @@ images, migration, scheduler, isolated entitled-canary, PostgreSQL repair, and
 two successful production-browser workflows are retained in
 `evidence/m2/IPLF-025B/release-2026-08-11.md`.
 
+`JUDGE_MAPPING_FOUNDATION.md` documents the IPLF-060A extension of the existing
+Court, Bench, Judge, JudgeAlias, JudgeAppointment, AuthorityDocument, and
+JudgeDecisionIndex owners. It defines source/version provenance, fail-closed
+collision review, curator resolution and duplicate merge, analytics admission,
+additive migration/restore-forward behavior, and the bounded paused refresh job.
+It explicitly leaves judge-profile/source-action UI, UJ-20, pilot-court, and
+exact-release acceptance to IPLF-060B.
+
 `bootstrap` is a one-time mechanical extraction command and refuses to replace
 an existing manifest unless `--force` is supplied. Do not use `--force` on an
 actively maintained program manifest.

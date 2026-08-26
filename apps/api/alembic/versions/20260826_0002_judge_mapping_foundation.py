@@ -21,7 +21,7 @@ depends_on = None
 # MIGRATION-ROLLBACK: restore-forward: once catalog provenance, curator reviews,
 # or mapping evidence is written, removing this schema would destroy committed
 # legal-source lineage; downgrade is limited to an unused pre-release revision.
-# DATA-GOVERNANCE-MAP: update the reviewed schema inventory before release.
+# DATA-GOVERNANCE-MAP: updated in the reviewed schema inventory.
 
 
 def _assert_downgrade_unused() -> None:
