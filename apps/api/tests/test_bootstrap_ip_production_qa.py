@@ -1,8 +1,21 @@
 from sqlalchemy import func, select
 
-from caseops_api.db.models import BillingSubscription, Company, CompanyMembership, User
+from caseops_api.db.models import (
+    AuthorityDocument,
+    BillingSubscription,
+    Company,
+    CompanyMembership,
+    Court,
+    Judge,
+    JudgeDecisionIndex,
+    User,
+)
 from caseops_api.db.session import get_session_factory
-from caseops_api.scripts.bootstrap_ip_production_qa import ensure_ip_production_qa
+from caseops_api.scripts.bootstrap_ip_production_qa import (
+    ensure_ip_production_qa,
+    ensure_ip_production_qa_judge_fixture,
+)
+from caseops_api.services.source_actions import authority_source_verified
 
 
 def test_bootstrap_ip_production_qa_is_bounded_and_idempotent(client) -> None:
@@ -73,3 +86,84 @@ def test_bootstrap_ip_production_qa_rejects_non_qa_identity(client) -> None:
             assert "Production IP QA" in str(exc)
         else:
             raise AssertionError("Non-QA identity was accepted")
+
+
+def test_bootstrap_ip_production_qa_judge_fixture_is_bounded_and_idempotent(
+    client,
+) -> None:
+    del client
+    with get_session_factory()() as session:
+        created = ensure_ip_production_qa_judge_fixture(session)
+        repeated = ensure_ip_production_qa_judge_fixture(session)
+
+        judges = list(
+            session.scalars(select(Judge).where(Judge.source_name == "ip_production_qa"))
+        )
+        authorities = list(
+            session.scalars(
+                select(AuthorityDocument).where(
+                    AuthorityDocument.adapter_name
+                    == "caseops-ip-production-qa-judge-authorities-v1"
+                )
+            )
+        )
+        mappings = list(
+            session.scalars(
+                select(JudgeDecisionIndex).where(
+                    JudgeDecisionIndex.resolver_version
+                    == "iplf-060b-production-qa-v1"
+                )
+            )
+        )
+
+    assert created.pilot_courts == 3
+    assert created.created_judges == 3
+    assert created.created_authorities == 3
+    assert created.created_mappings == 3
+    assert repeated.created_judges == 0
+    assert repeated.created_authorities == 0
+    assert repeated.created_mappings == 0
+    assert len(judges) == 3
+    assert len(authorities) == 3
+    assert len(mappings) == 3
+    assert all(item.is_analytics_eligible is False for item in mappings)
+    assert all(item.mapping_status == "curator_confirmed" for item in mappings)
+    assert all(
+        authority_source_verified(item.source, item.source_reference)
+        for item in authorities
+    )
+
+
+def test_bootstrap_ip_production_qa_judge_fixture_refuses_non_qa_collision(
+    client,
+) -> None:
+    del client
+    with get_session_factory()() as session:
+        court = session.scalar(select(Court).where(Court.name == "Delhi High Court"))
+        assert court is not None
+        session.add(
+            Judge(
+                court_id=court.id,
+                full_name="Justice CaseOps QA Pilot - Delhi",
+                source_name="official_court",
+                is_active=True,
+            )
+        )
+        session.commit()
+
+        try:
+            ensure_ip_production_qa_judge_fixture(session)
+        except RuntimeError as exc:
+            assert "non-QA judge fixture collision" in str(exc)
+        else:
+            raise AssertionError("A non-QA judge fixture collision was adopted")
+
+        fixture_authorities = session.scalar(
+            select(func.count())
+            .select_from(AuthorityDocument)
+            .where(
+                AuthorityDocument.adapter_name
+                == "caseops-ip-production-qa-judge-authorities-v1"
+            )
+        )
+        assert fixture_authorities == 0

@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import asdict, dataclass
+from datetime import date
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -19,9 +20,13 @@ from sqlalchemy.orm import Session
 from caseops_api.core.password_policy import enforce_password_policy
 from caseops_api.core.security import hash_password
 from caseops_api.db.models import (
+    AuthorityDocument,
     BillingSubscription,
     Company,
     CompanyMembership,
+    Court,
+    Judge,
+    JudgeDecisionIndex,
     MembershipRole,
     User,
 )
@@ -31,6 +36,34 @@ from caseops_api.services.identity import register_company_owner
 
 _ACTIVE_SUBSCRIPTION_STATUSES = {"active", "trialing", "grace", "manual_active"}
 _SOURCE = "ip_production_qa"
+_JUDGE_FIXTURE_VERSION = "iplf-060b-production-qa-v1"
+_JUDGE_FIXTURE_ADAPTER = "caseops-ip-production-qa-judge-authorities-v1"
+_JUDGE_PILOTS = (
+    {
+        "court_name": "Delhi High Court",
+        "judge_name": "Justice CaseOps QA Pilot - Delhi",
+        "source": "delhi_high_court_recent_judgments",
+        "source_url": "https://delhihighcourt.nic.in/",
+        "document_type": "judgment",
+        "fixture_key": "delhi",
+    },
+    {
+        "court_name": "Bombay High Court",
+        "judge_name": "Justice CaseOps QA Pilot - Bombay",
+        "source": "bombay_high_court_recent_orders_judgments",
+        "source_url": "https://www.bombayhighcourt.nic.in/recentorderjudgment.php",
+        "document_type": "judgment",
+        "fixture_key": "bombay",
+    },
+    {
+        "court_name": "Madras High Court",
+        "judge_name": "Justice CaseOps QA Pilot - Madras",
+        "source": "madras_high_court_operational_orders",
+        "source_url": "https://hcmadras.tn.gov.in/sitting_arrangements.php",
+        "document_type": "practice_direction",
+        "fixture_key": "madras",
+    },
+)
 
 
 @dataclass(frozen=True)
@@ -45,6 +78,15 @@ class IpProductionQaResult:
     # wrong QA password unfixable without deleting the tenant.
     rotated_owner_credential: bool = False
     entitlement_key: str = "ip_workspace"
+
+
+@dataclass(frozen=True)
+class IpProductionQaJudgeFixtureResult:
+    version: str
+    pilot_courts: int
+    created_judges: int
+    created_authorities: int
+    created_mappings: int
 
 
 def _validate_identity(*, company_name: str, company_slug: str, owner_email: str) -> None:
@@ -173,6 +215,172 @@ def ensure_ip_production_qa(
     )
 
 
+def ensure_ip_production_qa_judge_fixture(
+    session: Session,
+) -> IpProductionQaJudgeFixtureResult:
+    """Seed the bounded, non-analytics judge-source production canary.
+
+    The records are global catalog data, so every row is explicitly marked as
+    synthetic QA and uses a deterministic key. Existing non-QA records are
+    never adopted or overwritten.
+    """
+
+    court_names = [str(pilot["court_name"]) for pilot in _JUDGE_PILOTS]
+    courts = {
+        court.name: court
+        for court in session.scalars(select(Court).where(Court.name.in_(court_names)))
+    }
+    missing = sorted(set(court_names) - set(courts))
+    if missing:
+        raise RuntimeError(
+            "Production QA judge fixture is missing canonical courts: "
+            + ", ".join(missing)
+        )
+
+    # Refuse ownership collisions before making any writes.
+    for pilot in _JUDGE_PILOTS:
+        court = courts[str(pilot["court_name"])]
+        existing_judge = session.scalar(
+            select(Judge).where(
+                Judge.court_id == court.id,
+                Judge.full_name == pilot["judge_name"],
+            )
+        )
+        if existing_judge is not None and existing_judge.source_name != _SOURCE:
+            raise RuntimeError("Refusing to adopt a non-QA judge fixture collision.")
+        canonical_key = f"{_JUDGE_FIXTURE_VERSION}:{pilot['fixture_key']}"
+        existing_authority = session.scalar(
+            select(AuthorityDocument).where(
+                AuthorityDocument.canonical_key == canonical_key
+            )
+        )
+        if (
+            existing_authority is not None
+            and existing_authority.adapter_name != _JUDGE_FIXTURE_ADAPTER
+        ):
+            raise RuntimeError("Refusing to adopt a non-QA authority fixture collision.")
+
+    created_judges = 0
+    created_authorities = 0
+    created_mappings = 0
+    for pilot in _JUDGE_PILOTS:
+        court = courts[str(pilot["court_name"])]
+        judge = session.scalar(
+            select(Judge).where(
+                Judge.court_id == court.id,
+                Judge.full_name == pilot["judge_name"],
+            )
+        )
+        if judge is None:
+            judge = Judge(
+                court_id=court.id,
+                full_name=str(pilot["judge_name"]),
+                current_position="Synthetic production QA pilot",
+                source_name=_SOURCE,
+                source_url=str(pilot["source_url"]),
+                source_reference=_JUDGE_FIXTURE_VERSION,
+                is_active=True,
+            )
+            session.add(judge)
+            session.flush()
+            created_judges += 1
+        else:
+            judge.current_position = "Synthetic production QA pilot"
+            judge.source_url = str(pilot["source_url"])
+            judge.source_reference = _JUDGE_FIXTURE_VERSION
+            judge.is_active = True
+            judge.merged_into_judge_id = None
+
+        canonical_key = f"{_JUDGE_FIXTURE_VERSION}:{pilot['fixture_key']}"
+        authority = session.scalar(
+            select(AuthorityDocument).where(
+                AuthorityDocument.canonical_key == canonical_key
+            )
+        )
+        if authority is None:
+            authority = AuthorityDocument(
+                source=str(pilot["source"]),
+                adapter_name=_JUDGE_FIXTURE_ADAPTER,
+                court_name=court.name,
+                forum_level=court.forum_level,
+                document_type=str(pilot["document_type"]),
+                title=f"IPLF-060B production QA source proof - {court.name}",
+                case_reference=f"IPLF-060B-QA-{str(pilot['fixture_key']).upper()}",
+                bench_name=str(pilot["judge_name"]),
+                decision_date=date(2026, 8, 26),
+                canonical_key=canonical_key,
+                source_reference=str(pilot["source_url"]),
+                publisher_name=court.name,
+                jurisdiction=court.jurisdiction,
+                issuing_body=court.name,
+                source_category="high_court",
+                authority_status="synthetic_qa",
+                summary=(
+                    "Synthetic production QA record for source-action and canonical "
+                    "judge-mapping acceptance. It is not legal authority."
+                ),
+                judges_json=json.dumps([pilot["judge_name"]]),
+                source_access_state="available",
+                attribution_json={
+                    "synthetic_qa": True,
+                    "fixture_version": _JUDGE_FIXTURE_VERSION,
+                },
+                source_metadata_json={
+                    "synthetic_qa": True,
+                    "scope": "IPLF-060B",
+                },
+            )
+            session.add(authority)
+            session.flush()
+            created_authorities += 1
+        else:
+            authority.source = str(pilot["source"])
+            authority.source_reference = str(pilot["source_url"])
+            authority.source_access_state = "available"
+
+        mapping = session.scalar(
+            select(JudgeDecisionIndex).where(
+                JudgeDecisionIndex.judge_id == judge.id,
+                JudgeDecisionIndex.authority_document_id == authority.id,
+            )
+        )
+        if mapping is None:
+            mapping = JudgeDecisionIndex(
+                judge_id=judge.id,
+                authority_document_id=authority.id,
+                role="sat_on",
+                year=2026,
+                matched_alias=judge.full_name,
+                match_confidence="exact",
+                raw_judge_name=judge.full_name,
+                source_ordinal=0,
+                mapping_status="curator_confirmed",
+                resolver_version=_JUDGE_FIXTURE_VERSION,
+                evidence_json={
+                    "synthetic_qa": True,
+                    "fixture_version": _JUDGE_FIXTURE_VERSION,
+                    "source": "production_qa_bootstrap",
+                },
+                is_analytics_eligible=False,
+            )
+            session.add(mapping)
+            created_mappings += 1
+        else:
+            mapping.mapping_status = "curator_confirmed"
+            mapping.resolver_version = _JUDGE_FIXTURE_VERSION
+            mapping.match_confidence = "exact"
+            mapping.is_analytics_eligible = False
+
+    session.commit()
+    return IpProductionQaJudgeFixtureResult(
+        version=_JUDGE_FIXTURE_VERSION,
+        pilot_courts=len(_JUDGE_PILOTS),
+        created_judges=created_judges,
+        created_authorities=created_authorities,
+        created_mappings=created_mappings,
+    )
+
+
 def _required_env(name: str) -> str:
     value = os.environ.get(name, "").strip()
     if not value:
@@ -196,7 +404,10 @@ def main() -> None:
             ).strip().lower()
             == "true",
         )
-    print(json.dumps(asdict(result), sort_keys=True))
+        judge_fixture = ensure_ip_production_qa_judge_fixture(session)
+    payload = asdict(result)
+    payload["judge_workflow_fixture"] = asdict(judge_fixture)
+    print(json.dumps(payload, sort_keys=True))
 
 
 if __name__ == "__main__":
