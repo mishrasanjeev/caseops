@@ -25,6 +25,11 @@ def test_public_catalog_is_versioned_bounded_and_does_not_publish_commands(
     assert body["sections"][0]["href"] == "/guide#getting-started"
     assert body["sections"][16]["id"] == "judge-mapping"
     assert "commands" not in body
+    anonymous_search = client.get(
+        "/api/product-guide/search",
+        params={"q": "matters"},
+    )
+    assert anonymous_search.status_code == 401
 
 
 def test_authenticated_search_ranks_navigation_and_reports_stale_clients(
@@ -82,6 +87,7 @@ def test_search_uses_effective_custom_role_and_sanitizes_denied_commands(
         )
         session.add(role)
         session.flush()
+        role_id = role.id
         membership.role = MembershipRole.VIEWER
         membership.custom_role_id = role.id
         session.commit()
@@ -107,6 +113,24 @@ def test_search_uses_effective_custom_role_and_sanitizes_denied_commands(
         "required_capabilities": ["workspace:admin"],
         "message": "This task needs additional workspace access.",
     }
+
+    with get_session_factory()() as session:
+        revoked_role = session.get(CustomRole, role_id)
+        assert revoked_role is not None
+        revoked_role.is_active = False
+        session.commit()
+    revoked = client.get(
+        "/api/product-guide/search",
+        headers=auth_headers(token),
+        params={"q": "clients"},
+    )
+    assert revoked.status_code == 200, revoked.text
+    revoked_body = revoked.json()
+    assert not any(
+        result["kind"] == "command" and result["id"] == "clients"
+        for result in revoked_body["results"]
+    )
+    assert revoked_body["permission"]["required_capabilities"] == ["clients:view"]
 
 
 def test_search_abstains_without_writes_and_rejects_unbounded_inputs(
