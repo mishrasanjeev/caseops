@@ -3,11 +3,8 @@
 
 The checked-in JSON file is the sole source for scheduler names, targets,
 cadences, time zones, desired states, invoker identity, release-image policy,
-and explicitly owned task timeouts. Jobs without a bootstrap contract preserve
-their existing command, environment, secrets, resources, retries, and runtime
-service account. A job that may be introduced for the first time declares a
-bootstrap contract whose complete runtime shape is converged and verified on
-every release.
+task timeouts, and complete Cloud Run runtime contracts. Every recurring job
+is converged and verified on every release.
 """
 
 from __future__ import annotations
@@ -104,7 +101,9 @@ def validate_inventory(payload: object) -> list[str]:
                 "between 1 and 86400"
             )
         bootstrap = job.get("bootstrap")
-        if bootstrap is not None:
+        if bootstrap is None:
+            errors.append(f"{label}.bootstrap is required")
+        else:
             errors.extend(_validate_bootstrap(bootstrap, label=label))
     legacy = payload.get("legacy_schedulers_to_pause", [])
     if not isinstance(legacy, list) or any(not isinstance(value, str) for value in legacy):
@@ -145,6 +144,14 @@ def _validate_bootstrap(bootstrap: object, *, label: str) -> list[str]:
             errors.append(
                 f"{label}.bootstrap.{field} must be "
                 f"{'a non-empty' if field == 'command' else 'an'} array of strings"
+            )
+    command = bootstrap.get("command")
+    if isinstance(command, list) and command:
+        executable = str(command[0]).replace("\\", "/").rsplit("/", 1)[-1].casefold()
+        if executable in {"uv", "uv.exe", "uvx", "uvx.exe"}:
+            errors.append(
+                f"{label}.bootstrap.command must invoke the baked runtime directly; "
+                "uv/uvx job startup is forbidden"
             )
     for field in ("environment", "secrets"):
         value = bootstrap[field]

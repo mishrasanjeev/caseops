@@ -42,6 +42,16 @@ scan counters were also present on corpus-scale tables, but a sequential scan
 counter alone is not proof that an index is missing; corpus scans and small
 table scans can be intentional.
 
+The first exact-release retry advanced production to migration
+`20260827_0001`, then stopped before traffic routing when the index-health job
+exceeded its 512 MiB memory limit. The checker itself had not exhausted its
+query or task deadline. Its Cloud Run command was `uv run
+caseops-db-index-health`; inside the already-built API image, `uv run` created
+`/app/.venv` and resolved and installed 137 packages before starting the baked
+console command. Five other recurring jobs had the same redundant runtime
+dependency-resolution path. Production traffic correctly remained on the
+previous API and web revisions.
+
 ## Permanent release contract
 
 - `prod-verify.yml` no longer runs on a push to `main`.
@@ -54,6 +64,26 @@ table scans can be intentional.
   timeouts and never sleeps beyond its deadline.
 - A missing deployment now fails quickly and truthfully instead of consuming a
   25-minute runner before any browser test begins.
+
+## Recurring-job startup contract
+
+- The inventory owns the complete runtime shape of all eight recurring jobs:
+  command, arguments, environment, secret bindings, service account, Cloud SQL
+  attachment, CPU, memory, retries, and task timeout.
+- Production jobs invoke installed console commands or the baked Python
+  interpreter directly. Runtime `uv` or `uvx` startup is rejected by inventory
+  validation because it can create a virtual environment, contact package
+  registries, consume memory, and spend the task deadline before application
+  code starts.
+- An empty argument vector is deliberately emitted as `--args ""`, the gcloud
+  contract for clearing previously configured arguments.
+- Local Docker verification runs `caseops-db-index-health` with a hard 512 MiB
+  memory and swap limit. It must exit zero, report `status=ok`, and finish
+  without an OOM kill before production deployment.
+- This repair does not increase the index job's memory or timeout. It removes
+  unbounded duplicate startup work and retains the measured resource ceiling.
+- Authority metadata extraction and judge mapping remain `PAUSED`; converging
+  their runtime contracts does not authorize or execute either workload.
 
 ## Enforced timeout budget
 
