@@ -47,7 +47,7 @@ same server-owned permission decision as protected application routes. The
 browser does not invent tenant IDs, role mappings, or capabilities.
 
 Search is a deterministic, in-memory lexical ranking over 27 help sections and
-43 navigation commands. It performs no SQL corpus scan, provider call, model or
+44 navigation commands. It performs no SQL corpus scan, provider call, model or
 tokenizer resolution, network access, write, or analytics emission. Query
 length is capped at 160 characters, returned results at 10, sections at 64,
 and commands at 96.
@@ -57,12 +57,20 @@ and commands at 96.
 IPLF-061B owns UJ-22's product-guidance UI, approved help navigation,
 permission explanation, stale-version handling, terminology, and deterministic
 abstention. IPLF-062 owns assistant sessions, turns, citations,
-permission-scoped workspace retrieval, retention, export, and deletion.
+permission-scoped workspace retrieval, retention, archive, export, and the
+fail-closed deletion request. Destructive deletion remains unavailable until
+the legal-hold-aware disposition owner is approved; a blocked request is
+audited and returns a typed conflict rather than erasing retained evidence.
 IPLF-064 owns preview/confirm write actions. IPLF-065 owns governed answer
 feedback and safety evaluation. IPLF-066 owns private retrieval plus assistant
 and action analytics. Existing source actions, ModelRun, AI policy, audit,
 record access, Matter, client, IP, document, and search owners remain
 authoritative.
+
+The guide links to `/app/assistant`, but assistant questions and generated
+answers never update the guide catalog. The guide remains reviewed source
+content; assistant conversations are tenant-restricted legal content governed
+by `WORKSPACE_ASSISTANT_FOUNDATION.md`.
 
 The AI-GUIDE family is reciprocally allocated to those owners by behavior,
 rather than mechanically claimed in full by IPLF-061B. IPLF-061A claims no
