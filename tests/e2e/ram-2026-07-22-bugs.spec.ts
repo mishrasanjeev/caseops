@@ -10,6 +10,7 @@ import {
 } from "./support/local-legal-tenant";
 
 const LOCAL_PASSWORD = LOCAL_LEGAL_PASSWORD;
+const IDEMPOTENT_NETWORK_RETRIES = 2;
 
 type MatterRecord = {
   id: string;
@@ -81,6 +82,7 @@ async function createMatter(
 async function getMatter(matterId: string): Promise<MatterRecord> {
   const response = await api.get(`${apiBaseUrl}/api/matters/${matterId}`, {
     headers: authHeaders(),
+    maxRetries: IDEMPOTENT_NETWORK_RETRIES,
   });
   await expectStatus(response, 200, `read matter ${matterId}`);
   return (await response.json()) as MatterRecord;

@@ -103,12 +103,14 @@ def test_inventory_rejects_unsafe_or_incomplete_bootstrap_contract() -> None:
     inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
     watch_job = inventory["jobs"][-1]
     watch_job["bootstrap"]["command"] = []
+    watch_job["bootstrap"]["args"] = ["contains,comma"]
     watch_job["bootstrap"]["environment"]["UNSAFE"] = "one,two"
     watch_job["bootstrap"]["max_retries"] = 11
 
     errors = scheduler_inventory.validate_inventory(inventory)
 
     assert any("bootstrap.command" in error for error in errors)
+    assert any("bootstrap.args" in error for error in errors)
     assert any("bootstrap.environment" in error for error in errors)
     assert any("bootstrap.max_retries" in error for error in errors)
 
@@ -184,8 +186,8 @@ def test_reconcile_converges_inventory_owned_timeout_and_scheduler_state(
     assert authority_update[-2:] == ["--task-timeout", "43200s"]
     assert enabled_update[enabled_update.index("--task-timeout") + 1] == "1800s"
     assert (
-        "--args=^|^-m|caseops_api.scripts.extract_authority_metadata|"
-        "--concurrency|8"
+        "--args=-m,caseops_api.scripts.extract_authority_metadata,"
+        "--concurrency,8"
     ) in authority_update
     assert "--args" not in authority_update
     assert [
@@ -399,15 +401,9 @@ def test_bootstrap_arguments_bind_leading_dash_values_to_gcloud_args_flag() -> N
         image="registry.example/caseops-api@sha256:" + "f" * 64,
     )
 
-    assert "--args=^|^--mode=auto|--limit=200" in arguments
+    assert "--args=--mode=auto,--limit=200" in arguments
     assert "--args" not in arguments
     assert "--mode=auto,--limit=200" not in arguments
-
-
-def test_gcloud_args_flag_selects_a_delimiter_absent_from_values() -> None:
-    assert scheduler_inventory._gcloud_args_flag(["contains|pipe", "--flag"]) == (
-        "--args=^@^contains|pipe@--flag"
-    )
 
 
 def test_reconcile_fails_closed_when_a_missing_job_has_no_bootstrap(monkeypatch) -> None:
