@@ -66,12 +66,14 @@ class Settings(BaseSettings):
     db_max_overflow: int = Field(default=10, ge=0)
     db_pool_timeout: int = Field(default=30, ge=1)
     db_connect_timeout_seconds: int = Field(default=10, ge=1, le=60)
-    # Zero preserves unlimited background/batch statements. The canonical API
-    # deploy sets finite request-path values; jobs retain their own task-level
-    # deadlines and can opt into stricter database limits independently.
-    db_statement_timeout_ms: int = Field(default=0, ge=0)
-    db_lock_timeout_ms: int = Field(default=0, ge=0)
-    db_idle_transaction_timeout_ms: int = Field(default=0, ge=0)
+    # Fail closed when a runtime forgets to supply explicit database budgets.
+    # A disabled lock/idle timeout can pin the single API event loop behind an
+    # abandoned transaction, while an unbounded statement can monopolise the
+    # service indefinitely. Long-running maintenance paths set a larger local
+    # statement timeout inside their own transaction when they need one.
+    db_statement_timeout_ms: int = Field(default=60_000, ge=1)
+    db_lock_timeout_ms: int = Field(default=5_000, ge=1)
+    db_idle_transaction_timeout_ms: int = Field(default=60_000, ge=1)
     auth_secret: str = Field(default=PLACEHOLDER_AUTH_SECRET, min_length=32)
     access_token_ttl_minutes: int = Field(default=120)
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])

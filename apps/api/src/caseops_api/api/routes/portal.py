@@ -317,7 +317,7 @@ def _is_non_prod() -> bool:
     ),
 )
 @limiter.limit(portal_request_link_rate_limit)
-async def post_portal_request_link(
+def post_portal_request_link(
     request: Request,
     payload: PortalRequestLinkPayload,
     session: DbSession,
@@ -374,7 +374,7 @@ async def post_portal_request_link(
     response_model=PortalSessionResponse,
     summary="Verify a magic-link token, set the portal session cookie",
 )
-async def post_portal_verify_link(
+def post_portal_verify_link(
     payload: PortalVerifyLinkPayload,
     response: Response,
     request: Request,
@@ -423,7 +423,7 @@ async def post_portal_verify_link(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Clear the portal session cookie",
 )
-async def post_portal_logout(
+def post_portal_logout(
     response: Response,
     request: Request,
     session: DbSession,
@@ -1002,7 +1002,7 @@ async def get_oc_time_entries(
     status_code=status.HTTP_201_CREATED,
     summary="Invite a client or outside counsel into the portal",
 )
-async def post_portal_invitation(
+def post_portal_invitation(
     payload: PortalInvitePayload,
     context: PortalInviter,
     session: DbSession,

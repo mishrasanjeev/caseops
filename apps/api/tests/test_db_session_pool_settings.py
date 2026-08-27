@@ -155,6 +155,10 @@ def test_postgres_engine_passes_keepalive_connect_args(
         "keepalives_interval": 10,
         "keepalives_count": 5,
         "connect_timeout": 10,
+        "options": (
+            "-c statement_timeout=60000 -c lock_timeout=5000 "
+            "-c idle_in_transaction_session_timeout=60000"
+        ),
     }
 
 
@@ -451,9 +455,9 @@ def test_settings_field_defaults_match_sqlalchemy_defaults() -> None:
     assert settings.db_max_overflow == 10
     assert settings.db_pool_timeout == 30
     assert settings.db_connect_timeout_seconds == 10
-    assert settings.db_statement_timeout_ms == 0
-    assert settings.db_lock_timeout_ms == 0
-    assert settings.db_idle_transaction_timeout_ms == 0
+    assert settings.db_statement_timeout_ms == 60_000
+    assert settings.db_lock_timeout_ms == 5_000
+    assert settings.db_idle_transaction_timeout_ms == 60_000
 
 
 def test_settings_field_accepts_env_override(
@@ -485,5 +489,24 @@ def test_settings_pool_size_rejects_zero_or_negative(
     workload. Pin via ``ge=1`` constraint."""
     monkeypatch.setenv("CASEOPS_DB_POOL_SIZE", "0")
     get_settings.cache_clear()
+    with pytest.raises(ValidationError):
+        get_settings()
+
+
+@pytest.mark.parametrize(
+    "field",
+    (
+        "CASEOPS_DB_STATEMENT_TIMEOUT_MS",
+        "CASEOPS_DB_LOCK_TIMEOUT_MS",
+        "CASEOPS_DB_IDLE_TRANSACTION_TIMEOUT_MS",
+    ),
+)
+def test_database_safety_timeouts_cannot_be_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+) -> None:
+    monkeypatch.setenv(field, "0")
+    get_settings.cache_clear()
+
     with pytest.raises(ValidationError):
         get_settings()

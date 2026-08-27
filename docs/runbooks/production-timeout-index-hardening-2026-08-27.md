@@ -2,8 +2,8 @@
 
 **Date:** 2026-08-27
 **Incident:** GitHub Actions run `33009595343`
-**Scope:** production release verification, request deadlines, IP docket listing,
-and PostgreSQL index completeness
+**Scope:** production release verification, request deadlines, event-loop and
+transaction starvation, IP docket listing, and PostgreSQL index completeness
 
 ## Incident conclusion
 
@@ -60,18 +60,49 @@ table scans can be intentional.
 | Boundary | Budget | Behavior |
 | --- | ---: | --- |
 | PostgreSQL connection | 10 seconds | connection attempt fails closed |
-| PostgreSQL lock wait | 5 seconds in production API | retryable RFC 7807 `503` |
-| PostgreSQL statement | 60 seconds in production API | RFC 7807 `504` |
-| Idle database transaction | 60 seconds in production API | server terminates abandoned transaction |
+| PostgreSQL lock wait | 5 seconds by default in every runtime | retryable RFC 7807 `503` |
+| PostgreSQL statement | 60 seconds by default in every runtime | RFC 7807 `504` |
+| Idle database transaction | 60 seconds by default in every runtime | server terminates abandoned transaction |
 | Browser API request | 90 seconds | abort plus actionable `NetworkError` |
 | Browser auth refresh | 15 seconds | bounded refresh and normal auth recovery |
 | Cloud Run API request | 120 seconds | outer platform ceiling |
 | Release identity fetch | 5 seconds per attempt | bounded control-plane I/O |
 | Release convergence grace | 180 seconds | exact API/web SHA required |
 
-Background and batch jobs retain task-specific limits. Their default database
-statement limit remains unlimited unless the job opts in, so a 60-second
-interactive budget cannot truncate an approved corpus or migration operation.
+Background, batch, and migration jobs inherit the finite defaults. A reviewed
+operation that legitimately needs longer must set a larger transaction-local
+statement timeout; it may not disable the global lock or idle-transaction
+ceiling. Docker pins the same defaults explicitly for API, migration, and
+worker containers so workstation acceptance exercises the production failure
+mode instead of silently using unlimited waits.
+
+## Full-suite starvation finding
+
+The exact-image Docker run reached 137 of 168 Playwright cases before the
+portal invitation test exposed a second, application-level failure. The Admin
+page's read-only storage summary called the billing bootstrap helper. That
+helper acquired `FOR UPDATE` locks on `companies` and `billing_accounts`, then
+left the read transaction open until FastAPI dependency teardown. A concurrent
+portal invitation used synchronous SQL inside an `async` route and waited on
+an audit-event foreign-key check. Because that wait occupied the event loop,
+the storage request's dependency finalizer could not close its transaction.
+PostgreSQL showed the blocker as `idle in transaction` and every unrelated
+health/page request then queued behind it.
+
+The permanent controls are:
+
+- effective storage-quota reads resolve only already-persisted entitlements;
+  they never bootstrap billing state or acquire mutation locks;
+- explicit billing and mutation workflows remain the only owners allowed to
+  create grandfathered billing rows;
+- portal invitation and magic-link delivery handlers are synchronous FastAPI
+  handlers, so database or provider waits run in the worker pool instead of on
+  the event loop;
+- nonzero lock, statement, and idle-transaction limits are application
+  defaults, not deploy-script-only overrides; and
+- full Docker acceptance keeps the notice upload, Admin storage read, portal
+  invitation, query recovery, and health workflows in one ordered run so the
+  cross-request regression remains observable.
 
 ## Database index contract
 
@@ -121,6 +152,10 @@ The IP page demand-loads documents, proceedings, hearing/deadline, and access
 work areas. Hidden workspaces no longer issue all supporting requests during
 the initial docket render. Deep links still open the selected access workspace.
 
+Admin storage summaries are now side-effect-free reads. They do not create a
+billing account or subscription and therefore do not hold tenant billing
+mutation locks while the page issues its other concurrent requests.
+
 All direct first-party web requests now use `fetchWithTimeout`. A static test
 rejects any new direct `fetch` outside that helper and rejects Python `httpx`
 or `urlopen` construction without a declared timeout.
@@ -143,7 +178,9 @@ or `urlopen` construction without a declared timeout.
 ## Verification record
 
 The release evidence must record the final local test counts, Docker migration
-and index-health output, PR and exact-main CI run IDs, production migration and
-index-health execution IDs, Cloud Run revision identities, and exact-release
-Playwright run. A green source-tree test or a dispatched-but-unfinished workflow
-is not production evidence.
+and index-health output, the absence of lingering `idle in transaction`
+sessions after browser acceptance, proof that an unrelated health request
+remains responsive after timeout/recovery flows, PR and exact-main CI run IDs,
+production migration and index-health execution IDs, Cloud Run revision
+identities, and exact-release Playwright run. A green source-tree test or a
+dispatched-but-unfinished workflow is not production evidence.

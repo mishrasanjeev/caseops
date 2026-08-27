@@ -75,6 +75,13 @@ def _set_runtime_env(monkeypatch: pytest.MonkeyPatch, runtime_env: str) -> None:
 # ----- invite + verify happy path -------------------------------
 
 
+def test_portal_network_and_invitation_handlers_do_not_block_event_loop() -> None:
+    assert not inspect.iscoroutinefunction(portal_routes.post_portal_request_link)
+    assert not inspect.iscoroutinefunction(portal_routes.post_portal_verify_link)
+    assert not inspect.iscoroutinefunction(portal_routes.post_portal_logout)
+    assert not inspect.iscoroutinefunction(portal_routes.post_portal_invitation)
+
+
 def test_invite_then_request_then_verify_returns_session(
     client: TestClient,
 ) -> None:
