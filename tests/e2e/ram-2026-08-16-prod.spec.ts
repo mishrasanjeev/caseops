@@ -35,10 +35,7 @@ const envOr = (key: string, fallback: string): string => {
 
 const LOCAL_BOOTSTRAP = process.env.CASEOPS_PR237_LOCAL_BOOTSTRAP === "1";
 const PROD_BASE_URL = envOr("PROD_BASE_URL", "https://caseops.ai");
-const PROD_API_BASE_URL = envOr(
-  "PROD_API_BASE_URL",
-  "https://api.caseops.ai",
-);
+const PROD_API_BASE_URL = envOr("PROD_API_BASE_URL", "https://api.caseops.ai");
 
 function isHttpLoopback(rawUrl: string): boolean {
   try {
@@ -281,6 +278,11 @@ const NAV_GROUPS: ReadonlyArray<{
   {
     label: "Intelligence",
     items: [
+      {
+        label: "Ask Workspace",
+        href: "/app/assistant",
+        capability: "ai:generate",
+      },
       { label: "Research", href: "/app/research" },
       { label: "Drafting", href: "/app/drafting" },
       { label: "Recommendations", href: "/app/recommendations" },
@@ -346,7 +348,8 @@ const NAV_GROUPS: ReadonlyArray<{
 
 function required(key: string): string {
   const value = (process.env[key] ?? "").trim();
-  if (!value) throw new Error(`${key} is required for the August 16 production proof.`);
+  if (!value)
+    throw new Error(`${key} is required for the August 16 production proof.`);
   return value;
 }
 
@@ -618,8 +621,14 @@ test.describe("Ram 2026-08-16 PR #237 production-safe UX proof", () => {
 
       const box = await link.boundingBox();
       expect(box, `${action.label} must render a click target`).not.toBeNull();
-      expect(box!.height, `${action.label} click target height`).toBeGreaterThanOrEqual(32);
-      expect(box!.x, `${action.label} must not overflow left`).toBeGreaterThanOrEqual(0);
+      expect(
+        box!.height,
+        `${action.label} click target height`,
+      ).toBeGreaterThanOrEqual(32);
+      expect(
+        box!.x,
+        `${action.label} must not overflow left`,
+      ).toBeGreaterThanOrEqual(0);
       expect(
         box!.x + box!.width,
         `${action.label} must not overflow right`,
@@ -628,7 +637,9 @@ test.describe("Ram 2026-08-16 PR #237 production-safe UX proof", () => {
         clientWidth: node.clientWidth,
         scrollWidth: node.scrollWidth,
       }));
-      expect(navWidth.scrollWidth).toBeLessThanOrEqual(navWidth.clientWidth + 1);
+      expect(navWidth.scrollWidth).toBeLessThanOrEqual(
+        navWidth.clientWidth + 1,
+      );
 
       await link.click();
       await expect(drawer).toBeHidden();
@@ -640,10 +651,13 @@ test.describe("Ram 2026-08-16 PR #237 production-safe UX proof", () => {
         .toBe(expectedPath);
       await expect(page.locator("h1").first()).toBeVisible();
     }
-    expect(unexpectedMutations, "navigation must not issue API writes").toEqual([]);
-    expect(unsafeBillingRequests, "every billing request must use a safe GET fixture").toEqual(
+    expect(unexpectedMutations, "navigation must not issue API writes").toEqual(
       [],
     );
+    expect(
+      unsafeBillingRequests,
+      "every billing request must use a safe GET fixture",
+    ).toEqual([]);
   });
 
   test("manager selection shows live colleagues by name and email without exposing UUIDs", async ({
@@ -654,7 +668,11 @@ test.describe("Ram 2026-08-16 PR #237 production-safe UX proof", () => {
     const directoryResponse = await page.request.get(
       `${PROD_API_BASE_URL}/api/companies/current/users`,
     );
-    await expectStatus(directoryResponse, 200, "read tenant colleague directory");
+    await expectStatus(
+      directoryResponse,
+      200,
+      "read tenant colleague directory",
+    );
     const directory = (await directoryResponse.json()) as CompanyUsersResponse;
     expect(directory.company_slug).toBe(COMPANY_SLUG);
     const activeUsers = directory.users
@@ -866,7 +884,9 @@ test.describe("Ram 2026-08-16 PR #237 production-safe UX proof", () => {
     await expect(
       page.getByTestId("ip-docket-acknowledgements-loading"),
     ).toBeHidden();
-    await expect(page.getByTestId("ip-docket-saved-queues-loading")).toBeHidden();
+    await expect(
+      page.getByTestId("ip-docket-saved-queues-loading"),
+    ).toBeHidden();
     expect(unexpectedMutations).toEqual([]);
   });
 
@@ -912,7 +932,8 @@ test.describe("Ram 2026-08-16 PR #237 production-safe UX proof", () => {
                 coverage_id: SAFE_ACK_COVERAGE.coverage_id,
                 acknowledged: false,
                 reason: "version_conflict",
-                reassignment_version: SAFE_ACK_COVERAGE.reassignment_version + 1,
+                reassignment_version:
+                  SAFE_ACK_COVERAGE.reassignment_version + 1,
               },
             ],
           },

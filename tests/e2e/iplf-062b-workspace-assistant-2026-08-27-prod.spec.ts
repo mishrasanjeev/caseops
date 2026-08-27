@@ -5,7 +5,9 @@ import { expectStatus } from "./support/iplf058b";
 const WEB = (process.env.PROD_BASE_URL ?? "https://caseops.ai").trim();
 const API = (process.env.PROD_API_BASE_URL ?? "https://api.caseops.ai").trim();
 const SLUG = (process.env.CASEOPS_IP_QA_SLUG ?? "caseops-ip-qa").trim();
-const EMAIL = (process.env.CASEOPS_IP_QA_EMAIL ?? "ip-qa-bot@caseops.ai").trim();
+const EMAIL = (
+  process.env.CASEOPS_IP_QA_EMAIL ?? "ip-qa-bot@caseops.ai"
+).trim();
 
 function required(name: string): string {
   const value = process.env[name]?.trim();
@@ -13,7 +15,9 @@ function required(name: string): string {
   return value;
 }
 
-test("IPLF-062B production proves the exact scoped-assistant release", async ({ page }) => {
+test("IPLF-062B production proves the exact scoped-assistant release", async ({
+  page,
+}) => {
   const expectedSha = required("CASEOPS_EXPECTED_RELEASE_SHA");
   const [apiIdentity, webIdentity] = await Promise.all([
     page.request.get(`${API}/api/build`),
@@ -34,27 +38,41 @@ test("IPLF-062B production proves the exact scoped-assistant release", async ({ 
   await expectStatus(login, 200, "IP QA sign-in");
   const identity = await login.json();
   const headers = { Authorization: `Bearer ${identity.access_token}` };
-  const originalPolicyResponse = await page.request.get(`${API}/api/admin/tenant-ai-policy`, {
-    headers,
-  });
-  await expectStatus(originalPolicyResponse, 200, "read production assistant policy");
+  const originalPolicyResponse = await page.request.get(
+    `${API}/api/admin/tenant-ai-policy`,
+    {
+      headers,
+    },
+  );
+  await expectStatus(
+    originalPolicyResponse,
+    200,
+    "read production assistant policy",
+  );
   const originalPolicy = await originalPolicyResponse.json();
 
-  const enabledResponse = await page.request.patch(`${API}/api/admin/tenant-ai-policy`, {
-    headers,
-    data: {
-      expected_version: originalPolicy.policy_version,
-      workspace_assistant_enabled: true,
-      assistant_retention_days: originalPolicy.assistant_retention_days,
-      allowed_models_assistant: [],
+  const enabledResponse = await page.request.patch(
+    `${API}/api/admin/tenant-ai-policy`,
+    {
+      headers,
+      data: {
+        expected_version: originalPolicy.policy_version,
+        workspace_assistant_enabled: true,
+        assistant_retention_days: originalPolicy.assistant_retention_days,
+        allowed_models_assistant: [],
+      },
     },
-  });
-  await expectStatus(enabledResponse, 200, "enable production QA assistant policy");
+  );
+  await expectStatus(
+    enabledResponse,
+    200,
+    "enable production QA assistant policy",
+  );
   const enabledPolicy = await enabledResponse.json();
 
   try {
     const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const matter = await page.request.post(`${API}/api/matters`, {
+    const matter = await page.request.post(`${API}/api/matters/`, {
       headers,
       data: {
         matter_code: `AI-PROD-${runId}`,
@@ -68,7 +86,11 @@ test("IPLF-062B production proves the exact scoped-assistant release", async ({ 
 
     await page.goto(WEB);
     await page.evaluate(
-      (context) => window.localStorage.setItem("caseops.session.context", JSON.stringify(context)),
+      (context) =>
+        window.localStorage.setItem(
+          "caseops.session.context",
+          JSON.stringify(context),
+        ),
       {
         company: identity.company,
         user: identity.user,
@@ -77,10 +99,16 @@ test("IPLF-062B production proves the exact scoped-assistant release", async ({ 
       },
     );
     await page.goto(`${WEB}/app/assistant`);
-    await expect(page.getByRole("heading", { name: "Ask this Workspace" })).toBeVisible();
-    await page.getByRole("textbox", { name: "Find workspace records" }).fill(`AI-PROD-${runId}`);
+    await expect(
+      page.getByRole("heading", { name: "Ask this Workspace" }),
+    ).toBeVisible();
+    await page
+      .getByRole("textbox", { name: "Find workspace records" })
+      .fill(`AI-PROD-${runId}`);
     await page.getByRole("button", { name: "Find permitted records" }).click();
-    await page.getByRole("button", { name: `Add Production assistant ${runId}` }).click();
+    await page
+      .getByRole("button", { name: `Add Production assistant ${runId}` })
+      .click();
     await page.getByRole("button", { name: "Start conversation" }).click();
     await page
       .getByRole("textbox", { name: "Ask this workspace" })
@@ -92,22 +120,30 @@ test("IPLF-062B production proves the exact scoped-assistant release", async ({ 
     await expect(page.getByText(/tokens$/)).toBeVisible();
 
     await page.setViewportSize({ width: 360, height: 800 });
-    await expect(page.getByRole("textbox", { name: "Ask this workspace" })).toBeVisible();
+    await expect(
+      page.getByRole("textbox", { name: "Ask this workspace" }),
+    ).toBeVisible();
     expect(
       await page.evaluate(
-        () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+        () =>
+          document.documentElement.scrollWidth >
+          document.documentElement.clientWidth + 1,
       ),
     ).toBe(false);
   } finally {
-    const restore = await page.request.patch(`${API}/api/admin/tenant-ai-policy`, {
-      headers,
-      data: {
-        expected_version: enabledPolicy.policy_version,
-        workspace_assistant_enabled: originalPolicy.workspace_assistant_enabled,
-        assistant_retention_days: originalPolicy.assistant_retention_days,
-        allowed_models_assistant: originalPolicy.allowed_models_assistant,
+    const restore = await page.request.patch(
+      `${API}/api/admin/tenant-ai-policy`,
+      {
+        headers,
+        data: {
+          expected_version: enabledPolicy.policy_version,
+          workspace_assistant_enabled:
+            originalPolicy.workspace_assistant_enabled,
+          assistant_retention_days: originalPolicy.assistant_retention_days,
+          allowed_models_assistant: originalPolicy.allowed_models_assistant,
+        },
       },
-    });
+    );
     await expectStatus(restore, 200, "restore production QA assistant policy");
   }
 });
