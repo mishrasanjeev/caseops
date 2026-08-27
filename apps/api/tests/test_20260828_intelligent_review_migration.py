@@ -12,6 +12,7 @@ from alembic import command
 from caseops_api.core.settings import get_settings
 from caseops_api.db.index_coverage import database_foreign_key_gaps
 from caseops_api.db.session import clear_engine_cache
+from caseops_api.scripts.check_database_indexes import build_index_health_report
 
 PREVIOUS_HEAD = "20260827_0002"
 MIGRATION_HEAD = "20260828_0001"
@@ -40,6 +41,24 @@ def _module() -> ModuleType:
 
 def _constraint_names(rows: list[dict[str, object]]) -> set[str]:
     return {str(row["name"]) for row in rows if row.get("name")}
+
+
+def _health_failures(health: dict[str, object]) -> dict[str, object]:
+    failures: dict[str, object] = {}
+    for key, value in health.items():
+        if (
+            key in {"status", "schema_revisions", "sequential_scan_warnings"}
+            or not isinstance(value, list)
+            or not value
+        ):
+            continue
+        if key == "missing_declared_indexes":
+            failures[key] = [
+                f"{item['table_name']}.{item['index_name']}" for item in value
+            ]
+        else:
+            failures[key] = {"count": len(value), "sample": value[:10]}
+    return failures
 
 
 def test_intelligent_review_migration_round_trip_and_index_coverage(
@@ -100,6 +119,7 @@ def test_intelligent_review_migration_round_trip_and_index_coverage(
             "ix_recommendations_company_review_state_created",
             "ix_recommendations_company_ip_docket_created",
             "ix_fk_recommendations_finalized_by_me_a0403a0f",
+            "ix_fk_recommendations_ip_docket_id_company",
             "ix_fk_recommendations_ip_proceeding_i_0c288976",
             "ix_fk_recommendations_source_research_ae8b70ed",
             "ix_fk_recommendations_matter_id_compa_edcf1c7f",
@@ -108,6 +128,9 @@ def test_intelligent_review_migration_round_trip_and_index_coverage(
             inspector,
             table_names={"recommendations", "drafts"},
         ) == ()
+        with engine.connect() as connection:
+            health = build_index_health_report(connection)
+        assert health["status"] == "ok", _health_failures(health)
         with engine.connect() as connection:
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
                 MIGRATION_HEAD

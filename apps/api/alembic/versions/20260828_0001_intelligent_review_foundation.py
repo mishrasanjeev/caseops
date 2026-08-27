@@ -163,6 +163,11 @@ def upgrade() -> None:
         ["ip_proceeding_id", "company_id", "ip_docket_id"],
     )
     op.create_index(
+        "ix_fk_recommendations_ip_docket_id_company",
+        "recommendations",
+        ["ip_docket_id", "company_id"],
+    )
+    op.create_index(
         "ix_fk_recommendations_source_research_ae8b70ed",
         "recommendations",
         ["source_research_report_id", "company_id"],
@@ -229,6 +234,7 @@ def downgrade() -> None:
         "ix_recommendations_company_review_state_created",
         "ix_fk_recommendations_finalized_by_me_a0403a0f",
         "ix_fk_recommendations_source_research_ae8b70ed",
+        "ix_fk_recommendations_ip_docket_id_company",
         "ix_fk_recommendations_ip_proceeding_i_0c288976",
         "ix_fk_recommendations_matter_id_compa_edcf1c7f",
     ):

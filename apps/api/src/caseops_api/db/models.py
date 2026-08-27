@@ -10939,6 +10939,11 @@ class Recommendation(Base):
             "ip_docket_id",
         ),
         Index(
+            "ix_fk_recommendations_ip_docket_id_company",
+            "ip_docket_id",
+            "company_id",
+        ),
+        Index(
             "ix_fk_recommendations_source_research_ae8b70ed",
             "source_research_report_id",
             "company_id",

@@ -151,6 +151,7 @@ from caseops_api.services.matter_operational_guard import (
     matter_is_operational,
 )
 from caseops_api.services.session_context import SessionContext
+from caseops_api.services.tenant_time import tenant_today
 
 
 def _now() -> datetime:
@@ -5916,6 +5917,7 @@ def list_ip_assigned_coverage(
     unacknowledged_only: bool = False,
     actionable_only: bool = False,
     limit: int | None = None,
+    today: date | None = None,
 ) -> IpAssignedCoverageListResponse:
     """The caller's own deadlines (CAL-OPS-09).
 
@@ -5944,7 +5946,7 @@ def list_ip_assigned_coverage(
     if limit is not None:
         statement = statement.limit(max(0, limit))
 
-    today = _now().date()
+    effective_today = today or tenant_today(context.company.timezone, at=_now())
     records: list[IpAssignedCoverageRecord] = []
     for row, docket, deadline, is_critical in session.execute(statement).all():
         acknowledged = row.coverage_status == "accepted" and row.accepted_at is not None
@@ -5957,7 +5959,7 @@ def list_ip_assigned_coverage(
                 docket_identifier=docket.primary_identifier,
                 deadline_title=getattr(deadline, "title", None),
                 due_on=due_on,
-                days_until_due=(due_on - today).days if due_on else None,
+                days_until_due=(due_on - effective_today).days if due_on else None,
                 critical=bool(is_critical),
                 acknowledged=acknowledged,
                 coverage_status=row.coverage_status,
@@ -5973,6 +5975,7 @@ def list_ip_coverage_transfers_awaiting(
     *,
     context: SessionContext,
     limit: int | None = None,
+    today: date | None = None,
 ) -> IpCoverageTransfersAwaitingResponse:
     """Coverage transfers waiting on the calling member (CAL-OPS-08).
 
@@ -6029,7 +6032,7 @@ def list_ip_coverage_transfers_awaiting(
             return membership_id
         return member.user.full_name or member.user.email
 
-    today = _now().date()
+    effective_today = today or tenant_today(context.company.timezone, at=_now())
     transfers: list[IpCoverageTransferAwaiting] = []
     for row, docket, deadline, is_critical in rows:
         due_on = deadline.due_on
@@ -6041,7 +6044,7 @@ def list_ip_coverage_transfers_awaiting(
                 docket_identifier=docket.primary_identifier,
                 deadline_title=getattr(deadline, "title", None),
                 due_on=due_on,
-                days_until_due=(due_on - today).days if due_on else None,
+                days_until_due=(due_on - effective_today).days if due_on else None,
                 critical=bool(is_critical),
                 # The work has already moved when the responsible member is the
                 # reader; that only happens on an immediate transfer.
