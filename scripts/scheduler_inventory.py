@@ -300,8 +300,7 @@ def _bootstrap_arguments(
         project,
         "--command",
         ",".join(bootstrap["command"]),
-        "--args",
-        ",".join(bootstrap["args"]),
+        _gcloud_args_flag(bootstrap["args"]),
         "--set-env-vars",
         ",".join(
             f"{key}={value}" for key, value in bootstrap["environment"].items()
@@ -324,6 +323,16 @@ def _bootstrap_arguments(
     if task_timeout is not None:
         arguments.extend(["--task-timeout", f"{task_timeout}s"])
     return arguments
+
+
+def _gcloud_args_flag(values: list[str]) -> str:
+    """Bind job args to the flag even when the first value starts with a dash."""
+    if not values:
+        return "--args="
+    for delimiter in ("|", "@", "~", ";"):
+        if all(delimiter not in value for value in values):
+            return f"--args=^{delimiter}^{delimiter.join(values)}"
+    raise InventoryError("job args contain every supported gcloud list delimiter")
 
 
 def reconcile(inventory: dict[str, Any], *, project: str, region: str, image: str) -> None:

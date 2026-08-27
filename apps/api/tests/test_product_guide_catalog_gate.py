@@ -28,6 +28,26 @@ def test_committed_product_guide_projection_is_valid(gate: ModuleType) -> None:
     assert gate.validate() == []
 
 
+def test_gate_accepts_crlf_projection_from_windows_checkout(
+    gate: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "catalog.json"
+    api_projection = tmp_path / "api.json"
+    web_projection = tmp_path / "web.json"
+    document = gate._load()
+    canonical = gate._canonical_bytes(document)
+    source.write_bytes(canonical)
+    api_projection.write_bytes(canonical.replace(b"\n", b"\r\n"))
+    web_projection.write_bytes(canonical.replace(b"\n", b"\r\n"))
+    monkeypatch.setattr(gate, "SOURCE_PATH", source)
+    monkeypatch.setattr(gate, "API_PROJECTION_PATH", api_projection)
+    monkeypatch.setattr(gate, "WEB_PROJECTION_PATH", web_projection)
+
+    assert gate.validate() == []
+
+
 def test_gate_rejects_a_duplicate_section_id(gate: ModuleType) -> None:
     document = gate._load()
     document["sections"][1]["id"] = document["sections"][0]["id"]

@@ -225,7 +225,7 @@ def validate() -> list[str]:
     for path in (API_PROJECTION_PATH, WEB_PROJECTION_PATH):
         if not path.is_file():
             errors.append(f"missing generated projection: {_display_path(path)}")
-        elif path.read_bytes() != expected:
+        elif path.read_bytes().replace(b"\r\n", b"\n") != expected:
             errors.append(
                 f"stale or hand-edited projection: {_display_path(path)}; "
                 "run `python scripts/product_guide_catalog.py render`"
