@@ -9,6 +9,8 @@ minute ceiling. The migration is restart-safe after an interrupted build.
 MIGRATION-ROLLBACK: safe. This revision contains performance indexes only;
 downgrade removes deterministic support indexes in the migration transaction
 without changing data, so a later restore-forward refusal rolls everything back.
+DATA-GOVERNANCE-MAP: updated. The indexes add no stored data or new data class;
+the reviewed schema inventory now records every indexed table touched here.
 """
 
 from __future__ import annotations
