@@ -3,13 +3,14 @@
 Revision ID: 20260827_0002
 Revises: 20260827_0001
 
-MIGRATION-LOCK-RISK: bounded. The only existing table touched is the one-row-
-per-tenant AI policy table; additive columns use constant defaults and bounded
-checks. New conversation tables are created empty with every foreign-key support
-index present before application traffic can use them.
-MIGRATION-ROLLBACK: conditional. Downgrade is allowed only while all assistant
-tables are empty because sessions, turns, and citations are audit-relevant legal
-work product. No migration silently destroys retained conversations.
+MIGRATION-LOCK-RISK: acknowledged: the only existing table touched is the one-
+row-per-tenant AI policy table; additive columns use constant defaults and
+bounded checks. Every flagged index is built on a table created empty in this
+same migration before application traffic can use it.
+MIGRATION-ROLLBACK: restore-forward: downgrade is allowed only while all
+assistant tables are empty because sessions, turns, and citations are audit-
+relevant legal work product. Once evidence exists, the migration refuses the
+destructive rollback and requires governed export/disposition plus roll-forward.
 DATA-GOVERNANCE-MAP: updated for assistant conversations, explicit scope
 references, model provenance, retention, and citation records.
 """
