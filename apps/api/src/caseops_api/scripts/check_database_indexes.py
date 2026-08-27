@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import sqlalchemy as sa
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy.engine import Connection
 
 from caseops_api.db.base import Base
@@ -14,13 +18,39 @@ from caseops_api.db.session import get_engine
 
 logger = logging.getLogger(__name__)
 
-REQUIRED_SCHEMA_REVISION = "20260827_0001"
-
 
 @dataclass(frozen=True, slots=True)
 class DeclaredIndex:
     columns: tuple[str, ...] | None
     requires_exact_name: bool
+
+
+def _alembic_config_path() -> Path:
+    configured = os.getenv("CASEOPS_ALEMBIC_CONFIG")
+    candidates = [Path(configured)] if configured else []
+    candidates.append(Path.cwd() / "alembic.ini")
+    candidates.extend(parent / "alembic.ini" for parent in Path(__file__).resolve().parents)
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate.resolve()
+    raise RuntimeError("could not locate alembic.ini for schema-head verification")
+
+
+def _required_schema_revision() -> str:
+    config_path = _alembic_config_path()
+    config = Config(str(config_path))
+    script_location = config.get_main_option("script_location")
+    if not script_location:
+        raise RuntimeError("alembic.ini does not declare script_location")
+    script_path = Path(script_location)
+    if not script_path.is_absolute():
+        config.set_main_option(
+            "script_location", str((config_path.parent / script_path).resolve())
+        )
+    heads = ScriptDirectory.from_config(config).get_heads()
+    if len(heads) != 1:
+        raise RuntimeError(f"expected one Alembic head, found {sorted(heads)}")
+    return heads[0]
 
 
 def _declared_index_columns(index: sa.Index) -> tuple[str, ...] | None:
@@ -82,6 +112,7 @@ def _sequential_scan_warnings(connection: Connection) -> list[dict[str, Any]]:
 
 
 def build_index_health_report(connection: Connection) -> dict[str, Any]:
+    required_schema_revision = _required_schema_revision()
     inspector = sa.inspect(connection)
     table_names = set(inspector.get_table_names())
     gaps = database_foreign_key_gaps(inspector, table_names=table_names)
@@ -135,10 +166,13 @@ def build_index_health_report(connection: Connection) -> dict[str, Any]:
         "missing_declared_indexes": missing_declared,
         "mismatched_declared_indexes": mismatched_declared,
         "invalid_indexes": invalid,
-        "schema_revision_mismatch": ([] if versions == [REQUIRED_SCHEMA_REVISION] else versions),
+        "schema_revision_mismatch": (
+            [] if versions == [required_schema_revision] else versions
+        ),
     }
     return {
         "status": "ok" if not any(failures.values()) else "failed",
+        "required_schema_revision": required_schema_revision,
         "schema_revisions": versions,
         **failures,
         "sequential_scan_warnings": _sequential_scan_warnings(connection),
