@@ -209,9 +209,7 @@ test("IPLF-026A production enforces the record-access foundation across docket, 
         upload: {
           name: `iplf-026a-${canary}.txt`,
           mimeType: "text/plain",
-          buffer: Buffer.from(
-            `Synthetic IPLF-026A access canary ${canary}.`,
-          ),
+          buffer: Buffer.from(`Synthetic IPLF-026A access canary ${canary}.`),
         },
       },
     },
@@ -243,9 +241,9 @@ test("IPLF-026A production enforces the record-access foundation across docket, 
     events: Array<{ action: string; ip_docket_id: string }>;
   };
   expect(auditBody.total).toBeGreaterThanOrEqual(2);
-  expect(
-    auditBody.events.every((row) => row.ip_docket_id === docket.id),
-  ).toBe(true);
+  expect(auditBody.events.every((row) => row.ip_docket_id === docket.id)).toBe(
+    true,
+  );
   expect(auditBody.events.map((row) => row.action)).toEqual(
     expect.arrayContaining(["ip_docket.created", "source_access.opened"]),
   );
@@ -258,15 +256,14 @@ test("IPLF-026A production enforces the record-access foundation across docket, 
   const hiddenDocketBody = (await hiddenDockets.json()) as {
     dockets: Array<{ id: string }>;
   };
-  expect(
-    hiddenDocketBody.dockets.some((row) => row.id === docket.id),
-  ).toBe(false);
+  expect(hiddenDocketBody.dockets.some((row) => row.id === docket.id)).toBe(
+    false,
+  );
   expect(
     (
-      await memberApi.get(
-        `${PROD_API_BASE_URL}/api/ip/dockets/${docket.id}`,
-        { headers: memberHeaders },
-      )
+      await memberApi.get(`${PROD_API_BASE_URL}/api/ip/dockets/${docket.id}`, {
+        headers: memberHeaders,
+      })
     ).status(),
   ).toBe(404);
   expect(
@@ -407,9 +404,7 @@ test("IPLF-026B production previews, grants, and revokes independent IP access a
                 specification: "Legal workflow software",
               },
             ],
-            parties: [
-              { role: "applicant", name: "CaseOps IP QA LLP" },
-            ],
+            parties: [{ role: "applicant", name: "CaseOps IP QA LLP" }],
             filing_manifest: [
               {
                 key: "representation",
@@ -443,7 +438,9 @@ test("IPLF-026B production previews, grants, and revokes independent IP access a
       ).status(),
     ).toBe(404);
 
-    await page.goto(`/app/ip?docket=${encodeURIComponent(docket.id)}`);
+    await page.goto(
+      `/app/ip?docket=${encodeURIComponent(docket.id)}&view=access`,
+    );
     const workspace = page.getByTestId("ip-access-workspace");
     await expect(workspace).toBeVisible({ timeout: 45_000 });
     await expect(
@@ -467,7 +464,9 @@ test("IPLF-026B production previews, grants, and revokes independent IP access a
     await workspace.getByLabel("Person or team").selectOption(membershipId);
     const previewResponsePromise = page.waitForResponse(
       (response) =>
-        response.url().endsWith(`/api/ip/dockets/${docket.id}/access/preview`) &&
+        response
+          .url()
+          .endsWith(`/api/ip/dockets/${docket.id}/access/preview`) &&
         response.request().method() === "POST",
       { timeout: 20_000 },
     );
@@ -507,7 +506,9 @@ test("IPLF-026B production previews, grants, and revokes independent IP access a
       .fill("The dated production review assignment has ended.");
     const revokePreviewResponsePromise = page.waitForResponse(
       (response) =>
-        response.url().endsWith(`/api/ip/dockets/${docket.id}/access/preview`) &&
+        response
+          .url()
+          .endsWith(`/api/ip/dockets/${docket.id}/access/preview`) &&
         response.request().method() === "POST",
       { timeout: 20_000 },
     );
