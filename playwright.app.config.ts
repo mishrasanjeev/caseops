@@ -76,6 +76,8 @@ export default defineConfig({
   globalSetup: path.join("tests", "e2e", "global-setup.ts"),
   reporter: [["list"]],
   use: {
+    actionTimeout: 15_000,
+    navigationTimeout: 30_000,
     baseURL: webBaseUrl,
     headless: true,
     trace: "retain-on-failure",

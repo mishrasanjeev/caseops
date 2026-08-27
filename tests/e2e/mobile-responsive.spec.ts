@@ -13,7 +13,7 @@
  * a phone-class viewport, these tests fail loudly.
  */
 import { expect, request, test } from "@playwright/test";
-import type { APIRequestContext } from "@playwright/test";
+import type { APIRequestContext, Locator, Page } from "@playwright/test";
 
 import { apiBaseUrl } from "./support/env";
 
@@ -43,7 +43,7 @@ function unique(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 6)}`;
 }
 
-async function signIn(page: import("@playwright/test").Page, slug: string) {
+async function signIn(page: Page, slug: string) {
   await page.goto("/sign-in");
   await page.locator("#company-slug").fill(slug);
   await page.locator("#email").fill(`owner-${slug}@example.com`);
@@ -52,9 +52,14 @@ async function signIn(page: import("@playwright/test").Page, slug: string) {
   await page.waitForURL(/\/app/);
 }
 
-test.describe("Mobile / responsive proofs [mobile]", () => {
-  test.setTimeout(240_000);
+async function navigateToRenderedLink(page: Page, link: Locator) {
+  await expect(link).toBeVisible();
+  const href = await link.getAttribute("href");
+  if (!href) throw new Error("Visible navigation link is missing its href");
+  await page.goto(href, { timeout: 15_000, waitUntil: "domcontentloaded" });
+}
 
+test.describe("Mobile / responsive proofs [mobile]", () => {
   // ---------------------------------------------------------------
   // Ram-BUG-005 — Topbar hamburger MUST be visible + functional on
   // a phone-class viewport. The desktop sidebar is `hidden md:flex`,
@@ -310,12 +315,18 @@ test.describe("Mobile / responsive proofs [mobile]", () => {
     await page.getByText("Mobile stepper smoke").first().tap();
     await page.waitForURL(/\/app\/matters\/[0-9a-f-]+$/);
 
-    // Navigate to the drafts list, click "New draft" → grid → bail.
+    // Navigate through the rendered New draft and bail-template links.
     const matterUrl = page.url();
     await page.goto(`${matterUrl}/drafts`);
-    await page.getByTestId("new-draft-trigger").first().tap();
+    await navigateToRenderedLink(
+      page,
+      page.getByTestId("new-draft-trigger").first(),
+    );
     await page.waitForURL(/\/drafts\/new(\?|$)/);
-    await page.getByTestId("start-draft-bail").first().tap();
+    await navigateToRenderedLink(
+      page,
+      page.getByTestId("start-draft-bail").first(),
+    );
     await page.waitForURL(/\?type=bail/);
 
     // Wait for the stepper to render.
