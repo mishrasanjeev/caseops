@@ -52,6 +52,13 @@ console command. Five other recurring jobs had the same redundant runtime
 dependency-resolution path. Production traffic correctly remained on the
 previous API and web revisions.
 
+A later retry of release `9f1e3be...` also stopped before traffic routing. The
+inventory reconciler supplied the reminders arguments as two subprocess
+tokens, `--args` and `--mode=auto,--limit=200`. Because the value began with a
+dash, `gcloud` parsed it as another option and rejected the update. This was a
+serialization defect in the release control plane, not a reminders runtime
+failure.
+
 ## Permanent release contract
 
 - `prod-verify.yml` no longer runs on a push to `main`.
@@ -75,8 +82,16 @@ previous API and web revisions.
   validation because it can create a virtual environment, contact package
   registries, consume memory, and spend the task deadline before application
   code starts.
-- An empty argument vector is deliberately emitted as `--args ""`, the gcloud
-  contract for clearing previously configured arguments.
+- A non-empty argument vector is emitted as one bound gcloud token using an
+  alternate list delimiter, for example
+  `--args=^|^--mode=auto|--limit=200`. The reconciler selects a delimiter absent
+  from all values, so leading dashes cannot be parsed as gcloud options and
+  delimiter characters in application arguments do not corrupt the list.
+- An empty argument vector is emitted as the single token `--args=`, which
+  clears previously configured arguments without exposing a following token to
+  gcloud option parsing.
+- Regression tests exercise the exact reminders arguments, empty-list clearing,
+  and alternate-delimiter selection.
 - Local Docker verification runs `caseops-db-index-health` with a hard 512 MiB
   memory and swap limit. It must exit zero, report `status=ok`, and finish
   without an OOM kill before production deployment.
@@ -189,6 +204,11 @@ mutation locks while the page issues its other concurrent requests.
 All direct first-party web requests now use `fetchWithTimeout`. A static test
 rejects any new direct `fetch` outside that helper and rejects Python `httpx`
 or `urlopen` construction without a declared timeout.
+
+Product Guide projection validation normalizes only CRLF to LF before its
+canonical byte comparison. This keeps stale or hand-edited content fail-closed
+while allowing the same committed generated JSON to pass on Windows Git
+checkouts and Linux CI runners.
 
 ## Operator sequence
 

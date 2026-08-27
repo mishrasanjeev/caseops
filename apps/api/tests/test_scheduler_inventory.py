@@ -183,6 +183,11 @@ def test_reconcile_converges_inventory_owned_timeout_and_scheduler_state(
     )
     assert authority_update[-2:] == ["--task-timeout", "43200s"]
     assert enabled_update[enabled_update.index("--task-timeout") + 1] == "1800s"
+    assert (
+        "--args=^|^-m|caseops_api.scripts.extract_authority_metadata|"
+        "--concurrency|8"
+    ) in authority_update
+    assert "--args" not in authority_update
     assert [
         "scheduler",
         "jobs",
@@ -325,7 +330,7 @@ def test_reconcile_bootstraps_a_missing_declared_run_job(monkeypatch) -> None:
     assert create[3] == "caseops-ip-journal-watch"
     assert create[create.index("--image") + 1] == expected_image
     assert create[create.index("--command") + 1] == "caseops-ip-journal-watch"
-    assert create[create.index("--args") + 1] == ""
+    assert "--args=" in create
     assert create[create.index("--task-timeout") + 1] == "900s"
     assert create[create.index("--max-retries") + 1] == "1"
     assert "CASEOPS_DATABASE_URL=caseops-database-url:latest" in create[
@@ -376,6 +381,33 @@ def test_reconcile_converges_an_existing_bootstrap_contract(monkeypatch) -> None
     assert "--set-env-vars" in update
     assert "--set-secrets" in update
     assert "--set-cloudsql-instances" in update
+
+
+def test_bootstrap_arguments_bind_leading_dash_values_to_gcloud_args_flag() -> None:
+    inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
+    reminders_job = next(
+        job
+        for job in inventory["jobs"]
+        if job["run_job_name"] == "caseops-reminders-job"
+    )
+
+    arguments = scheduler_inventory._bootstrap_arguments(
+        reminders_job,
+        action="update",
+        project=inventory["production_project"],
+        region=inventory["location"],
+        image="registry.example/caseops-api@sha256:" + "f" * 64,
+    )
+
+    assert "--args=^|^--mode=auto|--limit=200" in arguments
+    assert "--args" not in arguments
+    assert "--mode=auto,--limit=200" not in arguments
+
+
+def test_gcloud_args_flag_selects_a_delimiter_absent_from_values() -> None:
+    assert scheduler_inventory._gcloud_args_flag(["contains|pipe", "--flag"]) == (
+        "--args=^@^contains|pipe@--flag"
+    )
 
 
 def test_reconcile_fails_closed_when_a_missing_job_has_no_bootstrap(monkeypatch) -> None:
