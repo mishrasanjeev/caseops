@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { Footer } from "@/components/marketing/Footer";
 import { Nav } from "@/components/marketing/Nav";
+import { ProductGuideSearch } from "@/components/guide/ProductGuideSearch";
 import { Container } from "@/components/ui/Container";
 import { SkipLink } from "@/components/ui/SkipLink";
 import { formatGuideDate, PRODUCT_GUIDE_CATALOG } from "@/lib/product-guide";
@@ -130,6 +131,7 @@ export default function GuidePage() {
         </header>
 
         <Container className="py-16">
+          <ProductGuideSearch contentVersion={PRODUCT_GUIDE_CATALOG.content_version} />
           <div className="grid gap-12 lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-16">
             <nav
               aria-label="Contents"

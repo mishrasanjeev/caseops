@@ -220,8 +220,11 @@ test("IPLF-025B production schedules, supersedes, and cancels unknown-time remin
 
   await page.setViewportSize({ width: 360, height: 900 });
   await page.goto(
-    `${PROD_BASE_URL}/app/ip?docket=${encodeURIComponent(docketId)}`,
+    `${PROD_BASE_URL}/app/ip?docket=${encodeURIComponent(docketId)}&view=schedule`,
   );
+  await expect(
+    page.getByRole("tab", { name: "Hearings and deadlines" }),
+  ).toHaveAttribute("aria-selected", "true");
   await expect(
     page.getByRole("heading", {
       name: "Hearings, reminders, and calendar copies",

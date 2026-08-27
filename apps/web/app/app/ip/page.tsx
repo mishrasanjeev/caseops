@@ -109,6 +109,12 @@ import { useSession } from "@/lib/use-session";
 const TODAY = new Date().toISOString().slice(0, 10);
 const FORM_SELECT_CLASS =
   "h-10 w-full min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm";
+const DOCKET_VIEWS = ["overview", "proceedings", "schedule", "access"] as const;
+type DocketView = (typeof DOCKET_VIEWS)[number];
+
+function requestedDocketView(value: string | null): DocketView {
+  return DOCKET_VIEWS.includes(value as DocketView) ? (value as DocketView) : "overview";
+}
 
 function verifiedHttpSource(reference: string | null | undefined): string | null {
   if (!reference) return null;
@@ -123,6 +129,7 @@ function verifiedHttpSource(reference: string | null | undefined): string | null
 export default function IpDocketPage() {
   const searchParams = useSearchParams();
   const requestedDocketId = searchParams.get("docket");
+  const requestedView = requestedDocketView(searchParams.get("view"));
   const queryClient = useQueryClient();
   const canView = useCapability("ip:read");
   const canWrite = useCapability("ip:write");
@@ -277,8 +284,10 @@ export default function IpDocketPage() {
           />
         </TabsContent>
         <TabsContent value="docket">
-          {deepLinkDocketPending && canManageAccess ? (
+          {deepLinkDocketPending && requestedView === "access" && canManageAccess ? (
             <IpAccessWorkspaceLoading />
+          ) : deepLinkDocketPending ? (
+            <Card><CardContent className="py-10 text-sm">Loading IP docket…</CardContent></Card>
           ) : listing.isPending && !selected ? (
             <Card><CardContent className="py-10 text-sm">Loading IP docket…</CardContent></Card>
           ) : listing.isError && !selected ? (
@@ -352,7 +361,7 @@ export default function IpDocketPage() {
               canProposeRules={canProposeRules}
               canActivateRules={canActivateRules}
               canManageAccess={canManageAccess}
-              initialView={requestedDocketId === selected.id ? "access" : "overview"}
+              initialView={requestedDocketId === selected.id ? requestedView : "overview"}
               currentMembershipId={session.context?.membership.id ?? null}
               onChanged={refresh}
             />
@@ -1374,14 +1383,12 @@ function DocketWorkspace({
   canProposeRules: boolean;
   canActivateRules: boolean;
   canManageAccess: boolean;
-  initialView: "overview" | "access";
+  initialView: DocketView;
   currentMembershipId: string | null;
   onChanged: () => Promise<void>;
 }) {
   const classes = docket.current_particulars.classes_json;
-  const [activeView, setActiveView] = useState<
-    "overview" | "proceedings" | "schedule" | "access"
-  >(initialView);
+  const [activeView, setActiveView] = useState<DocketView>(initialView);
   return (
     <div className="flex min-w-0 flex-col gap-5" data-testid="ip-docket-workspace">
       <Card className="min-w-0">

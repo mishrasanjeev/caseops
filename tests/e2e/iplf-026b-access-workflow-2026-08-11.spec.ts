@@ -178,7 +178,7 @@ test("IPLF-026B previews, grants, and revokes independent IP access at 360px", a
 
   await page.setViewportSize({ width: 360, height: 820 });
   await signIn(page, tenant.slug as string, tenant.email as string);
-  await page.goto(`/app/ip?docket=${encodeURIComponent(docketId)}`);
+  await page.goto(`/app/ip?docket=${encodeURIComponent(docketId)}&view=access`);
   const workspace = page.getByTestId("ip-access-workspace");
   await expect(workspace).toBeVisible();
   await expect(workspace.getByRole("heading", { name: "Internal access and ethical walls" })).toBeVisible();

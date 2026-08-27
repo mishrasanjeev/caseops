@@ -30,6 +30,11 @@ on:
         description: "Exact 40-character commit expected on both production services"
         required: true
         type: string
+      run_historical_a0_gate:
+        description: "Run the archived IPLF-027B predecessor-fixture acceptance"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   # Two scheduled runs on the same prod surface contending for the QA
@@ -138,10 +143,10 @@ jobs:
         run: npx playwright test --config=playwright.prod-ram.config.ts --reporter=list
 
       - name: Run IPLF-027B A0 quiescence acceptance
-        # Keep this gate visible even when an independent RAM provider/quota
-        # assertion fails. This step is verify-only: fixture preparation is a
-        # separately invoked, pre-T_ROUTE operation pinned to the predecessor.
-        if: always() && !cancelled() && steps.prod-playwright-prerequisites.outputs.ready == 'true'
+        # This is immutable historical rollout evidence tied to one exact
+        # predecessor fixture. It is available for deliberate replay but is
+        # not a recurring release-health gate after that fixture is retired.
+        if: always() && !cancelled() && steps.prod-playwright-prerequisites.outputs.ready == 'true' && inputs.run_historical_a0_gate == true
         timeout-minutes: 5
         env:
           CASEOPS_IP_QA_PASSWORD: ${{ secrets.CASEOPS_IP_QA_PASSWORD }}
