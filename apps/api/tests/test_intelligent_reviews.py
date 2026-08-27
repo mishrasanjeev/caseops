@@ -404,6 +404,8 @@ def test_intelligent_review_default_mock_provider_is_source_grounded(
 def test_intelligent_review_abstains_before_provider_for_inaccessible_sources(
     client: TestClient, monkeypatch
 ) -> None:
+    """IPLF-UJ-18-EXC-01/03: unusable sources abstain and remain identifiable."""
+
     bootstrap = bootstrap_company(client)
     token = str(bootstrap["access_token"])
     matter_id = _create_matter(client, token)
@@ -532,6 +534,8 @@ def test_intelligent_review_rejects_prohibited_output(
 def test_intelligent_review_preserves_stale_warning_and_prompt_injection_marker(
     client: TestClient, monkeypatch
 ) -> None:
+    """IPLF-UJ-18-EXC-02: the saved review retains its stale-corpus warning."""
+
     bootstrap = bootstrap_company(client)
     token = str(bootstrap["access_token"])
     matter_id = _create_matter(client, token)

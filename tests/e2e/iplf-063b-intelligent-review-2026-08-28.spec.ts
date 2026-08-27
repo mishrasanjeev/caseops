@@ -141,12 +141,14 @@ test("IPLF-063B completes UJ-18 normal and exception paths", async ({ page }) =>
     const detail = page.getByTestId("intelligent-review-detail");
     await expect(detail.getByText("Supporting and contrary authorities")).toBeVisible();
     await expect(detail.getByText(/Conflicting values for First use/)).toBeVisible();
-    await expect(detail.getByText(/no recent retrieval timestamp/)).toBeVisible();
+    await test.step("IPLF-UJ-18-EXC-02 retains the stale-corpus warning", async () => {
+      await expect(detail.getByText(/no recent retrieval timestamp/)).toBeVisible();
+    });
     for (const url of fixture.sourceUrls) await expect(detail.getByText(url)).toBeVisible();
     await expect(detail.getByText(/not exhaustive legal research/)).toBeVisible();
   });
 
-  await test.step("IPLF-UJ-18-EXC-02 citation removal blocks finalization", async () => {
+  await test.step("AI-REV-05 citation removal blocks finalization", async () => {
     const detail = page.getByTestId("intelligent-review-detail");
     const contraryCheckbox = detail.getByRole("checkbox", { name: /review authority 2/i });
     await contraryCheckbox.uncheck();
@@ -197,7 +199,7 @@ test("IPLF-063B completes UJ-18 normal and exception paths", async ({ page }) =>
     );
   });
 
-  await test.step("IPLF-UJ-18-EXC-01 inaccessible-only sources abstain", async () => {
+  await test.step("IPLF-UJ-18-EXC-01 and IPLF-UJ-18-EXC-03 inaccessible-only sources abstain", async () => {
     await page.goto(`/app/research/reviews?report=${encodeURIComponent(blockedReport.id)}`);
     await page.getByRole("combobox", { name: "Matter target" }).click();
     await page.getByRole("option", { name: new RegExp(`IR-${run}`) }).click();
@@ -207,7 +209,7 @@ test("IPLF-063B completes UJ-18 normal and exception paths", async ({ page }) =>
     ).toBeVisible();
   });
 
-  await test.step("IPLF-UJ-18-EXC-03 remains usable at 360px", async () => {
+  await test.step("The review, guide, and law-firm surfaces remain usable at 360px", async () => {
     await page.setViewportSize({ width: 360, height: 800 });
     await page.reload();
     for (const name of ["Frozen research report", "Matter target", "Issue for review"]) {
