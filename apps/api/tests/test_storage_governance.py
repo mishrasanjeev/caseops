@@ -8,7 +8,13 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from caseops_api.core.settings import get_settings
-from caseops_api.db.models import AuditEvent, Company, MatterAttachment
+from caseops_api.db.models import (
+    AuditEvent,
+    BillingAccount,
+    BillingSubscription,
+    Company,
+    MatterAttachment,
+)
 from caseops_api.db.session import get_session_factory
 
 
@@ -119,6 +125,46 @@ def _upload_txt(client: TestClient, token: str, matter_id: str, body: bytes) -> 
         headers=_auth(token),
         files={"file": ("storage-note.txt", body, "text/plain")},
     )
+
+
+def test_storage_summary_read_does_not_create_billing_state(
+    client: TestClient,
+) -> None:
+    boot = _bootstrap(client, "adp01-read-only")
+    token = str(boot["access_token"])
+    company_id = str(boot["company"]["id"])
+    factory = get_session_factory()
+
+    with factory() as session:
+        assert session.scalar(
+            select(func.count(BillingAccount.id)).where(
+                BillingAccount.company_id == company_id
+            )
+        ) == 0
+        assert session.scalar(
+            select(func.count(BillingSubscription.id)).where(
+                BillingSubscription.company_id == company_id
+            )
+        ) == 0
+
+    response = client.get(
+        "/api/admin/storage-governance",
+        headers=_auth(token),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["quota_bytes"] is None
+    with factory() as session:
+        assert session.scalar(
+            select(func.count(BillingAccount.id)).where(
+                BillingAccount.company_id == company_id
+            )
+        ) == 0
+        assert session.scalar(
+            select(func.count(BillingSubscription.id)).where(
+                BillingSubscription.company_id == company_id
+            )
+        ) == 0
 
 
 def test_firm_storage_usage_rollup_and_tenant_isolation(client: TestClient) -> None:

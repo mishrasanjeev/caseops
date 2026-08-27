@@ -4,6 +4,8 @@ import type { AuthSession } from "@/lib/api/schemas";
 import { API_BASE_URL, ApiError, NetworkError } from "./config";
 
 const REFRESH_PATH = "/api/auth/refresh";
+const DEFAULT_REQUEST_TIMEOUT_MS = 90_000;
+const REFRESH_TIMEOUT_MS = 15_000;
 
 // EG-001 (2026-04-23): cookie name + header pair for the
 // double-submit CSRF check. Must match core/cookies.py and
@@ -45,6 +47,43 @@ export function getCsrfHeaders(): Record<string, string> {
 // queued requests to await that same promise.
 let inflightRefresh: Promise<string | null> | null = null;
 
+export async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+): Promise<Response> {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new RangeError("timeoutMs must be a positive finite number.");
+  }
+  const controller = new AbortController();
+  const suppliedSignal = init.signal;
+  let timedOut = false;
+  const forwardAbort = () => controller.abort(suppliedSignal?.reason);
+  if (suppliedSignal?.aborted) {
+    forwardAbort();
+  } else {
+    suppliedSignal?.addEventListener("abort", forwardAbort, { once: true });
+  }
+  const timeout = globalThis.setTimeout(() => {
+    timedOut = true;
+    controller.abort(new DOMException("Request deadline exceeded.", "TimeoutError"));
+  }, timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (timedOut) {
+      throw new NetworkError(
+        `The workspace API did not respond within ${Math.ceil(timeoutMs / 1000)} seconds. Try again.`,
+        error,
+      );
+    }
+    throw error;
+  } finally {
+    globalThis.clearTimeout(timeout);
+    suppliedSignal?.removeEventListener("abort", forwardAbort);
+  }
+}
+
 export async function refreshAccessToken(): Promise<string | null> {
   if (inflightRefresh) return inflightRefresh;
   // Cookie-first refresh: if we have any context at all, the browser
@@ -54,16 +93,20 @@ export async function refreshAccessToken(): Promise<string | null> {
   if (!haveContext) return null;
   inflightRefresh = (async () => {
     try {
-      const res = await fetch(resolveUrl(REFRESH_PATH), {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          Accept: "application/json",
-          // /refresh is exempt from CSRF (see core/csrf.py) but the
-          // browser will still send the session cookie. The server
-          // returns a fresh cookie + a new CSRF cookie value.
+      const res = await fetchWithTimeout(
+        resolveUrl(REFRESH_PATH),
+        {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            Accept: "application/json",
+            // /refresh is exempt from CSRF (see core/csrf.py) but the
+            // browser will still send the session cookie. The server
+            // returns a fresh cookie + a new CSRF cookie value.
+          },
         },
-      });
+        REFRESH_TIMEOUT_MS,
+      );
       if (!res.ok) {
         // Refresh itself unauthorized → the cookie is hard-expired.
         // Clear local context so the next /sign-in redirect is clean.
@@ -93,6 +136,7 @@ export type ApiRequestInit = {
   headers?: Record<string, string>;
   token?: string | null;
   signal?: AbortSignal;
+  timeoutMs?: number;
 };
 
 function resolveUrl(path: string): string {
@@ -140,7 +184,7 @@ export async function apiRequest<TResponse>(
   init: ApiRequestInit = {},
   _retry = false,
 ): Promise<TResponse> {
-  const { method = "GET", body, headers = {}, signal } = init;
+  const { method = "GET", body, headers = {}, signal, timeoutMs } = init;
   const portalRequest = isPortalApiPath(path);
   // EG-001 (2026-04-23): cookie-first auth. We only attach a Bearer
   // header when the caller explicitly passes ``token`` — that path
@@ -180,17 +224,21 @@ export async function apiRequest<TResponse>(
 
   let response: Response;
   try {
-    response = await fetch(resolveUrl(path), {
-      method,
-      // credentials: 'include' makes the browser send the session
-      // cookie cross-origin (web: caseops.ai → api: api.caseops.ai).
-      // CORSMiddleware on the server already sets
-      // Access-Control-Allow-Credentials: true to allow this.
-      credentials: "include",
-      headers: requestHeaders,
-      body: serializedBody,
-      signal,
-    });
+    response = await fetchWithTimeout(
+      resolveUrl(path),
+      {
+        method,
+        // credentials: 'include' makes the browser send the session
+        // cookie cross-origin (web: caseops.ai → api: api.caseops.ai).
+        // CORSMiddleware on the server already sets
+        // Access-Control-Allow-Credentials: true to allow this.
+        credentials: "include",
+        headers: requestHeaders,
+        body: serializedBody,
+        signal,
+      },
+      timeoutMs,
+    );
   } catch (err) {
     // fetch throws TypeError for DNS / offline / CORS preflight failure.
     // AbortError also reaches here but is re-thrown untouched so callers
@@ -198,6 +246,7 @@ export async function apiRequest<TResponse>(
     if (err instanceof DOMException && err.name === "AbortError") {
       throw err;
     }
+    if (err instanceof NetworkError) throw err;
     throw new NetworkError(
       "Could not reach the workspace API. Check your connection and try again.",
       err,
@@ -316,7 +365,7 @@ export async function apiBlobRequest(
   init: Omit<ApiRequestInit, "body"> = {},
   _retry = false,
 ): Promise<Response> {
-  const { method = "GET", headers = {}, signal } = init;
+  const { method = "GET", headers = {}, signal, timeoutMs } = init;
   const explicitToken = init.token;
   const portalRequest = isPortalApiPath(path);
   const requestHeaders: Record<string, string> = {
@@ -329,16 +378,21 @@ export async function apiBlobRequest(
 
   let response: Response;
   try {
-    response = await fetch(resolveUrl(path), {
-      method,
-      credentials: "include",
-      headers: requestHeaders,
-      signal,
-    });
+    response = await fetchWithTimeout(
+      resolveUrl(path),
+      {
+        method,
+        credentials: "include",
+        headers: requestHeaders,
+        signal,
+      },
+      timeoutMs,
+    );
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw error;
     }
+    if (error instanceof NetworkError) throw error;
     throw new NetworkError(
       "Could not reach the workspace API. Check your connection and try again.",
       error,

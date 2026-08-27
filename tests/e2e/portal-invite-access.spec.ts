@@ -101,5 +101,11 @@ test.describe("Admin portal invitations", () => {
     await page.getByTestId("portal-signin-submit").click();
     await page.waitForURL(/\/portal\/oc$/, { timeout: 30_000 });
     await expect(page.getByTestId(`portal-oc-matter-${matterId}`)).toBeVisible();
+
+    const health = await api.get(`${apiBaseUrl}/api/health`, {
+      timeout: 5_000,
+    });
+    expect(health.status(), await health.text()).toBe(200);
+    await api.dispose();
   });
 });

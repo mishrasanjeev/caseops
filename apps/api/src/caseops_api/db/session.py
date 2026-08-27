@@ -20,7 +20,7 @@ if models.__name__ != "caseops_api.db.models":
 # process (settings are env-frozen) so this has no overhead in real
 # deployments. Tests that monkeypatch CASEOPS_DB_POOL_SIZE etc. get
 # a fresh engine without needing ``clear_engine_cache()``.
-_EngineCacheKey = tuple[str, int, int, int]
+_EngineCacheKey = tuple[str, int, int, int, int, int, int, int]
 _ENGINE_CACHE: dict[_EngineCacheKey, Engine] = {}
 _SQLITE_WRITE_LOCK = Lock()
 _SQLITE_WRITE_LOCK_HELD_KEY = "caseops_sqlite_write_lock_held"
@@ -100,6 +100,10 @@ def get_engine(database_url: str | None = None) -> Engine:
         settings.db_pool_size,
         settings.db_max_overflow,
         settings.db_pool_timeout,
+        settings.db_connect_timeout_seconds,
+        settings.db_statement_timeout_ms,
+        settings.db_lock_timeout_ms,
+        settings.db_idle_transaction_timeout_ms,
     )
     if cache_key not in _ENGINE_CACHE:
         if resolved_url.startswith("sqlite"):
@@ -132,7 +136,22 @@ def get_engine(database_url: str | None = None) -> Engine:
                 "keepalives_idle": 30,
                 "keepalives_interval": 10,
                 "keepalives_count": 5,
+                "connect_timeout": settings.db_connect_timeout_seconds,
             }
+            connection_options = []
+            if settings.db_statement_timeout_ms:
+                connection_options.append(
+                    f"-c statement_timeout={settings.db_statement_timeout_ms}"
+                )
+            if settings.db_lock_timeout_ms:
+                connection_options.append(f"-c lock_timeout={settings.db_lock_timeout_ms}")
+            if settings.db_idle_transaction_timeout_ms:
+                connection_options.append(
+                    "-c idle_in_transaction_session_timeout="
+                    f"{settings.db_idle_transaction_timeout_ms}"
+                )
+            if connection_options:
+                connect_args["options"] = " ".join(connection_options)
             # pool_pre_ping costs one lightweight SELECT 1 per checkout
             # but turns an already-dead pooled connection into a clean
             # reconnect instead of a crash. pool_recycle caps connection

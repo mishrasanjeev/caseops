@@ -40,6 +40,7 @@ import {
   updateStorageGovernance,
   type FirmStorageUsageSummary,
 } from "@/lib/api/endpoints";
+import { fetchWithTimeout } from "@/lib/api/client";
 import {
   invitePortalUser,
   type PortalUserRole,
@@ -278,7 +279,7 @@ export default function AdminPage() {
       const url =
         `${API_BASE_URL}/api/admin/audit/export` +
         (params.toString() ? `?${params.toString()}` : "");
-      const resp = await fetch(url, {
+      const resp = await fetchWithTimeout(url, {
         credentials: "include",
         headers: { Accept: "*/*" },
       });

@@ -212,6 +212,7 @@ test("IPLF-046B validates, corrects, files, rejects, refiles, and serves", async
 
   await signIn(page, tenant);
   await page.goto(`/app/ip?docket=${docket.id}`);
+  await page.getByRole("tab", { name: "Proceedings" }).click();
   const workspace = page.getByTestId("ip-pleading-workspace");
   await expect(workspace).toBeVisible();
   await expect(workspace.getByTestId("ip-draft-validation")).toContainText("0 blockers");

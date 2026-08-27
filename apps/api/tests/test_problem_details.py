@@ -11,6 +11,8 @@ from uuid import UUID
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 
 from caseops_api.core.observability import get_request_id
 from caseops_api.core.problem_details import (
@@ -181,6 +183,59 @@ def test_unhandled_exception_is_safe_correlated_problem_details() -> None:
     assert "secret" not in response.text
     assert body["request_id"] == response.headers["X-Request-ID"]
     assert body["request_id"] == observed_request_ids[0]
+
+
+class _DatabaseError(Exception):
+    def __init__(self, sqlstate: str | None = None) -> None:
+        self.sqlstate = sqlstate
+
+
+def test_database_statement_timeout_is_safe_actionable_gateway_timeout() -> None:
+    application = FastAPI()
+    register_problem_handlers(application)
+
+    @application.get("/database-timeout")
+    async def _database_timeout() -> None:
+        raise OperationalError("private SQL", {}, _DatabaseError("57014"))
+
+    with TestClient(application, raise_server_exceptions=False) as isolated_client:
+        response = isolated_client.get("/database-timeout")
+
+    assert response.status_code == 504
+    assert response.json()["type"] == "database_statement_timeout"
+    assert "private SQL" not in response.text
+
+
+def test_database_lock_and_pool_timeouts_are_retryable_without_details() -> None:
+    application = FastAPI()
+    register_problem_handlers(application)
+
+    @application.get("/database-lock")
+    async def _database_lock() -> None:
+        raise OperationalError("private lock details", {}, _DatabaseError("55P03"))
+
+    @application.get("/database-pool")
+    async def _database_pool() -> None:
+        raise SQLAlchemyTimeoutError("private pool details")
+
+    @application.get("/database-connection")
+    async def _database_connection() -> None:
+        raise OperationalError("private connection details", {}, _DatabaseError())
+
+    with TestClient(application, raise_server_exceptions=False) as isolated_client:
+        lock_response = isolated_client.get("/database-lock")
+        pool_response = isolated_client.get("/database-pool")
+        connection_response = isolated_client.get("/database-connection")
+
+    assert lock_response.status_code == 503
+    assert lock_response.headers["Retry-After"] == "1"
+    assert lock_response.json()["type"] == "database_lock_timeout"
+    assert pool_response.status_code == 503
+    assert pool_response.headers["Retry-After"] == "1"
+    assert pool_response.json()["type"] == "database_capacity_exhausted"
+    assert connection_response.status_code == 503
+    assert connection_response.json()["type"] == "database_temporarily_unavailable"
+    assert "private" not in lock_response.text + pool_response.text + connection_response.text
 
 
 def test_verified_citations_required_has_specific_slug(client: TestClient) -> None:

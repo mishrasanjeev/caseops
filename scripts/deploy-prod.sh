@@ -48,7 +48,7 @@ MIGRATION_TASK_TIMEOUT=30m
 # concurrency at 1 so one stuck request cannot take the whole API
 # surface down.
 API_CONCURRENCY=1
-API_TIMEOUT=300s
+API_TIMEOUT=120s
 # Keep a headroom ceiling above the historical ten single-request containers.
 # A production browser page can issue several ordinary API reads in parallel;
 # when all ten single-concurrency instances were busy, Cloud Run returned 429
@@ -204,6 +204,14 @@ python scripts/scheduler_inventory.py reconcile \
   --project "${PROJECT}" \
   --region "${REGION}" \
   --image "${API_IMMUTABLE_IMAGE}"
+
+# Index coverage is a release invariant. Execute the just-reconciled job from
+# the immutable candidate image and abort before routing traffic on any schema,
+# definition, validity, readiness, or foreign-key coverage failure.
+echo "--- database index health pre-route gate ---"
+gcloud run jobs execute caseops-db-index-health \
+  --region "${REGION}" --project "${PROJECT}" --wait --quiet
+echo "  database index health completed."
 
 if [[ "${A0_CAPTURE_RULE_GOVERNANCE_BASELINE}" == "true" ]]; then
   echo "--- IPLF-027B A0 final pre-route quiescence baseline ---"
@@ -383,7 +391,7 @@ gcloud run deploy caseops-api \
   --container api \
   --port 8080 \
   --image "${API_IMAGE}" \
-  --update-env-vars "CASEOPS_RELEASE_SHA=${HEAD_SHA},CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false" \
+  --update-env-vars "CASEOPS_RELEASE_SHA=${HEAD_SHA},CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false,CASEOPS_DB_STATEMENT_TIMEOUT_MS=60000,CASEOPS_DB_LOCK_TIMEOUT_MS=5000,CASEOPS_DB_IDLE_TRANSACTION_TIMEOUT_MS=60000" \
   --cpu "${API_CPU}" \
   --memory "${API_MEMORY}" \
   --container clamav \
@@ -538,5 +546,14 @@ if [[ "${CLAMAV_PROBE_DELAY}" != "0" || "${CLAMAV_PROBE_PERIOD}" != "2" ]]; then
   exit 1
 fi
 echo "  EG-003 clamav sidecar present with immediate two-second startup probing."
+
+# A push to main is not proof that a release started. Dispatch the exact-SHA
+# browser gate only after both services pass every synchronous deploy gate.
+echo "--- dispatch exact-release production verification ---"
+gh workflow run prod-verify.yml \
+  --repo mishrasanjeev/caseops \
+  --ref main \
+  -f "expected_release_sha=${HEAD_SHA}"
+echo "  prod-verify.yml dispatched for exact release ${HEAD_SHA}."
 
 echo "=== deploy-prod.sh — DONE ${TAG} ==="

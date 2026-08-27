@@ -725,6 +725,7 @@ class ManualTrademarkApplicationCreateResponse(BaseModel):
 class IpDocketListResponse(BaseModel):
     dockets: list[IpDocketRecordResponse]
     count: int
+    has_more: bool = False
 
 
 class IpDocketControlReport(BaseModel):

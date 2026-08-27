@@ -1659,10 +1659,13 @@ def record_manual_refresh_usage(
 
 
 def effective_storage_quota(session: Session, *, company: Company) -> int | None:
-    subscription = _subscription_for_gate(session, company)
-    if subscription is None:
-        return None
-    entitlements = resolve_entitlements(session, subscription)
+    # Storage summaries and workspace reads must be side-effect free. The old
+    # gate helper called ensure_grandfathered_subscription(), which takes
+    # FOR UPDATE locks on Company/BillingAccount even for a GET. An async
+    # request could then wait on those locks before FastAPI had a chance to
+    # finalize the read request's session, starving the event loop. Explicit
+    # billing and mutation workflows remain responsible for creating state.
+    entitlements = current_entitlements_for_company(session, company.id)
     return _coerce_int(entitlements.get("storage_bytes_limit"))
 
 

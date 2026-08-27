@@ -381,6 +381,7 @@ test("IPLF-023B legal deadline remains explicit, immutable, and usable at 360px"
   await page.goto("/app/ip");
 
   await expect(page.getByRole("heading", { name: "DEADLINE FLOW mark" })).toBeVisible();
+  await page.getByRole("tab", { name: "Hearings and deadlines" }).click();
   const deadlineWorkspace = page.getByTestId("ip-deadline-workspace");
   await expect(deadlineWorkspace).toContainText("Calculations are proposals");
   await expect(deadlineWorkspace.getByText("Exception queue")).toBeVisible();
@@ -472,6 +473,7 @@ test("IPLF-023B legal deadline remains explicit, immutable, and usable at 360px"
   expect(operationalBypass.status(), JSON.stringify(operationalBypassBody)).toBe(409);
   expect(operationalBypassBody.code).toBe("ip_deadline_workflow_required");
   await page.goto(`/app/ip?docket=${seeded.docketId}`);
+  await page.getByRole("tab", { name: "Hearings and deadlines" }).click();
   await expect(page.getByTestId(`ip-legal-deadline-${seeded.deadlineId}`)).toContainText(
     "confirmed",
   );

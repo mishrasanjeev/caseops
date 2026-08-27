@@ -60,9 +60,26 @@
       "schedule": "30 2 * * 0",
       "time_zone": "UTC",
       "desired_state": "ENABLED",
-      "task_timeout_seconds": null,
+      "task_timeout_seconds": 600,
       "image_policy": "release_digest",
-      "canary_policy": "manual_safe"
+      "canary_policy": "manual_safe",
+      "bootstrap": {
+        "command": ["uv"],
+        "args": ["run", "caseops-db-index-health"],
+        "environment": {
+          "CASEOPS_ENV": "cloud",
+          "CASEOPS_AUTO_MIGRATE": "false"
+        },
+        "secrets": {
+          "CASEOPS_DATABASE_URL": "caseops-database-url:latest",
+          "CASEOPS_AUTH_SECRET": "caseops-auth-secret:latest"
+        },
+        "service_account": "caseops-runtime@perfect-period-305406.iam.gserviceaccount.com",
+        "cloud_sql_instances": "perfect-period-305406:asia-south1:caseops-db",
+        "cpu": "1",
+        "memory": "512Mi",
+        "max_retries": 0
+      }
     },
     {
       "scheduler_name": "caseops-ip-journal-watch-publication-cadence",

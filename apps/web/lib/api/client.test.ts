@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "./config";
-import { apiBlobRequest, apiRequest, getCsrfHeaders } from "./client";
+import {
+  apiBlobRequest,
+  apiRequest,
+  fetchWithTimeout,
+  getCsrfHeaders,
+} from "./client";
 
 function response(
   body: unknown,
@@ -22,6 +27,7 @@ describe("apiRequest", () => {
   });
 
   afterEach(async () => {
+    vi.useRealTimers();
     await new Promise((resolve) => setTimeout(resolve, 0));
     vi.unstubAllGlobals();
     window.localStorage.clear();
@@ -238,5 +244,36 @@ describe("apiRequest", () => {
     expect(getCsrfHeaders()).toEqual({
       "X-CSRF-Token": "reusable-token",
     });
+  });
+
+  it("aborts API work at the configured deadline with an actionable error", async () => {
+    vi.useFakeTimers();
+    vi.mocked(fetch).mockImplementation((_input, init) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+      }),
+    );
+
+    const result = apiRequest("/api/slow", { timeoutMs: 2_000 });
+    const assertion = expect(result).rejects.toMatchObject({
+      name: "NetworkError",
+      message: expect.stringContaining("2 seconds"),
+    });
+    await vi.advanceTimersByTimeAsync(2_000);
+    await assertion;
+  });
+
+  it("preserves caller cancellation instead of reporting it as a timeout", async () => {
+    const caller = new AbortController();
+    vi.mocked(fetch).mockImplementation((_input, init) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+      }),
+    );
+
+    const result = fetchWithTimeout("/api/cancelled", { signal: caller.signal }, 5_000);
+    caller.abort(new DOMException("Cancelled by caller.", "AbortError"));
+
+    await expect(result).rejects.toMatchObject({ name: "AbortError" });
   });
 });

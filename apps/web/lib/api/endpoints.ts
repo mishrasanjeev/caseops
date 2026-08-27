@@ -1,4 +1,9 @@
-import { apiBlobRequest, apiRequest, getCsrfHeaders } from "./client";
+import {
+  apiBlobRequest,
+  apiRequest,
+  fetchWithTimeout,
+  getCsrfHeaders,
+} from "./client";
 import { API_BASE_URL, ApiError, NetworkError } from "./config";
 import {
   type AuthContext,
@@ -4777,7 +4782,7 @@ export async function commitEmployeeOffboarding(input: {
 export async function downloadEmployeeImportTemplate(
   format: "csv" | "xlsx",
 ): Promise<Blob> {
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     `${API_BASE_URL}/api/companies/current/employees/import-template?format=${format}`,
     {
       method: "GET",
@@ -5012,7 +5017,7 @@ export async function assignMatterTeam(input: {
 export async function downloadMatterImportTemplate(
   format: "csv" | "xlsx",
 ): Promise<Blob> {
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     `${API_BASE_URL}/api/matters/imports/template?format=${format}`,
     { method: "GET", credentials: "include" },
   );
@@ -5060,7 +5065,7 @@ export async function cancelMatterImport(jobId: string): Promise<MatterImportJob
 }
 
 export async function downloadMatterImportErrors(jobId: string): Promise<Blob> {
-  const response = await fetch(`${API_BASE_URL}/api/matters/imports/${jobId}/errors`, {
+  const response = await fetchWithTimeout(`${API_BASE_URL}/api/matters/imports/${jobId}/errors`, {
     method: "GET",
     credentials: "include",
   });
@@ -6589,7 +6594,7 @@ async function downloadApiFileWithPost(
   fallbackName: string,
 ): Promise<void> {
   const url = `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     method: "POST",
     credentials: "include",
     headers: {
@@ -8141,7 +8146,7 @@ export async function downloadApiFile(path: string, fallbackName: string): Promi
     : `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await fetchWithTimeout(url, {
       credentials: "include",
       headers: { Accept: "*/*" },
     });
@@ -11039,7 +11044,11 @@ export async function downloadBulkImportErrors(
   return response.blob();
 }
 
-export async function fetchIpDockets(): Promise<{ dockets: IpDocket[]; count: number }> {
+export async function fetchIpDockets(): Promise<{
+  dockets: IpDocket[];
+  count: number;
+  has_more: boolean;
+}> {
   return apiRequest("/api/ip/dockets");
 }
 

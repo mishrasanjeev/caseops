@@ -106,6 +106,10 @@ try {
     if ($ApiIdentity.release_sha -ne $ReleaseSha) { throw "API runtime identity does not match the candidate." }
     if ($WebIdentity.release_sha -ne $ReleaseSha) { throw "Web runtime identity does not match the candidate." }
 
+    Write-Host "[docker-acceptance] verifying complete PostgreSQL index coverage"
+    & docker compose --project-name $ComposeProject --file $ComposeFile exec --no-TTY api caseops-db-index-health
+    if ($LASTEXITCODE -ne 0) { throw "PostgreSQL index health gate failed." }
+
     Write-Host "[docker-acceptance] running Playwright against Docker + PostgreSQL"
     & npx playwright test --config playwright.docker.config.ts --reporter=list @PlaywrightArgs
     if ($LASTEXITCODE -ne 0) { throw "Docker Playwright acceptance failed." }

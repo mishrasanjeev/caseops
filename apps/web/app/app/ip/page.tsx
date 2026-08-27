@@ -31,6 +31,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { PersonName, PersonPicker } from "@/components/ui/PersonPicker";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { Textarea } from "@/components/ui/Textarea";
 import {
   addIpCostItem,
@@ -261,35 +262,40 @@ export default function IpDocketPage() {
         />
       ) : null}
 
-      {!deepLinkDocketPending ? (
-        <IpDocumentWorkspace
-          dockets={dockets}
-          canUpload={canWrite && canUploadDocuments}
-          canManage={canWrite && canManageDocuments}
-          canReview={canReview}
-          canConfigure={canConfigure}
-        />
-      ) : null}
-
-      {deepLinkDocketPending && canManageAccess ? (
-        <IpAccessWorkspaceLoading />
-      ) : listing.isPending && !selected ? (
-        <Card><CardContent className="py-10 text-sm">Loading IP docket…</CardContent></Card>
-      ) : listing.isError && !selected ? (
-        <EmptyState
-          title="Could not load the IP docket"
-          description={apiErrorMessage(listing.error, "The IP API did not respond.")}
-          action={<Button onClick={() => listing.refetch()}>Retry</Button>}
-        />
-      ) : portfolioDockets.length === 0 ? (
-        <EmptyState
-          title="No IP records yet"
-          description="Create a trademark record to validate filing particulars and begin the evidence-backed docket."
-        />
-      ) : (
-        <div className="flex min-w-0 flex-col gap-5">
-        <CoverageDecisionsCard onChanged={refresh} />
-        <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.4fr)]">
+      <Tabs defaultValue="docket" className="min-w-0">
+        <TabsList className="h-auto w-full min-w-0 flex-wrap sm:w-auto" aria-label="IP workspace areas">
+          <TabsTrigger value="docket">Docket</TabsTrigger>
+          <TabsTrigger value="documents">Documents</TabsTrigger>
+        </TabsList>
+        <TabsContent value="documents">
+          <IpDocumentWorkspace
+            dockets={dockets}
+            canUpload={canWrite && canUploadDocuments}
+            canManage={canWrite && canManageDocuments}
+            canReview={canReview}
+            canConfigure={canConfigure}
+          />
+        </TabsContent>
+        <TabsContent value="docket">
+          {deepLinkDocketPending && canManageAccess ? (
+            <IpAccessWorkspaceLoading />
+          ) : listing.isPending && !selected ? (
+            <Card><CardContent className="py-10 text-sm">Loading IP docket…</CardContent></Card>
+          ) : listing.isError && !selected ? (
+            <EmptyState
+              title="Could not load the IP docket"
+              description={apiErrorMessage(listing.error, "The IP API did not respond.")}
+              action={<Button onClick={() => listing.refetch()}>Retry</Button>}
+            />
+          ) : portfolioDockets.length === 0 ? (
+            <EmptyState
+              title="No IP records yet"
+              description="Create a trademark record to validate filing particulars and begin the evidence-backed docket."
+            />
+          ) : (
+            <div className="flex min-w-0 flex-col gap-5">
+              <CoverageDecisionsCard onChanged={refresh} />
+              <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.4fr)]">
           <Card className="min-w-0">
             <CardHeader><CardTitle as="h2">Portfolio</CardTitle></CardHeader>
             <CardContent className="flex flex-col gap-2">
@@ -301,6 +307,14 @@ export default function IpDocketPage() {
                 <Button variant="secondary" onClick={() => listing.refetch()}>
                   Retry portfolio
                 </Button>
+              ) : null}
+              {listing.data?.has_more ? (
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--color-line)] pb-3 text-xs text-[var(--color-mute)]" role="status">
+                  <span>Showing the 100 most recently updated records.</span>
+                  <Link className="font-semibold text-[var(--color-brand-700)]" href="/app/ip/portfolio">
+                    Open full portfolio
+                  </Link>
+                </div>
               ) : null}
               {portfolioDockets.map((row) => (
                 <button
@@ -325,6 +339,7 @@ export default function IpDocketPage() {
 
           {selected ? (
             <DocketWorkspace
+              key={selected.id}
               docket={selected}
               canWrite={canWrite}
               canReview={canReview}
@@ -337,13 +352,16 @@ export default function IpDocketPage() {
               canProposeRules={canProposeRules}
               canActivateRules={canActivateRules}
               canManageAccess={canManageAccess}
+              initialView={requestedDocketId === selected.id ? "access" : "overview"}
               currentMembershipId={session.context?.membership.id ?? null}
               onChanged={refresh}
             />
           ) : null}
-        </div>
-        </div>
-      )}
+              </div>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
@@ -1340,6 +1358,7 @@ function DocketWorkspace({
   canProposeRules,
   canActivateRules,
   canManageAccess,
+  initialView,
   currentMembershipId,
   onChanged,
 }: {
@@ -1355,10 +1374,14 @@ function DocketWorkspace({
   canProposeRules: boolean;
   canActivateRules: boolean;
   canManageAccess: boolean;
+  initialView: "overview" | "access";
   currentMembershipId: string | null;
   onChanged: () => Promise<void>;
 }) {
   const classes = docket.current_particulars.classes_json;
+  const [activeView, setActiveView] = useState<
+    "overview" | "proceedings" | "schedule" | "access"
+  >(initialView);
   return (
     <div className="flex min-w-0 flex-col gap-5" data-testid="ip-docket-workspace">
       <Card className="min-w-0">
@@ -1381,60 +1404,86 @@ function DocketWorkspace({
         </CardContent>
       </Card>
 
-      <div className="grid min-w-0 gap-5 xl:grid-cols-2">
-        <IdentityCard docket={docket} enabled={canWrite} />
-        <IpOppositionWorkspace
-          docket={docket}
-          canWrite={canWrite}
-          canReview={canReview}
-          canCreateDraft={canCreateDraft}
-          canEditDraft={canEditDraft}
-          canGenerateDraft={canGenerateDraft}
-          canReviewDraft={canReviewDraft}
-          canFinalizeDraft={canFinalizeDraft}
-          currentMembershipId={currentMembershipId}
-        />
-        <IpPostRegistrationWorkspace
-          docket={docket}
-          canWrite={canWrite}
-          canReview={canReview}
-          currentMembershipId={currentMembershipId}
-        />
-        {canManageAccess ? (
-          <IpAccessWorkspace docket={docket} onChanged={onChanged} />
-        ) : null}
-        <IpMatterLinksPanel docket={docket} canWrite={canWrite} onChanged={onChanged} />
-        <HearingWorkflowCard
-          docket={docket}
-          enabled={canWrite}
-          currentMembershipId={currentMembershipId}
-        />
-        <DeadlineWorkspaceCard
-          docket={docket}
-          enabled={canReview}
-          currentMembershipId={currentMembershipId}
-          onChanged={onChanged}
-        />
-        <DeadlineGovernanceCard
-          docket={docket}
-          canPropose={canProposeRules}
-          canActivate={canActivateRules}
-          currentMembershipId={currentMembershipId}
-        />
-        <ProsecutionCard
-          docket={docket}
-          enabled={canWrite}
-          currentMembershipId={currentMembershipId}
-          onChanged={onChanged}
-        />
-        <LifecycleCard docket={docket} enabled={canReview} onChanged={onChanged} />
-        <EvidenceCard docket={docket} enabled={canReview} onChanged={onChanged} />
-        <CoverageCard docket={docket} enabled={canReview} onChanged={onChanged} />
-        <IncidentCard docket={docket} enabled={canReview} onChanged={onChanged} />
-        <TitleCard docket={docket} enabled={canReview} onChanged={onChanged} />
-        <ObligationCard docket={docket} enabled={canReview} onChanged={onChanged} />
-        <CostCard docket={docket} enabled={canFinance} onChanged={onChanged} />
-      </div>
+      <Tabs
+        value={activeView}
+        onValueChange={(value) => setActiveView(value as typeof activeView)}
+        className="min-w-0"
+      >
+        <TabsList className="h-auto w-full min-w-0 flex-wrap sm:w-auto" aria-label="Docket work areas">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="proceedings">Proceedings</TabsTrigger>
+          <TabsTrigger value="schedule">Hearings and deadlines</TabsTrigger>
+          <TabsTrigger value="access">Access and links</TabsTrigger>
+        </TabsList>
+        <TabsContent value="overview">
+          <div className="grid min-w-0 gap-5 xl:grid-cols-2">
+            <IdentityCard docket={docket} enabled={canWrite} />
+            <LifecycleCard docket={docket} enabled={canReview} onChanged={onChanged} />
+            <EvidenceCard docket={docket} enabled={canReview} onChanged={onChanged} />
+            <CoverageCard docket={docket} enabled={canReview} onChanged={onChanged} />
+            <IncidentCard docket={docket} enabled={canReview} onChanged={onChanged} />
+            <TitleCard docket={docket} enabled={canReview} onChanged={onChanged} />
+            <ObligationCard docket={docket} enabled={canReview} onChanged={onChanged} />
+            <CostCard docket={docket} enabled={canFinance} onChanged={onChanged} />
+          </div>
+        </TabsContent>
+        <TabsContent value="proceedings">
+          <div className="grid min-w-0 gap-5 xl:grid-cols-2">
+            <IpOppositionWorkspace
+              docket={docket}
+              canWrite={canWrite}
+              canReview={canReview}
+              canCreateDraft={canCreateDraft}
+              canEditDraft={canEditDraft}
+              canGenerateDraft={canGenerateDraft}
+              canReviewDraft={canReviewDraft}
+              canFinalizeDraft={canFinalizeDraft}
+              currentMembershipId={currentMembershipId}
+            />
+            <IpPostRegistrationWorkspace
+              docket={docket}
+              canWrite={canWrite}
+              canReview={canReview}
+              currentMembershipId={currentMembershipId}
+            />
+            <ProsecutionCard
+              docket={docket}
+              enabled={canWrite}
+              currentMembershipId={currentMembershipId}
+              onChanged={onChanged}
+            />
+          </div>
+        </TabsContent>
+        <TabsContent value="schedule">
+          <div className="grid min-w-0 gap-5 xl:grid-cols-2">
+            <HearingWorkflowCard
+              docket={docket}
+              enabled={canWrite}
+              currentMembershipId={currentMembershipId}
+            />
+            <DeadlineWorkspaceCard
+              docket={docket}
+              enabled={canReview}
+              currentMembershipId={currentMembershipId}
+              onChanged={onChanged}
+            />
+            <DeadlineGovernanceCard
+              docket={docket}
+              canPropose={canProposeRules}
+              canActivate={canActivateRules}
+              currentMembershipId={currentMembershipId}
+            />
+          </div>
+        </TabsContent>
+        <TabsContent value="access">
+          <div className="grid min-w-0 gap-5 xl:grid-cols-2">
+            {canManageAccess ? (
+              <IpAccessWorkspace docket={docket} onChanged={onChanged} />
+            ) : null}
+            <IpMatterLinksPanel docket={docket} canWrite={canWrite} onChanged={onChanged} />
+          </div>
+        </TabsContent>
+      </Tabs>
 
       <Card>
         <CardHeader><CardTitle as="h3">Operational links</CardTitle></CardHeader>

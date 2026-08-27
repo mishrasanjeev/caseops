@@ -103,6 +103,8 @@
 | Focused unit / integration | | | | | | |
 | Full API shards and coverage | | | | | | |
 | PostgreSQL / migration | | | | | | |
+| Database index health | `caseops-db-index-health` | | | | | |
+| Timeout-boundary inventory | repository static contract | | | | | |
 | Full web / typecheck / build | | | | | | |
 | Local desktop + narrow E2E | | | | | | |
 | Exact deployed production E2E | | | | | | |
@@ -166,6 +168,10 @@ scripts/verify-web.ps1 ...
 
 - Do not issue a clean `GO` if the deployed commit is unproven without fallback evidence.
 - Do not issue a clean `GO` if a required smoke test was skipped without equivalent proof.
+- Do not issue a clean `GO` when exact-release verification was started by a
+  source push instead of the completed canonical deployment.
+- Do not route a new API revision when migration or database index health has
+  not passed from the same immutable candidate image.
 - Do not issue a clean `GO` for a lifecycle change without stale-session and
   post-terminal background-path proof.
 - Do not call a scoped subset complete when the source acceptance contract asks

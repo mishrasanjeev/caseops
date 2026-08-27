@@ -213,7 +213,16 @@ test.describe("Ram 2026-08-01 IP law firm slices", () => {
     await expect(workspace.getByText("Readiness")).toBeVisible();
     await expect(workspace.getByText("Operational links")).toBeVisible();
     await expect(page.getByRole("button", { name: "Add ownership evidence" })).toBeVisible();
-    for (const name of ["Preview prosecution event", "Record prosecution event", "Preview lifecycle impact", "Apply lifecycle transition"]) {
+    for (const name of ["Preview lifecycle impact", "Apply lifecycle transition"]) {
+      const control = page.getByRole("button", { name });
+      await expect(control).toBeVisible();
+      const box = await control.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(360);
+    }
+    await page.getByRole("tab", { name: "Proceedings" }).click();
+    for (const name of ["Preview prosecution event", "Record prosecution event"]) {
       const control = page.getByRole("button", { name });
       await expect(control).toBeVisible();
       const box = await control.boundingBox();
@@ -253,6 +262,7 @@ test.describe("Ram 2026-08-01 IP law firm slices", () => {
     await expect(page.getByText("Registry fee")).toBeVisible();
     await page.getByRole("button", { name: "Reconcile with Matter billing" }).click();
 
+    await page.getByRole("tab", { name: "Proceedings" }).click();
     const prosecution = page.getByTestId("ip-prosecution-workspace");
     await prosecution.getByLabel("Reason").fill("Reviewed the official formalities evidence.");
     await prosecution.getByLabel("Evidence reference").fill("attachment:formalities-evidence");
@@ -267,7 +277,17 @@ test.describe("Ram 2026-08-01 IP law firm slices", () => {
     // deadlines". A routine coverage transfer became a proposal that the named
     // replacement must accept, so a control labelled "transfer" was claiming an
     // act it no longer performs.
-    for (const name of ["Discover Matter evidence", "Offer covered deadlines", "Add recordal obligation", "Reconcile with Matter billing", "Preview prosecution event", "Record prosecution event", "Preview lifecycle impact", "Apply lifecycle transition"]) {
+    for (const name of ["Preview prosecution event", "Record prosecution event"]) {
+      const control = page.getByRole("button", { name });
+      await expect(control).toBeVisible();
+      const box = await control.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(360);
+    }
+
+    await page.getByRole("tab", { name: "Overview" }).click();
+    for (const name of ["Discover Matter evidence", "Offer covered deadlines", "Add recordal obligation", "Reconcile with Matter billing", "Preview lifecycle impact", "Apply lifecycle transition"]) {
       const control = page.getByRole("button", { name });
       await expect(control).toBeVisible();
       const box = await control.boundingBox();
