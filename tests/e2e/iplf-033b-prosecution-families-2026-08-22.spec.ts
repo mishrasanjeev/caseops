@@ -265,6 +265,7 @@ test("IPLF-033B completes family and prosecution exception journeys", async ({ p
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
   await page.goto(`/app/ip?docket=${first.docket.id}`);
+  await page.getByRole("tab", { name: "Proceedings" }).click();
   const prosecution = page.getByTestId("ip-prosecution-workspace");
   await expect(prosecution.getByText("response filed", { exact: true })).toBeVisible();
   await prosecution.getByLabel("Application").selectOption(first.applications[0].id);
@@ -321,6 +322,7 @@ test("IPLF-033B completes family and prosecution exception journeys", async ({ p
   });
   expect(candidate.status(), await candidate.text()).toBe(201);
   await page.reload();
+  await page.getByRole("tab", { name: "Proceedings" }).click();
   await prosecution.getByRole("button", { name: "Reconcile candidate" }).click();
   await expect(prosecution.getByText(/Reconciliation will append a decision/)).toBeVisible();
   await prosecution.getByLabel("Reconciliation decision").selectOption("same_fact");

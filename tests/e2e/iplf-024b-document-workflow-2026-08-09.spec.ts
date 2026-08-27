@@ -318,6 +318,7 @@ test("IPLF-024B keeps every document action visible and usable at 360px", async 
   await installSession(page, tenant as Record<string, unknown>);
   await page.setViewportSize({ width: 360, height: 900 });
   await page.goto("/app/ip");
+  await page.getByRole("tab", { name: "Documents", exact: true }).click();
 
   const workspace = page.getByTestId("ip-document-workspace");
   await expect(workspace.getByRole("heading", { name: "Document workflow" })).toBeVisible();

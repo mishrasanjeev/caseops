@@ -158,6 +158,7 @@ async function createOpposition(
   oppositionNumber: string,
 ) {
   await page.goto(`/app/ip?docket=${docketId}`);
+  await page.getByRole("tab", { name: "Proceedings" }).click();
   const workspace = page.getByTestId("ip-opposition-workspace");
   await expect(workspace).toBeVisible();
   await workspace.getByRole("button", { name: side }).click();

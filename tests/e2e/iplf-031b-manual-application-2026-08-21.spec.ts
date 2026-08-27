@@ -222,6 +222,7 @@ test("IPLF-031B completes manual identity and duplicate exception paths", async 
   expect(opposition.status(), await opposition.text()).toBe(201);
 
   await page.goto(`/app/ip?docket=${created.docket.id}`);
+  await page.getByRole("tab", { name: "Overview" }).click();
   await expect(page.getByTestId("ip-identity-workspace").getByText("Opposition no.")).toBeVisible();
   await expect(page.getByTestId("ip-identity-workspace").getByText("OPP / 88 / 2026")).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });

@@ -156,6 +156,7 @@ test("IPLF-025B schedules unknown-time reminders, exposes outcomes, and supersed
   await page.setViewportSize({ width: 360, height: 820 });
   await signIn(page, tenant.slug as string, tenant.email as string);
   await page.goto(`/app/ip?docket=${encodeURIComponent(docketId)}`);
+  await page.getByRole("tab", { name: "Hearings and deadlines" }).click();
   await expect(page.getByRole("heading", { name: "Hearings, reminders, and calendar copies" })).toBeVisible();
   await expect(page.getByLabel("Hearing date")).toBeVisible();
   await expect(page.getByLabel("Time precision")).toBeVisible();
