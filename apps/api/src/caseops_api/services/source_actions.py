@@ -239,13 +239,14 @@ def resolve_source_target(
         row = session.get(AuthorityDocument, target_id)
         if row is None:
             return None
+        source_reference = row.canonical_url or row.source_reference
         return ResolvedSourceTarget(
             target_type=target_type,
             target_id=row.id,
-            source_reference=row.source_reference,
+            source_reference=source_reference,
             # FMB-02: was hardcoded True, which made this the fail-open half of
             # a predicate the display surfaces failed closed on.
-            verified=authority_source_verified(row.source, row.source_reference),
+            verified=authority_source_verified(row.source, source_reference),
             quarantined=False,
             source_version=row.updated_at.isoformat(),
             provider=row.source,

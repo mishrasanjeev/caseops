@@ -2418,6 +2418,7 @@ def load_draft_record(draft: Draft) -> dict:
         "matter_id": draft.matter_id,
         "ip_docket_id": draft.ip_docket_id,
         "ip_proceeding_id": draft.ip_proceeding_id,
+        "source_recommendation_id": draft.source_recommendation_id,
         "created_by_membership_id": draft.created_by_membership_id,
         "title": draft.title,
         "draft_type": draft.draft_type,

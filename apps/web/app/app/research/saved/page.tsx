@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Bookmark, FileCheck2, Loader2 } from "lucide-react";
+import { Bookmark, FileCheck2, Loader2, ScanSearch } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -157,11 +157,22 @@ function SavedResearchReportCard({ report }: { report: AuthorityResearchReport }
             {report.query}
           </CardDescription>
         </div>
-        <Link href={`/app/research?${query.toString()}`} className="w-full sm:w-auto">
-          <Button size="sm" variant="outline" className="w-full sm:w-auto">
-            Refine search
-          </Button>
-        </Link>
+        <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
+          <Link href={`/app/research?${query.toString()}`} className="w-full sm:w-auto">
+            <Button size="sm" variant="outline" className="w-full sm:w-auto">
+              Refine search
+            </Button>
+          </Link>
+          <Link
+            href={`/app/research/reviews?report=${encodeURIComponent(report.id)}`}
+            className="w-full sm:w-auto"
+          >
+            <Button size="sm" className="w-full sm:w-auto">
+              <ScanSearch className="h-4 w-4" aria-hidden />
+              Start intelligent review
+            </Button>
+          </Link>
+        </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 text-sm">
         <div className="flex flex-wrap gap-2 text-xs text-[var(--color-mute)]">

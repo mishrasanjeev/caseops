@@ -120,6 +120,7 @@ class DraftRecord(BaseModel):
     matter_id: str | None
     ip_docket_id: str | None
     ip_proceeding_id: str | None
+    source_recommendation_id: str | None
     created_by_membership_id: str | None
     title: str
     draft_type: DraftTypeLiteral

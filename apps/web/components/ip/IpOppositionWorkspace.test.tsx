@@ -7,12 +7,14 @@ const {
   createMock,
   fetchCoreMock,
   fetchWorkspaceMock,
+  pleadingWorkspaceMock,
   saveMock,
   transitionMock,
 } = vi.hoisted(() => ({
   createMock: vi.fn(),
   fetchCoreMock: vi.fn(),
   fetchWorkspaceMock: vi.fn(),
+  pleadingWorkspaceMock: vi.fn(),
   saveMock: vi.fn(),
   transitionMock: vi.fn(),
 }));
@@ -45,7 +47,10 @@ vi.mock("@/components/ip/IpOppositionSpecializedPaths", () => ({
 }));
 
 vi.mock("@/components/ip/IpPleadingWorkspace", () => ({
-  IpPleadingWorkspace: () => <div data-testid="pleading-workspace-stub" />,
+  IpPleadingWorkspace: (props: unknown) => {
+    pleadingWorkspaceMock(props);
+    return <div data-testid="pleading-workspace-stub" />;
+  },
 }));
 
 import { IpOppositionWorkspace } from "@/components/ip/IpOppositionWorkspace";
@@ -296,6 +301,50 @@ describe("IpOppositionWorkspace", () => {
     expect(await screen.findByText("confirmed opposition identifier required")).toBeVisible();
     expect(screen.getByText("service fact required")).toBeVisible();
     expect(screen.getByRole("button", { name: "Apply stage" })).toBeDisabled();
+  });
+
+  it("opens the exact deep-linked proceeding and Draft", async () => {
+    const requestedProceeding = {
+      ...proceeding,
+      id: "opposition-2",
+      side: "opponent",
+      stage: "notice_filed",
+    };
+    fetchCoreMock.mockResolvedValue({
+      assets: [],
+      applications: [],
+      proceedings: [proceeding, requestedProceeding],
+      identifiers: [],
+    });
+    fetchWorkspaceMock.mockImplementation(({ proceedingId }: { proceedingId: string }) =>
+      Promise.resolve({
+        ...workspace,
+        proceeding: proceedingId === requestedProceeding.id ? requestedProceeding : proceeding,
+      }),
+    );
+
+    render(withClient(
+      <IpOppositionWorkspace
+        docket={docket}
+        canWrite
+        canReview
+        currentMembershipId="membership-1"
+        initialProceedingId="opposition-2"
+        initialDraftId="draft-from-review"
+      />,
+    ));
+
+    await waitFor(() => expect(fetchWorkspaceMock).toHaveBeenCalledWith({
+      docketId: "docket-1",
+      proceedingId: "opposition-2",
+    }));
+    expect(await screen.findByLabelText("Opposition proceeding")).toHaveValue("opposition-2");
+    await waitFor(() => expect(pleadingWorkspaceMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        proceedingId: "opposition-2",
+        initialDraftId: "draft-from-review",
+      }),
+    ));
   });
 
   it("refreshes both represented-side workflows after a stage transition", async () => {

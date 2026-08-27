@@ -9962,6 +9962,11 @@ class AuthorityResearchReport(Base):
 
     __tablename__ = "authority_research_reports"
     __table_args__ = (
+        UniqueConstraint(
+            "id",
+            "company_id",
+            name="uq_authority_research_reports_id_company",
+        ),
         Index(
             "ix_authority_research_reports_company_created",
             "company_id",
@@ -10851,9 +10856,99 @@ class PredictiveOutcomeAggregateSnapshot(Base):
 
 
 class Recommendation(Base):
-    """Explainable decision-support output for a matter (PRD §11, §23.1)."""
+    """Explainable decision-support output for exactly one legal target."""
 
     __tablename__ = "recommendations"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["matter_id", "company_id"],
+            ["matters.id", "matters.company_id"],
+            name="fk_recommendation_matter_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["ip_docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_recommendation_ip_docket_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["ip_proceeding_id", "company_id", "ip_docket_id"],
+            ["ip_proceedings.id", "ip_proceedings.company_id", "ip_proceedings.docket_id"],
+            name="fk_recommendation_ip_proceeding_target",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["source_research_report_id", "company_id"],
+            ["authority_research_reports.id", "authority_research_reports.company_id"],
+            name="fk_recommendation_research_report_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["finalized_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_recommendation_finalizer_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_recommendations_id_company"),
+        CheckConstraint(
+            "(matter_id IS NOT NULL AND ip_docket_id IS NULL AND "
+            "ip_proceeding_id IS NULL) OR "
+            "(matter_id IS NULL AND ip_docket_id IS NOT NULL)",
+            name="ck_recommendation_exactly_one_target",
+        ),
+        CheckConstraint(
+            "ip_proceeding_id IS NULL OR ip_docket_id IS NOT NULL",
+            name="ck_recommendation_ip_proceeding_requires_docket",
+        ),
+        CheckConstraint(
+            "(type = 'intelligent_review' AND source_research_report_id IS NOT NULL) OR "
+            "(type <> 'intelligent_review' AND source_research_report_id IS NULL)",
+            name="ck_recommendation_review_source",
+        ),
+        CheckConstraint(
+            "review_state IN ('not_applicable', 'queued', 'running', 'ready', "
+            "'abstained', 'failed', 'finalized', 'published')",
+            name="ck_recommendation_review_state",
+        ),
+        CheckConstraint(
+            "review_progress >= 0 AND review_progress <= 100",
+            name="ck_recommendation_review_progress",
+        ),
+        Index(
+            "ix_recommendations_company_review_state_created",
+            "company_id",
+            "review_state",
+            "created_at",
+        ),
+        Index(
+            "ix_recommendations_company_ip_docket_created",
+            "company_id",
+            "ip_docket_id",
+            "created_at",
+        ),
+        Index(
+            "ix_fk_recommendations_matter_id_compa_edcf1c7f",
+            "matter_id",
+            "company_id",
+        ),
+        Index(
+            "ix_fk_recommendations_ip_proceeding_i_0c288976",
+            "ip_proceeding_id",
+            "company_id",
+            "ip_docket_id",
+        ),
+        Index(
+            "ix_fk_recommendations_source_research_ae8b70ed",
+            "source_research_report_id",
+            "company_id",
+        ),
+        Index(
+            "ix_fk_recommendations_finalized_by_me_a0403a0f",
+            "finalized_by_membership_id",
+            "company_id",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
@@ -10861,10 +10956,15 @@ class Recommendation(Base):
         nullable=False,
         index=True,
     )
-    matter_id: Mapped[str] = mapped_column(
+    matter_id: Mapped[str | None] = mapped_column(
         ForeignKey("matters.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
+    )
+    ip_docket_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    ip_proceeding_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    source_research_report_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
     )
     created_by_membership_id: Mapped[str | None] = mapped_column(
         ForeignKey("company_memberships.id", ondelete="SET NULL"),
@@ -10899,9 +10999,34 @@ class Recommendation(Base):
     # itself is opaque JSON to the database.
     strategy_payload_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     analysis_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    review_state: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="not_applicable", server_default="not_applicable"
+    )
+    review_progress: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=100, server_default="100"
+    )
+    review_error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    review_payload_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    review_context_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_manifest_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    review_selection_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    review_template_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    prompt_policy_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    output_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    finalized_by_membership_id: Mapped[str | None] = mapped_column(
+        String(36),
+        nullable=True,
+    )
+    finalized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utcnow,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
         nullable=False,
     )
 
@@ -11182,6 +11307,12 @@ class Draft(Base):
             name="fk_draft_ip_proceeding_target",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["source_recommendation_id", "company_id"],
+            ["recommendations.id", "recommendations.company_id"],
+            name="fk_draft_source_recommendation_company",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "(matter_id IS NOT NULL AND ip_docket_id IS NULL AND "
             "ip_proceeding_id IS NULL) OR "
@@ -11193,6 +11324,15 @@ class Draft(Base):
             name="ck_draft_ip_proceeding_requires_docket",
         ),
         Index("ix_drafts_company_ip_docket", "company_id", "ip_docket_id"),
+        Index(
+            "ix_fk_drafts_source_recommen_7a6e2990",
+            "source_recommendation_id",
+            "company_id",
+        ),
+        UniqueConstraint(
+            "source_recommendation_id",
+            name="uq_draft_source_recommendation",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -11208,6 +11348,9 @@ class Draft(Base):
     )
     ip_docket_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     ip_proceeding_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    source_recommendation_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True
+    )
     created_by_membership_id: Mapped[str | None] = mapped_column(
         ForeignKey("company_memberships.id", ondelete="SET NULL"),
         nullable=True,

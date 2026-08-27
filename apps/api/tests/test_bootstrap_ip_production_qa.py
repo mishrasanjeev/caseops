@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 from sqlalchemy import func, select
 
 from caseops_api.db.models import (
@@ -14,6 +16,7 @@ from caseops_api.db.session import get_session_factory
 from caseops_api.scripts.bootstrap_ip_production_qa import (
     ensure_ip_production_qa,
     ensure_ip_production_qa_judge_fixture,
+    ensure_ip_production_qa_review_fixture,
 )
 from caseops_api.services.source_actions import authority_source_verified
 
@@ -167,3 +170,58 @@ def test_bootstrap_ip_production_qa_judge_fixture_refuses_non_qa_collision(
             )
         )
         assert fixture_authorities == 0
+
+
+def test_bootstrap_ip_production_qa_review_fixture_is_bounded_and_idempotent(
+    client,
+) -> None:
+    del client
+    with get_session_factory()() as session:
+        created = ensure_ip_production_qa_review_fixture(session)
+        repeated = ensure_ip_production_qa_review_fixture(session)
+        authorities = list(
+            session.scalars(
+                select(AuthorityDocument).where(
+                    AuthorityDocument.adapter_name
+                    == "caseops-ip-production-qa-intelligent-review-v1"
+                )
+            )
+        )
+
+    assert created.authority_count == 3
+    assert created.created_authorities == 3
+    assert repeated.created_authorities == 0
+    assert len(authorities) == 3
+    assert sum(item.source_access_state == "available" for item in authorities) == 2
+    assert sum(item.source_access_state == "unavailable" for item in authorities) == 1
+    assert all(item.authority_status == "synthetic_qa" for item in authorities)
+    assert all(item.content_hash and item.source_version for item in authorities)
+
+
+def test_bootstrap_ip_production_qa_review_fixture_refuses_non_qa_collision(
+    client,
+) -> None:
+    del client
+    with get_session_factory()() as session:
+        session.add(
+            AuthorityDocument(
+                source="official",
+                adapter_name="non-qa-owner",
+                court_name="Synthetic QA Court",
+                forum_level="tribunal",
+                document_type="judgment",
+                title="Collision",
+                canonical_key="iplf-063b-production-qa-v1:supporting",
+                source_reference="https://example.com/collision",
+                summary="Non-QA collision fixture.",
+                ingested_at=datetime(2026, 8, 28, tzinfo=UTC),
+            )
+        )
+        session.commit()
+
+        try:
+            ensure_ip_production_qa_review_fixture(session)
+        except RuntimeError as exc:
+            assert "non-QA review fixture collision" in str(exc)
+        else:
+            raise AssertionError("A non-QA review fixture collision was adopted")

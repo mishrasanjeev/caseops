@@ -11591,6 +11591,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/research/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List permission-visible intelligent reviews */
+        get: operations["get_intelligent_reviews_api_research_reviews_get"];
+        put?: never;
+        /** Queue a frozen, source-grounded intelligent review */
+        post: operations["create_intelligent_review_api_research_reviews_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/research/reviews/{review_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one source-frozen intelligent review */
+        get: operations["get_intelligent_review_by_id_api_research_reviews__review_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/research/reviews/{review_id}/authorities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Include or exclude authorities before finalization */
+        patch: operations["patch_intelligent_review_authorities_api_research_reviews__review_id__authorities_patch"];
+        trace?: never;
+    };
+    "/api/research/reviews/{review_id}/finalize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Finalize a complete review as an authorized lawyer */
+        post: operations["post_intelligent_review_finalize_api_research_reviews__review_id__finalize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/research/reviews/{review_id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Publish a finalized review into the existing Draft lifecycle */
+        post: operations["post_intelligent_review_publish_api_research_reviews__review_id__publish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/source-actions/inspect": {
         parameters: {
             query?: never;
@@ -18452,6 +18538,8 @@ export interface components {
             review_required: boolean;
             /** Reviews */
             reviews: components["schemas"]["DraftReviewRecord"][];
+            /** Source Recommendation Id */
+            source_recommendation_id: string | null;
             /**
              * Status
              * @enum {string}
@@ -21117,6 +21205,202 @@ export interface components {
             status?: ("new" | "triaging" | "in_progress" | "completed" | "rejected") | null;
             /** Triage Notes */
             triage_notes?: string | null;
+        };
+        /** IntelligentReviewAssertionRecord */
+        IntelligentReviewAssertionRecord: {
+            /** Authority Document Ids */
+            authority_document_ids?: string[];
+            /** Text */
+            text: string;
+        };
+        /** IntelligentReviewAuthorityRecord */
+        IntelligentReviewAuthorityRecord: {
+            /** Access State */
+            access_state: string;
+            /** Authority Document Id */
+            authority_document_id: string;
+            /** Citation */
+            citation: string;
+            /** Content Hash */
+            content_hash: string | null;
+            /** Court */
+            court: string;
+            /** Decision Date */
+            decision_date: string | null;
+            /**
+             * Disposition
+             * @enum {string}
+             */
+            disposition: "supporting" | "contrary";
+            /** Passage */
+            passage: string;
+            /** Relevance */
+            relevance: string;
+            /** Retrieved At */
+            retrieved_at: string | null;
+            /** Selected */
+            selected: boolean;
+            source_action: components["schemas"]["SourceActionRecord"];
+            /** Source Url */
+            source_url: string | null;
+            /** Source Version */
+            source_version: string | null;
+            /** Title */
+            title: string;
+            /** Treatment */
+            treatment: string | null;
+        };
+        /** IntelligentReviewCompletenessRecord */
+        IntelligentReviewCompletenessRecord: {
+            /** Cited Assertion Count */
+            cited_assertion_count: number;
+            /** Complete */
+            complete: boolean;
+            /** Contrary Authority Count */
+            contrary_authority_count: number;
+            /** Reasons */
+            reasons?: string[];
+            /** Selected Authority Count */
+            selected_authority_count: number;
+            /** Supporting Authority Count */
+            supporting_authority_count: number;
+            /** Unsupported Assertion Count */
+            unsupported_assertion_count: number;
+        };
+        /** IntelligentReviewCreateRequest */
+        IntelligentReviewCreateRequest: {
+            /** Document Refs */
+            document_refs?: string[];
+            /** Facts */
+            facts?: components["schemas"]["IntelligentReviewFactInput"][];
+            /** Included Authority Ids */
+            included_authority_ids?: string[];
+            /** Ip Docket Id */
+            ip_docket_id?: string | null;
+            /** Ip Proceeding Id */
+            ip_proceeding_id?: string | null;
+            /** Issue */
+            issue: string;
+            /** Matter Id */
+            matter_id?: string | null;
+            /** Source Research Report Id */
+            source_research_report_id: string;
+        };
+        /** IntelligentReviewFactInput */
+        IntelligentReviewFactInput: {
+            /** Label */
+            label: string;
+            /** Source Ref */
+            source_ref?: string | null;
+            /** Value */
+            value: string;
+        };
+        /** IntelligentReviewFinalizeRequest */
+        IntelligentReviewFinalizeRequest: {
+            /** Lawyer Notes */
+            lawyer_notes?: string | null;
+        };
+        /** IntelligentReviewListResponse */
+        IntelligentReviewListResponse: {
+            /** Reviews */
+            reviews: components["schemas"]["IntelligentReviewRecord"][];
+        };
+        /** IntelligentReviewPublishRequest */
+        IntelligentReviewPublishRequest: {
+            /** Title */
+            title?: string | null;
+        };
+        /** IntelligentReviewPublishResponse */
+        IntelligentReviewPublishResponse: {
+            /** Draft Id */
+            draft_id: string;
+            /** Draft Version Id */
+            draft_version_id: string;
+            review: components["schemas"]["IntelligentReviewRecord"];
+        };
+        /** IntelligentReviewRecord */
+        IntelligentReviewRecord: {
+            /** Abstention Reason */
+            abstention_reason?: string | null;
+            /** Applicable Provisions */
+            applicable_provisions?: components["schemas"]["IntelligentReviewAssertionRecord"][];
+            /** Company Id */
+            company_id: string;
+            completeness: components["schemas"]["IntelligentReviewCompletenessRecord"];
+            /** Contrary Authorities */
+            contrary_authorities?: components["schemas"]["IntelligentReviewAuthorityRecord"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Error Code */
+            error_code: string | null;
+            /** Factual Analogies */
+            factual_analogies?: components["schemas"]["IntelligentReviewAssertionRecord"][];
+            /** Finalized At */
+            finalized_at: string | null;
+            /** Finalized By Membership Id */
+            finalized_by_membership_id: string | null;
+            /** Gaps */
+            gaps?: string[];
+            /** Id */
+            id: string;
+            /** Ip Docket Id */
+            ip_docket_id: string | null;
+            /** Ip Proceeding Id */
+            ip_proceeding_id: string | null;
+            /** Issue */
+            issue: string;
+            /** Lawyer Checks */
+            lawyer_checks?: string[];
+            /** Lawyer Notes */
+            lawyer_notes?: string | null;
+            /** Matter Id */
+            matter_id: string | null;
+            /** Model Run Id */
+            model_run_id: string | null;
+            /** Non Exhaustive Disclaimer */
+            non_exhaustive_disclaimer: string;
+            /** Output Hash */
+            output_hash: string | null;
+            /** Progress */
+            progress: number;
+            /** Prompt Policy Version */
+            prompt_policy_version: string | null;
+            /** Published Draft Id */
+            published_draft_id: string | null;
+            /** Relevant Facts */
+            relevant_facts?: string[];
+            /** Review Template Version */
+            review_template_version: string | null;
+            /** Source Freshness At */
+            source_freshness_at?: string | null;
+            /** Source Research Report Id */
+            source_research_report_id: string;
+            /** Stale Warning */
+            stale_warning?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "queued" | "running" | "ready" | "abstained" | "failed" | "finalized" | "published";
+            /** Supporting Authorities */
+            supporting_authorities?: components["schemas"]["IntelligentReviewAuthorityRecord"][];
+            /** Unresolved Contradictions */
+            unresolved_contradictions?: string[];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** IntelligentReviewSelectionRequest */
+        IntelligentReviewSelectionRequest: {
+            /** Included Authority Ids */
+            included_authority_ids?: string[];
+            /** Lawyer Notes */
+            lawyer_notes?: string | null;
         };
         /** InvoiceCreateRequest */
         InvoiceCreateRequest: {
@@ -65607,6 +65891,208 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RecommendationRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_intelligent_reviews_api_research_reviews_get: {
+        parameters: {
+            query?: {
+                ip_docket_id?: string | null;
+                limit?: number;
+                matter_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntelligentReviewListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_intelligent_review_api_research_reviews_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IntelligentReviewCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntelligentReviewRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_intelligent_review_by_id_api_research_reviews__review_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                review_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntelligentReviewRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_intelligent_review_authorities_api_research_reviews__review_id__authorities_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                review_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IntelligentReviewSelectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntelligentReviewRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_intelligent_review_finalize_api_research_reviews__review_id__finalize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                review_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IntelligentReviewFinalizeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntelligentReviewRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_intelligent_review_publish_api_research_reviews__review_id__publish_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                review_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IntelligentReviewPublishRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntelligentReviewPublishResponse"];
                 };
             };
             /** @description Validation Error */

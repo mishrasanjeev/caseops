@@ -200,6 +200,53 @@ describe("IpPleadingWorkspace", () => {
     ));
   });
 
+  it("selects the exact deep-linked intelligent-review Draft", async () => {
+    const requestedDraft = {
+      ...draft,
+      id: "draft-from-review",
+      title: "Approved intelligent review",
+      current_version_id: "version-from-review",
+      versions: [{
+        ...draft.versions[0],
+        id: "version-from-review",
+        draft_id: "draft-from-review",
+        body: "Approved source-bounded intelligent review.",
+      }],
+    };
+    listDraftsMock.mockResolvedValue({
+      drafts: [draft, requestedDraft],
+      next_cursor: null,
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <IpPleadingWorkspace
+          docketId="docket-1"
+          proceedingId="proceeding-1"
+          canCreate
+          canEdit
+          canGenerate
+          canReview
+          canFinalize
+          initialDraftId="draft-from-review"
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByLabelText("Pleading draft")).toHaveValue("draft-from-review");
+    expect(screen.getByLabelText("Pleading body")).toHaveValue(
+      "Approved source-bounded intelligent review.",
+    );
+    expect(validationMock).toHaveBeenCalledWith({
+      docketId: "docket-1",
+      proceedingId: "proceeding-1",
+      draftId: "draft-from-review",
+    });
+  });
+
   it("compares revisions, exports a filing bundle, and records filing", async () => {
     const revisionTwo = {
       ...draft.versions[0],

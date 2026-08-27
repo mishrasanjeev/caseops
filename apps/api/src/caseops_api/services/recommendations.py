@@ -1945,6 +1945,7 @@ def list_matter_recommendations(
             .where(
                 Recommendation.company_id == context.company.id,
                 Recommendation.matter_id == matter_id,
+                Recommendation.type != "intelligent_review",
             )
             .order_by(Recommendation.created_at.desc())
         )
@@ -1963,6 +1964,7 @@ def _load_recommendation(
         .where(
             Recommendation.id == recommendation_id,
             Recommendation.company_id == context.company.id,
+            Recommendation.type != "intelligent_review",
         )
     )
     if not recommendation:
