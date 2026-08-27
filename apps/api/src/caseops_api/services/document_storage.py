@@ -121,7 +121,13 @@ def _safe_storage_segment(value: str, label: str) -> str:
     return segment
 
 
-def _write_stream_to_temp_file(stream: BinaryIO) -> tuple[Path, int, str]:
+def _write_stream_to_temp_file(
+    stream: BinaryIO,
+    *,
+    directory: Path | None = None,
+    prefix: str = "caseops-",
+    suffix: str = ".upload",
+) -> tuple[Path, int, str]:
     hasher = hashlib.sha256()
     size_bytes = 0
     max_bytes = get_settings().max_attachment_size_bytes
@@ -129,7 +135,12 @@ def _write_stream_to_temp_file(stream: BinaryIO) -> tuple[Path, int, str]:
 
     temp_path: Path | None = None
     try:
-        with tempfile.NamedTemporaryFile(suffix=".upload", delete=False) as temp_file:
+        with tempfile.NamedTemporaryFile(
+            suffix=suffix,
+            prefix=prefix,
+            dir=str(directory) if directory is not None else None,
+            delete=False,
+        ) as temp_file:
             temp_path = Path(temp_file.name)
             while chunk := stream.read(1024 * 1024):
                 size_bytes += len(chunk)
@@ -140,6 +151,8 @@ def _write_stream_to_temp_file(stream: BinaryIO) -> tuple[Path, int, str]:
                     )
                 hasher.update(chunk)
                 temp_file.write(chunk)
+            temp_file.flush()
+            os.fsync(temp_file.fileno())
     except Exception:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)
@@ -170,8 +183,7 @@ def _place_local_temp_file(temp_path: Path, target_path: Path) -> None:
     try:
         with temp_path.open("rb") as source_file:
             with tempfile.NamedTemporaryFile(
-                suffix=".staging",
-                prefix=f".{target_path.name}.",
+                prefix=".caseops-",
                 dir=str(target_path.parent),
                 delete=False,
             ) as staging_file:
@@ -250,9 +262,28 @@ def persist_workspace_attachment(
         / safe_workspace_id
         / object_name
     )
-    storage_key = relative_path.as_posix()
-    temp_path, size_bytes, sha256_hex = _write_stream_to_temp_file(stream)
     backend = _storage_backend()
+    storage_key = relative_path.as_posix()
+    target_path: Path | None = None
+    if backend == "local":
+        root = _document_root()
+        target_path = (root / relative_path).resolve()
+        if os.path.commonpath([str(root), str(target_path)]) != str(root):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid storage key.",
+            )
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+
+    temp_path, size_bytes, sha256_hex = _write_stream_to_temp_file(
+        stream,
+        directory=target_path.parent if target_path is not None else None,
+        # Keep the local staging basename short. The storage hierarchy uses
+        # UUIDs and can legitimately approach the legacy Windows MAX_PATH
+        # boundary even though the final object path itself remains portable.
+        prefix=".caseops-" if target_path is not None else "caseops-",
+        suffix="" if target_path is not None else ".upload",
+    )
 
     try:
         if before_store is not None:
@@ -264,14 +295,7 @@ def persist_workspace_attachment(
             # avoids an immediate GCS download solely to scan the same bytes.
             validate_temp_file(temp_path)
         if backend == "local":
-            root = _document_root()
-            target_path = (root / relative_path).resolve()
-            if os.path.commonpath([str(root), str(target_path)]) != str(root):
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid storage key.",
-                )
-            target_path.parent.mkdir(parents=True, exist_ok=True)
+            assert target_path is not None
             _place_local_temp_file(temp_path, target_path)
         else:
             bucket = _gcs_client().bucket(_gcs_bucket_name())
