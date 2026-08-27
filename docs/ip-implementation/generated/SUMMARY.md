@@ -2,7 +2,7 @@
 
 Generated from `PROGRAM_MANIFEST.yaml`; do not edit directly.
 
-- Active slice: `IPLF-061B`
+- Active slice: `IPLF-062A`
 - Requirements: 436 across 50 families
 - Journeys: 68 with 317 atomic normal/exception paths
 - Implementation slices: 144 (15 PRD-explicit; 129 derived decompositions)

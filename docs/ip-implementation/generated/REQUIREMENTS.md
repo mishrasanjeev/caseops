@@ -177,18 +177,18 @@ Generated; do not edit.
 | JUDGE-08 | JUDGE | IPLF-003C, IPLF-060B | 13 | 2 | implemented | passed | blocked | false |
 | JUDGE-09 | JUDGE | IPLF-003C, IPLF-060B | 13 | 2 | implemented | passed | blocked | false |
 | JUDGE-10 | JUDGE | IPLF-003C, IPLF-060B | 13 | 2 | implemented | passed | blocked | false |
-| AI-GUIDE-01 | AI-GUIDE | IPLF-061B | 4 | 0 | not_started | not_run | blocked | false |
-| AI-GUIDE-02 | AI-GUIDE | IPLF-061B | 4 | 0 | not_started | not_run | blocked | false |
-| AI-GUIDE-03 | AI-GUIDE | IPLF-061B | 4 | 0 | not_started | not_run | blocked | false |
-| AI-GUIDE-04 | AI-GUIDE | IPLF-061B | 4 | 0 | not_started | not_run | blocked | false |
-| AI-GUIDE-05 | AI-GUIDE | IPLF-061B | 4 | 0 | not_started | not_run | blocked | false |
-| AI-GUIDE-06 | AI-GUIDE | IPLF-061B | 4 | 0 | not_started | not_run | blocked | false |
-| AI-GUIDE-07 | AI-GUIDE | IPLF-061B | 4 | 0 | not_started | not_run | blocked | false |
-| AI-GUIDE-08 | AI-GUIDE | IPLF-061B | 4 | 0 | not_started | not_run | blocked | false |
-| AI-GUIDE-09 | AI-GUIDE | IPLF-061B | 4 | 0 | not_started | not_run | blocked | false |
-| AI-GUIDE-10 | AI-GUIDE | IPLF-061B | 4 | 0 | not_started | not_run | blocked | false |
-| AI-GUIDE-11 | AI-GUIDE | IPLF-061B | 4 | 0 | not_started | not_run | blocked | false |
-| AI-GUIDE-12 | AI-GUIDE | IPLF-061B | 4 | 0 | not_started | not_run | blocked | false |
+| AI-GUIDE-01 | AI-GUIDE | IPLF-061B | 7 | 1 | implemented | passed | blocked | false |
+| AI-GUIDE-02 | AI-GUIDE | IPLF-062B | 4 | 0 | not_started | not_run | blocked | false |
+| AI-GUIDE-03 | AI-GUIDE | IPLF-062B | 4 | 0 | not_started | not_run | blocked | false |
+| AI-GUIDE-04 | AI-GUIDE | IPLF-062B, IPLF-065B, IPLF-066B | 4 | 0 | not_started | not_run | blocked | false |
+| AI-GUIDE-05 | AI-GUIDE | IPLF-062B, IPLF-065B, IPLF-066B | 4 | 0 | not_started | not_run | blocked | false |
+| AI-GUIDE-06 | AI-GUIDE | IPLF-062B, IPLF-064B | 4 | 0 | not_started | not_run | blocked | false |
+| AI-GUIDE-07 | AI-GUIDE | IPLF-061B, IPLF-062B, IPLF-065B | 4 | 1 | in_progress | not_run | blocked | false |
+| AI-GUIDE-08 | AI-GUIDE | IPLF-061B, IPLF-062B, IPLF-066B | 4 | 1 | in_progress | not_run | blocked | false |
+| AI-GUIDE-09 | AI-GUIDE | IPLF-062B | 4 | 0 | not_started | not_run | blocked | false |
+| AI-GUIDE-10 | AI-GUIDE | IPLF-065B | 4 | 0 | not_started | not_run | blocked | false |
+| AI-GUIDE-11 | AI-GUIDE | IPLF-061B | 7 | 1 | implemented | passed | blocked | false |
+| AI-GUIDE-12 | AI-GUIDE | IPLF-066B | 4 | 0 | not_started | not_run | blocked | false |
 | AI-REV-01 | AI-REV | IPLF-063B, IPLF-065B | 5 | 0 | not_started | not_run | blocked | false |
 | AI-REV-02 | AI-REV | IPLF-063B, IPLF-065B | 5 | 0 | not_started | not_run | blocked | false |
 | AI-REV-03 | AI-REV | IPLF-063B, IPLF-065B | 5 | 0 | not_started | not_run | blocked | false |

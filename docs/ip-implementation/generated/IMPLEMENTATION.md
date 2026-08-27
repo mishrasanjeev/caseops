@@ -119,17 +119,17 @@ Generated; do not edit.
 | IPLF-060A | derived | IPLF-060 | M6 |  |  | implemented | passed | deployment_verified |
 | IPLF-060B | derived | IPLF-060 | M6 | JUDGE-01, JUDGE-02, JUDGE-03, JUDGE-04, JUDGE-05, JUDGE-06, JUDGE-07, JUDGE-08, JUDGE-09, JUDGE-10 | UJ-20-EXC-01, UJ-20-EXC-02, UJ-20-EXC-03, UJ-20-NORMAL | implemented | passed | deployment_verified |
 | IPLF-061A | derived | IPLF-061 | M6 |  |  | implemented | passed | blocked |
-| IPLF-061B | derived | IPLF-061 | M6 | AI-GUIDE-01, AI-GUIDE-02, AI-GUIDE-03, AI-GUIDE-04, AI-GUIDE-05, AI-GUIDE-06, AI-GUIDE-07, AI-GUIDE-08, AI-GUIDE-09, AI-GUIDE-10, AI-GUIDE-11, AI-GUIDE-12 | UJ-22-EXC-01, UJ-22-EXC-02, UJ-22-NORMAL | not_started | not_run | blocked |
+| IPLF-061B | derived | IPLF-061 | M6 | AI-GUIDE-01, AI-GUIDE-07, AI-GUIDE-08, AI-GUIDE-11 | UJ-22-EXC-01, UJ-22-EXC-02, UJ-22-NORMAL | implemented | passed | blocked |
 | IPLF-062A | derived | IPLF-062 | M6 |  |  | not_started | not_run | blocked |
-| IPLF-062B | derived | IPLF-062 | M6 |  | UJ-23-EXC-01, UJ-23-EXC-02, UJ-23-EXC-03, UJ-23-NORMAL | not_started | not_run | blocked |
+| IPLF-062B | derived | IPLF-062 | M6 | AI-GUIDE-02, AI-GUIDE-03, AI-GUIDE-04, AI-GUIDE-05, AI-GUIDE-06, AI-GUIDE-07, AI-GUIDE-08, AI-GUIDE-09 | UJ-23-EXC-01, UJ-23-EXC-02, UJ-23-EXC-03, UJ-23-NORMAL | not_started | not_run | blocked |
 | IPLF-063A | derived | IPLF-063 | M6 |  |  | not_started | not_run | blocked |
 | IPLF-063B | derived | IPLF-063 | M6 | AI-REV-01, AI-REV-02, AI-REV-03, AI-REV-04, AI-REV-05, AI-REV-06, AI-REV-07, AI-REV-08, AI-REV-09, AI-REV-10 | UJ-18-EXC-01, UJ-18-EXC-02, UJ-18-EXC-03, UJ-18-NORMAL | not_started | not_run | blocked |
 | IPLF-064A | derived | IPLF-064 | M6 |  |  | not_started | not_run | blocked |
-| IPLF-064B | derived | IPLF-064 | M6 |  |  | not_started | not_run | blocked |
+| IPLF-064B | derived | IPLF-064 | M6 | AI-GUIDE-06 | UJ-23-EXC-03, UJ-23-NORMAL | not_started | not_run | blocked |
 | IPLF-065A | derived | IPLF-065 | M6 |  |  | not_started | not_run | blocked |
-| IPLF-065B | derived | IPLF-065 | M6 | AI-REV-01, AI-REV-02, AI-REV-03, AI-REV-04, AI-REV-05, AI-REV-06, AI-REV-07, AI-REV-08, AI-REV-09, AI-REV-10 | UJ-18-EXC-01, UJ-18-EXC-02, UJ-18-EXC-03, UJ-18-NORMAL | not_started | not_run | blocked |
+| IPLF-065B | derived | IPLF-065 | M6 | AI-GUIDE-04, AI-GUIDE-05, AI-GUIDE-07, AI-GUIDE-10, AI-REV-01, AI-REV-02, AI-REV-03, AI-REV-04, AI-REV-05, AI-REV-06, AI-REV-07, AI-REV-08, AI-REV-09, AI-REV-10 | UJ-18-EXC-01, UJ-18-EXC-02, UJ-18-EXC-03, UJ-18-NORMAL, UJ-22-NORMAL, UJ-23-EXC-02, UJ-23-NORMAL | not_started | not_run | blocked |
 | IPLF-066A | derived | IPLF-066 | M6 |  |  | not_started | not_run | blocked |
-| IPLF-066B | derived | IPLF-066 | M6 | IP-ACCESS-01, IP-ACCESS-02, IP-ACCESS-03, IP-ACCESS-04, IP-ACCESS-05, IP-ACCESS-06, IP-ACCESS-07, IP-ACCESS-08, SEARCH-ACL-01, SEARCH-ACL-02, SEARCH-ACL-03, SEARCH-ACL-04, SEARCH-ACL-05, SEARCH-ACL-06, SEARCH-ACL-07, SEARCH-ACL-08, SEARCH-ACL-09, SEARCH-ACL-10, SEARCH-ACL-11, SEARCH-ACL-12 | UJ-23-EXC-01, UJ-23-EXC-02, UJ-23-EXC-03, UJ-23-NORMAL, UJ-66-EXC-01, UJ-66-EXC-02, UJ-66-EXC-03, UJ-66-EXC-04, UJ-66-NORMAL | not_started | not_run | blocked |
+| IPLF-066B | derived | IPLF-066 | M6 | AI-GUIDE-04, AI-GUIDE-05, AI-GUIDE-08, AI-GUIDE-12, IP-ACCESS-01, IP-ACCESS-02, IP-ACCESS-03, IP-ACCESS-04, IP-ACCESS-05, IP-ACCESS-06, IP-ACCESS-07, IP-ACCESS-08, SEARCH-ACL-01, SEARCH-ACL-02, SEARCH-ACL-03, SEARCH-ACL-04, SEARCH-ACL-05, SEARCH-ACL-06, SEARCH-ACL-07, SEARCH-ACL-08, SEARCH-ACL-09, SEARCH-ACL-10, SEARCH-ACL-11, SEARCH-ACL-12 | UJ-22-NORMAL, UJ-23-EXC-01, UJ-23-EXC-02, UJ-23-EXC-03, UJ-23-NORMAL, UJ-66-EXC-01, UJ-66-EXC-02, UJ-66-EXC-03, UJ-66-EXC-04, UJ-66-NORMAL | not_started | not_run | blocked |
 | IPLF-070A | derived | IPLF-070 | M7-M10 |  |  | not_started | not_run | blocked |
 | IPLF-070B | derived | IPLF-070 | M7-M10 | COMP-01, COMP-02, COMP-03, COMP-04, COMP-05, COMP-06, COMP-07, COMP-08 |  | not_started | not_run | blocked |
 | IPLF-071A | derived | IPLF-071 | M7-M10 |  |  | not_started | not_run | blocked |

@@ -54,16 +54,22 @@ and commands at 96.
 
 ## Non-duplication boundaries
 
-IPLF-061B owns the complete UJ-22 product-guidance UI and exceptions. IPLF-062
-owns assistant sessions, turns, citations, permission-scoped workspace
-retrieval, retention, export, and deletion. IPLF-064 owns preview/confirm write
-actions. IPLF-065 owns governed answer feedback. IPLF-066 owns assistant and
-action analytics. Existing source actions, ModelRun, AI policy, audit, record
-access, Matter, client, IP, document, and search owners remain authoritative.
+IPLF-061B owns UJ-22's product-guidance UI, approved help navigation,
+permission explanation, stale-version handling, terminology, and deterministic
+abstention. IPLF-062 owns assistant sessions, turns, citations,
+permission-scoped workspace retrieval, retention, export, and deletion.
+IPLF-064 owns preview/confirm write actions. IPLF-065 owns governed answer
+feedback and safety evaluation. IPLF-066 owns private retrieval plus assistant
+and action analytics. Existing source actions, ModelRun, AI policy, audit,
+record access, Matter, client, IP, document, and search owners remain
+authoritative.
 
-The mechanically allocated AI-GUIDE family spans those later owners. IPLF-061A
-claims no AI-GUIDE requirement or UJ-22 path completion; it provides only the
-bounded technical dependency declared by the manifest.
+The AI-GUIDE family is reciprocally allocated to those owners by behavior,
+rather than mechanically claimed in full by IPLF-061B. IPLF-061A claims no
+AI-GUIDE requirement or UJ-22 path completion; it provides only the bounded
+technical dependency declared by the manifest. UJ-22 remains incomplete after
+the 061B UI is delivered until its governed report/analytics postcondition is
+implemented by the later assigned owners.
 
 ## Verification
 
@@ -74,6 +80,12 @@ latency, OpenAPI generation, Sidebar regression, TypeScript, and Playwright at
 360px and 1280px. The dated production acceptance additionally gates exact API
 and web release identity before checking the live catalog, search contract, and
 responsive `/guide` page.
+
+IPLF-061B adds component and production-build browser proof for direct
+navigation, missing permission, stale content, abstention and suggested search,
+signed-out/unavailable behavior, mixed permitted and denied matches, and the
+360px layout. Its dated production spec is part of the canonical production
+batch.
 
 This slice has no schema or data backfill. Rollback is an application rollback
 to the preceding exact release; there is no database downgrade or cleanup.
