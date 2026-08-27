@@ -342,6 +342,10 @@ def test_workstation_docker_gate_is_migration_first_and_exact_release() -> None:
     assert "CASEOPS_E2E_DOCKER_COMPOSE_FILE" in docker_script
     assert "exec --no-TTY api caseops-db-index-health" in docker_script
     assert "PostgreSQL index health gate failed" in docker_script
+    assert "--memory 512m" in docker_script
+    assert "--memory-swap 512m" in docker_script
+    assert "label=com.docker.compose.network=default" in docker_script
+    assert "exceeded its 512 MiB production job ceiling" in docker_script
 
     assert "globalSetup: undefined" in playwright_config
     assert "webServer: undefined" in playwright_config

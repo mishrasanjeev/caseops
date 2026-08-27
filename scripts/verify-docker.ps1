@@ -90,6 +90,7 @@ try {
         throw "Migration container exited with code $MigrationExitCode."
     }
 
+    $ApiImageId = $null
     foreach ($Service in @("api", "web")) {
         $ImageId = ((& docker compose --project-name $ComposeProject --file $ComposeFile images --quiet $Service | Out-String).Trim())
         $ImageMetadata = (& docker image inspect $ImageId | ConvertFrom-Json)
@@ -97,6 +98,7 @@ try {
         if ($ImageRevision -ne $ReleaseSha) {
             throw "$Service image revision $ImageRevision does not match $ReleaseSha."
         }
+        if ($Service -eq "api") { $ApiImageId = $ImageId }
     }
 
     $ApiHealth = Invoke-RestMethod "http://127.0.0.1:$ApiPort/api/health"
@@ -109,6 +111,31 @@ try {
     Write-Host "[docker-acceptance] verifying complete PostgreSQL index coverage"
     & docker compose --project-name $ComposeProject --file $ComposeFile exec --no-TTY api caseops-db-index-health
     if ($LASTEXITCODE -ne 0) { throw "PostgreSQL index health gate failed." }
+
+    Write-Host "[docker-acceptance] verifying index health within the production job memory ceiling"
+    $AcceptanceNetworkId = ((& docker network ls `
+        --filter "label=com.docker.compose.project=$ComposeProject" `
+        --filter "label=com.docker.compose.network=default" `
+        --format "{{.ID}}" | Out-String).Trim())
+    if (-not $ApiImageId -or -not $AcceptanceNetworkId -or $AcceptanceNetworkId -match "\s") {
+        throw "Could not resolve the exact API image and isolated Compose network."
+    }
+    & docker run --rm `
+        --memory 512m `
+        --memory-swap 512m `
+        --network $AcceptanceNetworkId `
+        --env CASEOPS_ENV=e2e `
+        --env CASEOPS_AUTO_MIGRATE=false `
+        --env CASEOPS_DATABASE_URL=postgresql+psycopg://caseops:caseops@postgres:5432/caseops `
+        --env CASEOPS_DB_STATEMENT_TIMEOUT_MS=60000 `
+        --env CASEOPS_DB_LOCK_TIMEOUT_MS=5000 `
+        --env CASEOPS_DB_IDLE_TRANSACTION_TIMEOUT_MS=60000 `
+        --env CASEOPS_AUTH_SECRET=change-me-change-me-change-me-2026 `
+        $ApiImageId `
+        caseops-db-index-health
+    if ($LASTEXITCODE -ne 0) {
+        throw "PostgreSQL index health exceeded its 512 MiB production job ceiling or failed."
+    }
 
     Write-Host "[docker-acceptance] running Playwright against Docker + PostgreSQL"
     & npx playwright test --config playwright.docker.config.ts --reporter=list @PlaywrightArgs
