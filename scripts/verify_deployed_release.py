@@ -13,6 +13,7 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 
 EXACT_SHA = re.compile(r"^[0-9a-f]{40}$")
+FETCH_TIMEOUT_SECONDS = 5
 
 
 class ReleaseIdentityError(RuntimeError):
@@ -49,7 +50,9 @@ def parse_identity(payload: object, *, expected_service: str) -> ReleaseIdentity
 
 def fetch_identity(url: str, *, expected_service: str) -> ReleaseIdentity:
     request = Request(url, headers={"Accept": "application/json"})
-    with urlopen(request, timeout=15) as response:  # noqa: S310 - fixed operator URLs
+    with urlopen(  # noqa: S310 - fixed operator URLs
+        request, timeout=FETCH_TIMEOUT_SECONDS
+    ) as response:
         if response.status != 200:
             raise ReleaseIdentityError(
                 f"{expected_service} build endpoint returned HTTP {response.status}"
@@ -83,6 +86,17 @@ def verify_pair(
     return api.release_sha
 
 
+def normalize_expected_sha(expected_sha: str | None) -> str | None:
+    if expected_sha is None:
+        return None
+    normalized = expected_sha.strip().lower()
+    if not EXACT_SHA.fullmatch(normalized):
+        raise ReleaseIdentityError(
+            "expected SHA must contain exactly 40 hexadecimal characters"
+        )
+    return normalized
+
+
 def wait_for_release(
     *,
     api_url: str,
@@ -91,9 +105,11 @@ def wait_for_release(
     wait_seconds: int,
     interval_seconds: int,
     fetcher: Callable[..., ReleaseIdentity] = fetch_identity,
+    monotonic: Callable[[], float] = time.monotonic,
+    sleeper: Callable[[float], None] = time.sleep,
 ) -> tuple[ReleaseIdentity, ReleaseIdentity]:
-    deadline = time.monotonic() + wait_seconds
-    last_error: Exception | None = None
+    expected_sha = normalize_expected_sha(expected_sha)
+    deadline = monotonic() + wait_seconds
     while True:
         try:
             api = fetcher(api_url, expected_service="api")
@@ -101,13 +117,12 @@ def wait_for_release(
             verify_pair(api, web, expected_sha=expected_sha)
             return api, web
         except Exception as exc:  # retry network and identity convergence together
-            last_error = exc
-            if time.monotonic() >= deadline:
+            remaining = deadline - monotonic()
+            if remaining <= 0:
                 raise ReleaseIdentityError(
                     f"deployed release did not converge within {wait_seconds}s: {exc}"
                 ) from exc
-            time.sleep(interval_seconds)
-    raise AssertionError(last_error)  # pragma: no cover
+            sleeper(min(float(interval_seconds), remaining))
 
 
 def _parser() -> argparse.ArgumentParser:

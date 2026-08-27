@@ -340,6 +340,8 @@ def test_workstation_docker_gate_is_migration_first_and_exact_release() -> None:
     assert "CASEOPS_E2E_DATABASE_URL" in docker_script
     assert "CASEOPS_E2E_DOCKER_PROJECT" in docker_script
     assert "CASEOPS_E2E_DOCKER_COMPOSE_FILE" in docker_script
+    assert "exec --no-TTY api caseops-db-index-health" in docker_script
+    assert "PostgreSQL index health gate failed" in docker_script
 
     assert "globalSetup: undefined" in playwright_config
     assert "webServer: undefined" in playwright_config
@@ -780,6 +782,8 @@ def _run_deploy_with_fakes(
     traffic_mode: str = "ok",
     expected_tag: str = "abcdef1",
     a0_mode: str | None = None,
+    gh_mode: str = "ok",
+    index_health_mode: str = "ok",
 ) -> subprocess.CompletedProcess[str]:
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir()
@@ -815,7 +819,10 @@ exit 91
         """#!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >> "${FAKE_GCLOUD_LOG}"
-if [[ "$*" == *"artifacts docker images describe"* ]]; then
+if [[ "$*" == *"run jobs execute caseops-db-index-health"* && \
+  "${FAKE_INDEX_HEALTH_MODE}" == "fail" ]]; then
+  exit 56
+elif [[ "$*" == *"artifacts docker images describe"* ]]; then
   printf '%s\n' 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
 elif [[ "$*" == *"run jobs update caseops-ip-qa-bootstrap"* ]]; then
   touch "${FAKE_QA_UPDATED}"
@@ -911,6 +918,16 @@ elif [[ "$*" == *"services describe caseops-api"* && \
 elif [[ "$*" == *"services describe caseops-api"* && \
   "$*" == *"startupProbe.periodSeconds"* ]]; then
   printf '2\n'
+fi
+""",
+    )
+    _write_fake_executable(
+        fake_bin / "gh",
+        """#!/usr/bin/env bash
+set -euo pipefail
+printf 'gh %s\n' "$*" >> "${FAKE_GCLOUD_LOG}"
+if [[ "${FAKE_GH_MODE}" == "fail" ]]; then
+  exit 55
 fi
 """,
     )
@@ -1021,6 +1038,8 @@ exec "${FAKE_REAL_PYTHON}" "$@"
             ),
             "FAKE_GCLOUD_LOG": _bash_path(gcloud_log),
             "FAKE_GIT_STATUS": git_status,
+            "FAKE_GH_MODE": gh_mode,
+            "FAKE_INDEX_HEALTH_MODE": index_health_mode,
             "FAKE_QA_AFTER_JSON": _a0_qa_job_json(
                 immutable_image,
                 5,
@@ -1153,6 +1172,35 @@ def test_deploy_prod_accepts_clean_head_and_healthy_api(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
     assert "DONE abcdef1" in result.stdout
     assert (tmp_path / "gcloud.log").is_file()
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8")
+    assert calls.index("run jobs execute caseops-db-index-health") < calls.index(
+        "run deploy caseops-api"
+    )
+    assert (
+        "gh workflow run prod-verify.yml --repo mishrasanjeev/caseops --ref main "
+        "-f expected_release_sha=abcdef1234567890abcdef1234567890abcdef12"
+    ) in calls
+
+
+def test_deploy_prod_fails_if_exact_release_verification_cannot_be_dispatched(
+    tmp_path: Path,
+) -> None:
+    result = _run_deploy_with_fakes(tmp_path, "abcdef1", gh_mode="fail")
+
+    assert result.returncode != 0
+    assert "DONE abcdef1" not in result.stdout
+
+
+def test_deploy_prod_fails_before_routing_on_database_index_health_failure(
+    tmp_path: Path,
+) -> None:
+    result = _run_deploy_with_fakes(tmp_path, "abcdef1", index_health_mode="fail")
+
+    assert result.returncode != 0
+    assert "DONE abcdef1" not in result.stdout
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8")
+    assert "run jobs execute caseops-db-index-health" in calls
+    assert "run deploy caseops-api" not in calls
 
 
 def test_a0_deploy_captures_final_pre_route_baseline_in_fail_closed_order(
@@ -1172,6 +1220,9 @@ def test_a0_deploy_captures_final_pre_route_baseline_in_fail_closed_order(
         "scheduler_inventory.py reconcile"
     )
     assert call_index("scheduler_inventory.py reconcile") < call_index(
+        "run jobs execute caseops-db-index-health"
+    )
+    assert call_index("run jobs execute caseops-db-index-health") < call_index(
         "run jobs update caseops-ip-qa-bootstrap"
     )
     assert call_index("run jobs update caseops-ip-qa-bootstrap") < call_index(

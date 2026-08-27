@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import defaultdict
+from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 
 from fastapi import HTTPException, status
@@ -408,50 +411,79 @@ def _lock_ip_dockets_in_stable_order(
     return dockets_by_id
 
 
-def _current_particulars(session: Session, docket: IpDocketRecord) -> IpTrademarkParticularVersion:
-    row = session.scalar(
-        select(IpTrademarkParticularVersion).where(
-            IpTrademarkParticularVersion.docket_id == docket.id,
-            IpTrademarkParticularVersion.company_id == docket.company_id,
-            IpTrademarkParticularVersion.version == docket.current_version,
-        )
-    )
-    if row is None:
-        raise RuntimeError("IP docket current version is missing.")
-    return row
+def _group_rows[Row](rows: Iterable[Row], attribute: str) -> dict[str, list[Row]]:
+    grouped: defaultdict[str, list[Row]] = defaultdict(list)
+    for row in rows:
+        grouped[str(getattr(row, attribute))].append(row)
+    return dict(grouped)
 
 
-def _serialize_deadline_incident(
-    session: Session, incident: IpDeadlineIncident
-) -> IpDeadlineIncidentRecord:
+@dataclass(frozen=True, slots=True)
+class _IncidentSerializationRows:
+    impacts: dict[str, list[IpDeadlineIncidentImpact]]
+    actions: dict[str, list[IpDeadlineIncidentAction]]
+    notification_decisions: dict[str, list[IpDeadlineIncidentNotificationDecision]]
+    kill_switches: dict[str, list[IpIncidentKillSwitch]]
+
+
+@dataclass(frozen=True, slots=True)
+class _DocketSerializationRows:
+    particulars: dict[tuple[str, int], IpTrademarkParticularVersion]
+    notice_links: dict[str, list[CompanyNoticeIpLink]]
+    evidence_candidates: dict[str, list[IpEvidenceCandidate]]
+    coverages: dict[str, list[IpDeadlineCoverage]]
+    incidents: dict[str, list[IpDeadlineIncident]]
+    interests: dict[str, list[IpTitleInterest]]
+    obligations: dict[str, list[IpRelatedRightObligation]]
+    costs: dict[str, list[IpCostItem]]
+    incident_rows: _IncidentSerializationRows
+
+
+def _load_incident_serialization_rows(
+    session: Session,
+    *,
+    company_id: str,
+    incident_ids: list[str],
+) -> _IncidentSerializationRows:
+    if not incident_ids:
+        return _IncidentSerializationRows({}, {}, {}, {})
     impacts = list(
         session.scalars(
             select(IpDeadlineIncidentImpact)
             .where(
-                IpDeadlineIncidentImpact.company_id == incident.company_id,
-                IpDeadlineIncidentImpact.incident_id == incident.id,
+                IpDeadlineIncidentImpact.company_id == company_id,
+                IpDeadlineIncidentImpact.incident_id.in_(incident_ids),
             )
-            .order_by(IpDeadlineIncidentImpact.assessed_at, IpDeadlineIncidentImpact.id)
+            .order_by(
+                IpDeadlineIncidentImpact.incident_id,
+                IpDeadlineIncidentImpact.assessed_at,
+                IpDeadlineIncidentImpact.id,
+            )
         ).all()
     )
     actions = list(
         session.scalars(
             select(IpDeadlineIncidentAction)
             .where(
-                IpDeadlineIncidentAction.company_id == incident.company_id,
-                IpDeadlineIncidentAction.incident_id == incident.id,
+                IpDeadlineIncidentAction.company_id == company_id,
+                IpDeadlineIncidentAction.incident_id.in_(incident_ids),
             )
-            .order_by(IpDeadlineIncidentAction.recorded_at, IpDeadlineIncidentAction.id)
+            .order_by(
+                IpDeadlineIncidentAction.incident_id,
+                IpDeadlineIncidentAction.recorded_at,
+                IpDeadlineIncidentAction.id,
+            )
         ).all()
     )
-    notification_decisions = list(
+    decisions = list(
         session.scalars(
             select(IpDeadlineIncidentNotificationDecision)
             .where(
-                IpDeadlineIncidentNotificationDecision.company_id == incident.company_id,
-                IpDeadlineIncidentNotificationDecision.incident_id == incident.id,
+                IpDeadlineIncidentNotificationDecision.company_id == company_id,
+                IpDeadlineIncidentNotificationDecision.incident_id.in_(incident_ids),
             )
             .order_by(
+                IpDeadlineIncidentNotificationDecision.incident_id,
                 IpDeadlineIncidentNotificationDecision.decided_at,
                 IpDeadlineIncidentNotificationDecision.id,
             )
@@ -461,12 +493,147 @@ def _serialize_deadline_incident(
         session.scalars(
             select(IpIncidentKillSwitch)
             .where(
-                IpIncidentKillSwitch.company_id == incident.company_id,
-                IpIncidentKillSwitch.incident_id == incident.id,
+                IpIncidentKillSwitch.company_id == company_id,
+                IpIncidentKillSwitch.incident_id.in_(incident_ids),
             )
-            .order_by(IpIncidentKillSwitch.feature_id)
+            .order_by(IpIncidentKillSwitch.incident_id, IpIncidentKillSwitch.feature_id)
         ).all()
     )
+    return _IncidentSerializationRows(
+        impacts=_group_rows(impacts, "incident_id"),
+        actions=_group_rows(actions, "incident_id"),
+        notification_decisions=_group_rows(decisions, "incident_id"),
+        kill_switches=_group_rows(kill_switches, "incident_id"),
+    )
+
+
+def _load_docket_serialization_rows(
+    session: Session,
+    *,
+    company_id: str,
+    docket_ids: list[str],
+) -> _DocketSerializationRows:
+    if not docket_ids:
+        empty_incidents = _IncidentSerializationRows({}, {}, {}, {})
+        return _DocketSerializationRows({}, {}, {}, {}, {}, {}, {}, {}, empty_incidents)
+    particulars = list(
+        session.scalars(
+            select(IpTrademarkParticularVersion).where(
+                IpTrademarkParticularVersion.company_id == company_id,
+                IpTrademarkParticularVersion.docket_id.in_(docket_ids),
+            )
+        ).all()
+    )
+    notice_links = list(
+        session.scalars(
+            select(CompanyNoticeIpLink)
+            .where(
+                CompanyNoticeIpLink.company_id == company_id,
+                CompanyNoticeIpLink.docket_id.in_(docket_ids),
+            )
+            .order_by(CompanyNoticeIpLink.docket_id, CompanyNoticeIpLink.created_at)
+        ).all()
+    )
+    evidence = list(
+        session.scalars(
+            select(IpEvidenceCandidate)
+            .where(
+                IpEvidenceCandidate.company_id == company_id,
+                IpEvidenceCandidate.docket_id.in_(docket_ids),
+            )
+            .order_by(IpEvidenceCandidate.docket_id, IpEvidenceCandidate.created_at.desc())
+        ).all()
+    )
+    coverages = list(
+        session.scalars(
+            select(IpDeadlineCoverage)
+            .where(
+                IpDeadlineCoverage.company_id == company_id,
+                IpDeadlineCoverage.docket_id.in_(docket_ids),
+            )
+            .order_by(IpDeadlineCoverage.docket_id, IpDeadlineCoverage.created_at)
+        ).all()
+    )
+    incidents = list(
+        session.scalars(
+            select(IpDeadlineIncident)
+            .where(
+                IpDeadlineIncident.company_id == company_id,
+                IpDeadlineIncident.docket_id.in_(docket_ids),
+            )
+            .order_by(IpDeadlineIncident.docket_id, IpDeadlineIncident.created_at.desc())
+        ).all()
+    )
+    interests = list(
+        session.scalars(
+            select(IpTitleInterest)
+            .where(
+                IpTitleInterest.company_id == company_id,
+                IpTitleInterest.docket_id.in_(docket_ids),
+            )
+            .order_by(
+                IpTitleInterest.docket_id,
+                IpTitleInterest.effective_from,
+                IpTitleInterest.created_at,
+            )
+        ).all()
+    )
+    obligations = list(
+        session.scalars(
+            select(IpRelatedRightObligation)
+            .where(
+                IpRelatedRightObligation.company_id == company_id,
+                IpRelatedRightObligation.docket_id.in_(docket_ids),
+            )
+            .order_by(
+                IpRelatedRightObligation.docket_id,
+                IpRelatedRightObligation.due_on,
+                IpRelatedRightObligation.created_at,
+            )
+        ).all()
+    )
+    costs = list(
+        session.scalars(
+            select(IpCostItem)
+            .where(
+                IpCostItem.company_id == company_id,
+                IpCostItem.docket_id.in_(docket_ids),
+            )
+            .order_by(IpCostItem.docket_id, IpCostItem.created_at)
+        ).all()
+    )
+    incident_rows = _load_incident_serialization_rows(
+        session,
+        company_id=company_id,
+        incident_ids=[incident.id for incident in incidents],
+    )
+    return _DocketSerializationRows(
+        particulars={(row.docket_id, row.version): row for row in particulars},
+        notice_links=_group_rows(notice_links, "docket_id"),
+        evidence_candidates=_group_rows(evidence, "docket_id"),
+        coverages=_group_rows(coverages, "docket_id"),
+        incidents=_group_rows(incidents, "docket_id"),
+        interests=_group_rows(interests, "docket_id"),
+        obligations=_group_rows(obligations, "docket_id"),
+        costs=_group_rows(costs, "docket_id"),
+        incident_rows=incident_rows,
+    )
+
+
+def _serialize_deadline_incident(
+    session: Session,
+    incident: IpDeadlineIncident,
+    *,
+    preload: _IncidentSerializationRows | None = None,
+) -> IpDeadlineIncidentRecord:
+    if preload is None:
+        preload = _load_incident_serialization_rows(
+            session, company_id=incident.company_id, incident_ids=[incident.id]
+        )
+    impacts = preload.impacts.get(incident.id, [])
+    actions = preload.actions.get(incident.id, [])
+    notification_decisions = preload.notification_decisions.get(incident.id, [])
+    kill_switches = preload.kill_switches.get(incident.id, [])
     return IpDeadlineIncidentRecord.model_validate(incident).model_copy(
         update={
             "impacts": [IpDeadlineIncidentImpactRecord.model_validate(row) for row in impacts],
@@ -488,6 +655,7 @@ def _serialize_docket(
     *,
     context: SessionContext,
     may_read_rates: bool | None = None,
+    preload: _DocketSerializationRows | None = None,
 ) -> IpDocketRecordResponse:
     """Serialize a docket for one specific reader.
 
@@ -502,59 +670,20 @@ def _serialize_docket(
     it properly rather than assuming either answer.
     """
 
-    particulars = _current_particulars(session, docket)
-    notice_links = list(
-        session.scalars(
-            select(CompanyNoticeIpLink)
-            .where(CompanyNoticeIpLink.docket_id == docket.id)
-            .order_by(CompanyNoticeIpLink.created_at)
-        ).all()
-    )
-    evidence_candidates = list(
-        session.scalars(
-            select(IpEvidenceCandidate)
-            .where(IpEvidenceCandidate.docket_id == docket.id)
-            .order_by(IpEvidenceCandidate.created_at.desc())
-        ).all()
-    )
-    coverages = list(
-        session.scalars(
-            select(IpDeadlineCoverage)
-            .where(IpDeadlineCoverage.docket_id == docket.id)
-            .order_by(IpDeadlineCoverage.created_at)
-        ).all()
-    )
-    incidents = list(
-        session.scalars(
-            select(IpDeadlineIncident)
-            .where(IpDeadlineIncident.docket_id == docket.id)
-            .order_by(IpDeadlineIncident.created_at.desc())
-        ).all()
-    )
-    interests = list(
-        session.scalars(
-            select(IpTitleInterest)
-            .where(IpTitleInterest.docket_id == docket.id)
-            .order_by(IpTitleInterest.effective_from, IpTitleInterest.created_at)
-        ).all()
-    )
-    obligations = list(
-        session.scalars(
-            select(IpRelatedRightObligation)
-            .where(IpRelatedRightObligation.docket_id == docket.id)
-            .order_by(
-                IpRelatedRightObligation.due_on,
-                IpRelatedRightObligation.created_at,
-            )
-        ).all()
-    )
-    costs = list(
-        session.scalars(
-            select(IpCostItem)
-            .where(IpCostItem.docket_id == docket.id)
-            .order_by(IpCostItem.created_at)
-        ).all()
-    )
+    if preload is None:
+        preload = _load_docket_serialization_rows(
+            session, company_id=docket.company_id, docket_ids=[docket.id]
+        )
+    particulars = preload.particulars.get((docket.id, docket.current_version))
+    if particulars is None:
+        raise RuntimeError("IP docket current version is missing.")
+    notice_links = preload.notice_links.get(docket.id, [])
+    evidence_candidates = preload.evidence_candidates.get(docket.id, [])
+    coverages = preload.coverages.get(docket.id, [])
+    incidents = preload.incidents.get(docket.id, [])
+    interests = preload.interests.get(docket.id, [])
+    obligations = preload.obligations.get(docket.id, [])
+    costs = preload.costs.get(docket.id, [])
     if may_read_rates is None:
         may_read_rates = _may_read_confidential_rates(session, context=context)
     return IpDocketRecordResponse(
@@ -582,7 +711,10 @@ def _serialize_docket(
             IpEvidenceCandidateRecord.model_validate(row) for row in evidence_candidates
         ],
         deadline_coverages=[IpDeadlineCoverageRecord.model_validate(row) for row in coverages],
-        deadline_incidents=[_serialize_deadline_incident(session, row) for row in incidents],
+        deadline_incidents=[
+            _serialize_deadline_incident(session, row, preload=preload.incident_rows)
+            for row in incidents
+        ],
         title_interests=[IpTitleInterestRecord.model_validate(row) for row in interests],
         related_right_obligations=[
             IpRelatedRightObligationRecord.model_validate(row) for row in obligations
@@ -875,32 +1007,46 @@ def append_ip_docket_version(
     return _serialize_docket(session, docket, context=context)
 
 
-def list_ip_dockets(session: Session, *, context: SessionContext) -> IpDocketListResponse:
+def list_ip_dockets(
+    session: Session, *, context: SessionContext, limit: int = 100
+) -> IpDocketListResponse:
     rows = list(
         session.scalars(
             select(IpDocketRecord)
             .where(
                 IpDocketRecord.company_id == context.company.id,
+                IpDocketRecord.is_active.is_(True),
+                IpDocketRecord.archived_by_matter_disposal.is_(False),
                 visible_ip_dockets_filter(session, context=context),
             )
-            .order_by(IpDocketRecord.updated_at.desc())
+            .order_by(IpDocketRecord.updated_at.desc(), IpDocketRecord.id.desc())
+            .limit(limit + 1)
         ).all()
     )
+    has_more = len(rows) > limit
+    rows = rows[:limit]
     # One reader, one capability resolution - not one per docket in the list.
     may_read_rates = _may_read_confidential_rates(session, context=context)
-    visible: list[IpDocketRecordResponse] = []
-    for row in rows:
-        if row.archived_by_matter_disposal or not row.is_active:
-            continue
-        visible.append(
-            _serialize_docket(
-                session,
-                row,
-                context=context,
-                may_read_rates=may_read_rates,
-            )
+    preload = _load_docket_serialization_rows(
+        session,
+        company_id=context.company.id,
+        docket_ids=[row.id for row in rows],
+    )
+    visible = [
+        _serialize_docket(
+            session,
+            row,
+            context=context,
+            may_read_rates=may_read_rates,
+            preload=preload,
         )
-    return IpDocketListResponse(dockets=visible, count=len(visible))
+        for row in rows
+    ]
+    return IpDocketListResponse(
+        dockets=visible,
+        count=len(visible),
+        has_more=has_more,
+    )
 
 
 def get_ip_docket(

@@ -29,6 +29,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 
 from caseops_api.core.observability import ensure_request_id, get_request_id
 
@@ -131,6 +133,7 @@ STATUS_TITLES: dict[int, str] = {
     422: "Unprocessable content",
     429: "Too many requests",
     503: "Service unavailable",
+    504: "Gateway timeout",
     500: "Internal server error",
 }
 
@@ -330,6 +333,48 @@ def register_problem_handlers(application: FastAPI) -> None:
             422,
             detail=exc.errors(),
             request=request,
+        )
+
+    @application.exception_handler(SQLAlchemyTimeoutError)
+    async def _database_pool_timeout(
+        request: Request, _exc: SQLAlchemyTimeoutError
+    ) -> JSONResponse:
+        return problem_json(
+            503,
+            detail="Database capacity is temporarily unavailable. Retry the request.",
+            request=request,
+            headers={"Retry-After": "1"},
+            problem_type="database_capacity_exhausted",
+        )
+
+    @application.exception_handler(OperationalError)
+    async def _database_operational_error(
+        request: Request, exc: OperationalError
+    ) -> JSONResponse:
+        sqlstate = getattr(exc.orig, "sqlstate", None) or getattr(
+            exc.orig, "pgcode", None
+        )
+        if sqlstate == "57014":
+            return problem_json(
+                504,
+                detail="The database operation exceeded its request deadline.",
+                request=request,
+                problem_type="database_statement_timeout",
+            )
+        if sqlstate == "55P03":
+            return problem_json(
+                503,
+                detail="The requested database record is busy. Retry the request.",
+                request=request,
+                headers={"Retry-After": "1"},
+                problem_type="database_lock_timeout",
+            )
+        return problem_json(
+            503,
+            detail="The database is temporarily unavailable. Retry the request.",
+            request=request,
+            headers={"Retry-After": "1"},
+            problem_type="database_temporarily_unavailable",
         )
 
     @application.exception_handler(Exception)

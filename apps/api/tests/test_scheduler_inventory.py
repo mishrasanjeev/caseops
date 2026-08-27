@@ -45,6 +45,14 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
     )
     assert watch_job["bootstrap"]["command"] == ["uv"]
     assert watch_job["bootstrap"]["args"] == ["run", "caseops-ip-journal-watch"]
+    index_job = next(
+        job
+        for job in inventory["jobs"]
+        if job["run_job_name"] == "caseops-db-index-health"
+    )
+    assert index_job["task_timeout_seconds"] == 600
+    assert index_job["bootstrap"]["args"] == ["run", "caseops-db-index-health"]
+    assert index_job["bootstrap"]["max_retries"] == 0
     mapping_job = next(
         job
         for job in inventory["jobs"]

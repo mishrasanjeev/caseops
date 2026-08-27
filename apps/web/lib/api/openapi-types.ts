@@ -23213,6 +23213,11 @@ export interface components {
             count: number;
             /** Dockets */
             dockets: components["schemas"]["IpDocketRecordResponse"][];
+            /**
+             * Has More
+             * @default false
+             */
+            has_more: boolean;
         };
         /** IpDocketMatterLinkListResponse */
         IpDocketMatterLinkListResponse: {
@@ -50918,7 +50923,9 @@ export interface operations {
     };
     get_ip_dockets_api_ip_dockets_get: {
         parameters: {
-            query?: never;
+            query?: {
+                limit?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -50932,6 +50939,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpDocketListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

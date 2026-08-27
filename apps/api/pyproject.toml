@@ -87,6 +87,7 @@ caseops-send-activity-report = "caseops_api.scripts.send_activity_report:main"
 caseops-verify-calendar-provider-sandbox = "caseops_api.scripts.verify_calendar_provider_sandbox:main"
 caseops-ip-journal-watch = "caseops_api.scripts.run_ip_journal_watch:main"
 caseops-refresh-bench-analysis-layers = "caseops_api.scripts.refresh_bench_analysis_layers:main"
+caseops-db-index-health = "caseops_api.scripts.check_database_indexes:main"
 
 [dependency-groups]
 dev = [

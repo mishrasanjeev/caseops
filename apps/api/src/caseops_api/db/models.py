@@ -32,6 +32,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship
 
 from caseops_api.db.base import Base
+from caseops_api.db.index_coverage import ensure_foreign_key_indexes
 
 
 def utcnow() -> datetime:
@@ -14780,6 +14781,13 @@ class IpDocketRecord(Base):
             name="uq_ip_docket_company_identifier",
         ),
         Index("ix_ip_docket_company_status", "company_id", "status"),
+        Index(
+            "ix_ip_docket_records_company_active_updated",
+            "company_id",
+            "is_active",
+            "updated_at",
+            "id",
+        ),
         CheckConstraint(
             "(status IN ('archived', 'abandoned', 'transferred', 'retired', 'closed') "
             "AND is_active = false) OR "
@@ -19754,3 +19762,8 @@ class IpDocketQueue(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )
+
+
+# PostgreSQL does not create indexes for referencing foreign-key columns. Keep
+# model-created schemas and migration-created schemas on the same coverage contract.
+ensure_foreign_key_indexes(Base.metadata)

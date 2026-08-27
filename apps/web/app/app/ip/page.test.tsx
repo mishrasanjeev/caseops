@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -547,6 +548,10 @@ describe("IpDocketPage", () => {
 
     render(withClient(<IpDocketPage />));
 
+    expect(fetchIpSharedHearingsMock).not.toHaveBeenCalled();
+    await userEvent.click(
+      await screen.findByRole("tab", { name: "Hearings and deadlines" }),
+    );
     const workflow = await screen.findByTestId("ip-hearing-workflow");
     expect(await within(workflow).findByText(/Time confirmation pending/)).toBeVisible();
     expect(within(workflow).getByText("Superseded by generation 2")).toBeVisible();
@@ -577,6 +582,22 @@ describe("IpDocketPage", () => {
     expect(fetchIpSharedHearingsMock).toHaveBeenCalledTimes(1);
   });
 
+  it("links to the complete portfolio when the bounded docket list has more records", async () => {
+    fetchIpDocketsMock.mockResolvedValue({
+      dockets: [activeDocket()],
+      count: 1,
+      has_more: true,
+    });
+
+    render(withClient(<IpDocketPage />));
+
+    expect(await screen.findByText("Showing the 100 most recently updated records.")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Open full portfolio" })).toHaveAttribute(
+      "href",
+      "/app/ip/portfolio",
+    );
+  });
+
   it("renders created reminder delivery from the mutation without a list refetch", async () => {
     const returned = unknownTimeHearing();
     const currentReminder = returned.reminders[1];
@@ -593,6 +614,10 @@ describe("IpDocketPage", () => {
 
     render(withClient(<IpDocketPage />));
 
+    expect(fetchIpSharedHearingsMock).not.toHaveBeenCalled();
+    await userEvent.click(
+      await screen.findByRole("tab", { name: "Hearings and deadlines" }),
+    );
     const workflow = await screen.findByTestId("ip-hearing-workflow");
     await waitFor(() => expect(fetchIpSharedHearingsMock).toHaveBeenCalledTimes(1));
     fireEvent.click(within(workflow).getByRole("button", {
@@ -973,10 +998,16 @@ describe("IpDocketPage", () => {
     expect(screen.getByRole("button", { name: "Add recordal obligation" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Reconcile with Matter billing" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Open incident" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Preview prosecution event" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Record prosecution event" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Preview lifecycle impact" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Apply lifecycle transition" })).toBeVisible();
+
+    await userEvent.click(screen.getByRole("tab", { name: "Proceedings" }));
+    expect(screen.getByRole("button", { name: "Preview prosecution event" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Record prosecution event" })).toBeVisible();
+
+    await userEvent.click(
+      screen.getByRole("tab", { name: "Hearings and deadlines" }),
+    );
     expect(screen.getByRole("button", { name: "Calculate deadline proposal" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Propose calendar version" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Propose rule and fixture" })).toBeVisible();
@@ -997,7 +1028,9 @@ describe("IpDocketPage", () => {
       }),
     ).toBeVisible();
     expect(within(hearingWorkflow).getByRole("button", { name: "Edit details" })).toBeVisible();
-    const documentWorkspace = screen.getByTestId("ip-document-workspace");
+
+    await userEvent.click(screen.getByRole("tab", { name: "Documents" }));
+    const documentWorkspace = await screen.findByTestId("ip-document-workspace");
     expect(within(documentWorkspace).getByLabelText("Original file")).toBeVisible();
     expect(within(documentWorkspace).getByRole("button", { name: "Preview controlled name" })).toBeVisible();
     expect(within(documentWorkspace).getByRole("button", { name: "Upload reviewed document" })).toBeVisible();
@@ -1122,6 +1155,10 @@ describe("IpDocketPage", () => {
 
     render(withClient(<IpDocketPage />));
 
+    expect(fetchIpDeadlineWorkspaceMock).not.toHaveBeenCalled();
+    await userEvent.click(
+      await screen.findByRole("tab", { name: "Hearings and deadlines" }),
+    );
     const deadlineWorkspace = await screen.findByTestId("ip-deadline-workspace");
     expect(await within(deadlineWorkspace).findByText("Exception queue")).toBeVisible();
     expect(within(deadlineWorkspace).getByText("unowned Â· unacknowledged")).toBeVisible();
@@ -1184,6 +1221,7 @@ describe("IpDocketPage", () => {
 
     render(withClient(<IpDocketPage />));
 
+    await userEvent.click(await screen.findByRole("tab", { name: "Proceedings" }));
     const prosecution = await screen.findByTestId("ip-prosecution-workspace");
     const record = within(prosecution).getByRole("button", { name: "Record prosecution event" });
     expect(record).toBeDisabled();
@@ -1196,7 +1234,8 @@ describe("IpDocketPage", () => {
     fireEvent.click(record);
     await waitFor(() => expect(appendIpDocketEventMock).toHaveBeenCalledTimes(1));
 
-    const lifecycle = screen.getByTestId("ip-lifecycle-workflow");
+    await userEvent.click(screen.getByRole("tab", { name: "Overview" }));
+    const lifecycle = await screen.findByTestId("ip-lifecycle-workflow");
     const apply = within(lifecycle).getByRole("button", { name: "Apply lifecycle transition" });
     fireEvent.change(within(lifecycle).getByLabelText("Reason"), { target: { value: "Client instructed closure." } });
     fireEvent.change(within(lifecycle).getByLabelText("Outcome"), { target: { value: "closed" } });
@@ -1235,6 +1274,7 @@ describe("IpDocketPage", () => {
     });
 
     render(withClient(<IpDocketPage />));
+    await userEvent.click(await screen.findByRole("tab", { name: "Proceedings" }));
     const prosecution = await screen.findByTestId("ip-prosecution-workspace");
     fireEvent.click(await within(prosecution).findByRole("button", { name: "Correct event" }));
     fireEvent.change(within(prosecution).getByLabelText("Correction reason"), {
@@ -1284,6 +1324,7 @@ describe("IpDocketPage", () => {
     });
 
     render(withClient(<IpDocketPage />));
+    await userEvent.click(await screen.findByRole("tab", { name: "Proceedings" }));
     const prosecution = await screen.findByTestId("ip-prosecution-workspace");
     fireEvent.click(await within(prosecution).findByRole("button", { name: "Reconcile candidate" }));
     fireEvent.click(within(prosecution).getByRole("button", { name: "Preview prosecution event" }));

@@ -2150,8 +2150,12 @@ async def post_ip_control_review_sign_off(
 
 
 @router.get("/dockets", response_model=IpDocketListResponse)
-async def get_ip_dockets(context: IpViewer, session: DbSession) -> IpDocketListResponse:
-    return list_ip_dockets(session, context=context)
+async def get_ip_dockets(
+    context: IpViewer,
+    session: DbSession,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+) -> IpDocketListResponse:
+    return list_ip_dockets(session, context=context, limit=limit)
 
 
 @router.get("/portfolio", response_model=IpPortfolioListResponse)

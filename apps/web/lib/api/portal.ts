@@ -13,7 +13,7 @@
  * POST/PUT/PATCH/DELETE; reads stay header-free.
  */
 import { API_BASE_URL } from "@/lib/api/config";
-import { apiRequest } from "@/lib/api/client";
+import { apiRequest, fetchWithTimeout } from "@/lib/api/client";
 
 const PORTAL_CSRF_COOKIE = "caseops_portal_csrf";
 const PORTAL_CSRF_HEADER = "X-Portal-CSRF-Token";
@@ -32,7 +32,7 @@ async function portalMutate<T>(path: string, body: unknown): Promise<T> {
   const csrf = readPortalCsrfCookie();
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (csrf) headers[PORTAL_CSRF_HEADER] = csrf;
-  const resp = await fetch(`${API_BASE_URL}${path}`, {
+  const resp = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
     method: "POST",
     credentials: "include",
     headers,
@@ -475,7 +475,7 @@ async function portalMultipartPost<T>(path: string, form: FormData): Promise<T> 
   const csrf = readPortalCsrfCookie();
   const headers: Record<string, string> = {};
   if (csrf) headers[PORTAL_CSRF_HEADER] = csrf;
-  const resp = await fetch(`${API_BASE_URL}${path}`, {
+  const resp = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
     method: "POST",
     credentials: "include",
     headers,

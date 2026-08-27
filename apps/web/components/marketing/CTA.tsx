@@ -6,6 +6,7 @@ import type { FormEvent } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
+import { fetchWithTimeout } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
 import { siteConfig } from "@/lib/site";
 
@@ -25,11 +26,15 @@ export function CTA() {
     const payload = Object.fromEntries(data.entries());
 
     try {
-      const res = await fetch("/api/demo-request", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const res = await fetchWithTimeout(
+        "/api/demo-request",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+        15_000,
+      );
       if (!res.ok) {
         throw new Error("Request failed");
       }
