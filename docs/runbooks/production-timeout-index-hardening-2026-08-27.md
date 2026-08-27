@@ -212,6 +212,25 @@ canonical byte comparison. This keeps stale or hand-edited content fail-closed
 while allowing the same committed generated JSON to pass on Windows Git
 checkouts and Linux CI runners.
 
+## Browser transport contract
+
+PR `#367` initially completed 165 Playwright cases before one lifecycle
+verification GET failed with `ECONNRESET`; the API logged no exception or
+shutdown and the following 22 cases passed. The request had not reached
+FastAPI, so this was a stale or reset keep-alive transport, not a failed legal
+state transition.
+
+- July 22 local and production lifecycle verification GETs allow at most two
+  Playwright network retries. Playwright limits this option to `ECONNRESET` and
+  does not retry HTTP response codes.
+- Mutation requests are never transport-retried. Every lifecycle write remains
+  single-attempt and protected by expected status, timestamp, and lifecycle
+  state assertions.
+- A retried GET must still return the exact expected HTTP status and persisted
+  legal state. Retry exhaustion remains a hard test failure.
+- The focused serial lifecycle flow must pass ten complete repetitions before
+  the PR is updated, followed by the exact-commit Docker and CI browser gates.
+
 ## Operator sequence
 
 1. Merge only after local API, web, migration, Docker/PostgreSQL, index-health,

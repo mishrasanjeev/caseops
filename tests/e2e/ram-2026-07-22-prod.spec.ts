@@ -34,6 +34,7 @@ const TESTER_EMAIL = envOr(
   "CASEOPS_RAM_PROD_EMAIL",
   "hari.gupta@gmail.com",
 );
+const IDEMPOTENT_NETWORK_RETRIES = 2;
 const RUN_ID = `${Date.now().toString(36)}-${Math.random()
   .toString(36)
   .slice(2, 8)}`.toUpperCase();
@@ -129,7 +130,10 @@ async function signInAsTester(): Promise<void> {
 
   const meResponse = await context.request.get(
     `${PROD_API_BASE_URL}/api/auth/me`,
-    { headers: await authHeaders() },
+    {
+      headers: await authHeaders(),
+      maxRetries: IDEMPOTENT_NETWORK_RETRIES,
+    },
   );
   await expectStatus(meResponse, 200, "read tester auth context");
   const auth = (await meResponse.json()) as AuthContext;
@@ -181,7 +185,10 @@ async function createMatter(
 async function getMatter(matterId: string): Promise<MatterRecord> {
   const response = await context.request.get(
     `${PROD_API_BASE_URL}/api/matters/${matterId}`,
-    { headers: await authHeaders() },
+    {
+      headers: await authHeaders(),
+      maxRetries: IDEMPOTENT_NETWORK_RETRIES,
+    },
   );
   await expectStatus(response, 200, `read matter ${matterId}`);
   return (await response.json()) as MatterRecord;
@@ -210,6 +217,7 @@ async function discoverRunMatters(): Promise<MatterRecord[]> {
     `${PROD_API_BASE_URL}/api/matters/`,
     {
       headers: await authHeaders(),
+      maxRetries: IDEMPOTENT_NETWORK_RETRIES,
       params: { q: RUN_ID, limit: 100 },
     },
   );
