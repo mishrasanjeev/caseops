@@ -50,6 +50,7 @@ from caseops_api.api.routes import (
     source_actions,
     statutes,
     teams,
+    workspace_assistant,
 )
 
 api_router = APIRouter()
@@ -96,6 +97,11 @@ api_router.include_router(
 api_router.include_router(case_tracking.router, prefix="/case-tracking", tags=["case-tracking"])
 api_router.include_router(cause_lists.router, prefix="/cause-lists", tags=["cause-lists"])
 api_router.include_router(ai.router, prefix="/ai", tags=["ai"])
+api_router.include_router(
+    workspace_assistant.router,
+    prefix="/workspace-assistant",
+    tags=["workspace-assistant"],
+)
 api_router.include_router(recommendations.router, tags=["recommendations"])
 api_router.include_router(conflicts.router, tags=["conflicts"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])

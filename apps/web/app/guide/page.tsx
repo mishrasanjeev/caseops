@@ -1771,6 +1771,18 @@ export default function GuidePage() {
                       to the matter currently open in another tab.
                     </li>
                     <li>
+                      <strong>Ask this Workspace.</strong> Open <code>/app/assistant</code>,
+                      search for the permitted client, matter, docket, IP right, proceeding,
+                      or document records you want to include, and apply that explicit scope.
+                      Answers show exact record citations and source links. The assistant
+                      abstains when permitted verified evidence is insufficient and routes
+                      legal-proposition research back here. It can suggest navigation,
+                      searches, drafts, tasks, or field updates, but it does not execute a
+                      write without the separate preview-and-confirm workflow. Conversations
+                      can be exported, archived, or cleared; destructive deletion remains
+                      blocked until legal-hold-aware retention is implemented.
+                    </li>
+                    <li>
                       <strong>Licensed source.</strong> Indian Kanoon access is disabled by
                       default. Contract and terms approval, server-only credentials,
                       permitted uses, retention, legal coverage, approved actual cost

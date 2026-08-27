@@ -12122,6 +12122,144 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/workspace-assistant/scope-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Find currently permitted records for an explicit assistant scope. */
+        get: operations["get_assistant_scope_options_api_workspace_assistant_scope_options_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspace-assistant/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the signed-in user's bounded assistant session history. */
+        get: operations["get_assistant_sessions_api_workspace_assistant_sessions_get"];
+        put?: never;
+        /** Create a permission-scoped workspace assistant session. */
+        post: operations["post_assistant_session_api_workspace_assistant_sessions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspace-assistant/sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a session after reauthorizing every active scope. */
+        get: operations["get_assistant_session_route_api_workspace_assistant_sessions__session_id__get"];
+        put?: never;
+        post?: never;
+        /** Apply the governed assistant-session deletion boundary. */
+        delete: operations["delete_assistant_session_api_workspace_assistant_sessions__session_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspace-assistant/sessions/{session_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Archive a session without deleting retained legal work product. */
+        post: operations["post_assistant_session_archive_api_workspace_assistant_sessions__session_id__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspace-assistant/sessions/{session_id}/ask": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Answer from explicit, currently permitted workspace scopes. */
+        post: operations["post_assistant_question_api_workspace_assistant_sessions__session_id__ask_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspace-assistant/sessions/{session_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export a retained session after current permission checks. */
+        get: operations["get_assistant_session_export_api_workspace_assistant_sessions__session_id__export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspace-assistant/sessions/{session_id}/scopes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Atomically replace active scopes with optimistic concurrency. */
+        put: operations["put_assistant_session_scopes_api_workspace_assistant_sessions__session_id__scopes_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspace-assistant/sessions/{session_id}/turns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List retained turns after citation reauthorization. */
+        get: operations["get_assistant_turns_api_workspace_assistant_sessions__session_id__turns_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -12677,6 +12815,302 @@ export interface components {
             recommended_edits: string[];
             /** Weak Evidence Paths */
             weak_evidence_paths: string[];
+        };
+        /** AssistantAskRequest */
+        AssistantAskRequest: {
+            /** Expected Version */
+            expected_version: number;
+            /** Question */
+            question: string;
+        };
+        /** AssistantAskResponse */
+        AssistantAskResponse: {
+            assistant_turn: components["schemas"]["AssistantTurnRecord"];
+            session: components["schemas"]["AssistantSessionRecord"];
+            user_turn: components["schemas"]["AssistantTurnRecord"];
+        };
+        /** AssistantCitationRecord */
+        AssistantCitationRecord: {
+            /** Excerpt */
+            excerpt: string | null;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Ordinal */
+            ordinal: number;
+            /** Source Id */
+            source_id: string;
+            /** Source Sha256 */
+            source_sha256: string | null;
+            /** Source Type */
+            source_type: string;
+            /** Source Url */
+            source_url: string | null;
+            /** Source Version */
+            source_version: string;
+            /** Verified At */
+            verified_at: string | null;
+        };
+        /** AssistantModelMetadata */
+        AssistantModelMetadata: {
+            /** Completion Tokens */
+            completion_tokens: number;
+            /** Latency Ms */
+            latency_ms: number;
+            /** Model */
+            model: string;
+            /** Prompt Tokens */
+            prompt_tokens: number;
+            /** Provider */
+            provider: string;
+            /** Purpose */
+            purpose: string;
+            /** Run Id */
+            run_id: string;
+            /** Status */
+            status: string;
+        };
+        /** AssistantProposedAction */
+        AssistantProposedAction: {
+            /**
+             * Action Type
+             * @enum {string}
+             */
+            action_type: "navigation" | "search" | "draft" | "task" | "field_update";
+            /**
+             * Execution Available
+             * @default false
+             */
+            execution_available: boolean;
+            /** Href */
+            href?: string | null;
+            /** Instruction */
+            instruction?: string | null;
+            /** Label */
+            label: string;
+            /** Proposal Id */
+            proposal_id: string;
+            /** Requires Confirmation */
+            requires_confirmation: boolean;
+            /** Target Id */
+            target_id?: string | null;
+            /** Target Type */
+            target_type?: string | null;
+        };
+        /** AssistantScopeInput */
+        AssistantScopeInput: {
+            /** Scope Id */
+            scope_id: string;
+            /**
+             * Scope Type
+             * @enum {string}
+             */
+            scope_type: "tenant" | "client" | "matter" | "ip_docket" | "ip_asset" | "trademark_application" | "ip_proceeding" | "matter_document" | "ip_document";
+        };
+        /** AssistantScopeOption */
+        AssistantScopeOption: {
+            /** Href */
+            href: string;
+            /** Label */
+            label: string;
+            /** Resource Version */
+            resource_version: string;
+            /** Scope Id */
+            scope_id: string;
+            /**
+             * Scope Type
+             * @enum {string}
+             */
+            scope_type: "tenant" | "client" | "matter" | "ip_docket" | "ip_asset" | "trademark_application" | "ip_proceeding" | "matter_document" | "ip_document";
+            /** Secondary Text */
+            secondary_text: string | null;
+        };
+        /** AssistantScopeRecord */
+        AssistantScopeRecord: {
+            /** Ordinal */
+            ordinal: number;
+            /** Resource Version */
+            resource_version: string | null;
+            /** Scope Id */
+            scope_id: string;
+            /**
+             * Scope Type
+             * @enum {string}
+             */
+            scope_type: "tenant" | "client" | "matter" | "ip_docket" | "ip_asset" | "trademark_application" | "ip_proceeding" | "matter_document" | "ip_document";
+        };
+        /** AssistantScopeReplaceRequest */
+        AssistantScopeReplaceRequest: {
+            /** Expected Version */
+            expected_version: number;
+            /** Scopes */
+            scopes: components["schemas"]["AssistantScopeInput"][];
+        };
+        /** AssistantScopeSearchResponse */
+        AssistantScopeSearchResponse: {
+            /** Items */
+            items: components["schemas"]["AssistantScopeOption"][];
+            /** Query */
+            query: string;
+            /** Truncated */
+            truncated: boolean;
+        };
+        /** AssistantSessionArchiveRequest */
+        AssistantSessionArchiveRequest: {
+            /** Expected Version */
+            expected_version: number;
+        };
+        /** AssistantSessionCreateRequest */
+        AssistantSessionCreateRequest: {
+            /** Scopes */
+            scopes: components["schemas"]["AssistantScopeInput"][];
+            /** Title */
+            title: string;
+        };
+        /** AssistantSessionExportResponse */
+        AssistantSessionExportResponse: {
+            /**
+             * Exported At
+             * Format: date-time
+             */
+            exported_at: string;
+            /** Retention Disposition */
+            retention_disposition: string;
+            /** Schema Version */
+            schema_version: number;
+            session: components["schemas"]["AssistantSessionRecord"];
+            /** Turns */
+            turns: components["schemas"]["AssistantTurnRecord"][];
+        };
+        /** AssistantSessionListResponse */
+        AssistantSessionListResponse: {
+            /** Has More */
+            has_more: boolean;
+            /** Items */
+            items: components["schemas"]["AssistantSessionSummary"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
+        /** AssistantSessionRecord */
+        AssistantSessionRecord: {
+            /** Archived At */
+            archived_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Policy Version */
+            policy_version: number;
+            /**
+             * Retention Expires At
+             * Format: date-time
+             */
+            retention_expires_at: string;
+            /**
+             * Scope State
+             * @enum {string}
+             */
+            scope_state: "current" | "permission_changed";
+            /** Scopes */
+            scopes: components["schemas"]["AssistantScopeRecord"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "archived";
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version */
+            version: number;
+        };
+        /** AssistantSessionSummary */
+        AssistantSessionSummary: {
+            /** Archived At */
+            archived_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /**
+             * Retention Expires At
+             * Format: date-time
+             */
+            retention_expires_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "archived";
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version */
+            version: number;
+        };
+        /** AssistantTurnListResponse */
+        AssistantTurnListResponse: {
+            /** Has More */
+            has_more: boolean;
+            /** Items */
+            items: components["schemas"]["AssistantTurnRecord"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
+        /** AssistantTurnRecord */
+        AssistantTurnRecord: {
+            /** Citations */
+            citations: components["schemas"]["AssistantCitationRecord"][];
+            /** Content */
+            content: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            model: components["schemas"]["AssistantModelMetadata"] | null;
+            /** Proposed Actions */
+            proposed_actions: components["schemas"]["AssistantProposedAction"][];
+            /**
+             * Render Status
+             * @enum {string}
+             */
+            render_status: "visible" | "permission_changed";
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "user" | "assistant";
+            /** Sequence */
+            sequence: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "completed" | "abstained" | "failed" | "cancelled";
+            /** Suggested Searches */
+            suggested_searches: string[];
         };
         /**
          * AuditExportAsyncRequest
@@ -40079,22 +40513,35 @@ export interface components {
         };
         /** TenantAIPolicyPatchRequest */
         TenantAIPolicyPatchRequest: {
+            /** Allowed Models Assistant */
+            allowed_models_assistant?: string[] | null;
+            /** Assistant Retention Days */
+            assistant_retention_days?: number | null;
             /** Disabled Template Types */
             disabled_template_types?: string[] | null;
+            /** Expected Version */
+            expected_version?: number | null;
             /** Predictive Bench Strategy Enabled */
             predictive_bench_strategy_enabled?: boolean | null;
+            /** Workspace Assistant Enabled */
+            workspace_assistant_enabled?: boolean | null;
         };
         /** TenantAIPolicyResponse */
         TenantAIPolicyResponse: {
+            /** Allowed Models Assistant */
+            allowed_models_assistant?: string[];
+            /** Assistant Retention Days */
+            assistant_retention_days: number;
             /** Company Id */
             company_id: string;
-            /**
-             * Disabled Template Types
-             * @default []
-             */
-            disabled_template_types: string[];
+            /** Disabled Template Types */
+            disabled_template_types?: string[];
+            /** Policy Version */
+            policy_version: number;
             /** Predictive Bench Strategy Enabled */
             predictive_bench_strategy_enabled: boolean;
+            /** Workspace Assistant Enabled */
+            workspace_assistant_enabled: boolean;
         };
         /** TenantConnectorRecord */
         TenantConnectorRecord: {
@@ -66264,6 +66711,334 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WebhookAckResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_assistant_scope_options_api_workspace_assistant_scope_options_get: {
+        parameters: {
+            query: {
+                limit?: number;
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantScopeSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_assistant_sessions_api_workspace_assistant_sessions_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                status?: ("active" | "archived") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantSessionListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_assistant_session_api_workspace_assistant_sessions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantSessionCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantSessionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_assistant_session_route_api_workspace_assistant_sessions__session_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantSessionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_assistant_session_api_workspace_assistant_sessions__session_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_assistant_session_archive_api_workspace_assistant_sessions__session_id__archive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantSessionArchiveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantSessionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_assistant_question_api_workspace_assistant_sessions__session_id__ask_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantAskRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantAskResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_assistant_session_export_api_workspace_assistant_sessions__session_id__export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantSessionExportResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_assistant_session_scopes_api_workspace_assistant_sessions__session_id__scopes_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantScopeReplaceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantSessionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_assistant_turns_api_workspace_assistant_sessions__session_id__turns_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantTurnListResponse"];
                 };
             };
             /** @description Validation Error */

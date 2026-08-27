@@ -38,7 +38,7 @@ test("IPLF-061A production proves the exact versioned guide foundation", async (
   const catalogResponse = await page.request.get(`${API}/api/product-guide/catalog`);
   await expectStatus(catalogResponse, 200, "production Product Guide catalog");
   const catalog = await catalogResponse.json();
-  expect(catalog.content_version).toBe("2026.08.26.1");
+  expect(catalog.content_version).toBe("2026.08.27.2");
   expect(catalog.sections).toHaveLength(27);
   expect(catalog.commands).toBeUndefined();
 

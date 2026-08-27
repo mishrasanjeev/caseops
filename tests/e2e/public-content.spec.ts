@@ -212,8 +212,8 @@ test.describe("Public landing page and user guide", () => {
     ).toBeVisible();
 
     await page.goto("/guide");
-    await expect(page.getByText("User guide · v3 · 2026", { exact: true })).toBeVisible();
-    await expect(page.locator("main > header")).toContainText(/Updated\s+26 August 2026/);
+    await expect(page.getByText("User guide · v4 · 2026", { exact: true })).toBeVisible();
+    await expect(page.locator("main > header")).toContainText(/Updated\s+27 August 2026/);
   });
 
   for (const pathname of PUBLIC_CONTENT_PAGES) {

@@ -64,7 +64,9 @@ class MockProvider:
         started = time.perf_counter()
         joined = "\n".join(m.content for m in messages)
         lowered = joined.lower()
-        if "matter_file_qa" in lowered:
+        if "workspace_assistant_qa" in lowered:
+            text = _mock_workspace_assistant_response(joined)
+        elif "matter_file_qa" in lowered:
             text = _mock_matter_file_qa_response(joined)
         elif "hearing pack" in lowered or "hearing_pack" in lowered:
             text = _mock_hearing_pack_response(joined)
@@ -99,6 +101,54 @@ def _estimate_call_tokens(messages: list[LLMMessage], max_tokens: int) -> int:
 def _mock_plain_response(prompt: str) -> str:
     digest = hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:8]
     return f"mock-ack::{digest}"
+
+
+def _mock_workspace_assistant_response(prompt: str) -> str:
+    sources: list[tuple[str, str, str]] = []
+    source_id: str | None = None
+    label = "Workspace record"
+    text_lines: list[str] = []
+    collecting = False
+    for line in prompt.splitlines():
+        if line.startswith("SOURCE_ID:"):
+            source_id = line.split(":", 1)[1].strip()
+        elif line.startswith("LABEL:"):
+            label = line.split(":", 1)[1].strip() or label
+        elif line == "TEXT:":
+            collecting = True
+            text_lines = []
+        elif line == "END_SOURCE":
+            if source_id:
+                sources.append((source_id, label, " ".join(" ".join(text_lines).split())))
+            source_id = None
+            label = "Workspace record"
+            collecting = False
+            text_lines = []
+        elif collecting:
+            text_lines.append(line)
+    if not sources:
+        return json.dumps(
+            {
+                "status": "abstained",
+                "answer": "I do not have enough permitted workspace evidence to answer that.",
+                "confidence": "insufficient",
+                "used_source_ids": [],
+                "suggested_searches": ["Search the workspace by matter, mark, or identifier"],
+            },
+            separators=(",", ":"),
+        )
+    first_id, first_label, first_text = sources[0]
+    preview = " ".join(first_text.split()[:55])
+    return json.dumps(
+        {
+            "status": "answered",
+            "answer": f"Based on {first_label}: {preview}",
+            "confidence": "medium",
+            "used_source_ids": [source[0] for source in sources[:3]],
+            "suggested_searches": [],
+        },
+        separators=(",", ":"),
+    )
 
 
 def _mock_matter_file_qa_response(prompt: str) -> str:
@@ -729,6 +779,7 @@ def _messages_to_gemini(messages: list[LLMMessage]) -> list[dict[str, Any]]:
 # purpose deliberately resolves to the strongest available model.
 Purpose = str
 PURPOSE_DRAFTING = "drafting"
+PURPOSE_ASSISTANT = "assistant"
 PURPOSE_RECOMMENDATIONS = "recommendations"
 PURPOSE_HEARING_PACK = "hearing_pack"
 PURPOSE_METADATA_EXTRACT = "metadata_extract"
@@ -745,6 +796,7 @@ def _resolve_model_for_purpose(settings: object, purpose: str | None) -> str:
     """
     mapping = {
         PURPOSE_DRAFTING: getattr(settings, "llm_model_drafting", None),
+        PURPOSE_ASSISTANT: getattr(settings, "llm_model_assistant", None),
         PURPOSE_RECOMMENDATIONS: getattr(settings, "llm_model_recommendations", None),
         PURPOSE_HEARING_PACK: getattr(settings, "llm_model_hearing_pack", None),
         PURPOSE_METADATA_EXTRACT: getattr(
@@ -797,6 +849,7 @@ def _build_inner_provider(settings: object, purpose: str | None) -> LLMProvider:
     # out at 30s on prod). Cloud Run's 300s request ceiling sets the
     # ceiling; leave 60s headroom for retrieval + verification + DB.
     per_purpose_timeout: dict[str, float] = {
+        PURPOSE_ASSISTANT: 60.0,
         PURPOSE_RECOMMENDATIONS: 90.0,
         PURPOSE_HEARING_PACK: 90.0,
         PURPOSE_METADATA_EXTRACT: 60.0,
@@ -806,6 +859,7 @@ def _build_inner_provider(settings: object, purpose: str | None) -> LLMProvider:
         PURPOSE_EVAL: 60.0,
     }
     per_purpose_retries: dict[str, int] = {
+        PURPOSE_ASSISTANT: 1,
         PURPOSE_RECOMMENDATIONS: 1,
         PURPOSE_HEARING_PACK: 1,
         PURPOSE_METADATA_EXTRACT: 1,
@@ -896,6 +950,8 @@ def max_tokens_for_purpose(purpose: str | None) -> int:
         return getattr(settings, "llm_max_output_tokens_drafting", 8192)
     if purpose == PURPOSE_HEARING_PACK:
         return getattr(settings, "llm_max_output_tokens_hearing_pack", 4096)
+    if purpose == PURPOSE_ASSISTANT:
+        return getattr(settings, "llm_max_output_tokens_assistant", 2048)
     return settings.llm_max_output_tokens
 
 
@@ -909,6 +965,7 @@ def generate_structured[T: BaseModel](
     max_tokens: int = 2048,
     on_model_run: ModelRunWriter | None = None,
     session: Any | None = None,
+    release_session_before_provider: bool = False,
 ) -> tuple[T, LLMCompletion]:
     """Run the provider and validate its output as ``schema``.
 
@@ -922,7 +979,12 @@ def generate_structured[T: BaseModel](
     allow-list for the purpose, the call is blocked *before* any tokens are
     spent. Callers that omit ``session`` (tests, CLI) are not gated — the
     DEFAULT_POLICY allows everything anyway, so the effect is identical when
-    no restriction has been configured.
+    no restriction has been configured. Callers may opt into
+    ``release_session_before_provider`` after completing all of their own
+    read-only retrieval. That closes the transaction before network latency;
+    the session is reusable and billing starts a fresh transaction only after
+    a schema-valid response. The caller must revalidate mutable source state
+    before persisting the result.
     """
     estimated_billing_credits = 0
     if session is not None and context.tenant_id:
@@ -975,6 +1037,13 @@ def generate_structured[T: BaseModel](
             company_id=context.tenant_id,
             estimated_credits=estimated_billing_credits,
         )
+        if release_session_before_provider:
+            # Preflight is intentionally read-only on the success path. Do not
+            # leave its transaction open across a provider deadline: SQLite
+            # can otherwise retain a reader that delays a writer, while on
+            # PostgreSQL it needlessly pins an MVCC snapshot. A blocked quota
+            # call raises above and retains its independently committed audit.
+            session.rollback()
     completion = provider.generate(
         messages=messages,
         temperature=temperature,
