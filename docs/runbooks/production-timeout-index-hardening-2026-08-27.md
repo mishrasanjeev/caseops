@@ -52,12 +52,13 @@ console command. Five other recurring jobs had the same redundant runtime
 dependency-resolution path. Production traffic correctly remained on the
 previous API and web revisions.
 
-A later retry of release `9f1e3be...` also stopped before traffic routing. The
-inventory reconciler supplied the reminders arguments as two subprocess
-tokens, `--args` and `--mode=auto,--limit=200`. Because the value began with a
-dash, `gcloud` parsed it as another option and rejected the update. This was a
-serialization defect in the release control plane, not a reminders runtime
-failure.
+Two later retries also stopped before traffic routing. Release `9f1e3be...`
+supplied the reminders arguments as two subprocess tokens, `--args` and
+`--mode=auto,--limit=200`; gcloud parsed the leading-dash value as another
+option. Release `04787ab...` bound an alternate-delimiter value as one token,
+but the Windows `gcloud.cmd` shim interpreted its pipe delimiter before gcloud
+received it. These were serialization defects in the release control plane,
+not reminders runtime failures.
 
 ## Permanent release contract
 
@@ -82,16 +83,17 @@ failure.
   validation because it can create a virtual environment, contact package
   registries, consume memory, and spend the task deadline before application
   code starts.
-- A non-empty argument vector is emitted as one bound gcloud token using an
-  alternate list delimiter, for example
-  `--args=^|^--mode=auto|--limit=200`. The reconciler selects a delimiter absent
-  from all values, so leading dashes cannot be parsed as gcloud options and
-  delimiter characters in application arguments do not corrupt the list.
+- A non-empty argument vector is emitted as one bound gcloud token using its
+  default comma list format, for example
+  `--args=--mode=auto,--limit=200`. Leading dashes therefore cannot be parsed as
+  gcloud options, and the token contains no Windows shell metacharacters.
+- Inventory validation rejects commas inside individual command or argument
+  values, making the comma list serialization unambiguous and fail-closed.
 - An empty argument vector is emitted as the single token `--args=`, which
   clears previously configured arguments without exposing a following token to
   gcloud option parsing.
 - Regression tests exercise the exact reminders arguments, empty-list clearing,
-  and alternate-delimiter selection.
+  and rejection of ambiguous comma-bearing values.
 - Local Docker verification runs `caseops-db-index-health` with a hard 512 MiB
   memory and swap limit. It must exit zero, report `status=ok`, and finish
   without an OOM kill before production deployment.
