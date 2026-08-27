@@ -369,7 +369,7 @@ def download_audit_export_job(
 # ---------------------------------------------------------------------------
 
 
-from pydantic import BaseModel  # noqa: E402
+from pydantic import BaseModel, Field  # noqa: E402
 
 from caseops_api.db.models import TenantAIPolicy  # noqa: E402
 
@@ -713,12 +713,20 @@ class TenantAIPolicyResponse(BaseModel):
     company_id: str
     predictive_bench_strategy_enabled: bool
     # PG-005 Sprint 11 (2026-05-01) — admin-disabled drafting templates.
-    disabled_template_types: list[str] = []
+    disabled_template_types: list[str] = Field(default_factory=list)
+    workspace_assistant_enabled: bool
+    allowed_models_assistant: list[str] = Field(default_factory=list)
+    assistant_retention_days: int
+    policy_version: int
 
 
 class TenantAIPolicyPatchRequest(BaseModel):
     predictive_bench_strategy_enabled: bool | None = None
     disabled_template_types: list[str] | None = None
+    workspace_assistant_enabled: bool | None = None
+    allowed_models_assistant: list[str] | None = None
+    assistant_retention_days: int | None = Field(default=None, ge=1, le=3650)
+    expected_version: int | None = Field(default=None, ge=1)
 
 
 def _ensure_policy_row(session, company_id: str) -> TenantAIPolicy:
@@ -758,6 +766,12 @@ def get_tenant_ai_policy(
         disabled_template_types=_parse_disabled_templates(
             getattr(row, "disabled_template_types_json", None)
         ),
+        workspace_assistant_enabled=bool(row.workspace_assistant_enabled),
+        allowed_models_assistant=_parse_disabled_templates(
+            row.allowed_models_assistant_json
+        ),
+        assistant_retention_days=int(row.assistant_retention_days),
+        policy_version=int(row.policy_version),
     )
 
 
@@ -775,6 +789,15 @@ def patch_tenant_ai_policy(
     session: DbSession,
 ) -> TenantAIPolicyResponse:
     row = _ensure_policy_row(session, context.company.id)
+    if payload.expected_version is not None and payload.expected_version != row.policy_version:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "type": "tenant_ai_policy_version_conflict",
+                "detail": "The tenant AI policy changed after it was loaded.",
+                "current_version": row.policy_version,
+            },
+        )
     audit_metadata: dict = {}
 
     if payload.predictive_bench_strategy_enabled is not None:
@@ -802,8 +825,52 @@ def patch_tenant_ai_policy(
             "after": cleaned,
         }
 
+    if payload.workspace_assistant_enabled is not None:
+        before = bool(row.workspace_assistant_enabled)
+        after = bool(payload.workspace_assistant_enabled)
+        if before != after:
+            row.workspace_assistant_enabled = after
+            audit_metadata["workspace_assistant_enabled"] = {
+                "before": before,
+                "after": after,
+            }
+
+    if payload.allowed_models_assistant is not None:
+        if len(payload.allowed_models_assistant) > 16:
+            raise HTTPException(status_code=422, detail="At most 16 assistant models are allowed.")
+        before_list = _parse_disabled_templates(row.allowed_models_assistant_json)
+        cleaned_models: list[str] = []
+        for raw_model in payload.allowed_models_assistant:
+            model = raw_model.strip()
+            if not model or len(model) > 120:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Assistant model names must contain 1 to 120 characters.",
+                )
+            if model not in cleaned_models:
+                cleaned_models.append(model)
+        if before_list != cleaned_models:
+            row.allowed_models_assistant_json = json.dumps(cleaned_models)
+            audit_metadata["allowed_models_assistant"] = {
+                "before": before_list,
+                "after": cleaned_models,
+            }
+
+    if payload.assistant_retention_days is not None:
+        before = int(row.assistant_retention_days)
+        after = int(payload.assistant_retention_days)
+        if before != after:
+            row.assistant_retention_days = after
+            audit_metadata["assistant_retention_days"] = {
+                "before": before,
+                "after": after,
+            }
+
+    if audit_metadata:
+        row.policy_version += 1
     session.flush()
     if audit_metadata:
+        audit_metadata["policy_version"] = row.policy_version
         record_from_context(
             session,
             context,
@@ -819,4 +886,10 @@ def patch_tenant_ai_policy(
         disabled_template_types=_parse_disabled_templates(
             getattr(row, "disabled_template_types_json", None)
         ),
+        workspace_assistant_enabled=bool(row.workspace_assistant_enabled),
+        allowed_models_assistant=_parse_disabled_templates(
+            row.allowed_models_assistant_json
+        ),
+        assistant_retention_days=int(row.assistant_retention_days),
+        policy_version=int(row.policy_version),
     )

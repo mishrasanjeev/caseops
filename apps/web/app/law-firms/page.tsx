@@ -168,6 +168,11 @@ const platformMoves = [
     body: "Generate permission-scoped snapshots for portfolio, application, opposition, deadline, renewal, workload, data quality and integration freshness. Review the exact snapshot hash, then publish or schedule a client-safe artifact only to selected active IP grants; delivery and access remain auditable and version-invalidated data is withheld.",
   },
   {
+    icon: Sparkles,
+    title: "Ask this Workspace",
+    body: "Select the exact clients, matters, dockets, IP rights, proceedings and documents an answer may use. CaseOps retrieves only permitted verified records, returns record-level citations and source links, rechecks access before display, and abstains when the evidence is insufficient. Suggested writes remain proposals until the separate confirmation boundary is released.",
+  },
+  {
     icon: FileText,
     title: "Contracts and playbooks",
     body: "Upload, compare against playbooks, surface deviations, and move obligations back into the matter graph.",

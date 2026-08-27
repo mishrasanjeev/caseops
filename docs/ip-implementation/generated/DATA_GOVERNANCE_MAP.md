@@ -6,16 +6,16 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `2b11163ab41de08c26fb4bc5df90b3f6502c1993084ef82a30ace97b7570540f`
-- SQL tables: `292`
-- SQL columns: `4720`
-- ORM indexes: `1584`
-- Alembic/raw index declarations: `637`
+- Canonical map SHA-256: `6fd71f46f442eb0feb3f7c3ec40305b624a4d31c68d30d9d2d1322e3324499f2`
+- SQL tables: `296`
+- SQL columns: `4772`
+- ORM indexes: `1598`
+- Alembic/raw index declarations: `651`
 - Non-SQL data classes: `11`
 
 ## Boundary
 
-This inventory does not claim approved retention bounds, legal-hold activation, tenant export, purge, offboarding, provider deletion, backup recovery/restore, residency, or data-governance/recovery milestone completion. The only current disposition behavior is fail-closed Definition-of-Ready validation. This release's tenant-scoped company-user lookup, deadline-coverage guards, standalone-deadline offboarding serialization, and bounded Today IP coverage stream expose existing registered SQL classes only. The Today stream is a read projection over ip_deadline_coverages, ip_docket_records, and matter_deadlines that reuses the existing IP docket access predicate; the web endpoint and generated OpenAPI contract changes add no SQL or non-SQL data class, new storage, or disposition authority. IPLF-057B backfills the required ip_trademark_particular_versions compatibility projection for existing trademark_international_registrations dockets; both tables are already registered, Madrid facts retain their canonical owner, and the bounded restore-forward migration adds no data class, storage boundary, retention authority, or disposition handler. EG-009 narrows what failure paths persist: audit-export, authority-ingestion, court-sync, document-job, document-processing, embedding and legal-update errors now store redacted text instead of raw exception strings. This removes infrastructure detail from already-registered columns; it adds no SQL or non-SQL data class, no new storage, and no disposition authority. The 2026-08-27 recurring-job hardening changes only version-controlled Cloud Run commands, arguments, environment and secret references, runtime identity, Cloud SQL attachment, resources, retries, and timeouts. It invokes already-baked application entrypoints, preserves the existing registered SQL/provider/storage boundaries and paused governance writers, and adds no data class, persistence path, provider transmission, retention authority, or disposition handler.
+This inventory does not claim approved retention bounds, legal-hold activation, tenant export, purge, offboarding, provider deletion, backup recovery/restore, residency, or data-governance/recovery milestone completion. The only current disposition behavior is fail-closed Definition-of-Ready validation. This release's tenant-scoped company-user lookup, deadline-coverage guards, standalone-deadline offboarding serialization, and bounded Today IP coverage stream expose existing registered SQL classes only. The Today stream is a read projection over ip_deadline_coverages, ip_docket_records, and matter_deadlines that reuses the existing IP docket access predicate; the web endpoint and generated OpenAPI contract changes add no SQL or non-SQL data class, new storage, or disposition authority. IPLF-057B backfills the required ip_trademark_particular_versions compatibility projection for existing trademark_international_registrations dockets; both tables are already registered, Madrid facts retain their canonical owner, and the bounded restore-forward migration adds no data class, storage boundary, retention authority, or disposition handler. EG-009 narrows what failure paths persist: audit-export, authority-ingestion, court-sync, document-job, document-processing, embedding and legal-update errors now store redacted text instead of raw exception strings. This removes infrastructure detail from already-registered columns; it adds no SQL or non-SQL data class, no new storage, and no disposition authority. The 2026-08-27 recurring-job hardening changes only version-controlled Cloud Run commands, arguments, environment and secret references, runtime identity, Cloud SQL attachment, resources, retries, and timeouts. It invokes already-baked application entrypoints, preserves the existing registered SQL/provider/storage boundaries and paused governance writers, and adds no data class, persistence path, provider transmission, retention authority, or disposition handler. IPLF-062A adds tenant-scoped assistant sessions, explicit polymorphic scope references, turns, and exact citation provenance under the tenant-restricted legal-content profile. The tenant AI policy supplies a bounded session expiry, but automated destruction remains unauthorized until the hold-aware disposition owner is implemented and approved; downgrade therefore refuses retained assistant evidence.
 
 ## SQL table inventory
 
@@ -30,6 +30,10 @@ This inventory does not claim approved retention bounds, legal-hold activation, 
 | `agent_tool_calls` | `platform_operational_reference` | 9 | `registry_fail_closed` |
 | `ai_governance_approvals` | `tenant_operational_record` | 16 | `registry_fail_closed` |
 | `api_idempotency_records` | `tenant_operational_record` | 20 | `registry_fail_closed` |
+| `assistant_citations` | `tenant_operational_record` | 14 | `registry_fail_closed` |
+| `assistant_session_scopes` | `tenant_operational_record` | 9 | `registry_fail_closed` |
+| `assistant_sessions` | `tenant_operational_record` | 12 | `registry_fail_closed` |
+| `assistant_turns` | `tenant_operational_record` | 13 | `registry_fail_closed` |
 | `audit_events` | `tenant_operational_record` | 16 | `registry_fail_closed` |
 | `audit_export_jobs` | `tenant_operational_record` | 16 | `registry_fail_closed` |
 | `authority_annotations` | `tenant_operational_record` | 10 | `registry_fail_closed` |
@@ -283,7 +287,7 @@ This inventory does not claim approved retention bounds, legal-hold activation, 
 | `statutes` | `public_or_licensed_legal_reference` | 22 | `registry_fail_closed` |
 | `team_memberships` | `platform_operational_reference` | 5 | `registry_fail_closed` |
 | `teams` | `tenant_operational_record` | 9 | `registry_fail_closed` |
-| `tenant_ai_policies` | `tenant_operational_record` | 15 | `registry_fail_closed` |
+| `tenant_ai_policies` | `tenant_operational_record` | 19 | `registry_fail_closed` |
 | `tenant_contract_playbook_rules` | `tenant_restricted_legal_content` | 13 | `registry_fail_closed` |
 | `tenant_contract_playbooks` | `tenant_restricted_legal_content` | 11 | `registry_fail_closed` |
 | `tenant_data_operation_items` | `tenant_operational_record` | 13 | `registry_fail_closed` |

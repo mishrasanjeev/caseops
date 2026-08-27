@@ -189,7 +189,7 @@ test("IPLF-044B links independent Matter and IP lifecycles end to end", async ({
   const docket = applicationBody.docket;
 
   await signIn(page, tenant);
-  await page.goto(`/app/ip?docket=${docket.id}`);
+  await page.goto(`/app/ip?docket=${docket.id}&view=access`);
   const panel = page.getByTestId("ip-matter-links-panel");
   await expect(panel).toBeVisible();
   await expect(panel.getByText("Operational", { exact: true })).toBeVisible();
@@ -253,6 +253,7 @@ test("IPLF-044B links independent Matter and IP lifecycles end to end", async ({
   await expect(openIp).toHaveAttribute("href", `/app/ip?docket=${docket.id}`);
   await openIp.click();
   await expect(page).toHaveURL(new RegExp(`/app/ip\\?docket=${docket.id}$`));
+  await page.getByRole("tab", { name: "Access and links" }).click();
 
   const refreshedPanel = page.getByTestId("ip-matter-links-panel");
   const litigationRow = refreshedPanel

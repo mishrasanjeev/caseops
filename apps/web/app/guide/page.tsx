@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { Footer } from "@/components/marketing/Footer";
 import { Nav } from "@/components/marketing/Nav";
+import { ProductGuideSearch } from "@/components/guide/ProductGuideSearch";
 import { Container } from "@/components/ui/Container";
 import { SkipLink } from "@/components/ui/SkipLink";
 import { formatGuideDate, PRODUCT_GUIDE_CATALOG } from "@/lib/product-guide";
@@ -130,6 +131,7 @@ export default function GuidePage() {
         </header>
 
         <Container className="py-16">
+          <ProductGuideSearch contentVersion={PRODUCT_GUIDE_CATALOG.content_version} />
           <div className="grid gap-12 lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-16">
             <nav
               aria-label="Contents"
@@ -1767,6 +1769,18 @@ export default function GuidePage() {
                       <strong>Save.</strong> Saving a result creates a tenant-private entry
                       in the workspace research notebook. It is not automatically attached
                       to the matter currently open in another tab.
+                    </li>
+                    <li>
+                      <strong>Ask this Workspace.</strong> Open <code>/app/assistant</code>,
+                      search for the permitted client, matter, docket, IP right, proceeding,
+                      or document records you want to include, and apply that explicit scope.
+                      Answers show exact record citations and source links. The assistant
+                      abstains when permitted verified evidence is insufficient and routes
+                      legal-proposition research back here. It can suggest navigation,
+                      searches, drafts, tasks, or field updates, but it does not execute a
+                      write without the separate preview-and-confirm workflow. Conversations
+                      can be exported, archived, or cleared; destructive deletion remains
+                      blocked until legal-hold-aware retention is implemented.
                     </li>
                     <li>
                       <strong>Licensed source.</strong> Indian Kanoon access is disabled by

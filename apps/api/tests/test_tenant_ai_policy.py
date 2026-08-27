@@ -22,6 +22,10 @@ def test_resolver_returns_default_when_no_row(client) -> None:  # noqa: ARG001
         company = session.scalar(select(Company))
         policy = resolve_tenant_policy(session, company_id=company.id)
     assert policy.allowed_drafting == ()
+    assert policy.allowed_assistant == ()
+    assert policy.workspace_assistant_enabled is False
+    assert policy.assistant_retention_days == 90
+    assert policy.policy_version == 1
     assert policy.max_tokens_per_session == DEFAULT_POLICY.max_tokens_per_session
     assert policy.external_share_requires_approval is True
 
@@ -38,6 +42,10 @@ def test_resolver_parses_allowed_models(client) -> None:  # noqa: ARG001
                 ["claude-sonnet-4-6", "claude-opus-4-7"]
             ),
             allowed_models_hearing_pack_json=json.dumps([]),
+            allowed_models_assistant_json=json.dumps(["caseops-assistant-1"]),
+            workspace_assistant_enabled=True,
+            assistant_retention_days=120,
+            policy_version=3,
             max_tokens_per_session=12000,
             external_share_requires_approval=False,
             training_opt_in=True,
@@ -49,6 +57,10 @@ def test_resolver_parses_allowed_models(client) -> None:  # noqa: ARG001
     assert policy.allowed_drafting == ("claude-opus-4-7",)
     assert "claude-sonnet-4-6" in policy.allowed_recommendations
     assert policy.allowed_hearing_pack == ()  # empty list → no restriction
+    assert policy.allowed_assistant == ("caseops-assistant-1",)
+    assert policy.workspace_assistant_enabled is True
+    assert policy.assistant_retention_days == 120
+    assert policy.policy_version == 3
     assert policy.max_tokens_per_session == 12000
     assert policy.external_share_requires_approval is False
     assert policy.training_opt_in is True
@@ -81,6 +93,9 @@ def test_is_model_allowed_honours_allowlist(client) -> None:  # noqa: ARG001
     # Empty allowlist on a purpose means no restriction.
     assert is_model_allowed(
         policy, purpose="recommendations", model="anything"
+    ) is True
+    assert is_model_allowed(
+        policy, purpose="assistant", model="anything"
     ) is True
 
 

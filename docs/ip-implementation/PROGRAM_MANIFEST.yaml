@@ -14,16 +14,16 @@
     "verification_status": "not_run",
     "release_status": "blocked",
     "execution_policy": "codex_owned_single_ordered_queue; implement first and run the automated check and exact-release verification batch at the end",
-    "active_slice": "IPLF-061B",
+    "active_slice": "IPLF-063A",
     "checkpoint": {
-      "recorded_at": "2026-08-26T21:25:00+05:30",
-      "repository_revision": "bf223d8691f13c3f02fed5dcace901fe954d38b0",
-      "environment": "Canonical main bf223d8691f13c3f02fed5dcace901fe954d38b0 is deployed as API caseops-api-00369-29s and web caseops-web-00348-sls at 100 percent latest-only traffic with immutable digests sha256:eb60f829194fd135e7958b48e4dfcede0e5ce2001d49e1ce052905b07881eea2 and sha256:593cee6d253b7e7c36c349de770e89dbe43dd298ebf6622ff3256b3ce2221c69. Migration caseops-migrate-job-654ml, eight-job scheduler reconciliation, health, exact-main CI 32980337508, Security, and CodeQL passed. Production workflow 32980337509 completed with 87 passed, 4 skipped, and 1 failed: the independent recommendation-grounding path returned a false-positive unsafe-wording refusal for a safety disclaimer. Reviewed corrective candidate 989cd3ba6be9a1f2a6eef184c449e5ddb1e78e30 distinguishes explicit single negations from prohibited or double-negated assertions and requires whole meaningful Guide-token matches; 10 Guide tests, 34 recommendation tests, and 17 AI safety/token-governance tests pass locally. Judge refresh remains PAUSED. IPLF-061A is not yet merged or deployed.",
-      "completed_scope": "IPLF-060B, parent IPLF-060, IPLF-003B, and UJ-20 normal/exception paths remain deployment-verified. IPLF-061A is implemented and locally verified without claiming AI-GUIDE or UJ-22 completion: one reviewed Product Guide catalog now projects into both application build contexts, drives the existing /guide index and Sidebar, and provides bounded public catalog plus server-capability-filtered search contracts. Exact merged-main deployment proof for IPLF-061A remains pending. Independent legal/provider/source and law-firm UAT acceptance for judge-refresh activation remains external and is not claimed.",
+      "recorded_at": "2026-08-27T23:32:29+05:30",
+      "repository_revision": "25e0c50cf5839aa8f90377daf9e7544549ec1e6b",
+      "environment": "Canonical main d7c7835b077054206d497822426a54e1aeb3c5f4 remains the production baseline. Local implementation revision 25e0c50cf5839aa8f90377daf9e7544549ec1e6b plus Windows storage hardening 398b2ab23e9fa1032d63d0ecb4357a611c20b2a5 passed the exact 362-file, 13-shard API inventory (3,636 passed; 129 intentional skips), all 152 web test files (772 passed), route type generation, TypeScript, a fresh Next.js build, governance/projection gates, and the dated desktop/360px assistant journey. Docker/PostgreSQL/index acceptance and hosted/deployed gates remain pending. Authority metadata and judge refresh remain PAUSED.",
+      "completed_scope": "IPLF-061A/061B remain implemented and locally verified. IPLF-062A adds the tenant AI policy and additive assistant session/scope/turn/citation foundation with complete query-shape indexes and fail-closed downgrade. IPLF-062B adds creator-private explicit scope, bounded server-authorized retrieval, exact citations, post-provider reauthorization, abstention, write-free proposals, archive/export, model/billing/audit evidence, Product Guide and law-firm surfaces, and dated responsive E2E. Destructive deletion remains an audited typed conflict until IPLF-071 supplies approved legal-hold-aware disposition; reciprocal write execution, feedback/evals, and private-index/analytics facets remain with IPLF-064/065/066.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-061B",
-      "next_action": "Pass the complete PR matrix for the integrated IPLF-061A and recommendation correction candidate, merge to canonical main, deploy migration-first, and require the unchanged full production batch to pass before marking IPLF-061A deployment_verified. Then implement IPLF-061B's complete UJ-22 guidance workflow while preserving IPLF-062/064/065/066 ownership. Independently obtain legal/provider/source and law-firm UAT approval before any judge-refresh activation; retain the scheduler as PAUSED until then.",
-      "evidence_ref": "docs/ip-implementation/evidence/m6/IPLF-061A/local-2026-08-26.md"
+      "next_slice": "IPLF-063A",
+      "next_action": "Commit this manifest/evidence reconciliation, run the immutable candidate through local Docker/PostgreSQL/index-health and Docker browser acceptance, then publish only that green revision for hosted CI/Security/CodeQL, canonical main merge, migration-first production deployment, exact identity, and dated 061A/061B/062B verification. Begin IPLF-063A only without activating the paused authority-metadata or judge-refresh writers.",
+      "evidence_ref": "docs/ip-implementation/evidence/m6/IPLF-062B/local-2026-08-27.md"
     },
     "work_owner": {
       "owner": "Codex",
@@ -44,7 +44,12 @@
       "release_status": "not_required",
       "epic_ids": [],
       "gate_ids": [],
-      "evidence_refs": []
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-061A/local-2026-08-26.md",
+        "docs/ip-implementation/evidence/m6/IPLF-061B/local-2026-08-27.md",
+        "docs/ip-implementation/evidence/m6/IPLF-062A/local-2026-08-27.md",
+        "docs/ip-implementation/evidence/m6/IPLF-062B/local-2026-08-27.md"
+      ]
     },
     {
       "id": "M1",
@@ -205,7 +210,12 @@
         "IPLF-066"
       ],
       "gate_ids": [],
-      "evidence_refs": []
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-061A/local-2026-08-26.md",
+        "docs/ip-implementation/evidence/m6/IPLF-061B/local-2026-08-27.md",
+        "docs/ip-implementation/evidence/m6/IPLF-062A/local-2026-08-27.md",
+        "docs/ip-implementation/evidence/m6/IPLF-062B/local-2026-08-27.md"
+      ]
     },
     {
       "id": "M7",
@@ -2242,17 +2252,9 @@
       "milestone_id": "M6",
       "requirement_ids": [
         "AI-GUIDE-01",
-        "AI-GUIDE-02",
-        "AI-GUIDE-03",
-        "AI-GUIDE-04",
-        "AI-GUIDE-05",
-        "AI-GUIDE-06",
         "AI-GUIDE-07",
         "AI-GUIDE-08",
-        "AI-GUIDE-09",
-        "AI-GUIDE-10",
-        "AI-GUIDE-11",
-        "AI-GUIDE-12"
+        "AI-GUIDE-11"
       ],
       "journey_ids": [
         "UJ-22"
@@ -2261,18 +2263,28 @@
         "IPLF-061A",
         "IPLF-061B"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-061A/local-2026-08-26.md"
+        "docs/ip-implementation/evidence/m6/IPLF-061A/local-2026-08-26.md",
+        "docs/ip-implementation/evidence/m6/IPLF-061B/local-2026-08-27.md"
       ]
     },
     {
       "id": "IPLF-062",
       "title": "Permission-scoped Ask this Workspace using new assistant sessions/turns/citations plus existing `ModelRun`, source, retrieval, and AI-policy owners.",
       "milestone_id": "M6",
-      "requirement_ids": [],
+      "requirement_ids": [
+        "AI-GUIDE-02",
+        "AI-GUIDE-03",
+        "AI-GUIDE-04",
+        "AI-GUIDE-05",
+        "AI-GUIDE-06",
+        "AI-GUIDE-07",
+        "AI-GUIDE-08",
+        "AI-GUIDE-09"
+      ],
       "journey_ids": [
         "UJ-23"
       ],
@@ -2280,10 +2292,13 @@
         "IPLF-062A",
         "IPLF-062B"
       ],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
-      "evidence_refs": []
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-062A/local-2026-08-27.md",
+        "docs/ip-implementation/evidence/m6/IPLF-062B/local-2026-08-27.md"
+      ]
     },
     {
       "id": "IPLF-063",
@@ -2317,7 +2332,9 @@
       "id": "IPLF-064",
       "title": "AI proposed-action preview/confirm boundary.",
       "milestone_id": "M6",
-      "requirement_ids": [],
+      "requirement_ids": [
+        "AI-GUIDE-06"
+      ],
       "journey_ids": [],
       "slice_ids": [
         "IPLF-064A",
@@ -2333,6 +2350,10 @@
       "title": "Prompt-injection, permission, citation, abstention, and legal-safety evals.",
       "milestone_id": "M6",
       "requirement_ids": [
+        "AI-GUIDE-04",
+        "AI-GUIDE-05",
+        "AI-GUIDE-07",
+        "AI-GUIDE-10",
         "AI-REV-01",
         "AI-REV-02",
         "AI-REV-03",
@@ -2361,6 +2382,10 @@
       "title": "Private index generations, prefiltered ACL retrieval, hydration reauthorization, cache partitioning, revocation/tombstone propagation and saved-output access.",
       "milestone_id": "M6",
       "requirement_ids": [
+        "AI-GUIDE-04",
+        "AI-GUIDE-05",
+        "AI-GUIDE-08",
+        "AI-GUIDE-12",
         "IP-ACCESS-01",
         "IP-ACCESS-02",
         "IP-ACCESS-03",
@@ -14538,17 +14563,9 @@
       "release_boundary": "Compatible slices may share one exact integrated candidate, CI matrix, staged rollout, rollback plan, and dated deployed acceptance; this row remains a traceability and activation unit, not a mandatory separate release.",
       "requirement_ids": [
         "AI-GUIDE-01",
-        "AI-GUIDE-02",
-        "AI-GUIDE-03",
-        "AI-GUIDE-04",
-        "AI-GUIDE-05",
-        "AI-GUIDE-06",
         "AI-GUIDE-07",
         "AI-GUIDE-08",
-        "AI-GUIDE-09",
-        "AI-GUIDE-10",
-        "AI-GUIDE-11",
-        "AI-GUIDE-12"
+        "AI-GUIDE-11"
       ],
       "journey_path_ids": [
         "UJ-22-EXC-01",
@@ -14567,25 +14584,58 @@
       "dependencies": [
         "IPLF-061A"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-22-EXC-01",
-        "planned:IPLF-UJ-22-EXC-02",
-        "planned:IPLF-UJ-22-NORMAL"
+      "implementation_refs": [
+        "apps/web/app/guide/page.tsx",
+        "apps/web/components/guide/ProductGuideSearch.tsx",
+        "apps/web/lib/api/product-guide.ts",
+        "apps/api/src/caseops_api/services/product_guide.py",
+        "apps/api/src/caseops_api/api/routes/product_guide.py",
+        "docs/ip-implementation/PRODUCT_GUIDE_CATALOG.json"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "test_refs": [
+        "apps/web/components/guide/ProductGuideSearch.test.tsx",
+        "tests/e2e/iplf-061b-product-guide-workflow-2026-08-27.spec.ts",
+        "tests/e2e/iplf-061b-product-guide-workflow-2026-08-27-prod.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-061B/local-2026-08-27.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m6/IPLF-061B/local-2026-08-27.md",
+          "revision": "f7c672e822ff18b1e4dad46ca1f77c30b82b7d50",
+          "environment": "Windows 11 workstation, local CaseOps API, Next.js production build, isolated tenants, and Chromium desktop/360px",
+          "fixtures": "owner session, approved guide catalog, permitted command, denied platform command, stale client version, unsupported query, signed-out response, IP hearing docket, and restricted IP access docket",
+          "assertions": "approved-corpus search, direct navigation, permission sanitization, stale-version disclosure, deterministic abstention and suggestion, signed-out and unavailable states, mixed permitted/denied result, explicit docket work-area deep links, historical A0 opt-in release control, responsive layout, and production-spec discovery",
+          "result": "passed",
+          "recorded_at": "2026-08-27T19:41:56+05:30"
+        }
+      ],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Pass the complete local and hosted release matrix, merge to canonical main, deploy the exact revision, and run the complete production verifier including the dated IPLF-061B spec before marking deployment_verified.",
+        "Continue IPLF-062A independently; do not claim Ask Workspace, action confirmation, feedback, analytics, or private retrieval from this slice."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No schema, migration, backfill, model/provider call, writer, audit/analytics event, worker, scheduler, assistant session, workspace retrieval, feedback queue, or proposed action. The browser reads the bounded IPLF-061A catalog/search contract."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/PRODUCT_GUIDE_FOUNDATION.md",
+          "disposition": "updated",
+          "owner": "Engineering/Product/Security",
+          "evidence": "061B UI behavior, reciprocal later-owner boundaries, and dated browser proof"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m6/IPLF-061B/local-2026-08-27.md",
+          "disposition": "created",
+          "owner": "Engineering/SRE",
+          "evidence": "Exact local implementation and release-control regression record"
+        }
+      ],
+      "allocation_review": "2026-08-27 brutal current-implementation review: IPLF-061B extends the existing /guide and IPLF-061A catalog/search only for approved help, command navigation, permission explanation, stale-version disclosure, terminology and deterministic abstention. AI-GUIDE-02..06, 09, 10 and 12 are removed from this slice and reciprocally assigned to IPLF-062/064/065/066. UJ-22 normal remains shared with the feedback/analytics owners, while its two explicit permission/version exceptions are implemented here. No assistant session, private record retrieval, action writer, feedback persistence, analytics store, duplicate corpus, model run, worker, scheduler, or schema is introduced.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked"
     },
     {
@@ -14596,7 +14646,7 @@
       "source_kind": "derived",
       "scope_source": "IPLF-062",
       "primary_behavior": "Foundation, ownership, and backend contract",
-      "migration_boundary": "Additive expand/backfill/verify/switch boundary when persistence changes; otherwise explicitly no schema change.",
+      "migration_boundary": "Additive migration 20260827_0002 adds tenant AI policy controls and tenant-scoped assistant sessions, scopes, turns, citations, constraints, foreign keys, and query-shape indexes. It requires no data backfill and refuses downgrade while retained assistant evidence exists.",
       "release_boundary": "Compatible slices may share one exact integrated candidate, CI matrix, staged rollout, rollback plan, and dated deployed acceptance; this row remains a traceability and activation unit, not a mandatory separate release.",
       "requirement_ids": [],
       "journey_path_ids": [],
@@ -14604,27 +14654,62 @@
         {
           "classification": "NEW",
           "component": "IPLF-062 canonical scope: Permission-scoped Ask this Workspace using new assistant sessions/turns/citations plus existing `ModelRun`, source, retrieval, and AI-policy owners.",
-          "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
-          "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
-          "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
+          "canonical_writer": "WorkspaceAssistantService owns only assistant_sessions, assistant_session_scopes, assistant_turns, and assistant_citations; existing TenantAIPolicy, ModelRun, billing, audit, Matter/client/IP/document/source/access services remain canonical for their records and decisions.",
+          "compatibility_path": "The additive assistant API stores references and source versions instead of copying canonical business records. Existing Matter/platform/IP/document routes and records are unchanged, and policy defaults keep the assistant disabled until a tenant owner explicitly enables it.",
+          "retirement_gate": "No assistant persistence or policy column may be removed while retained evidence exists; downgrade, deletion, mixed-revision deployment, and eventual disposition require governed export/hold proof and exact deployed acceptance."
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260827_0002_workspace_assistant_foundation.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/workspace_assistant.py",
+        "apps/api/src/caseops_api/services/workspace_assistant.py",
+        "apps/api/src/caseops_api/api/routes/workspace_assistant.py",
+        "apps/api/src/caseops_api/services/tenant_ai_policy.py",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml",
+        "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
+        "docs/ip-implementation/WORKSPACE_ASSISTANT_FOUNDATION.md"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_20260827_workspace_assistant_migration.py",
+        "apps/api/tests/test_workspace_assistant_foundation.py",
+        "apps/api/tests/test_tenant_ai_policy.py",
+        "apps/api/tests/test_ip_data_governance_map.py",
+        "apps/api/tests/test_ip_data_class_projection_gate.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-062A/local-2026-08-27.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m6/IPLF-062A/local-2026-08-27.md",
+          "revision": "25e0c50cf5839aa8f90377daf9e7544549ec1e6b",
+          "environment": "Windows 11, Python 3.13, SQLite migration rehearsal, deterministic 13-shard API inventory, generated governance projection",
+          "fixtures": "isolated tenants, owners/members, active/revoked scope targets, policy versions, retained and empty assistant evidence, model allowlists",
+          "assertions": "additive migration, downgrade refusal, composite tenant ownership, OCC, creator privacy, policy fail-closed behavior, complete query indexes, map/projection parity",
+          "result": "passed",
+          "recorded_at": "2026-08-27T23:32:29+05:30"
+        }
+      ],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Require Docker/PostgreSQL/index-health, hosted CI/security, canonical main merge, migration-first production deployment, exact identity, and dated production acceptance before changing release status."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Adds four tenant-restricted assistant tables and four tenant AI policy fields. Existing canonical Matter, client, IP, document, legal-source, access, audit, ModelRun, and billing records are referenced, not copied.",
+        "Retention expiry is recorded from tenant policy, but automated destructive disposition is not authorized; downgrade and deletion fail closed while evidence is retained."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        "docs/ip-implementation/WORKSPACE_ASSISTANT_FOUNDATION.md",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml",
+        "docs/ip-implementation/generated/DATA_GOVERNANCE_MAP.md",
+        "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
+        "docs/ip-implementation/evidence/m6/IPLF-062A/local-2026-08-27.md"
+      ],
+      "allocation_review": "2026-08-27 current-implementation review replaces the mechanical row: IPLF-062A adds only the neutral assistant conversation foundation and extends existing AI policy. It does not duplicate canonical records, access, legal sources, ModelRun, billing, audit, tasks, drafts, feedback, analytics, workers, or schedulers. Destructive disposition remains with the later legal-hold owner.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
@@ -14642,9 +14727,18 @@
       "source_kind": "derived",
       "scope_source": "IPLF-062",
       "primary_behavior": "User workflow, exceptions, and release proof",
-      "migration_boundary": "Additive expand/backfill/verify/switch boundary when persistence changes; otherwise explicitly no schema change.",
+      "migration_boundary": "Uses the additive IPLF-062A foundation. IPLF-062B adds no further table, backfill, worker, scheduler, private index, feedback queue, or action writer.",
       "release_boundary": "Compatible slices may share one exact integrated candidate, CI matrix, staged rollout, rollback plan, and dated deployed acceptance; this row remains a traceability and activation unit, not a mandatory separate release.",
-      "requirement_ids": [],
+      "requirement_ids": [
+        "AI-GUIDE-02",
+        "AI-GUIDE-03",
+        "AI-GUIDE-04",
+        "AI-GUIDE-05",
+        "AI-GUIDE-06",
+        "AI-GUIDE-07",
+        "AI-GUIDE-08",
+        "AI-GUIDE-09"
+      ],
       "journey_path_ids": [
         "UJ-23-EXC-01",
         "UJ-23-EXC-02",
@@ -14655,34 +14749,80 @@
         {
           "classification": "NEW",
           "component": "IPLF-062 canonical scope: Permission-scoped Ask this Workspace using new assistant sessions/turns/citations plus existing `ModelRun`, source, retrieval, and AI-policy owners.",
-          "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
-          "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
-          "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
+          "canonical_writer": "WorkspaceAssistantService owns only assistant_sessions, assistant_session_scopes, assistant_turns, and assistant_citations; existing TenantAIPolicy, ModelRun, billing, audit, Matter/client/IP/document/source/access services remain canonical for their records and decisions.",
+          "compatibility_path": "The new /app/assistant route is additive. Product Guide remains reviewed help truth, existing business-record pages remain canonical destinations, and every assistant citation links to those existing routes.",
+          "retirement_gate": "The assistant remains tenant-policy-disabled by default and proposed writes remain disabled until later owners pass. Exact migration, CI/security, production identity, citation/access, and responsive acceptance are required before activation claims."
         }
       ],
       "dependencies": [
         "IPLF-062A"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-23-EXC-01",
-        "planned:IPLF-UJ-23-EXC-02",
-        "planned:IPLF-UJ-23-EXC-03",
-        "planned:IPLF-UJ-23-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/workspace_assistant.py",
+        "apps/api/src/caseops_api/services/ip_document_workflow.py",
+        "apps/api/src/caseops_api/services/llm.py",
+        "apps/api/src/caseops_api/api/routes/workspace_assistant.py",
+        "apps/web/app/app/assistant/page.tsx",
+        "apps/web/components/assistant/WorkspaceAssistant.tsx",
+        "apps/web/lib/api/workspace-assistant.ts",
+        "apps/web/app/guide/page.tsx",
+        "apps/web/app/law-firms/page.tsx",
+        "docs/ip-implementation/WORKSPACE_ASSISTANT_FOUNDATION.md"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
-      "blockers": [],
+      "test_refs": [
+        "IPLF-UJ-23-EXC-01",
+        "IPLF-UJ-23-EXC-02",
+        "IPLF-UJ-23-EXC-03",
+        "IPLF-UJ-23-NORMAL",
+        "apps/api/tests/test_workspace_assistant_foundation.py",
+        "apps/api/tests/test_workspace_assistant_qa.py",
+        "apps/web/components/assistant/WorkspaceAssistant.test.tsx",
+        "apps/web/app/app/assistant/page.test.tsx",
+        "tests/e2e/iplf-062b-workspace-assistant-2026-08-27.spec.ts",
+        "tests/e2e/iplf-062b-workspace-assistant-2026-08-27-prod.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-062B/local-2026-08-27.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m6/IPLF-062B/local-2026-08-27.md",
+          "revision": "25e0c50cf5839aa8f90377daf9e7544549ec1e6b",
+          "environment": "Windows 11 local API/web, complete API and web inventories, fresh Next.js build, Chromium desktop and 360x800",
+          "fixtures": "isolated law-firm tenant, enabled assistant policy, permitted Matter scope, exact Matter citation, write proposal, unsupported legal proposition",
+          "assertions": "scope search/admission, creator privacy, pre/post-provider reauthorization, exact citation, write-free proposal, abstention, model metadata, task collection unchanged, narrow no-overflow",
+          "result": "passed",
+          "recorded_at": "2026-08-27T23:32:29+05:30"
+        }
+      ],
+      "blockers": [
+        {
+          "id": "IPLF-062B-AI-GUIDE-09-DISPOSITION",
+          "summary": "AI-GUIDE-09 destructive conversation deletion remains fail-closed until IPLF-071 supplies approved legal-hold-aware disposition authority; the current DELETE request is audited and returns a typed 409 without deleting evidence.",
+          "owner": "IPLF-071 legal-hold and data-disposition owner",
+          "evidence_needed": "Approve and implement the legal-hold-aware assistant disposition contract, then prove held evidence is preserved, eligible evidence is disposed, audit/export history remains complete, and exact deployed acceptance passes.",
+          "safe_fallback": "Continue returning assistant_deletion_governance_required without deleting assistant evidence; archive and governed export remain available.",
+          "milestone_impact": "Blocks complete AI-GUIDE-09 and IPLF-062 release closure but does not block the read-only IPLF-062B assistant workflow or later independent slices.",
+          "next_independent_slice": "IPLF-063A safety policy foundation."
+        }
+      ],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Run Docker/PostgreSQL/index-health and Docker browser acceptance, then require hosted CI/security, canonical main merge, migration-first production deployment, exact identity, and dated production assistant acceptance.",
+        "Keep all proposed writes disabled until IPLF-064 and keep destructive deletion unavailable until the IPLF-071 legal-hold-aware disposition path is approved and verified."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Creates bounded creator-private assistant sessions, explicit scope references, user/assistant turns, citations, ModelRun/billing records, and audit events only after current authorization and policy checks.",
+        "Does not write Matter, client, IP, document, task, draft, field, legal-source, access, feedback, analytics, worker, or scheduler state."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        "docs/ip-implementation/WORKSPACE_ASSISTANT_FOUNDATION.md",
+        "docs/ip-implementation/PRODUCT_GUIDE_FOUNDATION.md",
+        "docs/ip-implementation/evidence/m6/IPLF-062B/local-2026-08-27.md",
+        "Generated OpenAPI TypeScript client and Product Guide projections"
+      ],
+      "allocation_review": "2026-08-27 reciprocal AI-GUIDE review: owns Ask this Workspace sessions, explicit scope, answers/citations, assistant-side permission enforcement, proposal handoff, abstention, scoped record search, and conversation-policy behavior. Product-help UI remains IPLF-061B; write execution remains IPLF-064; safety/feedback remains IPLF-065; private retrieval and analytics remain IPLF-066.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
@@ -14856,8 +14996,13 @@
       "primary_behavior": "User workflow, exceptions, and release proof",
       "migration_boundary": "Additive expand/backfill/verify/switch boundary when persistence changes; otherwise explicitly no schema change.",
       "release_boundary": "Compatible slices may share one exact integrated candidate, CI matrix, staged rollout, rollback plan, and dated deployed acceptance; this row remains a traceability and activation unit, not a mandatory separate release.",
-      "requirement_ids": [],
-      "journey_path_ids": [],
+      "requirement_ids": [
+        "AI-GUIDE-06"
+      ],
+      "journey_path_ids": [
+        "UJ-23-EXC-03",
+        "UJ-23-NORMAL"
+      ],
       "ownership": [
         {
           "classification": "EXTEND",
@@ -14871,7 +15016,10 @@
         "IPLF-064A"
       ],
       "implementation_refs": [],
-      "test_refs": [],
+      "test_refs": [
+        "planned:IPLF-UJ-23-EXC-03",
+        "planned:IPLF-UJ-23-NORMAL"
+      ],
       "evidence_refs": [],
       "evidence_metadata": [],
       "blockers": [],
@@ -14882,7 +15030,7 @@
         "Pending slice design; no data mutation is authorized by this allocation row."
       ],
       "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
+      "allocation_review": "2026-08-27 reciprocal AI-GUIDE review: owns the proposed-action preview/confirm write boundary and the UJ-23 proposed-write exception; it does not own guide search, assistant retrieval, feedback, or analytics.",
       "implementation_status": "not_started",
       "verification_status": "not_run",
       "release_status": "blocked",
@@ -14951,6 +15099,10 @@
       "migration_boundary": "Additive expand/backfill/verify/switch boundary when persistence changes; otherwise explicitly no schema change.",
       "release_boundary": "Compatible slices may share one exact integrated candidate, CI matrix, staged rollout, rollback plan, and dated deployed acceptance; this row remains a traceability and activation unit, not a mandatory separate release.",
       "requirement_ids": [
+        "AI-GUIDE-04",
+        "AI-GUIDE-05",
+        "AI-GUIDE-07",
+        "AI-GUIDE-10",
         "AI-REV-01",
         "AI-REV-02",
         "AI-REV-03",
@@ -14966,7 +15118,10 @@
         "UJ-18-EXC-01",
         "UJ-18-EXC-02",
         "UJ-18-EXC-03",
-        "UJ-18-NORMAL"
+        "UJ-18-NORMAL",
+        "UJ-22-NORMAL",
+        "UJ-23-EXC-02",
+        "UJ-23-NORMAL"
       ],
       "ownership": [
         {
@@ -14985,7 +15140,10 @@
         "planned:IPLF-UJ-18-EXC-01",
         "planned:IPLF-UJ-18-EXC-02",
         "planned:IPLF-UJ-18-EXC-03",
-        "planned:IPLF-UJ-18-NORMAL"
+        "planned:IPLF-UJ-18-NORMAL",
+        "planned:IPLF-UJ-22-NORMAL",
+        "planned:IPLF-UJ-23-EXC-02",
+        "planned:IPLF-UJ-23-NORMAL"
       ],
       "evidence_refs": [],
       "evidence_metadata": [],
@@ -14997,7 +15155,7 @@
         "Pending slice design; no data mutation is authorized by this allocation row."
       ],
       "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
+      "allocation_review": "2026-08-27 reciprocal AI-GUIDE review: owns citation/permission/abstention safety evaluation and governed answer/navigation/permission/citation feedback in addition to AI-REV evaluation. It does not own the help corpus, assistant session writer, action writer, private index, or analytics store.",
       "implementation_status": "not_started",
       "verification_status": "not_run",
       "release_status": "blocked"
@@ -15059,6 +15217,10 @@
       "migration_boundary": "Additive expand/backfill/verify/switch boundary when persistence changes; otherwise explicitly no schema change.",
       "release_boundary": "Compatible slices may share one exact integrated candidate, CI matrix, staged rollout, rollback plan, and dated deployed acceptance; this row remains a traceability and activation unit, not a mandatory separate release.",
       "requirement_ids": [
+        "AI-GUIDE-04",
+        "AI-GUIDE-05",
+        "AI-GUIDE-08",
+        "AI-GUIDE-12",
         "IP-ACCESS-01",
         "IP-ACCESS-02",
         "IP-ACCESS-03",
@@ -15081,6 +15243,7 @@
         "SEARCH-ACL-12"
       ],
       "journey_path_ids": [
+        "UJ-22-NORMAL",
         "UJ-23-EXC-01",
         "UJ-23-EXC-02",
         "UJ-23-EXC-03",
@@ -15105,6 +15268,7 @@
       ],
       "implementation_refs": [],
       "test_refs": [
+        "planned:IPLF-UJ-22-NORMAL",
         "planned:IPLF-UJ-23-EXC-01",
         "planned:IPLF-UJ-23-EXC-02",
         "planned:IPLF-UJ-23-EXC-03",
@@ -15125,7 +15289,7 @@
         "Pending slice design; no data mutation is authorized by this allocation row."
       ],
       "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
+      "allocation_review": "2026-08-27 reciprocal AI-GUIDE review: owns private record/document retrieval, hydration reauthorization, permitted global record search, citation access, revocation propagation, and non-employee-scoring assistant/action analytics. It does not own the public help corpus, assistant session writer, proposed-action writer, or feedback queue.",
       "implementation_status": "not_started",
       "verification_status": "not_run",
       "release_status": "blocked"
@@ -23098,22 +23262,32 @@
       "journey_ids": [
         "UJ-22"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-AI-GUIDE-01",
-        "planned:IPLF-UJ-22-EXC-01",
-        "planned:IPLF-UJ-22-EXC-02",
-        "planned:IPLF-UJ-22-NORMAL"
+      "implementation_refs": [
+        "apps/web/app/guide/page.tsx",
+        "apps/web/components/guide/ProductGuideSearch.tsx",
+        "apps/web/lib/api/product-guide.ts",
+        "docs/ip-implementation/PRODUCT_GUIDE_CATALOG.json"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "IPLF-REQ-AI-GUIDE-01",
+        "IPLF-UJ-22-EXC-01",
+        "IPLF-UJ-22-EXC-02",
+        "IPLF-UJ-22-NORMAL",
+        "apps/web/components/guide/ProductGuideSearch.test.tsx",
+        "tests/e2e/iplf-061b-product-guide-workflow-2026-08-27.spec.ts",
+        "tests/e2e/iplf-061b-product-guide-workflow-2026-08-27-prod.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-061B/local-2026-08-27.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-061B"
       ],
-      "allocation_rationale": "AI-GUIDE allocation reviewed against PRD requirement family and parent epic scope: IPLF-061."
+      "allocation_rationale": "2026-08-27 reciprocal allocation review: the single maintained Product Guide corpus, approved-help search, and permission-aware navigation are implemented by IPLF-061B; generated answers and workspace Q&A remain outside this requirement owner."
     },
     {
       "id": "AI-GUIDE-02",
@@ -23121,24 +23295,33 @@
       "text": "Provide Ask this Workspace mode scoped to the current tenant and optionally client, asset, application, proceeding, Matter, or document set.",
       "text_sha256": "99edf4a9b11ba65a40cd444fd9c15fa37bdee41db08f8054d6349851423cadf8",
       "journey_ids": [
-        "UJ-22"
+        "UJ-23"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/workspace_assistant.py",
+        "apps/api/src/caseops_api/api/routes/workspace_assistant.py",
+        "apps/web/components/assistant/WorkspaceAssistant.tsx",
+        "apps/web/app/app/assistant/page.tsx"
+      ],
       "test_refs": [
-        "planned:IPLF-REQ-AI-GUIDE-02",
-        "planned:IPLF-UJ-22-EXC-01",
-        "planned:IPLF-UJ-22-EXC-02",
-        "planned:IPLF-UJ-22-NORMAL"
+        "IPLF-REQ-AI-GUIDE-02",
+        "IPLF-UJ-23-NORMAL",
+        "apps/api/tests/test_workspace_assistant_foundation.py",
+        "apps/api/tests/test_workspace_assistant_qa.py",
+        "apps/web/components/assistant/WorkspaceAssistant.test.tsx",
+        "tests/e2e/iplf-062b-workspace-assistant-2026-08-27.spec.ts"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-062B/local-2026-08-27.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
-        "IPLF-061B"
+        "IPLF-062B"
       ],
-      "allocation_rationale": "AI-GUIDE allocation reviewed against PRD requirement family and parent epic scope: IPLF-061."
+      "allocation_rationale": "2026-08-27 reciprocal allocation review: Ask this Workspace scope belongs to IPLF-062B, not the Product Guide UI."
     },
     {
       "id": "AI-GUIDE-03",
@@ -23146,24 +23329,32 @@
       "text": "Show active scope and allow the user to narrow or clear it.",
       "text_sha256": "5efed521b41cd06b4c1b0cd57ea7b0236799d6123baafa84ae505565a64c35ec",
       "journey_ids": [
-        "UJ-22"
+        "UJ-23"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/workspace_assistant.py",
+        "apps/api/src/caseops_api/schemas/workspace_assistant.py",
+        "apps/web/components/assistant/WorkspaceAssistant.tsx"
+      ],
       "test_refs": [
-        "planned:IPLF-REQ-AI-GUIDE-03",
-        "planned:IPLF-UJ-22-EXC-01",
-        "planned:IPLF-UJ-22-EXC-02",
-        "planned:IPLF-UJ-22-NORMAL"
+        "IPLF-REQ-AI-GUIDE-03",
+        "IPLF-UJ-23-EXC-01",
+        "IPLF-UJ-23-NORMAL",
+        "apps/api/tests/test_workspace_assistant_foundation.py",
+        "apps/web/components/assistant/WorkspaceAssistant.test.tsx",
+        "tests/e2e/iplf-062b-workspace-assistant-2026-08-27.spec.ts"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-062B/local-2026-08-27.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
-        "IPLF-061B"
+        "IPLF-062B"
       ],
-      "allocation_rationale": "AI-GUIDE allocation reviewed against PRD requirement family and parent epic scope: IPLF-061."
+      "allocation_rationale": "2026-08-27 reciprocal allocation review: active workspace scope selection belongs to IPLF-062B."
     },
     {
       "id": "AI-GUIDE-04",
@@ -23171,24 +23362,36 @@
       "text": "Every factual workspace answer cites exact records/documents; every external legal proposition cites a verified source.",
       "text_sha256": "40c62dc5d513dd2986d9389c22bef6b94aa69ff818f1911e4fc3dcf6c7a1114a",
       "journey_ids": [
-        "UJ-22"
+        "UJ-23"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/workspace_assistant.py",
+        "apps/api/src/caseops_api/schemas/workspace_assistant.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/web/components/assistant/WorkspaceAssistant.tsx"
+      ],
       "test_refs": [
-        "planned:IPLF-REQ-AI-GUIDE-04",
-        "planned:IPLF-UJ-22-EXC-01",
-        "planned:IPLF-UJ-22-EXC-02",
-        "planned:IPLF-UJ-22-NORMAL"
+        "IPLF-REQ-AI-GUIDE-04",
+        "IPLF-UJ-23-EXC-02",
+        "IPLF-UJ-23-NORMAL",
+        "apps/api/tests/test_workspace_assistant_foundation.py",
+        "apps/api/tests/test_workspace_assistant_qa.py",
+        "apps/web/components/assistant/WorkspaceAssistant.test.tsx",
+        "tests/e2e/iplf-062b-workspace-assistant-2026-08-27.spec.ts"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-062B/local-2026-08-27.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
-        "IPLF-061B"
+        "IPLF-062B",
+        "IPLF-065B",
+        "IPLF-066B"
       ],
-      "allocation_rationale": "AI-GUIDE allocation reviewed against PRD requirement family and parent epic scope: IPLF-061."
+      "allocation_rationale": "2026-08-27 reciprocal allocation review: answer citation assembly, citation safety evaluation, and private citation retrieval are distinct facets owned by IPLF-062B, IPLF-065B, and IPLF-066B."
     },
     {
       "id": "AI-GUIDE-05",
@@ -23196,24 +23399,34 @@
       "text": "Permission checks occur during retrieval and again before citation rendering.",
       "text_sha256": "36886a5f9b71905d7a8ae7006e516a45f08954d166e1eec0a3f2345abcc6ffc1",
       "journey_ids": [
-        "UJ-22"
+        "UJ-23"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/workspace_assistant.py",
+        "apps/api/src/caseops_api/services/ip_document_workflow.py",
+        "apps/web/components/assistant/WorkspaceAssistant.tsx"
+      ],
       "test_refs": [
-        "planned:IPLF-REQ-AI-GUIDE-05",
-        "planned:IPLF-UJ-22-EXC-01",
-        "planned:IPLF-UJ-22-EXC-02",
-        "planned:IPLF-UJ-22-NORMAL"
+        "IPLF-REQ-AI-GUIDE-05",
+        "IPLF-UJ-23-EXC-01",
+        "IPLF-UJ-23-NORMAL",
+        "apps/api/tests/test_workspace_assistant_foundation.py",
+        "apps/api/tests/test_workspace_assistant_qa.py",
+        "tests/e2e/iplf-062b-workspace-assistant-2026-08-27.spec.ts"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-062B/local-2026-08-27.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
-        "IPLF-061B"
+        "IPLF-062B",
+        "IPLF-065B",
+        "IPLF-066B"
       ],
-      "allocation_rationale": "AI-GUIDE allocation reviewed against PRD requirement family and parent epic scope: IPLF-061."
+      "allocation_rationale": "2026-08-27 reciprocal allocation review: assistant retrieval enforcement, permission-eval proof, and hydration-time reauthorization are owned by IPLF-062B, IPLF-065B, and IPLF-066B."
     },
     {
       "id": "AI-GUIDE-06",
@@ -23221,24 +23434,31 @@
       "text": "The assistant may propose navigation, searches, drafts, tasks, or field updates, but writes require preview and confirmation.",
       "text_sha256": "49ad2e92c4a891b8496d3eae1ad2147e51949cbca4494b48f549fe36d333f1e9",
       "journey_ids": [
-        "UJ-22"
+        "UJ-23"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/workspace_assistant.py",
+        "apps/web/components/assistant/WorkspaceAssistant.tsx"
+      ],
       "test_refs": [
-        "planned:IPLF-REQ-AI-GUIDE-06",
-        "planned:IPLF-UJ-22-EXC-01",
-        "planned:IPLF-UJ-22-EXC-02",
-        "planned:IPLF-UJ-22-NORMAL"
+        "IPLF-REQ-AI-GUIDE-06",
+        "IPLF-UJ-23-EXC-03",
+        "apps/api/tests/test_workspace_assistant_qa.py",
+        "apps/web/components/assistant/WorkspaceAssistant.test.tsx",
+        "tests/e2e/iplf-062b-workspace-assistant-2026-08-27.spec.ts"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-062B/local-2026-08-27.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
-        "IPLF-061B"
+        "IPLF-062B",
+        "IPLF-064B"
       ],
-      "allocation_rationale": "AI-GUIDE allocation reviewed against PRD requirement family and parent epic scope: IPLF-061."
+      "allocation_rationale": "2026-08-27 reciprocal allocation review: IPLF-062B owns assistant proposal handoff and IPLF-064B owns the preview/confirm write boundary."
     },
     {
       "id": "AI-GUIDE-07",
@@ -23246,24 +23466,39 @@
       "text": "Unsupported or insufficiently sourced questions return an abstention and suggested next search.",
       "text_sha256": "9b7824f83bccb1f57addd0376732780f02d5b02b48c54758fe24a81a55981f66",
       "journey_ids": [
-        "UJ-22"
+        "UJ-22",
+        "UJ-23"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/web/components/guide/ProductGuideSearch.tsx",
+        "apps/api/src/caseops_api/services/product_guide.py",
+        "apps/api/src/caseops_api/services/workspace_assistant.py",
+        "apps/web/components/assistant/WorkspaceAssistant.tsx"
+      ],
       "test_refs": [
-        "planned:IPLF-REQ-AI-GUIDE-07",
-        "planned:IPLF-UJ-22-EXC-01",
-        "planned:IPLF-UJ-22-EXC-02",
-        "planned:IPLF-UJ-22-NORMAL"
+        "IPLF-REQ-AI-GUIDE-07",
+        "IPLF-UJ-22-EXC-01",
+        "IPLF-UJ-22-EXC-02",
+        "IPLF-UJ-22-NORMAL",
+        "IPLF-UJ-23-EXC-02",
+        "apps/api/tests/test_workspace_assistant_qa.py",
+        "apps/web/components/assistant/WorkspaceAssistant.test.tsx",
+        "tests/e2e/iplf-062b-workspace-assistant-2026-08-27.spec.ts"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-061B/local-2026-08-27.md",
+        "docs/ip-implementation/evidence/m6/IPLF-062B/local-2026-08-27.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
-        "IPLF-061B"
+        "IPLF-061B",
+        "IPLF-062B",
+        "IPLF-065B"
       ],
-      "allocation_rationale": "AI-GUIDE allocation reviewed against PRD requirement family and parent epic scope: IPLF-061."
+      "allocation_rationale": "2026-08-27 reciprocal allocation review: IPLF-061B implements deterministic Product Guide abstention; IPLF-062B and IPLF-065B retain workspace-answer abstention and its safety evaluation."
     },
     {
       "id": "AI-GUIDE-08",
@@ -23271,24 +23506,40 @@
       "text": "Global keyword entry can find commands, clients, marks, identifiers, proceedings, documents, and permitted help topics.",
       "text_sha256": "fa6dd2b8dd2deeeb7a9cfe61a3fe3492594788b147f16c728c76b3fa0061fcbd",
       "journey_ids": [
-        "UJ-22"
+        "UJ-22",
+        "UJ-23"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/web/components/guide/ProductGuideSearch.tsx",
+        "apps/api/src/caseops_api/services/product_guide.py",
+        "apps/api/src/caseops_api/services/workspace_assistant.py",
+        "apps/web/components/assistant/WorkspaceAssistant.tsx"
+      ],
       "test_refs": [
-        "planned:IPLF-REQ-AI-GUIDE-08",
-        "planned:IPLF-UJ-22-EXC-01",
-        "planned:IPLF-UJ-22-EXC-02",
-        "planned:IPLF-UJ-22-NORMAL"
+        "IPLF-REQ-AI-GUIDE-08",
+        "IPLF-UJ-22-EXC-01",
+        "IPLF-UJ-22-EXC-02",
+        "IPLF-UJ-22-NORMAL",
+        "IPLF-UJ-23-EXC-01",
+        "IPLF-UJ-23-NORMAL",
+        "apps/api/tests/test_workspace_assistant_foundation.py",
+        "apps/web/components/assistant/WorkspaceAssistant.test.tsx",
+        "tests/e2e/iplf-062b-workspace-assistant-2026-08-27.spec.ts"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-061B/local-2026-08-27.md",
+        "docs/ip-implementation/evidence/m6/IPLF-062B/local-2026-08-27.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
-        "IPLF-061B"
+        "IPLF-061B",
+        "IPLF-062B",
+        "IPLF-066B"
       ],
-      "allocation_rationale": "AI-GUIDE allocation reviewed against PRD requirement family and parent epic scope: IPLF-061."
+      "allocation_rationale": "2026-08-27 reciprocal allocation review: IPLF-061B implements permitted help/command keyword entry; IPLF-062B and IPLF-066B retain scoped client, mark, identifier, proceeding, and document retrieval."
     },
     {
       "id": "AI-GUIDE-09",
@@ -23296,24 +23547,44 @@
       "text": "Conversation retention, export, deletion, and model/provider metadata follow tenant policy.",
       "text_sha256": "44eee2b1bb0193ed1ab60fa2640a9a1864ac7f5377e29f2c5ab4e8501011a4b7",
       "journey_ids": [
-        "UJ-22"
+        "UJ-23"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260827_0002_workspace_assistant_foundation.py",
+        "apps/api/src/caseops_api/services/workspace_assistant.py",
+        "apps/api/src/caseops_api/services/tenant_ai_policy.py",
+        "apps/api/src/caseops_api/api/routes/workspace_assistant.py",
+        "apps/web/components/assistant/WorkspaceAssistant.tsx"
+      ],
       "test_refs": [
-        "planned:IPLF-REQ-AI-GUIDE-09",
-        "planned:IPLF-UJ-22-EXC-01",
-        "planned:IPLF-UJ-22-EXC-02",
-        "planned:IPLF-UJ-22-NORMAL"
+        "IPLF-REQ-AI-GUIDE-09",
+        "IPLF-UJ-23-NORMAL",
+        "apps/api/tests/test_20260827_workspace_assistant_migration.py",
+        "apps/api/tests/test_workspace_assistant_foundation.py",
+        "apps/web/components/assistant/WorkspaceAssistant.test.tsx"
       ],
-      "evidence_refs": [],
-      "blockers": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-062A/local-2026-08-27.md",
+        "docs/ip-implementation/evidence/m6/IPLF-062B/local-2026-08-27.md"
+      ],
+      "blockers": [
+        {
+          "id": "AI-GUIDE-09-DISPOSITION",
+          "summary": "Destructive conversation deletion remains unavailable until IPLF-071 supplies approved legal-hold-aware disposition; the current DELETE request is audited and returns assistant_deletion_governance_required without deleting evidence.",
+          "owner": "IPLF-071 legal-hold and data-disposition owner",
+          "evidence_needed": "Approve and implement the legal-hold-aware assistant disposition contract, then prove held evidence is preserved, eligible evidence is disposed, audit/export history remains complete, and exact deployed acceptance passes.",
+          "safe_fallback": "Retain evidence and return the typed governance conflict; do not add an ungoverned delete path.",
+          "milestone_impact": "Keeps AI-GUIDE-09 in progress and release-blocked while its retention, archive, export, and model-metadata facets remain locally verified.",
+          "next_independent_slice": "IPLF-063A safety policy foundation."
+        }
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
-        "IPLF-061B"
+        "IPLF-062B"
       ],
-      "allocation_rationale": "AI-GUIDE allocation reviewed against PRD requirement family and parent epic scope: IPLF-061."
+      "allocation_rationale": "2026-08-27 reciprocal allocation review: assistant conversation retention, export, deletion, and model/provider metadata belong to IPLF-062B."
     },
     {
       "id": "AI-GUIDE-10",
@@ -23321,7 +23592,8 @@
       "text": "Users can rate/report an answer, wrong navigation, missing permission explanation, or unsafe citation; feedback enters a governed review queue.",
       "text_sha256": "c88e32c9c64ed91a0adb7a5bcf757a3652abe887f9f68dceb8b556028938cabb",
       "journey_ids": [
-        "UJ-22"
+        "UJ-22",
+        "UJ-23"
       ],
       "implementation_refs": [],
       "test_refs": [
@@ -23336,9 +23608,9 @@
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
-        "IPLF-061B"
+        "IPLF-065B"
       ],
-      "allocation_rationale": "AI-GUIDE allocation reviewed against PRD requirement family and parent epic scope: IPLF-061."
+      "allocation_rationale": "2026-08-27 reciprocal allocation review: governed answer/navigation/permission/citation feedback belongs to IPLF-065B."
     },
     {
       "id": "AI-GUIDE-11",
@@ -23348,22 +23620,31 @@
       "journey_ids": [
         "UJ-22"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-AI-GUIDE-11",
-        "planned:IPLF-UJ-22-EXC-01",
-        "planned:IPLF-UJ-22-EXC-02",
-        "planned:IPLF-UJ-22-NORMAL"
+      "implementation_refs": [
+        "docs/ip-implementation/PRODUCT_GUIDE_CATALOG.json",
+        "apps/api/src/caseops_api/services/product_guide.py",
+        "apps/web/components/guide/ProductGuideSearch.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "IPLF-REQ-AI-GUIDE-11",
+        "IPLF-UJ-22-EXC-01",
+        "IPLF-UJ-22-EXC-02",
+        "IPLF-UJ-22-NORMAL",
+        "apps/api/tests/test_product_guide.py",
+        "apps/web/components/guide/ProductGuideSearch.test.tsx",
+        "tests/e2e/iplf-061b-product-guide-workflow-2026-08-27.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-061B/local-2026-08-27.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-061B"
       ],
-      "allocation_rationale": "AI-GUIDE allocation reviewed against PRD requirement family and parent epic scope: IPLF-061."
+      "allocation_rationale": "2026-08-27 reciprocal allocation review: reviewed English (India) help text, plain-language labels, and approved catalog aliases are owned by IPLF-061B; multilingual corpora remain unavailable until separately evaluated."
     },
     {
       "id": "AI-GUIDE-12",
@@ -23371,7 +23652,8 @@
       "text": "Measure task completion, abstention, citation-open success, permission denial, proposed-action confirmation, and reported-answer rate without scoring employee performance.",
       "text_sha256": "00ad43390b44e4c0e236e06d361588e727c99e9973fe757368a71298a773eecc",
       "journey_ids": [
-        "UJ-22"
+        "UJ-22",
+        "UJ-23"
       ],
       "implementation_refs": [],
       "test_refs": [
@@ -23386,9 +23668,9 @@
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
-        "IPLF-061B"
+        "IPLF-066B"
       ],
-      "allocation_rationale": "AI-GUIDE allocation reviewed against PRD requirement family and parent epic scope: IPLF-061."
+      "allocation_rationale": "2026-08-27 reciprocal allocation review: privacy-bounded assistant/action analytics belong to IPLF-066B and are not fabricated by the read-only Product Guide slice."
     },
     {
       "id": "AI-REV-01",
@@ -41252,29 +41534,32 @@
       ],
       "requirement_ids": [
         "AI-GUIDE-01",
-        "AI-GUIDE-02",
-        "AI-GUIDE-03",
-        "AI-GUIDE-04",
-        "AI-GUIDE-05",
-        "AI-GUIDE-06",
         "AI-GUIDE-07",
         "AI-GUIDE-08",
-        "AI-GUIDE-09",
         "AI-GUIDE-10",
         "AI-GUIDE-11",
         "AI-GUIDE-12"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-22-EXC-01",
-        "planned:IPLF-UJ-22-EXC-02",
-        "planned:IPLF-UJ-22-NORMAL"
+        "IPLF-UJ-22-EXC-01",
+        "IPLF-UJ-22-EXC-02",
+        "IPLF-UJ-22-NORMAL",
+        "apps/web/components/guide/ProductGuideSearch.test.tsx",
+        "planned:IPLF-065B-UJ-22-NORMAL",
+        "planned:IPLF-066B-UJ-22-NORMAL",
+        "tests/e2e/iplf-061b-product-guide-workflow-2026-08-27-prod.spec.ts",
+        "tests/e2e/iplf-061b-product-guide-workflow-2026-08-27.spec.ts"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-061B/local-2026-08-27.md"
+      ],
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
-        "IPLF-061B"
+        "IPLF-061B",
+        "IPLF-065B",
+        "IPLF-066B"
       ]
     },
     {
@@ -41291,6 +41576,16 @@
         "UJ-23-EXC-03"
       ],
       "requirement_ids": [
+        "AI-GUIDE-02",
+        "AI-GUIDE-03",
+        "AI-GUIDE-04",
+        "AI-GUIDE-05",
+        "AI-GUIDE-06",
+        "AI-GUIDE-07",
+        "AI-GUIDE-08",
+        "AI-GUIDE-09",
+        "AI-GUIDE-10",
+        "AI-GUIDE-12",
         "IP-ACCESS-01",
         "IP-ACCESS-02",
         "IP-ACCESS-03",
@@ -41313,17 +41608,25 @@
         "SEARCH-ACL-12"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-23-EXC-01",
-        "planned:IPLF-UJ-23-EXC-02",
-        "planned:IPLF-UJ-23-EXC-03",
-        "planned:IPLF-UJ-23-NORMAL"
+        "IPLF-UJ-23-EXC-01",
+        "IPLF-UJ-23-EXC-02",
+        "IPLF-UJ-23-EXC-03",
+        "IPLF-UJ-23-NORMAL",
+        "apps/api/tests/test_workspace_assistant_foundation.py",
+        "apps/api/tests/test_workspace_assistant_qa.py",
+        "apps/web/components/assistant/WorkspaceAssistant.test.tsx",
+        "tests/e2e/iplf-062b-workspace-assistant-2026-08-27.spec.ts"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-062B/local-2026-08-27.md"
+      ],
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-062B",
+        "IPLF-064B",
+        "IPLF-065B",
         "IPLF-066B"
       ]
     },
@@ -48330,29 +48633,31 @@
       "test_id": "IPLF-UJ-22-NORMAL",
       "requirement_ids": [
         "AI-GUIDE-01",
-        "AI-GUIDE-02",
-        "AI-GUIDE-03",
-        "AI-GUIDE-04",
-        "AI-GUIDE-05",
-        "AI-GUIDE-06",
         "AI-GUIDE-07",
         "AI-GUIDE-08",
-        "AI-GUIDE-09",
         "AI-GUIDE-10",
         "AI-GUIDE-11",
         "AI-GUIDE-12"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-22-NORMAL"
+        "IPLF-UJ-22-NORMAL",
+        "tests/e2e/iplf-061b-product-guide-workflow-2026-08-27.spec.ts",
+        "tests/e2e/iplf-061b-product-guide-workflow-2026-08-27-prod.spec.ts",
+        "planned:IPLF-065B-UJ-22-NORMAL",
+        "planned:IPLF-066B-UJ-22-NORMAL"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-061B/local-2026-08-27.md"
+      ],
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
-        "IPLF-061B"
+        "IPLF-061B",
+        "IPLF-065B",
+        "IPLF-066B"
       ],
-      "allocation_rationale": "UJ-22 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-061."
+      "allocation_rationale": "2026-08-27 reciprocal review: IPLF-061B implements approved help and navigation; IPLF-065B retains governed user reporting and IPLF-066B retains the non-content-heavy analytics postcondition."
     },
     {
       "id": "UJ-22-EXC-01",
@@ -48363,29 +48668,26 @@
       "test_id": "IPLF-UJ-22-EXC-01",
       "requirement_ids": [
         "AI-GUIDE-01",
-        "AI-GUIDE-02",
-        "AI-GUIDE-03",
-        "AI-GUIDE-04",
-        "AI-GUIDE-05",
-        "AI-GUIDE-06",
-        "AI-GUIDE-07",
         "AI-GUIDE-08",
-        "AI-GUIDE-09",
         "AI-GUIDE-10",
-        "AI-GUIDE-11",
-        "AI-GUIDE-12"
+        "AI-GUIDE-11"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-22-EXC-01"
+        "IPLF-UJ-22-EXC-01",
+        "apps/web/components/guide/ProductGuideSearch.test.tsx",
+        "tests/e2e/iplf-061b-product-guide-workflow-2026-08-27.spec.ts",
+        "tests/e2e/iplf-061b-product-guide-workflow-2026-08-27-prod.spec.ts"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-061B/local-2026-08-27.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-061B"
       ],
-      "allocation_rationale": "UJ-22 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-061."
+      "allocation_rationale": "2026-08-27 current-implementation review: server-filtered commands and sanitized capability explanations implement this Product Guide exception without exposing restricted destinations or record names."
     },
     {
       "id": "UJ-22-EXC-02",
@@ -48396,6 +48698,33 @@
       "test_id": "IPLF-UJ-22-EXC-02",
       "requirement_ids": [
         "AI-GUIDE-01",
+        "AI-GUIDE-10",
+        "AI-GUIDE-11"
+      ],
+      "test_refs": [
+        "IPLF-UJ-22-EXC-02",
+        "apps/web/components/guide/ProductGuideSearch.test.tsx",
+        "tests/e2e/iplf-061b-product-guide-workflow-2026-08-27.spec.ts",
+        "tests/e2e/iplf-061b-product-guide-workflow-2026-08-27-prod.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-061B/local-2026-08-27.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "blocked",
+      "slice_ids": [
+        "IPLF-061B"
+      ],
+      "allocation_rationale": "2026-08-27 current-implementation review: the UI sends its content version and visibly reports the server's current version when stale."
+    },
+    {
+      "id": "UJ-23-NORMAL",
+      "journey_id": "UJ-23",
+      "kind": "normal",
+      "source_text": "Normal path for UJ-23: Ask this Workspace",
+      "test_id": "IPLF-UJ-23-NORMAL",
+      "requirement_ids": [
         "AI-GUIDE-02",
         "AI-GUIDE-03",
         "AI-GUIDE-04",
@@ -48405,28 +48734,7 @@
         "AI-GUIDE-08",
         "AI-GUIDE-09",
         "AI-GUIDE-10",
-        "AI-GUIDE-11",
-        "AI-GUIDE-12"
-      ],
-      "test_refs": [
-        "planned:IPLF-UJ-22-EXC-02"
-      ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
-      "slice_ids": [
-        "IPLF-061B"
-      ],
-      "allocation_rationale": "UJ-22 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-061."
-    },
-    {
-      "id": "UJ-23-NORMAL",
-      "journey_id": "UJ-23",
-      "kind": "normal",
-      "source_text": "Normal path for UJ-23: Ask this Workspace",
-      "test_id": "IPLF-UJ-23-NORMAL",
-      "requirement_ids": [
+        "AI-GUIDE-12",
         "IP-ACCESS-01",
         "IP-ACCESS-02",
         "IP-ACCESS-03",
@@ -48449,17 +48757,25 @@
         "SEARCH-ACL-12"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-23-NORMAL"
+        "IPLF-UJ-23-NORMAL",
+        "apps/api/tests/test_workspace_assistant_foundation.py",
+        "apps/api/tests/test_workspace_assistant_qa.py",
+        "apps/web/components/assistant/WorkspaceAssistant.test.tsx",
+        "tests/e2e/iplf-062b-workspace-assistant-2026-08-27.spec.ts"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-062B/local-2026-08-27.md"
+      ],
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-062B",
+        "IPLF-064B",
+        "IPLF-065B",
         "IPLF-066B"
       ],
-      "allocation_rationale": "UJ-23 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-062, IPLF-066."
+      "allocation_rationale": "2026-08-27 reciprocal review: session/answer workflow, proposed-action preview, safety/abstention, and private retrieval are owned by IPLF-062B, IPLF-064B, IPLF-065B, and IPLF-066B."
     },
     {
       "id": "UJ-23-EXC-01",
@@ -48469,6 +48785,9 @@
       "source_sha256": "6e9994e3b4af11293d3202d2e64c45be745f797d1d87626270221611f8276606",
       "test_id": "IPLF-UJ-23-EXC-01",
       "requirement_ids": [
+        "AI-GUIDE-03",
+        "AI-GUIDE-05",
+        "AI-GUIDE-08",
         "IP-ACCESS-01",
         "IP-ACCESS-02",
         "IP-ACCESS-03",
@@ -48491,10 +48810,14 @@
         "SEARCH-ACL-12"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-23-EXC-01"
+        "IPLF-UJ-23-EXC-01",
+        "apps/api/tests/test_workspace_assistant_foundation.py",
+        "apps/api/tests/test_workspace_assistant_qa.py"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-062B/local-2026-08-27.md"
+      ],
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -48511,6 +48834,8 @@
       "source_sha256": "7afcbb1b9fba86d8e79a93793ea3af06c7f23c4060cdb999529428efb7bb337a",
       "test_id": "IPLF-UJ-23-EXC-02",
       "requirement_ids": [
+        "AI-GUIDE-04",
+        "AI-GUIDE-07",
         "IP-ACCESS-01",
         "IP-ACCESS-02",
         "IP-ACCESS-03",
@@ -48533,17 +48858,23 @@
         "SEARCH-ACL-12"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-23-EXC-02"
+        "IPLF-UJ-23-EXC-02",
+        "apps/api/tests/test_workspace_assistant_qa.py",
+        "apps/web/components/assistant/WorkspaceAssistant.test.tsx",
+        "tests/e2e/iplf-062b-workspace-assistant-2026-08-27.spec.ts"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-062B/local-2026-08-27.md"
+      ],
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-062B",
+        "IPLF-065B",
         "IPLF-066B"
       ],
-      "allocation_rationale": "UJ-23 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-062, IPLF-066."
+      "allocation_rationale": "2026-08-27 reciprocal review: IPLF-062B owns assistant abstention, IPLF-065B evaluates it, and IPLF-066B enforces private evidence retrieval."
     },
     {
       "id": "UJ-23-EXC-03",
@@ -48553,6 +48884,7 @@
       "source_sha256": "6c5258ff1b7f9f1184522924439d1a93055e0609f4f4ead1118a377a1e58246d",
       "test_id": "IPLF-UJ-23-EXC-03",
       "requirement_ids": [
+        "AI-GUIDE-06",
         "IP-ACCESS-01",
         "IP-ACCESS-02",
         "IP-ACCESS-03",
@@ -48575,17 +48907,23 @@
         "SEARCH-ACL-12"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-23-EXC-03"
+        "IPLF-UJ-23-EXC-03",
+        "apps/api/tests/test_workspace_assistant_qa.py",
+        "apps/web/components/assistant/WorkspaceAssistant.test.tsx",
+        "tests/e2e/iplf-062b-workspace-assistant-2026-08-27.spec.ts"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-062B/local-2026-08-27.md"
+      ],
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-062B",
+        "IPLF-064B",
         "IPLF-066B"
       ],
-      "allocation_rationale": "UJ-23 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-062, IPLF-066."
+      "allocation_rationale": "2026-08-27 reciprocal review: IPLF-062B proposes, IPLF-064B enforces preview/confirm, and IPLF-066B protects private targets throughout the action boundary."
     },
     {
       "id": "UJ-24-NORMAL",

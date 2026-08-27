@@ -241,6 +241,80 @@ def test_local_storage_key_does_not_embed_a_long_original_filename(
     assert resolve_storage_path(stored.storage_key).read_bytes() == b"portable local storage path"
 
 
+def test_local_storage_stages_and_validates_inside_the_destination_directory(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    reset_storage_settings,
+) -> None:
+    storage_root = tmp_path / "documents"
+    observed: dict[str, object] = {}
+    monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_BACKEND", "local")
+    monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_PATH", storage_root.as_posix())
+
+    def validate(path: Path) -> None:
+        observed["path"] = path
+        observed["contents"] = path.read_bytes()
+        observed["exists_during_validation"] = path.exists()
+
+    stored = persist_workspace_attachment(
+        company_id="company-1",
+        workspace_id="matter-1",
+        attachment_id="attachment-1",
+        filename="court-order.txt",
+        stream=io.BytesIO(b"destination-local staging"),
+        validate_temp_file=validate,
+    )
+
+    target_path = resolve_storage_path(stored.storage_key)
+    observed_path = observed["path"]
+    assert isinstance(observed_path, Path)
+    assert observed_path.parent == target_path.parent
+    assert observed_path.name.startswith(".caseops-")
+    assert observed["exists_during_validation"] is True
+    assert observed["contents"] == b"destination-local staging"
+    assert not observed_path.exists()
+    assert target_path.read_bytes() == b"destination-local staging"
+    assert list(target_path.parent.glob(".caseops-*")) == []
+
+
+def test_local_storage_keeps_staging_name_short_near_windows_path_limit(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    reset_storage_settings,
+) -> None:
+    target_root_length = 120
+    padding_length = max(1, target_root_length - len(str(tmp_path)) - 1)
+    storage_root = tmp_path / ("s" * padding_length)
+    company_id = "c" * 36
+    workspace_id = "w" * 36
+    attachment_id = "a" * 36
+    observed_temp_path: Path | None = None
+    monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_BACKEND", "local")
+    monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_PATH", storage_root.as_posix())
+
+    def validate(path: Path) -> None:
+        nonlocal observed_temp_path
+        observed_temp_path = path
+
+    stored = persist_workspace_attachment(
+        company_id=company_id,
+        workspace_id=workspace_id,
+        attachment_id=attachment_id,
+        filename="order.txt",
+        stream=io.BytesIO(b"portable near-boundary upload"),
+        validate_temp_file=validate,
+    )
+
+    target_path = resolve_storage_path(stored.storage_key)
+    legacy_staging_path = target_path.parent / f".{target_path.name}.12345678.upload"
+    assert len(str(target_path)) < 260
+    assert len(str(legacy_staging_path)) >= 260
+    assert observed_temp_path is not None
+    assert len(str(observed_temp_path)) < len(str(target_path))
+    assert not observed_temp_path.exists()
+    assert target_path.read_bytes() == b"portable near-boundary upload"
+
+
 def test_local_storage_handles_cross_filesystem_temp_move_atomically(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

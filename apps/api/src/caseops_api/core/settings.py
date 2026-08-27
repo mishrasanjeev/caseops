@@ -357,6 +357,7 @@ class Settings(BaseSettings):
     # Haiku-quality briefs.
     llm_model: str = Field(default="caseops-mock-1")
     llm_model_drafting: str | None = Field(default=None)
+    llm_model_assistant: str | None = Field(default=None)
     llm_model_recommendations: str | None = Field(default=None)
     llm_model_hearing_pack: str | None = Field(default=None)
     llm_model_metadata_extract: str | None = Field(default=None)
@@ -383,6 +384,7 @@ class Settings(BaseSettings):
     # structured JSON and stay tight.
     llm_max_output_tokens_drafting: int = Field(default=8192, ge=512)
     llm_max_output_tokens_hearing_pack: int = Field(default=4096, ge=512)
+    llm_max_output_tokens_assistant: int = Field(default=2048, ge=256, le=8192)
     # BUG-005 2026-04-21: the default 2048 was truncating
     # recommendations mid-rationale — both Sonnet and Haiku ended
     # their JSON at ~2k output tokens on a real matter, and the

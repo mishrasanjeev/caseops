@@ -461,7 +461,7 @@ describe("IpDocketPage", () => {
   });
 
   it("renders a deep-linked docket without waiting for the full portfolio", async () => {
-    window.history.replaceState(null, "", "/app/ip?docket=ip-1");
+    window.history.replaceState(null, "", "/app/ip?docket=ip-1&view=access");
     fetchIpDocketsMock.mockReturnValue(new Promise(() => {}));
 
     render(withClient(<IpDocketPage />));
@@ -474,7 +474,7 @@ describe("IpDocketPage", () => {
   });
 
   it("prioritizes a deep-linked docket before portfolio and document requests", async () => {
-    window.history.replaceState(null, "", "/app/ip?docket=ip-1");
+    window.history.replaceState(null, "", "/app/ip?docket=ip-1&view=access");
     fetchIpDocketMock.mockReturnValue(new Promise(() => {}));
 
     render(withClient(<IpDocketPage />));
@@ -491,6 +491,31 @@ describe("IpDocketPage", () => {
     expect(fetchIpDocketsMock).not.toHaveBeenCalled();
     expect(fetchIpDocumentsMock).not.toHaveBeenCalled();
     expect(fetchIpDocumentTaxonomyMock).not.toHaveBeenCalled();
+  });
+
+  it("opens ordinary docket links on overview and honors an explicit schedule view", async () => {
+    window.history.replaceState(null, "", "/app/ip?docket=ip-1");
+
+    const { unmount } = render(withClient(<IpDocketPage />));
+
+    expect(await screen.findByRole("tab", { name: "Overview" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.queryByTestId("ip-access-workspace")).not.toBeInTheDocument();
+    unmount();
+
+    window.history.replaceState(null, "", "/app/ip?docket=ip-1&view=schedule");
+    render(withClient(<IpDocketPage />));
+
+    expect(
+      await screen.findByRole("tab", { name: "Hearings and deadlines" }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(
+      await screen.findByRole("heading", {
+        name: "Hearings, reminders, and calendar copies",
+      }),
+    ).toBeVisible();
   });
 
   it("creates a pre-filing application through one canonical command", async () => {

@@ -18,7 +18,7 @@ def test_public_catalog_is_versioned_bounded_and_does_not_publish_commands(
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["content_version"] == "2026.08.26.1"
+    assert body["content_version"] == "2026.08.27.2"
     assert body["canonical_path"] == "/guide"
     assert len(body["catalog_fingerprint"]) == 64
     assert len(body["sections"]) == 27
@@ -52,7 +52,7 @@ def test_authenticated_search_ranks_navigation_and_reports_stale_clients(
     body = response.json()
     assert body["status"] == "matched"
     assert body["version_status"] == "stale"
-    assert body["content_version"] == "2026.08.26.1"
+    assert body["content_version"] == "2026.08.27.2"
     assert len(body["results"]) <= 3
     assert body["results"][0] == {
         "kind": "command",

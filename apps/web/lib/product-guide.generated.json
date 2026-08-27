@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "corpus_id": "caseops-product-guide",
-  "content_version": "2026.08.26.1",
-  "display_version": "v3",
+  "content_version": "2026.08.27.2",
+  "display_version": "v4",
   "language": "en-IN",
   "canonical_path": "/guide",
-  "updated_on": "2026-08-26",
+  "updated_on": "2026-08-27",
   "navigation_groups": {
     "overview": "Overview",
     "schedule": "Schedule",
@@ -817,6 +817,23 @@
         "cloud documents"
       ],
       "required_capabilities": []
+    },
+    {
+      "id": "workspace-assistant",
+      "label": "Ask Workspace",
+      "href": "/app/assistant",
+      "icon": "Sparkles",
+      "group": "intel",
+      "summary": "Ask factual questions within explicitly selected and currently permitted workspace records.",
+      "keywords": [
+        "ask workspace",
+        "assistant",
+        "chat",
+        "record question"
+      ],
+      "required_capabilities": [
+        "ai:generate"
+      ]
     },
     {
       "id": "research",

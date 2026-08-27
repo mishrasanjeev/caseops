@@ -30,6 +30,10 @@ class ResolvedAIPolicy:
     allowed_drafting: tuple[str, ...]
     allowed_recommendations: tuple[str, ...]
     allowed_hearing_pack: tuple[str, ...]
+    allowed_assistant: tuple[str, ...]
+    workspace_assistant_enabled: bool
+    assistant_retention_days: int
+    policy_version: int
     max_tokens_per_session: int
     monthly_token_budget: int | None
     user_monthly_token_budget: int | None
@@ -59,6 +63,10 @@ DEFAULT_POLICY = ResolvedAIPolicy(
     allowed_drafting=(),
     allowed_recommendations=(),
     allowed_hearing_pack=(),
+    allowed_assistant=(),
+    workspace_assistant_enabled=False,
+    assistant_retention_days=90,
+    policy_version=1,
     max_tokens_per_session=16384,
     monthly_token_budget=None,
     user_monthly_token_budget=None,
@@ -80,6 +88,10 @@ def resolve_tenant_policy(
             allowed_drafting=DEFAULT_POLICY.allowed_drafting,
             allowed_recommendations=DEFAULT_POLICY.allowed_recommendations,
             allowed_hearing_pack=DEFAULT_POLICY.allowed_hearing_pack,
+            allowed_assistant=DEFAULT_POLICY.allowed_assistant,
+            workspace_assistant_enabled=DEFAULT_POLICY.workspace_assistant_enabled,
+            assistant_retention_days=DEFAULT_POLICY.assistant_retention_days,
+            policy_version=DEFAULT_POLICY.policy_version,
             max_tokens_per_session=DEFAULT_POLICY.max_tokens_per_session,
             monthly_token_budget=DEFAULT_POLICY.monthly_token_budget,
             user_monthly_token_budget=DEFAULT_POLICY.user_monthly_token_budget,
@@ -96,6 +108,10 @@ def resolve_tenant_policy(
         allowed_drafting=_parse_list(row.allowed_models_drafting_json),
         allowed_recommendations=_parse_list(row.allowed_models_recommendations_json),
         allowed_hearing_pack=_parse_list(row.allowed_models_hearing_pack_json),
+        allowed_assistant=_parse_list(row.allowed_models_assistant_json),
+        workspace_assistant_enabled=bool(row.workspace_assistant_enabled),
+        assistant_retention_days=int(row.assistant_retention_days),
+        policy_version=int(row.policy_version),
         max_tokens_per_session=int(row.max_tokens_per_session),
         monthly_token_budget=(
             int(row.monthly_token_budget) if row.monthly_token_budget is not None else None
@@ -130,6 +146,7 @@ def is_model_allowed(
         "drafting": policy.allowed_drafting,
         "recommendations": policy.allowed_recommendations,
         "hearing_pack": policy.allowed_hearing_pack,
+        "assistant": policy.allowed_assistant,
     }
     allowed = mapping.get(normalized_purpose, ())
     if not allowed:

@@ -12,6 +12,7 @@ from alembic import command
 from caseops_api.core.settings import get_settings
 from caseops_api.db.index_coverage import database_foreign_key_gaps
 from caseops_api.db.session import clear_engine_cache
+from caseops_api.scripts import check_database_indexes
 from caseops_api.scripts.check_database_indexes import build_index_health_report
 
 PREVIOUS_HEAD = "20260826_0002"
@@ -107,6 +108,11 @@ def test_complete_foreign_key_indexes_migration_round_trip(
     assert _head(database_url) == MIGRATION_HEAD
     assert _gaps(database_url) == ()
     assert HOT_INDEX in _ip_docket_indexes(database_url)
+    monkeypatch.setattr(
+        check_database_indexes,
+        "_required_schema_revision",
+        lambda: MIGRATION_HEAD,
+    )
     engine = create_engine(database_url, future=True)
     try:
         with engine.connect() as connection:

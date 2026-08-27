@@ -12974,7 +12974,14 @@ class TenantAIPolicy(Base):
     """
 
     __tablename__ = "tenant_ai_policies"
-    __table_args__ = (UniqueConstraint("company_id", name="uq_tenant_ai_policy_company"),)
+    __table_args__ = (
+        UniqueConstraint("company_id", name="uq_tenant_ai_policy_company"),
+        CheckConstraint(
+            "assistant_retention_days >= 1 AND assistant_retention_days <= 3650",
+            name="ck_tenant_ai_policy_assistant_retention_days",
+        ),
+        CheckConstraint("policy_version > 0", name="ck_tenant_ai_policy_version_positive"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
@@ -12987,6 +12994,18 @@ class TenantAIPolicy(Base):
     )
     allowed_models_hearing_pack_json: Mapped[str] = mapped_column(
         Text, nullable=False, default="[]"
+    )
+    allowed_models_assistant_json: Mapped[str] = mapped_column(
+        Text, nullable=False, default="[]", server_default="[]"
+    )
+    workspace_assistant_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+    assistant_retention_days: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=90, server_default="90"
+    )
+    policy_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
     )
     max_tokens_per_session: Mapped[int] = mapped_column(Integer, nullable=False, default=16384)
     monthly_token_budget: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -19761,6 +19780,268 @@ class IpDocketQueue(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+# IPLF-062A: canonical persistence for permission-scoped workspace assistance.
+# Source records remain in their existing bounded contexts; these tables store
+# only conversation state, explicit scope references, and answer provenance.
+class AssistantSessionStatus(StrEnum):
+    ACTIVE = "active"
+    ARCHIVED = "archived"
+
+
+class AssistantScopeType(StrEnum):
+    TENANT = "tenant"
+    CLIENT = "client"
+    MATTER = "matter"
+    IP_DOCKET = "ip_docket"
+    IP_ASSET = "ip_asset"
+    TRADEMARK_APPLICATION = "trademark_application"
+    IP_PROCEEDING = "ip_proceeding"
+    MATTER_DOCUMENT = "matter_document"
+    IP_DOCUMENT = "ip_document"
+
+
+class AssistantTurnRole(StrEnum):
+    USER = "user"
+    ASSISTANT = "assistant"
+
+
+class AssistantTurnStatus(StrEnum):
+    QUEUED = "queued"
+    COMPLETED = "completed"
+    ABSTAINED = "abstained"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class AssistantSession(Base):
+    __tablename__ = "assistant_sessions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_assistant_session_creator_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_assistant_session_id_company"),
+        CheckConstraint(
+            "status IN ('active', 'archived')",
+            name="ck_assistant_session_status",
+        ),
+        CheckConstraint("version > 0", name="ck_assistant_session_version_positive"),
+        CheckConstraint(
+            "length(trim(title)) > 0",
+            name="ck_assistant_session_title_nonempty",
+        ),
+        CheckConstraint(
+            "retention_expires_at > created_at",
+            name="ck_assistant_session_retention_after_creation",
+        ),
+        Index(
+            "ix_assistant_sessions_company_status_updated",
+            "company_id",
+            "status",
+            "updated_at",
+            "id",
+        ),
+        Index(
+            "ix_assistant_sessions_company_creator_status_updated",
+            "company_id",
+            "created_by_membership_id",
+            "status",
+            "updated_at",
+            "id",
+        ),
+        Index(
+            "ix_assistant_sessions_company_creator_updated",
+            "company_id",
+            "created_by_membership_id",
+            "updated_at",
+            "id",
+        ),
+        Index(
+            "ix_assistant_sessions_creator_company",
+            "created_by_membership_id",
+            "company_id",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
+    )
+    created_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=AssistantSessionStatus.ACTIVE
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    policy_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    policy_snapshot_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    retention_expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+
+class AssistantSessionScope(Base):
+    __tablename__ = "assistant_session_scopes"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["session_id", "company_id"],
+            ["assistant_sessions.id", "assistant_sessions.company_id"],
+            name="fk_assistant_scope_session_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["added_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_assistant_scope_actor_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "session_id", "scope_type", "scope_id", name="uq_assistant_scope_target"
+        ),
+        UniqueConstraint("session_id", "ordinal", name="uq_assistant_scope_ordinal"),
+        CheckConstraint(
+            "scope_type IN ('tenant', 'client', 'matter', 'ip_docket', 'ip_asset', "
+            "'trademark_application', 'ip_proceeding', 'matter_document', 'ip_document')",
+            name="ck_assistant_scope_type",
+        ),
+        CheckConstraint("ordinal >= 0", name="ck_assistant_scope_ordinal_nonnegative"),
+        CheckConstraint(
+            "length(trim(scope_id)) > 0",
+            name="ck_assistant_scope_id_nonempty",
+        ),
+        Index("ix_assistant_scopes_company_session", "company_id", "session_id"),
+        Index("ix_assistant_scopes_session_company", "session_id", "company_id"),
+        Index(
+            "ix_assistant_scopes_actor_company", "added_by_membership_id", "company_id"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    session_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    scope_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    scope_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    resource_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    added_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
+class AssistantTurn(Base):
+    __tablename__ = "assistant_turns"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["session_id", "company_id"],
+            ["assistant_sessions.id", "assistant_sessions.company_id"],
+            name="fk_assistant_turn_session_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_assistant_turn_actor_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_assistant_turn_id_company"),
+        UniqueConstraint("session_id", "sequence", name="uq_assistant_turn_sequence"),
+        CheckConstraint("sequence > 0", name="ck_assistant_turn_sequence_positive"),
+        CheckConstraint("role IN ('user', 'assistant')", name="ck_assistant_turn_role"),
+        CheckConstraint(
+            "status IN ('queued', 'completed', 'abstained', 'failed', 'cancelled')",
+            name="ck_assistant_turn_status",
+        ),
+        CheckConstraint(
+            "(content_text IS NULL AND content_sha256 IS NULL) OR "
+            "(content_text IS NOT NULL AND length(content_sha256) = 64)",
+            name="ck_assistant_turn_content_hash",
+        ),
+        Index("ix_assistant_turns_company_session", "company_id", "session_id", "sequence"),
+        Index("ix_assistant_turns_session_company", "session_id", "company_id"),
+        Index("ix_assistant_turns_actor_company", "created_by_membership_id", "company_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    session_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    content_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    content_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    model_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("model_runs.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    retrieval_manifest_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    permission_snapshot_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
+class AssistantCitation(Base):
+    __tablename__ = "assistant_citations"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["turn_id", "company_id"],
+            ["assistant_turns.id", "assistant_turns.company_id"],
+            name="fk_assistant_citation_turn_company",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("turn_id", "ordinal", name="uq_assistant_citation_ordinal"),
+        UniqueConstraint(
+            "turn_id",
+            "source_type",
+            "source_id",
+            "source_version",
+            name="uq_assistant_citation_source_version",
+        ),
+        CheckConstraint("ordinal >= 0", name="ck_assistant_citation_ordinal_nonnegative"),
+        CheckConstraint(
+            "length(trim(source_type)) > 0 AND length(trim(source_id)) > 0",
+            name="ck_assistant_citation_source_nonempty",
+        ),
+        CheckConstraint(
+            "source_sha256 IS NULL OR length(source_sha256) = 64",
+            name="ck_assistant_citation_source_hash",
+        ),
+        CheckConstraint(
+            "relevance_score IS NULL OR (relevance_score >= 0 AND relevance_score <= 1)",
+            name="ck_assistant_citation_relevance_range",
+        ),
+        Index("ix_assistant_citations_company_turn", "company_id", "turn_id", "ordinal"),
+        Index("ix_assistant_citations_turn_company", "turn_id", "company_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    turn_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_type: Mapped[str] = mapped_column(String(48), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    source_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    source_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    source_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    label: Mapped[str] = mapped_column(String(255), nullable=False)
+    excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    relevance_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
     )
 
 

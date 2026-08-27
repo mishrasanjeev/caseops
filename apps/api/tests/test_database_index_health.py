@@ -7,6 +7,35 @@ from caseops_api.db.index_coverage import database_foreign_key_gaps
 from caseops_api.scripts import check_database_indexes
 
 
+def test_required_schema_revision_is_derived_from_the_alembic_graph() -> None:
+    assert check_database_indexes._required_schema_revision() == "20260827_0002"
+
+
+def test_health_report_rejects_a_database_behind_the_source_head(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = sa.create_engine("sqlite://")
+    with engine.begin() as connection:
+        connection.execute(
+            sa.text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        )
+        connection.execute(
+            sa.text("INSERT INTO alembic_version (version_num) VALUES ('20260827_0001')")
+        )
+        monkeypatch.setattr(
+            check_database_indexes,
+            "_required_schema_revision",
+            lambda: "20260827_0002",
+        )
+        monkeypatch.setattr(check_database_indexes, "_declared_indexes", dict)
+
+        report = check_database_indexes.build_index_health_report(connection)
+
+    assert report["status"] == "failed"
+    assert report["required_schema_revision"] == "20260827_0002"
+    assert report["schema_revision_mismatch"] == ["20260827_0001"]
+
+
 def test_live_inspection_finds_and_then_clears_composite_fk_gap() -> None:
     engine = sa.create_engine("sqlite://")
     with engine.begin() as connection:

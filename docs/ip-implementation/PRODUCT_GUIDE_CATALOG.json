@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "corpus_id": "caseops-product-guide",
-  "content_version": "2026.08.26.1",
-  "display_version": "v3",
+  "content_version": "2026.08.27.2",
+  "display_version": "v4",
   "language": "en-IN",
   "canonical_path": "/guide",
-  "updated_on": "2026-08-26",
+  "updated_on": "2026-08-27",
   "navigation_groups": {
     "overview": "Overview",
     "schedule": "Schedule",
@@ -228,6 +228,7 @@
     {"id":"calendar","label":"Calendar","href":"/app/calendar","icon":"CalendarDays","group":"schedule","summary":"Open the unified hearings, tasks, and deadlines calendar.","keywords":["schedule","court calendar","due dates"],"required_capabilities":[]},
     {"id":"mailbox","label":"Mailbox","href":"/app/mailbox","icon":"Inbox","group":"casework","summary":"Open the workspace mailbox.","keywords":["email","inbound mail","message"],"required_capabilities":[]},
     {"id":"drive","label":"Drive","href":"/app/drive","icon":"HardDrive","group":"casework","summary":"Open connected-drive imports and files.","keywords":["google drive","files","cloud documents"],"required_capabilities":[]},
+    {"id":"workspace-assistant","label":"Ask Workspace","href":"/app/assistant","icon":"Sparkles","group":"intel","summary":"Ask factual questions within explicitly selected and currently permitted workspace records.","keywords":["ask workspace","assistant","chat","record question"],"required_capabilities":["ai:generate"]},
     {"id":"research","label":"Research","href":"/app/research","icon":"LibraryBig","group":"intel","summary":"Search judgments and legal authorities with source links.","keywords":["case law","judgment search","Indian Kanoon","citation"],"required_capabilities":[]},
     {"id":"drafting","label":"Drafting","href":"/app/drafting","icon":"FileSignature","group":"intel","summary":"Open legal drafting and review workflows.","keywords":["draft pleading","generate draft","citation"],"required_capabilities":[]},
     {"id":"recommendations","label":"Recommendations","href":"/app/recommendations","icon":"Sparkles","group":"intel","summary":"Open source-backed legal recommendations.","keywords":["recommended cases","legal checks","authority"],"required_capabilities":[]},
