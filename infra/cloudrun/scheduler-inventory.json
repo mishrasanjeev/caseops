@@ -10,9 +10,30 @@
       "schedule": "0 0 * * *",
       "time_zone": "Asia/Kolkata",
       "desired_state": "ENABLED",
-      "task_timeout_seconds": null,
+      "task_timeout_seconds": 1800,
       "image_policy": "release_digest",
-      "canary_policy": "scheduled_execution"
+      "canary_policy": "scheduled_execution",
+      "bootstrap": {
+        "command": ["caseops-sync-legal-updates"],
+        "args": [],
+        "environment": {
+          "CASEOPS_ENV": "cloud",
+          "CASEOPS_AUTO_MIGRATE": "false",
+          "CASEOPS_LEGAL_UPDATE_SYNC_ENABLED": "true",
+          "CASEOPS_LEGAL_UPDATE_SYNC_DEFAULT_LIMIT": "100",
+          "CASEOPS_LEGAL_UPDATE_SYNC_FREQUENCY": "daily"
+        },
+        "secrets": {
+          "CASEOPS_DATABASE_URL": "caseops-database-url:latest",
+          "CASEOPS_AUTH_SECRET": "caseops-auth-secret:latest",
+          "CASEOPS_OPENAI_API_KEY": "caseops-openai-api-key:latest"
+        },
+        "service_account": "caseops-runtime@perfect-period-305406.iam.gserviceaccount.com",
+        "cloud_sql_instances": "perfect-period-305406:asia-south1:caseops-db",
+        "cpu": "1",
+        "memory": "1Gi",
+        "max_retries": 1
+      }
     },
     {
       "scheduler_name": "caseops-case-tracking-poll-1630-ist",
@@ -20,9 +41,32 @@
       "schedule": "30 16 * * *",
       "time_zone": "Asia/Kolkata",
       "desired_state": "ENABLED",
-      "task_timeout_seconds": null,
+      "task_timeout_seconds": 1800,
       "image_policy": "release_digest",
-      "canary_policy": "scheduled_execution"
+      "canary_policy": "scheduled_execution",
+      "bootstrap": {
+        "command": ["caseops-poll-tracked-cases"],
+        "args": [],
+        "environment": {
+          "CASEOPS_ENV": "cloud",
+          "CASEOPS_AUTO_MIGRATE": "false",
+          "CASEOPS_CASE_TRACKING_ENABLED": "true",
+          "CASEOPS_CASE_TRACKING_PROVIDER": "ecourtsindia",
+          "CASEOPS_ECOURTSINDIA_API_BASE_URL": "https://webapi.ecourtsindia.com",
+          "CASEOPS_CASE_TRACKING_POLL_LIMIT": "50"
+        },
+        "secrets": {
+          "CASEOPS_DATABASE_URL": "caseops-database-url:latest",
+          "CASEOPS_AUTH_SECRET": "caseops-auth-secret:latest",
+          "CASEOPS_OPENAI_API_KEY": "caseops-openai-api-key:latest",
+          "CASEOPS_ECOURTSINDIA_API_TOKEN": "caseops-ecourtsindia-api-token:latest"
+        },
+        "service_account": "caseops-runtime@perfect-period-305406.iam.gserviceaccount.com",
+        "cloud_sql_instances": "perfect-period-305406:asia-south1:caseops-db",
+        "cpu": "1",
+        "memory": "1Gi",
+        "max_retries": 1
+      }
     },
     {
       "scheduler_name": "caseops-activity-report-0800-ist",
@@ -30,9 +74,31 @@
       "schedule": "0 8 * * *",
       "time_zone": "Asia/Kolkata",
       "desired_state": "ENABLED",
-      "task_timeout_seconds": null,
+      "task_timeout_seconds": 900,
       "image_policy": "release_digest",
-      "canary_policy": "scheduled_execution"
+      "canary_policy": "scheduled_execution",
+      "bootstrap": {
+        "command": ["caseops-send-activity-report"],
+        "args": [],
+        "environment": {
+          "CASEOPS_ENV": "cloud",
+          "CASEOPS_AUTO_MIGRATE": "false",
+          "CASEOPS_SENDGRID_SENDER_EMAIL": "hearings@caseops.ai",
+          "CASEOPS_SENDGRID_SENDER_NAME": "CaseOps",
+          "CASEOPS_ACTIVITY_REPORT_RECIPIENT_EMAIL": "mishra.sanjeev@gmail.com",
+          "CASEOPS_ACTIVITY_REPORT_ENABLED": "true"
+        },
+        "secrets": {
+          "CASEOPS_DATABASE_URL": "caseops-database-url:latest",
+          "CASEOPS_AUTH_SECRET": "caseops-auth-secret:latest",
+          "CASEOPS_SENDGRID_API_KEY": "caseops-sendgrid-api-key:latest"
+        },
+        "service_account": "caseops-runtime@perfect-period-305406.iam.gserviceaccount.com",
+        "cloud_sql_instances": "perfect-period-305406:asia-south1:caseops-db",
+        "cpu": "1",
+        "memory": "2Gi",
+        "max_retries": 1
+      }
     },
     {
       "scheduler_name": "caseops-reminders-cadence",
@@ -40,9 +106,30 @@
       "schedule": "*/5 * * * *",
       "time_zone": "Asia/Kolkata",
       "desired_state": "ENABLED",
-      "task_timeout_seconds": null,
+      "task_timeout_seconds": 600,
       "image_policy": "release_digest",
-      "canary_policy": "scheduled_execution"
+      "canary_policy": "scheduled_execution",
+      "bootstrap": {
+        "command": ["caseops-send-hearing-reminders"],
+        "args": ["--mode=auto", "--limit=200"],
+        "environment": {
+          "CASEOPS_ENV": "production",
+          "CASEOPS_AUTO_MIGRATE": "false",
+          "CASEOPS_HEARING_REMINDERS_ENABLED": "true",
+          "CASEOPS_SENDGRID_SENDER_EMAIL": "hearings@caseops.ai",
+          "CASEOPS_SENDGRID_SENDER_NAME": "CaseOps"
+        },
+        "secrets": {
+          "CASEOPS_DATABASE_URL": "caseops-database-url:latest",
+          "CASEOPS_AUTH_SECRET": "caseops-auth-secret:latest",
+          "CASEOPS_SENDGRID_API_KEY": "caseops-sendgrid-api-key:latest"
+        },
+        "service_account": "caseops-runtime@perfect-period-305406.iam.gserviceaccount.com",
+        "cloud_sql_instances": "perfect-period-305406:asia-south1:caseops-db",
+        "cpu": "1",
+        "memory": "512Mi",
+        "max_retries": 2
+      }
     },
     {
       "scheduler_name": "caseops-extract-authority-metadata-daily",
@@ -52,7 +139,40 @@
       "desired_state": "PAUSED",
       "task_timeout_seconds": 43200,
       "image_policy": "release_digest",
-      "canary_policy": "scheduled_execution"
+      "canary_policy": "scheduled_execution",
+      "bootstrap": {
+        "command": ["python"],
+        "args": [
+          "-m",
+          "caseops_api.scripts.extract_authority_metadata",
+          "--concurrency",
+          "8"
+        ],
+        "environment": {
+          "CASEOPS_ENV": "cloud",
+          "CASEOPS_AUTO_MIGRATE": "false",
+          "CASEOPS_LLM_PROVIDER": "openai",
+          "CASEOPS_LLM_MODEL": "gpt-5-mini",
+          "CASEOPS_LLM_MODEL_METADATA_EXTRACT": "gpt-5-mini",
+          "CASEOPS_LAYER2_DAILY_USD_CAP": "40",
+          "CASEOPS_LAYER2_DAILY_CAP_USD": "40",
+          "CASEOPS_EMBEDDING_PROVIDER": "voyage",
+          "CASEOPS_EMBEDDING_MODEL": "voyage-4-large",
+          "CASEOPS_EMBEDDING_DIMENSIONS": "1024"
+        },
+        "secrets": {
+          "CASEOPS_DATABASE_URL": "caseops-database-url:latest",
+          "CASEOPS_AUTH_SECRET": "caseops-auth-secret:latest",
+          "CASEOPS_LLM_API_KEY": "caseops-openai-api-key:latest",
+          "CASEOPS_OPENAI_API_KEY": "caseops-openai-api-key:latest",
+          "CASEOPS_EMBEDDING_API_KEY": "caseops-voyage-api-key:latest"
+        },
+        "service_account": "caseops-runtime@perfect-period-305406.iam.gserviceaccount.com",
+        "cloud_sql_instances": "perfect-period-305406:asia-south1:caseops-db",
+        "cpu": "2",
+        "memory": "2Gi",
+        "max_retries": 0
+      }
     },
     {
       "scheduler_name": "caseops-db-index-health-weekly",
@@ -64,8 +184,8 @@
       "image_policy": "release_digest",
       "canary_policy": "manual_safe",
       "bootstrap": {
-        "command": ["uv"],
-        "args": ["run", "caseops-db-index-health"],
+        "command": ["caseops-db-index-health"],
+        "args": [],
         "environment": {
           "CASEOPS_ENV": "cloud",
           "CASEOPS_AUTO_MIGRATE": "false"
@@ -91,8 +211,8 @@
       "image_policy": "release_digest",
       "canary_policy": "scheduled_execution",
       "bootstrap": {
-        "command": ["uv"],
-        "args": ["run", "caseops-ip-journal-watch"],
+        "command": ["caseops-ip-journal-watch"],
+        "args": [],
         "environment": {
           "CASEOPS_ENV": "cloud",
           "CASEOPS_AUTO_MIGRATE": "false"
@@ -118,8 +238,8 @@
       "image_policy": "release_digest",
       "canary_policy": "manual_safe",
       "bootstrap": {
-        "command": ["uv"],
-        "args": ["run", "caseops-refresh-bench-analysis-layers"],
+        "command": ["caseops-refresh-bench-analysis-layers"],
+        "args": [],
         "environment": {
           "CASEOPS_ENV": "cloud",
           "CASEOPS_AUTO_MIGRATE": "false"

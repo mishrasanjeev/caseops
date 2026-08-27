@@ -43,15 +43,16 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
         for job in inventory["jobs"]
         if job["run_job_name"] == "caseops-ip-journal-watch"
     )
-    assert watch_job["bootstrap"]["command"] == ["uv"]
-    assert watch_job["bootstrap"]["args"] == ["run", "caseops-ip-journal-watch"]
+    assert watch_job["bootstrap"]["command"] == ["caseops-ip-journal-watch"]
+    assert watch_job["bootstrap"]["args"] == []
     index_job = next(
         job
         for job in inventory["jobs"]
         if job["run_job_name"] == "caseops-db-index-health"
     )
     assert index_job["task_timeout_seconds"] == 600
-    assert index_job["bootstrap"]["args"] == ["run", "caseops-db-index-health"]
+    assert index_job["bootstrap"]["command"] == ["caseops-db-index-health"]
+    assert index_job["bootstrap"]["args"] == []
     assert index_job["bootstrap"]["max_retries"] == 0
     mapping_job = next(
         job
@@ -64,10 +65,15 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
     assert mapping_job["task_timeout_seconds"] == 3_600
     assert mapping_job["image_policy"] == "release_digest"
     assert mapping_job["canary_policy"] == "manual_safe"
-    assert mapping_job["bootstrap"]["args"] == [
-        "run",
-        "caseops-refresh-bench-analysis-layers",
+    assert mapping_job["bootstrap"]["command"] == [
+        "caseops-refresh-bench-analysis-layers"
     ]
+    assert mapping_job["bootstrap"]["args"] == []
+    assert all(job.get("bootstrap") for job in inventory["jobs"])
+    assert all(
+        job["bootstrap"]["command"][0].casefold() not in {"uv", "uvx"}
+        for job in inventory["jobs"]
+    )
     assert all(
         job["desired_state"] == "ENABLED"
         for job in inventory["jobs"]
@@ -105,6 +111,21 @@ def test_inventory_rejects_unsafe_or_incomplete_bootstrap_contract() -> None:
     assert any("bootstrap.command" in error for error in errors)
     assert any("bootstrap.environment" in error for error in errors)
     assert any("bootstrap.max_retries" in error for error in errors)
+
+
+def test_inventory_rejects_runtime_dependency_resolution_and_missing_contract() -> None:
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    inventory["jobs"][0]["bootstrap"]["command"] = ["uv"]
+    inventory["jobs"][0]["bootstrap"]["args"] = [
+        "run",
+        "caseops-sync-legal-updates",
+    ]
+    inventory["jobs"][1].pop("bootstrap")
+
+    errors = scheduler_inventory.validate_inventory(inventory)
+
+    assert any("uv/uvx job startup is forbidden" in error for error in errors)
+    assert any("bootstrap is required" in error for error in errors)
 
 
 def test_reconcile_converges_inventory_owned_timeout_and_scheduler_state(
@@ -161,7 +182,7 @@ def test_reconcile_converges_inventory_owned_timeout_and_scheduler_state(
         call for call in update_calls if call[3] == enabled_job["run_job_name"]
     )
     assert authority_update[-2:] == ["--task-timeout", "43200s"]
-    assert "--task-timeout" not in enabled_update
+    assert enabled_update[enabled_update.index("--task-timeout") + 1] == "1800s"
     assert [
         "scheduler",
         "jobs",
@@ -303,8 +324,8 @@ def test_reconcile_bootstraps_a_missing_declared_run_job(monkeypatch) -> None:
     create = next(call for call in calls if call[:3] == ["run", "jobs", "create"])
     assert create[3] == "caseops-ip-journal-watch"
     assert create[create.index("--image") + 1] == expected_image
-    assert create[create.index("--command") + 1] == "uv"
-    assert create[create.index("--args") + 1] == "run,caseops-ip-journal-watch"
+    assert create[create.index("--command") + 1] == "caseops-ip-journal-watch"
+    assert create[create.index("--args") + 1] == ""
     assert create[create.index("--task-timeout") + 1] == "900s"
     assert create[create.index("--max-retries") + 1] == "1"
     assert "CASEOPS_DATABASE_URL=caseops-database-url:latest" in create[
@@ -360,6 +381,7 @@ def test_reconcile_converges_an_existing_bootstrap_contract(monkeypatch) -> None
 def test_reconcile_fails_closed_when_a_missing_job_has_no_bootstrap(monkeypatch) -> None:
     inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
     job = inventory["jobs"][0]
+    job.pop("bootstrap")
     inventory["jobs"] = [job]
     inventory["legacy_schedulers_to_pause"] = []
     calls: list[list[str]] = []
@@ -813,13 +835,57 @@ def test_attempt_audit_does_not_require_delivery_for_paused_scheduler(monkeypatc
                 }
             ]
         if arguments[:3] == ["run", "jobs", "describe"]:
+            bootstrap = authority_job["bootstrap"]
             return {
                 "spec": {
                     "template": {
+                        "metadata": {
+                            "annotations": {
+                                "run.googleapis.com/cloudsql-instances": bootstrap[
+                                    "cloud_sql_instances"
+                                ]
+                            }
+                        },
                         "spec": {
                             "template": {
                                 "spec": {
-                                    "containers": [{"image": expected_image}],
+                                    "containers": [
+                                        {
+                                            "image": expected_image,
+                                            "command": bootstrap["command"],
+                                            "args": bootstrap["args"],
+                                            "env": [
+                                                *[
+                                                    {"name": key, "value": value}
+                                                    for key, value in bootstrap[
+                                                        "environment"
+                                                    ].items()
+                                                ],
+                                                *[
+                                                    {
+                                                        "name": key,
+                                                        "valueFrom": {
+                                                            "secretKeyRef": {
+                                                                "name": value.split(":")[0],
+                                                                "key": value.split(":")[1],
+                                                            }
+                                                        },
+                                                    }
+                                                    for key, value in bootstrap[
+                                                        "secrets"
+                                                    ].items()
+                                                ],
+                                            ],
+                                            "resources": {
+                                                "limits": {
+                                                    "cpu": bootstrap["cpu"],
+                                                    "memory": bootstrap["memory"],
+                                                }
+                                            },
+                                        }
+                                    ],
+                                    "serviceAccountName": bootstrap["service_account"],
+                                    "maxRetries": bootstrap["max_retries"],
                                     "timeoutSeconds": "43200",
                                 }
                             }
