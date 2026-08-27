@@ -7,7 +7,8 @@ MIGRATION-LOCK-RISK: acknowledged. PostgreSQL indexes are built concurrently,
 lock acquisition is capped at five seconds, and each statement has a thirty-
 minute ceiling. The migration is restart-safe after an interrupted build.
 MIGRATION-ROLLBACK: safe. This revision contains performance indexes only;
-downgrade removes deterministic support indexes without changing data.
+downgrade removes deterministic support indexes in the migration transaction
+without changing data, so a later restore-forward refusal rolls everything back.
 """
 
 from __future__ import annotations
@@ -212,11 +213,9 @@ def downgrade() -> None:
     }
     removable = sorted(names & existing)
     if connection.dialect.name == "postgresql":
-        with op.get_context().autocommit_block():
-            op.execute(sa.text("SET lock_timeout = '5s'"))
-            for name in removable:
-                op.execute(sa.text(f"DROP INDEX CONCURRENTLY IF EXISTS {_quote(connection, name)}"))
-            op.execute(sa.text("RESET lock_timeout"))
+        op.execute(sa.text("SET LOCAL lock_timeout = '5s'"))
+        for name in removable:
+            op.execute(sa.text(f"DROP INDEX IF EXISTS {_quote(connection, name)}"))
         return
     for name in removable:
         op.drop_index(name)

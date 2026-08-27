@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 from alembic.config import Config
@@ -22,6 +24,20 @@ def _config() -> Config:
     config = Config(str(project_root / "alembic.ini"))
     config.set_main_option("script_location", str(project_root / "alembic"))
     return config
+
+
+def _migration_module() -> ModuleType:
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "alembic"
+        / "versions"
+        / "20260827_0001_complete_foreign_key_indexes.py"
+    )
+    spec = importlib.util.spec_from_file_location("complete_fk_indexes_migration", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _head(database_url: str) -> str:
@@ -108,3 +124,58 @@ def test_complete_foreign_key_indexes_migration_round_trip(
     assert _head(database_url) == MIGRATION_HEAD
     assert _gaps(database_url) == ()
     assert HOT_INDEX in _ip_docket_indexes(database_url)
+
+
+def test_postgres_downgrade_keeps_index_drops_in_migration_transaction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    migration = _migration_module()
+    statements: list[str] = []
+
+    class FakePreparer:
+        @staticmethod
+        def quote(identifier: str) -> str:
+            return f'"{identifier}"'
+
+    class FakeConnection:
+        dialect = type(
+            "Dialect",
+            (),
+            {"name": "postgresql", "identifier_preparer": FakePreparer()},
+        )()
+
+    class FakeInspector:
+        @staticmethod
+        def get_table_names() -> list[str]:
+            return ["ip_docket_records"]
+
+        @staticmethod
+        def get_foreign_keys(_table_name: str) -> list[dict[str, object]]:
+            return []
+
+        @staticmethod
+        def get_indexes(_table_name: str) -> list[dict[str, str]]:
+            return [{"name": HOT_INDEX}]
+
+    class FakeOperations:
+        @staticmethod
+        def get_bind() -> FakeConnection:
+            return FakeConnection()
+
+        @staticmethod
+        def execute(statement: object) -> None:
+            statements.append(str(statement))
+
+        @staticmethod
+        def get_context() -> None:
+            raise AssertionError("PostgreSQL downgrade must not enter autocommit mode")
+
+    monkeypatch.setattr(migration, "op", FakeOperations())
+    monkeypatch.setattr(migration.sa, "inspect", lambda _connection: FakeInspector())
+
+    migration.downgrade()
+
+    assert statements == [
+        "SET LOCAL lock_timeout = '5s'",
+        f'DROP INDEX IF EXISTS "{HOT_INDEX}"',
+    ]

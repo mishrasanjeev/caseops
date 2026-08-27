@@ -88,6 +88,9 @@ the hot IP list index `(company_id, is_active, updated_at, id)`.
   and a per-index 30-minute statement limit.
 - An interrupted concurrent build is restartable: an invalid or unready
   same-name remnant is dropped concurrently before retry.
+- Downgrade index removal stays inside Alembic's migration transaction. If a
+  later restore-forward guard refuses a multi-revision downgrade, the index
+  removals and revision change roll back together.
 - The migration verifies the resulting live definitions before recording
   success.
 - Model metadata applies the same rule, preventing `create_all` test schemas
