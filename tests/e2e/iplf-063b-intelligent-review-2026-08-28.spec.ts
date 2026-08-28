@@ -140,11 +140,18 @@ test("IPLF-063B completes UJ-18 normal and exception paths", async ({ page }) =>
 
     const detail = page.getByTestId("intelligent-review-detail");
     await expect(detail.getByText("Supporting and contrary authorities")).toBeVisible();
-    await expect(detail.getByText(/Conflicting values for First use/)).toBeVisible();
+    await expect(detail.getByText(/Conflicting values remain for First use/)).toBeVisible();
     await test.step("IPLF-UJ-18-EXC-02 retains the stale-corpus warning", async () => {
       await expect(detail.getByText(/no recent retrieval timestamp/)).toBeVisible();
     });
-    for (const url of fixture.sourceUrls) await expect(detail.getByText(url)).toBeVisible();
+    for (const url of new Set(fixture.sourceUrls)) {
+      const matches = detail.getByText(url, { exact: true });
+      const expectedCount = fixture.sourceUrls.filter((sourceUrl) => sourceUrl === url).length;
+      await expect(matches).toHaveCount(expectedCount);
+      for (let index = 0; index < expectedCount; index += 1) {
+        await expect(matches.nth(index)).toBeVisible();
+      }
+    }
     await expect(detail.getByText(/not exhaustive legal research/)).toBeVisible();
   });
 
@@ -157,7 +164,7 @@ test("IPLF-063B completes UJ-18 normal and exception paths", async ({ page }) =>
     await expect(detail.getByRole("button", { name: "Finalize review" })).toBeDisabled();
     await contraryCheckbox.check();
     await detail.getByRole("button", { name: "Save selection" }).click();
-    await expect(detail.getByText("Complete")).toBeVisible();
+    await expect(detail.getByText("Complete", { exact: true })).toBeVisible();
     await detail.getByLabel("Review notes").fill("Both sides checked against the frozen record.");
     await detail.getByRole("button", { name: "Finalize review" }).click();
     await detail.getByRole("button", { name: "Publish to Drafts" }).click();
@@ -171,7 +178,7 @@ test("IPLF-063B completes UJ-18 normal and exception paths", async ({ page }) =>
     await page.goto(`/app/research/reviews?report=${encodeURIComponent(report.id)}`);
     await page.getByRole("tab", { name: "IP docket" }).click();
     await page.getByRole("combobox", { name: "IP docket target" }).click();
-    await page.getByRole("option", { name: new RegExp(`^${application.identifier.normalized_value} ·`) }).click();
+    await page.getByRole("option", { name: new RegExp(`^${application.identifier.raw_value} ·`) }).click();
     await page.getByRole("combobox", { name: "Opposition proceeding for Draft handoff" }).click();
     await page.getByRole("option", { name: /opponent.*draft.*Trade Marks Registry Delhi/i }).click();
     await page.getByRole("button", { name: "Generate review" }).click();
