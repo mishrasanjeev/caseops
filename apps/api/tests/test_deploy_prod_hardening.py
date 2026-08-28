@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tomllib
 from functools import cache
 from pathlib import Path
 
@@ -381,6 +382,12 @@ def test_api_release_image_uses_frozen_dependencies_before_source_layers() -> No
     assert image.index("--frozen") < image.index("COPY src ./src")
     assert image.index("Tokenizer.from_pretrained") < image.index("COPY src ./src")
     assert image.index("TextCrossEncoder") < image.index("COPY src ./src")
+
+
+def test_api_release_declares_cross_platform_timezone_data() -> None:
+    project = tomllib.loads(_read_repo_text("apps/api/pyproject.toml"))["project"]
+
+    assert "tzdata==2026.1" in project["dependencies"]
 
 
 def test_deploy_prod_uses_api_gcloudignore_explicitly() -> None:

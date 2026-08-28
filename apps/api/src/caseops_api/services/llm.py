@@ -64,7 +64,9 @@ class MockProvider:
         started = time.perf_counter()
         joined = "\n".join(m.content for m in messages)
         lowered = joined.lower()
-        if "workspace_assistant_qa" in lowered:
+        if "untrusted_authority_sources:" in lowered and "issue_summary" in lowered:
+            text = _mock_intelligent_review_response(joined)
+        elif "workspace_assistant_qa" in lowered:
             text = _mock_workspace_assistant_response(joined)
         elif "matter_file_qa" in lowered:
             text = _mock_matter_file_qa_response(joined)
@@ -101,6 +103,93 @@ def _estimate_call_tokens(messages: list[LLMMessage], max_tokens: int) -> int:
 def _mock_plain_response(prompt: str) -> str:
     digest = hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:8]
     return f"mock-ack::{digest}"
+
+
+def _mock_intelligent_review_response(prompt: str) -> str:
+    context_raw = _extract_between(
+        prompt,
+        "CONTEXT_MANIFEST:\n",
+        "\n\nUNTRUSTED_AUTHORITY_SOURCES:",
+    )
+    sources_raw = _extract_between(
+        prompt,
+        "UNTRUSTED_AUTHORITY_SOURCES:\n",
+        "\n\nReturn this schema:",
+    )
+    try:
+        context = json.loads(context_raw or "{}")
+        sources = json.loads(sources_raw or "[]")
+    except json.JSONDecodeError:
+        context, sources = {}, []
+    if not isinstance(context, dict):
+        context = {}
+    if not isinstance(sources, list):
+        sources = []
+
+    authorities: list[dict[str, Any]] = []
+    source_ids: list[str] = []
+    for index, source in enumerate(sources[:25]):
+        if not isinstance(source, dict):
+            continue
+        source_id = str(source.get("authority_document_id") or "").strip()
+        excerpt = " ".join(str(source.get("untrusted_source_excerpt") or "").split())
+        if not source_id or not excerpt:
+            continue
+        source_ids.append(source_id)
+        authorities.append(
+            {
+                "authority_document_id": source_id,
+                "disposition": "supporting" if index == 0 else "contrary",
+                "passage": excerpt[:600],
+                "relevance": (
+                    "Supports the issue on the supplied frozen record."
+                    if index == 0
+                    else "Provides contrary material that the lawyer should distinguish."
+                ),
+                "treatment": "Review against the current facts and procedural posture.",
+            }
+        )
+
+    facts = context.get("facts", [])
+    relevant_facts = [
+        f"{item.get('label')}: {item.get('value')}"
+        for item in facts
+        if isinstance(item, dict) and item.get("label") and item.get("value")
+    ][:50]
+    primary_ids = source_ids[:1]
+    all_ids = source_ids[:10]
+    payload = {
+        "issue_summary": str(context.get("issue") or "Review the stated legal issue."),
+        "relevant_facts": relevant_facts,
+        "applicable_provisions": (
+            [
+                {
+                    "text": "Apply the governing provisions reflected in the selected authority.",
+                    "authority_document_ids": primary_ids,
+                }
+            ]
+            if primary_ids
+            else []
+        ),
+        "authorities": authorities,
+        "factual_analogies": (
+            [
+                {
+                    "text": (
+                        "Compare the supplied facts with the records described in "
+                        "the selected authorities."
+                    ),
+                    "authority_document_ids": all_ids,
+                }
+            ]
+            if all_ids
+            else []
+        ),
+        "gaps": ["Confirm current law, registry status, and the complete evidentiary record."],
+        "lawyer_checks": ["Open each source and verify the passage before reliance."],
+        "unresolved_contradictions": [],
+    }
+    return json.dumps(payload, separators=(",", ":"))
 
 
 def _mock_workspace_assistant_response(prompt: str) -> str:

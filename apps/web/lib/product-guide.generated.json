@@ -331,14 +331,17 @@
     {
       "id": "research",
       "title": "Research and authorities",
-      "summary": "Search judgments and legal authorities, inspect citations and source links, save research, and annotate permitted records.",
+      "summary": "Search judgments and legal authorities, inspect citations and source links, save frozen research, and run lawyer-gated intelligent review.",
       "keywords": [
         "research",
         "judgment",
         "authority",
         "citation",
         "case law",
-        "source link"
+        "source link",
+        "intelligent review",
+        "supporting authority",
+        "contrary authority"
       ],
       "aliases": [
         "legal search",

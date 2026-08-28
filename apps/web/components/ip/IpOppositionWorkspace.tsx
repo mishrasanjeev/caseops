@@ -101,6 +101,8 @@ export function IpOppositionWorkspace({
   canReviewDraft = false,
   canFinalizeDraft = false,
   currentMembershipId,
+  initialProceedingId = null,
+  initialDraftId = null,
 }: {
   docket: IpDocket;
   canWrite: boolean;
@@ -111,6 +113,8 @@ export function IpOppositionWorkspace({
   canReviewDraft?: boolean;
   canFinalizeDraft?: boolean;
   currentMembershipId: string | null;
+  initialProceedingId?: string | null;
+  initialDraftId?: string | null;
 }) {
   const queryClient = useQueryClient();
   const core = useQuery({
@@ -121,13 +125,14 @@ export function IpOppositionWorkspace({
     () => (core.data?.proceedings ?? []).filter((row) => row.proceeding_kind === "opposition"),
     [core.data?.proceedings],
   );
-  const [selectedId, setSelectedId] = useState("");
+  const [selectedId, setSelectedId] = useState(initialProceedingId ?? "");
   useEffect(() => {
+    if (!core.data) return;
     if (!selectedId && oppositions[0]) setSelectedId(oppositions[0].id);
     if (selectedId && !oppositions.some((row) => row.id === selectedId)) {
       setSelectedId(oppositions[0]?.id ?? "");
     }
-  }, [oppositions, selectedId]);
+  }, [core.data, oppositions, selectedId]);
 
   const workspace = useQuery({
     queryKey: ["ip", "opposition-workspace", docket.id, selectedId],
@@ -417,6 +422,9 @@ export function IpOppositionWorkspace({
               canGenerate={canWrite && canGenerateDraft}
               canReview={canReview && canReviewDraft}
               canFinalize={canReview && canFinalizeDraft}
+              initialDraftId={
+                selectedId === initialProceedingId ? initialDraftId : null
+              }
             />
 
             <form data-testid="ip-opposition-stage-form" className="grid min-w-0 gap-3 border-t border-[var(--color-line)] pt-4 md:grid-cols-2 xl:grid-cols-4" onSubmit={(event) => { event.preventDefault(); if (transitionInput) transition.mutate(transitionInput); }}>

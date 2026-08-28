@@ -9,10 +9,11 @@ printed. Re-running the command is idempotent.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from dataclasses import asdict, dataclass
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -38,6 +39,8 @@ _ACTIVE_SUBSCRIPTION_STATUSES = {"active", "trialing", "grace", "manual_active"}
 _SOURCE = "ip_production_qa"
 _JUDGE_FIXTURE_VERSION = "iplf-060b-production-qa-v1"
 _JUDGE_FIXTURE_ADAPTER = "caseops-ip-production-qa-judge-authorities-v1"
+_REVIEW_FIXTURE_VERSION = "iplf-063b-production-qa-v1"
+_REVIEW_FIXTURE_ADAPTER = "caseops-ip-production-qa-intelligent-review-v1"
 _JUDGE_PILOTS = (
     {
         "court_name": "Delhi High Court",
@@ -87,6 +90,13 @@ class IpProductionQaJudgeFixtureResult:
     created_judges: int
     created_authorities: int
     created_mappings: int
+
+
+@dataclass(frozen=True)
+class IpProductionQaReviewFixtureResult:
+    version: str
+    authority_count: int
+    created_authorities: int
 
 
 def _validate_identity(*, company_name: str, company_slug: str, owner_email: str) -> None:
@@ -381,6 +391,117 @@ def ensure_ip_production_qa_judge_fixture(
     )
 
 
+def ensure_ip_production_qa_review_fixture(
+    session: Session,
+) -> IpProductionQaReviewFixtureResult:
+    """Seed bounded synthetic sources for the recurring UJ-18 canary."""
+
+    fixtures = (
+        {
+            "key": "supporting",
+            "title": "IPLF 063B production QA supporting authority",
+            "citation": "2026:IPLF063B:SUPPORT",
+            "url": "https://www.sci.gov.in/",
+            "access": "available",
+            "days_old": 1,
+            "text": (
+                "Synthetic QA evidence: proved prior continuous use supported the "
+                "passing-off claim on the supplied record."
+            ),
+        },
+        {
+            "key": "contrary",
+            "title": "IPLF 063B production QA contrary authority",
+            "citation": "2026:IPLF063B:CONTRARY",
+            "url": "https://www.sci.gov.in/",
+            "access": "available",
+            "days_old": 120,
+            "text": (
+                "Synthetic QA evidence: visual comparison alone was insufficient "
+                "without evidence of likely confusion."
+            ),
+        },
+        {
+            "key": "inaccessible",
+            "title": "IPLF 063B production QA inaccessible authority",
+            "citation": "2026:IPLF063B:INACCESSIBLE",
+            "url": None,
+            "access": "unavailable",
+            "days_old": 1,
+            "text": (
+                "Synthetic QA evidence retained only to prove inaccessible-source "
+                "abstention before provider work."
+            ),
+        },
+    )
+    created = 0
+    for fixture in fixtures:
+        canonical_key = f"{_REVIEW_FIXTURE_VERSION}:{fixture['key']}"
+        document = session.scalar(
+            select(AuthorityDocument).where(
+                AuthorityDocument.canonical_key == canonical_key
+            )
+        )
+        if document is not None and document.adapter_name != _REVIEW_FIXTURE_ADAPTER:
+            raise RuntimeError("Refusing to adopt a non-QA review fixture collision.")
+        text = str(fixture["text"])
+        if document is None:
+            document = AuthorityDocument(
+                source="supreme_court_latest_orders",
+                adapter_name=_REVIEW_FIXTURE_ADAPTER,
+                court_name="Synthetic QA Court",
+                forum_level="tribunal",
+                document_type="judgment",
+                title=str(fixture["title"]),
+                case_reference=str(fixture["citation"]),
+                neutral_citation=str(fixture["citation"]),
+                decision_date=date(2026, 8, 28),
+                canonical_key=canonical_key,
+                source_reference=fixture["url"],
+                canonical_url=fixture["url"],
+                content_hash=hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                source_version=_REVIEW_FIXTURE_VERSION,
+                retrieved_at=datetime.now(UTC)
+                - timedelta(days=int(fixture["days_old"])),
+                source_access_state=str(fixture["access"]),
+                summary=text,
+                document_text=text,
+                extracted_char_count=len(text),
+                ingested_at=datetime.now(UTC),
+                authority_status="synthetic_qa",
+                attribution_json={
+                    "synthetic_qa": True,
+                    "fixture_version": _REVIEW_FIXTURE_VERSION,
+                },
+                source_metadata_json={
+                    "synthetic_qa": True,
+                    "scope": "IPLF-063B",
+                },
+            )
+            session.add(document)
+            created += 1
+        else:
+            document.source = "supreme_court_latest_orders"
+            document.source_reference = fixture["url"]
+            document.canonical_url = fixture["url"]
+            document.content_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+            document.source_version = _REVIEW_FIXTURE_VERSION
+            document.retrieved_at = datetime.now(UTC) - timedelta(
+                days=int(fixture["days_old"])
+            )
+            document.source_access_state = str(fixture["access"])
+            document.summary = text
+            document.document_text = text
+            document.extracted_char_count = len(text)
+
+    session.commit()
+    return IpProductionQaReviewFixtureResult(
+        version=_REVIEW_FIXTURE_VERSION,
+        authority_count=len(fixtures),
+        created_authorities=created,
+    )
+
+
 def _required_env(name: str) -> str:
     value = os.environ.get(name, "").strip()
     if not value:
@@ -405,8 +526,10 @@ def main() -> None:
             == "true",
         )
         judge_fixture = ensure_ip_production_qa_judge_fixture(session)
+        review_fixture = ensure_ip_production_qa_review_fixture(session)
     payload = asdict(result)
     payload["judge_workflow_fixture"] = asdict(judge_fixture)
+    payload["intelligent_review_fixture"] = asdict(review_fixture)
     print(json.dumps(payload, sort_keys=True))
 
 

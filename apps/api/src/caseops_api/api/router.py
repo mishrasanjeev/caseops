@@ -24,6 +24,7 @@ from caseops_api.api.routes import (
     health,
     intake,
     integrations,
+    intelligent_reviews,
     ip_foreign_associates,
     ip_international,
     ip_operations,
@@ -103,6 +104,11 @@ api_router.include_router(
     tags=["workspace-assistant"],
 )
 api_router.include_router(recommendations.router, tags=["recommendations"])
+api_router.include_router(
+    intelligent_reviews.router,
+    prefix="/research",
+    tags=["intelligent-reviews"],
+)
 api_router.include_router(conflicts.router, tags=["conflicts"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 api_router.include_router(

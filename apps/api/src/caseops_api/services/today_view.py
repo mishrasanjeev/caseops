@@ -71,6 +71,7 @@ from caseops_api.db.models import (
 from caseops_api.services.capabilities import membership_has_capability
 from caseops_api.services.matter_access import visible_matters_filter
 from caseops_api.services.session_context import SessionContext
+from caseops_api.services.tenant_time import tenant_today
 
 
 @dataclass(frozen=True)
@@ -228,7 +229,7 @@ def _ip_coverage_actions(
     actions: list[TodayIpCoverageAction] = []
 
     for transfer in list_ip_coverage_transfers_awaiting(
-        session, context=context, limit=limit
+        session, context=context, limit=limit, today=today
     ).transfers:
         actions.append(
             TodayIpCoverageAction(
@@ -251,6 +252,7 @@ def _ip_coverage_actions(
         unacknowledged_only=True,
         actionable_only=True,
         limit=limit,
+        today=today,
     )
     pending_decision = {action.coverage_id for action in actions}
     for row in assigned.coverages:
@@ -286,8 +288,8 @@ def build_today_view(
     today: date | None = None,
 ) -> TodayView:
     """Aggregate the per-user Today feed. ``today`` is injectable for
-    deterministic tests; defaults to ``date.today()``."""
-    today = today or date.today()
+    deterministic tests; defaults to the tenant's configured timezone."""
+    today = today or tenant_today(context.company.timezone)
     horizon_end = today + timedelta(days=max(0, horizon_days))
     # Read the module constant at call time so tests can monkeypatch it.
     cap = MAX_PER_STREAM

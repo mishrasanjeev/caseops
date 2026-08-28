@@ -4,7 +4,7 @@
   "status": "repository_inventory_snapshot_policy_unapproved",
   "policy_status": "pending_named_human_approval",
   "purpose": "Versioned repository inventory for DATA-GOV-01 and DATA-GOV-03. It snapshots SQL tables/columns/indexes and known non-SQL classes so unregistered data-bearing changes fail Definition of Ready.",
-  "completion_boundary": "This inventory does not claim approved retention bounds, legal-hold activation, tenant export, purge, offboarding, provider deletion, backup recovery/restore, residency, or data-governance/recovery milestone completion. The only current disposition behavior is fail-closed Definition-of-Ready validation. This release's tenant-scoped company-user lookup, deadline-coverage guards, standalone-deadline offboarding serialization, and bounded Today IP coverage stream expose existing registered SQL classes only. The Today stream is a read projection over ip_deadline_coverages, ip_docket_records, and matter_deadlines that reuses the existing IP docket access predicate; the web endpoint and generated OpenAPI contract changes add no SQL or non-SQL data class, new storage, or disposition authority. IPLF-057B backfills the required ip_trademark_particular_versions compatibility projection for existing trademark_international_registrations dockets; both tables are already registered, Madrid facts retain their canonical owner, and the bounded restore-forward migration adds no data class, storage boundary, retention authority, or disposition handler. EG-009 narrows what failure paths persist: audit-export, authority-ingestion, court-sync, document-job, document-processing, embedding and legal-update errors now store redacted text instead of raw exception strings. This removes infrastructure detail from already-registered columns; it adds no SQL or non-SQL data class, no new storage, and no disposition authority. The 2026-08-27 recurring-job hardening changes only version-controlled Cloud Run commands, arguments, environment and secret references, runtime identity, Cloud SQL attachment, resources, retries, and timeouts. It invokes already-baked application entrypoints, preserves the existing registered SQL/provider/storage boundaries and paused governance writers, and adds no data class, persistence path, provider transmission, retention authority, or disposition handler. IPLF-062A adds tenant-scoped assistant sessions, explicit polymorphic scope references, turns, and exact citation provenance under the tenant-restricted legal-content profile. The tenant AI policy supplies a bounded session expiry, but automated destruction remains unauthorized until the hold-aware disposition owner is implemented and approved; downgrade therefore refuses retained assistant evidence.",
+  "completion_boundary": "This inventory does not claim approved retention bounds, legal-hold activation, tenant export, purge, offboarding, provider deletion, backup recovery/restore, residency, or data-governance/recovery milestone completion. The only current disposition behavior is fail-closed Definition-of-Ready validation. This release's tenant-scoped company-user lookup, deadline-coverage guards, standalone-deadline offboarding serialization, and bounded Today IP coverage stream expose existing registered SQL classes only. The Today stream is a read projection over ip_deadline_coverages, ip_docket_records, and matter_deadlines that reuses the existing IP docket access predicate; the web endpoint and generated OpenAPI contract changes add no SQL or non-SQL data class, new storage, or disposition authority. IPLF-057B backfills the required ip_trademark_particular_versions compatibility projection for existing trademark_international_registrations dockets; both tables are already registered, Madrid facts retain their canonical owner, and the bounded restore-forward migration adds no data class, storage boundary, retention authority, or disposition handler. EG-009 narrows what failure paths persist: audit-export, authority-ingestion, court-sync, document-job, document-processing, embedding and legal-update errors now store redacted text instead of raw exception strings. This removes infrastructure detail from already-registered columns; it adds no SQL or non-SQL data class, no new storage, and no disposition authority. The 2026-08-27 recurring-job hardening changes only version-controlled Cloud Run commands, arguments, environment and secret references, runtime identity, Cloud SQL attachment, resources, retries, and timeouts. It invokes already-baked application entrypoints, preserves the existing registered SQL/provider/storage boundaries and paused governance writers, and adds no data class, persistence path, provider transmission, retention authority, or disposition handler. IPLF-062A adds tenant-scoped assistant sessions, explicit polymorphic scope references, turns, and exact citation provenance under the tenant-restricted legal-content profile. The tenant AI policy supplies a bounded session expiry, but automated destruction remains unauthorized until the hold-aware disposition owner is implemented and approved; downgrade therefore refuses retained assistant evidence. IPLF-063 extends the existing recommendation and Draft records with tenant-bound Matter/IP targets, frozen legal-review context and source provenance, lawyer selection/finalization evidence, redacted terminal state, and an idempotent Draft link under the same tenant-restricted legal-content profile. It adds no alternate research, source, drafting, audit, model-run, billing, retention, hold, export, purge, or provider-deletion owner; downgrade refuses retained intelligent-review or linked Draft evidence.",
   "requirement_refs": [
     "DATA-GOV-01",
     "DATA-GOV-03"
@@ -139,6 +139,9 @@
   },
   "table_policy_profile_overrides": {},
   "column_category_overrides": {
+    "drafts": {
+      "source_recommendation_id": "tenant_or_access_identifier"
+    },
     "draft_reviews": {
       "metadata_json": "privileged_or_raw_content"
     },
@@ -157,6 +160,14 @@
     },
     "ip_identifiers": {
       "superseded_by_identifier_id": "tenant_or_access_identifier"
+    },
+    "recommendations": {
+      "prompt_policy_version": "configuration_or_state_metadata",
+      "review_context_json": "privileged_or_raw_content",
+      "review_payload_json": "privileged_or_raw_content",
+      "review_selection_json": "privileged_or_raw_content",
+      "source_manifest_json": "privileged_or_raw_content",
+      "source_research_report_id": "tenant_or_access_identifier"
     }
   },
   "change_controls": {
@@ -8167,6 +8178,11 @@
           "category_id": "domain_attribute",
           "sql_type": "BOOLEAN",
           "nullable": false
+        },
+        "source_recommendation_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
         },
         "status": {
           "category_id": "configuration_or_state_metadata",
@@ -23427,15 +23443,35 @@
           "sql_type": "VARCHAR(36)",
           "nullable": true
         },
+        "finalized_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "finalized_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
         "id": {
           "category_id": "tenant_or_access_identifier",
           "sql_type": "VARCHAR(36)",
           "nullable": false
         },
+        "ip_docket_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "ip_proceeding_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
         "matter_id": {
           "category_id": "tenant_or_access_identifier",
           "sql_type": "VARCHAR(36)",
-          "nullable": false
+          "nullable": true
         },
         "missing_facts_json": {
           "category_id": "domain_attribute",
@@ -23452,10 +23488,20 @@
           "sql_type": "TEXT",
           "nullable": true
         },
+        "output_hash": {
+          "category_id": "lifecycle_or_audit_evidence",
+          "sql_type": "VARCHAR(64)",
+          "nullable": true
+        },
         "primary_option_index": {
           "category_id": "domain_attribute",
           "sql_type": "INTEGER",
           "nullable": false
+        },
+        "prompt_policy_version": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(80)",
+          "nullable": true
         },
         "rationale": {
           "category_id": "domain_attribute",
@@ -23467,10 +23513,55 @@
           "sql_type": "TEXT",
           "nullable": false
         },
+        "review_context_json": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "review_error_code": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(80)",
+          "nullable": true
+        },
+        "review_payload_json": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "review_progress": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
         "review_required": {
           "category_id": "domain_attribute",
           "sql_type": "BOOLEAN",
           "nullable": false
+        },
+        "review_selection_json": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "review_state": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "review_template_version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "VARCHAR(80)",
+          "nullable": true
+        },
+        "source_manifest_json": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "source_research_report_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
         },
         "status": {
           "category_id": "configuration_or_state_metadata",
@@ -23490,6 +23581,11 @@
         "type": {
           "category_id": "configuration_or_state_metadata",
           "sql_type": "VARCHAR(40)",
+          "nullable": false
+        },
+        "updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
           "nullable": false
         }
       }
@@ -26931,12 +27027,12 @@
       }
     }
   ],
-  "schema_fingerprint": "0dada5b8e970047b593cbf354ed9cfdd5f5b3fe829469a63733d8728e546907c",
+  "schema_fingerprint": "f60f2148ee1eb2344c2c7f1a62adeae743c5c5b5a7a85485fc90d5f5e4ce374c",
   "index_inventory": {
-    "orm_index_count": 1598,
-    "orm_index_fingerprint": "c16b9822ff56ebb8b6304aabe2f52cd667a6d1c63013fbc0cfbe06523f346968",
-    "migration_index_count": 651,
-    "migration_index_fingerprint": "f1cc3049066e0d5ae0520862d93696d3e6f5391bf6cfb8a0ec0c4d307b7345b1",
+    "orm_index_count": 1606,
+    "orm_index_fingerprint": "e2d300cf9fb3e4d09e5f74971aa22a5492e7279878dd7ab4bcfc5ce3d98dedaf",
+    "migration_index_count": 659,
+    "migration_index_fingerprint": "3d130776837ddfd24e7bf1b6bc51913323174496ccf49a0910f4a975f974dde9",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."
   }
 }

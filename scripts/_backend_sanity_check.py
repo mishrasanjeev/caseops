@@ -35,6 +35,7 @@ REQUIRED = [
     "boto3",
     "clamd",
     "cryptography",
+    "tzdata",
 ]
 
 

@@ -130,6 +130,8 @@ export default function IpDocketPage() {
   const searchParams = useSearchParams();
   const requestedDocketId = searchParams.get("docket");
   const requestedView = requestedDocketView(searchParams.get("view"));
+  const requestedProceedingId = searchParams.get("proceeding");
+  const requestedDraftId = searchParams.get("draft");
   const queryClient = useQueryClient();
   const canView = useCapability("ip:read");
   const canWrite = useCapability("ip:write");
@@ -362,6 +364,10 @@ export default function IpDocketPage() {
               canActivateRules={canActivateRules}
               canManageAccess={canManageAccess}
               initialView={requestedDocketId === selected.id ? requestedView : "overview"}
+              initialProceedingId={
+                requestedDocketId === selected.id ? requestedProceedingId : null
+              }
+              initialDraftId={requestedDocketId === selected.id ? requestedDraftId : null}
               currentMembershipId={session.context?.membership.id ?? null}
               onChanged={refresh}
             />
@@ -1368,6 +1374,8 @@ function DocketWorkspace({
   canActivateRules,
   canManageAccess,
   initialView,
+  initialProceedingId,
+  initialDraftId,
   currentMembershipId,
   onChanged,
 }: {
@@ -1384,6 +1392,8 @@ function DocketWorkspace({
   canActivateRules: boolean;
   canManageAccess: boolean;
   initialView: DocketView;
+  initialProceedingId: string | null;
+  initialDraftId: string | null;
   currentMembershipId: string | null;
   onChanged: () => Promise<void>;
 }) {
@@ -1446,6 +1456,8 @@ function DocketWorkspace({
               canReviewDraft={canReviewDraft}
               canFinalizeDraft={canFinalizeDraft}
               currentMembershipId={currentMembershipId}
+              initialProceedingId={initialProceedingId}
+              initialDraftId={initialDraftId}
             />
             <IpPostRegistrationWorkspace
               docket={docket}

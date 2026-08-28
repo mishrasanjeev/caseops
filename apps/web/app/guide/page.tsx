@@ -1771,6 +1771,28 @@ export default function GuidePage() {
                       to the matter currently open in another tab.
                     </li>
                     <li>
+                      <strong>Intelligent review.</strong> Save a frozen report, then choose
+                      <strong> Start intelligent review</strong> from Saved research. Select
+                      one permitted Matter or IP docket, state the issue, record facts and
+                      conflicting values, reference existing documents, and confirm the
+                      authority set. The asynchronous review separates relevant facts,
+                      applicable provisions, supporting and contrary passages, factual
+                      analogies, gaps, unresolved contradictions, and lawyer checks. Every
+                      authority retains its citation, court, date, passage, relevance,
+                      source URL, content hash, and source version.
+                    </li>
+                    <li>
+                      <strong>Lawyer gate.</strong> An authorized lawyer can include or
+                      exclude authorities and add notes. Removing any citation behind an
+                      assertion makes the review visibly incomplete and blocks finalization.
+                      A finalized review can be published only into the existing Draft
+                      lifecycle, where the approved Draft remains separate from generated
+                      analysis and follows the normal review and finalization controls. An
+                      IP-docket review can be finalized as analysis, but publishing it into
+                      the trademark pleading workspace also requires a selected opposition
+                      proceeding from that docket.
+                    </li>
+                    <li>
                       <strong>Ask this Workspace.</strong> Open <code>/app/assistant</code>,
                       search for the permitted client, matter, docket, IP right, proceeding,
                       or document records you want to include, and apply that explicit scope.
@@ -1797,6 +1819,15 @@ export default function GuidePage() {
                     is labelled during an outage. Imported content is hashed; a changed
                     version resets two-person legal review and invalidates linked frozen
                     research reports.
+                  </Callout>
+                  <Callout title="Intelligent-review safety boundary">
+                    The review abstains when accessible frozen sources are insufficient,
+                    rejects citations that cannot be matched to source text, rechecks target
+                    and source access after provider work, and labels stale sources. It does
+                    not produce judge favourability, outcome probability, guaranteed
+                    strategy, or a claim of exhaustive research. The displayed review keeps
+                    its template, prompt-policy, model-run, source-freshness, and output-hash
+                    evidence for audit.
                   </Callout>
                 </Section>
 

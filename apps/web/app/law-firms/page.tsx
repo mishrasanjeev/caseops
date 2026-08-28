@@ -18,6 +18,7 @@ import {
   PanelsTopLeft,
   Radar,
   Scale,
+  ScanSearch,
   Search,
   ShieldCheck,
   Sparkles,
@@ -181,6 +182,11 @@ const platformMoves = [
     icon: Search,
     title: "Research and knowledge reuse",
     body: "Search the public corpus and tenant-private annotations without leaving the operating workflow.",
+  },
+  {
+    icon: ScanSearch,
+    title: "Source-bounded intelligent review",
+    body: "Turn a frozen research report into a Matter- or IP-docket review that separates supporting and contrary passages, provisions, analogies, gaps, conflicts and lawyer checks. Each authority retains its source URL and frozen version; citation removal blocks finalization, and only an authorized lawyer can publish the approved result into the existing Matter Draft or selected opposition pleading lifecycle.",
   },
   {
     icon: Gavel,

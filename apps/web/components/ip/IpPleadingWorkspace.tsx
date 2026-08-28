@@ -71,6 +71,7 @@ export function IpPleadingWorkspace({
   canGenerate,
   canReview,
   canFinalize,
+  initialDraftId = null,
 }: {
   docketId: string;
   proceedingId: string;
@@ -79,6 +80,7 @@ export function IpPleadingWorkspace({
   canGenerate: boolean;
   canReview: boolean;
   canFinalize: boolean;
+  initialDraftId?: string | null;
 }) {
   const queryClient = useQueryClient();
   const queryKey = ["ip", "pleading-drafts", docketId, proceedingId] as const;
@@ -92,7 +94,7 @@ export function IpPleadingWorkspace({
   });
   const [templateKey, setTemplateKey] = useState("");
   const [title, setTitle] = useState("");
-  const [selectedId, setSelectedId] = useState("");
+  const [selectedId, setSelectedId] = useState(initialDraftId ?? "");
   const [focusNote, setFocusNote] = useState("");
   const [reviewNotes, setReviewNotes] = useState("");
   const [lifecycleReference, setLifecycleReference] = useState("");
@@ -106,6 +108,7 @@ export function IpPleadingWorkspace({
     }
   }, [templateKey, templates.data?.templates]);
   useEffect(() => {
+    if (!drafts.data) return;
     const rows = drafts.data?.drafts ?? [];
     if (!selectedId && rows[0]) setSelectedId(rows[0].id);
     if (selectedId && !rows.some((row) => row.id === selectedId)) {
