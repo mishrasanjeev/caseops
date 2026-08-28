@@ -23,7 +23,7 @@ from caseops_api.db.models import (
     MatterTaskStatus,
 )
 from caseops_api.db.session import get_session_factory
-from tests.test_auth_company import auth_headers, bootstrap_company
+from tests.test_auth_company import auth_headers, bootstrap_company, tenant_legal_today
 
 
 def _create_matter(client: TestClient, token: str, code: str) -> str:
@@ -192,8 +192,9 @@ def test_today_empty_workspace_returns_empty_streams(client: TestClient) -> None
 
 def test_today_aggregates_hearing_in_next_7d(client: TestClient) -> None:
     token = str(bootstrap_company(client)["access_token"])
+    today = tenant_legal_today(client, auth_headers(token))
     matter_id = _create_matter(client, token, "TODAY-H1")
-    _seed_hearing(matter_id, date.today() + timedelta(days=3))
+    _seed_hearing(matter_id, today + timedelta(days=3))
 
     resp = client.get("/api/me/today", headers=auth_headers(token))
     body = resp.json()
@@ -206,28 +207,30 @@ def test_today_aggregates_hearing_in_next_7d(client: TestClient) -> None:
 
 def test_today_excludes_past_hearings(client: TestClient) -> None:
     token = str(bootstrap_company(client)["access_token"])
+    today = tenant_legal_today(client, auth_headers(token))
     matter_id = _create_matter(client, token, "TODAY-H2")
-    _seed_hearing(matter_id, date.today() - timedelta(days=2))
-    _seed_hearing(matter_id, date.today() + timedelta(days=10))  # outside horizon
-    _seed_hearing(matter_id, date.today() + timedelta(days=5))  # in horizon
+    _seed_hearing(matter_id, today - timedelta(days=2))
+    _seed_hearing(matter_id, today + timedelta(days=10))  # outside horizon
+    _seed_hearing(matter_id, today + timedelta(days=5))  # in horizon
 
     resp = client.get("/api/me/today", headers=auth_headers(token))
     hearings = resp.json()["hearings_next_7d"]
     assert len(hearings) == 1
     assert (
-        date.fromisoformat(hearings[0]["hearing_on"]) == date.today() + timedelta(days=5)
+        date.fromisoformat(hearings[0]["hearing_on"]) == today + timedelta(days=5)
     )
 
 
 def test_today_tasks_overdue_and_due_today(client: TestClient) -> None:
     token = str(bootstrap_company(client)["access_token"])
+    today = tenant_legal_today(client, auth_headers(token))
     matter_id = _create_matter(client, token, "TODAY-T1")
-    _seed_task(matter_id, due_on=date.today() - timedelta(days=3))  # overdue
-    _seed_task(matter_id, due_on=date.today())  # due today
-    _seed_task(matter_id, due_on=date.today() + timedelta(days=2))  # within horizon
-    _seed_task(matter_id, due_on=date.today() + timedelta(days=14))  # outside horizon
+    _seed_task(matter_id, due_on=today - timedelta(days=3))  # overdue
+    _seed_task(matter_id, due_on=today)  # due today
+    _seed_task(matter_id, due_on=today + timedelta(days=2))  # within horizon
+    _seed_task(matter_id, due_on=today + timedelta(days=14))  # outside horizon
     _seed_task(
-        matter_id, due_on=date.today() - timedelta(days=1),
+        matter_id, due_on=today - timedelta(days=1),
         status=MatterTaskStatus.COMPLETED,  # done — must be excluded
     )
 
@@ -266,19 +269,20 @@ def test_today_drafts_in_review_surface(client: TestClient) -> None:
 
 def test_today_overdue_invoices_filter(client: TestClient) -> None:
     token = str(bootstrap_company(client)["access_token"])
+    today = tenant_legal_today(client, auth_headers(token))
     matter_id = _create_matter(client, token, "TODAY-I1")
     # Overdue + issued — must surface.
-    _seed_invoice(matter_id, due_on=date.today() - timedelta(days=10))
+    _seed_invoice(matter_id, due_on=today - timedelta(days=10))
     # Due in future — must NOT surface.
-    _seed_invoice(matter_id, due_on=date.today() + timedelta(days=10))
+    _seed_invoice(matter_id, due_on=today + timedelta(days=10))
     # Overdue but PAID — must NOT surface.
     _seed_invoice(
-        matter_id, due_on=date.today() - timedelta(days=20),
+        matter_id, due_on=today - timedelta(days=20),
         status=InvoiceStatus.PAID,
     )
     # Overdue + partially_paid — MUST surface.
     _seed_invoice(
-        matter_id, due_on=date.today() - timedelta(days=5),
+        matter_id, due_on=today - timedelta(days=5),
         status=InvoiceStatus.PARTIALLY_PAID,
     )
 
@@ -290,9 +294,10 @@ def test_today_overdue_invoices_filter(client: TestClient) -> None:
 
 def test_today_deadlines_in_horizon(client: TestClient) -> None:
     token = str(bootstrap_company(client)["access_token"])
+    today = tenant_legal_today(client, auth_headers(token))
     matter_id = _create_matter(client, token, "TODAY-DL1")
-    _seed_deadline(matter_id, due_on=date.today() + timedelta(days=2))  # in horizon
-    _seed_deadline(matter_id, due_on=date.today() + timedelta(days=20))  # outside
+    _seed_deadline(matter_id, due_on=today + timedelta(days=2))  # in horizon
+    _seed_deadline(matter_id, due_on=today + timedelta(days=20))  # outside
 
     resp = client.get("/api/me/today", headers=auth_headers(token))
     deadlines = resp.json()["deadlines_next_7d"]
@@ -304,8 +309,9 @@ def test_today_tenant_isolation(client: TestClient) -> None:
     """Tenant A's today feed must not include any of tenant B's
     hearings / tasks / drafts / invoices / deadlines."""
     token_a = str(bootstrap_company(client)["access_token"])
+    today = tenant_legal_today(client, auth_headers(token_a))
     matter_a = _create_matter(client, token_a, "TODAY-ISO-A")
-    _seed_hearing(matter_a, date.today() + timedelta(days=2))
+    _seed_hearing(matter_a, today + timedelta(days=2))
 
     # Bootstrap a second tenant by hitting bootstrap directly.
     bootstrap_resp = client.post(
@@ -356,9 +362,10 @@ def test_next_action_picks_overdue_invoice_first(client: TestClient) -> None:
     """When a matter has both an overdue invoice AND an upcoming
     hearing, the overdue invoice wins (severity=urgent beats soon)."""
     token = str(bootstrap_company(client)["access_token"])
+    today = tenant_legal_today(client, auth_headers(token))
     matter_id = _create_matter(client, token, "NA-INV")
-    _seed_invoice(matter_id, due_on=date.today() - timedelta(days=15))
-    _seed_hearing(matter_id, date.today() + timedelta(days=3))
+    _seed_invoice(matter_id, due_on=today - timedelta(days=15))
+    _seed_hearing(matter_id, today + timedelta(days=3))
 
     resp = client.get(
         f"/api/matters/{matter_id}/next-action",
@@ -377,9 +384,10 @@ def test_next_action_picks_overdue_task_over_upcoming_hearing(
 ) -> None:
     """Overdue task beats a hearing 3 days out (urgent > normal)."""
     token = str(bootstrap_company(client)["access_token"])
+    today = tenant_legal_today(client, auth_headers(token))
     matter_id = _create_matter(client, token, "NA-TASK")
-    _seed_task(matter_id, due_on=date.today() - timedelta(days=2))
-    _seed_hearing(matter_id, date.today() + timedelta(days=3))
+    _seed_task(matter_id, due_on=today - timedelta(days=2))
+    _seed_hearing(matter_id, today + timedelta(days=3))
 
     resp = client.get(
         f"/api/matters/{matter_id}/next-action",
@@ -398,8 +406,9 @@ def test_next_action_picks_hearing_today_over_draft_in_review(
     """Within `soon` severity, a hearing today wins over a draft
     in review (kind tiebreak: hearing > draft)."""
     token = str(bootstrap_company(client)["access_token"])
+    today = tenant_legal_today(client, auth_headers(token))
     matter_id = _create_matter(client, token, "NA-HRG")
-    _seed_hearing(matter_id, date.today())  # today → soon
+    _seed_hearing(matter_id, today)  # today → soon
     _seed_draft_in_review(client, token, matter_id)  # soon
 
     resp = client.get(
@@ -416,8 +425,9 @@ def test_next_action_tenant_scoped(client: TestClient) -> None:
     """A matter id from tenant A doesn't surface tenant A's data when
     queried with tenant B's token."""
     token_a = str(bootstrap_company(client)["access_token"])
+    today = tenant_legal_today(client, auth_headers(token_a))
     matter_a = _create_matter(client, token_a, "NA-ISO-A")
-    _seed_hearing(matter_a, date.today() + timedelta(days=2))
+    _seed_hearing(matter_a, today + timedelta(days=2))
 
     bootstrap_resp = client.post(
         "/api/bootstrap/company",
