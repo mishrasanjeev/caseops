@@ -76,7 +76,11 @@ test("IPLF-059B production proves every UJ-37 path and source-backed responsive 
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1)).toBe(false);
 
-  await page.getByRole("button").filter({ hasText: "Completed" }).first().click();
+  const completedInstruction = page.getByRole("button")
+    .filter({ hasText: `TM-US-${runId}` })
+    .filter({ hasText: "Completed" });
+  await expect(completedInstruction).toHaveCount(1);
+  await completedInstruction.click();
   for (const name of ["Instruction", "Actions", "Reminders", "History"]) {
     await expect(page.getByRole("tab", { name })).toBeVisible();
   }

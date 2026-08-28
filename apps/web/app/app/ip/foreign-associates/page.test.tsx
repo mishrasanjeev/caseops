@@ -16,7 +16,6 @@ const mocks = vi.hoisted(() => ({
   communications: vi.fn(),
   counsel: vi.fn(),
   deadlines: vi.fn(),
-  docket: vi.fn(),
   dockets: vi.fn(),
   documents: vi.fn(),
   instructions: vi.fn(),
@@ -34,7 +33,6 @@ vi.mock("@/lib/api/endpoints", async () => {
     ...actual,
     fetchIpForeignAssociateInstructions: mocks.instructions,
     fetchIpForeignAssociateWorkspace: mocks.workspace,
-    fetchIpDocket: mocks.docket,
     fetchIpDockets: mocks.dockets,
     fetchIpDocumentsForDocket: mocks.documents,
     fetchIpDeadlineWorkspace: mocks.deadlines,
@@ -141,6 +139,8 @@ const DOCUMENTS: IpDocument[] = [
 function workspace(instruction = INSTRUCTION): IpForeignAssociateWorkspace {
   return {
     instruction,
+    docket: DOCKET,
+    documents: DOCUMENTS.filter((document) => instruction.selected_document_refs_json.includes(document.id)),
     transactions: [],
     associate_name: instruction.outside_counsel_id === "counsel-2" ? "Hudson Marks LLP" : "Liberty IP LLP",
     delivery_status: "delivered",
@@ -178,7 +178,6 @@ describe("foreign-associate coordinator workspace", () => {
     mocks.capability.mockReturnValue(true);
     mocks.instructions.mockResolvedValue({ items: [INSTRUCTION], total: 1, limit: 100, offset: 0 });
     mocks.workspace.mockResolvedValue(workspace());
-    mocks.docket.mockResolvedValue(DOCKET);
     mocks.dockets.mockResolvedValue({ dockets: [DOCKET], count: 1 });
     mocks.documents.mockResolvedValue({ items: DOCUMENTS, total: DOCUMENTS.length });
     mocks.deadlines.mockResolvedValue({ deadlines: [{ id: "deadline-1", title: "Foreign filing deadline" }] });
@@ -242,5 +241,24 @@ describe("foreign-associate coordinator workspace", () => {
       replacementEstimateCostItemId: "estimate-2",
       evidenceRefs: ["associate-refusal:REF-101"],
     })));
+  });
+
+  it("opens a completed instruction without action-only request fan-out", async () => {
+    const user = userEvent.setup();
+    const completed = { ...INSTRUCTION, status: "completed" as const, row_version: 12 };
+    mocks.instructions.mockResolvedValue({ items: [completed], total: 1, limit: 100, offset: 0 });
+    mocks.workspace.mockResolvedValue(workspace(completed));
+
+    render(<ForeignAssociatesPage />, { wrapper: wrapper() });
+
+    for (const name of ["Instruction", "Actions", "Reminders", "History"]) {
+      const tab = await screen.findByRole("tab", { name });
+      expect(tab).toBeVisible();
+      await user.click(tab);
+    }
+    expect(mocks.documents).not.toHaveBeenCalled();
+    expect(mocks.deadlines).not.toHaveBeenCalled();
+    expect(mocks.counsel).not.toHaveBeenCalled();
+    expect(mocks.communications).not.toHaveBeenCalled();
   });
 });

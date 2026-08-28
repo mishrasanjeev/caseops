@@ -240,7 +240,7 @@ export default function ForeignAssociatesPage() {
                 onCreated={(row) => { setCreating(false); setSelectedId(row.id); }}
               />
             ) : selectedId ? (
-              <InstructionWorkspace instructionId={selectedId} canWrite={canWrite} canApprove={canApprove} />
+              <InstructionWorkspace key={selectedId} instructionId={selectedId} canWrite={canWrite} canApprove={canApprove} />
             ) : (
               <EmptyState title="Select an instruction" description="" />
             )}
@@ -422,36 +422,57 @@ function CreateInstruction({
 }
 
 function InstructionWorkspace({ instructionId, canWrite, canApprove }: { instructionId: string; canWrite: boolean; canApprove: boolean }) {
+  const [activeTab, setActiveTab] = useState<"instruction" | "actions" | "reminders" | "history">("instruction");
   const workspace = useQuery({ queryKey: ["ip-foreign-associate-workspace", instructionId], queryFn: () => fetchIpForeignAssociateWorkspace(instructionId) });
-  const docket = useQuery({ queryKey: ["ip-docket", workspace.data?.instruction.docket_id], queryFn: () => fetchIpDocket(workspace.data!.instruction.docket_id), enabled: Boolean(workspace.data?.instruction.docket_id) });
-  const documents = useQuery({ queryKey: ["ip-documents", workspace.data?.instruction.docket_id], queryFn: () => fetchIpDocumentsForDocket(workspace.data!.instruction.docket_id), enabled: Boolean(workspace.data?.instruction.docket_id) });
-  const counsel = useQuery({ queryKey: ["outside-counsel-workspace"], queryFn: fetchOutsideCounselWorkspace });
-  const deadlines = useQuery({ queryKey: ["ip-deadlines", workspace.data?.instruction.docket_id], queryFn: () => fetchIpDeadlineWorkspace(workspace.data!.instruction.docket_id), enabled: Boolean(workspace.data?.instruction.docket_id) });
-  const communications = useQuery({ queryKey: ["matter-communications", docket.data?.matter_id], queryFn: () => fetchMatterCommunications(docket.data!.matter_id!), enabled: Boolean(docket.data?.matter_id) });
+  const actions = workspace.data ? TRANSITIONS[workspace.data.instruction.status] : [];
+  const actionsEnabled = activeTab === "actions" && actions.length > 0;
+  const documentsNeeded = actionsEnabled && actions.some((kind) => ["record_query", "approve_substantive_response", "report_filing", "verify_filing_evidence"].includes(kind));
+  const counselNeeded = actionsEnabled && actions.some((kind) => ["link_invoice", "reassign"].includes(kind));
+  const communicationsNeeded = actionsEnabled && actions.includes("dispatch");
+  const documents = useQuery({ queryKey: ["ip-documents", workspace.data?.instruction.docket_id], queryFn: () => fetchIpDocumentsForDocket(workspace.data!.instruction.docket_id), enabled: documentsNeeded });
+  const counsel = useQuery({ queryKey: ["outside-counsel-workspace"], queryFn: fetchOutsideCounselWorkspace, enabled: counselNeeded });
+  const deadlines = useQuery({ queryKey: ["ip-deadlines", workspace.data?.instruction.docket_id], queryFn: () => fetchIpDeadlineWorkspace(workspace.data!.instruction.docket_id), enabled: actionsEnabled });
+  const communications = useQuery({ queryKey: ["matter-communications", workspace.data?.docket.matter_id], queryFn: () => fetchMatterCommunications(workspace.data!.docket.matter_id!), enabled: communicationsNeeded && Boolean(workspace.data?.docket.matter_id) });
 
   if (workspace.isLoading) return <Skeleton className="h-[32rem]" />;
   if (workspace.isError) return <QueryErrorState error={workspace.error} onRetry={() => void workspace.refetch()} />;
-  if (!workspace.data || !docket.data) return <EmptyState title="Instruction unavailable" description="" />;
-  const selectedDocuments = documents.data?.items.filter((row) => workspace.data.instruction.selected_document_refs_json.includes(row.id)) ?? [];
+  if (!workspace.data) return <EmptyState title="Instruction unavailable" description="" />;
+  const actionQueries = [documents, counsel, deadlines, communications].filter((query) => query.isLoading || query.isError);
+  const actionLoading = actionQueries.some((query) => query.isLoading);
+  const actionError = actionQueries.find((query) => query.isError)?.error;
+  const retryActionQueries = () => {
+    void Promise.all([
+      ...(documentsNeeded ? [documents.refetch()] : []),
+      ...(counselNeeded ? [counsel.refetch()] : []),
+      ...(actionsEnabled ? [deadlines.refetch()] : []),
+      ...(communicationsNeeded && workspace.data.docket.matter_id ? [communications.refetch()] : []),
+    ]);
+  };
   return (
     <div className="min-w-0 space-y-4">
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="break-words text-xl font-semibold">{workspace.data.associate_name}</h2>
-          <p className="break-words text-sm text-[var(--color-mute)]">{docket.data.title} · {workspace.data.instruction.target_jurisdiction} · v{workspace.data.instruction.instruction_version}</p>
+          <p className="break-words text-sm text-[var(--color-mute)]">{workspace.data.docket.title} · {workspace.data.instruction.target_jurisdiction} · v{workspace.data.instruction.instruction_version}</p>
         </div>
         <Status value={workspace.data.instruction.status} />
       </div>
-      <Tabs defaultValue="instruction" className="min-w-0">
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)} className="min-w-0">
         <TabsList className="grid h-auto w-full min-w-0 grid-cols-2 gap-1 sm:grid-cols-4">
           <TabsTrigger value="instruction">Instruction</TabsTrigger>
           <TabsTrigger value="actions">Actions</TabsTrigger>
           <TabsTrigger value="reminders">Reminders</TabsTrigger>
           <TabsTrigger value="history">History</TabsTrigger>
         </TabsList>
-        <TabsContent value="instruction"><InstructionSummary workspace={workspace.data} docket={docket.data} documents={selectedDocuments} /></TabsContent>
-        <TabsContent value="actions"><TransactionForm workspace={workspace.data} docket={docket.data} documents={documents.data?.items ?? []} deadlines={deadlines.data?.deadlines ?? []} counsel={counsel.data} communications={communications.data?.communications ?? []} canWrite={canWrite} canApprove={canApprove} /></TabsContent>
-        <TabsContent value="reminders"><ReminderPanel workspace={workspace.data} docket={docket.data} canWrite={canWrite} /></TabsContent>
+        <TabsContent value="instruction"><InstructionSummary workspace={workspace.data} docket={workspace.data.docket} documents={workspace.data.documents} /></TabsContent>
+        <TabsContent value="actions">
+          {actionLoading ? <Skeleton className="h-[24rem]" /> : actionError ? (
+            <QueryErrorState error={actionError} onRetry={retryActionQueries} />
+          ) : (
+            <TransactionForm workspace={workspace.data} docket={workspace.data.docket} documents={documents.data?.items ?? []} deadlines={deadlines.data?.deadlines ?? []} counsel={counsel.data} communications={communications.data?.communications ?? []} canWrite={canWrite} canApprove={canApprove} />
+          )}
+        </TabsContent>
+        <TabsContent value="reminders"><ReminderPanel workspace={workspace.data} docket={workspace.data.docket} canWrite={canWrite} /></TabsContent>
         <TabsContent value="history"><HistoryPanel workspace={workspace.data} /></TabsContent>
       </Tabs>
     </div>

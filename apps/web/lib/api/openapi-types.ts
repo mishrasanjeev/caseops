@@ -25133,6 +25133,9 @@ export interface components {
             delivered_at: string | null;
             /** Delivery Status */
             delivery_status: string;
+            docket: components["schemas"]["IpDocketRecordResponse"];
+            /** Documents */
+            documents: components["schemas"]["IpDocumentRecord"][];
             /**
              * Filing Evidence Status
              * @enum {string}

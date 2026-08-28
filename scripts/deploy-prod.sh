@@ -58,17 +58,21 @@ API_TIMEOUT=120s
 # cannot raise a historical revision cap.
 # Override only for a deliberate incident/cost response.
 API_MAX_INSTANCES="${API_MAX_INSTANCES:-20}"
-# Keep two API instances warm because each instance deliberately accepts one
+# Keep four API instances warm because each instance deliberately accepts one
 # request and the ClamAV sidecar makes burst scale-out take tens of seconds.
+# Production telemetry on 2026-08-28 measured a 49.758s queued request when a
+# third supporting read triggered an autoscaled instance. Four warm slots cover
+# the bounded foreign-associate workspace load and leave capacity for an
+# unrelated interactive request.
 # caseops-api previously had no minScale (scaled to 0), so the first
 # login after any idle window paid a 3-8s Python + SQLAlchemy + Cloud
 # SQL + clamav-sidecar cold start — the dominant cause of "login is
 # slow". This must be SERVICE-level minimum capacity (gcloud --min),
 # not revision-level --min-instances. Historical tagged revisions inherited
 # revision minScale=1 and kept restarting with pinned, obsolete DB secrets.
-# Two service-level warm instances leave one slot responsive while another
-# request is stalled. The Matter cockpit also sequences its supporting reads.
-API_MIN_INSTANCES=2
+# Four service-level warm instances leave headroom while another request is
+# stalled. The Matter cockpit also sequences its supporting reads.
+API_MIN_INSTANCES=4
 # P1-2b (2026-05-15 perf review): keep one web instance warm too.
 # /sign-in is `dynamic = "force-dynamic"` (SSR per request, no CDN
 # cache), so with web minScale=0 the first hit after an idle window

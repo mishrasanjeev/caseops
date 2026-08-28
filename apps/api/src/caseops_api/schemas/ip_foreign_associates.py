@@ -7,7 +7,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from caseops_api.schemas.ip_documents import IpDocumentRecord
 from caseops_api.schemas.ip_lifecycle import IpDocketEventResponse
+from caseops_api.schemas.ip_operations import IpDocketRecordResponse
 
 IpForeignAssociateStatus = Literal[
     "draft",
@@ -298,6 +300,8 @@ class IpForeignAssociateReminderScheduleResponse(BaseModel):
 
 class IpForeignAssociateWorkspaceResponse(BaseModel):
     instruction: IpForeignAssociateResponse
+    docket: IpDocketRecordResponse
+    documents: list[IpDocumentRecord]
     transactions: list[IpDocketEventResponse]
     associate_name: str
     delivery_status: str
