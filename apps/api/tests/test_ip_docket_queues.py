@@ -28,11 +28,11 @@ test_uj57_recon05_only_the_decision_path_may_record_an_acceptance``.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import timedelta
 
 from fastapi.testclient import TestClient
 
-from tests.test_auth_company import auth_headers, bootstrap_company
+from tests.test_auth_company import auth_headers, bootstrap_company, tenant_legal_today
 from tests.test_clients import _mk_matter
 from tests.test_ip_deadline_workflow import _member
 from tests.test_ip_record_workflow import _particulars
@@ -65,7 +65,7 @@ def _coverage(client, headers, *, matter_id, title, responsible, critical=False)
             "source": "custom",
             "kind": "licence_royalty",
             "title": "Queue deadline",
-            "due_on": str(date.today() + timedelta(days=30)),
+            "due_on": str(tenant_legal_today(client, headers) + timedelta(days=30)),
             "assignee_membership_id": responsible,
         },
     )
