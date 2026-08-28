@@ -186,7 +186,7 @@ const platformMoves = [
   {
     icon: ScanSearch,
     title: "Source-bounded intelligent review",
-    body: "Turn a frozen research report into a Matter- or IP-docket review that separates supporting and contrary passages, provisions, analogies, gaps, conflicts and lawyer checks. Each authority retains its source URL and frozen version; citation removal blocks finalization, and only an authorized lawyer can publish the approved result into the existing Matter Draft or selected opposition pleading lifecycle.",
+    body: "Turn a frozen research report into a Matter- or IP-docket review that separates supporting and contrary passages, provisions, analogies, gaps, conflicts and lawyer checks. Each authority retains its source URL and frozen version; permission-checked links reopen the exact review, citation removal blocks finalization, and only an authorized lawyer can publish the approved result into the existing Matter Draft or selected opposition pleading lifecycle.",
   },
   {
     icon: Gavel,

@@ -1390,6 +1390,33 @@ def _build_prompt(
     ]
 
 
+def _build_safety_repair_messages(
+    messages: list[LLMMessage], *, category: str
+) -> list[LLMMessage]:
+    """Strengthen the existing prompt without replaying rejected model text."""
+
+    instruction = (
+        "\n\nSAFETY REPAIR (HARD): The previous structured response was rejected "
+        f"for {category.replace('_', ' ')} wording. Generate a completely new "
+        "response. Keep every statement neutral, source-backed, and expressly for "
+        "lawyer review. Do not include the rejected wording, a prediction, a "
+        "guarantee, judge-selection guidance, or a final instruction."
+    )
+    repaired: list[LLMMessage] = []
+    instruction_added = False
+    for message in messages:
+        if message.role == "system" and not instruction_added:
+            repaired.append(
+                LLMMessage(role=message.role, content=message.content + instruction)
+            )
+            instruction_added = True
+        else:
+            repaired.append(message)
+    if not instruction_added:
+        repaired.insert(0, LLMMessage(role="system", content=instruction.strip()))
+    return repaired
+
+
 def _cap_confidence(current: str, verified_count: int) -> str:
     current = current if current in CONFIDENCE_LEVELS else "low"
     if verified_count == 0:
@@ -1663,12 +1690,14 @@ def generate_recommendation(
         purpose=f"recommendation:{rec_type}",
     )
 
-    def _invoke(active: LLMProvider) -> tuple[_LLMResponse, LLMCompletion]:
+    def _invoke(
+        active: LLMProvider, active_messages: list[LLMMessage]
+    ) -> tuple[_LLMResponse, LLMCompletion]:
         return generate_structured(
             active,
             session=session,
             schema=_LLMResponse,
-            messages=messages,
+            messages=active_messages,
             context=_call_context,
             temperature=settings.llm_temperature,
             max_tokens=settings.llm_max_output_tokens_recommendations,
@@ -1687,15 +1716,19 @@ def generate_recommendation(
     # errors clear on retry because the model's JSON output is non-
     # deterministic at temperature > 0. Quota / 5xx / timeout still 502
     # immediately (retry won't help upstream outages).
+    provider_retry_used = False
+    safety_repair_category: str | None = None
+    safety_repair_error: str | None = None
     try:
-        parsed, completion = _invoke(llm)
+        parsed, completion = _invoke(llm, messages)
         _stage("llm_primary")
     except LLMResponseFormatError:
         logger.warning(
             "recommendation generation: primary LLM returned malformed JSON; retrying once"
         )
+        provider_retry_used = True
         try:
-            parsed, completion = _invoke(llm)
+            parsed, completion = _invoke(llm, messages)
             _stage("llm_retry")
         except LLMProviderError as retry_exc:
             logger.warning(
@@ -1714,21 +1747,44 @@ def generate_recommendation(
             exc=exc,
         ) from exc
 
+    unsafe_output_category = _classify_unsafe_response(parsed)
+    if unsafe_output_category is not None and not provider_retry_used:
+        safety_repair_category = unsafe_output_category
+        repair_messages = _build_safety_repair_messages(
+            messages,
+            category=unsafe_output_category,
+        )
+        logger.warning(
+            "recommendation generation: unsafe output category=%s; retrying once "
+            "with safety repair",
+            unsafe_output_category,
+        )
+        provider_retry_used = True
+        try:
+            parsed, completion = _invoke(llm, repair_messages)
+            prompt_hash = _prompt_hash(repair_messages)
+            _stage("llm_retry")
+            unsafe_output_category = _classify_unsafe_response(parsed)
+        except (LLMProviderError, HTTPException) as repair_exc:
+            safety_repair_error = type(repair_exc).__name__
+            logger.warning(
+                "recommendation generation: safety repair failed error_type=%s",
+                safety_repair_error,
+            )
+
     # The optional bench-rerank audit above commits its own ModelRun, which
     # necessarily releases the Matter row lock acquired at request entry.
-    # Provider work is also an unbounded external boundary.  Reload and lock
-    # the parent again *after* the provider returns and before any refusal run,
-    # recommendation, option, or audit row is staged.  Keeping this lock until
-    # the single terminal commit makes concurrent disposal and recommendation
-    # persistence mutually exclusive; ``populate_existing`` in the shared
-    # guard prevents the session identity map from hiding a winning disposal.
+    # Provider work is also an external boundary. Reload and lock the parent
+    # only after every bounded provider attempt and before any refusal run,
+    # recommendation, option, or audit row is staged. Keeping this lock until
+    # the terminal commit makes disposal and recommendation persistence
+    # mutually exclusive.
     matter = require_operational_matter(
         session,
         matter=matter,
         operation="save a generated recommendation",
     )
 
-    unsafe_output_category = _classify_unsafe_response(parsed)
     if unsafe_output_category is not None:
         logger.warning(
             "recommendation generation: unsafe output rejected category=%s",
@@ -1742,7 +1798,11 @@ def generate_recommendation(
             completion=completion,
             prompt_hash=prompt_hash,
             status_label="rejected_unsafe_output",
-            error=f"unsafe_recommendation_output:{unsafe_output_category}",
+            error=(
+                f"unsafe_recommendation_output:{unsafe_output_category};"
+                f"repair_attempted={safety_repair_category is not None};"
+                f"repair_error={safety_repair_error or 'none'}"
+            ),
         )
         session.commit()
         raise HTTPException(
@@ -1870,6 +1930,11 @@ def generate_recommendation(
             "option_count": len(cleaned_options),
             "verified_citations": total_verified_citations,
             "confidence": confidence,
+            "safety_repair": {
+                "attempted": safety_repair_category is not None,
+                "source_category": safety_repair_category,
+                "succeeded": safety_repair_category is not None,
+            },
         },
     )
     session.commit()
