@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import UTC, date, datetime, timedelta
 
 import httpx
+import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
@@ -30,12 +33,14 @@ from caseops_api.services.case_tracking import (
     poll_tracked_cases,
 )
 from caseops_api.services.case_tracking_providers import (
+    _SOURCE_TEXT_MAX_CHARS,
     CaseSearchQuery,
     CaseTrackingProviderError,
     EcourtsIndiaApiProvider,
     ProviderBulkRefreshResult,
     ProviderCaseEvent,
     ProviderCaseSnapshot,
+    _source_text,
 )
 from caseops_api.services.session_context import SessionContext
 from tests.test_auth_company import auth_headers, bootstrap_company
@@ -108,6 +113,17 @@ class FakeCaseTrackingProvider:
             except CaseTrackingProviderError as exc:
                 errors[cnr] = str(exc)
         return ProviderBulkRefreshResult(snapshots=snapshots, errors=errors)
+
+
+def test_provider_source_text_is_format_preserving_and_bounded() -> None:
+    normalized, truncated = _source_text("heading\r\n\r\nbody\x00")
+    assert normalized == "heading\n\nbody"
+    assert truncated is False
+
+    bounded, truncated = _source_text("x" * (_SOURCE_TEXT_MAX_CHARS + 1))
+    assert bounded is not None
+    assert len(bounded) == _SOURCE_TEXT_MAX_CHARS
+    assert truncated is True
 
 
 def _bootstrap(client: TestClient) -> str:
@@ -381,6 +397,7 @@ def test_ecourts_provider_uses_partner_paths_and_normalizes_payloads() -> None:
                                     "orderUrl": "order-1.pdf",
                                     "description": "Interim order",
                                     "orderDate": "2026-05-26",
+                                    "markdownContent": "# Interim order\n\nOfficial directions.",
                                 }
                             ],
                             "judgmentOrders": [
@@ -428,6 +445,8 @@ def test_ecourts_provider_uses_partner_paths_and_normalizes_payloads() -> None:
     assert snapshot.orders[0].source_url == (
         "https://webapi.ecourtsindia.com/api/partner/case/DLHC010012342026/order/order-1.pdf"
     )
+    assert snapshot.orders[0].text == "# Interim order\n\nOfficial directions."
+    assert snapshot.orders[0].text_truncated is False
     assert snapshot.judgments[0].title == "Final judgment dated 2026-05-27"
     assert requests[1].url.path == "/api/partner/case/DLHC010012342026"
 
@@ -572,6 +591,14 @@ def test_case_tracking_refresh_detects_order_and_enqueues_in_app_idempotently(
     assert "provider.example" not in json.dumps(body)
     assert "lawyer review" in body["created_updates"][0]["ai_summary"]["review_framing"]
 
+    with get_session_factory()() as session:
+        legacy_update = session.scalar(select(TrackedCaseUpdate))
+        assert legacy_update is not None
+        legacy_update.source_text = None
+        legacy_update.source_text_sha256 = None
+        legacy_update.source_text_truncated = False
+        session.commit()
+
     rerun = client.post(
         f"/api/case-tracking/bookmarks/{bookmark_id}/refresh",
         headers=auth_headers(token),
@@ -591,7 +618,13 @@ def test_case_tracking_refresh_detects_order_and_enqueues_in_app_idempotently(
     assert "provider.example" not in json.dumps(updates.json())
 
     with get_session_factory()() as session:
-        assert session.scalar(select(TrackedCaseUpdate)) is not None
+        restored_update = session.scalar(select(TrackedCaseUpdate))
+        assert restored_update is not None
+        assert restored_update.source_text == (
+            "The court issued directions and listed the matter."
+        )
+        assert restored_update.source_text_sha256
+        assert restored_update.source_text_truncated is False
         operations = list(
             session.scalars(
                 select(TrackedCaseProviderOperation).order_by(
@@ -895,6 +928,7 @@ def test_case_tracking_source_download_uses_server_side_provider_auth(
             assert download.content.startswith(b"%PDF")
             assert download.content_type == "application/pdf"
             assert download.filename == "order-1.pdf"
+            assert download.source_format == "provider-document"
             assert requests
             assert (
                 session.scalar(
@@ -902,6 +936,60 @@ def test_case_tracking_source_download_uses_server_side_provider_auth(
                 )
                 is not None
             )
+
+            def billing_handler(request: httpx.Request) -> httpx.Response:
+                return httpx.Response(
+                    402,
+                    json={
+                        "status": 402,
+                        "error_code": "INSUFFICIENT_CREDITS",
+                        "message": "Provider billing balance is insufficient.",
+                    },
+                    request=request,
+                )
+
+            fallback = download_case_tracking_source(
+                session,
+                context=context,
+                bookmark_id=bookmark_id,
+                update_id=update["id"],
+                transport=httpx.MockTransport(billing_handler),
+            )
+            assert fallback.content == (
+                b"The court issued directions and listed the matter."
+            )
+            assert fallback.content_type == "text/markdown; charset=utf-8"
+            assert fallback.filename.endswith(".md")
+            assert fallback.source_format == "provider-markdown"
+
+            stored = session.get(TrackedCaseUpdate, update["id"])
+            assert stored is not None
+            stored.source_text_sha256 = "0" * 64
+            session.flush()
+            with pytest.raises(HTTPException) as corrupted:
+                download_case_tracking_source(
+                    session,
+                    context=context,
+                    bookmark_id=bookmark_id,
+                    update_id=update["id"],
+                    transport=httpx.MockTransport(billing_handler),
+                )
+            assert corrupted.value.status_code == 409
+
+            stored.source_text_sha256 = hashlib.sha256(
+                stored.source_text.encode("utf-8")
+            ).hexdigest()
+            stored.source_text_truncated = True
+            session.flush()
+            with pytest.raises(HTTPException) as truncated:
+                download_case_tracking_source(
+                    session,
+                    context=context,
+                    bookmark_id=bookmark_id,
+                    update_id=update["id"],
+                    transport=httpx.MockTransport(billing_handler),
+                )
+            assert truncated.value.status_code == 503
     finally:
         get_settings.cache_clear()
 

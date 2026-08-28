@@ -126,6 +126,7 @@ export function IpOppositionWorkspace({
     [core.data?.proceedings],
   );
   const [selectedId, setSelectedId] = useState(initialProceedingId ?? "");
+  const selectedOpposition = oppositions.find((row) => row.id === selectedId) ?? null;
   useEffect(() => {
     if (!core.data) return;
     if (!selectedId && oppositions[0]) setSelectedId(oppositions[0].id);
@@ -137,7 +138,7 @@ export function IpOppositionWorkspace({
   const workspace = useQuery({
     queryKey: ["ip", "opposition-workspace", docket.id, selectedId],
     queryFn: () => fetchIpOppositionWorkspace({ docketId: docket.id, proceedingId: selectedId }),
-    enabled: Boolean(selectedId),
+    enabled: Boolean(selectedOpposition),
   });
 
   const [applicationId, setApplicationId] = useState("");
@@ -364,6 +365,18 @@ export function IpOppositionWorkspace({
 
         {workspace.isPending ? <Skeleton className="h-80 w-full" /> : null}
         {workspace.isError ? <QueryErrorState error={workspace.error} title="Could not load the opposition workspace" onRetry={() => workspace.refetch()} /> : null}
+        {selectedOpposition ? (
+          <IpPleadingWorkspace
+            docketId={docket.id}
+            proceedingId={selectedOpposition.id}
+            canCreate={canWrite && canCreateDraft}
+            canEdit={canWrite && canEditDraft}
+            canGenerate={canWrite && canGenerateDraft}
+            canReview={canReview && canReviewDraft}
+            canFinalize={canReview && canFinalizeDraft}
+            initialDraftId={selectedOpposition.id === initialProceedingId ? initialDraftId : null}
+          />
+        ) : null}
         {workspace.data ? (
           <>
             <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -413,19 +426,6 @@ export function IpOppositionWorkspace({
             {workspace.data.proceeding.side === "opponent" && workspace.data.profile ? <IpOppositionOpponentWorkflow docket={docket} workspace={workspace.data} canReview={canReview} currentMembershipId={currentMembershipId} /> : null}
             {workspace.data.profile ? <IpOppositionSharedWorkflow docket={docket} workspace={workspace.data} canReview={canReview} currentMembershipId={currentMembershipId} /> : null}
             {workspace.data.profile ? <IpOppositionSpecializedPaths docket={docket} workspace={workspace.data} canReview={canReview} currentMembershipId={currentMembershipId} /> : null}
-
-            <IpPleadingWorkspace
-              docketId={docket.id}
-              proceedingId={workspace.data.proceeding.id}
-              canCreate={canWrite && canCreateDraft}
-              canEdit={canWrite && canEditDraft}
-              canGenerate={canWrite && canGenerateDraft}
-              canReview={canReview && canReviewDraft}
-              canFinalize={canReview && canFinalizeDraft}
-              initialDraftId={
-                selectedId === initialProceedingId ? initialDraftId : null
-              }
-            />
 
             <form data-testid="ip-opposition-stage-form" className="grid min-w-0 gap-3 border-t border-[var(--color-line)] pt-4 md:grid-cols-2 xl:grid-cols-4" onSubmit={(event) => { event.preventDefault(); if (transitionInput) transition.mutate(transitionInput); }}>
               <div className="md:col-span-2 xl:col-span-4"><h4 className="flex items-center gap-2 font-semibold"><Scale className="h-4 w-4" /> Stage transition</h4></div>

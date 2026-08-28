@@ -4847,6 +4847,11 @@ class TrackedCaseUpdate(Base):
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     ai_summary_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     source_url: Mapped[str | None] = mapped_column(String(800), nullable=True)
+    source_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_text_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    source_text_truncated: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
     order_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
     hearing_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     previous_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)

@@ -368,6 +368,11 @@ def _snapshot_payload(snapshot: ProviderCaseSnapshot) -> dict[str, object]:
         for event in payload.get(collection, []):
             if isinstance(event, dict) and isinstance(event.get("metadata"), dict):
                 event["metadata"] = _tenant_safe_metadata(event["metadata"])
+            if isinstance(event, dict) and isinstance(event.get("text"), str):
+                text = event["text"]
+                if len(text) > 4000:
+                    event["text"] = text[:4000]
+                    event["snapshot_text_preview_truncated"] = True
     return json.loads(json.dumps(payload, default=str))
 
 
@@ -1412,6 +1417,31 @@ def _create_update(
         )
     )
     if existing is not None:
+        if event and event.text and (
+            existing.source_text is None
+            or (existing.source_text_truncated and not event.text_truncated)
+        ):
+            existing.source_text = event.text
+            existing.source_text_sha256 = hashlib.sha256(
+                event.text.encode("utf-8")
+            ).hexdigest()
+            existing.source_text_truncated = event.text_truncated
+            if not existing.source_url and event.source_url:
+                existing.source_url = event.source_url
+            record_from_context(
+                session,
+                context,
+                action="case_tracking.source_text_backfilled",
+                target_type="tracked_case_update",
+                target_id=existing.id,
+                metadata={
+                    "tracked_case_id_sha256": _hash_value(tracked_case.id),
+                    "source_record_key_sha256": _hash_value(source_record_key),
+                    "source_text_sha256": existing.source_text_sha256,
+                    "source_text_truncated": existing.source_text_truncated,
+                },
+            )
+            session.add(existing)
         return None
     summary, ai_summary, model_run_id = _summary_for_update(
         session,
@@ -1430,6 +1460,13 @@ def _create_update(
         summary=summary,
         ai_summary_json=ai_summary,
         source_url=event.source_url if event else None,
+        source_text=event.text if event else None,
+        source_text_sha256=(
+            hashlib.sha256(event.text.encode("utf-8")).hexdigest()
+            if event and event.text
+            else None
+        ),
+        source_text_truncated=event.text_truncated if event else False,
         order_date=order_date,
         hearing_date=hearing_date,
         previous_hash=previous_hash,
@@ -1933,6 +1970,7 @@ class CaseTrackingSourceDownload:
     content: bytes
     content_type: str
     filename: str
+    source_format: str
 
 
 def _get_update_for_bookmark(
@@ -2008,6 +2046,44 @@ def _safe_source_filename(update: TrackedCaseUpdate, response: httpx.Response) -
     return safe[:180]
 
 
+def _safe_markdown_filename(update: TrackedCaseUpdate) -> str:
+    base_name = update.title or update.source_record_key or "case-source"
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "-", base_name.strip()).strip(".-")
+    if not safe:
+        safe = "case-source"
+    if not safe.lower().endswith(".md"):
+        safe = f"{safe}.md"
+    return safe[:180]
+
+
+def _provider_billing_code(exc: httpx.HTTPError) -> str | None:
+    if not isinstance(exc, httpx.HTTPStatusError) or exc.response.status_code != 402:
+        return None
+    try:
+        payload = exc.response.json()
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    code = str(payload.get("error_code") or payload.get("code") or "").upper()
+    if code in {"INSUFFICIENT_CREDITS", "SUBSCRIPTION_REQUIRED"}:
+        return code
+    return None
+
+
+def _verified_cached_source(update: TrackedCaseUpdate) -> bytes | None:
+    if not update.source_text or update.source_text_truncated:
+        return None
+    content = update.source_text.encode("utf-8")
+    actual_hash = hashlib.sha256(content).hexdigest()
+    if not update.source_text_sha256 or actual_hash != update.source_text_sha256:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cached provider source failed integrity verification.",
+        )
+    return content
+
+
 def download_case_tracking_source(
     session: Session,
     *,
@@ -2060,6 +2136,44 @@ def download_case_tracking_source(
                 },
             )
     except httpx.HTTPError as exc:
+        billing_code = _provider_billing_code(exc)
+        if billing_code:
+            cached_source = _verified_cached_source(update)
+            if cached_source is not None:
+                record_from_context(
+                    session,
+                    context,
+                    action="case_tracking.source_downloaded",
+                    target_type="tracked_case_update",
+                    target_id=update.id,
+                    matter_id=bookmark.matter_id,
+                    metadata={
+                        "tracked_case_id_sha256": _hash_value(update.tracked_case_id),
+                        "bookmark_id_sha256": _hash_value(bookmark.id),
+                        "provider": provider,
+                        "provider_response_class": "billing",
+                        "source_format": "provider-markdown",
+                        "update_type": update.update_type,
+                        "source_record_key_sha256": _hash_value(
+                            update.source_record_key
+                        ),
+                        "source_text_sha256": update.source_text_sha256,
+                    },
+                )
+                session.commit()
+                return CaseTrackingSourceDownload(
+                    content=cached_source,
+                    content_type="text/markdown; charset=utf-8",
+                    filename=_safe_markdown_filename(update),
+                    source_format="provider-markdown",
+                )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "The certified provider document is temporarily unavailable and "
+                    "no complete verified provider text is cached."
+                ),
+            ) from exc
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=redact_provider_error(exc),
@@ -2081,6 +2195,7 @@ def download_case_tracking_source(
             "tracked_case_id_sha256": _hash_value(update.tracked_case_id),
             "bookmark_id_sha256": _hash_value(bookmark.id),
             "provider": provider,
+            "source_format": "provider-document",
             "update_type": update.update_type,
             "source_record_key_sha256": _hash_value(update.source_record_key),
         },
@@ -2090,6 +2205,7 @@ def download_case_tracking_source(
         content=response.content,
         content_type=content_type,
         filename=_safe_source_filename(update, response),
+        source_format="provider-document",
     )
 
 

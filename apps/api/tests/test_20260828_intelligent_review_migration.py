@@ -16,6 +16,7 @@ from caseops_api.scripts.check_database_indexes import build_index_health_report
 
 PREVIOUS_HEAD = "20260827_0002"
 MIGRATION_HEAD = "20260828_0001"
+CURRENT_HEAD = "20260828_0002"
 
 
 def _config() -> Config:
@@ -129,11 +130,20 @@ def test_intelligent_review_migration_round_trip_and_index_coverage(
             table_names={"recommendations", "drafts"},
         ) == ()
         with engine.connect() as connection:
-            health = build_index_health_report(connection)
-        assert health["status"] == "ok", _health_failures(health)
-        with engine.connect() as connection:
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
                 MIGRATION_HEAD
+            )
+    finally:
+        engine.dispose()
+
+    command.upgrade(config, CURRENT_HEAD)
+    engine = create_engine(database_url, future=True)
+    try:
+        with engine.connect() as connection:
+            health = build_index_health_report(connection)
+            assert health["status"] == "ok", _health_failures(health)
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
+                CURRENT_HEAD
             )
     finally:
         engine.dispose()
@@ -152,7 +162,7 @@ def test_intelligent_review_migration_round_trip_and_index_coverage(
     finally:
         engine.dispose()
 
-    command.upgrade(config, MIGRATION_HEAD)
+    command.upgrade(config, CURRENT_HEAD)
 
 
 def test_intelligent_review_downgrade_refuses_retained_work_product(
