@@ -904,7 +904,7 @@ export type BenchStrategy = {
 
 export async function fetchBenchStrategy(
   matterId: string,
-  opts?: { authorityLimit?: number; statuteLimit?: number },
+  opts?: { authorityLimit?: number; statuteLimit?: number; signal?: AbortSignal },
 ): Promise<BenchStrategy> {
   const params = new URLSearchParams();
   if (opts?.authorityLimit) params.set("authority_limit", String(opts.authorityLimit));
@@ -912,6 +912,7 @@ export async function fetchBenchStrategy(
   const qs = params.toString();
   return apiRequest<BenchStrategy>(
     `/api/matters/${matterId}/bench-strategy${qs ? `?${qs}` : ""}`,
+    { signal: opts?.signal },
   );
 }
 
@@ -1164,8 +1165,13 @@ export async function checkMatterCodeAvailable(
   );
 }
 
-export async function fetchMatterWorkspace(matterId: string): Promise<unknown> {
-  return apiRequest<unknown>(`/api/matters/${matterId}/workspace`);
+export async function fetchMatterWorkspace(
+  matterId: string,
+  options?: { signal?: AbortSignal },
+): Promise<unknown> {
+  return apiRequest<unknown>(`/api/matters/${matterId}/workspace`, {
+    signal: options?.signal,
+  });
 }
 
 export type MatterTaskRecord = {
@@ -1689,12 +1695,13 @@ export type OutsideCounselRecommendationsResult = {
 export async function fetchOutsideCounselRecommendations(input: {
   matterId: string;
   limit?: number;
-}): Promise<OutsideCounselRecommendationsResult> {
+}, options?: { signal?: AbortSignal }): Promise<OutsideCounselRecommendationsResult> {
   const data = await apiRequest<unknown>(
     "/api/outside-counsel/recommendations",
     {
       method: "POST",
       body: { matter_id: input.matterId, limit: input.limit ?? 5 },
+      signal: options?.signal,
     },
   );
   return data as OutsideCounselRecommendationsResult;
@@ -1846,9 +1853,11 @@ export async function runConflictCheck(input: {
 
 export async function listConflictChecks(
   matterId: string,
+  options?: { signal?: AbortSignal },
 ): Promise<ConflictCheckListResponse> {
   return apiRequest<ConflictCheckListResponse>(
     `/api/matters/${matterId}/conflict-checks`,
+    { signal: options?.signal },
   );
 }
 
@@ -2409,9 +2418,11 @@ export type NextAction = {
 
 export async function fetchMatterNextAction(
   matterId: string,
+  options?: { signal?: AbortSignal },
 ): Promise<NextAction | null> {
   return apiRequest<NextAction | null>(
     `/api/matters/${matterId}/next-action`,
+    { signal: options?.signal },
   );
 }
 
@@ -4924,8 +4935,8 @@ export type TeamListResult = {
   team_scoping_enabled: boolean;
 };
 
-export async function listTeams(): Promise<TeamListResult> {
-  return apiRequest("/api/teams/");
+export async function listTeams(options?: { signal?: AbortSignal }): Promise<TeamListResult> {
+  return apiRequest("/api/teams/", { signal: options?.signal });
 }
 
 export async function createTeam(input: {
@@ -11996,8 +12007,13 @@ export async function fetchIpDocketMatterLinks(
   );
 }
 
-export async function fetchMatterIpLinks(matterId: string): Promise<IpMatterLinkList> {
-  return apiRequest(`/api/matters/${encodeURIComponent(matterId)}/ip-links`);
+export async function fetchMatterIpLinks(
+  matterId: string,
+  options?: { signal?: AbortSignal },
+): Promise<IpMatterLinkList> {
+  return apiRequest(`/api/matters/${encodeURIComponent(matterId)}/ip-links`, {
+    signal: options?.signal,
+  });
 }
 
 export async function createIpDocketMatterLink(input: {

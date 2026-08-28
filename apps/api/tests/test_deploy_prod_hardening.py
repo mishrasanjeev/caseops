@@ -414,6 +414,8 @@ def test_deploy_prod_uses_service_minimums_and_clears_stale_revision_tags() -> N
     assert "--to-latest --clear-tags --quiet" in script
     assert '--min-instances "${API_MIN_INSTANCES}"' not in script
     assert '--min-instances "${WEB_MIN_INSTANCES}"' not in script
+    assert "API_MIN_INSTANCES=2" in script
+    assert 'annotations.get("run.googleapis.com/minScale")' in script
     assert "MIGRATION_TASK_TIMEOUT=30m" in script
     assert '--task-timeout "${MIGRATION_TASK_TIMEOUT}"' in script
 
@@ -432,7 +434,7 @@ def test_deploy_prod_fences_rule_governance_and_verifies_exact_traffic() -> None
 
 
 def test_deploy_prod_preserves_single_request_instances_with_scale_headroom() -> None:
-    """Cloud Run must not reject ordinary UI fan-out while handlers stay sync."""
+    """A stalled request must leave a warm slot while handlers stay sync."""
 
     script = _read_repo_text("scripts/deploy-prod.sh")
     manifest = _read_repo_text("infra/cloudrun/api-service.yaml")
@@ -441,6 +443,8 @@ def test_deploy_prod_preserves_single_request_instances_with_scale_headroom() ->
     assert 'API_MAX_INSTANCES="${API_MAX_INSTANCES:-20}"' in script
     assert '--max "${API_MAX_INSTANCES}"' in script
     assert '--max-instances "${API_MAX_INSTANCES}"' in script
+    assert 'run.googleapis.com/minScale: "2"' in manifest
+    assert "autoscaling.knative.dev/minScale" not in manifest
     assert 'autoscaling.knative.dev/maxScale: "20"' in manifest
 
 
@@ -883,6 +887,7 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
   FAKE_TRAFFIC_LATEST='true'
   FAKE_OBSERVED_GENERATION='2'
   FAKE_GOVERNANCE_FLAG='false'
+  FAKE_SERVICE_MIN='2'
   if [[ "${FAKE_TRAFFIC_MODE}" == "drift" ]]; then
     FAKE_TRAFFIC_REVISION='caseops-api-old'
     FAKE_TRAFFIC_LATEST='false'
@@ -890,9 +895,12 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
     FAKE_OBSERVED_GENERATION='1'
   elif [[ "${FAKE_TRAFFIC_MODE}" == "flag-enabled" ]]; then
     FAKE_GOVERNANCE_FLAG='true'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "capacity-drift" ]]; then
+    FAKE_SERVICE_MIN='1'
   fi
   printf '%s' \
-    '{"metadata":{"generation":2},' \
+    '{"metadata":{"generation":2,"annotations":{' \
+    '"run.googleapis.com/minScale":"' "${FAKE_SERVICE_MIN}" '"}},' \
     '"spec":{"traffic":[{"latestRevision":true,"percent":100}],' \
     '"template":{"spec":{"containers":[{"name":"api","env":[' \
     '{"name":"CASEOPS_RELEASE_SHA",' \
@@ -1320,6 +1328,7 @@ def test_fingerprint_wrapper_fails_on_local_expected_digest_mismatch(
         ("drift", "TRAFFIC/REVISION DRIFT"),
         ("generation-drift", "TRAFFIC/REVISION DRIFT"),
         ("flag-enabled", "TRAFFIC/REVISION DRIFT"),
+        ("capacity-drift", "TRAFFIC/REVISION DRIFT"),
         ("image-drift", "REVISION IMAGE DRIFT"),
     ],
 )

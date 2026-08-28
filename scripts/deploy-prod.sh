@@ -58,16 +58,17 @@ API_TIMEOUT=120s
 # cannot raise a historical revision cap.
 # Override only for a deliberate incident/cost response.
 API_MAX_INSTANCES="${API_MAX_INSTANCES:-20}"
-# P1-2 (2026-05-15 perf review): keep one API instance always warm.
+# Keep two API instances warm because each instance deliberately accepts one
+# request and the ClamAV sidecar makes burst scale-out take tens of seconds.
 # caseops-api previously had no minScale (scaled to 0), so the first
 # login after any idle window paid a 3-8s Python + SQLAlchemy + Cloud
 # SQL + clamav-sidecar cold start — the dominant cause of "login is
 # slow". This must be SERVICE-level minimum capacity (gcloud --min),
 # not revision-level --min-instances. Historical tagged revisions inherited
 # revision minScale=1 and kept restarting with pinned, obsolete DB secrets.
-# One service-level warm instance follows traffic to the current revision.
-# Override with API_MIN_INSTANCES=0 for a cost-only deploy.
-API_MIN_INSTANCES="${API_MIN_INSTANCES:-1}"
+# Two service-level warm instances leave one slot responsive while another
+# request is stalled. The Matter cockpit also sequences its supporting reads.
+API_MIN_INSTANCES=2
 # P1-2b (2026-05-15 perf review): keep one web instance warm too.
 # /sign-in is `dynamic = "force-dynamic"` (SSR per request, no CDN
 # cache), so with web minScale=0 the first hit after an idle window
@@ -433,16 +434,21 @@ LIVE_API_SERVICE_JSON=$(gcloud run services describe caseops-api \
   --region "${REGION}" \
   --project "${PROJECT}" \
   --format=json)
-if ! LIVE_API_REVISION=$(python - "${HEAD_SHA}" "${LIVE_API_SERVICE_JSON}" <<'PY'
+if ! LIVE_API_REVISION=$(python - "${HEAD_SHA}" "${API_MIN_INSTANCES}" "${LIVE_API_SERVICE_JSON}" <<'PY'
 import json
 import sys
 
 expected_sha = sys.argv[1]
-service = json.loads(sys.argv[2])
+expected_min = sys.argv[2]
+service = json.loads(sys.argv[3])
 metadata = service.get("metadata") or {}
 spec = service.get("spec") or {}
 status = service.get("status") or {}
 errors = []
+
+annotations = metadata.get("annotations") or {}
+if str(annotations.get("run.googleapis.com/minScale")) != expected_min:
+    errors.append("service-level minimum capacity does not match API_MIN_INSTANCES")
 
 if str(metadata.get("generation")) != str(status.get("observedGeneration")):
     errors.append("metadata.generation does not match status.observedGeneration")
@@ -501,7 +507,7 @@ if errors:
 print(latest_ready)
 PY
 ); then
-  echo "TRAFFIC/REVISION DRIFT: caseops-api did not converge to one untagged exact-HEAD latest revision at 100%."
+  echo "TRAFFIC/REVISION DRIFT: caseops-api did not converge to exact service capacity and one untagged exact-HEAD latest revision at 100%."
   exit 1
 fi
 LIVE_API_REVISION_IMAGE=$(gcloud run revisions describe "${LIVE_API_REVISION}" \

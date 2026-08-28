@@ -19,6 +19,7 @@ import {
   type OutsideCounselRecommendation,
 } from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
+import { useSequencedQuerySettled } from "@/lib/use-sequenced-query-settled";
 
 function formatScore(score: number): string {
   return Math.round(score * 100).toString();
@@ -71,13 +72,29 @@ function CounselRow({ rec }: { rec: OutsideCounselRecommendation }) {
   );
 }
 
-export function CounselRecommendationsCard({ matterId }: { matterId: string }) {
+export function CounselRecommendationsCard({
+  matterId,
+  loadEnabled = true,
+  onLoadSettled,
+}: {
+  matterId: string;
+  loadEnabled?: boolean;
+  onLoadSettled?: () => void;
+}) {
   const canRecommend = useCapability("outside_counsel:recommend");
-  const { data, isPending, isError, error, refetch } = useQuery({
+  const query = useQuery({
     queryKey: ["outside-counsel", "recommendations", matterId],
-    queryFn: () => fetchOutsideCounselRecommendations({ matterId, limit: 5 }),
-    enabled: canRecommend,
+    queryFn: ({ signal }) =>
+      fetchOutsideCounselRecommendations({ matterId, limit: 5 }, { signal }),
+    enabled: canRecommend && loadEnabled,
     staleTime: 5 * 60_000,
+  });
+  const { data, isPending, isError, error, refetch } = query;
+  useSequencedQuerySettled({
+    enabled: loadEnabled,
+    identity: matterId,
+    settled: !canRecommend || query.isFetched,
+    onSettled: onLoadSettled,
   });
 
   if (!canRecommend) {

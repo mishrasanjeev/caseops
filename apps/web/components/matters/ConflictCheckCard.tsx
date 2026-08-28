@@ -39,6 +39,7 @@ import {
   runConflictCheck,
 } from "@/lib/api/endpoints";
 import { useCapability } from "@/lib/capabilities";
+import { useSequencedQuerySettled } from "@/lib/use-sequenced-query-settled";
 
 /**
  * ConflictCheckCard — optional pre-engagement conflict review (PG-001) on
@@ -51,17 +52,29 @@ export function ConflictCheckCard({
   matterId,
   matterLifecycleVersion,
   opposingParty,
+  loadEnabled = true,
+  onLoadSettled,
 }: {
   matterId: string;
   matterLifecycleVersion: number;
   opposingParty: string | null | undefined;
+  loadEnabled?: boolean;
+  onLoadSettled?: () => void;
 }): React.JSX.Element | null {
   const canRun = useCapability("conflicts:run");
   const canResolve = useCapability("conflicts:resolve");
   const queryClient = useQueryClient();
-  const { data, isLoading } = useQuery({
+  const query = useQuery({
     queryKey: ["matters", matterId, "conflict-checks"],
-    queryFn: () => listConflictChecks(matterId),
+    queryFn: ({ signal }) => listConflictChecks(matterId, { signal }),
+    enabled: loadEnabled && canRun,
+  });
+  const { data, isLoading } = query;
+  useSequencedQuerySettled({
+    enabled: loadEnabled,
+    identity: matterId,
+    settled: !canRun || query.isFetched,
+    onSettled: onLoadSettled,
   });
 
   if (!canRun) return null;
