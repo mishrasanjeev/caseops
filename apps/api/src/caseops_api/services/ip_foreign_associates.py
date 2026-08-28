@@ -45,10 +45,12 @@ from caseops_api.schemas.ip_foreign_associates import (
 )
 from caseops_api.schemas.ip_lifecycle import IpDocketEventCreateRequest, IpDocketEventResponse
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.ip_document_workflow import list_ip_documents
 from caseops_api.services.ip_lifecycle import append_ip_docket_event
 from caseops_api.services.ip_operations import (
     _lock_ip_dockets_in_stable_order,
     _lock_ip_writer_context,
+    get_ip_docket,
 )
 from caseops_api.services.matter_access import visible_ip_dockets_filter
 from caseops_api.services.notification_delivery import (
@@ -1308,8 +1310,21 @@ def ip_foreign_associate_workspace(
     reminders = _foreign_associate_reminders(
         session, company_id=context.company.id, instruction_id=row.id
     )
+    docket = get_ip_docket(session, context=context, docket_id=row.docket_id)
+    selected_document_ids = set(row.selected_document_refs_json)
+    documents = [
+        document
+        for document in list_ip_documents(
+            session,
+            context=context,
+            docket_id=row.docket_id,
+        ).items
+        if document.id in selected_document_ids
+    ]
     return IpForeignAssociateWorkspaceResponse(
         instruction=IpForeignAssociateResponse.model_validate(row),
+        docket=docket,
+        documents=documents,
         transactions=[IpDocketEventResponse.model_validate(event) for event in events],
         associate_name=counsel.name,
         delivery_status=delivery_status,

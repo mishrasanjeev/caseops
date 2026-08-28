@@ -937,30 +937,50 @@ def test_case_tracking_source_download_uses_server_side_provider_auth(
                 is not None
             )
 
-            def billing_handler(request: httpx.Request) -> httpx.Response:
-                return httpx.Response(
-                    402,
-                    json={
-                        "status": 402,
-                        "error_code": "INSUFFICIENT_CREDITS",
-                        "message": "Provider billing balance is insufficient.",
-                    },
-                    request=request,
-                )
+            payment_responses = [
+                {
+                    "status": 402,
+                    "error_code": "INSUFFICIENT_CREDITS",
+                    "message": "Provider billing balance is insufficient.",
+                },
+                {"error": {"code": "SUBSCRIPTION_REQUIRED"}},
+                "Payment required",
+            ]
+            for payment_response in payment_responses:
+                def billing_handler(
+                    request: httpx.Request,
+                    response_body=payment_response,
+                ) -> httpx.Response:
+                    if isinstance(response_body, str):
+                        return httpx.Response(402, text=response_body, request=request)
+                    return httpx.Response(402, json=response_body, request=request)
 
-            fallback = download_case_tracking_source(
-                session,
-                context=context,
-                bookmark_id=bookmark_id,
-                update_id=update["id"],
-                transport=httpx.MockTransport(billing_handler),
-            )
-            assert fallback.content == (
-                b"The court issued directions and listed the matter."
-            )
-            assert fallback.content_type == "text/markdown; charset=utf-8"
-            assert fallback.filename.endswith(".md")
-            assert fallback.source_format == "provider-markdown"
+                fallback = download_case_tracking_source(
+                    session,
+                    context=context,
+                    bookmark_id=bookmark_id,
+                    update_id=update["id"],
+                    transport=httpx.MockTransport(billing_handler),
+                )
+                assert fallback.content == (
+                    b"The court issued directions and listed the matter."
+                )
+                assert fallback.content_type == "text/markdown; charset=utf-8"
+                assert fallback.filename.endswith(".md")
+                assert fallback.source_format == "provider-markdown"
+
+            def forbidden_handler(request: httpx.Request) -> httpx.Response:
+                return httpx.Response(403, text="Forbidden", request=request)
+
+            with pytest.raises(HTTPException) as forbidden:
+                download_case_tracking_source(
+                    session,
+                    context=context,
+                    bookmark_id=bookmark_id,
+                    update_id=update["id"],
+                    transport=httpx.MockTransport(forbidden_handler),
+                )
+            assert forbidden.value.status_code == 502
 
             stored = session.get(TrackedCaseUpdate, update["id"])
             assert stored is not None

@@ -11159,6 +11159,8 @@ export type IpForeignAssociateReminder = {
 
 export type IpForeignAssociateWorkspace = {
   instruction: IpForeignAssociateInstruction;
+  docket: IpDocket;
+  documents: IpDocument[];
   transactions: IpDocketEvent[];
   associate_name: string;
   delivery_status: string;

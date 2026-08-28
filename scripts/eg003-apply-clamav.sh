@@ -22,7 +22,7 @@
 #   scripts/eg003-apply-clamav.sh                       # apply
 #   scripts/eg003-apply-clamav.sh --dry-run             # print diff
 #
-# Capacity note (updated 2026-08-28): production keeps two API instances warm
+# Capacity note (updated 2026-08-29): production keeps four API instances warm
 # at service level because each instance accepts one request and the ClamAV
 # sidecar makes scale-out slow. This one-time script preserves the live service
 # capacity; scripts/deploy-prod.sh owns and verifies it. Do not add a

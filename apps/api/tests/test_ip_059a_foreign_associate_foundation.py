@@ -558,8 +558,14 @@ def test_foreign_associate_contract_separates_delivery_ack_and_evidence(
         headers=headers,
     )
     assert workspace.status_code == 200, workspace.text
-    assert workspace.json()["delivery_status"] == "delivered"
-    assert workspace.json()["acknowledgement_status"] == "outstanding"
+    workspace_body = workspace.json()
+    assert workspace_body["delivery_status"] == "delivered"
+    assert workspace_body["acknowledgement_status"] == "outstanding"
+    assert workspace_body["docket"]["id"] == docket["id"]
+    assert {document["id"] for document in workspace_body["documents"]} == {
+        records["filing_document_id"],
+        records["privileged_document_id"],
+    }
 
     outstanding = client.get(
         "/api/ip/foreign-associate-instructions",

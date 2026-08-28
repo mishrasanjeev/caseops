@@ -3,7 +3,7 @@ kind: Service
 metadata:
   name: caseops-api
   annotations:
-    run.googleapis.com/minScale: "2"
+    run.googleapis.com/minScale: "4"
 spec:
   template:
     metadata:

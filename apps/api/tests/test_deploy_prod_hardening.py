@@ -414,7 +414,8 @@ def test_deploy_prod_uses_service_minimums_and_clears_stale_revision_tags() -> N
     assert "--to-latest --clear-tags --quiet" in script
     assert '--min-instances "${API_MIN_INSTANCES}"' not in script
     assert '--min-instances "${WEB_MIN_INSTANCES}"' not in script
-    assert "API_MIN_INSTANCES=2" in script
+    assert "API_MIN_INSTANCES=4" in script
+    assert "49.758s queued request" in script
     assert 'annotations.get("run.googleapis.com/minScale")' in script
     assert "MIGRATION_TASK_TIMEOUT=30m" in script
     assert '--task-timeout "${MIGRATION_TASK_TIMEOUT}"' in script
@@ -444,10 +445,10 @@ def test_deploy_prod_preserves_single_request_instances_with_scale_headroom() ->
     assert 'API_MAX_INSTANCES="${API_MAX_INSTANCES:-20}"' in script
     assert '--max "${API_MAX_INSTANCES}"' in script
     assert '--max-instances "${API_MAX_INSTANCES}"' in script
-    assert 'run.googleapis.com/minScale: "2"' in manifest
+    assert 'run.googleapis.com/minScale: "4"' in manifest
     assert "autoscaling.knative.dev/minScale" not in manifest
     assert 'autoscaling.knative.dev/maxScale: "20"' in manifest
-    assert "--min=2" in runbook
+    assert "--min=4" in runbook
     assert "--min-instances=default" in runbook
     assert "--min-instances=0" not in runbook
 
@@ -891,7 +892,7 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
   FAKE_TRAFFIC_LATEST='true'
   FAKE_OBSERVED_GENERATION='2'
   FAKE_GOVERNANCE_FLAG='false'
-  FAKE_SERVICE_MIN='2'
+  FAKE_SERVICE_MIN='4'
   if [[ "${FAKE_TRAFFIC_MODE}" == "drift" ]]; then
     FAKE_TRAFFIC_REVISION='caseops-api-old'
     FAKE_TRAFFIC_LATEST='false'

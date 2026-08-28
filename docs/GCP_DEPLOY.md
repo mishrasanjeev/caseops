@@ -173,7 +173,7 @@ gcloud run deploy caseops-api \
   --concurrency=1 \
   --max=20 \
   --max-instances=20 \
-  --min=2 \
+  --min=4 \
   --min-instances=default \
   --timeout=120 \
   --set-env-vars=\
@@ -201,8 +201,11 @@ CASEOPS_EMBEDDING_API_KEY=caseops-voyage-api-key:latest"
 
 The API minimum is service-level capacity that follows traffic. Keep
 `--min-instances=default`; setting a revision-level minimum can leave obsolete
-tagged revisions running after secret rotation. Two warm, concurrency-one API
-instances keep an unrelated request responsive while one request is occupied.
+tagged revisions running after secret rotation. Four warm, concurrency-one API
+instances cover the bounded interactive read burst and keep an unrelated request
+responsive while another request is occupied. Production telemetry on 28 August
+2026 measured a 49.758-second queued request when a third read had to cold-start
+the API and ClamAV sidecar.
 
 ---
 

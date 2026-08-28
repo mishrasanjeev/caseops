@@ -2056,19 +2056,10 @@ def _safe_markdown_filename(update: TrackedCaseUpdate) -> str:
     return safe[:180]
 
 
-def _provider_billing_code(exc: httpx.HTTPError) -> str | None:
-    if not isinstance(exc, httpx.HTTPStatusError) or exc.response.status_code != 402:
-        return None
-    try:
-        payload = exc.response.json()
-    except (ValueError, TypeError):
-        return None
-    if not isinstance(payload, dict):
-        return None
-    code = str(payload.get("error_code") or payload.get("code") or "").upper()
-    if code in {"INSUFFICIENT_CREDITS", "SUBSCRIPTION_REQUIRED"}:
-        return code
-    return None
+def _provider_payment_required(exc: httpx.HTTPError) -> bool:
+    """Recognize the provider's HTTP payment boundary without trusting its body shape."""
+
+    return isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 402
 
 
 def _verified_cached_source(update: TrackedCaseUpdate) -> bytes | None:
@@ -2136,8 +2127,7 @@ def download_case_tracking_source(
                 },
             )
     except httpx.HTTPError as exc:
-        billing_code = _provider_billing_code(exc)
-        if billing_code:
+        if _provider_payment_required(exc):
             cached_source = _verified_cached_source(update)
             if cached_source is not None:
                 record_from_context(
