@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from datetime import date
+
 from fastapi.testclient import TestClient
+
+from caseops_api.services.tenant_time import tenant_today
 
 
 def bootstrap_company(client: TestClient) -> dict[str, object]:
@@ -21,6 +25,12 @@ def bootstrap_company(client: TestClient) -> dict[str, object]:
 
 def auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+def tenant_legal_today(client: TestClient, headers: dict[str, str]) -> date:
+    response = client.get("/api/companies/current/profile", headers=headers)
+    assert response.status_code == 200, response.text
+    return tenant_today(str(response.json()["timezone"]))
 
 
 def test_company_bootstrap_creates_owner_session(client: TestClient) -> None:

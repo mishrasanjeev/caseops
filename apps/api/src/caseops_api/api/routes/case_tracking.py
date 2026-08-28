@@ -199,5 +199,8 @@ def get_case_tracking_update_source(
     return Response(
         content=download.content,
         media_type=download.content_type,
-        headers={"Content-Disposition": f'attachment; filename="{download.filename}"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{download.filename}"',
+            "X-CaseOps-Source-Format": download.source_format,
+        },
     )

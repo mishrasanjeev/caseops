@@ -32,14 +32,14 @@ Stable manifest test IDs:
 from __future__ import annotations
 
 import ast
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from caseops_api.db.models import IpDeadlineCoverage
 from caseops_api.db.session import get_session_factory
-from tests.test_auth_company import auth_headers, bootstrap_company
+from tests.test_auth_company import auth_headers, bootstrap_company, tenant_legal_today
 from tests.test_clients import _mk_matter
 from tests.test_ip_deadline_workflow import _member
 from tests.test_ip_record_workflow import _particulars
@@ -94,7 +94,7 @@ def _docket_with_coverage(client, headers, *, matter_id, title, responsible):
             "source": "custom",
             "kind": "licence_royalty",
             "title": "Reconciliation deadline",
-            "due_on": str(date.today() + timedelta(days=60)),
+            "due_on": str(tenant_legal_today(client, headers) + timedelta(days=60)),
             "assignee_membership_id": responsible,
         },
     )

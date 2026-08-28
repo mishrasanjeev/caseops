@@ -29,6 +29,18 @@ def test_prod_verification_runs_notice_suite_after_ram_failure() -> None:
     assert "playwright.notice-prod.config.ts" in next_step
 
 
+def test_prod_verification_preserves_each_suite_failure_artifact() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "prod-verify.yml").read_text(
+        encoding="utf-8"
+    )
+
+    for output_directory in ("ram", "ip-a0", "ip-renewal", "notice"):
+        assert f"--output=test-results/{output_directory}" in workflow
+    upload_step = workflow.split("- name: Upload Playwright report on failure", 1)[1]
+    assert "test-results/" in upload_step
+    assert "if-no-files-found: error" in upload_step
+
+
 def test_historical_a0_acceptance_is_opt_in_not_a_recurring_release_gate() -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / "prod-verify.yml").read_text(
         encoding="utf-8"

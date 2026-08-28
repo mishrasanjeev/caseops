@@ -140,7 +140,7 @@ jobs:
           CASEOPS_EXPECTED_RELEASE_SHA: ${{ steps.deployed-release.outputs.release_sha }}
           CASEOPS_QA_TRACKED_CASE_BOOKMARK_ID: ${{ vars.CASEOPS_QA_TRACKED_CASE_BOOKMARK_ID }}
           CASEOPS_QA_TRACKED_CASE_CNR: ${{ vars.CASEOPS_QA_TRACKED_CASE_CNR }}
-        run: npx playwright test --config=playwright.prod-ram.config.ts --reporter=list
+        run: npx playwright test --config=playwright.prod-ram.config.ts --reporter=list --output=test-results/ram
 
       - name: Run IPLF-027B A0 quiescence acceptance
         # This is immutable historical rollout evidence tied to one exact
@@ -152,7 +152,7 @@ jobs:
           CASEOPS_IP_QA_PASSWORD: ${{ secrets.CASEOPS_IP_QA_PASSWORD }}
           CASEOPS_EXPECTED_RELEASE_SHA: ${{ steps.deployed-release.outputs.release_sha }}
           CASEOPS_IP_A0_PROD_MODE: verify
-        run: npx playwright test --config=playwright.ip-a0-prod.config.ts --reporter=list
+        run: npx playwright test --config=playwright.ip-a0-prod.config.ts --reporter=list --output=test-results/ip-a0
 
       - name: Check IPLF-037B renewal acceptance configuration
         id: renewal-prerequisites
@@ -197,7 +197,7 @@ jobs:
           CASEOPS_IP_RENEWAL_RULE_VERSION_ID: ${{ vars.CASEOPS_IP_RENEWAL_RULE_VERSION_ID }}
           CASEOPS_IP_RENEWAL_GRACE_RULE_VERSION_ID: ${{ vars.CASEOPS_IP_RENEWAL_GRACE_RULE_VERSION_ID }}
           CASEOPS_IP_RENEWAL_NEXT_TERM_RULE_VERSION_ID: ${{ vars.CASEOPS_IP_RENEWAL_NEXT_TERM_RULE_VERSION_ID }}
-        run: npx playwright test --config=playwright.ip-renewal-prod.config.ts --reporter=list
+        run: npx playwright test --config=playwright.ip-renewal-prod.config.ts --reporter=list --output=test-results/ip-renewal
 
       - name: Run prod-Playwright suite (notice module)
         # The RAM batch is intentionally broad and can expose an independent
@@ -211,7 +211,7 @@ jobs:
           PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
           CASEOPS_QA_EMAIL: ${{ vars.CASEOPS_QA_EMAIL }}
           CASEOPS_QA_SLUG: ${{ vars.CASEOPS_QA_SLUG }}
-        run: npx playwright test --config=playwright.notice-prod.config.ts --reporter=list
+        run: npx playwright test --config=playwright.notice-prod.config.ts --reporter=list --output=test-results/notice
 
       - name: Upload Playwright report on failure
         if: failure()
@@ -219,6 +219,6 @@ jobs:
         with:
           name: prod-playwright-report
           path: |
-            playwright-report/
             test-results/
+          if-no-files-found: error
           retention-days: 14

@@ -39,6 +39,7 @@ class ProviderCaseEvent:
     event_date: date | None = None
     source_url: str | None = None
     text: str | None = None
+    text_truncated: bool = False
     provider_summary: str | None = None
     metadata: dict[str, object] = field(default_factory=dict)
 
@@ -89,6 +90,19 @@ def _compact(value: object, *, limit: int = 500) -> str | None:
     return text[:limit] if text else None
 
 
+_SOURCE_TEXT_MAX_CHARS = 512 * 1024
+
+
+def _source_text(value: object) -> tuple[str | None, bool]:
+    text = str(value or "").replace("\r\n", "\n").replace("\r", "\n")
+    text = text.replace("\x00", "").strip()
+    if not text:
+        return None, False
+    if len(text) <= _SOURCE_TEXT_MAX_CHARS:
+        return text, False
+    return text[:_SOURCE_TEXT_MAX_CHARS].rstrip(), True
+
+
 def _parse_date(value: object) -> date | None:
     if value in (None, ""):
         return None
@@ -131,6 +145,9 @@ def _events(raw: object, *, prefix: str) -> list[ProviderCaseEvent]:
         )
         if not title:
             continue
+        source_text, source_text_truncated = _source_text(
+            item.get("text") or item.get("order_text")
+        )
         source_key = _compact(
             item.get("id") or item.get("source_record_key") or item.get("pdf_url"),
             limit=160,
@@ -143,7 +160,8 @@ def _events(raw: object, *, prefix: str) -> list[ProviderCaseEvent]:
                     item.get("date") or item.get("order_date") or item.get("judgment_date")
                 ),
                 source_url=_compact(item.get("source_url") or item.get("pdf_url"), limit=800),
-                text=_compact(item.get("text") or item.get("order_text"), limit=4000),
+                text=source_text,
+                text_truncated=source_text_truncated,
                 provider_summary=_compact(
                     item.get("summary") or item.get("ai_summary"),
                     limit=2000,
@@ -264,6 +282,9 @@ def _case_order_events(
         if not title:
             continue
         event_date = _parse_date(item.get("orderDate") or item.get("date"))
+        source_text, source_text_truncated = _source_text(
+            item.get("markdownContent") or item.get("text")
+        )
         source_key = order_url or _stable_key(prefix, item)
         source_url = None
         if cnr and order_url:
@@ -286,7 +307,8 @@ def _case_order_events(
                 ),
                 event_date=event_date,
                 source_url=source_url,
-                text=_compact(item.get("markdownContent") or item.get("text"), limit=4000),
+                text=source_text,
+                text_truncated=source_text_truncated,
                 provider_summary=_compact(item.get("summary") or item.get("aiSummary"), limit=2000),
                 metadata={
                     key: str(value)[:500]

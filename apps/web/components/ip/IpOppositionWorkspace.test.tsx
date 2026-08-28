@@ -347,6 +347,39 @@ describe("IpOppositionWorkspace", () => {
     ));
   });
 
+  it("opens the deep-linked pleading while opposition profile data is still loading", async () => {
+    let resolveWorkspace: ((value: typeof workspace) => void) | undefined;
+    fetchWorkspaceMock.mockReturnValue(new Promise((resolve) => {
+      resolveWorkspace = resolve;
+    }));
+
+    render(withClient(
+      <IpOppositionWorkspace
+        docket={docket}
+        canWrite
+        canReview
+        currentMembershipId="membership-1"
+        initialProceedingId="opposition-1"
+        initialDraftId="draft-from-review"
+      />,
+    ));
+
+    expect(await screen.findByLabelText("Opposition proceeding")).toHaveValue(
+      "opposition-1",
+    );
+    await waitFor(() => expect(pleadingWorkspaceMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        proceedingId: "opposition-1",
+        initialDraftId: "draft-from-review",
+      }),
+    ));
+    expect(screen.getByTestId("pleading-workspace-stub")).toBeVisible();
+    expect(screen.queryByText("TM-APP-100")).not.toBeInTheDocument();
+
+    resolveWorkspace?.(workspace);
+    expect(await screen.findByText("TM-APP-100")).toBeVisible();
+  });
+
   it("refreshes both represented-side workflows after a stage transition", async () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },

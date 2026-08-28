@@ -8,7 +8,7 @@ from caseops_api.scripts import check_database_indexes
 
 
 def test_required_schema_revision_is_derived_from_the_alembic_graph() -> None:
-    assert check_database_indexes._required_schema_revision() == "20260828_0001"
+    assert check_database_indexes._required_schema_revision() == "20260828_0002"
 
 
 def test_health_report_rejects_a_database_behind_the_source_head(

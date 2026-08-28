@@ -394,6 +394,9 @@ test.describe("Ram 2026-08-05 exact-release case tracking canary", () => {
     const source = await page.request.get(`${PROD_API_BASE_URL}${sourcePath}`);
     expect(source.status(), await source.text()).toBe(200);
     expect(source.headers()["content-disposition"]).toMatch(/^attachment;/);
+    expect(["provider-document", "provider-markdown"]).toContain(
+      source.headers()["x-caseops-source-format"],
+    );
     expect((await source.body()).byteLength).toBeGreaterThan(16);
 
     await page.setViewportSize({ width: 360, height: 800 });
