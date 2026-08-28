@@ -7,8 +7,9 @@ MIGRATION-LOCK-RISK: acknowledged. The source payload and digest columns are
 nullable; the bounded truncation flag uses a constant default. No table scan,
 backfill, or index build is performed during deployment.
 MIGRATION-ROLLBACK: downgrade refuses to discard retained provider source text.
-DATA-GOVERNANCE-MAP: extends the existing tracked-case update evidence owner;
-it adds no parallel provider, source, retention, or disposition owner.
+DATA-GOVERNANCE-MAP: updated. This extends the existing tracked-case update
+evidence owner; it adds no parallel provider, source, retention, or disposition
+owner.
 """
 
 from __future__ import annotations
