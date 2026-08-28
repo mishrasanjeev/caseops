@@ -15,6 +15,10 @@ function required(name: string) {
   return value;
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 async function authenticate(page: Page) {
   const response = await page.request.post(`${API}/api/auth/login`, {
     data: {
@@ -351,7 +355,13 @@ test("IPLF-063B production proves the exact UJ-18 release", async ({ page }) => 
 
   await page.setViewportSize({ width: 360, height: 800 });
   await page.goto(`${WEB}/app/research/reviews`);
-  await page.getByRole("button", { name: new RegExp(`Does proved prior use.*${run}`) }).click();
+  await page
+    .getByRole("button", {
+      name: new RegExp(
+        `^Does proved prior use support IP opposition ${escapeRegExp(run)}\\?`,
+      ),
+    })
+    .click();
   const detail = page.getByTestId("intelligent-review-detail");
   await expect(detail.getByText("Supporting and contrary authorities")).toBeVisible();
   await expect(detail.getByText(/not exhaustive legal research/)).toBeVisible();
