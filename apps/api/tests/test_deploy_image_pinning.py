@@ -52,6 +52,28 @@ def test_api_image_forces_runtime_model_resolution_offline_after_preloads() -> N
     assert "TRANSFORMERS_OFFLINE=1" in dockerfile[offline_runtime:]
 
 
+def test_api_image_uses_baked_tesseract_without_runtime_model_downloads() -> None:
+    dockerfile = (REPO_ROOT / "apps" / "api" / "Dockerfile").read_text(
+        encoding="utf-8"
+    )
+
+    tesseract_install = dockerfile.index("tesseract-ocr")
+    provider_default = dockerfile.index("CASEOPS_OCR_PROVIDER=tesseract")
+
+    assert provider_default > tesseract_install
+
+
+def test_api_ci_shards_disable_network_backed_ocr() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(
+        encoding="utf-8"
+    )
+    shard_job = workflow.split("  api-test-shards:", maxsplit=1)[1].split(
+        "\n  api:", maxsplit=1
+    )[0]
+
+    assert "CASEOPS_OCR_PROVIDER: none" in shard_job
+
+
 def test_production_deploy_converges_clamav_startup_probe() -> None:
     script = (REPO_ROOT / "scripts" / "deploy-prod.sh").read_text(encoding="utf-8")
 

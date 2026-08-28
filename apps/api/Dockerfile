@@ -68,8 +68,12 @@ RUN uv pip install --system --no-deps .
 
 # Both model families are now baked into immutable image layers. Force runtime
 # resolution through those caches so cold workers never probe the public Hub.
+# Use the native Tesseract installation above for OCR; RapidOCR resolves its
+# ONNX models lazily and must not make an interactive request wait on a model
+# download.
 ENV HF_HUB_OFFLINE=1 \
-    TRANSFORMERS_OFFLINE=1
+    TRANSFORMERS_OFFLINE=1 \
+    CASEOPS_OCR_PROVIDER=tesseract
 
 ARG CASEOPS_RELEASE_SHA=unavailable
 LABEL org.opencontainers.image.revision=$CASEOPS_RELEASE_SHA

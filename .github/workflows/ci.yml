@@ -72,6 +72,10 @@ jobs:
   api-test-shards:
     name: API pytest coverage shard ${{ matrix.shard }}/${{ matrix.total_shards }}
     runs-on: ubuntu-latest
+    # Broad unit/integration shards must be network-independent. Dedicated OCR
+    # tests select and mock each backend explicitly.
+    env:
+      CASEOPS_OCR_PROVIDER: none
     # Keep shards comfortably within the hosted-runner window under coverage.
     # Every test file is still selected exactly once and the aggregate
     # coverage gate combines every shard artifact. On 2026-08-16, comparable
