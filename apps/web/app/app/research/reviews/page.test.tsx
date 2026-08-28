@@ -14,11 +14,12 @@ const mocks = vi.hoisted(() => ({
   listMatters: vi.fn(),
   listReviews: vi.fn(),
   publish: vi.fn(),
+  searchParams: "report=report-1",
   update: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
-  useSearchParams: () => new URLSearchParams("report=report-1"),
+  useSearchParams: () => new URLSearchParams(mocks.searchParams),
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
@@ -221,6 +222,7 @@ function renderPage() {
 describe("IntelligentReviewsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.searchParams = "report=report-1";
     mocks.fetchReports.mockResolvedValue({ reports: [report] });
     mocks.fetchCore.mockResolvedValue({ assets: [], applications: [], proceedings: [], identifiers: [] });
     mocks.fetchPortfolio.mockResolvedValue({ rows: [], counts: {}, filters: {}, limit: 100, next_cursor: null });
@@ -367,6 +369,21 @@ describe("IntelligentReviewsPage", () => {
       "href",
       "/app/ip?docket=docket-1&view=proceedings&proceeding=proceeding-1&draft=draft-1",
     );
+  });
+
+  it("loads a permission-visible review deep link even when it is outside bounded history", async () => {
+    const linked = reviewFixture({ id: "review-linked", issue: "Linked opposition review" });
+    mocks.searchParams = "report=report-1&review=review-linked";
+    mocks.listReviews.mockResolvedValue({ reviews: [reviewFixture({ id: "review-newer" })] });
+    mocks.getReview.mockImplementation(async (reviewId: string) => {
+      expect(reviewId).toBe("review-linked");
+      return linked;
+    });
+
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Linked opposition review" })).toBeInTheDocument();
+    expect(mocks.getReview).toHaveBeenCalledWith("review-linked");
   });
 
   it("shows typed abstention without presenting invented analysis", async () => {

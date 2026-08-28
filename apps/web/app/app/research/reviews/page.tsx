@@ -75,6 +75,7 @@ export default function IntelligentReviewsPage() {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const linkedReportId = searchParams.get("report") ?? "";
+  const linkedReviewId = searchParams.get("review")?.trim() ?? "";
   const role = useRole();
   const resolvedCapabilities = useResolvedCapabilities();
   const hasCapability = (capability: Capability) =>
@@ -105,7 +106,9 @@ export default function IntelligentReviewsPage() {
         : false,
   });
 
-  const [selectedReviewId, setSelectedReviewId] = useState<string | null>(null);
+  const [selectedReviewId, setSelectedReviewId] = useState<string | null>(
+    linkedReviewId || null,
+  );
   const [reportId, setReportId] = useState(linkedReportId);
   const [targetKind, setTargetKind] = useState<TargetKind>("matter");
   const [targetId, setTargetId] = useState("");
@@ -134,10 +137,12 @@ export default function IntelligentReviewsPage() {
   }, [selectedReport?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!selectedReviewId && (reviewsQuery.data?.reviews.length ?? 0) > 0) {
+    if (linkedReviewId && linkedReviewId !== selectedReviewId) {
+      setSelectedReviewId(linkedReviewId);
+    } else if (!selectedReviewId && (reviewsQuery.data?.reviews.length ?? 0) > 0) {
       setSelectedReviewId(reviewsQuery.data?.reviews[0].id ?? null);
     }
-  }, [reviewsQuery.data?.reviews, selectedReviewId]);
+  }, [linkedReviewId, reviewsQuery.data?.reviews, selectedReviewId]);
 
   const createMutation = useMutation({
     mutationFn: createIntelligentReview,

@@ -2,18 +2,18 @@
  * Recommendations grounding fix verification — runs against PRODUCTION
  * (caseops.ai) signed in as the dedicated CaseOps QA Bot.
  *
- * Anchors BUG-015 / BUG-024 / BUG-033 / BUG-034 / BUG-035: prior fix
- * attempts left POST /api/matters/{id}/recommendations probabilistically
- * 422'ing with "none matched verified authorities". The 2026-04-29 fix
- * adds a bracket-tag fast path in services/citations.verify_citations
- * that resolves "[N] ..." citations by index — deterministic, skips the
- * proposition gate, falls back to fuzzy on legacy free-form output.
+ * Anchors BUG-015 / BUG-024 / BUG-033 / BUG-034 / BUG-035. A successful
+ * generation must surface canonical citations that pass the current
+ * proposition-aware verifier. A model response containing prohibited outcome
+ * prediction or final-instruction wording must instead fail closed, carry an
+ * auditable model-run handle, and save no recommendation.
  *
  * Per the bug-fixing skill's brutal-honest rule:
  * - "Properly fixed" requires this spec to PASS on the deployed commit
  *   SHA against the deployed surface.
- * - A 422 here keeps the verdict at "Partially fixed" — the fix lowered
- *   the rate but did not eliminate it.
+ * - A citation-grounding 422 keeps the verdict at "Partially fixed".
+ * - An audited unsafe-output 422 is the required legal-safety behavior, not a
+ *   grounding regression.
  *
  * Auth: storageState from tests/e2e/setup/qa-auth.setup.ts. The QA Bot
  * workspace owns its own matter so this test does not depend on Ram's
@@ -167,7 +167,7 @@ test.describe("Recommendations grounding fix (2026-04-29) — prod verification"
   // beyond the config's default 120s test cap.
   test.setTimeout(300_000);
 
-  test("recommendations grounding: POST returns 200 with at least one verified citation", async ({
+  test("recommendations grounding: returns verified citations or an audited safety refusal", async ({
     page,
   }) => {
     await page.goto(`${PROD_BASE_URL}/app`, { waitUntil: "networkidle" });
@@ -192,6 +192,39 @@ test.describe("Recommendations grounding fix (2026-04-29) — prod verification"
         timeout: 180_000,
       },
     );
+
+    if (resp.status() === 422) {
+      const body = (await resp.json()) as { detail?: string };
+      if (!/unsupported wording/i.test(body.detail ?? "")) {
+        throw new Error(
+          `POST /api/matters/${matterId}/recommendations returned 422 for a ` +
+            `non-safety reason — grounding remains broken. Body: ${JSON.stringify(body)}`,
+        );
+      }
+      expect(
+        resp.headers()["x-model-run-id"],
+        "A safety refusal must expose its auditable model-run handle",
+      ).toBeTruthy();
+      expect(body.detail).toMatch(/No recommendation was saved/i);
+
+      const listResp = await page.context().request.get(
+        `${PROD_API_BASE_URL}/api/matters/${matterId}/recommendations`,
+        {
+          headers: {
+            Cookie: cookie,
+            "X-CSRF-Token": csrf!,
+            Accept: "application/json",
+          },
+        },
+      );
+      await expectApiOk(listResp, "GET recommendations after safety refusal");
+      const listBody = (await listResp.json()) as { recommendations: unknown[] };
+      expect(
+        listBody.recommendations,
+        "A fail-closed safety refusal must persist no recommendation",
+      ).toHaveLength(0);
+      return;
+    }
 
     if (!resp.ok()) {
       const body = await resp.text();

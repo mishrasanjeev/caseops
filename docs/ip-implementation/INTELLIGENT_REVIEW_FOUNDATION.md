@@ -88,6 +88,12 @@ orphan pleading is created. A successful IP handoff opens the existing
 opposition pleading workspace with the exact docket, proceeding, and Draft IDs;
 the loading state does not discard those deep-link selections.
 
+The review workspace also accepts a server-owned `review` query parameter. It
+loads that exact review through the existing tenant- and permission-scoped read
+endpoint instead of depending on the bounded history page. An inaccessible,
+invented, or cross-tenant ID therefore returns the normal typed read error and
+never falls back to exposing another review.
+
 ## Persistence and operational bounds
 
 - 25 selected authorities, 50 facts, and 50 document references per review;
@@ -125,9 +131,9 @@ work. They also prove constant list query count, complete foreign-key indexes,
 Matter publication, IP opposition publication, and rejection of an orphan
 docket-level Draft. Web tests cover source selection, server-owned
 target/proceeding IDs, exact URLs, lawyer completeness, finalization,
-publication, typed abstention, and exact opposition/Draft deep-link selection
-after asynchronous loading. Dated Playwright covers desktop and 360px
-user-visible acceptance.
+publication, typed abstention, an exact review-ID deep link outside bounded
+history, and exact opposition/Draft deep-link selection after asynchronous
+loading. Dated Playwright covers desktop and 360px user-visible acceptance.
 
 Release requires the full repository gates, PostgreSQL migration and index
 health, exact Docker images, responsive browser acceptance, hosted CI/security,

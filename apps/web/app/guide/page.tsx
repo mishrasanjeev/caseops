@@ -1779,7 +1779,10 @@ export default function GuidePage() {
                       applicable provisions, supporting and contrary passages, factual
                       analogies, gaps, unresolved contradictions, and lawyer checks. Every
                       authority retains its citation, court, date, passage, relevance,
-                      source URL, content hash, and source version.
+                      source URL, content hash, and source version. A link containing the
+                      server-owned review ID opens that exact permission-visible review even
+                      when it is outside the bounded history list; access is rechecked by the
+                      review API before any detail is shown.
                     </li>
                     <li>
                       <strong>Lawyer gate.</strong> An authorized lawyer can include or
@@ -1887,7 +1890,11 @@ export default function GuidePage() {
                   <Callout tone="warn" title="Human review is the default">
                     No recommendation auto-acts. Accepting a recommendation is a tracked
                     action; the audit log records who accepted, when, and against what
-                    version of the underlying draft or pack.
+                    version of the underlying draft or pack. If the first structured output
+                    uses prohibited prediction or final-instruction wording, CaseOps may make
+                    one corrective generation attempt. It never makes a third provider call;
+                    a still-unsafe or failed repair is refused, audited, and saves no
+                    recommendation.
                   </Callout>
                 </Section>
 

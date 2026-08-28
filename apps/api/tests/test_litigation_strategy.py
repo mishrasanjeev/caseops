@@ -17,7 +17,6 @@ from __future__ import annotations
 import datetime
 import hashlib
 import json
-import logging
 from collections.abc import Iterable
 
 import pytest
@@ -1998,7 +1997,7 @@ def test_strategy_marks_structured_action_with_uncited_citation_unverified(
 
 
 def test_strategy_drops_unverified_limitation_flag(
-    client: TestClient, monkeypatch, caplog,
+    client: TestClient, monkeypatch,
 ) -> None:
     """An LLM that emits a limitation flag whose citation fails
     verification is offering the lawyer an unverified DEADLINE. The
@@ -2054,16 +2053,22 @@ def test_strategy_drops_unverified_limitation_flag(
         "caseops_api.services.litigation_strategy.build_provider",
         lambda *a, **kw: _MixedLimitations(),
     )
+    operator_warnings: list[str] = []
+
+    def capture_warning(message: str, *args: object) -> None:
+        operator_warnings.append(message % args if args else message)
+
+    monkeypatch.setattr(
+        "caseops_api.services.litigation_strategy.logger.warning",
+        capture_warning,
+    )
 
     token, _, matter_id = _setup_matter(client, forum_level="high_court")
-    with caplog.at_level(
-        logging.WARNING, logger="caseops_api.services.litigation_strategy"
-    ):
-        response = client.post(
-            f"/api/matters/{matter_id}/recommendations",
-            headers=auth_headers(token),
-            json={"type": "litigation_strategy"},
-        )
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
     assert response.status_code == 200, response.text
     flags = response.json()["strategy_payload"]["limitation_flags"]
     assert len(flags) == 1, (
@@ -2077,8 +2082,8 @@ def test_strategy_drops_unverified_limitation_flag(
     # the lawyer never sees the flag, so the only trace is the log line. Without
     # this assertion the logger block could be deleted and the suite stay green.
     assert any(
-        "dropped" in record.getMessage() and "limitation flag" in record.getMessage()
-        for record in caplog.records
+        "dropped" in message and "limitation flag" in message
+        for message in operator_warnings
     ), "dropping a limitation flag must be announced to operators"
 
 

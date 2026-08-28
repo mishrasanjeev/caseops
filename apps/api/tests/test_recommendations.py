@@ -1626,7 +1626,11 @@ def test_unsafe_recommendation_output_is_refused_without_persisting_row(
         name = "mock"
         model = "mock-unsafe-output"
 
+        def __init__(self) -> None:
+            self.calls = 0
+
         def generate(self, messages: list[LLMMessage], **_kwargs):
+            self.calls += 1
             payload = {
                 "title": "Source-backed options for lawyer review",
                 "options": [
@@ -1657,9 +1661,10 @@ def test_unsafe_recommendation_output_is_refused_without_persisting_row(
                 latency_ms=5,
             )
 
+    provider = _UnsafeOutputProvider()
     monkeypatch.setattr(
         "caseops_api.services.recommendations.build_provider",
-        lambda *a, **kw: _UnsafeOutputProvider(),
+        lambda *a, **kw: provider,
     )
     response = client.post(
         f"/api/matters/{matter_id}/recommendations",
@@ -1669,6 +1674,7 @@ def test_unsafe_recommendation_output_is_refused_without_persisting_row(
 
     assert response.status_code == 422, response.text
     assert "unsupported wording" in response.json()["detail"]
+    assert provider.calls == 2
     factory = get_session_factory()
     with factory() as session:
         recs = list(
@@ -1682,6 +1688,175 @@ def test_unsafe_recommendation_output_is_refused_without_persisting_row(
     assert not recs
     assert run is not None
     assert "outcome_prediction" in (run.error or "")
+    assert "repair_attempted=True" in (run.error or "")
+
+
+def test_unsafe_recommendation_output_is_repaired_once_without_weakening_gate(
+    client: TestClient, monkeypatch,
+) -> None:
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    token, _, matter_id = _setup_matter(client)
+    _seed_relevant_authority()
+
+    class _RepairableOutputProvider:
+        name = "mock"
+        model = "mock-repairable-output"
+
+        def __init__(self) -> None:
+            self.calls = 0
+            self.messages: list[list[LLMMessage]] = []
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            self.calls += 1
+            self.messages.append(messages)
+            unsafe = self.calls == 1
+            payload = {
+                "title": "Source-backed options for lawyer review",
+                "options": [
+                    {
+                        "label": "Review the Section 34 authority",
+                        "rationale": (
+                            "The matter will win on patent illegality."
+                            if unsafe
+                            else "Patent illegality under Section 34 can support "
+                            "setting aside an arbitral award for lawyer review."
+                        ),
+                        "confidence": "medium",
+                        "supporting_citations": [
+                            "[1] Ssangyong Engg v. NHAI (2019)"
+                        ],
+                        "risk_notes": None,
+                    }
+                ],
+                "primary_recommendation_label": "Review the Section 34 authority",
+                "rationale": "Lawyer review remains required.",
+                "assumptions": [],
+                "missing_facts": [],
+                "confidence": "medium",
+                "next_action": None,
+            }
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=12,
+                completion_tokens=22,
+                latency_ms=5,
+            )
+
+    provider = _RepairableOutputProvider()
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: provider,
+    )
+
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "authority"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert provider.calls == 2
+    assert "SAFETY REPAIR (HARD)" not in provider.messages[0][0].content
+    assert "SAFETY REPAIR (HARD)" in provider.messages[1][0].content
+    with get_session_factory()() as session:
+        recommendation = session.scalar(
+            select(Recommendation).where(Recommendation.matter_id == matter_id)
+        )
+        rejected_run = session.scalar(
+            select(ModelRun).where(ModelRun.status == "rejected_unsafe_output")
+        )
+        event = session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.action == "recommendation.generated",
+                AuditEvent.matter_id == matter_id,
+            )
+        )
+    assert recommendation is not None
+    assert rejected_run is None
+    assert event is not None
+    metadata = json.loads(event.metadata_json or "{}")
+    assert metadata["safety_repair"] == {
+        "attempted": True,
+        "source_category": "outcome_prediction",
+        "succeeded": True,
+    }
+
+
+def test_format_retry_that_is_unsafe_does_not_trigger_a_third_provider_call(
+    client: TestClient, monkeypatch,
+) -> None:
+    from caseops_api.services.llm import (
+        LLMCompletion,
+        LLMMessage,
+        LLMResponseFormatError,
+    )
+
+    token, _, matter_id = _setup_matter(client)
+    _seed_relevant_authority()
+
+    class _FormatThenUnsafeProvider:
+        name = "mock"
+        model = "mock-format-then-unsafe"
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                raise LLMResponseFormatError("transient malformed JSON")
+            payload = {
+                "title": "Unsafe recommendation",
+                "options": [
+                    {
+                        "label": "Predicted result",
+                        "rationale": "The matter will win.",
+                        "confidence": "high",
+                        "supporting_citations": [
+                            "[1] Ssangyong Engg v. NHAI (2019)"
+                        ],
+                        "risk_notes": None,
+                    }
+                ],
+                "primary_recommendation_label": "Predicted result",
+                "rationale": "The outcome is guaranteed.",
+                "assumptions": [],
+                "missing_facts": [],
+                "confidence": "high",
+                "next_action": None,
+            }
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=12,
+                completion_tokens=22,
+                latency_ms=5,
+            )
+
+    provider = _FormatThenUnsafeProvider()
+    monkeypatch.setattr(
+        "caseops_api.services.recommendations.build_provider",
+        lambda *a, **kw: provider,
+    )
+
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "authority"},
+    )
+
+    assert response.status_code == 422, response.text
+    assert provider.calls == 2
+    with get_session_factory()() as session:
+        run = session.scalar(
+            select(ModelRun).where(ModelRun.status == "rejected_unsafe_output")
+        )
+    assert run is not None
+    assert "repair_attempted=False" in (run.error or "")
 
 
 def test_negated_safety_mentions_do_not_reject_grounded_recommendation(
