@@ -22,11 +22,11 @@
 #   scripts/eg003-apply-clamav.sh                       # apply
 #   scripts/eg003-apply-clamav.sh --dry-run             # print diff
 #
-# Cost note (founder-stage, 2026-04-25): minScale stays 0, so idle
-# cost stays $0. Per-request handling adds ~$0.00007/sec while clamav
-# (1 CPU / 1.5 GiB) shares the request lifecycle. First upload after
-# a cold start incurs ~30-60s while clamd loads signatures; if that
-# becomes a UX complaint, flip minScale=1 (~$30-50/mo extra).
+# Capacity note (updated 2026-08-28): production keeps two API instances warm
+# at service level because each instance accepts one request and the ClamAV
+# sidecar makes scale-out slow. This one-time script preserves the live service
+# capacity; scripts/deploy-prod.sh owns and verifies it. Do not add a
+# revision-level minScale, which can keep obsolete tagged revisions alive.
 
 set -euo pipefail
 

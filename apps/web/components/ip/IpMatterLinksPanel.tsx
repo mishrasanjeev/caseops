@@ -37,6 +37,7 @@ import {
   type IpMatterLink,
   type IpMatterRelationRole,
 } from "@/lib/api/endpoints";
+import { useSequencedQuerySettled } from "@/lib/use-sequenced-query-settled";
 
 const ROLES: Array<{ value: IpMatterRelationRole; label: string }> = [
   { value: "operational", label: "Operational" },
@@ -348,10 +349,25 @@ export function IpMatterLinksPanel({
   );
 }
 
-export function MatterIpLinksPanel({ matterId }: { matterId: string }) {
+export function MatterIpLinksPanel({
+  matterId,
+  loadEnabled = true,
+  onLoadSettled,
+}: {
+  matterId: string;
+  loadEnabled?: boolean;
+  onLoadSettled?: () => void;
+}) {
   const links = useQuery({
     queryKey: ["matters", matterId, "ip-links"],
-    queryFn: () => fetchMatterIpLinks(matterId),
+    queryFn: ({ signal }) => fetchMatterIpLinks(matterId, { signal }),
+    enabled: loadEnabled,
+  });
+  useSequencedQuerySettled({
+    enabled: loadEnabled,
+    identity: matterId,
+    settled: links.isFetched,
+    onSettled: onLoadSettled,
   });
   if (!links.isPending && !links.isError && links.data.links.length === 0) return null;
   return (

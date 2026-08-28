@@ -7,6 +7,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   useMatterWorkspaceMock,
   fetchBenchStrategyMock,
+  fetchMatterIpLinksMock,
+  fetchMatterNextActionMock,
+  fetchOutsideCounselRecommendationsMock,
   listConflictChecksMock,
   transitionMatterStatusMock,
   updateMatterMock,
@@ -17,6 +20,9 @@ const {
 } = vi.hoisted(() => ({
   useMatterWorkspaceMock: vi.fn(),
   fetchBenchStrategyMock: vi.fn(),
+  fetchMatterIpLinksMock: vi.fn(),
+  fetchMatterNextActionMock: vi.fn(),
+  fetchOutsideCounselRecommendationsMock: vi.fn(),
   listConflictChecksMock: vi.fn(),
   transitionMatterStatusMock: vi.fn(),
   updateMatterMock: vi.fn(),
@@ -32,16 +38,15 @@ vi.mock("@/lib/use-matter-workspace", () => ({
 
 vi.mock("@/lib/api/endpoints", () => ({
   fetchBenchStrategy: fetchBenchStrategyMock,
+  fetchMatterIpLinks: fetchMatterIpLinksMock,
+  fetchMatterNextAction: fetchMatterNextActionMock,
   fetchForumCatalog: vi.fn(),
   listConflictChecks: listConflictChecksMock,
   resolveConflictCheck: vi.fn(),
   runConflictCheck: vi.fn(),
   transitionMatterStatus: transitionMatterStatusMock,
   updateMatter: updateMatterMock,
-  fetchCounselRecommendations: vi.fn().mockResolvedValue({
-    matter_id: "m-1",
-    recommendations: [],
-  }),
+  fetchOutsideCounselRecommendations: fetchOutsideCounselRecommendationsMock,
 }));
 
 vi.mock("@/lib/capabilities", () => ({
@@ -93,6 +98,23 @@ describe("MatterOverviewPage", () => {
   beforeEach(() => {
     useMatterWorkspaceMock.mockReset();
     fetchBenchStrategyMock.mockReset();
+    fetchMatterIpLinksMock.mockReset();
+    fetchMatterIpLinksMock.mockResolvedValue({
+      matter_id: "m-1",
+      links: [],
+      count: 0,
+      active_count: 0,
+    });
+    fetchMatterNextActionMock.mockReset();
+    fetchMatterNextActionMock.mockResolvedValue(null);
+    fetchOutsideCounselRecommendationsMock.mockReset();
+    fetchOutsideCounselRecommendationsMock.mockResolvedValue({
+      matter_id: "m-1",
+      matter_title: "Test Matter",
+      matter_code: "T-1",
+      generated_at: "2026-08-28T10:00:00Z",
+      results: [],
+    });
     updateMatterMock.mockReset();
     transitionMatterStatusMock.mockReset();
     updateMatterMock.mockResolvedValue(BASE_DATA.matter);
@@ -205,13 +227,101 @@ describe("MatterOverviewPage", () => {
     );
 
     await waitFor(() =>
-      expect(listConflictChecksMock).toHaveBeenCalledWith("m-2"),
+      expect(listConflictChecksMock).toHaveBeenCalledWith(
+        "m-2",
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      ),
     );
     expect(screen.queryByTestId("conflict-run-opposing")).toBeNull();
     await userEvent.click(screen.getByTestId("conflict-run-open"));
     expect(await screen.findByTestId("conflict-run-opposing")).toHaveValue(
       "Second Counterparty",
     );
+  });
+
+  it("sequences support reads after the primary workspace is available", async () => {
+    useCapabilityMock.mockReturnValue(true);
+    useMatterWorkspaceMock.mockReturnValue({ data: BASE_DATA });
+
+    let resolveNextAction!: (value: null) => void;
+    let resolveIpLinks!: (value: {
+      matter_id: string;
+      links: never[];
+      count: number;
+      active_count: number;
+    }) => void;
+    let resolveConflicts!: (value: { matter_id: string; checks: never[] }) => void;
+    let resolveCounsel!: (value: {
+      matter_id: string;
+      matter_title: string;
+      matter_code: string;
+      generated_at: string;
+      results: never[];
+    }) => void;
+    fetchMatterNextActionMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveNextAction = resolve;
+      }),
+    );
+    fetchMatterIpLinksMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveIpLinks = resolve;
+      }),
+    );
+    listConflictChecksMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveConflicts = resolve;
+      }),
+    );
+    fetchOutsideCounselRecommendationsMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveCounsel = resolve;
+      }),
+    );
+    fetchBenchStrategyMock.mockReturnValue(new Promise(() => undefined));
+
+    render(withClient(<MatterOverviewPage />));
+
+    await waitFor(() => expect(fetchMatterNextActionMock).toHaveBeenCalledTimes(1));
+    expect(fetchMatterIpLinksMock).not.toHaveBeenCalled();
+    expect(listConflictChecksMock).not.toHaveBeenCalled();
+    expect(fetchOutsideCounselRecommendationsMock).not.toHaveBeenCalled();
+    expect(fetchBenchStrategyMock).not.toHaveBeenCalled();
+
+    resolveNextAction(null);
+    await waitFor(() => expect(fetchMatterIpLinksMock).toHaveBeenCalledTimes(1));
+    expect(listConflictChecksMock).not.toHaveBeenCalled();
+
+    resolveIpLinks({ matter_id: "m-1", links: [], count: 0, active_count: 0 });
+    await waitFor(() => expect(listConflictChecksMock).toHaveBeenCalledTimes(1));
+    expect(fetchOutsideCounselRecommendationsMock).not.toHaveBeenCalled();
+
+    resolveConflicts({ matter_id: "m-1", checks: [] });
+    await waitFor(() =>
+      expect(fetchOutsideCounselRecommendationsMock).toHaveBeenCalledTimes(1),
+    );
+    expect(fetchBenchStrategyMock).not.toHaveBeenCalled();
+
+    resolveCounsel({
+      matter_id: "m-1",
+      matter_title: "Test Matter",
+      matter_code: "T-1",
+      generated_at: "2026-08-28T10:00:00Z",
+      results: [],
+    });
+    await waitFor(() => expect(fetchBenchStrategyMock).toHaveBeenCalledTimes(1));
+
+    for (const call of [
+      fetchMatterNextActionMock.mock.calls[0],
+      fetchMatterIpLinksMock.mock.calls[0],
+      listConflictChecksMock.mock.calls[0],
+      fetchOutsideCounselRecommendationsMock.mock.calls[0],
+      fetchBenchStrategyMock.mock.calls[0],
+    ]) {
+      expect(call?.at(-1)).toEqual(
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+    }
   });
 
   it("does not treat cancelled hearings as upcoming on the overview", () => {

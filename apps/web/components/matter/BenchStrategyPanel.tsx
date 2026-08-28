@@ -34,6 +34,7 @@ import {
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { fetchBenchStrategy } from "@/lib/api/endpoints";
+import { useSequencedQuerySettled } from "@/lib/use-sequenced-query-settled";
 
 const QUALITY_LABELS: Record<string, string> = {
   strong: "Strong evidence base",
@@ -48,12 +49,26 @@ function qualityTone(q: string): "brand" | "neutral" | "warning" {
   return "warning";
 }
 
-export function BenchStrategyPanel({ matterId }: { matterId: string }) {
+export function BenchStrategyPanel({
+  matterId,
+  loadEnabled = true,
+  onLoadSettled,
+}: {
+  matterId: string;
+  loadEnabled?: boolean;
+  onLoadSettled?: () => void;
+}) {
   const query = useQuery({
     queryKey: ["bench-strategy", matterId],
-    queryFn: () => fetchBenchStrategy(matterId),
-    enabled: matterId.length > 0,
+    queryFn: ({ signal }) => fetchBenchStrategy(matterId, { signal }),
+    enabled: loadEnabled && matterId.length > 0,
     staleTime: 5 * 60_000,
+  });
+  useSequencedQuerySettled({
+    enabled: loadEnabled,
+    identity: matterId,
+    settled: query.isFetched,
+    onSettled: onLoadSettled,
   });
 
   if (query.isPending) {

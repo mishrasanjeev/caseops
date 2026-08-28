@@ -2,11 +2,12 @@ apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
   name: caseops-api
+  annotations:
+    run.googleapis.com/minScale: "2"
 spec:
   template:
     metadata:
       annotations:
-        autoscaling.knative.dev/minScale: "0"
         # Each API container deliberately accepts one request at a time: sync
         # database/LLM handlers must not share the Uvicorn event loop. Allow
         # enough instances to absorb normal browser fan-out while one request

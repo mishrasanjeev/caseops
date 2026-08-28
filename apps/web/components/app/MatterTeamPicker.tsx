@@ -33,7 +33,7 @@ export function MatterTeamPicker({
 
   const { data } = useQuery({
     queryKey: ["teams", "list"],
-    queryFn: () => listTeams(),
+    queryFn: ({ signal }) => listTeams({ signal }),
     enabled: canManage,
     staleTime: 60_000,
   });

@@ -10,7 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { toast } from "sonner";
 
 import { CounselRecommendationsCard } from "@/components/app/CounselRecommendationsCard";
@@ -223,6 +223,23 @@ export default function MatterOverviewPage() {
   const [isEditingMatter, setIsEditingMatter] = useState(false);
   const [matterDraft, setMatterDraft] = useState<MatterEditDraft | null>(null);
   const [matterEditBase, setMatterEditBase] = useState<Matter | null>(null);
+  const [supportSequence, setSupportSequence] = useState({
+    matterId: params.id,
+    stage: 0,
+  });
+  const supportStage =
+    supportSequence.matterId === params.id ? supportSequence.stage : 0;
+  const advanceSupportSequence = useCallback(
+    (matterId: string, stage: number) => {
+      if (matterId !== params.id) return;
+      setSupportSequence((current) => ({
+        matterId,
+        stage:
+          current.matterId === matterId ? Math.max(current.stage, stage) : stage,
+      }));
+    },
+    [params.id],
+  );
   const [matterEditConcurrencyError, setMatterEditConcurrencyError] = useState<
     string | null
   >(null);
@@ -289,10 +306,17 @@ export default function MatterOverviewPage() {
           /api/me/today feed. The card auto-hides when nothing is
           queued so it doesn't leave dead space. */}
       <div className="lg:col-span-3">
-        <NextActionCard matterId={data.matter.id} />
+        <NextActionCard
+          matterId={data.matter.id}
+          onLoadSettled={() => advanceSupportSequence(data.matter.id, 1)}
+        />
       </div>
 
-      <MatterIpLinksPanel matterId={data.matter.id} />
+      <MatterIpLinksPanel
+        matterId={data.matter.id}
+        loadEnabled={supportStage >= 1}
+        onLoadSettled={() => advanceSupportSequence(data.matter.id, 2)}
+      />
 
       <Card className="lg:col-span-2">
         <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
@@ -667,13 +691,22 @@ export default function MatterOverviewPage() {
         matterId={data.matter.id}
         matterLifecycleVersion={data.matter.lifecycle_version}
         opposingParty={data.matter.opposing_party}
+        loadEnabled={supportStage >= 2}
+        onLoadSettled={() => advanceSupportSequence(data.matter.id, 3)}
       />
 
       <MatterForumCard matter={data.matter} />
 
-      <CounselRecommendationsCard matterId={data.matter.id} />
+      <CounselRecommendationsCard
+        matterId={data.matter.id}
+        loadEnabled={supportStage >= 3}
+        onLoadSettled={() => advanceSupportSequence(data.matter.id, 4)}
+      />
 
-      <BenchStrategyPanel matterId={data.matter.id} />
+      <BenchStrategyPanel
+        matterId={data.matter.id}
+        loadEnabled={supportStage >= 4}
+      />
 
       {/* BUG-011 (Hari 2026-04-22 reopen): hide the "Last court order"
           card on matters with no order yet, mirroring the Open tasks

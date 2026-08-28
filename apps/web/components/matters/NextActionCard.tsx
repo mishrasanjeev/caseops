@@ -11,11 +11,27 @@ import Link from "next/link";
 
 import { Card, CardContent } from "@/components/ui/Card";
 import { fetchMatterNextAction } from "@/lib/api/endpoints";
+import { useSequencedQuerySettled } from "@/lib/use-sequenced-query-settled";
 
-export function NextActionCard({ matterId }: { matterId: string }) {
+export function NextActionCard({
+  matterId,
+  loadEnabled = true,
+  onLoadSettled,
+}: {
+  matterId: string;
+  loadEnabled?: boolean;
+  onLoadSettled?: () => void;
+}) {
   const query = useQuery({
     queryKey: ["matter", matterId, "next-action"],
-    queryFn: () => fetchMatterNextAction(matterId),
+    queryFn: ({ signal }) => fetchMatterNextAction(matterId, { signal }),
+    enabled: loadEnabled,
+  });
+  useSequencedQuerySettled({
+    enabled: loadEnabled,
+    identity: matterId,
+    settled: query.isFetched,
+    onSettled: onLoadSettled,
   });
 
   if (query.isPending || query.isError) return null;

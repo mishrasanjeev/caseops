@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, timedelta
 
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import event, select
 
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
@@ -27,10 +27,11 @@ from caseops_api.db.models import (
     NotificationDeliveryIntent,
     Statute,
     StatuteSection,
+    Team,
     User,
     UserCalendarConnection,
 )
-from caseops_api.db.session import get_session_factory
+from caseops_api.db.session import get_engine, get_session_factory
 from caseops_api.services.notification_delivery import (
     apply_notification_provider_event,
     enqueue_notification_delivery_intent,
@@ -930,6 +931,141 @@ def test_ip_matter_links_are_effective_dated_many_to_many_and_timeline_is_refere
         == "The advisory engagement has concluded."
     )
     assert retired.json()["operational_pointer_cleared"] is False
+
+
+def test_matter_ip_link_query_count_is_bounded_by_page_not_link_count(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    headers = auth_headers(token)
+    matter = _mk_matter(client, token, "IP-LINK-PERF-001")
+
+    def create_docket(index: int) -> None:
+        response = client.post(
+            "/api/ip/dockets",
+            headers=headers,
+            json={
+                "title": f"Bounded link {index}",
+                "matter_id": matter["id"],
+                "primary_identifier": f"TM-LINK-PERF-{index:03d}",
+                "restricted": False,
+                "particulars": _particulars(mark=f"BOUND {index}"),
+            },
+        )
+        assert response.status_code == 201, response.text
+
+    def measured_read() -> tuple[int, dict]:
+        query_count = 0
+
+        def count_query(*_args: object) -> None:
+            nonlocal query_count
+            query_count += 1
+
+        engine = get_engine()
+        event.listen(engine, "before_cursor_execute", count_query)
+        try:
+            response = client.get(
+                f"/api/matters/{matter['id']}/ip-links",
+                headers=headers,
+            )
+        finally:
+            event.remove(engine, "before_cursor_execute", count_query)
+        assert response.status_code == 200, response.text
+        return query_count, response.json()
+
+    create_docket(0)
+    one_link_queries, one_link = measured_read()
+    assert one_link["count"] == 1
+
+    for index in range(1, 8):
+        create_docket(index)
+    many_link_queries, many_links = measured_read()
+    assert many_links["count"] == 8
+    assert many_link_queries <= one_link_queries + 1
+    assert many_link_queries <= 24
+
+
+def test_matter_ip_link_warning_matches_inactive_team_visibility_policy(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    headers = auth_headers(token)
+    member_email = "inactive-team-link-reader@asterlegal.in"
+    created_member = client.post(
+        "/api/companies/current/users",
+        headers=headers,
+        json={
+            "full_name": "Inactive Team Link Reader",
+            "email": member_email,
+            "role": "member",
+            "password": "MemberPass123!",
+        },
+    )
+    assert created_member.status_code == 200, created_member.text
+    team_response = client.post(
+        "/api/teams/",
+        headers=headers,
+        json={"name": "Historical IP Team", "slug": "historical-ip-team"},
+    )
+    assert team_response.status_code == 201, team_response.text
+    team = team_response.json()
+    with get_session_factory()() as session:
+        membership_id = session.scalar(
+            select(CompanyMembership.id)
+            .join(User, User.id == CompanyMembership.user_id)
+            .where(User.email == member_email)
+        )
+    assert membership_id is not None
+    add_member = client.post(
+        f"/api/teams/{team['id']}/members",
+        headers=headers,
+        json={"membership_id": membership_id},
+    )
+    assert add_member.status_code == 200, add_member.text
+    scope = client.put(
+        "/api/teams/scoping",
+        headers=headers,
+        json={"enabled": True},
+    )
+    assert scope.status_code == 200, scope.text
+    matter = _mk_matter(client, token, "IP-LINK-INACTIVE-TEAM-001")
+    assigned = client.patch(
+        f"/api/matters/{matter['id']}",
+        headers=headers,
+        json={
+            "team_id": team["id"],
+            "expected_updated_at": matter["updated_at"],
+        },
+    )
+    assert assigned.status_code == 200, assigned.text
+    docket = client.post(
+        "/api/ip/dockets",
+        headers=headers,
+        json={
+            "title": "Historical team visibility",
+            "matter_id": matter["id"],
+            "primary_identifier": "TM-LINK-INACTIVE-TEAM-001",
+            "restricted": False,
+            "particulars": _particulars(mark="HISTORICAL TEAM"),
+        },
+    )
+    assert docket.status_code == 201, docket.text
+    with get_session_factory()() as session:
+        persisted_team = session.get(Team, team["id"])
+        assert persisted_team is not None
+        persisted_team.is_active = False
+        session.commit()
+
+    response = client.get(
+        f"/api/matters/{matter['id']}/ip-links",
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["count"] == 1
+    assert payload["links"][0]["access_mismatch_warning"] is False
 
 
 def test_ip_matter_links_omit_inaccessible_side_without_link_metadata_leak(
