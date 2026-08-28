@@ -4,6 +4,11 @@
 
 **Audience**: You (sole operator). Every step is gcloud CLI; no Console clicking required.
 
+> For an existing CaseOps production deployment, use `scripts/deploy-prod.sh <full-main-sha>`.
+> It is the release authority for migration-first ordering, immutable images,
+> recurring jobs, service capacity, latest-only traffic, and exact identity.
+> The commands below are bootstrap examples for a new project.
+
 ---
 
 ## 0. Prerequisites
@@ -163,11 +168,14 @@ gcloud run deploy caseops-api \
   --service-account=$RUNTIME_SA@$GCP_PROJECT.iam.gserviceaccount.com \
   --add-cloudsql-instances=$SQL_CONN \
   --allow-unauthenticated \
-  --memory=2Gi \
+  --memory=4Gi \
   --cpu=2 \
-  --max-instances=10 \
-  --min-instances=0 \
-  --timeout=300 \
+  --concurrency=1 \
+  --max=20 \
+  --max-instances=20 \
+  --min=2 \
+  --min-instances=default \
+  --timeout=120 \
   --set-env-vars=\
 "CASEOPS_ENV=production,\
 CASEOPS_DATABASE_URL=postgresql+psycopg://$DB_USER:$DB_PASSWORD@/cloudsql/$SQL_CONN/$DB_NAME,\
@@ -190,6 +198,11 @@ CASEOPS_EMBEDDING_API_KEY=caseops-voyage-api-key:latest"
 ```
 
 **Note on `--allow-unauthenticated`**: this is ingress-public + app-level auth (Option B from the design call). CaseOps' own login layer protects every route past `/api/auth/*`.
+
+The API minimum is service-level capacity that follows traffic. Keep
+`--min-instances=default`; setting a revision-level minimum can leave obsolete
+tagged revisions running after secret rotation. Two warm, concurrency-one API
+instances keep an unrelated request responsive while one request is occupied.
 
 ---
 

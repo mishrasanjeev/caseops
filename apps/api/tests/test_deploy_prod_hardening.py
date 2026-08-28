@@ -438,6 +438,7 @@ def test_deploy_prod_preserves_single_request_instances_with_scale_headroom() ->
 
     script = _read_repo_text("scripts/deploy-prod.sh")
     manifest = _read_repo_text("infra/cloudrun/api-service.yaml")
+    runbook = _read_repo_text("docs/GCP_DEPLOY.md")
 
     assert "API_CONCURRENCY=1" in script
     assert 'API_MAX_INSTANCES="${API_MAX_INSTANCES:-20}"' in script
@@ -446,6 +447,9 @@ def test_deploy_prod_preserves_single_request_instances_with_scale_headroom() ->
     assert 'run.googleapis.com/minScale: "2"' in manifest
     assert "autoscaling.knative.dev/minScale" not in manifest
     assert 'autoscaling.knative.dev/maxScale: "20"' in manifest
+    assert "--min=2" in runbook
+    assert "--min-instances=default" in runbook
+    assert "--min-instances=0" not in runbook
 
 
 def _ignore_matches(ignore_text: str, relative_path: str) -> bool:
