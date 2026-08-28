@@ -219,11 +219,14 @@ export async function recordTransaction(
   input: Json = {},
   expectedStatus = 201,
 ) {
-  const [workspaceResponse, docketResponse] = await Promise.all([
-    api.get(`${apiBase}/api/ip/recordals/${fixture.recordal.id}/workspace`, { headers }),
-    api.get(`${apiBase}/api/ip/dockets/${fixture.docket.id}`, { headers }),
-  ]);
+  const workspaceResponse = await api.get(
+    `${apiBase}/api/ip/recordals/${fixture.recordal.id}/workspace`,
+    { headers },
+  );
   await expectStatus(workspaceResponse, 200, "recordal workspace");
+  const docketResponse = await api.get(`${apiBase}/api/ip/dockets/${fixture.docket.id}`, {
+    headers,
+  });
   await expectStatus(docketResponse, 200, "recordal docket");
   const workspace = (await workspaceResponse.json()) as Json;
   const docket = (await docketResponse.json()) as Json;

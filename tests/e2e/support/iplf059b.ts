@@ -323,14 +323,14 @@ export async function recordForeignAssociateTransaction(
   kind: string,
   input: Json = {},
 ) {
-  const [workspaceResponse, docketResponse] = await Promise.all([
-    api.get(
-      `${apiBase}/api/ip/foreign-associate-instructions/${instruction.id}/workspace`,
-      { headers },
-    ),
-    api.get(`${apiBase}/api/ip/dockets/${fixture.docket.id}`, { headers }),
-  ]);
+  const workspaceResponse = await api.get(
+    `${apiBase}/api/ip/foreign-associate-instructions/${instruction.id}/workspace`,
+    { headers },
+  );
   await expectStatus(workspaceResponse, 200, `${kind} workspace`);
+  const docketResponse = await api.get(`${apiBase}/api/ip/dockets/${fixture.docket.id}`, {
+    headers,
+  });
   await expectStatus(docketResponse, 200, `${kind} docket`);
   const workspace = (await workspaceResponse.json()) as Json;
   const docket = (await docketResponse.json()) as Json;

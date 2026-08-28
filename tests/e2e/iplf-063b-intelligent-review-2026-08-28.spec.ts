@@ -125,7 +125,9 @@ test("IPLF-063B completes UJ-18 normal and exception paths", async ({ page }) =>
 
   await test.step("IPLF-UJ-18-NORMAL generates, verifies, finalizes, and publishes", async () => {
     await page.goto(`/app/research/reviews?report=${encodeURIComponent(report.id)}`);
-    await expect(page.getByRole("heading", { name: "Intelligent review" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Intelligent review", exact: true }),
+    ).toBeVisible();
     await page.getByRole("combobox", { name: "Matter target" }).click();
     await page.getByRole("option", { name: new RegExp(`^${matter.matter_code} ·`) }).click();
     await page.getByLabel("Fact 1 label").fill("First use");
