@@ -17,7 +17,7 @@
     "active_slice": "IPLF-064A",
     "checkpoint": {
       "recorded_at": "2026-08-28T05:29:41.1567256+05:30",
-      "repository_revision": "1e8f62cab9a44f90978d226520ed38320038331a",
+      "repository_revision": "eeca4967908aa723c1578141c674ad21fcd3e124",
       "environment": "IPLF-061/062 exact production release is verified. IPLF-063 source, schema, API, web, governance, build, and traceability gates are green locally; exact Docker/PostgreSQL/index/browser, hosted CI/security, merge, and production gates remain pending. Protected authority-metadata and judge-refresh schedulers remain PAUSED.",
       "completed_scope": "IPLF-061A/061B/062A/062B are implemented, locally passed, and deployment verified at exact release 1267ea8c. IPLF-063A/063B implement source-bounded intelligent review, Matter/IP target generalization, canonical IP opposition Draft handoff, source/freshness/contradiction/completeness controls, responsive workflow, documentation, and full local source verification.",
       "program_state": "PROGRAM INCOMPLETE",
@@ -14930,7 +14930,7 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m6/IPLF-063A/local-2026-08-28.md",
-          "revision": "1e8f62cab9a44f90978d226520ed38320038331a",
+          "revision": "eeca4967908aa723c1578141c674ad21fcd3e124",
           "environment": "Windows 11, Python 3.13, SQLite migration rehearsal, complete deterministic API inventory, full web verification, and generated governance projections",
           "fixtures": "isolated tenants, Matter and IP targets, opposition proceeding, frozen accessible/inaccessible/stale sources, disposed target, prompt injection, prohibited output, 50-row list, and UTC-midnight tenant calendar",
           "assertions": "additive fail-closed migration, exact-one target, tenant foreign keys, complete leading indexes, source openability, bounded provider/query work, post-provider reauthorization, abstention, stale and contradiction retention, no orphan IP Draft, and governance parity",
@@ -15032,7 +15032,7 @@
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
-          "revision": "1e8f62cab9a44f90978d226520ed38320038331a",
+          "revision": "eeca4967908aa723c1578141c674ad21fcd3e124",
           "environment": "Windows 11 local API/web, complete API and web inventories, fresh Next.js build, responsive component coverage, and local/production Playwright discovery",
           "fixtures": "frozen supporting/contrary/stale/inaccessible authorities, contradictory facts, Matter target, canonical IP docket/opposition target, approved Draft, and 360px viewport",
           "assertions": "normal generation, exact source URLs/passages, support/contrary selection, incomplete citation removal, stale warning, abstention, prohibited-output boundary, Matter publish, exact IP opposition Draft handoff, async deep-link stability, guide/public copy, and responsive non-overflow",
