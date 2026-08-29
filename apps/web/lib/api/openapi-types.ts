@@ -4,6 +4,40 @@
  */
 
 export interface paths {
+    "/api/admin/ai-feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the bounded workspace AI feedback review queue */
+        get: operations["get_ai_feedback_api_admin_ai_feedback_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/ai-feedback/{feedback_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Review feedback with optimistic concurrency */
+        patch: operations["patch_ai_feedback_api_admin_ai_feedback__feedback_id__patch"];
+        trace?: never;
+    };
     "/api/admin/ai-token-governance": {
         parameters: {
             query?: never;
@@ -919,6 +953,40 @@ export interface paths {
         head?: never;
         /** Toggle predictive bench analytics + admin-disabled templates for this workspace (PG-107 + Sprint 11). Owner/admin only. */
         patch: operations["patch_tenant_ai_policy_api_admin_tenant_ai_policy_patch"];
+        trace?: never;
+    };
+    "/api/ai-feedback/product-guide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit idempotent feedback for a current Product Guide target */
+        post: operations["post_product_guide_feedback_api_ai_feedback_product_guide_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ai-feedback/workspace-assistant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit idempotent feedback for a private assistant turn */
+        post: operations["post_workspace_assistant_feedback_api_ai_feedback_workspace_assistant_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/ai/contracts/{contract_id}/clauses/extract": {
@@ -12717,6 +12785,89 @@ export interface components {
              * @enum {string}
              */
             readiness_classification: "live" | "review-first" | "provider-gated" | "founder-only" | "disabled until UAT" | "planned";
+        };
+        /** AIFeedbackListResponse */
+        AIFeedbackListResponse: {
+            /** Has More */
+            has_more: boolean;
+            /** Items */
+            items: components["schemas"]["AIFeedbackRecord"][];
+            /** Limit */
+            limit: number;
+        };
+        /** AIFeedbackRecord */
+        AIFeedbackRecord: {
+            /** Category */
+            category: ("answer_quality" | "wrong_navigation" | "missing_permission_explanation" | "unsafe_citation" | "outdated_guidance" | "missing_guidance" | "other") | null;
+            /** Comment */
+            comment: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Feedback Type
+             * @enum {string}
+             */
+            feedback_type: "rating" | "report";
+            /** Id */
+            id: string;
+            /** Parent Target Id */
+            parent_target_id: string | null;
+            /**
+             * Priority
+             * @enum {string}
+             */
+            priority: "normal" | "high";
+            /** Rating */
+            rating: ("helpful" | "not_helpful") | null;
+            /** Review Notes */
+            review_notes: string | null;
+            /** Reviewed At */
+            reviewed_at: string | null;
+            /** Reviewed By Membership Id */
+            reviewed_by_membership_id: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "in_review" | "resolved" | "dismissed";
+            /** Submitted By Membership Id */
+            submitted_by_membership_id: string;
+            /**
+             * Surface
+             * @enum {string}
+             */
+            surface: "product_guide" | "workspace_assistant";
+            /** Target Href */
+            target_href: string | null;
+            /** Target Id */
+            target_id: string;
+            /** Target Type */
+            target_type: string;
+            /** Target Version */
+            target_version: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** AIFeedbackReviewRequest */
+        AIFeedbackReviewRequest: {
+            /**
+             * Expected Updated At
+             * Format: date-time
+             */
+            expected_updated_at: string;
+            /** Review Notes */
+            review_notes?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "in_review" | "resolved" | "dismissed";
         };
         /** AIGovernanceReadinessResponse */
         AIGovernanceReadinessResponse: {
@@ -38731,6 +38882,31 @@ export interface components {
             /** Updated On */
             updated_on: string;
         };
+        /** ProductGuideFeedbackCreateRequest */
+        ProductGuideFeedbackCreateRequest: {
+            /** Catalog Fingerprint */
+            catalog_fingerprint: string;
+            /** Category */
+            category?: ("answer_quality" | "wrong_navigation" | "missing_permission_explanation" | "unsafe_citation" | "outdated_guidance" | "missing_guidance" | "other") | null;
+            /** Comment */
+            comment?: string | null;
+            /**
+             * Feedback Type
+             * @enum {string}
+             */
+            feedback_type: "rating" | "report";
+            /** Rating */
+            rating?: ("helpful" | "not_helpful") | null;
+            /** Submission Key */
+            submission_key: string;
+            /** Target Id */
+            target_id: string;
+            /**
+             * Target Type
+             * @enum {string}
+             */
+            target_type: "product_guide_command" | "product_guide_section" | "product_guide_permission" | "product_guide_no_match";
+        };
         /** ProductGuidePermissionResponse */
         ProductGuidePermissionResponse: {
             /** Message */
@@ -42399,6 +42575,26 @@ export interface components {
             /** Matched */
             matched: number;
         };
+        /** WorkspaceAssistantFeedbackCreateRequest */
+        WorkspaceAssistantFeedbackCreateRequest: {
+            /** Category */
+            category?: ("answer_quality" | "wrong_navigation" | "missing_permission_explanation" | "unsafe_citation" | "outdated_guidance" | "missing_guidance" | "other") | null;
+            /** Comment */
+            comment?: string | null;
+            /**
+             * Feedback Type
+             * @enum {string}
+             */
+            feedback_type: "rating" | "report";
+            /** Rating */
+            rating?: ("helpful" | "not_helpful") | null;
+            /** Session Id */
+            session_id: string;
+            /** Submission Key */
+            submission_key: string;
+            /** Turn Id */
+            turn_id: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -42408,6 +42604,75 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    get_ai_feedback_api_admin_ai_feedback_get: {
+        parameters: {
+            query?: {
+                category?: ("answer_quality" | "wrong_navigation" | "missing_permission_explanation" | "unsafe_citation" | "outdated_guidance" | "missing_guidance" | "other") | null;
+                limit?: number;
+                status?: ("open" | "in_review" | "resolved" | "dismissed") | null;
+                surface?: ("product_guide" | "workspace_assistant") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIFeedbackListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_ai_feedback_api_admin_ai_feedback__feedback_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                feedback_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AIFeedbackReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIFeedbackRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_ai_token_governance_api_admin_ai_token_governance_get: {
         parameters: {
             query?: {
@@ -44308,6 +44573,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TenantAIPolicyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_product_guide_feedback_api_ai_feedback_product_guide_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductGuideFeedbackCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIFeedbackRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_workspace_assistant_feedback_api_ai_feedback_workspace_assistant_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkspaceAssistantFeedbackCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIFeedbackRecord"];
                 };
             };
             /** @description Validation Error */

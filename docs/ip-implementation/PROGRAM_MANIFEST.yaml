@@ -15457,6 +15457,7 @@
         "apps/web/components/assistant/WorkspaceAssistant.tsx",
         "apps/web/app/app/admin/ai-feedback/page.tsx",
         "apps/web/lib/api/ai-feedback.ts",
+        "apps/web/lib/api/openapi-types.ts",
         "apps/api/src/caseops_api/api/routes/ai_feedback.py",
         "apps/api/src/caseops_api/services/ai_feedback.py",
         "apps/web/app/law-firms/page.tsx",
@@ -15531,6 +15532,12 @@
           "disposition": "updated",
           "owner": "Product/Marketing/Engineering",
           "evidence": "Truthful governed-feedback and safety-release claims; unsupported productivity statistics removed"
+        },
+        {
+          "artifact": "apps/web/lib/api/openapi-types.ts",
+          "disposition": "generated",
+          "owner": "Engineering/API governance",
+          "evidence": "Canonical generated request, response, enum, and route contracts for all four feedback endpoints"
         },
         {
           "artifact": "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md",
