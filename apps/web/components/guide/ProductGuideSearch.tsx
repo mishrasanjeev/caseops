@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { type FormEvent, useRef, useState } from "react";
 
+import { AIFeedbackControls } from "@/components/ai/AIFeedbackControls";
 import { isApiErrorShape } from "@/lib/api/config";
 import {
   searchProductGuide,
@@ -158,10 +159,13 @@ export function ProductGuideSearch({ contentVersion }: { contentVersion: string 
               {response.results.map((result) => {
                 const ResultIcon = result.kind === "command" ? Compass : BookOpenText;
                 return (
-                  <li key={`${result.kind}:${result.id}`}>
+                  <li
+                    key={`${result.kind}:${result.id}`}
+                    className="flex min-w-0 flex-col py-4 sm:flex-row sm:items-start sm:gap-3"
+                  >
                     <a
                       href={result.href}
-                      className="group flex min-w-0 items-start gap-3 px-1 py-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-600)]"
+                      className="group flex min-w-0 flex-1 items-start gap-3 px-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-600)]"
                     >
                       <ResultIcon className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-brand-600)]" aria-hidden />
                       <span className="min-w-0 flex-1">
@@ -174,6 +178,18 @@ export function ProductGuideSearch({ contentVersion }: { contentVersion: string 
                       </span>
                       <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-mute)] group-hover:text-[var(--color-ink)]" aria-hidden />
                     </a>
+                    <AIFeedbackControls
+                      target={{
+                        surface: "product_guide",
+                        targetType:
+                          result.kind === "command"
+                            ? "product_guide_command"
+                            : "product_guide_section",
+                        targetId: result.id,
+                        catalogFingerprint: response.catalog_fingerprint,
+                      }}
+                      testId={`product-guide-feedback-${result.kind}-${result.id}`}
+                    />
                   </li>
                 );
               })}
@@ -189,6 +205,15 @@ export function ProductGuideSearch({ contentVersion }: { contentVersion: string 
               <p className="mt-1 text-[var(--color-mute)]">
                 Required access: {response.permission.required_capabilities.map(capabilityLabel).join(", ")}.
               </p>
+              <AIFeedbackControls
+                target={{
+                  surface: "product_guide",
+                  targetType: "product_guide_permission",
+                  targetId: "permission",
+                  catalogFingerprint: response.catalog_fingerprint,
+                }}
+                testId="product-guide-feedback-permission"
+              />
             </div>
           </div>
         ) : null}
@@ -211,6 +236,15 @@ export function ProductGuideSearch({ contentVersion }: { contentVersion: string 
                 </button>
               ))}
             </div>
+            <AIFeedbackControls
+              target={{
+                surface: "product_guide",
+                targetType: "product_guide_no_match",
+                targetId: "no_match",
+                catalogFingerprint: response.catalog_fingerprint,
+              }}
+              testId="product-guide-feedback-no-match"
+            />
           </div>
         ) : null}
 

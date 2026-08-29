@@ -137,8 +137,26 @@
       "handling": "Inherits the registered table profile; a more specific category may be selected through an explicit override."
     }
   },
-  "table_policy_profile_overrides": {},
+  "table_policy_profile_overrides": {
+    "ai_feedback_items": "tenant_operational_record"
+  },
   "column_category_overrides": {
+    "ai_feedback_items": {
+      "category": "configuration_or_state_metadata",
+      "comment": "privileged_or_raw_content",
+      "feedback_type": "configuration_or_state_metadata",
+      "parent_target_id": "tenant_or_access_identifier",
+      "priority": "configuration_or_state_metadata",
+      "rating": "configuration_or_state_metadata",
+      "review_notes": "privileged_or_raw_content",
+      "status": "configuration_or_state_metadata",
+      "submission_key": "external_or_provider_identifier",
+      "surface": "configuration_or_state_metadata",
+      "target_href": "domain_attribute",
+      "target_id": "tenant_or_access_identifier",
+      "target_type": "configuration_or_state_metadata",
+      "target_version": "temporal_or_version_metadata"
+    },
     "drafts": {
       "source_recommendation_id": "tenant_or_access_identifier"
     },
@@ -947,6 +965,120 @@
         "tool_name": {
           "category_id": "personal_or_contact_data",
           "sql_type": "VARCHAR(120)",
+          "nullable": false
+        }
+      }
+    },
+    {
+      "id": "ai_feedback_items",
+      "table_name": "ai_feedback_items",
+      "purpose": "Repository SQL persistence class `ai_feedback_items`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "tenant_operational_record",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "category": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(48)",
+          "nullable": true
+        },
+        "comment": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "feedback_type": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(16)",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "parent_target_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(160)",
+          "nullable": true
+        },
+        "priority": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(16)",
+          "nullable": false
+        },
+        "rating": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(16)",
+          "nullable": true
+        },
+        "review_notes": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "reviewed_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "reviewed_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(16)",
+          "nullable": false
+        },
+        "submission_key": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(80)",
+          "nullable": false
+        },
+        "submitted_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "surface": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(32)",
+          "nullable": false
+        },
+        "target_href": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(2048)",
+          "nullable": true
+        },
+        "target_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(160)",
+          "nullable": false
+        },
+        "target_type": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(40)",
+          "nullable": false
+        },
+        "target_version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "VARCHAR(128)",
+          "nullable": true
+        },
+        "updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
           "nullable": false
         }
       }
@@ -27167,12 +27299,12 @@
       }
     }
   ],
-  "schema_fingerprint": "4af209280b37f3acf28e20ca541ceec82757eaeefefbd0cd98ca9170af4cd819",
+  "schema_fingerprint": "7c58fddcd7e51b6277d0975a9e092cd38393706745e2f84c01a7d98c03d19ffe",
   "index_inventory": {
-    "orm_index_count": 1612,
-    "orm_index_fingerprint": "4da092c6ba4d7b70d51866bfac2649876779132a974b83d9036283283498a9cf",
-    "migration_index_count": 665,
-    "migration_index_fingerprint": "798b5903a0898d65a484e957df93c7fdb4cdb4ddb36d24e8022a5c6bdd5dcb7d",
+    "orm_index_count": 1617,
+    "orm_index_fingerprint": "f7caab91e0f44287434f814bc40c922309040a36fdb5355dc73e034764b317b5",
+    "migration_index_count": 670,
+    "migration_index_fingerprint": "446d96c7267ac062a38f53d1a9972981601e12605c01392e813766af945506ba",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."
   }
 }

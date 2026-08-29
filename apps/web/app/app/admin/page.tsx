@@ -6,6 +6,7 @@ import {
   Download,
   HardDrive,
   MailPlus,
+  MessageSquareWarning,
   PlugZap,
   ServerCog,
   Shield,
@@ -336,6 +337,14 @@ export default function AdminPage() {
                 className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-line)] bg-white px-3 py-1.5 text-sm font-medium text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)]"
               >
                 Notifications
+              </Link>
+            ) : null}
+            {canAdmin ? (
+              <Link
+                href="/app/admin/ai-feedback"
+                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-line)] bg-white px-3 py-1.5 text-sm font-medium text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)]"
+              >
+                <MessageSquareWarning className="h-4 w-4" aria-hidden /> AI feedback
               </Link>
             ) : null}
             {canAdmin ? (

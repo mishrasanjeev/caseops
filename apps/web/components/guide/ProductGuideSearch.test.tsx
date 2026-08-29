@@ -58,6 +58,7 @@ describe("ProductGuideSearch", () => {
       "/app/ip/docket",
     );
     expect(screen.getByText("Review legal deadlines and calculation provenance.")).toBeVisible();
+    expect(screen.getByTestId("product-guide-feedback-command-deadline-control")).toBeVisible();
   });
 
   it("reports a stale guide and explains missing capability without leaking a destination", async () => {
@@ -86,6 +87,7 @@ describe("ProductGuideSearch", () => {
     expect(screen.getByTestId("product-guide-permission")).toHaveTextContent(
       "Required access: Platform admin",
     );
+    expect(screen.getByTestId("product-guide-feedback-permission")).toBeVisible();
     expect(screen.queryByText("/app/platform-admin")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Platform admin/ })).not.toBeInTheDocument();
   });
@@ -165,6 +167,7 @@ describe("ProductGuideSearch", () => {
     expect(await screen.findByTestId("product-guide-no-match")).toHaveTextContent(
       "does not have approved guidance",
     );
+    expect(screen.getByTestId("product-guide-feedback-no-match")).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "research" }));
     await waitFor(() => expect(searchProductGuideMock).toHaveBeenLastCalledWith("research", expect.any(Object)));

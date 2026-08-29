@@ -22,6 +22,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 
 import { AssistantActionDialog } from "@/components/assistant/AssistantActionDialog";
+import { AIFeedbackControls } from "@/components/ai/AIFeedbackControls";
 import {
   archiveAssistantSession,
   askWorkspaceAssistant,
@@ -493,6 +494,7 @@ export function WorkspaceAssistant() {
                     <TurnView
                       key={turn.id}
                       turn={turn}
+                      sessionId={active.id}
                       onSuggestion={setQuestion}
                       onAction={(action) => setActionReview({ turnId: turn.id, action })}
                     />
@@ -553,10 +555,12 @@ export function WorkspaceAssistant() {
 
 function TurnView({
   turn,
+  sessionId,
   onSuggestion,
   onAction,
 }: {
   turn: AssistantTurn;
+  sessionId: string;
   onSuggestion: (value: string) => void;
   onAction: (action: AssistantProposedAction) => void;
 }) {
@@ -632,6 +636,16 @@ function TurnView({
             <p className="mt-3 text-[11px] text-[var(--color-mute)]">
               {turn.model.provider} · {turn.model.model} · {turn.model.prompt_tokens + turn.model.completion_tokens} tokens
             </p>
+          ) : null}
+          {assistant ? (
+            <AIFeedbackControls
+              target={{
+                surface: "workspace_assistant",
+                sessionId,
+                turnId: turn.id,
+              }}
+              testId={`workspace-assistant-feedback-${turn.id}`}
+            />
           ) : null}
         </div>
       </div>

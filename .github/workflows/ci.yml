@@ -65,6 +65,9 @@ jobs:
       - name: Validate production scheduler inventory
         run: uv --directory apps/api run python ../../scripts/scheduler_inventory.py validate
 
+      - name: Enforce offline AI safety release gate (IPLF-065)
+        run: uv --directory apps/api run python -m caseops_api.scripts.eval_ai_safety --release-gate
+
       - name: Ruff
         working-directory: apps/api
         run: uv run ruff check src tests

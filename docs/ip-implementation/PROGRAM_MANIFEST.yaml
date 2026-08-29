@@ -14,16 +14,16 @@
     "verification_status": "not_run",
     "release_status": "blocked",
     "execution_policy": "codex_owned_single_ordered_queue; implement first and run the automated check and exact-release verification batch at the end",
-    "active_slice": "IPLF-065A",
+    "active_slice": "IPLF-066A",
     "checkpoint": {
-      "recorded_at": "2026-08-30T00:07:41+05:30",
-      "repository_revision": "c407ed9399ca501070cb72d3be3200286fa5b3d2",
-      "environment": "IPLF-061/062/063/064 exact production releases are verified. IPLF-064 passed clean local Docker/PostgreSQL/index/browser gates, exact-main CI/Security/CodeQL, migration-first deployment, one counted QA bootstrap, and exact-release hosted acceptance. Protected authority-metadata and judge-refresh schedulers remain PAUSED.",
-      "completed_scope": "IPLF-061A/061B/062A/062B/063A/063B/064A/064B are implemented and deployment verified. IPLF-064 released retained 15-minute assistant action previews, explicit confirmation, canonical Matter/IP task and Draft delegation, allowlisted Matter updates, actor/policy/session/target/token reauthorization, atomic idempotent confirmation, responsive UI, documentation, and the dated proposed-write portion of UJ-23.",
+      "recorded_at": "2026-08-30T04:22:46.3545552+05:30",
+      "repository_revision": "9f7c278d50dd3a2cb6a43b09f7a3d5e04647ec9e",
+      "environment": "IPLF-061/062/063/064 exact production releases are verified. IPLF-065 passed complete local API/web verification, an offline eight-surface safety release gate, exact committed production Docker images, fresh PostgreSQL/Valkey migration-first acceptance, normal and 512 MiB index gates, and the complete local browser inventory. Protected authority-metadata and judge-refresh schedulers remain PAUSED.",
+      "completed_scope": "IPLF-061A/061B/062A/062B/063A/063B/064A/064B remain deployment verified. IPLF-065A/065B are implemented, locally verified, and ready for review with a retained tenant-scoped feedback queue, Product Guide and creator-private Workspace Assistant feedback controls, bounded admin review, redacted audits, an eight-surface/eleven-rule safety release gate, responsive browser proof, governance documentation, and truthful law-firm landing-page claims.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-065A",
-      "next_action": "Implement IPLF-065A from current main after reconciling existing intelligent-review and assistant safety controls, preserving the IPLF-063 review writer, IPLF-064 action boundary, and IPLF-066 private-retrieval ownership.",
-      "evidence_ref": "docs/ip-implementation/evidence/m6/release-2026-08-30-064.md"
+      "next_slice": "IPLF-066A",
+      "next_action": "Review and merge the exact IPLF-065 candidate, verify exact-main CI/Security/CodeQL, deploy migration-first, run the dated hosted feedback journey and production release gates, then mark IPLF-065 deployment verified before starting IPLF-066A.",
+      "evidence_ref": "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
     },
     "work_owner": {
       "owner": "Codex",
@@ -2385,10 +2385,13 @@
         "IPLF-065A",
         "IPLF-065B"
       ],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
-      "evidence_refs": []
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-065A/local-2026-08-30.md",
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
+      ]
     },
     {
       "id": "IPLF-066",
@@ -15286,7 +15289,7 @@
       "source_kind": "derived",
       "scope_source": "IPLF-065",
       "primary_behavior": "Foundation, ownership, and backend contract",
-      "migration_boundary": "Additive expand/backfill/verify/switch boundary when persistence changes; otherwise explicitly no schema change.",
+      "migration_boundary": "Additive 20260830_0001 creates one empty tenant-scoped ai_feedback_items queue with constrained canonical references, composite tenant foreign keys, idempotency and bounded-review indexes. No existing row is backfilled or rewritten; downgrade refuses retained feedback.",
       "release_boundary": "Compatible slices may share one exact integrated candidate, CI matrix, staged rollout, rollback plan, and dated deployed acceptance; this row remains a traceability and activation unit, not a mandatory separate release.",
       "requirement_ids": [],
       "journey_path_ids": [],
@@ -15300,22 +15303,99 @@
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260830_0001_ai_feedback_queue.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/ai_feedback.py",
+        "apps/api/src/caseops_api/services/ai_feedback.py",
+        "apps/api/src/caseops_api/api/routes/ai_feedback.py",
+        "apps/api/src/caseops_api/scripts/eval_ai_safety.py",
+        "apps/api/src/caseops_api/services/evaluation.py",
+        ".github/workflows/ci.yml"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_20260830_ai_feedback_migration.py",
+        "apps/api/tests/test_ai_feedback.py",
+        "apps/api/tests/test_eval_ai_safety.py",
+        "apps/api/tests/test_database_index_health.py",
+        "apps/api/tests/test_role_guards.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-065A/local-2026-08-30.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m6/IPLF-065A/local-2026-08-30.md",
+          "revision": "9f7c278d50dd3a2cb6a43b09f7a3d5e04647ec9e",
+          "environment": "Windows 11, Python 3.13, Node.js 22, exact committed production Docker images, fresh PostgreSQL 17/Valkey 8.1, API, worker, web, and Chromium",
+          "fixtures": "eight required AI surfaces, eleven required safety rules, negative detector cases, current Product Guide catalog targets, creator-private assistant turns, cross-tenant actors, stale review versions, and retained feedback",
+          "assertions": "additive migration, tenant foreign keys, idempotent replay, typed and bounded review, terminal lifecycle, role/capability guards, redacted audits, no prompt/answer/source copies, release-gate completeness, exact runtime identity, complete indexes, 512 MiB index health, and post-suite health",
+          "result": "passed",
+          "recorded_at": "2026-08-30T04:22:46.3545552+05:30"
+        }
+      ],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Merge the exact locally verified candidate, deploy migration-first, verify the production schema and index gates, and retain the offline release-gate result against the exact deployed revision."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Adds one empty tenant-scoped ai_feedback_items table. It stores canonical target IDs/hrefs, typed rating or report fields, submitter/reviewer membership IDs, lifecycle timestamps, and review notes; it never copies prompts, answers, citations, source text, document content, or provider payloads.",
+        "Existing EvaluationRun/EvaluationCase, Product Guide, Workspace Assistant, research, Draft, citation, permission, model-run, audit, notification, worker, and scheduler owners remain canonical."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/AI_SAFETY_FEEDBACK_GOVERNANCE.md",
+          "disposition": "created",
+          "owner": "Engineering/Product/Security",
+          "evidence": "Canonical ownership, safety-release, privacy, authorization, review-lifecycle, rollback, and residual boundaries"
+        },
+        {
+          "artifact": "docs/runbooks/ai-safety-eval-harness.md",
+          "disposition": "updated",
+          "owner": "Engineering/Security",
+          "evidence": "Executable eight-surface release gate, persistence option, redaction contract, and live-provider boundary"
+        },
+        {
+          "artifact": "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml",
+          "disposition": "updated",
+          "owner": "Engineering/Data governance",
+          "evidence": "Registered ai_feedback_items table, columns, classifications, index fingerprints, and fail-closed disposition"
+        },
+        {
+          "artifact": "docs/ip-implementation/generated/DATA_GOVERNANCE_MAP.md",
+          "disposition": "generated",
+          "owner": "Program control plane",
+          "evidence": "Exact readable projection of the updated canonical governance map"
+        },
+        {
+          "artifact": "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
+          "disposition": "updated",
+          "owner": "Engineering/Security",
+          "evidence": "Versioned redacted feedback-submitted and feedback-reviewed audit contracts"
+        },
+        {
+          "artifact": "docs/WORK_TO_BE_DONE.md",
+          "disposition": "updated",
+          "owner": "Product/Engineering",
+          "evidence": "WTD-11.4 implementation status and honest remaining boundaries"
+        },
+        {
+          "artifact": "docs/STRICT_ENTERPRISE_GAP_TASKLIST.md",
+          "disposition": "updated",
+          "owner": "Product/Engineering",
+          "evidence": "Safety evaluation gap reconciled to implemented local status"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m6/IPLF-065A/local-2026-08-30.md",
+          "disposition": "created",
+          "owner": "Engineering/QA",
+          "evidence": "Exact committed local foundation, index, safety-release, and regression proof"
+        }
+      ],
+      "allocation_review": "2026-08-30 brutal current-main and duplicate-work review: retain the existing EvaluationRun/EvaluationCase writer, all domain AI writers, permission owners, source registries, audit owner, and IPLF-066 private-retrieval ownership. Add only an offline release evaluator and one content-minimised neutral feedback queue; no duplicate answer, citation, research, Draft, private index, analytics, notification, worker, or scheduler owner is introduced.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
@@ -15332,7 +15412,7 @@
       "source_kind": "derived",
       "scope_source": "IPLF-065",
       "primary_behavior": "User workflow, exceptions, and release proof",
-      "migration_boundary": "Additive expand/backfill/verify/switch boundary when persistence changes; otherwise explicitly no schema change.",
+      "migration_boundary": "Uses the additive IPLF-065A feedback queue and existing EvaluationRun/EvaluationCase tables. IPLF-065B adds no table, private index, answer/citation copy, analytics store, worker, scheduler, or domain writer.",
       "release_boundary": "Compatible slices may share one exact integrated candidate, CI matrix, staged rollout, rollback plan, and dated deployed acceptance; this row remains a traceability and activation unit, not a mandatory separate release.",
       "requirement_ids": [
         "AI-GUIDE-04",
@@ -15371,30 +15451,105 @@
       "dependencies": [
         "IPLF-065A"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-18-EXC-01",
-        "planned:IPLF-UJ-18-EXC-02",
-        "planned:IPLF-UJ-18-EXC-03",
-        "planned:IPLF-UJ-18-NORMAL",
-        "planned:IPLF-UJ-22-NORMAL",
-        "planned:IPLF-UJ-23-EXC-02",
-        "planned:IPLF-UJ-23-NORMAL"
+      "implementation_refs": [
+        "apps/web/components/ai/AIFeedbackControls.tsx",
+        "apps/web/components/guide/ProductGuideSearch.tsx",
+        "apps/web/components/assistant/WorkspaceAssistant.tsx",
+        "apps/web/app/app/admin/ai-feedback/page.tsx",
+        "apps/web/lib/api/ai-feedback.ts",
+        "apps/web/lib/api/openapi-types.ts",
+        "apps/api/src/caseops_api/api/routes/ai_feedback.py",
+        "apps/api/src/caseops_api/services/ai_feedback.py",
+        "apps/web/app/law-firms/page.tsx",
+        "playwright.prod-ram.config.ts"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "test_refs": [
+        "IPLF-UJ-18-EXC-01",
+        "IPLF-UJ-18-EXC-02",
+        "IPLF-UJ-18-EXC-03",
+        "IPLF-UJ-18-NORMAL",
+        "IPLF-UJ-22-NORMAL",
+        "IPLF-UJ-23-EXC-02",
+        "IPLF-UJ-23-NORMAL",
+        "apps/api/tests/test_ai_feedback.py",
+        "apps/api/tests/test_eval_ai_safety.py",
+        "apps/web/components/ai/AIFeedbackControls.test.tsx",
+        "apps/web/components/guide/ProductGuideSearch.test.tsx",
+        "apps/web/components/assistant/WorkspaceAssistant.test.tsx",
+        "apps/web/app/app/admin/ai-feedback/page.test.tsx",
+        "tests/e2e/iplf-065b-ai-safety-feedback-2026-08-30.spec.ts",
+        "tests/e2e/iplf-065b-ai-safety-feedback-2026-08-30-prod.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md",
+          "revision": "9f7c278d50dd3a2cb6a43b09f7a3d5e04647ec9e",
+          "environment": "Windows 11, exact committed API/web production Docker images, fresh PostgreSQL/Valkey volumes, desktop Chromium, and 360px viewport",
+          "fixtures": "current guide command, Product Guide rating and typed report, permission-aware result states, creator-private assistant answer, independent rating, bounded admin queue, optimistic review, terminal resolution, and cleanup",
+          "assertions": "rating/report independence, same-key retry behavior, current-target validation, creator privacy, tenant fencing, surface-specific authorization, redacted audits, admin capability, optimistic terminal review, responsive non-overflow, landing-page truth, exact runtime identity, and post-suite health",
+          "result": "passed",
+          "recorded_at": "2026-08-30T04:22:46.3545552+05:30"
+        }
+      ],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Merge the exact locally verified candidate, deploy migration-first, run the dated production feedback/admin journey and complete hosted regression batches, then mark deployment verified before starting IPLF-066A."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "The browser submits only server-owned/current catalog or assistant target references plus typed feedback. It never invents tenant scope and never copies prompt, answer, citation, source, document, or provider content.",
+        "Admin review updates only the IPLF-065A queue with optimistic concurrency. Resolved or dismissed feedback is terminal and cannot be silently reopened."
       ],
-      "documentation_impact": [],
-      "allocation_review": "2026-08-27 reciprocal AI-GUIDE review: owns citation/permission/abstention safety evaluation and governed answer/navigation/permission/citation feedback in addition to AI-REV evaluation. It does not own the help corpus, assistant session writer, action writer, private index, or analytics store.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
-      "release_status": "blocked"
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/AI_SAFETY_FEEDBACK_GOVERNANCE.md",
+          "disposition": "created",
+          "owner": "Engineering/Product/Security",
+          "evidence": "Workflow, queue, review, privacy, and release boundaries"
+        },
+        {
+          "artifact": "docs/ip-implementation/PRODUCT_GUIDE_FOUNDATION.md",
+          "disposition": "updated",
+          "owner": "Product/Engineering",
+          "evidence": "Independent governed rating/report controls without changing catalog ownership"
+        },
+        {
+          "artifact": "docs/ip-implementation/WORKSPACE_ASSISTANT_FOUNDATION.md",
+          "disposition": "updated",
+          "owner": "Product/Engineering/Security",
+          "evidence": "Creator-private assistant feedback and preserved session/action/private-retrieval boundaries"
+        },
+        {
+          "artifact": "docs/runbooks/ai-safety-eval-harness.md",
+          "disposition": "updated",
+          "owner": "Engineering/Security",
+          "evidence": "Release-gate command and failure interpretation"
+        },
+        {
+          "artifact": "apps/web/app/law-firms/page.tsx",
+          "disposition": "updated",
+          "owner": "Product/Marketing/Engineering",
+          "evidence": "Truthful governed-feedback and safety-release claims; unsupported productivity statistics removed"
+        },
+        {
+          "artifact": "apps/web/lib/api/openapi-types.ts",
+          "disposition": "generated",
+          "owner": "Engineering/API governance",
+          "evidence": "Canonical generated request, response, enum, and route contracts for all four feedback endpoints"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md",
+          "disposition": "created",
+          "owner": "Engineering/QA",
+          "evidence": "Exact committed local workflow, responsive, admin-review, and landing-page proof"
+        }
+      ],
+      "allocation_review": "2026-08-30 reciprocal and duplicate-work review: owns governed Product Guide/Assistant rating and reporting, bounded admin review, citation/permission/abstention safety evaluation, and release scoring. It extends the existing guide and assistant surfaces without owning the help corpus, assistant session/turn writer, intelligent-review writer, action writer, citation/source registry, private index, analytics store, notification, worker, or scheduler.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "ready_for_review"
     },
     {
       "id": "IPLF-066A",
@@ -23733,8 +23888,8 @@
         "docs/ip-implementation/evidence/m6/IPLF-062B/local-2026-08-27.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-061B",
@@ -23838,17 +23993,25 @@
         "UJ-22",
         "UJ-23"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-AI-GUIDE-10",
-        "planned:IPLF-UJ-22-EXC-01",
-        "planned:IPLF-UJ-22-EXC-02",
-        "planned:IPLF-UJ-22-NORMAL"
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ai_feedback.py",
+        "apps/api/src/caseops_api/api/routes/ai_feedback.py",
+        "apps/web/components/ai/AIFeedbackControls.tsx",
+        "apps/web/app/app/admin/ai-feedback/page.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ai_feedback.py",
+        "apps/web/components/ai/AIFeedbackControls.test.tsx",
+        "apps/web/components/guide/ProductGuideSearch.test.tsx",
+        "apps/web/components/assistant/WorkspaceAssistant.test.tsx",
+        "tests/e2e/iplf-065b-ai-safety-feedback-2026-08-30.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-065B"
@@ -23929,21 +24092,18 @@
         "docs/ip-implementation/INTELLIGENT_REVIEW_FOUNDATION.md"
       ],
       "test_refs": [
-        "planned:IPLF-REQ-AI-REV-01",
-        "planned:IPLF-UJ-18-EXC-01",
-        "planned:IPLF-UJ-18-EXC-02",
-        "planned:IPLF-UJ-18-EXC-03",
-        "planned:IPLF-UJ-18-NORMAL",
         "apps/api/tests/test_intelligent_reviews.py",
+        "apps/api/tests/test_eval_ai_safety.py",
         "tests/e2e/iplf-063b-intelligent-review-2026-08-28.spec.ts",
         "tests/e2e/iplf-063b-intelligent-review-2026-08-28-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md"
+        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-063B",
@@ -23965,21 +24125,18 @@
         "docs/ip-implementation/INTELLIGENT_REVIEW_FOUNDATION.md"
       ],
       "test_refs": [
-        "planned:IPLF-REQ-AI-REV-02",
-        "planned:IPLF-UJ-18-EXC-01",
-        "planned:IPLF-UJ-18-EXC-02",
-        "planned:IPLF-UJ-18-EXC-03",
-        "planned:IPLF-UJ-18-NORMAL",
         "apps/api/tests/test_intelligent_reviews.py",
+        "apps/api/tests/test_eval_ai_safety.py",
         "tests/e2e/iplf-063b-intelligent-review-2026-08-28.spec.ts",
         "tests/e2e/iplf-063b-intelligent-review-2026-08-28-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md"
+        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-063B",
@@ -24001,21 +24158,18 @@
         "docs/ip-implementation/INTELLIGENT_REVIEW_FOUNDATION.md"
       ],
       "test_refs": [
-        "planned:IPLF-REQ-AI-REV-03",
-        "planned:IPLF-UJ-18-EXC-01",
-        "planned:IPLF-UJ-18-EXC-02",
-        "planned:IPLF-UJ-18-EXC-03",
-        "planned:IPLF-UJ-18-NORMAL",
         "apps/api/tests/test_intelligent_reviews.py",
+        "apps/api/tests/test_eval_ai_safety.py",
         "tests/e2e/iplf-063b-intelligent-review-2026-08-28.spec.ts",
         "tests/e2e/iplf-063b-intelligent-review-2026-08-28-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md"
+        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-063B",
@@ -24037,21 +24191,18 @@
         "docs/ip-implementation/INTELLIGENT_REVIEW_FOUNDATION.md"
       ],
       "test_refs": [
-        "planned:IPLF-REQ-AI-REV-04",
-        "planned:IPLF-UJ-18-EXC-01",
-        "planned:IPLF-UJ-18-EXC-02",
-        "planned:IPLF-UJ-18-EXC-03",
-        "planned:IPLF-UJ-18-NORMAL",
         "apps/api/tests/test_intelligent_reviews.py",
+        "apps/api/tests/test_eval_ai_safety.py",
         "tests/e2e/iplf-063b-intelligent-review-2026-08-28.spec.ts",
         "tests/e2e/iplf-063b-intelligent-review-2026-08-28-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md"
+        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-063B",
@@ -24073,21 +24224,18 @@
         "docs/ip-implementation/INTELLIGENT_REVIEW_FOUNDATION.md"
       ],
       "test_refs": [
-        "planned:IPLF-REQ-AI-REV-05",
-        "planned:IPLF-UJ-18-EXC-01",
-        "planned:IPLF-UJ-18-EXC-02",
-        "planned:IPLF-UJ-18-EXC-03",
-        "planned:IPLF-UJ-18-NORMAL",
         "apps/api/tests/test_intelligent_reviews.py",
+        "apps/api/tests/test_eval_ai_safety.py",
         "tests/e2e/iplf-063b-intelligent-review-2026-08-28.spec.ts",
         "tests/e2e/iplf-063b-intelligent-review-2026-08-28-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md"
+        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-063B",
@@ -24109,21 +24257,18 @@
         "docs/ip-implementation/INTELLIGENT_REVIEW_FOUNDATION.md"
       ],
       "test_refs": [
-        "planned:IPLF-REQ-AI-REV-06",
-        "planned:IPLF-UJ-18-EXC-01",
-        "planned:IPLF-UJ-18-EXC-02",
-        "planned:IPLF-UJ-18-EXC-03",
-        "planned:IPLF-UJ-18-NORMAL",
         "apps/api/tests/test_intelligent_reviews.py",
+        "apps/api/tests/test_eval_ai_safety.py",
         "tests/e2e/iplf-063b-intelligent-review-2026-08-28.spec.ts",
         "tests/e2e/iplf-063b-intelligent-review-2026-08-28-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md"
+        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-063B",
@@ -24145,21 +24290,18 @@
         "docs/ip-implementation/INTELLIGENT_REVIEW_FOUNDATION.md"
       ],
       "test_refs": [
-        "planned:IPLF-REQ-AI-REV-07",
-        "planned:IPLF-UJ-18-EXC-01",
-        "planned:IPLF-UJ-18-EXC-02",
-        "planned:IPLF-UJ-18-EXC-03",
-        "planned:IPLF-UJ-18-NORMAL",
         "apps/api/tests/test_intelligent_reviews.py",
+        "apps/api/tests/test_eval_ai_safety.py",
         "tests/e2e/iplf-063b-intelligent-review-2026-08-28.spec.ts",
         "tests/e2e/iplf-063b-intelligent-review-2026-08-28-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md"
+        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-063B",
@@ -24181,21 +24323,18 @@
         "docs/ip-implementation/INTELLIGENT_REVIEW_FOUNDATION.md"
       ],
       "test_refs": [
-        "planned:IPLF-REQ-AI-REV-08",
-        "planned:IPLF-UJ-18-EXC-01",
-        "planned:IPLF-UJ-18-EXC-02",
-        "planned:IPLF-UJ-18-EXC-03",
-        "planned:IPLF-UJ-18-NORMAL",
         "apps/api/tests/test_intelligent_reviews.py",
+        "apps/api/tests/test_eval_ai_safety.py",
         "tests/e2e/iplf-063b-intelligent-review-2026-08-28.spec.ts",
         "tests/e2e/iplf-063b-intelligent-review-2026-08-28-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md"
+        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-063B",
@@ -24217,21 +24356,18 @@
         "docs/ip-implementation/INTELLIGENT_REVIEW_FOUNDATION.md"
       ],
       "test_refs": [
-        "planned:IPLF-REQ-AI-REV-09",
-        "planned:IPLF-UJ-18-EXC-01",
-        "planned:IPLF-UJ-18-EXC-02",
-        "planned:IPLF-UJ-18-EXC-03",
-        "planned:IPLF-UJ-18-NORMAL",
         "apps/api/tests/test_intelligent_reviews.py",
+        "apps/api/tests/test_eval_ai_safety.py",
         "tests/e2e/iplf-063b-intelligent-review-2026-08-28.spec.ts",
         "tests/e2e/iplf-063b-intelligent-review-2026-08-28-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md"
+        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-063B",
@@ -24253,21 +24389,18 @@
         "docs/ip-implementation/INTELLIGENT_REVIEW_FOUNDATION.md"
       ],
       "test_refs": [
-        "planned:IPLF-REQ-AI-REV-10",
-        "planned:IPLF-UJ-18-EXC-01",
-        "planned:IPLF-UJ-18-EXC-02",
-        "planned:IPLF-UJ-18-EXC-03",
-        "planned:IPLF-UJ-18-NORMAL",
         "apps/api/tests/test_intelligent_reviews.py",
+        "apps/api/tests/test_eval_ai_safety.py",
         "tests/e2e/iplf-063b-intelligent-review-2026-08-28.spec.ts",
         "tests/e2e/iplf-063b-intelligent-review-2026-08-28-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md"
+        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-063B",
@@ -41692,10 +41825,11 @@
         "tests/e2e/iplf-063b-intelligent-review-2026-08-28.spec.ts#IPLF-UJ-18-NORMAL"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md"
+        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-063B",
@@ -48317,10 +48451,11 @@
         "tests/e2e/iplf-063b-intelligent-review-2026-08-28-prod.spec.ts#IPLF-UJ-18-NORMAL"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md"
+        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-063B",
@@ -48352,10 +48487,11 @@
         "tests/e2e/iplf-063b-intelligent-review-2026-08-28.spec.ts#IPLF-UJ-18-EXC-01"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md"
+        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-063B",
@@ -48387,10 +48523,11 @@
         "tests/e2e/iplf-063b-intelligent-review-2026-08-28.spec.ts#IPLF-UJ-18-EXC-02"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md"
+        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-063B",
@@ -48422,10 +48559,11 @@
         "tests/e2e/iplf-063b-intelligent-review-2026-08-28.spec.ts#IPLF-UJ-18-EXC-03"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md"
+        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-063B",

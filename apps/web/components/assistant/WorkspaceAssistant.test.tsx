@@ -142,6 +142,8 @@ describe("WorkspaceAssistant", () => {
     await user.click(screen.getByRole("button", { name: "Ask" }));
 
     expect(await screen.findByText("The matter is Active.")).toBeVisible();
+    expect(screen.getByTestId("workspace-assistant-feedback-turn-2")).toBeVisible();
+    expect(screen.queryByTestId("workspace-assistant-feedback-turn-1")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /TM-42 · Aster mark/ })).toHaveAttribute(
       "href",
       "/app/matters/matter-1",

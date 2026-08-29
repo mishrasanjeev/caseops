@@ -95,7 +95,7 @@ This document enumerates the work needed to close these gaps, in priority order,
 | Phase 18 | `08d8c8e` | Sprint J wrap: `services/file_security.verify_upload` with extension whitelist + declared-content-type coherence + magic-byte signature check, wired into matter and contract attachment services, fixtures tightened to carry real PDF/PNG magic; OpenAPI completeness lint that walks `application.openapi()` and fails CI on any /api route without summary / tag / response | Section 6.3, Section 6.5 |
 | Phase 19 | *this session* | Thread A (bail draft quality): `caseops-extract-authority-metadata` CLI backfilled `neutral_citation` / `case_reference` / `bench_name` across 2 408 of 2 436 corpus rows; `services/drafting._build_messages` hardened with ABSOLUTE RULES (no invented facts -> `[____]` placeholders; BNS vs BNSS statute guidance; authorities emitted by `neutral_citation` or `case_reference`, never UUID); `services/draft_validators` with `check_statute_confusion` / `check_uuid_leakage` / `check_citation_coverage`, findings appended to `DraftVersion.summary`; multi-query retrieval via `_retrieve_for_draft` with bail / anticipatory-bail / quashing seed packs; `_verify_version_citations` now matches `case_reference` too; `GET /api/admin/audit/export?format=csv` toggle; Alembic migration-order lint in `tests/test_migration_order.py`; `tests/conftest.py` forces `CASEOPS_LLM_PROVIDER=mock` so the suite never hits live Haiku | Section 4.2 (metadata), Section 4.3 (quality), Section 7.3 (model-run depth), Section 8.4 (lint), Section 10.4 (CSV) |
 
-**All P0 items closed. Sprints H and J complete (Phases 15-18).** Phase 19 extended the draft-quality loop and closed doc drift between the ladder and Section 2-Section 7. Remaining P1 spine: Section 5.1 non-notification workflow porting, Section 5.2 Grantex, Section 5.3 external-provider notification channels, Section 5.7 teams, Section 6.5 OpenAPI TS-client gen (lint already live), Section 7.2 generic Task/Deadline, Section 7.3 EvaluationRun harness (table still pending), Section 7.4 Statute/Section, Section 8.1 OTEL, Section 8.2 structured logs, Section 8.3 backups, Section 8.4 CI/CD image push + deploy, Section 8.5 secret management, Section 9.1 broader parsers, Section 9.2 structural extraction, Section 9.3 virus scanning. Section 4.2 remaining: cross-encoder reranker, per-tenant annotation overlay, matter-attachment embeddings, live-PG integration tests. P2: Section 10 admin console, Section 11 test coverage expansion, Section 12 court integrations.
+**All P0 items closed. Sprints H and J complete (Phases 15-18).** Phase 19 extended the draft-quality loop and closed doc drift between the ladder and Section 2-Section 7. This historical snapshot predates later P1 deliveries; current status is maintained in the detailed sections and program manifest. `EvaluationRun`/`EvaluationCase`, the deterministic WTD-11.4 safety release gate, OpenTelemetry, structured logging, generated OpenAPI types, and Teams are implemented and must not be treated as pending from this snapshot.
 
 ### 1.2 Authority corpus  - vector embedding status
 
@@ -620,11 +620,16 @@ Beyond what Section 4 and Section 5 add.
   - Generic `Task` with `assignee`, `due_on`, `status`, `source` (hearing, draft review, intake, contract obligation).
   - Deadline reminders wired to notification service.
 
-### 7.3 Model runs and evaluation  - **PARTIAL (Phase 4A, 2026-04-17, `ee158f7`)**
+### 7.3 Model runs and evaluation  - **IMPLEMENTED foundation**
 
 - **Traces to:** PRD Section 12.7, Section 17.4; `db/models.py::ModelRun`.
-- **Landed:** `ModelRun` records every LLM call (provider, model id, prompt hash, input/output tokens, latency, tenant, matter, parent recommendation, citation-verification outcome). Wired through `services/llm.py` for all recommendation and draft paths.
-- **Remaining:** `EvaluationRun` table + benchmark harness (citation accuracy, hallucination rate, extraction accuracy); admin UI to gate a new model version behind a passing evaluation; cost rollup per tenant.
+- **Landed:** `ModelRun` records governed LLM calls; `EvaluationRun` and
+  `EvaluationCase` own benchmark results; citation and drafting evaluators use
+  those canonical tables; and WTD-11.4 adds the deterministic, redacted
+  per-workflow safety release gate with optional canonical persistence.
+- **Remaining product depth:** an admin model-promotion UI and consolidated
+  per-tenant AI cost rollup. These do not make the evaluation tables or safety
+  harness pending.
 
 ### 7.4 Statute, Section, Issue, Relief
 
@@ -752,25 +757,29 @@ Beyond what Section 4 and Section 5 add.
 - **Traces to:** PRD Section 19.4
 - **Done when:** All scenarios from PRD Section 19.4 covered (issue, expiry, revocation, out-of-scope, unauthorized tool, approval block, audit record, budget enforcement).
 
-### 11.4 WTD-11.4 AI safety tests -- PARTIAL foundation
+### 11.4 WTD-11.4 AI safety tests -- IMPLEMENTED
 
 - **Traces to:** PRD Section 19.6
-- **Foundation landed:** Offline fixture-only harness
-  `caseops-eval-ai-safety` evaluates checked-in JSON goldens and already
-  generated outputs without live LLM calls, production data, corpus jobs, or
-  Temporal. It emits machine-readable JSON and blocks missing/invalid sources,
-  copied prompt injection, directive legal-advice wording, guaranteed
-  outcome/win-probability/judge-reputation wording, and emotion/biometric/
-  psychological/mental-health/voice/lie-detection scoring.
+- **Landed:** The offline `caseops-eval-ai-safety --release-gate` evaluates
+  checked-in goldens and already-generated outputs without live LLM calls,
+  production data, corpus jobs, or Temporal. It requires complete coverage for
+  drafting, citation validation, Matter File Q&A, recommendations, Litigation
+  Strategy, hearing packs, Ask this Workspace, and intelligent review.
+- **Blocking rules:** citation entailment, source access and verification,
+  authority relevance, contrary authority, abstention, permissions, prompt
+  injection, prohibited outputs, statute confusion, fact fabrication, and data
+  exfiltration. The machine output is redacted and may use the existing
+  `EvaluationRun`/`EvaluationCase` persistence owner.
+- **CI gate:** the deterministic release suite is a required API CI step. An
+  incomplete legacy fixture, a missing required surface/rule, or any failed
+  case exits non-zero.
 - **Evidence:** `apps/api/src/caseops_api/scripts/eval_ai_safety.py`,
   `apps/api/tests/fixtures/ai_safety_eval/`,
-  `apps/api/tests/test_eval_ai_safety.py`, and
+  `apps/api/tests/test_eval_ai_safety.py`, `.github/workflows/ci.yml`, and
   `docs/runbooks/ai-safety-eval-harness.md`.
-- **Remaining done when:** per-workflow golden coverage spans drafting,
-  citation validity, statute confusion, fact fabrication, Matter File Q&A,
-  recommendations, Litigation Strategy, hearing packs, prompt-injection
-  resistance, data-exfiltration red-team cases, and CI gating for model or
-  prompt changes.
+- **Release boundary:** exact deployed acceptance, independent legal review,
+  and any future live-provider benchmark are release/UAT approvals, not missing
+  WTD-11.4 repository implementation.
 
 ### 11.5 Payment tests
 
@@ -857,7 +866,7 @@ These are explicitly deferred by PRD Section 20.5.
 | Section 18.3 Backup/restore | Implicit | Documented + drilled | Section 8.3 |
 | Section 19.3 Tenant leakage tests | Absent | Present | Section 11.1 |
 | Section 19.4 Grantex tests | Absent | Present | Section 11.3 |
-| Section 19.6 AI safety tests | Partial foundation | Full per-workflow CI gate | Section 11.4 |
+| Section 19.6 AI safety tests | Implemented | Deterministic per-workflow CI release gate | Section 11.4 |
 
 ---
 
@@ -876,8 +885,8 @@ Sprints A-F (security, frontend spine, AI core, drafting v1) all **shipped**  - 
 5. Durable notifications / Temporal: `WTD-5.1c` and `WTD-5.3` are landed for
    the notification foundation; next work remains provider-specific approval
    and ADP-20+ implementation, not Outlook sync in this slice.
-6. AI eval harness: expand the `WTD-11.4` offline foundation into
-   per-workflow goldens and CI-gated evaluation for model or prompt changes.
+6. AI eval harness: `WTD-11.4` is implemented; retain the deterministic
+   release gate and require separate approval for any live-provider benchmark.
 
 Older planning context:
 

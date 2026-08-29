@@ -167,6 +167,32 @@
       "payload_schema": {"required": ["taxonomy_version", "alias_set_hash", "imported_count", "unchanged_count"]}
     },
     {
+      "name": "ai.feedback.submitted",
+      "version": 1,
+      "owner": "drafting-ai",
+      "scope": "company",
+      "envelope": "company_audit_v1",
+      "emission_status": "runtime_emitted",
+      "confidentiality": "confidential",
+      "idempotency_key": "company_id:target_id",
+      "consumers": ["audit-evidence", "ai-governance-review"],
+      "retention": "operational feedback and company audit retention policy",
+      "payload_schema": {"required": ["surface", "feedback_type", "priority"]}
+    },
+    {
+      "name": "ai.feedback.reviewed",
+      "version": 1,
+      "owner": "drafting-ai",
+      "scope": "company",
+      "envelope": "company_audit_v1",
+      "emission_status": "runtime_emitted",
+      "confidentiality": "confidential",
+      "idempotency_key": "company_id:target_id:occurred_at",
+      "consumers": ["audit-evidence", "ai-governance-review"],
+      "retention": "operational feedback and company audit retention policy",
+      "payload_schema": {"required": ["surface", "status"]}
+    },
+    {
       "name": "tenant_ai_policy.updated",
       "version": 1,
       "owner": "drafting-ai",

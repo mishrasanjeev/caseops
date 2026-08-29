@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from caseops_api.api.routes import (
     admin,
     ai,
+    ai_feedback,
     auth,
     authorities,
     billing,
@@ -98,6 +99,16 @@ api_router.include_router(
 api_router.include_router(case_tracking.router, prefix="/case-tracking", tags=["case-tracking"])
 api_router.include_router(cause_lists.router, prefix="/cause-lists", tags=["cause-lists"])
 api_router.include_router(ai.router, prefix="/ai", tags=["ai"])
+api_router.include_router(
+    ai_feedback.router,
+    prefix="/ai-feedback",
+    tags=["ai-feedback"],
+)
+api_router.include_router(
+    ai_feedback.admin_router,
+    prefix="/admin",
+    tags=["ai-feedback-admin"],
+)
 api_router.include_router(
     workspace_assistant.router,
     prefix="/workspace-assistant",
