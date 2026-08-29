@@ -218,10 +218,10 @@ gcloud run jobs execute caseops-db-index-health \
   --region "${REGION}" --project "${PROJECT}" --wait --quiet
 echo "  database index health completed."
 
-if [[ "${A0_CAPTURE_RULE_GOVERNANCE_BASELINE}" == "true" ]]; then
-  echo "--- IPLF-027B A0 final pre-route quiescence baseline ---"
-  # This manually invokable writer-era job is not part of recurring inventory.
-  # Pin it without execution before establishing the no-writer baseline.
+# This manually invokable release fixture is not part of recurring inventory.
+# Every release pins it to the immutable candidate without execution before
+# traffic moves; the post-deploy production workflow executes it exactly once.
+echo "--- production QA bootstrap immutable repin (no execution) ---"
   A0_QA_JOB_BEFORE=""
   A0_QA_JOB_AFTER=""
   A0_BASELINE_TEMP=""
@@ -337,6 +337,8 @@ PY
   A0_QA_JOB_BEFORE=""
   A0_QA_JOB_AFTER=""
 
+if [[ "${A0_CAPTURE_RULE_GOVERNANCE_BASELINE}" == "true" ]]; then
+  echo "--- IPLF-027B A0 final pre-route quiescence baseline ---"
   NONTERMINAL_EXECUTIONS=$(gcloud run jobs executions list \
     --region "${REGION}" \
     --project "${PROJECT}" \

@@ -49,8 +49,14 @@ async def create_intelligent_review(
     session: DbSession,
 ) -> IntelligentReviewRecord:
     review = enqueue_intelligent_review(session, context=context, payload=payload)
-    background_tasks.add_task(run_intelligent_review_job, review.id)
-    return serialize_intelligent_review(session, review=review)
+    review_id = review.id
+    record = serialize_intelligent_review(session, review=review)
+    # Starlette runs BackgroundTasks before FastAPI closes yielded request
+    # dependencies. End the serialization read transaction before a model call
+    # that can legitimately outlive PostgreSQL's idle-transaction boundary.
+    session.rollback()
+    background_tasks.add_task(run_intelligent_review_job, review_id)
+    return record
 
 
 @router.get(

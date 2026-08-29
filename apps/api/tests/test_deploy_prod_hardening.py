@@ -808,6 +808,7 @@ def _run_deploy_with_fakes(
     a0_mode: str | None = None,
     gh_mode: str = "ok",
     index_health_mode: str = "ok",
+    qa_execution_drift: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir()
@@ -1071,7 +1072,9 @@ exec "${FAKE_REAL_PYTHON}" "$@"
             "FAKE_QA_AFTER_JSON": _a0_qa_job_json(
                 immutable_image,
                 5,
-                execution_count=10 if a0_mode == "qa-executed" else 9,
+                execution_count=(
+                    10 if a0_mode == "qa-executed" or qa_execution_drift else 9
+                ),
             ),
             "FAKE_QA_BEFORE_JSON": _a0_qa_job_json(
                 "registry.invalid/caseops-api:old",
@@ -1200,14 +1203,38 @@ def test_deploy_prod_accepts_clean_head_and_healthy_api(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
     assert "DONE abcdef1" in result.stdout
     assert (tmp_path / "gcloud.log").is_file()
-    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8")
-    assert calls.index("run jobs execute caseops-db-index-health") < calls.index(
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+
+    def call_index(fragment: str) -> int:
+        return next(index for index, call in enumerate(calls) if fragment in call)
+
+    assert call_index("run jobs execute caseops-db-index-health") < call_index(
+        "run jobs update caseops-ip-qa-bootstrap"
+    )
+    assert call_index("run jobs update caseops-ip-qa-bootstrap") < call_index(
         "run deploy caseops-api"
     )
+    assert not any("run jobs execute caseops-ip-qa-bootstrap" in call for call in calls)
     assert (
         "gh workflow run prod-verify.yml --repo mishrasanjeev/caseops --ref main "
         "-f expected_release_sha=abcdef1234567890abcdef1234567890abcdef12"
-    ) in calls
+    ) in "\n".join(calls)
+
+
+def test_deploy_prod_fails_before_routing_if_qa_repin_executes_the_job(
+    tmp_path: Path,
+) -> None:
+    result = _run_deploy_with_fakes(
+        tmp_path,
+        "abcdef1",
+        qa_execution_drift=True,
+    )
+
+    assert result.returncode != 0, result.stdout + result.stderr
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8")
+    assert "run jobs update caseops-ip-qa-bootstrap" in calls
+    assert "run deploy caseops-api" not in calls
+    assert "DONE abcdef1" not in result.stdout
 
 
 def test_deploy_prod_fails_if_exact_release_verification_cannot_be_dispatched(

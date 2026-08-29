@@ -80,16 +80,19 @@ def test_unset_purpose_falls_back_to_global_model(
     assert build_provider(purpose=PURPOSE_EVAL).model == "default-only"
 
 
-def test_drafting_gets_its_larger_max_tokens_ceiling(
+def test_each_structured_purpose_gets_its_configured_max_tokens_ceiling(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Defaults: drafting 8192, hearing-pack 4096, global 2048.
+    # Production recommendations need visible-output headroom after hidden
+    # reasoning tokens; the purpose-specific setting must not fall through to
+    # the much smaller global default.
     monkeypatch.setenv("CASEOPS_LLM_MAX_OUTPUT_TOKENS", "2048")
+    monkeypatch.setenv("CASEOPS_LLM_MAX_OUTPUT_TOKENS_RECOMMENDATIONS", "16384")
     _clear_cache()
 
     assert max_tokens_for_purpose(PURPOSE_DRAFTING) == 8192
     assert max_tokens_for_purpose(PURPOSE_HEARING_PACK) == 4096
-    assert max_tokens_for_purpose(PURPOSE_RECOMMENDATIONS) == 2048
+    assert max_tokens_for_purpose(PURPOSE_RECOMMENDATIONS) == 16384
     assert max_tokens_for_purpose(None) == 2048
 
 

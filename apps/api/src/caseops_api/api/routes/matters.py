@@ -2656,6 +2656,7 @@ async def post_current_company_matter_attachment(
         linked_court_order_id=linked_court_order_id,
         hearing_id=hearing_id,
     )
+    session.rollback()
     background_tasks.add_task(run_document_processing_job, job_id)
     return attachment
 
@@ -2700,6 +2701,7 @@ async def retry_current_company_matter_attachment_processing(
         attachment_id=attachment_id,
         action="retry",
     )
+    session.rollback()
     background_tasks.add_task(run_document_processing_job, job_id)
     return attachment
 
@@ -2723,6 +2725,7 @@ async def reindex_current_company_matter_attachment(
         attachment_id=attachment_id,
         action="reindex",
     )
+    session.rollback()
     background_tasks.add_task(run_document_processing_job, job_id)
     return attachment
 
