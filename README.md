@@ -2,6 +2,10 @@
 
 **The matter-native legal operating system for Indian law firms and corporate legal teams.**
 
+CaseOps is owned by **Orchestrum Technologies LLP**. **Sanjeev Kumar** is the
+Inventor/Owner. Owner contact: [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in)
+and [mishra.sanjeev@gmail.com](mailto:mishra.sanjeev@gmail.com).
+
 CaseOps unifies legal intake and optional conflict review, matter management, notice and reply-deadline
 tracking, legal research, AI-assisted drafting, hearing preparation, tracked case refresh,
 court-order compliance review, date-wise cause-list PDFs, contract workflows,

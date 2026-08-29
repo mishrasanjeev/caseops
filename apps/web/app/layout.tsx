@@ -28,16 +28,25 @@ import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
+import { ProductOwnershipNotice } from "@/components/legal/ProductOwnershipNotice";
 
 import "./globals.css";
 
 const organizationJsonLd = {
   "@context": "https://schema.org",
   "@type": "Organization",
-  name: siteConfig.name,
+  name: siteConfig.ownership.legalOwner,
+  legalName: siteConfig.ownership.legalOwner,
+  alternateName: siteConfig.name,
   url: siteConfig.url,
   logo: `${siteConfig.url}/icon`,
-  email: siteConfig.contact.email,
+  email: [...siteConfig.ownership.emails],
+  brand: { "@type": "Brand", name: siteConfig.name },
+  contactPoint: siteConfig.ownership.emails.map((email) => ({
+    "@type": "ContactPoint",
+    contactType: "owner",
+    email,
+  })),
   sameAs: [],
   foundingDate: "2026",
   areaServed: { "@type": "Country", name: "India" },
@@ -51,6 +60,20 @@ const softwareJsonLd = {
   applicationSubCategory: "Legal Software",
   operatingSystem: "Web",
   description: siteConfig.description,
+  creator: {
+    "@type": "Person",
+    name: siteConfig.ownership.inventorOwner,
+    email: [...siteConfig.ownership.emails],
+    jobTitle: "Inventor and Owner",
+  },
+  publisher: {
+    "@type": "Organization",
+    name: siteConfig.ownership.legalOwner,
+  },
+  copyrightHolder: {
+    "@type": "Organization",
+    name: siteConfig.ownership.legalOwner,
+  },
   offers: {
     "@type": "AggregateOffer",
     priceCurrency: "INR",
@@ -86,7 +109,7 @@ const websiteJsonLd = {
   url: siteConfig.url,
   description: siteConfig.description,
   inLanguage: "en",
-  publisher: { "@type": "Organization", name: siteConfig.name },
+  publisher: { "@type": "Organization", name: siteConfig.ownership.legalOwner },
 };
 
 export const metadata: Metadata = {
@@ -98,9 +121,17 @@ export const metadata: Metadata = {
   description: siteConfig.description,
   keywords: [...siteConfig.keywords],
   applicationName: siteConfig.name,
-  authors: [{ name: siteConfig.author }],
+  authors: [
+    { name: siteConfig.ownership.inventorOwner },
+    { name: siteConfig.ownership.legalOwner },
+  ],
   creator: siteConfig.author,
-  publisher: siteConfig.author,
+  publisher: siteConfig.publisher,
+  other: {
+    "product-owner": siteConfig.ownership.legalOwner,
+    "inventor-owner": siteConfig.ownership.inventorOwner,
+    "owner-contact": siteConfig.ownership.emails.join(", "),
+  },
   category: "technology",
   alternates: {
     canonical: "/",
@@ -168,6 +199,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
         />
         {children}
+        <ProductOwnershipNotice />
         <GoogleAnalytics nonce={nonce} />
       </body>
     </html>

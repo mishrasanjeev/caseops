@@ -10,6 +10,12 @@ const body = `# CaseOps - Indian Legal Operating System
 
 ${siteConfig.description}
 
+## Ownership
+
+- Product owner: ${siteConfig.ownership.legalOwner}
+- Inventor/Owner: ${siteConfig.ownership.inventorOwner}
+- Owner emails: ${siteConfig.ownership.emails.join(", ")}
+
 ## What CaseOps is
 
 CaseOps is a matter-native legal operating system built for Indian legal practice, not a generic workflow tool or a retrofitted US-first product. The system is organized around matters, tenants, source-backed legal work, and auditable review.
@@ -204,7 +210,8 @@ Every public claim is classified as one of: live, review-first, provider-gated, 
 ## Contact
 
 - Demo requests: ${siteConfig.url}
-- Direct: ${siteConfig.contact.email}
+- Direct: ${siteConfig.ownership.emails[0]}
+- Alternate: ${siteConfig.ownership.emails[1]}
 `;
 
 export function GET() {

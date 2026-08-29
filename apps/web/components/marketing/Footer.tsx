@@ -5,7 +5,6 @@ import { Logo } from "./Logo";
 
 export function Footer() {
   const groups = Object.entries(siteConfig.nav.footer);
-  const showFounder = siteConfig.contact.founder !== siteConfig.contact.email;
 
   return (
     <footer className="border-t border-[var(--color-line)] bg-white py-14">
@@ -18,25 +17,27 @@ export function Footer() {
             </p>
             <div className="mt-4 space-y-1 text-sm">
               <div>
-                <span className="text-[var(--color-mute-2)]">Contact · </span>
+                <span className="text-[var(--color-mute-2)]">Owner contact · </span>
                 <a
-                  href={`mailto:${siteConfig.contact.email}`}
+                  href={`mailto:${siteConfig.ownership.emails[0]}`}
                   className="font-medium text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
                 >
-                  {siteConfig.contact.email}
+                  {siteConfig.ownership.emails[0]}
                 </a>
               </div>
-              {showFounder ? (
-                <div>
-                  <span className="text-[var(--color-mute-2)]">Founder · </span>
-                  <a
-                    href={`mailto:${siteConfig.contact.founder}`}
-                    className="font-medium text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
-                  >
-                    {siteConfig.contact.founder}
-                  </a>
-                </div>
-              ) : null}
+              <div>
+                <span className="text-[var(--color-mute-2)]">Alternate · </span>
+                <a
+                  href={`mailto:${siteConfig.ownership.emails[1]}`}
+                  className="font-medium text-[var(--color-ink-2)] hover:text-[var(--color-ink)]"
+                >
+                  {siteConfig.ownership.emails[1]}
+                </a>
+              </div>
+              <p className="pt-2 text-[var(--color-mute)]">
+                Owned by {siteConfig.ownership.legalOwner}. Inventor/Owner:{" "}
+                {siteConfig.ownership.inventorOwner}.
+              </p>
             </div>
           </div>
 
@@ -63,7 +64,8 @@ export function Footer() {
 
         <div className="mt-12 flex flex-col items-start justify-between gap-4 border-t border-[var(--color-line)] pt-6 text-xs text-[var(--color-mute-2)] md:flex-row md:items-center">
           <span>
-            © {new Date().getFullYear()} {siteConfig.name}. All rights reserved.
+            © {new Date().getFullYear()} {siteConfig.ownership.legalOwner}. All rights
+            reserved.
           </span>
           <span>Designed for dense, professional legal workflows.</span>
         </div>

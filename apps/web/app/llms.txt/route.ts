@@ -13,6 +13,8 @@ const body = `# CaseOps - Indian legal operating system
 - Home: ${siteConfig.url}
 - User guide: ${siteConfig.url}/guide
 - Tagline: ${siteConfig.tagline}
+- Product owner: ${siteConfig.ownership.legalOwner}
+- Inventor/Owner: ${siteConfig.ownership.inventorOwner}
 - Primary jurisdictions: Supreme Court of India, High Courts, lower courts, tribunals, and forums where lawful source access and source-quality proof exist
 - Built around Indian statute names (BNS, BNSS, BSA, CrPC, CPC) - not retrofitted from a US product
 - Grounding: every substantive legal answer is backed by a citation from an indexed authority or source document; no fabricated case law
@@ -49,7 +51,8 @@ const body = `# CaseOps - Indian legal operating system
 
 ## Contact
 
-- ${siteConfig.contact.email}
+- ${siteConfig.ownership.emails[0]}
+- ${siteConfig.ownership.emails[1]}
 - Sign-in / try the product: ${siteConfig.url}/sign-in
 - Forgot password: ${siteConfig.url}/account/forgot-password
 `;

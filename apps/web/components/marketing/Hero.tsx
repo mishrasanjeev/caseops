@@ -3,6 +3,7 @@ import { ArrowRight, CheckCircle2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
+import { siteConfig } from "@/lib/site";
 
 const proofPoints = [
   "Citation-grounded AI",
@@ -37,6 +38,11 @@ export function Hero() {
           court-order compliance item, cause-list PDF, drafting pass, hearing, contract,
           invoice, and review queue from one matter-graph workspace. Grounded in statutes,
           orders, affidavits, judgments, and your own precedents - never guesses.
+        </p>
+
+        <p className="mt-5 text-sm font-medium text-[var(--color-ink-2)]">
+          Owned by {siteConfig.ownership.legalOwner} · Inventor/Owner:{" "}
+          {siteConfig.ownership.inventorOwner}
         </p>
 
         <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row">

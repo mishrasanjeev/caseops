@@ -27,14 +27,21 @@ export const siteConfig = {
     "legal AI India",
     "case management software",
   ],
-  author: "CaseOps",
+  author: "Sanjeev Kumar",
+  publisher: "Orchestrum Technologies LLP",
+  ownership: {
+    legalOwner: "Orchestrum Technologies LLP",
+    inventorOwner: "Sanjeev Kumar",
+    emails: ["sanjeev@orchestrum.in", "mishra.sanjeev@gmail.com"],
+  },
   twitter: "@caseops",
   locale: "en_IN",
   contact: {
-    email: "mishra.sanjeev@gmail.com",
-    sales: "mishra.sanjeev@gmail.com",
+    email: "sanjeev@orchestrum.in",
+    sales: "sanjeev@orchestrum.in",
     support: "support@caseops.ai",
-    founder: "mishra.sanjeev@gmail.com",
+    founder: "sanjeev@orchestrum.in",
+    alternateOwner: "mishra.sanjeev@gmail.com",
   },
   nav: {
     primary: [
@@ -61,7 +68,7 @@ export const siteConfig = {
         { label: "For general counsels", href: "/general-counsels" },
         { label: "For solo lawyers", href: "/solo-lawyers" },
         { label: "User guide", href: "/guide" },
-        { label: "Contact", href: "mailto:mishra.sanjeev@gmail.com" },
+        { label: "Contact", href: "mailto:sanjeev@orchestrum.in" },
       ],
       Trust: [
         { label: "Security", href: "/#security" },
