@@ -4528,7 +4528,7 @@
           "revision": "f07cbfa26903b07c3f5878703a43534be2a1c28b",
           "environment": "local API/web, exact-head CI with PostgreSQL 17 and app Playwright, plus Google Cloud production migration/jobs/services and exact-serving tracked-case production Playwright",
           "fixtures": "tagged notification-disabled QA bookmark, exact and stale release SHAs, costed provider snapshot/order, untagged bookmark, and 360px case-tracking surface",
-          "assertions": "one serialized provider canary per company/exact release, cost/audit/correlation persistence, tagged-fixture authorization, freshness and provider health, protected source download, API/web release equality, exact serving checkout, visible narrow-screen controls, and no overflow",
+          "assertions": "one serialized release-evidence canary per company/exact release, tagged-fixture authorization, explicit live-provider or hash-verified stored-evidence mode, truthful external-call/cost/freshness/provider-health state, corrupt-cache rejection, protected source download, API/web release equality, exact serving checkout, visible narrow-screen controls, and no overflow",
           "result": "passed",
           "recorded_at": "2026-08-06T06:50:00+05:30"
         }
@@ -4538,7 +4538,7 @@
         "Continue dependency-ready implementation; completion requires automated checks and exact-release evidence, with affected live operations remaining fail-closed until their machine conditions pass."
       ],
       "data_impact": [
-        "No schema migration or backfill; the exact-release canary reuses existing bookmark, operation/snapshot, cost, update/source, and audit owners and may create one notification-disabled tagged QA bookmark."
+        "No schema migration or backfill; the exact-release canary reuses existing bookmark, operation/snapshot, cost, update/source, and audit owners and may create one notification-disabled tagged QA bookmark. After a successful provider snapshot exists, each release records a zero-cost verified-evidence operation without mutating provider health or freshness; live provider work remains independently monitored."
       ],
       "documentation_impact": [
         {

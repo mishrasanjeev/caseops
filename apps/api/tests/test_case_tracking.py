@@ -457,6 +457,87 @@ def test_ecourts_provider_uses_partner_paths_and_normalizes_payloads() -> None:
     assert requests[2].url.path == "/api/partner/case/bulk-refresh"
 
 
+def test_ecourts_provider_classifies_payment_required_without_exposing_body() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            402,
+            request=request,
+            json={"internal_billing_message": "provider account balance exhausted"},
+        )
+
+    provider = EcourtsIndiaApiProvider(
+        base_url="https://webapi.ecourtsindia.com",
+        token="test-token",
+        transport=httpx.MockTransport(handler),
+    )
+
+    with pytest.raises(CaseTrackingProviderError) as raised:
+        provider.get_case_by_cnr(cnr="DLHC010012342026")
+
+    assert str(raised.value) == "Case tracking provider refresh failed."
+    assert raised.value.response_class == "rate_limit"
+    assert raised.value.http_status_code == 402
+    assert "balance" not in str(raised.value)
+
+    bulk = provider.refresh_cases(cnrs=["DLHC010012342026"])
+    assert bulk.snapshots == []
+    assert bulk.errors == {
+        "DLHC010012342026": "Case tracking provider bulk refresh failed. [rate_limit]"
+    }
+
+
+def test_payment_required_persists_rate_limit_provider_health(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            402,
+            request=request,
+            json={"internal_billing_message": "provider account balance exhausted"},
+        )
+
+    provider = EcourtsIndiaApiProvider(
+        base_url="https://webapi.ecourtsindia.com",
+        token="test-token",
+        transport=httpx.MockTransport(handler),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.case_tracking.get_case_tracking_provider",
+        lambda: provider,
+    )
+    token = _bootstrap(client)
+    created = client.post(
+        "/api/case-tracking/bookmarks",
+        headers=auth_headers(token),
+        json={
+            "provider": "ecourtsindia",
+            "cnr_number": "DLHC010012342026",
+            "court_code": "DLHC",
+            "court_name": "Delhi High Court",
+            "case_title": "Payment boundary fixture",
+        },
+    )
+    assert created.status_code == 201, created.text
+
+    refresh = client.post(
+        f"/api/case-tracking/bookmarks/{created.json()['id']}/refresh",
+        headers=auth_headers(token),
+    )
+    assert refresh.status_code == 502
+    assert "balance" not in refresh.text
+
+    with get_session_factory()() as session:
+        operation = session.scalar(select(TrackedCaseProviderOperation))
+        tracked_case = session.scalar(select(TrackedCase))
+        assert operation is not None
+        assert tracked_case is not None
+        assert operation.response_class == "rate_limit"
+        assert tracked_case.last_response_class == "rate_limit"
+        assert tracked_case.provider_freshness_status == "never_succeeded"
+        assert "balance" not in (operation.error_redacted or "")
+
+
 def test_case_tracking_search_bookmark_update_and_archive(
     client: TestClient,
     monkeypatch,
@@ -646,7 +727,7 @@ def test_case_tracking_refresh_detects_order_and_enqueues_in_app_idempotently(
         assert intents[0].event_type == "case_tracking.new_order"
 
 
-def test_exact_release_smoke_is_qa_only_costed_and_idempotent(
+def test_exact_release_smoke_is_qa_only_idempotent_and_reuses_verified_evidence(
     client: TestClient,
     monkeypatch,
 ) -> None:
@@ -690,6 +771,10 @@ def test_exact_release_smoke_is_qa_only_costed_and_idempotent(
     body = first.json()
     assert body["release_sha"] == release_sha
     assert body["response_class"] == "success"
+    assert body["evidence_mode"] == "live_provider"
+    assert body["provider_call_performed"] is True
+    assert body["provider_evidence_operation_id"] == body["operation_id"]
+    assert body["provider_evidence_age_seconds"] >= 0
     assert body["reused"] is False
     assert body["bookmark"]["tracked_case"]["freshness_status"] == "fresh"
     assert body["bookmark"]["tracked_case"]["last_provider_successful_at"]
@@ -708,10 +793,67 @@ def test_exact_release_smoke_is_qa_only_costed_and_idempotent(
     assert second.json()["operation_id"] == body["operation_id"]
     assert provider.refresh_calls == ["DLHC010012342026"]
 
+    cached_release_sha = "b" * 40
+    monkeypatch.setenv("CASEOPS_RELEASE_SHA", cached_release_sha)
+    get_settings.cache_clear()
+    with get_session_factory()() as session:
+        tracked_case = session.scalar(select(TrackedCase))
+        assert tracked_case is not None
+        tracked_case.last_response_class = "rate_limit"
+        tracked_case.last_error = "Provider quota requires operator attention."
+        tracked_case.provider_freshness_status = "stale"
+        session.commit()
+
+    cached = client.post(
+        f"/api/case-tracking/bookmarks/{bookmark_id}/release-smoke",
+        headers=headers,
+        json={"release_sha": cached_release_sha},
+    )
+    assert cached.status_code == 200, cached.text
+    cached_body = cached.json()
+    assert cached_body["response_class"] == "verified_cached"
+    assert cached_body["evidence_mode"] == "verified_cached"
+    assert cached_body["provider_call_performed"] is False
+    assert cached_body["provider_evidence_operation_id"] == body["operation_id"]
+    assert cached_body["source_text_sha256"]
+    assert cached_body["bookmark"]["tracked_case"]["provider_health"] == "unhealthy"
+    assert cached_body["bookmark"]["tracked_case"]["manual_refresh_allowed"] is False
+    assert provider.refresh_calls == ["DLHC010012342026"]
+
+    jobs = client.get(
+        "/api/admin/provider-operations/jobs?include_resolved=true",
+        headers=headers,
+    )
+    assert jobs.status_code == 200, jobs.text
+    cached_job = next(
+        row
+        for row in jobs.json()["operations"]
+        if row["response_class"] == "verified_cached"
+    )
+    assert cached_job["status"] == "succeeded"
+    assert any("made no external call" in note for note in cached_job["notes"])
+
+    with get_session_factory()() as session:
+        update = session.scalar(select(TrackedCaseUpdate))
+        assert update is not None
+        update.source_text = f"{update.source_text} corrupted"
+        session.commit()
+    corrupt_release_sha = "c" * 40
+    monkeypatch.setenv("CASEOPS_RELEASE_SHA", corrupt_release_sha)
+    get_settings.cache_clear()
+    corrupt = client.post(
+        f"/api/case-tracking/bookmarks/{bookmark_id}/release-smoke",
+        headers=headers,
+        json={"release_sha": corrupt_release_sha},
+    )
+    assert corrupt.status_code == 409
+    assert corrupt.json()["detail"] == "Cached provider source failed integrity verification."
+    assert provider.refresh_calls == ["DLHC010012342026"]
+
     stale = client.post(
         f"/api/case-tracking/bookmarks/{bookmark_id}/release-smoke",
         headers=headers,
-        json={"release_sha": "b" * 40},
+        json={"release_sha": "d" * 40},
     )
     assert stale.status_code == 409
     assert "serving API revision" in stale.json()["detail"]
@@ -726,12 +868,23 @@ def test_exact_release_smoke_is_qa_only_costed_and_idempotent(
         assert operation.operation_type == "canary"
         assert operation.correlation_id == f"release:{release_sha}"
         assert operation.metadata_json["cost_disclosed"] is True
+        cached_operation = session.scalar(
+            select(TrackedCaseProviderOperation).where(
+                TrackedCaseProviderOperation.id == cached_body["operation_id"]
+            )
+        )
+        assert cached_operation is not None
+        assert cached_operation.status == "succeeded"
+        assert cached_operation.response_class == "verified_cached"
+        assert cached_operation.attempts == 0
+        assert cached_operation.cost_minor == 0
+        assert cached_operation.metadata_json["provider_call_performed"] is False
         audits = list(
             session.scalars(
                 select(AuditEvent).where(AuditEvent.action == "case_tracking.release_smoke")
             )
         )
-        assert len(audits) == 1
+        assert len(audits) == 2
 
 
 def test_release_smoke_rejects_an_untagged_bookmark(

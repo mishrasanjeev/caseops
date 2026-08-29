@@ -52,6 +52,8 @@ $AcceptanceEnvironment = @{
     CASEOPS_E2E_DOCKER_PROJECT = $ComposeProject
     CASEOPS_E2E_DOCKER_COMPOSE_FILE = $ComposeFile
     CASEOPS_WEB_BASE_URL = "http://127.0.0.1:$WebPort"
+    # Worktrees under OneDrive cannot always accept uv cache hardlinks on Windows.
+    UV_LINK_MODE = "copy"
 }
 
 foreach ($Name in $AcceptanceEnvironment.Keys) {

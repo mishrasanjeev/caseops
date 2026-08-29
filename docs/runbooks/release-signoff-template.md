@@ -92,7 +92,7 @@
 | Regression discovery | normal local + production Playwright configs | pass/fail | New dated specs are selected; no unregistered allowlist entry |
 | Deployed user workflow | committed `tests/e2e/*.spec.ts` on observed build | pass/fail/skipped | Name the exact spec/test and result; local-only evidence is insufficient |
 | Exact API/web release identity | `/api/build` + `/api/release-identity` + test checkout | pass/fail | All three are the expected full SHA; abbreviated tags do not count |
-| Case-tracking release canary | approved QA bookmark `/release-smoke` | pass/fail/not-applicable | One idempotent, costed operation for this exact SHA; fresh success/no-change outcome |
+| Case-tracking release evidence | approved QA bookmark `/release-smoke` | pass/fail/not-applicable | One idempotent operation for this exact SHA; live success/no-change or hash-verified stored evidence, explicit external-call flag, current provider health retained, and protected source opens |
 | Protected source open | tracked-case update source proxy | pass/fail/not-applicable | API-origin path, provider boundary, bearer proxy, non-empty attachment, audit |
 | Narrow responsive actions | dated 360px Playwright | pass/fail/not-applicable | Every grouped action/link visible and in viewport; DOM presence alone does not count |
 

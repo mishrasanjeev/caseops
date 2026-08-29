@@ -2652,7 +2652,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Run one costed tracked-case canary for the exact deployed release. */
+        /** Verify tracked-case evidence for the exact deployed release. */
         post: operations["post_case_tracking_release_smoke_api_case_tracking_bookmarks__bookmark_id__release_smoke_post"];
         delete?: never;
         options?: never;
@@ -15774,20 +15774,38 @@ export interface components {
         /** CaseTrackingReleaseSmokeResponse */
         CaseTrackingReleaseSmokeResponse: {
             bookmark: components["schemas"]["CaseTrackingBookmarkRecord"];
+            /**
+             * Evidence Mode
+             * @enum {string}
+             */
+            evidence_mode: "live_provider" | "verified_cached";
             /** Operation Id */
             operation_id: string;
+            /** Provider Call Performed */
+            provider_call_performed: boolean;
+            /** Provider Evidence Age Seconds */
+            provider_evidence_age_seconds: number;
+            /**
+             * Provider Evidence Completed At
+             * Format: date-time
+             */
+            provider_evidence_completed_at: string;
+            /** Provider Evidence Operation Id */
+            provider_evidence_operation_id: string;
             /** Release Sha */
             release_sha: string;
             /**
              * Response Class
              * @enum {string}
              */
-            response_class: "success" | "no_change";
+            response_class: "success" | "no_change" | "verified_cached";
             /**
              * Reused
              * @default false
              */
             reused: boolean;
+            /** Source Text Sha256 */
+            source_text_sha256?: string | null;
             source_update: components["schemas"]["CaseTrackingUpdateRecord"];
         };
         /** CaseTrackingSearchRequest */
@@ -39096,7 +39114,7 @@ export interface components {
              * @default unknown
              * @enum {string}
              */
-            response_class: "success" | "no_change" | "timeout" | "authentication" | "rate_limit" | "parse_error" | "provider_outage" | "url_failure" | "removed_document" | "changed_content" | "unsupported_access" | "configuration" | "policy" | "unknown";
+            response_class: "success" | "no_change" | "verified_cached" | "timeout" | "authentication" | "rate_limit" | "parse_error" | "provider_outage" | "url_failure" | "removed_document" | "changed_content" | "unsupported_access" | "configuration" | "policy" | "unknown";
             /**
              * Retryable
              * @default false

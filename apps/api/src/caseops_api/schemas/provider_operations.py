@@ -114,6 +114,7 @@ class ProviderOperationRecord(BaseModel):
     response_class: Literal[
         "success",
         "no_change",
+        "verified_cached",
         "timeout",
         "authentication",
         "rate_limit",

@@ -540,6 +540,7 @@ def _case_tracking_record(row: TrackedCaseProviderOperation) -> ProviderOperatio
     response_classes = {
         "success",
         "no_change",
+        "verified_cached",
         "timeout",
         "authentication",
         "rate_limit",
@@ -604,7 +605,12 @@ def _case_tracking_record(row: TrackedCaseProviderOperation) -> ProviderOperatio
         mark_resolved_available=open_action and operator_state == "open",
         notes=[
             f"operation_type={row.operation_type}",
-            "Raw provider evidence and the normalized diff are retained append-only.",
+            (
+                "This release check reused hash-verified stored provider evidence and made no "
+                "external call."
+                if response_class == "verified_cached"
+                else "Raw provider evidence and the normalized diff are retained append-only."
+            ),
             "Replay executes in the next bounded poll and remains tenant scoped.",
         ],
     )
