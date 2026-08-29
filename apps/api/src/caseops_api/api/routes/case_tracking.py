@@ -151,7 +151,7 @@ def post_case_tracking_bookmark_refresh(
 @router.post(
     "/bookmarks/{bookmark_id}/release-smoke",
     response_model=CaseTrackingReleaseSmokeResponse,
-    summary="Run one costed tracked-case canary for the exact deployed release.",
+    summary="Verify tracked-case evidence for the exact deployed release.",
 )
 def post_case_tracking_release_smoke(
     bookmark_id: str,

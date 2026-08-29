@@ -97,6 +97,10 @@ not reminders runtime failures.
 - Local Docker verification runs `caseops-db-index-health` with a hard 512 MiB
   memory and swap limit. It must exit zero, report `status=ok`, and finish
   without an OOM kill before production deployment.
+- The Windows acceptance harness sets `UV_LINK_MODE=copy` before frozen host
+  dependency sync. OneDrive-backed worktrees can reject cache hardlinks with OS
+  error 396; copy mode preserves the exact lockfile while avoiding that
+  filesystem-specific setup failure.
 - This repair does not increase the index job's memory or timeout. It removes
   unbounded duplicate startup work and retains the measured resource ceiling.
 - Authority metadata extraction and judge mapping remain `PAUSED`; converging

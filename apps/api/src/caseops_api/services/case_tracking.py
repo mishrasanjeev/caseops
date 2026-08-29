@@ -227,12 +227,15 @@ def _next_refresh_at(now: datetime | None = None) -> datetime:
 
 
 def _response_class(exc: BaseException) -> str:
+    explicit = getattr(exc, "response_class", None)
+    if explicit in _RED_PROVIDER_RESPONSE_CLASSES and explicit != "provider_error":
+        return str(explicit)
     value = f"{type(exc).__name__} {exc}".lower()
     if "timeout" in value:
         return "timeout"
     if any(token in value for token in ("401", "403", "auth", "token", "credential")):
         return "authentication"
-    if any(token in value for token in ("429", "rate", "quota")):
+    if any(token in value for token in ("402", "429", "billing", "payment", "rate", "quota")):
         return "rate_limit"
     if any(token in value for token in ("parse", "schema", "malformed", "decode")):
         return "parse_error"
@@ -1797,26 +1800,169 @@ def _release_smoke_source_update(
     session: Session,
     *,
     bookmark: TrackedCaseBookmark,
-) -> TrackedCaseUpdate:
+    update_id: str | None = None,
+    require_verified_cache: bool = False,
+    allow_missing: bool = False,
+) -> TrackedCaseUpdate | None:
+    filters = [
+        TrackedCaseUpdate.company_id == bookmark.company_id,
+        TrackedCaseUpdate.tracked_case_id == bookmark.tracked_case_id,
+        TrackedCaseUpdate.source_url.is_not(None),
+    ]
+    if update_id is not None:
+        filters.append(TrackedCaseUpdate.id == update_id)
+    if require_verified_cache:
+        filters.extend(
+            [
+                TrackedCaseUpdate.source_text.is_not(None),
+                TrackedCaseUpdate.source_text_sha256.is_not(None),
+                TrackedCaseUpdate.source_text_truncated.is_(False),
+            ]
+        )
     source_update = session.scalar(
         select(TrackedCaseUpdate)
-        .where(
-            TrackedCaseUpdate.company_id == bookmark.company_id,
-            TrackedCaseUpdate.tracked_case_id == bookmark.tracked_case_id,
-            TrackedCaseUpdate.source_url.is_not(None),
-        )
+        .where(*filters)
         .order_by(TrackedCaseUpdate.created_at.desc())
         .limit(1)
     )
     if source_update is None:
+        if allow_missing:
+            return None
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "The release-smoke fixture has no provider source document; "
+                "The release-smoke fixture has no complete provider source evidence; "
                 "production release proof remains incomplete."
             ),
         )
+    if require_verified_cache:
+        _verified_cached_source(source_update)
     return source_update
+
+
+def _verified_provider_snapshot(
+    session: Session,
+    *,
+    bookmark: TrackedCaseBookmark,
+    operation_id: str | None = None,
+) -> tuple[TrackedCaseProviderOperation, TrackedCaseProviderSnapshot] | None:
+    filters = [
+        TrackedCaseProviderOperation.company_id == bookmark.company_id,
+        TrackedCaseProviderOperation.tracked_case_id == bookmark.tracked_case_id,
+        TrackedCaseProviderOperation.status.in_(("succeeded", "no_change")),
+        TrackedCaseProviderOperation.response_class.in_(("success", "no_change")),
+        TrackedCaseProviderOperation.completed_at.is_not(None),
+    ]
+    if operation_id is not None:
+        filters.append(TrackedCaseProviderOperation.id == operation_id)
+    operation = session.scalar(
+        select(TrackedCaseProviderOperation)
+        .join(
+            TrackedCaseProviderSnapshot,
+            TrackedCaseProviderSnapshot.operation_id == TrackedCaseProviderOperation.id,
+        )
+        .where(*filters)
+        .order_by(TrackedCaseProviderOperation.completed_at.desc())
+        .limit(1)
+    )
+    if operation is None:
+        return None
+    snapshot = session.scalar(
+        select(TrackedCaseProviderSnapshot).where(
+            TrackedCaseProviderSnapshot.operation_id == operation.id,
+            TrackedCaseProviderSnapshot.company_id == bookmark.company_id,
+            TrackedCaseProviderSnapshot.tracked_case_id == bookmark.tracked_case_id,
+        )
+    )
+    if snapshot is None:  # pragma: no cover - protected by the join
+        return None
+    if (
+        not re.fullmatch(r"[0-9a-f]{64}", snapshot.raw_hash)
+        or not re.fullmatch(r"[0-9a-f]{64}", snapshot.normalized_hash)
+        or _hash_value(snapshot.raw_json) != snapshot.raw_hash
+        or _hash_value(snapshot.normalized_json) != snapshot.normalized_hash
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Stored provider snapshot failed integrity verification.",
+        )
+    return operation, snapshot
+
+
+@dataclass(frozen=True, slots=True)
+class _ReleaseSmokeCachedEvidence:
+    operation: TrackedCaseProviderOperation
+    snapshot: TrackedCaseProviderSnapshot
+    source_update: TrackedCaseUpdate
+
+
+def _release_smoke_cached_evidence(
+    session: Session,
+    *,
+    bookmark: TrackedCaseBookmark,
+) -> _ReleaseSmokeCachedEvidence | None:
+    provider_evidence = _verified_provider_snapshot(session, bookmark=bookmark)
+    if provider_evidence is None:
+        return None
+    operation, snapshot = provider_evidence
+    source_update = _release_smoke_source_update(
+        session,
+        bookmark=bookmark,
+        require_verified_cache=True,
+        allow_missing=True,
+    )
+    if source_update is None:
+        return None
+    return _ReleaseSmokeCachedEvidence(
+        operation=operation,
+        snapshot=snapshot,
+        source_update=source_update,
+    )
+
+
+def _create_cached_release_smoke_operation(
+    session: Session,
+    *,
+    context: SessionContext,
+    bookmark: TrackedCaseBookmark,
+    correlation_id: str,
+    evidence: _ReleaseSmokeCachedEvidence,
+) -> TrackedCaseProviderOperation:
+    now = _now()
+    operation = TrackedCaseProviderOperation(
+        company_id=context.company.id,
+        tracked_case_id=bookmark.tracked_case_id,
+        requested_by_membership_id=context.membership.id,
+        provider=bookmark.tracked_case.provider,
+        operation_type="canary",
+        correlation_id=correlation_id,
+        # Keep the durable operation lifecycle on the canonical terminal status;
+        # response_class records that no provider call was made.
+        status="succeeded",
+        response_class="verified_cached",
+        cost_minor=0,
+        currency=evidence.operation.currency,
+        attempts=0,
+        max_attempts=1,
+        started_at=now,
+        completed_at=now,
+        metadata_json={
+            "scope": "exact_release_stored_provider_evidence",
+            "cost_disclosed": True,
+            "verification_mode": "verified_cached",
+            "provider_call_performed": False,
+            "provider_evidence_operation_id": evidence.operation.id,
+            "provider_evidence_completed_at": evidence.operation.completed_at.isoformat(),
+            "provider_snapshot_id": evidence.snapshot.id,
+            "provider_snapshot_raw_hash": evidence.snapshot.raw_hash,
+            "provider_snapshot_normalized_hash": evidence.snapshot.normalized_hash,
+            "source_update_id": evidence.source_update.id,
+            "source_text_sha256": evidence.source_update.source_text_sha256,
+        },
+    )
+    session.add(operation)
+    session.flush()
+    return operation
 
 
 def _release_smoke_response(
@@ -1827,7 +1973,7 @@ def _release_smoke_response(
     release_sha: str,
     reused: bool,
 ) -> CaseTrackingReleaseSmokeResponse:
-    if operation.response_class not in {"success", "no_change"}:
+    if operation.response_class not in {"success", "no_change", "verified_cached"}:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
@@ -1835,11 +1981,52 @@ def _release_smoke_response(
                 "the correlated provider operation before replay."
             ),
         )
-    source_update = _release_smoke_source_update(session, bookmark=bookmark)
+    metadata = dict(operation.metadata_json or {})
+    cached = operation.response_class == "verified_cached"
+    evidence_mode = "verified_cached" if cached else "live_provider"
+    provider_evidence = operation
+    if cached:
+        evidence_operation_id = str(metadata.get("provider_evidence_operation_id") or "")
+        verified = _verified_provider_snapshot(
+            session,
+            bookmark=bookmark,
+            operation_id=evidence_operation_id,
+        )
+        if verified is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Stored release evidence no longer resolves to a successful "
+                    "provider snapshot."
+                ),
+            )
+        provider_evidence = verified[0]
+    if provider_evidence.completed_at is None:  # pragma: no cover - success invariant
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Provider evidence has no completion timestamp.",
+        )
+    source_update = _release_smoke_source_update(
+        session,
+        bookmark=bookmark,
+        update_id=(str(metadata.get("source_update_id")) if cached else None),
+        require_verified_cache=cached,
+    )
+    if source_update is None:  # pragma: no cover - allow_missing is false
+        raise RuntimeError("release source evidence was not persisted")
+    evidence_completed_at = provider_evidence.completed_at
+    if evidence_completed_at.tzinfo is None:
+        evidence_completed_at = evidence_completed_at.replace(tzinfo=UTC)
     return CaseTrackingReleaseSmokeResponse(
         release_sha=release_sha,
         operation_id=operation.id,
         response_class=operation.response_class,
+        evidence_mode=evidence_mode,
+        provider_call_performed=not cached,
+        provider_evidence_operation_id=provider_evidence.id,
+        provider_evidence_completed_at=evidence_completed_at,
+        provider_evidence_age_seconds=max(0, int((_now() - evidence_completed_at).total_seconds())),
+        source_text_sha256=source_update.source_text_sha256,
         bookmark=_bookmark_record(session, bookmark),
         source_update=_update_record(source_update, bookmark_id=bookmark.id),
         reused=reused,
@@ -1854,7 +2041,7 @@ def run_release_smoke(
     release_sha: str,
     provider: CaseTrackingProvider | None = None,
 ) -> CaseTrackingReleaseSmokeResponse:
-    """Run at most one provider canary per company and exact deployed release."""
+    """Verify one exact release without coupling deployment health to provider billing."""
     configured_sha = (get_settings().release_sha or "").strip().lower()
     if not re.fullmatch(r"[0-9a-f]{40}", configured_sha) or configured_sha != release_sha:
         raise HTTPException(
@@ -1901,23 +2088,33 @@ def run_release_smoke(
             reused=True,
         )
 
-    refresh_bookmark(
-        session,
-        context=context,
-        bookmark_id=bookmark_id,
-        provider=provider,
-        operation_type="canary",
-        correlation_id=correlation_id,
-        enforce_manual_limit=False,
-    )
-    operation = session.scalar(
-        select(TrackedCaseProviderOperation).where(
-            TrackedCaseProviderOperation.company_id == context.company.id,
-            TrackedCaseProviderOperation.correlation_id == correlation_id,
+    cached_evidence = _release_smoke_cached_evidence(session, bookmark=bookmark)
+    if cached_evidence is not None:
+        operation = _create_cached_release_smoke_operation(
+            session,
+            context=context,
+            bookmark=bookmark,
+            correlation_id=correlation_id,
+            evidence=cached_evidence,
         )
-    )
-    if operation is None:  # pragma: no cover - transaction invariant
-        raise RuntimeError("release canary operation was not persisted")
+    else:
+        refresh_bookmark(
+            session,
+            context=context,
+            bookmark_id=bookmark_id,
+            provider=provider,
+            operation_type="canary",
+            correlation_id=correlation_id,
+            enforce_manual_limit=False,
+        )
+        operation = session.scalar(
+            select(TrackedCaseProviderOperation).where(
+                TrackedCaseProviderOperation.company_id == context.company.id,
+                TrackedCaseProviderOperation.correlation_id == correlation_id,
+            )
+        )
+        if operation is None:  # pragma: no cover - transaction invariant
+            raise RuntimeError("release canary operation was not persisted")
     record_from_context(
         session,
         context,
@@ -1931,6 +2128,10 @@ def run_release_smoke(
             "response_class": operation.response_class,
             "cost_minor": operation.cost_minor,
             "currency": operation.currency,
+            "verification_mode": dict(operation.metadata_json or {}).get(
+                "verification_mode", "live_provider"
+            ),
+            "provider_call_performed": operation.response_class != "verified_cached",
         },
     )
     session.commit()

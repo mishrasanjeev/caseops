@@ -352,10 +352,10 @@ test.describe("Ram 2026-08-05 deployed notification convergence", () => {
   });
 });
 
-test.describe("Ram 2026-08-05 exact-release case tracking canary", () => {
+test.describe("Ram 2026-08-05 exact-release case tracking evidence", () => {
   test.setTimeout(180_000);
 
-  test("freshens the approved QA case and opens its protected source at 360px", async ({
+  test("verifies the approved QA case and opens its protected source at 360px", async ({
     page,
   }) => {
     const releaseSha = required("CASEOPS_EXPECTED_RELEASE_SHA");
@@ -380,12 +380,34 @@ test.describe("Ram 2026-08-05 exact-release case tracking canary", () => {
     const canaryBody = await canary.json();
     expect(canary.status(), JSON.stringify(canaryBody)).toBe(200);
     expect(canaryBody.release_sha).toBe(releaseSha);
-    expect(["success", "no_change"]).toContain(canaryBody.response_class);
+    expect(["success", "no_change", "verified_cached"]).toContain(
+      canaryBody.response_class,
+    );
+    expect(["live_provider", "verified_cached"]).toContain(
+      canaryBody.evidence_mode,
+    );
+    expect(canaryBody.provider_call_performed).toBe(
+      canaryBody.evidence_mode === "live_provider",
+    );
+    expect(canaryBody.provider_evidence_operation_id).toBeTruthy();
+    expect(canaryBody.provider_evidence_completed_at).toBeTruthy();
+    expect(canaryBody.provider_evidence_age_seconds).toBeGreaterThanOrEqual(0);
     expect(canaryBody.operation_id).toBeTruthy();
     expect(canaryBody.bookmark.id).toBe(bookmarkId);
-    expect(canaryBody.bookmark.tracked_case.freshness_status).toBe("fresh");
-    expect(canaryBody.bookmark.tracked_case.provider_health).toBe("healthy");
     expect(canaryBody.bookmark.tracked_case.last_provider_successful_at).toBeTruthy();
+    if (canaryBody.evidence_mode === "live_provider") {
+      expect(canaryBody.bookmark.tracked_case.freshness_status).toBe("fresh");
+      expect(canaryBody.bookmark.tracked_case.provider_health).toBe("healthy");
+    } else {
+      expect(canaryBody.response_class).toBe("verified_cached");
+      expect(canaryBody.source_text_sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(["fresh", "stale", "quarantined"]).toContain(
+        canaryBody.bookmark.tracked_case.freshness_status,
+      );
+      expect(["healthy", "degraded", "unhealthy", "quarantined"]).toContain(
+        canaryBody.bookmark.tracked_case.provider_health,
+      );
+    }
 
     const sourcePath = canaryBody.source_update.source_url as string;
     expect(sourcePath).toBe(
@@ -410,7 +432,11 @@ test.describe("Ram 2026-08-05 exact-release case tracking canary", () => {
     await expect(bookmark).toBeVisible({ timeout: 30_000 });
     const refresh = bookmark.getByRole("button", { name: "Refresh" });
     await expect(refresh).toBeVisible();
-    await expect(refresh).toBeEnabled();
+    if (canaryBody.bookmark.tracked_case.manual_refresh_allowed) {
+      await expect(refresh).toBeEnabled();
+    } else {
+      await expect(refresh).toBeDisabled();
+    }
     const refreshBox = await refresh.boundingBox();
     expect(refreshBox).not.toBeNull();
     expect(refreshBox!.x).toBeGreaterThanOrEqual(0);

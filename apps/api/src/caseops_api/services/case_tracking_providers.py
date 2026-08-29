@@ -19,7 +19,37 @@ class CaseTrackingProviderUnavailable(RuntimeError):
 
 
 class CaseTrackingProviderError(RuntimeError):
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        response_class: str = "provider_error",
+        http_status_code: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.response_class = response_class
+        self.http_status_code = http_status_code
+
+
+def _http_error_response_class(exc: httpx.HTTPError) -> str:
+    if isinstance(exc, (httpx.TimeoutException, httpx.PoolTimeout)):
+        return "timeout"
+    if isinstance(exc, httpx.HTTPStatusError):
+        if exc.response.status_code in {401, 403}:
+            return "authentication"
+        if exc.response.status_code in {402, 429}:
+            return "rate_limit"
+    return "provider_error"
+
+
+def _provider_http_error(message: str, exc: httpx.HTTPError) -> CaseTrackingProviderError:
+    return CaseTrackingProviderError(
+        message,
+        response_class=_http_error_response_class(exc),
+        http_status_code=(
+            exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+        ),
+    )
 
 
 @dataclass(frozen=True)
@@ -455,7 +485,7 @@ class EcourtsIndiaApiProvider:
                     headers=self._headers(),
                 )
         except httpx.HTTPError as exc:
-            raise CaseTrackingProviderError("Case tracking provider search failed.") from exc
+            raise _provider_http_error("Case tracking provider search failed.", exc) from exc
         payload = response.json()
         data = _data_payload(payload)
         rows = data.get("results") if isinstance(data, dict) else data
@@ -493,7 +523,7 @@ class EcourtsIndiaApiProvider:
                     headers=self._headers(),
                 )
         except httpx.HTTPError as exc:
-            raise CaseTrackingProviderError("Case tracking provider refresh failed.") from exc
+            raise _provider_http_error("Case tracking provider refresh failed.", exc) from exc
         payload = response.json()
         if not isinstance(payload, dict):
             raise CaseTrackingProviderError("Case tracking provider returned invalid data.")
@@ -516,15 +546,18 @@ class EcourtsIndiaApiProvider:
                         headers={**self._headers(), "Content-Type": "application/json"},
                     )
                     response.raise_for_status()
-            except httpx.HTTPError:
+            except httpx.HTTPError as exc:
+                response_class = _http_error_response_class(exc)
                 for cnr in unique_cnrs:
-                    errors[cnr] = "Case tracking provider bulk refresh failed."
+                    errors[cnr] = (
+                        f"Case tracking provider bulk refresh failed. [{response_class}]"
+                    )
                 return ProviderBulkRefreshResult(snapshots=snapshots, errors=errors)
         for cnr in unique_cnrs:
             try:
                 snapshots.append(self.get_case_by_cnr(cnr=cnr))
             except CaseTrackingProviderError as exc:
-                errors[cnr] = str(exc)
+                errors[cnr] = f"{exc} [{exc.response_class}]"
         return ProviderBulkRefreshResult(snapshots=snapshots, errors=errors)
 
 

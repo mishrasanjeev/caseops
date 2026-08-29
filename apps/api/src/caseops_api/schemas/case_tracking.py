@@ -228,7 +228,13 @@ class CaseTrackingReleaseSmokeRequest(BaseModel):
 class CaseTrackingReleaseSmokeResponse(BaseModel):
     release_sha: str
     operation_id: str
-    response_class: Literal["success", "no_change"]
+    response_class: Literal["success", "no_change", "verified_cached"]
+    evidence_mode: Literal["live_provider", "verified_cached"]
+    provider_call_performed: bool
+    provider_evidence_operation_id: str
+    provider_evidence_completed_at: datetime
+    provider_evidence_age_seconds: int = Field(ge=0)
+    source_text_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     bookmark: CaseTrackingBookmarkRecord
     source_update: CaseTrackingUpdateRecord
     reused: bool = False
