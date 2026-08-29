@@ -15,6 +15,7 @@ from caseops_api.scripts.check_database_indexes import build_index_health_report
 
 PREVIOUS_HEAD = "20260828_0001"
 MIGRATION_HEAD = "20260828_0002"
+CURRENT_HEAD = "20260829_0001"
 
 
 def _config() -> Config:
@@ -69,10 +70,20 @@ def test_case_tracking_source_text_migration_round_trip_and_index_health(
         }
         assert "ck_tracked_case_update_source_text_hash" in constraints
         with engine.connect() as connection:
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
+                MIGRATION_HEAD
+            )
+    finally:
+        engine.dispose()
+
+    command.upgrade(config, CURRENT_HEAD)
+    engine = create_engine(database_url, future=True)
+    try:
+        with engine.connect() as connection:
             health = build_index_health_report(connection)
             assert health["status"] == "ok", health
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-                MIGRATION_HEAD
+                CURRENT_HEAD
             )
     finally:
         engine.dispose()
@@ -88,7 +99,7 @@ def test_case_tracking_source_text_migration_round_trip_and_index_health(
     finally:
         engine.dispose()
 
-    command.upgrade(config, MIGRATION_HEAD)
+    command.upgrade(config, CURRENT_HEAD)
 
 
 def test_case_tracking_source_text_downgrade_refuses_retained_evidence(

@@ -171,7 +171,7 @@ const platformMoves = [
   {
     icon: Sparkles,
     title: "Ask this Workspace",
-    body: "Select the exact clients, matters, dockets, IP rights, proceedings and documents an answer may use. CaseOps retrieves only permitted verified records, returns record-level citations and source links, rechecks access before display, and abstains when the evidence is insufficient. Suggested writes remain proposals until the separate confirmation boundary is released.",
+    body: "Select the exact clients, matters, dockets, IP rights, proceedings and documents an answer may use. CaseOps retrieves only permitted verified records, returns record-level citations and source links, rechecks access before display, and abstains when the evidence is insufficient. Proposed tasks, review-required drafts and allowlisted Matter changes show exact before-and-after details and require a separate, expiring confirmation before CaseOps writes anything.",
   },
   {
     icon: FileText,

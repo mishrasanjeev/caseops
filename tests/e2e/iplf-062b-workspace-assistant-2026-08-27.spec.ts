@@ -80,7 +80,7 @@ test("IPLF-UJ-23 runs scoped answers, abstention, and write-proposal exceptions"
     .getByRole("textbox", { name: "Ask this workspace" })
     .fill("Create a task to review this matter tomorrow.");
   await page.getByRole("button", { name: "Ask", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Prepare a task proposal" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Prepare a task proposal" })).toBeEnabled();
   const tasks = await page.request.get(
     `${apiBaseUrl}/api/matters/${matterRecord.id}/tasks`,
     { headers },

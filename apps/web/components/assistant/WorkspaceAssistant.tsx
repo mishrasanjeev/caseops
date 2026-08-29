@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { AssistantActionDialog } from "@/components/assistant/AssistantActionDialog";
 import {
   archiveAssistantSession,
   askWorkspaceAssistant,
@@ -34,6 +35,8 @@ import {
   searchAssistantScopes,
   type AssistantScopeInput,
   type AssistantScopeOption,
+  type AssistantActionPreview,
+  type AssistantProposedAction,
   type AssistantSessionRecord,
   type AssistantSessionSummary,
   type AssistantTurn,
@@ -85,6 +88,10 @@ export function WorkspaceAssistant() {
   const [busy, setBusy] = useState<"scope" | "session" | "ask" | "export" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [policyDisabled, setPolicyDisabled] = useState(false);
+  const [actionReview, setActionReview] = useState<{
+    turnId: string;
+    action: AssistantProposedAction;
+  } | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -271,6 +278,15 @@ export function WorkspaceAssistant() {
     } finally {
       setBusy(null);
     }
+  }
+
+  function actionConfirmed(preview: AssistantActionPreview) {
+    if (!active || preview.resulting_session_version === null) return;
+    const version = preview.resulting_session_version;
+    setActive((current) => (current ? { ...current, version } : current));
+    setSessions((current) =>
+      current.map((row) => (row.id === active.id ? { ...row, version } : row)),
+    );
   }
 
   return (
@@ -473,7 +489,14 @@ export function WorkspaceAssistant() {
                 {turns.length === 0 ? (
                   <div className="flex min-h-72 items-center justify-center text-sm text-[var(--color-mute)]">No questions yet</div>
                 ) : (
-                  turns.map((turn) => <TurnView key={turn.id} turn={turn} onSuggestion={setQuestion} />)
+                  turns.map((turn) => (
+                    <TurnView
+                      key={turn.id}
+                      turn={turn}
+                      onSuggestion={setQuestion}
+                      onAction={(action) => setActionReview({ turnId: turn.id, action })}
+                    />
+                  ))
                 )}
               </div>
               <form
@@ -513,11 +536,30 @@ export function WorkspaceAssistant() {
           ) : null}
         </section>
       </div>
+      {active && actionReview ? (
+        <AssistantActionDialog
+          key={`${actionReview.turnId}:${actionReview.action.proposal_id}`}
+          sessionId={active.id}
+          sessionVersion={active.version}
+          turnId={actionReview.turnId}
+          action={actionReview.action}
+          onClose={() => setActionReview(null)}
+          onConfirmed={actionConfirmed}
+        />
+      ) : null}
     </div>
   );
 }
 
-function TurnView({ turn, onSuggestion }: { turn: AssistantTurn; onSuggestion: (value: string) => void }) {
+function TurnView({
+  turn,
+  onSuggestion,
+  onAction,
+}: {
+  turn: AssistantTurn;
+  onSuggestion: (value: string) => void;
+  onAction: (action: AssistantProposedAction) => void;
+}) {
   const assistant = turn.role === "assistant";
   return (
     <article className={assistant ? "pr-4" : "pl-4 sm:pl-16"} data-turn-role={turn.role}>
@@ -557,9 +599,14 @@ function TurnView({ turn, onSuggestion }: { turn: AssistantTurn; onSuggestion: (
                   <button
                     key={action.proposal_id}
                     type="button"
-                    disabled
-                    title="Review and confirmation required"
-                    className="inline-flex items-center gap-1 rounded-md border border-[var(--color-line)] px-2.5 py-1.5 text-xs font-semibold text-[var(--color-mute)] disabled:cursor-not-allowed"
+                    disabled={!action.execution_available}
+                    onClick={() => action.execution_available && onAction(action)}
+                    title={
+                      action.execution_available
+                        ? "Review proposed action"
+                        : (action.unavailable_reason ?? "Action unavailable")
+                    }
+                    className="inline-flex items-center gap-1 rounded-md border border-[var(--color-line)] px-2.5 py-1.5 text-xs font-semibold text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)] disabled:cursor-not-allowed disabled:text-[var(--color-mute)]"
                   >
                     <ShieldCheck className="h-3.5 w-3.5" aria-hidden /> {action.label}
                   </button>

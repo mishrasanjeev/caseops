@@ -13,6 +13,8 @@ only the conversation records needed for permission-scoped Ask this Workspace:
 - `assistant_turns` owns bounded user/assistant content, content hashes,
   retrieval and permission snapshots, status, and `ModelRun` linkage;
 - `assistant_citations` owns exact record/document/source version provenance.
+- `assistant_action_previews` owns the retained, expiring, actor-bound preview
+  and confirmation evidence added by IPLF-064, not the resulting domain record.
 
 The assistant does not create a second Matter, client, IP, document, research,
 task, draft, billing, access, or legal-source owner. Migration
@@ -53,8 +55,13 @@ model or tokenizer is downloaded or initialized on the interactive path.
 ## Actions and retention
 
 The assistant may return navigation, search, draft, task, or field-change
-proposals. IPLF-062 performs no proposed write. Write proposals remain disabled
-until IPLF-064 supplies the separate preview/confirm owner.
+proposals. IPLF-062 itself performs no proposed write. IPLF-064 enables a
+separate 15-minute preview/confirm boundary for compatible Matter and IP
+targets; preview never mutates, and confirmation reauthorizes actor, policy,
+session, proposal, target access/version, token, and canonical input before
+delegating atomically to the existing task, Draft, or Matter writer. The exact
+contract and excluded fields are maintained in
+`ASSISTANT_ACTION_BOUNDARY.md`.
 
 Tenant policy controls enablement, allowed assistant models, and retention from
 1 to 3,650 days under optimistic concurrency. Users can list, inspect, archive,
@@ -73,8 +80,9 @@ returns `assistant_deletion_governance_required` without deleting evidence.
 - no assistant worker, scheduler, provider-side autonomous action, or hidden
   analytics writer.
 
-The four assistant tables and tenant AI policy additions are registered in the
+The five assistant tables and tenant AI policy additions are registered in the
 data-governance map. Assistant lifecycle, answer, abstention, provider failure,
-export, archive, and blocked deletion events are registered in the event
-catalog. Production activation remains gated by exact-release migration,
-index-health, CI/security, and dated browser acceptance.
+export, archive, blocked deletion, action preview, and action confirmation
+events are registered in the event catalog. Production activation remains
+gated by exact-release migration, index-health, CI/security, and dated browser
+acceptance.

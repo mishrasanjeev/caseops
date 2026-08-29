@@ -85,9 +85,55 @@ export type AssistantProposedAction = {
   href: string | null;
   target_type: string | null;
   target_id: string | null;
+  target_version: string | null;
+  target_label: string | null;
   instruction: string | null;
   requires_confirmation: boolean;
   execution_available: boolean;
+  unavailable_reason: string | null;
+};
+
+export type AssistantMatterField =
+  | "title"
+  | "description"
+  | "matter_type"
+  | "client_name"
+  | "opposing_party"
+  | "opposing_counsel"
+  | "practice_area"
+  | "court_name"
+  | "judge_name";
+
+export type AssistantActionInput = {
+  title?: string;
+  description?: string;
+  due_on?: string;
+  priority?: "low" | "medium" | "high" | "urgent";
+  draft_type?: "brief" | "notice" | "reply" | "memo" | "other";
+  template_key?: string;
+  field_name?: AssistantMatterField;
+  field_value?: string;
+};
+
+export type AssistantActionPreview = {
+  preview_id: string;
+  proposal_id: string;
+  action_type: "draft" | "task" | "field_update";
+  status: "pending" | "superseded" | "confirmed";
+  session_version: number;
+  resulting_session_version: number | null;
+  target_type: string;
+  target_id: string;
+  target_label: string;
+  summary: string;
+  changes: Array<{ field: string; before: string | null; after: string | null }>;
+  warnings: string[];
+  required_capabilities: string[];
+  preview_token: string;
+  expires_at: string;
+  result_type: string | null;
+  result_id: string | null;
+  result_href: string | null;
 };
 
 export type AssistantTurn = {
@@ -186,6 +232,42 @@ export function askWorkspaceAssistant(
 export function listAssistantTurns(sessionId: string) {
   return apiRequest<{ items: AssistantTurn[]; limit: number; offset: number; has_more: boolean }>(
     `/api/workspace-assistant/sessions/${sessionId}/turns?limit=50&offset=0`,
+  );
+}
+
+export function previewAssistantAction(
+  sessionId: string,
+  expectedVersion: number,
+  turnId: string,
+  proposalId: string,
+  input: AssistantActionInput,
+) {
+  return apiRequest<AssistantActionPreview>(
+    `/api/workspace-assistant/sessions/${sessionId}/actions/preview`,
+    {
+      method: "POST",
+      body: {
+        expected_version: expectedVersion,
+        turn_id: turnId,
+        proposal_id: proposalId,
+        input,
+      },
+    },
+  );
+}
+
+export function confirmAssistantAction(
+  sessionId: string,
+  previewId: string,
+  expectedVersion: number,
+  previewToken: string,
+) {
+  return apiRequest<AssistantActionPreview>(
+    `/api/workspace-assistant/sessions/${sessionId}/actions/${previewId}/confirm`,
+    {
+      method: "POST",
+      body: { expected_version: expectedVersion, preview_token: previewToken },
+    },
   );
 }
 

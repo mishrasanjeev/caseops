@@ -284,6 +284,32 @@
       "payload_schema": {"required": ["reason", "retention_expires_at"]}
     },
     {
+      "name": "workspace_assistant.action_previewed",
+      "version": 1,
+      "owner": "drafting-ai",
+      "scope": "company",
+      "envelope": "company_audit_v1",
+      "emission_status": "runtime_emitted",
+      "confidentiality": "privileged",
+      "idempotency_key": "company_id:target_id:payload_sha256",
+      "consumers": ["audit-evidence", "ai-governance-review"],
+      "retention": "assistant legal-work-product retention plus company litigation-hold policy",
+      "payload_schema": {"required": ["assistant_session_id", "assistant_turn_id", "proposal_id", "action_type", "payload_sha256", "expires_at"]}
+    },
+    {
+      "name": "workspace_assistant.action_confirmed",
+      "version": 1,
+      "owner": "drafting-ai",
+      "scope": "company",
+      "envelope": "company_audit_v1",
+      "emission_status": "runtime_emitted",
+      "confidentiality": "privileged",
+      "idempotency_key": "company_id:target_id:result_type:result_id",
+      "consumers": ["audit-evidence", "ai-governance-review"],
+      "retention": "assistant legal-work-product retention plus company litigation-hold policy",
+      "payload_schema": {"required": ["assistant_session_id", "assistant_turn_id", "proposal_id", "action_type", "payload_sha256", "result_type", "result_id"]}
+    },
+    {
       "name": "intelligent_review.queued",
       "version": 1,
       "owner": "drafting-ai",

@@ -1183,8 +1183,28 @@ def _proposed_actions(
     abstained: bool,
 ) -> list[AssistantProposedAction]:
     normalized = question.casefold()
-    target = candidates[0] if candidates else None
+    read_target = candidates[0] if candidates else None
     actions: list[AssistantProposedAction] = []
+
+    def write_target(
+        action_type: Literal["draft", "task", "field_update"],
+    ) -> _SourceCandidate | None:
+        if action_type == "field_update":
+            permitted = {"matter"}
+        elif action_type == "draft":
+            permitted = {"matter", "ip_proceeding"}
+        else:
+            permitted = {
+                "matter",
+                "ip_docket",
+                "ip_asset",
+                "trademark_application",
+                "ip_proceeding",
+            }
+        return next(
+            (candidate for candidate in candidates if candidate.source_type in permitted),
+            None,
+        )
 
     def append(
         action_type: Literal["navigation", "search", "draft", "task", "field_update"],
@@ -1193,6 +1213,13 @@ def _proposed_actions(
         href: str | None = None,
         write: bool = False,
     ) -> None:
+        target = write_target(action_type) if write else read_target
+        unavailable_reason = None
+        if write and target is None:
+            unavailable_reason = (
+                "Add a permitted Matter or compatible IP record to this conversation "
+                "before reviewing this write."
+            )
         actions.append(
             AssistantProposedAction(
                 proposal_id=_proposal_id(
@@ -1206,14 +1233,17 @@ def _proposed_actions(
                 href=href,
                 target_type=target.source_type if target is not None else None,
                 target_id=target.source_id if target is not None else None,
+                target_version=target.source_version if target is not None else None,
+                target_label=target.label if target is not None else None,
                 instruction=question if write else None,
                 requires_confirmation=write,
-                execution_available=False,
+                execution_available=write and target is not None,
+                unavailable_reason=unavailable_reason,
             )
         )
 
-    if target is not None and any(term in normalized for term in ("open", "show", "go to")):
-        append("navigation", f"Open {target.label}", href=target.href)
+    if read_target is not None and any(term in normalized for term in ("open", "show", "go to")):
+        append("navigation", f"Open {read_target.label}", href=read_target.href)
     if any(term in normalized for term in ("draft", "prepare", "write a reply")):
         append("draft", "Prepare a draft proposal", write=True)
     if any(term in normalized for term in ("task", "remind", "schedule", "assign")):

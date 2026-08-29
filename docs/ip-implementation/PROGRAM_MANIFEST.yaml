@@ -14,16 +14,16 @@
     "verification_status": "not_run",
     "release_status": "blocked",
     "execution_policy": "codex_owned_single_ordered_queue; implement first and run the automated check and exact-release verification batch at the end",
-    "active_slice": "IPLF-064A",
+    "active_slice": "IPLF-065A",
     "checkpoint": {
-      "recorded_at": "2026-08-28T05:29:41.1567256+05:30",
-      "repository_revision": "93ff47cae0d2da41ce5cad6a9a63176d6fc5000a",
-      "environment": "IPLF-061/062 exact production release is verified. IPLF-063 source, schema, API, web, governance, build, and traceability gates are green locally; exact Docker/PostgreSQL/index/browser, hosted CI/security, merge, and production gates remain pending. Protected authority-metadata and judge-refresh schedulers remain PAUSED.",
-      "completed_scope": "IPLF-061A/061B/062A/062B are implemented, locally passed, and deployment verified at exact release 1267ea8c. IPLF-063A/063B implement source-bounded intelligent review, Matter/IP target generalization, canonical IP opposition Draft handoff, source/freshness/contradiction/completeness controls, responsive workflow, documentation, and full local source verification.",
+      "recorded_at": "2026-08-29T19:15:00+05:30",
+      "repository_revision": "0610be30d8f856cd75898625c9357265d734b0b4",
+      "environment": "IPLF-061/062/063 exact production releases are verified. IPLF-064A/B source, schema, API, web, governance, documentation, migration/index, focused backend, TypeScript, and component gates are implemented; the clean full Docker/PostgreSQL/browser gate, hosted CI/security, merge, and production gates remain pending. Protected authority-metadata and judge-refresh schedulers remain PAUSED.",
+      "completed_scope": "IPLF-061A/061B/062A/062B/063A/063B are implemented and deployment verified. IPLF-064A/B implement retained 15-minute assistant action previews, explicit confirmation, canonical Matter/IP task and Draft delegation, allowlisted Matter updates, actor/policy/session/target/token reauthorization, atomic idempotent confirmation, responsive UI, documentation, and dated acceptance coverage.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-064A",
-      "next_action": "Commit the reconciled 063 candidate, run the immutable full Docker/PostgreSQL/index-health and Docker browser matrix, then and only then push for hosted CI/Security/CodeQL, canonical main merge, migration-first production deployment, exact identity, QA bootstrap, and dated UJ-18 production verification. Begin IPLF-064A after the 063 release is complete.",
-      "evidence_ref": "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md"
+      "next_slice": "IPLF-065A",
+      "next_action": "Finish the 064 source gates, run the immutable clean Docker/PostgreSQL/index-health and complete Docker browser matrix, then and only then push for hosted CI/Security/CodeQL, canonical main merge, migration-first production deployment, exact identity, one post-route QA bootstrap, and dated UJ-23 production verification.",
+      "evidence_ref": "docs/ip-implementation/evidence/m6/release-2026-08-29-063.md"
     },
     "work_owner": {
       "owner": "Codex",
@@ -2330,10 +2330,11 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "evidence_refs": [
         "docs/ip-implementation/evidence/m6/IPLF-063A/local-2026-08-28.md",
-        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md"
+        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
+        "docs/ip-implementation/evidence/m6/release-2026-08-29-063.md"
       ]
     },
     {
@@ -2348,7 +2349,7 @@
         "IPLF-064A",
         "IPLF-064B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "implemented",
       "verification_status": "not_run",
       "release_status": "blocked",
       "evidence_refs": []
@@ -14925,7 +14926,8 @@
         "apps/api/tests/test_ip_data_class_projection_gate.py"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-063A/local-2026-08-28.md"
+        "docs/ip-implementation/evidence/m6/IPLF-063A/local-2026-08-28.md",
+        "docs/ip-implementation/evidence/m6/release-2026-08-29-063.md"
       ],
       "evidence_metadata": [
         {
@@ -14940,8 +14942,8 @@
       ],
       "blockers": [],
       "next_actions": [
-        "Run the exact committed candidate through Docker/PostgreSQL migration and index health plus Docker browser acceptance before any push.",
-        "After hosted CI/security and canonical main merge, deploy migration-first and require exact production UJ-18 acceptance; keep protected schedulers PAUSED."
+        "Production deployment and exact hosted UJ-18 acceptance are complete for this bounded slice; continue only with independently allocated later-owner requirements and UAT.",
+        "Preserve the exact-release evidence and keep authority-metadata and judge-mapping refresh schedulers PAUSED until separately approved."
       ],
       "data_impact": [
         "Extends recommendations with tenant-matched Matter/IP target, frozen report/source/prompt/model/selection/finalization evidence and adds a tenant-bound source recommendation link to Draft.",
@@ -14957,7 +14959,7 @@
       "allocation_review": "2026-08-28 brutal current-implementation review: extend Recommendation and the existing M4 target-aware Draft owner only. Preserve AuthorityResearchReport, SourceAction, Matter/IP target, access/lifecycle, ModelRun/billing/audit, and opposition proceeding ownership. Bound provider/query work, release the transaction around provider calls, require source registry openability and exact passage support, and fail closed for stale access or destructive rollback. No duplicate research, recommendation, pleading, source, worker, or scheduler owner.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
@@ -15027,7 +15029,8 @@
         "tests/e2e/iplf-063b-intelligent-review-2026-08-28-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md"
+        "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
+        "docs/ip-implementation/evidence/m6/release-2026-08-29-063.md"
       ],
       "evidence_metadata": [
         {
@@ -15042,7 +15045,7 @@
       ],
       "blockers": [],
       "next_actions": [
-        "Execute the dated UJ-18 normal and exception paths in exact Docker acceptance, then require hosted CI/Security/CodeQL and exact production replay before release status changes.",
+        "Production deployment and exact hosted UJ-18 acceptance are complete for this bounded slice; preserve the dated evidence and continue only with independent later-owner work.",
         "Continue IPLF-065 evaluation/feedback independently; do not claim its shared AI-REV release evaluation from this slice."
       ],
       "data_impact": [
@@ -15058,7 +15061,7 @@
       "allocation_review": "2026-08-28 brutal workflow review: one review route extends saved research and existing Matter/IP workspaces. IP Draft publication requires the canonical opposition proceeding; docket-only analysis may finalize but cannot create an orphan pleading. IPLF-065 retains independent feedback/evaluation and prohibited-output release scoring. The dated specifications map every UJ-18 normal/exception ID to its PRD meaning.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked"
+      "release_status": "deployment_verified"
     },
     {
       "id": "IPLF-064A",
@@ -15076,26 +15079,56 @@
         {
           "classification": "EXTEND",
           "component": "IPLF-064 canonical scope: AI proposed-action preview/confirm boundary.",
-          "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
-          "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
-          "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
+          "canonical_writer": "AssistantActionService owns only retained assistant_action_previews evidence. Confirmed mutations delegate atomically to existing MatterTask, Draft, Matter, and IP shared-work writers.",
+          "compatibility_path": "Existing direct Matter, Draft, and IP routes retain their contracts; their services accept an internal transaction-owner option so assistant confirmation can commit one canonical write and both audit records atomically.",
+          "retirement_gate": "No existing writer is retired. The assistant action route remains unavailable until the additive table exists and exact deployed migration/index/action acceptance passes."
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260829_0001_assistant_action_boundary.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/schemas/workspace_assistant.py",
+        "apps/api/src/caseops_api/services/assistant_actions.py",
+        "apps/api/src/caseops_api/api/routes/workspace_assistant.py",
+        "apps/api/src/caseops_api/services/matters.py",
+        "apps/api/src/caseops_api/services/drafting.py"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_20260829_assistant_action_migration.py",
+        "apps/api/tests/test_workspace_assistant_actions.py"
+      ],
       "evidence_refs": [],
       "evidence_metadata": [],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Run the clean full local Docker/PostgreSQL/index/browser gate; keep release blocked until hosted CI, main merge, migration-first production deployment, exact identity, and dated production acceptance pass."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Adds only assistant_action_previews retained handoff evidence. Confirmed writes use existing canonical MatterTask, Draft, Matter, and IP records in one transaction; there is no worker, scheduler, autonomous executor, alternate domain writer, or authorized disposition."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/ASSISTANT_ACTION_BOUNDARY.md",
+          "disposition": "created",
+          "owner": "Engineering/Product/Security",
+          "evidence": "Canonical ownership, preview/confirm invariants, exclusions, retention, rollback, and verification boundary"
+        },
+        {
+          "artifact": "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml",
+          "disposition": "updated",
+          "owner": "Engineering/Data governance",
+          "evidence": "Registered assistant_action_previews table, columns, indexes, categories, and fail-closed disposition"
+        },
+        {
+          "artifact": "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
+          "disposition": "updated",
+          "owner": "Engineering/Security",
+          "evidence": "Versioned action-previewed and action-confirmed audit contracts"
+        }
+      ],
+      "allocation_review": "2026-08-29 brutal ownership review: one retained assistant preview table seals actor/session/policy/target/payload evidence and delegates confirmation to existing canonical writers. No duplicate task, Draft, Matter, IP, audit, retention, analytics, worker, or scheduler owner was introduced.",
+      "implementation_status": "implemented",
       "verification_status": "not_run",
       "release_status": "blocked",
       "administrative_exception": {
@@ -15127,31 +15160,66 @@
         {
           "classification": "EXTEND",
           "component": "IPLF-064 canonical scope: AI proposed-action preview/confirm boundary.",
-          "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
-          "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
-          "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
+          "canonical_writer": "AssistantActionService owns only retained assistant_action_previews evidence. Confirmed mutations delegate atomically to existing MatterTask, Draft, Matter, and IP shared-work writers.",
+          "compatibility_path": "WorkspaceAssistant continues to propose deterministic actions. The web opens a separate editable preview dialog and never calls a domain write route directly; navigation and search remain read-only.",
+          "retirement_gate": "The prior disabled-proposal state is replaced only when API and web are on the same migrated revision and exact local/hosted action acceptance is green."
         }
       ],
       "dependencies": [
         "IPLF-064A"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/workspace_assistant.py",
+        "apps/api/src/caseops_api/services/assistant_actions.py",
+        "apps/web/lib/api/workspace-assistant.ts",
+        "apps/web/components/assistant/AssistantActionDialog.tsx",
+        "apps/web/components/assistant/WorkspaceAssistant.tsx"
+      ],
       "test_refs": [
-        "planned:IPLF-UJ-23-EXC-03",
-        "planned:IPLF-UJ-23-NORMAL"
+        "IPLF-UJ-23-EXC-03",
+        "IPLF-UJ-23-NORMAL",
+        "apps/api/tests/test_workspace_assistant_actions.py",
+        "apps/web/components/assistant/WorkspaceAssistant.test.tsx",
+        "tests/e2e/iplf-064b-assistant-actions-2026-08-29.spec.ts",
+        "tests/e2e/iplf-064b-assistant-actions-2026-08-29-prod.spec.ts"
       ],
       "evidence_refs": [],
       "evidence_metadata": [],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Run clean local Docker browser acceptance at desktop and 360px, then exact-release production acceptance after hosted gates and migration-first deployment."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Preview persists sealed evidence but performs no domain write. Explicit confirmation creates exactly one canonical result or fails closed; successful replay is idempotent."
       ],
-      "documentation_impact": [],
-      "allocation_review": "2026-08-27 reciprocal AI-GUIDE review: owns the proposed-action preview/confirm write boundary and the UJ-23 proposed-write exception; it does not own guide search, assistant retrieval, feedback, or analytics.",
-      "implementation_status": "not_started",
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/WORKSPACE_ASSISTANT_FOUNDATION.md",
+          "disposition": "updated",
+          "owner": "Engineering/Product/Security",
+          "evidence": "Released action boundary and non-duplication references"
+        },
+        {
+          "artifact": "docs/ip-implementation/PRODUCT_GUIDE_FOUNDATION.md",
+          "disposition": "updated",
+          "owner": "Product/Engineering",
+          "evidence": "Implemented IPLF-064 boundary and retained IPLF-065/066 ownership"
+        },
+        {
+          "artifact": "docs/ip-implementation/PRODUCT_GUIDE_CATALOG.json",
+          "disposition": "updated",
+          "owner": "Product/Engineering",
+          "evidence": "Ask Workspace command summary includes separate preview and confirmation"
+        },
+        {
+          "artifact": "apps/web/app/law-firms/page.tsx",
+          "disposition": "updated",
+          "owner": "Product/Marketing/Engineering",
+          "evidence": "Public product claim now matches the implemented expiring confirmation boundary"
+        }
+      ],
+      "allocation_review": "2026-08-29 reciprocal and duplicate-work review: owns only proposed-write input, exact preview, explicit confirmation, result handoff, and UJ-23 proposed-write exceptions. Guide search, assistant retrieval, feedback/safety evals, private retrieval/analytics, domain records, and filing/approval remain with their existing or later owners.",
+      "implementation_status": "implemented",
       "verification_status": "not_run",
       "release_status": "blocked",
       "administrative_exception": {
@@ -23558,20 +23626,25 @@
       ],
       "implementation_refs": [
         "apps/api/src/caseops_api/services/workspace_assistant.py",
+        "apps/api/src/caseops_api/services/assistant_actions.py",
+        "apps/api/src/caseops_api/api/routes/workspace_assistant.py",
+        "apps/web/components/assistant/AssistantActionDialog.tsx",
         "apps/web/components/assistant/WorkspaceAssistant.tsx"
       ],
       "test_refs": [
         "IPLF-REQ-AI-GUIDE-06",
         "IPLF-UJ-23-EXC-03",
         "apps/api/tests/test_workspace_assistant_qa.py",
+        "apps/api/tests/test_workspace_assistant_actions.py",
         "apps/web/components/assistant/WorkspaceAssistant.test.tsx",
-        "tests/e2e/iplf-062b-workspace-assistant-2026-08-27.spec.ts"
+        "tests/e2e/iplf-062b-workspace-assistant-2026-08-27.spec.ts",
+        "tests/e2e/iplf-064b-assistant-actions-2026-08-29.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m6/IPLF-062B/local-2026-08-27.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
+      "implementation_status": "implemented",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -41828,10 +41901,12 @@
         "IPLF-UJ-23-EXC-02",
         "IPLF-UJ-23-EXC-03",
         "IPLF-UJ-23-NORMAL",
+        "apps/api/tests/test_workspace_assistant_actions.py",
         "apps/api/tests/test_workspace_assistant_foundation.py",
         "apps/api/tests/test_workspace_assistant_qa.py",
         "apps/web/components/assistant/WorkspaceAssistant.test.tsx",
-        "tests/e2e/iplf-062b-workspace-assistant-2026-08-27.spec.ts"
+        "tests/e2e/iplf-062b-workspace-assistant-2026-08-27.spec.ts",
+        "tests/e2e/iplf-064b-assistant-actions-2026-08-29.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m6/IPLF-062B/local-2026-08-27.md"
@@ -48986,10 +49061,12 @@
       ],
       "test_refs": [
         "IPLF-UJ-23-NORMAL",
+        "apps/api/tests/test_workspace_assistant_actions.py",
         "apps/api/tests/test_workspace_assistant_foundation.py",
         "apps/api/tests/test_workspace_assistant_qa.py",
         "apps/web/components/assistant/WorkspaceAssistant.test.tsx",
-        "tests/e2e/iplf-062b-workspace-assistant-2026-08-27.spec.ts"
+        "tests/e2e/iplf-062b-workspace-assistant-2026-08-27.spec.ts",
+        "tests/e2e/iplf-064b-assistant-actions-2026-08-29.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m6/IPLF-062B/local-2026-08-27.md"
@@ -49137,8 +49214,10 @@
       "test_refs": [
         "IPLF-UJ-23-EXC-03",
         "apps/api/tests/test_workspace_assistant_qa.py",
+        "apps/api/tests/test_workspace_assistant_actions.py",
         "apps/web/components/assistant/WorkspaceAssistant.test.tsx",
-        "tests/e2e/iplf-062b-workspace-assistant-2026-08-27.spec.ts"
+        "tests/e2e/iplf-062b-workspace-assistant-2026-08-27.spec.ts",
+        "tests/e2e/iplf-064b-assistant-actions-2026-08-29.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m6/IPLF-062B/local-2026-08-27.md"

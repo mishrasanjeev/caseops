@@ -185,6 +185,7 @@ def create_draft(
     draft_type: str = DraftType.BRIEF,
     template_type: str | None = None,
     facts: dict | None = None,
+    commit: bool = True,
 ) -> Draft:
     matter = _load_matter(session, context, matter_id)
     matter = require_operational_matter(
@@ -231,8 +232,11 @@ def create_draft(
             "facts_keys": sorted(facts.keys()) if facts else [],
         },
     )
-    session.commit()
-    session.refresh(draft)
+    if commit:
+        session.commit()
+        session.refresh(draft)
+    else:
+        session.flush()
     return draft
 
 
@@ -347,6 +351,7 @@ def create_ip_draft(
     title: str,
     template_key: str,
     facts: dict | None = None,
+    commit: bool = True,
 ) -> Draft:
     clean_title = title.strip()
     if len(clean_title) < 3:
@@ -399,8 +404,11 @@ def create_ip_draft(
             "target_type": "ip_docket",
         },
     )
-    session.commit()
-    session.refresh(draft)
+    if commit:
+        session.commit()
+        session.refresh(draft)
+    else:
+        session.flush()
     return draft
 
 

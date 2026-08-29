@@ -61,11 +61,12 @@ permission-scoped workspace retrieval, retention, archive, export, and the
 fail-closed deletion request. Destructive deletion remains unavailable until
 the legal-hold-aware disposition owner is approved; a blocked request is
 audited and returns a typed conflict rather than erasing retained evidence.
-IPLF-064 owns preview/confirm write actions. IPLF-065 owns governed answer
-feedback and safety evaluation. IPLF-066 owns private retrieval plus assistant
-and action analytics. Existing source actions, ModelRun, AI policy, audit,
-record access, Matter, client, IP, document, and search owners remain
-authoritative.
+IPLF-064 owns the implemented preview/confirm boundary for proposed tasks,
+Drafts, and allowlisted Matter fields; it delegates every confirmed mutation to
+the existing canonical writer. IPLF-065 owns governed answer feedback and
+safety evaluation. IPLF-066 owns private retrieval plus assistant and action
+analytics. Existing source actions, ModelRun, AI policy, audit, record access,
+Matter, client, IP, document, and search owners remain authoritative.
 
 The guide links to `/app/assistant`, but assistant questions and generated
 answers never update the guide catalog. The guide remains reviewed source
