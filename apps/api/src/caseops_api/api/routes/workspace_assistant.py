@@ -6,6 +6,9 @@ from fastapi import APIRouter, Depends, Query, status
 
 from caseops_api.api.dependencies import DbSession, require_capability
 from caseops_api.schemas.workspace_assistant import (
+    AssistantActionConfirmRequest,
+    AssistantActionPreviewRequest,
+    AssistantActionPreviewResponse,
     AssistantAskRequest,
     AssistantAskResponse,
     AssistantScopeReplaceRequest,
@@ -16,6 +19,10 @@ from caseops_api.schemas.workspace_assistant import (
     AssistantSessionListResponse,
     AssistantSessionRecord,
     AssistantTurnListResponse,
+)
+from caseops_api.services.assistant_actions import (
+    confirm_assistant_action,
+    preview_assistant_action,
 )
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.workspace_assistant import (
@@ -167,6 +174,46 @@ def post_assistant_question(
         session_id=session_id,
         expected_version=payload.expected_version,
         question=payload.question,
+    )
+
+
+@router.post(
+    "/sessions/{session_id}/actions/preview",
+    response_model=AssistantActionPreviewResponse,
+    summary="Preview one proposed assistant write without changing its target.",
+)
+def post_assistant_action_preview(
+    session_id: str,
+    payload: AssistantActionPreviewRequest,
+    context: AssistantUser,
+    session: DbSession,
+) -> AssistantActionPreviewResponse:
+    return preview_assistant_action(
+        session,
+        context=context,
+        session_id=session_id,
+        payload=payload,
+    )
+
+
+@router.post(
+    "/sessions/{session_id}/actions/{preview_id}/confirm",
+    response_model=AssistantActionPreviewResponse,
+    summary="Confirm an unchanged preview through the canonical domain writer.",
+)
+def post_assistant_action_confirmation(
+    session_id: str,
+    preview_id: str,
+    payload: AssistantActionConfirmRequest,
+    context: AssistantUser,
+    session: DbSession,
+) -> AssistantActionPreviewResponse:
+    return confirm_assistant_action(
+        session,
+        context=context,
+        session_id=session_id,
+        preview_id=preview_id,
+        payload=payload,
     )
 
 

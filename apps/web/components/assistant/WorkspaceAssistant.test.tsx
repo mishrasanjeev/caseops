@@ -7,12 +7,14 @@ import { ApiError } from "@/lib/api/config";
 const api = vi.hoisted(() => ({
   archiveAssistantSession: vi.fn(),
   askWorkspaceAssistant: vi.fn(),
+  confirmAssistantAction: vi.fn(),
   createAssistantSession: vi.fn(),
   deleteAssistantSession: vi.fn(),
   exportAssistantSession: vi.fn(),
   getAssistantSession: vi.fn(),
   listAssistantSessions: vi.fn(),
   listAssistantTurns: vi.fn(),
+  previewAssistantAction: vi.fn(),
   replaceAssistantScopes: vi.fn(),
   searchAssistantScopes: vi.fn(),
 }));
@@ -98,9 +100,12 @@ const ASSISTANT_TURN = {
       href: null,
       target_type: "matter",
       target_id: "matter-1",
+      target_version: "2026-08-27T12:00:00",
+      target_label: "TM-42 · Aster mark",
       instruction: "Create a task",
       requires_confirmation: true,
       execution_available: false,
+      unavailable_reason: "Action unavailable in this fixture",
     },
   ],
   created_at: "2026-08-27T12:01:01Z",
@@ -166,6 +171,101 @@ describe("WorkspaceAssistant", () => {
 
     expect(await screen.findByText("Workspace AI policy has not enabled this assistant.")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Start conversation" })).toBeDisabled();
+  });
+
+  it("previews exact task changes before a separate confirmation", async () => {
+    const user = userEvent.setup();
+    const availableTurn = {
+      ...ASSISTANT_TURN,
+      proposed_actions: [
+        {
+          ...ASSISTANT_TURN.proposed_actions[0],
+          execution_available: true,
+          unavailable_reason: null,
+        },
+      ],
+    };
+    const pending = {
+      preview_id: "preview-1",
+      proposal_id: "proposal-1",
+      action_type: "task" as const,
+      status: "pending" as const,
+      session_version: 2,
+      resulting_session_version: null,
+      target_type: "matter",
+      target_id: "matter-1",
+      target_label: "TM-42 · Aster mark",
+      summary: "Create one task on TM-42 · Aster mark.",
+      changes: [
+        { field: "Title", before: null, after: "Review registry evidence" },
+        { field: "Priority", before: null, after: "high" },
+      ],
+      warnings: ["Nothing is written until you confirm this exact preview."],
+      required_capabilities: ["matters:write"],
+      preview_token: "a".repeat(64),
+      expires_at: "2026-08-27T12:16:00Z",
+      result_type: null,
+      result_id: null,
+      result_href: null,
+    };
+    api.askWorkspaceAssistant.mockResolvedValue({
+      session: { ...SESSION, version: 2 },
+      user_turn: USER_TURN,
+      assistant_turn: availableTurn,
+    });
+    api.previewAssistantAction.mockResolvedValue(pending);
+    api.confirmAssistantAction.mockResolvedValue({
+      ...pending,
+      status: "confirmed",
+      resulting_session_version: 3,
+      result_type: "matter_task",
+      result_id: "task-1",
+      result_href: "/app/matters/matter-1/tasks",
+    });
+    render(<WorkspaceAssistant />);
+
+    await user.type(screen.getByRole("textbox", { name: "Find workspace records" }), "TM-42");
+    await user.click(screen.getByRole("button", { name: "Find permitted records" }));
+    await user.click(await screen.findByRole("button", { name: "Add TM-42 · Aster mark" }));
+    await user.click(screen.getByRole("button", { name: "Start conversation" }));
+    await user.type(screen.getByRole("textbox", { name: "Ask this workspace" }), "Create a task");
+    await user.click(screen.getByRole("button", { name: "Ask" }));
+
+    await user.click(await screen.findByRole("button", { name: "Prepare a task proposal" }));
+    expect(api.previewAssistantAction).not.toHaveBeenCalled();
+    const title = screen.getByRole("textbox", { name: "Task title" });
+    await user.clear(title);
+    await user.type(title, "Review registry evidence");
+    await user.click(screen.getByRole("combobox", { name: "Priority" }));
+    await user.click(screen.getByRole("option", { name: "High" }));
+    await user.click(screen.getByRole("button", { name: "Review changes" }));
+
+    await waitFor(() =>
+      expect(api.previewAssistantAction).toHaveBeenCalledWith(
+        "session-1",
+        2,
+        "turn-2",
+        "proposal-1",
+        expect.objectContaining({ title: "Review registry evidence", priority: "high" }),
+      ),
+    );
+    expect(await screen.findByText("Create one task on TM-42 · Aster mark.")).toBeVisible();
+    expect(api.confirmAssistantAction).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Confirm action" }));
+    await waitFor(() =>
+      expect(api.confirmAssistantAction).toHaveBeenCalledWith(
+        "session-1",
+        "preview-1",
+        2,
+        "a".repeat(64),
+      ),
+    );
+    expect(await screen.findByText("Action confirmed")).toBeVisible();
+    expect(screen.getByRole("link", { name: /Open result/ })).toHaveAttribute(
+      "href",
+      "/app/matters/matter-1/tasks",
+    );
   });
 
   it("shows permission-changed history and clears the active scope through archival", async () => {

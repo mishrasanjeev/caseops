@@ -2338,6 +2338,7 @@ def update_matter(
     context: SessionContext,
     matter_id: str,
     payload: MatterUpdateRequest,
+    commit: bool = True,
 ) -> MatterRecord:
     requested_updates = payload.model_dump(exclude_unset=True)
     matter_roles = _discover_matter_role_snapshot(
@@ -2739,8 +2740,11 @@ def update_matter(
             matter_id=matter.id,
             metadata={"before": forum_before, "after": forum_after},
         )
-    session.commit()
-    session.refresh(matter)
+    if commit:
+        session.commit()
+        session.refresh(matter)
+    else:
+        session.flush()
     return _matter_record(matter)
 
 
@@ -3334,6 +3338,7 @@ def create_matter_task(
     context: SessionContext,
     matter_id: str,
     payload: MatterTaskCreateRequest,
+    commit: bool = True,
 ) -> MatterTaskRecord:
     matter_roles = _discover_matter_role_snapshot(
         session,
@@ -3419,7 +3424,10 @@ def create_matter_task(
             else f"{task.title} added to the workspace."
         ),
     )
-    session.commit()
+    if commit:
+        session.commit()
+    else:
+        session.flush()
     refreshed_task = session.scalar(
         select(MatterTask)
         .options(

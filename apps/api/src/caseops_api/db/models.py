@@ -19969,6 +19969,12 @@ class AssistantTurnStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class AssistantActionStatus(StrEnum):
+    PENDING = "pending"
+    SUPERSEDED = "superseded"
+    CONFIRMED = "confirmed"
+
+
 class AssistantSession(Base):
     __tablename__ = "assistant_sessions"
     __table_args__ = (
@@ -20195,6 +20201,127 @@ class AssistantCitation(Base):
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
+class AssistantActionPreview(Base):
+    """Reviewable, idempotent handoff from an assistant proposal to one canonical writer."""
+
+    __tablename__ = "assistant_action_previews"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["session_id", "company_id"],
+            ["assistant_sessions.id", "assistant_sessions.company_id"],
+            name="fk_assistant_action_session_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["turn_id", "company_id"],
+            ["assistant_turns.id", "assistant_turns.company_id"],
+            name="fk_assistant_action_turn_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_assistant_action_actor_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_assistant_action_id_company"),
+        CheckConstraint(
+            "action_type IN ('draft', 'task', 'field_update')",
+            name="ck_assistant_action_type",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'superseded', 'confirmed')",
+            name="ck_assistant_action_status",
+        ),
+        CheckConstraint(
+            "session_version > 0 AND policy_version > 0",
+            name="ck_assistant_action_versions_positive",
+        ),
+        CheckConstraint(
+            "length(payload_sha256) = 64 AND length(preview_token_sha256) = 64",
+            name="ck_assistant_action_hashes",
+        ),
+        CheckConstraint(
+            "expires_at > created_at",
+            name="ck_assistant_action_expiry_after_creation",
+        ),
+        CheckConstraint(
+            "(status = 'confirmed' AND confirmed_at IS NOT NULL AND "
+            "result_type IS NOT NULL AND result_id IS NOT NULL AND result_href IS NOT NULL) OR "
+            "(status IN ('pending', 'superseded') AND confirmed_at IS NULL AND "
+            "result_type IS NULL AND result_id IS NULL AND result_href IS NULL)",
+            name="ck_assistant_action_result_lifecycle",
+        ),
+        Index(
+            "ix_assistant_actions_company_actor_status_expiry",
+            "company_id",
+            "created_by_membership_id",
+            "status",
+            "expires_at",
+            "id",
+        ),
+        Index(
+            "ix_assistant_actions_company_session_turn",
+            "company_id",
+            "session_id",
+            "turn_id",
+        ),
+        Index(
+            "ix_assistant_actions_session_company",
+            "session_id",
+            "company_id",
+        ),
+        Index(
+            "ix_assistant_actions_turn_company",
+            "turn_id",
+            "company_id",
+        ),
+        Index(
+            "ix_assistant_actions_turn_proposal",
+            "turn_id",
+            "proposal_id",
+            "created_at",
+        ),
+        Index(
+            "ix_assistant_actions_actor_company",
+            "created_by_membership_id",
+            "company_id",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
+    )
+    session_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    turn_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    proposal_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    action_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    target_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    target_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    target_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    payload_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    payload_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    preview_token_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    session_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    policy_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=AssistantActionStatus.PENDING
+    )
+    result_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    result_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    result_href: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    created_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
     )
 
 

@@ -150,7 +150,9 @@ def test_scoped_qa_citations_abstention_proposals_export_and_deletion_boundary(
         if action["action_type"] == "task"
     )
     assert task_proposal["requires_confirmation"] is True
-    assert task_proposal["execution_available"] is False
+    assert task_proposal["execution_available"] is True
+    assert task_proposal["target_version"]
+    assert matter["title"] in task_proposal["target_label"]
     assert task_proposal["target_type"] == "matter"
     assert task_proposal["target_id"] == matter["id"]
     assert len(task_proposal["proposal_id"]) == 32

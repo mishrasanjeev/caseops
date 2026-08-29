@@ -12261,6 +12261,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/workspace-assistant/sessions/{session_id}/actions/{preview_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm an unchanged preview through the canonical domain writer. */
+        post: operations["post_assistant_action_confirmation_api_workspace_assistant_sessions__session_id__actions__preview_id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspace-assistant/sessions/{session_id}/actions/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview one proposed assistant write without changing its target. */
+        post: operations["post_assistant_action_preview_api_workspace_assistant_sessions__session_id__actions_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workspace-assistant/sessions/{session_id}/archive": {
         parameters: {
             query?: never;
@@ -12902,6 +12936,107 @@ export interface components {
             /** Weak Evidence Paths */
             weak_evidence_paths: string[];
         };
+        /** AssistantActionChangeRecord */
+        AssistantActionChangeRecord: {
+            /** After */
+            after: string | null;
+            /** Before */
+            before: string | null;
+            /** Field */
+            field: string;
+        };
+        /** AssistantActionConfirmRequest */
+        AssistantActionConfirmRequest: {
+            /** Expected Version */
+            expected_version: number;
+            /** Preview Token */
+            preview_token: string;
+        };
+        /** AssistantActionInput */
+        AssistantActionInput: {
+            /** Description */
+            description?: string | null;
+            /**
+             * Draft Type
+             * @default memo
+             * @enum {string}
+             */
+            draft_type: "brief" | "notice" | "reply" | "memo" | "other";
+            /** Due On */
+            due_on?: string | null;
+            /** Field Name */
+            field_name?: ("title" | "description" | "matter_type" | "client_name" | "opposing_party" | "opposing_counsel" | "practice_area" | "court_name" | "judge_name") | null;
+            /** Field Value */
+            field_value?: string | null;
+            /**
+             * Priority
+             * @default medium
+             * @enum {string}
+             */
+            priority: "low" | "medium" | "high" | "urgent";
+            /** Template Key */
+            template_key?: string | null;
+            /** Title */
+            title?: string | null;
+        };
+        /** AssistantActionPreviewRequest */
+        AssistantActionPreviewRequest: {
+            /** Expected Version */
+            expected_version: number;
+            input: components["schemas"]["AssistantActionInput"];
+            /** Proposal Id */
+            proposal_id: string;
+            /** Turn Id */
+            turn_id: string;
+        };
+        /** AssistantActionPreviewResponse */
+        AssistantActionPreviewResponse: {
+            /**
+             * Action Type
+             * @enum {string}
+             */
+            action_type: "draft" | "task" | "field_update";
+            /** Changes */
+            changes: components["schemas"]["AssistantActionChangeRecord"][];
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Preview Id */
+            preview_id: string;
+            /** Preview Token */
+            preview_token: string;
+            /** Proposal Id */
+            proposal_id: string;
+            /** Required Capabilities */
+            required_capabilities: string[];
+            /** Result Href */
+            result_href?: string | null;
+            /** Result Id */
+            result_id?: string | null;
+            /** Result Type */
+            result_type?: string | null;
+            /** Resulting Session Version */
+            resulting_session_version?: number | null;
+            /** Session Version */
+            session_version: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "superseded" | "confirmed";
+            /** Summary */
+            summary: string;
+            /** Target Id */
+            target_id: string;
+            /** Target Label */
+            target_label: string;
+            /** Target Type */
+            target_type: string;
+            /** Warnings */
+            warnings: string[];
+        };
         /** AssistantAskRequest */
         AssistantAskRequest: {
             /** Expected Version */
@@ -12981,8 +13116,14 @@ export interface components {
             requires_confirmation: boolean;
             /** Target Id */
             target_id?: string | null;
+            /** Target Label */
+            target_label?: string | null;
             /** Target Type */
             target_type?: string | null;
+            /** Target Version */
+            target_version?: string | null;
+            /** Unavailable Reason */
+            unavailable_reason?: string | null;
         };
         /** AssistantScopeInput */
         AssistantScopeInput: {
@@ -67377,6 +67518,77 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_assistant_action_confirmation_api_workspace_assistant_sessions__session_id__actions__preview_id__confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                preview_id: string;
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantActionConfirmRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantActionPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_assistant_action_preview_api_workspace_assistant_sessions__session_id__actions_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantActionPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantActionPreviewResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

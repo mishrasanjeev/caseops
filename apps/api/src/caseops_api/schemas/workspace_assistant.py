@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -151,9 +151,78 @@ class AssistantProposedAction(BaseModel):
     href: str | None = None
     target_type: str | None = None
     target_id: str | None = None
+    target_version: str | None = None
+    target_label: str | None = None
     instruction: str | None = None
     requires_confirmation: bool
     execution_available: bool = False
+    unavailable_reason: str | None = None
+
+
+AssistantActionType = Literal["draft", "task", "field_update"]
+AssistantMatterField = Literal[
+    "title",
+    "description",
+    "matter_type",
+    "client_name",
+    "opposing_party",
+    "opposing_counsel",
+    "practice_area",
+    "court_name",
+    "judge_name",
+]
+
+
+class AssistantActionInput(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    title: str | None = Field(default=None, max_length=255)
+    description: str | None = Field(default=None, max_length=4000)
+    due_on: date | None = None
+    priority: Literal["low", "medium", "high", "urgent"] = "medium"
+    draft_type: Literal["brief", "notice", "reply", "memo", "other"] = "memo"
+    template_key: str | None = Field(default=None, min_length=3, max_length=60)
+    field_name: AssistantMatterField | None = None
+    field_value: str | None = Field(default=None, max_length=4000)
+
+
+class AssistantActionPreviewRequest(BaseModel):
+    expected_version: int = Field(ge=1)
+    turn_id: str = Field(min_length=1, max_length=36)
+    proposal_id: str = Field(min_length=1, max_length=64)
+    input: AssistantActionInput
+
+
+class AssistantActionConfirmRequest(BaseModel):
+    expected_version: int = Field(ge=1)
+    preview_token: str = Field(min_length=64, max_length=64)
+
+
+class AssistantActionChangeRecord(BaseModel):
+    field: str
+    before: str | None
+    after: str | None
+
+
+class AssistantActionPreviewResponse(BaseModel):
+    preview_id: str
+    proposal_id: str
+    action_type: AssistantActionType
+    status: Literal["pending", "superseded", "confirmed"]
+    session_version: int
+    resulting_session_version: int | None = None
+    target_type: str
+    target_id: str
+    target_label: str
+    summary: str
+    changes: list[AssistantActionChangeRecord]
+    warnings: list[str]
+    required_capabilities: list[str]
+    preview_token: str
+    expires_at: datetime
+    result_type: str | None = None
+    result_id: str | None = None
+    result_href: str | None = None
 
 
 class AssistantTurnRecord(BaseModel):
