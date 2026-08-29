@@ -70,6 +70,20 @@ Destructive deletion is intentionally fail-closed: until IPLF-071 supplies an
 approved legal-hold-aware disposition path, `DELETE` records a denied audit and
 returns `assistant_deletion_governance_required` without deleting evidence.
 
+## Governed feedback boundary
+
+IPLF-065 lets the session creator rate or report an assistant answer. The
+feedback target is the existing canonical assistant turn and session; no prompt,
+answer, citation, source text, retrieval payload, or model output is copied into
+the feedback table or feedback audit metadata. Submission reauthorizes the
+creator-private session and tenant before accepting the reference, and a
+cross-tenant, cross-session, user-turn, or invented target fails closed.
+
+The same tenant-admin review queue used for Product Guide feedback owns status,
+priority, reviewer, and bounded review notes. This is operational feedback, not
+an autonomous prompt update, model-training corpus, analytics writer, worker,
+or scheduler. Resolved and dismissed records remain terminal.
+
 ## Bounds and operational behavior
 
 - 24 scopes per session, 20 scope-search results, 20 retrieved sources;
@@ -80,9 +94,9 @@ returns `assistant_deletion_governance_required` without deleting evidence.
 - no assistant worker, scheduler, provider-side autonomous action, or hidden
   analytics writer.
 
-The five assistant tables and tenant AI policy additions are registered in the
-data-governance map. Assistant lifecycle, answer, abstention, provider failure,
-export, archive, blocked deletion, action preview, and action confirmation
-events are registered in the event catalog. Production activation remains
-gated by exact-release migration, index-health, CI/security, and dated browser
-acceptance.
+The five assistant tables, tenant AI policy additions, and canonical-reference
+feedback table are registered in the data-governance map. Assistant lifecycle,
+answer, abstention, provider failure, export, archive, blocked deletion, action
+preview, action confirmation, and feedback review events are registered in the
+event catalog. Production activation remains gated by exact-release migration,
+index-health, CI/security, and dated browser acceptance.

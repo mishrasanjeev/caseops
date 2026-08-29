@@ -6,11 +6,11 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `4d0ea8218e4eca590c4e8588fb5c164edc6500e28afb2619ffb4f6c1b6ccad64`
-- SQL tables: `297`
-- SQL columns: `4815`
-- ORM indexes: `1612`
-- Alembic/raw index declarations: `665`
+- Canonical map SHA-256: `315fb97a88c195df0373a6a81b3e9c8c1e2a19e6d337e2d7bd9afcdafde10b2b`
+- SQL tables: `298`
+- SQL columns: `4836`
+- ORM indexes: `1617`
+- Alembic/raw index declarations: `670`
 - Non-SQL data classes: `11`
 
 ## Boundary
@@ -28,6 +28,7 @@ This inventory does not claim approved retention bounds, legal-hold activation, 
 | `agent_executions` | `tenant_operational_record` | 10 | `registry_fail_closed` |
 | `agent_grants` | `tenant_operational_record` | 15 | `registry_fail_closed` |
 | `agent_tool_calls` | `platform_operational_reference` | 9 | `registry_fail_closed` |
+| `ai_feedback_items` | `tenant_operational_record` | 21 | `registry_fail_closed` |
 | `ai_governance_approvals` | `tenant_operational_record` | 16 | `registry_fail_closed` |
 | `api_idempotency_records` | `tenant_operational_record` | 20 | `registry_fail_closed` |
 | `assistant_action_previews` | `tenant_operational_record` | 23 | `registry_fail_closed` |

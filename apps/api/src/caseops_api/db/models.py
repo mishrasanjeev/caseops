@@ -12802,6 +12802,158 @@ class EvaluationCase(Base):
     run: Mapped[EvaluationRun] = relationship(back_populates="cases")
 
 
+class AIFeedbackSurface(StrEnum):
+    PRODUCT_GUIDE = "product_guide"
+    WORKSPACE_ASSISTANT = "workspace_assistant"
+
+
+class AIFeedbackType(StrEnum):
+    RATING = "rating"
+    REPORT = "report"
+
+
+class AIFeedbackStatus(StrEnum):
+    OPEN = "open"
+    IN_REVIEW = "in_review"
+    RESOLVED = "resolved"
+    DISMISSED = "dismissed"
+
+
+class AIFeedbackItem(Base):
+    """Minimal, tenant-fenced human feedback for approved AI/help surfaces.
+
+    The row points at a canonical Product Guide catalog item or assistant turn.
+    It deliberately does not copy prompts, answers, citations, provider payloads,
+    or retrieved source text into a second analytics store.
+    """
+
+    __tablename__ = "ai_feedback_items"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["submitted_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ai_feedback_submitter_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["reviewed_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ai_feedback_reviewer_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_ai_feedback_id_company"),
+        UniqueConstraint(
+            "company_id",
+            "submitted_by_membership_id",
+            "submission_key",
+            name="uq_ai_feedback_submitter_submission_key",
+        ),
+        CheckConstraint(
+            "surface IN ('product_guide', 'workspace_assistant')",
+            name="ck_ai_feedback_surface",
+        ),
+        CheckConstraint(
+            "target_type IN ('product_guide_command', 'product_guide_section', "
+            "'product_guide_permission', 'product_guide_no_match', 'assistant_turn')",
+            name="ck_ai_feedback_target_type",
+        ),
+        CheckConstraint(
+            "feedback_type IN ('rating', 'report')",
+            name="ck_ai_feedback_type",
+        ),
+        CheckConstraint(
+            "rating IS NULL OR rating IN ('helpful', 'not_helpful')",
+            name="ck_ai_feedback_rating",
+        ),
+        CheckConstraint(
+            "category IS NULL OR category IN ('answer_quality', 'wrong_navigation', "
+            "'missing_permission_explanation', 'unsafe_citation', 'outdated_guidance', "
+            "'missing_guidance', 'other')",
+            name="ck_ai_feedback_category",
+        ),
+        CheckConstraint(
+            "priority IN ('normal', 'high')",
+            name="ck_ai_feedback_priority",
+        ),
+        CheckConstraint(
+            "status IN ('open', 'in_review', 'resolved', 'dismissed')",
+            name="ck_ai_feedback_status",
+        ),
+        CheckConstraint(
+            "(feedback_type = 'rating' AND rating IS NOT NULL AND category IS NULL) OR "
+            "(feedback_type = 'report' AND rating IS NULL AND category IS NOT NULL)",
+            name="ck_ai_feedback_payload_shape",
+        ),
+        CheckConstraint(
+            "(status = 'open' AND reviewed_by_membership_id IS NULL AND reviewed_at IS NULL) OR "
+            "(status IN ('in_review', 'resolved', 'dismissed') AND "
+            "reviewed_by_membership_id IS NOT NULL AND reviewed_at IS NOT NULL)",
+            name="ck_ai_feedback_review_lifecycle",
+        ),
+        Index(
+            "ix_ai_feedback_company_status_created",
+            "company_id",
+            "status",
+            "created_at",
+            "id",
+        ),
+        Index(
+            "ix_ai_feedback_company_surface_created",
+            "company_id",
+            "surface",
+            "created_at",
+            "id",
+        ),
+        Index(
+            "ix_ai_feedback_company_category_status",
+            "company_id",
+            "category",
+            "status",
+            "created_at",
+        ),
+        Index(
+            "ix_ai_feedback_submitter_company",
+            "submitted_by_membership_id",
+            "company_id",
+        ),
+        Index(
+            "ix_ai_feedback_reviewer_company",
+            "reviewed_by_membership_id",
+            "company_id",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
+    )
+    submitted_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    reviewed_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    submission_key: Mapped[str] = mapped_column(String(80), nullable=False)
+    surface: Mapped[str] = mapped_column(String(32), nullable=False)
+    target_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    target_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    parent_target_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    target_version: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    target_href: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    feedback_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    rating: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    category: Mapped[str | None] = mapped_column(String(48), nullable=True)
+    priority: Mapped[str] = mapped_column(String(16), nullable=False, default="normal")
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=AIFeedbackStatus.OPEN
+    )
+    review_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+
 class AuditExportJobStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"

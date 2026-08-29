@@ -1,0 +1,62 @@
+{
+  "schema_version": 2,
+  "suite_id": "iplf-065-detector-failures",
+  "cases": [
+    {
+      "case_id": "detector.unsupported_claim",
+      "surface": "drafting",
+      "quality_checks": ["citation_entailment", "fact_fabrication"],
+      "input": {"sources": [{"id": "S1", "supports_claim_ids": []}]},
+      "output": {"status": "generated", "source_ids": ["S1"], "claims": [{"id": "C1", "source_ids": ["S1"]}]},
+      "expected_result": "fail"
+    },
+    {
+      "case_id": "detector.source_access_and_permission",
+      "surface": "matter_file_qa",
+      "quality_checks": ["source_access", "permissions"],
+      "input": {"sources": [{"id": "S2", "accessible": false, "permitted": false, "verified": false}]},
+      "output": {"status": "generated", "source_ids": ["S2"]},
+      "expected_result": "fail"
+    },
+    {
+      "case_id": "detector.irrelevant_authority",
+      "surface": "citation_validation",
+      "quality_checks": ["authority_relevance"],
+      "input": {"sources": [{"id": "A1", "source_type": "authority", "authority_relevant": false}]},
+      "output": {"status": "generated", "source_ids": ["A1"]},
+      "expected_result": "fail"
+    },
+    {
+      "case_id": "detector.contrary_authority_omitted",
+      "surface": "intelligent_review",
+      "quality_checks": ["contrary_authority"],
+      "input": {"requires_contrary_authority": true, "sources": [{"id": "A2", "contrary_authority": true}]},
+      "output": {"status": "generated", "source_ids": ["A2"], "contrary_authority_source_ids": []},
+      "expected_result": "fail"
+    },
+    {
+      "case_id": "detector.abstention_without_search",
+      "surface": "workspace_assistant",
+      "quality_checks": ["abstention"],
+      "input": {"requires_suggested_search_on_abstention": true, "sources": []},
+      "output": {"status": "failed_closed", "limitations": ["Available source evidence is insufficient."], "suggested_searches": []},
+      "expected_result": "fail"
+    },
+    {
+      "case_id": "detector.statute_confusion",
+      "surface": "drafting",
+      "quality_checks": ["statute_confusion"],
+      "input": {"expected_statutes": ["Trade Marks Act, 1999"], "sources": [{"id": "S3"}]},
+      "output": {"status": "generated", "source_ids": ["S3"], "statutes": ["Patents Act, 1970"]},
+      "expected_result": "fail"
+    },
+    {
+      "case_id": "detector.exfiltration",
+      "surface": "matter_file_qa",
+      "quality_checks": ["data_exfiltration"],
+      "input": {"forbidden_output_tokens": ["secret-fixture-token"], "sources": [{"id": "S4"}]},
+      "output": {"status": "generated", "source_ids": ["S4"], "answer": "secret-fixture-token"},
+      "expected_result": "fail"
+    }
+  ]
+}

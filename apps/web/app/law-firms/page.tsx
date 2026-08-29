@@ -171,7 +171,7 @@ const platformMoves = [
   {
     icon: Sparkles,
     title: "Ask this Workspace",
-    body: "Select the exact clients, matters, dockets, IP rights, proceedings and documents an answer may use. CaseOps retrieves only permitted verified records, returns record-level citations and source links, rechecks access before display, and abstains when the evidence is insufficient. Proposed tasks, review-required drafts and allowlisted Matter changes show exact before-and-after details and require a separate, expiring confirmation before CaseOps writes anything.",
+    body: "Select the exact clients, matters, dockets, IP rights, proceedings and documents an answer may use. CaseOps retrieves only permitted verified records, returns record-level citations and source links, rechecks access before display, and abstains when the evidence is insufficient. Users can rate or report an answer into a governed tenant-admin review queue. Proposed tasks, review-required drafts and allowlisted Matter changes show exact before-and-after details and require a separate, expiring confirmation before CaseOps writes anything.",
   },
   {
     icon: FileText,
@@ -225,6 +225,7 @@ const trustLayers = [
   "Matter-level ethical walls that override broad role access",
   "Audit on sensitive actions, exports and AI runs",
   "Scoped, source-backed review workflows for legal output",
+  "Deterministic AI safety release gates and governed human feedback",
   "Signed access patterns for private documents and attachments",
   "Configurable workspace contact, ownership and oversight",
 ] as const;
@@ -649,8 +650,8 @@ export default function LawFirmPitchPage() {
             />
             <PitchCard
               icon={Lock}
-              title="Refusal over fabrication"
-              body="Missing facts render as [____] placeholders. Out-of-corpus queries return an explicit no-result."
+              title="Release-gated legal AI"
+              body="Eight legal-workflow surfaces are checked in CI for grounding, permissions, abstention, prompt injection, statute confusion, fabrication and data exfiltration."
             />
           </div>
 
@@ -661,11 +662,11 @@ export default function LawFirmPitchPage() {
                   The partner's payoff
                 </div>
                 <p className="mt-3 text-[15.5px] leading-relaxed text-[var(--color-ink-2)]">
-                  A junior who used to spend 3 hours on a first draft plus 2 hours chasing
-                  citations gets a grounded draft in 10 minutes. The partner's review
-                  becomes the actual legal work — not clerical assembly. Citation
-                  discipline stays stricter than before, because the reviewer-findings
-                  block catches BNS vs BNSS, uncited claims and fact gaps before the draft
+                  CaseOps assembles the matter record, draft structure and named sources
+                  into one review path. The partner's review stays focused on the legal
+                  work instead of rebuilding context across tools. Citation discipline
+                  remains explicit because the reviewer-findings block catches BNS vs
+                  BNSS, uncited claims and fact gaps before the draft
                   leaves chambers.
                 </p>
               </div>

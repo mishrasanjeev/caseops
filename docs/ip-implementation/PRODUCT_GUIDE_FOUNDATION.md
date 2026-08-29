@@ -80,6 +80,21 @@ technical dependency declared by the manifest. UJ-22 remains incomplete after
 the 061B UI is delivered until its governed report/analytics postcondition is
 implemented by the later assigned owners.
 
+## Governed feedback boundary
+
+IPLF-065 adds feedback to the existing guide result rows; it does not add a
+second guide catalog, search index, help corpus, analytics store, or issue
+tracker. A rating or typed report points to a server-validated command, section,
+permission result, or no-match result and includes the current catalog
+fingerprint. Invented targets and stale fingerprints fail closed.
+
+Submission is tenant- and membership-scoped and idempotent. The feedback row
+stores only the canonical target reference, rating or category, optional
+bounded comment, lifecycle state, and reviewer evidence. It does not copy the
+search query, guide content, assistant prompt/answer, citations, source text,
+or provider payload. `workspace:admin` is required for the bounded review
+queue; resolved and dismissed records cannot be reopened.
+
 ## Verification
 
 Automated proof covers projection rejection cases, public catalog privacy,
@@ -95,6 +110,10 @@ navigation, missing permission, stale content, abstention and suggested search,
 signed-out/unavailable behavior, mixed permitted and denied matches, and the
 360px layout. Its dated production spec is part of the canonical production
 batch.
+
+IPLF-065 adds component/API/browser proof for rating, typed reporting,
+idempotent retry, stale/invented target rejection, admin review, terminal-state
+immutability, audit redaction, and the 360px feedback layout.
 
 This slice has no schema or data backfill. Rollback is an application rollback
 to the preceding exact release; there is no database downgrade or cleanup.

@@ -131,7 +131,12 @@ def record_case(
     return case
 
 
-def finalize_run(session: Session, run: EvaluationRun) -> EvaluationRun:
+def finalize_run(
+    session: Session,
+    run: EvaluationRun,
+    *,
+    extra_metrics: dict[str, object] | None = None,
+) -> EvaluationRun:
     """Roll per-case counts into the run aggregates and stamp
     ``completed_at``. Idempotent — safe to call after each case if the
     caller prefers streaming progress."""
@@ -162,6 +167,8 @@ def finalize_run(session: Session, run: EvaluationRun) -> EvaluationRun:
         "total_warnings": int(metric_totals[3] or 0),
         "by_status": counts,
     }
+    if extra_metrics:
+        metrics["release_gate"] = extra_metrics
 
     run.case_count = case_count
     run.pass_count = pass_count
