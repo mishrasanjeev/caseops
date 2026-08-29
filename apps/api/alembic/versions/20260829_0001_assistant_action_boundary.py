@@ -3,8 +3,8 @@
 Revision ID: 20260829_0001
 Revises: 20260828_0002
 
-MIGRATION-LOCK-RISK: none on existing application tables; the migration creates
-one empty additive table and its indexes before action execution is enabled.
+MIGRATION-LOCK-RISK: acknowledged - the migration creates one empty additive
+table and its indexes before action execution is enabled; no existing table is scanned.
 MIGRATION-ROLLBACK: restore-forward once preview or confirmation evidence exists.
 The table is retained legal work-product provenance and cannot be dropped while
 populated.
