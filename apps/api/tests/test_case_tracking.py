@@ -29,6 +29,7 @@ from caseops_api.db.models import (
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.services.case_tracking import (
+    _release_smoke_authority_source_text,
     download_case_tracking_source,
     normalize_cnr,
     poll_tracked_cases,
@@ -968,6 +969,26 @@ def test_exact_release_smoke_is_qa_only_idempotent_and_reuses_verified_evidence(
         assert authority_audit_metadata["authority_match_mode"] == (
             "ecourts_cnr_order_reference"
         )
+
+        # An exact order-2 URL may never fall back to order 1 merely because
+        # both records share a case, court, and decision date.
+        authority_update.source_text = None
+        authority_update.source_text_sha256 = None
+        authority_update.source_url = (
+            "https://provider.example/api/partner/case/DLHC010012342026/"
+            "order/order-2.pdf"
+        )
+        bookmark = session.get(TrackedCaseBookmark, bookmark_id)
+        assert bookmark is not None
+        assert (
+            _release_smoke_authority_source_text(
+                session,
+                bookmark=bookmark,
+                update=authority_update,
+            )
+            is None
+        )
+        session.rollback()
 
     jobs = client.get(
         "/api/admin/provider-operations/jobs?include_resolved=true",

@@ -1911,19 +1911,6 @@ def _release_smoke_authority_source_text(
     court_name = (tracked_case.court_name or "").strip()
     if update.order_date is None:
         return None
-    identity_predicates = []
-    if case_number and court_name:
-        identity_predicates.append(
-            and_(
-                func.upper(func.trim(AuthorityDocument.court_name))
-                == court_name.upper(),
-                or_(
-                    func.upper(func.trim(AuthorityDocument.case_reference))
-                    == case_number,
-                    func.upper(func.trim(AuthorityDocument.case_number)) == case_number,
-                ),
-            )
-        )
     ecourts_source_reference: str | None = None
     cnr = normalize_cnr(tracked_case.cnr_number)
     if (
@@ -1940,13 +1927,31 @@ def _release_smoke_authority_source_text(
             ecourts_source_reference = (
                 f"{cnr}_{order_match.group(1)}_{update.order_date.isoformat()}.pdf"
             )
-            identity_predicates.append(
-                and_(
-                    AuthorityDocument.source == "ecourts-hc",
-                    func.upper(func.trim(AuthorityDocument.source_reference))
-                    == ecourts_source_reference.upper(),
-                )
+    # An order-specific eCourts reference is authoritative. Falling back to a
+    # generic case/court identity when that reference is available can attach
+    # order 1's text to order 2 when the documents share a decision date.
+    if ecourts_source_reference:
+        identity_predicates = [
+            and_(
+                AuthorityDocument.source == "ecourts-hc",
+                func.upper(func.trim(AuthorityDocument.source_reference))
+                == ecourts_source_reference.upper(),
             )
+        ]
+    elif case_number and court_name:
+        identity_predicates = [
+            and_(
+                func.upper(func.trim(AuthorityDocument.court_name))
+                == court_name.upper(),
+                or_(
+                    func.upper(func.trim(AuthorityDocument.case_reference))
+                    == case_number,
+                    func.upper(func.trim(AuthorityDocument.case_number)) == case_number,
+                ),
+            )
+        ]
+    else:
+        identity_predicates = []
     if not identity_predicates:
         return None
     rows = list(
@@ -1971,7 +1976,7 @@ def _release_smoke_authority_source_text(
             == ecourts_source_reference.upper()
         ):
             matches.append((row, "ecourts_cnr_order_reference"))
-        elif (
+        elif not ecourts_source_reference and (
             court_name
             and row.court_name.strip().upper() == court_name.upper()
             and (
