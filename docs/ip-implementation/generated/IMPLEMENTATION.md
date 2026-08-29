@@ -124,8 +124,8 @@ Generated; do not edit.
 | IPLF-062B | derived | IPLF-062 | M6 | AI-GUIDE-02, AI-GUIDE-03, AI-GUIDE-04, AI-GUIDE-05, AI-GUIDE-06, AI-GUIDE-07, AI-GUIDE-08, AI-GUIDE-09 | UJ-23-EXC-01, UJ-23-EXC-02, UJ-23-EXC-03, UJ-23-NORMAL | implemented | passed | deployment_verified |
 | IPLF-063A | derived | IPLF-063 | M6 |  |  | implemented | passed | deployment_verified |
 | IPLF-063B | derived | IPLF-063 | M6 | AI-REV-01, AI-REV-02, AI-REV-03, AI-REV-04, AI-REV-05, AI-REV-06, AI-REV-07, AI-REV-08, AI-REV-09, AI-REV-10 | UJ-18-EXC-01, UJ-18-EXC-02, UJ-18-EXC-03, UJ-18-NORMAL | implemented | passed | deployment_verified |
-| IPLF-064A | derived | IPLF-064 | M6 |  |  | implemented | not_run | blocked |
-| IPLF-064B | derived | IPLF-064 | M6 | AI-GUIDE-06 | UJ-23-EXC-03, UJ-23-NORMAL | implemented | not_run | blocked |
+| IPLF-064A | derived | IPLF-064 | M6 |  |  | implemented | passed | blocked |
+| IPLF-064B | derived | IPLF-064 | M6 | AI-GUIDE-06 | UJ-23-EXC-03, UJ-23-NORMAL | implemented | passed | blocked |
 | IPLF-065A | derived | IPLF-065 | M6 |  |  | not_started | not_run | blocked |
 | IPLF-065B | derived | IPLF-065 | M6 | AI-GUIDE-04, AI-GUIDE-05, AI-GUIDE-07, AI-GUIDE-10, AI-REV-01, AI-REV-02, AI-REV-03, AI-REV-04, AI-REV-05, AI-REV-06, AI-REV-07, AI-REV-08, AI-REV-09, AI-REV-10 | UJ-18-EXC-01, UJ-18-EXC-02, UJ-18-EXC-03, UJ-18-NORMAL, UJ-22-NORMAL, UJ-23-EXC-02, UJ-23-NORMAL | not_started | not_run | blocked |
 | IPLF-066A | derived | IPLF-066 | M6 |  |  | not_started | not_run | blocked |

@@ -16,14 +16,14 @@
     "execution_policy": "codex_owned_single_ordered_queue; implement first and run the automated check and exact-release verification batch at the end",
     "active_slice": "IPLF-065A",
     "checkpoint": {
-      "recorded_at": "2026-08-29T19:15:00+05:30",
-      "repository_revision": "0610be30d8f856cd75898625c9357265d734b0b4",
-      "environment": "IPLF-061/062/063 exact production releases are verified. IPLF-064A/B source, schema, API, web, governance, documentation, migration/index, focused backend, TypeScript, and component gates are implemented; the clean full Docker/PostgreSQL/browser gate, hosted CI/security, merge, and production gates remain pending. Protected authority-metadata and judge-refresh schedulers remain PAUSED.",
-      "completed_scope": "IPLF-061A/061B/062A/062B/063A/063B are implemented and deployment verified. IPLF-064A/B implement retained 15-minute assistant action previews, explicit confirmation, canonical Matter/IP task and Draft delegation, allowlisted Matter updates, actor/policy/session/target/token reauthorization, atomic idempotent confirmation, responsive UI, documentation, and dated acceptance coverage.",
+      "recorded_at": "2026-08-29T20:35:24+05:30",
+      "repository_revision": "274d537fa445030e086008acc0b2a033a4959ca5",
+      "environment": "IPLF-061/062/063 exact production releases are verified. IPLF-064A/B implementation and exact committed local Docker/PostgreSQL/index/browser verification are complete; hosted CI/security, merge, and production gates remain pending. Protected authority-metadata and judge-refresh schedulers remain PAUSED.",
+      "completed_scope": "IPLF-061A/061B/062A/062B/063A/063B are implemented and deployment verified. IPLF-064A/B implement and locally verify retained 15-minute assistant action previews, explicit confirmation, canonical Matter/IP task and Draft delegation, allowlisted Matter updates, actor/policy/session/target/token reauthorization, atomic idempotent confirmation, responsive UI, documentation, and dated UJ-23 acceptance.",
       "program_state": "PROGRAM INCOMPLETE",
       "next_slice": "IPLF-065A",
-      "next_action": "Finish the 064 source gates, run the immutable clean Docker/PostgreSQL/index-health and complete Docker browser matrix, then and only then push for hosted CI/Security/CodeQL, canonical main merge, migration-first production deployment, exact identity, one post-route QA bootstrap, and dated UJ-23 production verification.",
-      "evidence_ref": "docs/ip-implementation/evidence/m6/release-2026-08-29-063.md"
+      "next_action": "Push the exact locally verified 064 candidate for hosted CI/Security/CodeQL, merge only when green, verify main, deploy migration-first, verify exact identity, run one post-route QA bootstrap, and execute dated UJ-23 production verification before closing release.",
+      "evidence_ref": "docs/ip-implementation/evidence/m6/IPLF-064B/local-2026-08-29.md"
     },
     "work_owner": {
       "owner": "Codex",
@@ -2350,9 +2350,12 @@
         "IPLF-064B"
       ],
       "implementation_status": "implemented",
-      "verification_status": "not_run",
+      "verification_status": "passed",
       "release_status": "blocked",
-      "evidence_refs": []
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-064A/local-2026-08-29.md",
+        "docs/ip-implementation/evidence/m6/IPLF-064B/local-2026-08-29.md"
+      ]
     },
     {
       "id": "IPLF-065",
@@ -15098,11 +15101,23 @@
         "apps/api/tests/test_20260829_assistant_action_migration.py",
         "apps/api/tests/test_workspace_assistant_actions.py"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-064A/local-2026-08-29.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m6/IPLF-064A/local-2026-08-29.md",
+          "revision": "274d537fa445030e086008acc0b2a033a4959ca5",
+          "environment": "Windows 11, Python 3.13, Node.js 22, exact committed production Docker images, fresh PostgreSQL 17/Valkey 8.1, API, worker, web, and Chromium",
+          "fixtures": "isolated Matter and IP tenants, task/Draft/field proposals, expiring and superseded previews, policy/session/target drift, capability revocation, tampered token, transaction rollback, and retained evidence",
+          "assertions": "preview performs no domain write, exact payload/token sealing, tenant and capability reauthorization, one atomic canonical write, idempotent replay, fail-closed downgrade, complete FK indexes, 512 MiB index health, exact runtime identity, and post-suite health",
+          "result": "passed",
+          "recorded_at": "2026-08-29T20:35:24.1243649+05:30"
+        }
+      ],
       "blockers": [],
       "next_actions": [
-        "Run the clean full local Docker/PostgreSQL/index/browser gate; keep release blocked until hosted CI, main merge, migration-first production deployment, exact identity, and dated production acceptance pass."
+        "Local exact-commit verification passed; keep release blocked until hosted CI, main merge, migration-first production deployment, exact identity, and dated production acceptance pass."
       ],
       "data_impact": [
         "Adds only assistant_action_previews retained handoff evidence. Confirmed writes use existing canonical MatterTask, Draft, Matter, and IP records in one transaction; there is no worker, scheduler, autonomous executor, alternate domain writer, or authorized disposition."
@@ -15129,7 +15144,7 @@
       ],
       "allocation_review": "2026-08-29 brutal ownership review: one retained assistant preview table seals actor/session/policy/target/payload evidence and delegates confirmation to existing canonical writers. No duplicate task, Draft, Matter, IP, audit, retention, analytics, worker, or scheduler owner was introduced.",
       "implementation_status": "implemented",
-      "verification_status": "not_run",
+      "verification_status": "passed",
       "release_status": "blocked",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
@@ -15183,11 +15198,23 @@
         "tests/e2e/iplf-064b-assistant-actions-2026-08-29.spec.ts",
         "tests/e2e/iplf-064b-assistant-actions-2026-08-29-prod.spec.ts"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-064B/local-2026-08-29.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m6/IPLF-064B/local-2026-08-29.md",
+          "revision": "274d537fa445030e086008acc0b2a033a4959ca5",
+          "environment": "Windows 11, exact committed API/web production Docker images, fresh PostgreSQL/Valkey volumes, desktop Chromium, and 360px viewport",
+          "fixtures": "permissioned Matter scope, task proposal, editable preview, confirmed task, exact result link, allowlisted client-name proposal, concurrent canonical Matter edit, and stale-target rejection",
+          "assertions": "proposal and preview make no write, separate confirmation creates exactly one task, exact server session-version handoff, responsive non-overflow, uniquely accessible actions, stale target fails closed, and client name remains unchanged",
+          "result": "passed",
+          "recorded_at": "2026-08-29T20:35:24.1243649+05:30"
+        }
+      ],
       "blockers": [],
       "next_actions": [
-        "Run clean local Docker browser acceptance at desktop and 360px, then exact-release production acceptance after hosted gates and migration-first deployment."
+        "Local desktop and 360px acceptance passed; run exact-release production acceptance after hosted gates and migration-first deployment."
       ],
       "data_impact": [
         "Preview persists sealed evidence but performs no domain write. Explicit confirmation creates exactly one canonical result or fails closed; successful replay is idempotent."
@@ -15220,7 +15247,7 @@
       ],
       "allocation_review": "2026-08-29 reciprocal and duplicate-work review: owns only proposed-write input, exact preview, explicit confirmation, result handoff, and UJ-23 proposed-write exceptions. Guide search, assistant retrieval, feedback/safety evals, private retrieval/analytics, domain records, and filing/approval remain with their existing or later owners.",
       "implementation_status": "implemented",
-      "verification_status": "not_run",
+      "verification_status": "passed",
       "release_status": "blocked",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
@@ -23641,11 +23668,12 @@
         "tests/e2e/iplf-064b-assistant-actions-2026-08-29.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-062B/local-2026-08-27.md"
+        "docs/ip-implementation/evidence/m6/IPLF-062B/local-2026-08-27.md",
+        "docs/ip-implementation/evidence/m6/IPLF-064B/local-2026-08-29.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
-      "verification_status": "not_run",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-062B",
