@@ -16,14 +16,14 @@
     "execution_policy": "codex_owned_single_ordered_queue; implement first and run the automated check and exact-release verification batch at the end",
     "active_slice": "IPLF-065A",
     "checkpoint": {
-      "recorded_at": "2026-08-29T20:35:24+05:30",
-      "repository_revision": "274d537fa445030e086008acc0b2a033a4959ca5",
-      "environment": "IPLF-061/062/063 exact production releases are verified. IPLF-064A/B implementation and exact committed local Docker/PostgreSQL/index/browser verification are complete; hosted CI/security, merge, and production gates remain pending. Protected authority-metadata and judge-refresh schedulers remain PAUSED.",
-      "completed_scope": "IPLF-061A/061B/062A/062B/063A/063B are implemented and deployment verified. IPLF-064A/B implement and locally verify retained 15-minute assistant action previews, explicit confirmation, canonical Matter/IP task and Draft delegation, allowlisted Matter updates, actor/policy/session/target/token reauthorization, atomic idempotent confirmation, responsive UI, documentation, and dated UJ-23 acceptance.",
+      "recorded_at": "2026-08-30T00:07:41+05:30",
+      "repository_revision": "c407ed9399ca501070cb72d3be3200286fa5b3d2",
+      "environment": "IPLF-061/062/063/064 exact production releases are verified. IPLF-064 passed clean local Docker/PostgreSQL/index/browser gates, exact-main CI/Security/CodeQL, migration-first deployment, one counted QA bootstrap, and exact-release hosted acceptance. Protected authority-metadata and judge-refresh schedulers remain PAUSED.",
+      "completed_scope": "IPLF-061A/061B/062A/062B/063A/063B/064A/064B are implemented and deployment verified. IPLF-064 released retained 15-minute assistant action previews, explicit confirmation, canonical Matter/IP task and Draft delegation, allowlisted Matter updates, actor/policy/session/target/token reauthorization, atomic idempotent confirmation, responsive UI, documentation, and the dated proposed-write portion of UJ-23.",
       "program_state": "PROGRAM INCOMPLETE",
       "next_slice": "IPLF-065A",
-      "next_action": "Push the exact locally verified 064 candidate for hosted CI/Security/CodeQL, merge only when green, verify main, deploy migration-first, verify exact identity, run one post-route QA bootstrap, and execute dated UJ-23 production verification before closing release.",
-      "evidence_ref": "docs/ip-implementation/evidence/m6/IPLF-064B/local-2026-08-29.md"
+      "next_action": "Implement IPLF-065A from current main after reconciling existing intelligent-review and assistant safety controls, preserving the IPLF-063 review writer, IPLF-064 action boundary, and IPLF-066 private-retrieval ownership.",
+      "evidence_ref": "docs/ip-implementation/evidence/m6/release-2026-08-30-064.md"
     },
     "work_owner": {
       "owner": "Codex",
@@ -2351,10 +2351,11 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "evidence_refs": [
         "docs/ip-implementation/evidence/m6/IPLF-064A/local-2026-08-29.md",
-        "docs/ip-implementation/evidence/m6/IPLF-064B/local-2026-08-29.md"
+        "docs/ip-implementation/evidence/m6/IPLF-064B/local-2026-08-29.md",
+        "docs/ip-implementation/evidence/m6/release-2026-08-30-064.md"
       ]
     },
     {
@@ -15102,7 +15103,8 @@
         "apps/api/tests/test_workspace_assistant_actions.py"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-064A/local-2026-08-29.md"
+        "docs/ip-implementation/evidence/m6/IPLF-064A/local-2026-08-29.md",
+        "docs/ip-implementation/evidence/m6/release-2026-08-30-064.md"
       ],
       "evidence_metadata": [
         {
@@ -15113,11 +15115,20 @@
           "assertions": "preview performs no domain write, exact payload/token sealing, tenant and capability reauthorization, one atomic canonical write, idempotent replay, fail-closed downgrade, complete FK indexes, 512 MiB index health, exact runtime identity, and post-suite health",
           "result": "passed",
           "recorded_at": "2026-08-29T20:35:24.1243649+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m6/release-2026-08-30-064.md",
+          "revision": "c407ed9399ca501070cb72d3be3200286fa5b3d2",
+          "environment": "Exact main CI/Security/CodeQL, Cloud Build, migration-first Cloud Run deployment, production PostgreSQL/index gate, exact API/web identity, and single-worker hosted Chromium",
+          "fixtures": "CaseOps QA production tenant, retained assistant previews, canonical task/Draft/Matter/IP writers, one counted production bootstrap, and paused protected schedulers",
+          "assertions": "exact image and release identity, migration before traffic, complete index health, preview/confirm reauthorization and atomic idempotency, responsive hosted journey, post-route health, one QA bootstrap execution, and protected-job non-execution",
+          "result": "passed",
+          "recorded_at": "2026-08-30T00:07:41+05:30"
         }
       ],
       "blockers": [],
       "next_actions": [
-        "Local exact-commit verification passed; keep release blocked until hosted CI, main merge, migration-first production deployment, exact identity, and dated production acceptance pass."
+        "Deployment verified; preserve this canonical action boundary while IPLF-065 adds safety evaluation and IPLF-066 adds private retrieval controls."
       ],
       "data_impact": [
         "Adds only assistant_action_previews retained handoff evidence. Confirmed writes use existing canonical MatterTask, Draft, Matter, and IP records in one transaction; there is no worker, scheduler, autonomous executor, alternate domain writer, or authorized disposition."
@@ -15145,7 +15156,7 @@
       "allocation_review": "2026-08-29 brutal ownership review: one retained assistant preview table seals actor/session/policy/target/payload evidence and delegates confirmation to existing canonical writers. No duplicate task, Draft, Matter, IP, audit, retention, analytics, worker, or scheduler owner was introduced.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
@@ -15199,7 +15210,8 @@
         "tests/e2e/iplf-064b-assistant-actions-2026-08-29-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-064B/local-2026-08-29.md"
+        "docs/ip-implementation/evidence/m6/IPLF-064B/local-2026-08-29.md",
+        "docs/ip-implementation/evidence/m6/release-2026-08-30-064.md"
       ],
       "evidence_metadata": [
         {
@@ -15210,11 +15222,20 @@
           "assertions": "proposal and preview make no write, separate confirmation creates exactly one task, exact server session-version handoff, responsive non-overflow, uniquely accessible actions, stale target fails closed, and client name remains unchanged",
           "result": "passed",
           "recorded_at": "2026-08-29T20:35:24.1243649+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m6/release-2026-08-30-064.md",
+          "revision": "c407ed9399ca501070cb72d3be3200286fa5b3d2",
+          "environment": "Exact production API/web release, CaseOps QA tenant, desktop and 360px hosted Chromium, and the public concurrency-one API",
+          "fixtures": "permissioned Matter scope, editable task preview, explicit confirmation, exact result handoff, stale-target rejection, and retained evidence",
+          "assertions": "IPLF-064B hosted preview-confirm journey passed in 13.9 seconds; the complete RAM batch passed 95 tests with five intentional skips, Notice passed two tests, exact identity held, and an unrelated health request remained responsive",
+          "result": "passed",
+          "recorded_at": "2026-08-30T00:07:41+05:30"
         }
       ],
       "blockers": [],
       "next_actions": [
-        "Local desktop and 360px acceptance passed; run exact-release production acceptance after hosted gates and migration-first deployment."
+        "Deployment verified; retain the dated hosted journey as regression coverage while later slices complete shared UJ-23 safety and private-retrieval ownership."
       ],
       "data_impact": [
         "Preview persists sealed evidence but performs no domain write. Explicit confirmation creates exactly one canonical result or fails closed; successful replay is idempotent."
@@ -15248,7 +15269,7 @@
       "allocation_review": "2026-08-29 reciprocal and duplicate-work review: owns only proposed-write input, exact preview, explicit confirmation, result handoff, and UJ-23 proposed-write exceptions. Guide search, assistant retrieval, feedback/safety evals, private retrieval/analytics, domain records, and filing/approval remain with their existing or later owners.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
@@ -23669,12 +23690,13 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m6/IPLF-062B/local-2026-08-27.md",
-        "docs/ip-implementation/evidence/m6/IPLF-064B/local-2026-08-29.md"
+        "docs/ip-implementation/evidence/m6/IPLF-064B/local-2026-08-29.md",
+        "docs/ip-implementation/evidence/m6/release-2026-08-30-064.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-062B",
         "IPLF-064B"

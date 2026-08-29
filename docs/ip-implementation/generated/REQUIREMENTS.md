@@ -182,7 +182,7 @@ Generated; do not edit.
 | AI-GUIDE-03 | AI-GUIDE | IPLF-062B | 6 | 1 | implemented | passed | deployment_verified | true |
 | AI-GUIDE-04 | AI-GUIDE | IPLF-062B, IPLF-065B, IPLF-066B | 7 | 1 | in_progress | not_run | blocked | false |
 | AI-GUIDE-05 | AI-GUIDE | IPLF-062B, IPLF-065B, IPLF-066B | 6 | 1 | in_progress | not_run | blocked | false |
-| AI-GUIDE-06 | AI-GUIDE | IPLF-062B, IPLF-064B | 7 | 2 | implemented | passed | blocked | false |
+| AI-GUIDE-06 | AI-GUIDE | IPLF-062B, IPLF-064B | 7 | 3 | implemented | passed | deployment_verified | true |
 | AI-GUIDE-07 | AI-GUIDE | IPLF-061B, IPLF-062B, IPLF-065B | 8 | 2 | in_progress | not_run | blocked | false |
 | AI-GUIDE-08 | AI-GUIDE | IPLF-061B, IPLF-062B, IPLF-066B | 9 | 2 | in_progress | not_run | blocked | false |
 | AI-GUIDE-09 | AI-GUIDE | IPLF-062B | 5 | 2 | implemented | passed | deployment_verified | false |
