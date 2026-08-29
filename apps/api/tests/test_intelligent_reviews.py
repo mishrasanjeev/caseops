@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from fastapi.testclient import TestClient
 from sqlalchemy import event, select
@@ -250,6 +251,39 @@ def _queue(
     )
     assert response.status_code == 202, response.text
     return str(response.json()["id"])
+
+
+def test_intelligent_review_releases_request_transaction_before_background_model_call(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    from caseops_api.api.routes import intelligent_reviews as review_routes
+
+    bootstrap, matter_id, report_id, authority_ids, _passages = _setup(client)
+    captured: dict[str, Any] = {}
+    original_enqueue = review_routes.enqueue_intelligent_review
+
+    def capture_session(session, **kwargs):
+        captured["session"] = session
+        return original_enqueue(session, **kwargs)
+
+    def checked_worker(review_id: str) -> None:
+        assert review_id
+        request_session = captured["session"]
+        assert request_session.in_transaction() is False
+        captured["background_checked"] = True
+
+    monkeypatch.setattr(review_routes, "enqueue_intelligent_review", capture_session)
+    monkeypatch.setattr(review_routes, "run_intelligent_review_job", checked_worker)
+
+    _queue(
+        client,
+        token=str(bootstrap["access_token"]),
+        matter_id=matter_id,
+        report_id=report_id,
+        authority_ids=authority_ids,
+    )
+    assert captured.get("background_checked") is True
 
 
 def test_intelligent_review_normal_selection_finalize_and_publish(

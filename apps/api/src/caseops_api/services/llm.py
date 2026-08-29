@@ -1041,6 +1041,8 @@ def max_tokens_for_purpose(purpose: str | None) -> int:
         return getattr(settings, "llm_max_output_tokens_hearing_pack", 4096)
     if purpose == PURPOSE_ASSISTANT:
         return getattr(settings, "llm_max_output_tokens_assistant", 2048)
+    if purpose == PURPOSE_RECOMMENDATIONS:
+        return getattr(settings, "llm_max_output_tokens_recommendations", 4096)
     return settings.llm_max_output_tokens
 
 

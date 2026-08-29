@@ -294,7 +294,9 @@ def _case_order_events(
     prefix: str,
     cnr: str | None,
     order_download_base_url: str | None = None,
+    embedded_files: object = None,
 ) -> list[ProviderCaseEvent]:
+    file_rows = _embedded_order_files(embedded_files)
     if not isinstance(raw, list):
         return []
     events: list[ProviderCaseEvent] = []
@@ -312,8 +314,15 @@ def _case_order_events(
         if not title:
             continue
         event_date = _parse_date(item.get("orderDate") or item.get("date"))
+        embedded_file = _matching_embedded_order_file(
+            file_rows,
+            cnr=cnr,
+            order_url=order_url,
+        )
         source_text, source_text_truncated = _source_text(
-            item.get("markdownContent") or item.get("text")
+            item.get("markdownContent")
+            or item.get("text")
+            or (embedded_file or {}).get("markdownContent")
         )
         source_key = order_url or _stable_key(prefix, item)
         source_url = None
@@ -350,6 +359,38 @@ def _case_order_events(
     return events
 
 
+def _embedded_order_files(raw: object) -> list[dict[str, object]]:
+    if isinstance(raw, dict):
+        raw = raw.get("files")
+    if not isinstance(raw, list):
+        return []
+    return [item for item in raw if isinstance(item, dict)][:100]
+
+
+def _matching_embedded_order_file(
+    files: list[dict[str, object]],
+    *,
+    cnr: str | None,
+    order_url: str | None,
+) -> dict[str, object] | None:
+    """Match one order URL to the CNR-prefixed case-detail file row."""
+
+    if not order_url:
+        return None
+    short_name = order_url.rsplit("/", 1)[-1].strip().lower()
+    if not short_name:
+        return None
+    accepted = {short_name}
+    if cnr:
+        accepted.add(f"{cnr.strip().lower()}-{short_name}")
+    matches = []
+    for item in files:
+        pdf_name = str(item.get("pdfFile") or "").rsplit("/", 1)[-1].strip().lower()
+        if pdf_name in accepted:
+            matches.append(item)
+    return matches[0] if len(matches) == 1 else None
+
+
 def _snapshot_from_payload(
     payload: dict[str, object],
     *,
@@ -379,12 +420,14 @@ def _snapshot_from_payload(
         prefix="order",
         cnr=cnr,
         order_download_base_url=order_download_base_url,
+        embedded_files=data.get("files") if isinstance(data, dict) else None,
     )
     judgments = _case_order_events(
         _first_list(case.get("judgments"), case.get("final_judgments"), case.get("judgmentOrders")),
         prefix="judgment",
         cnr=cnr,
         order_download_base_url=order_download_base_url,
+        embedded_files=data.get("files") if isinstance(data, dict) else None,
     )
     if not orders:
         orders = _events(case.get("orders") or case.get("daily_orders"), prefix="order")

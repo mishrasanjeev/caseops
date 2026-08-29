@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from caseops_api.core.settings import get_settings, is_non_local_env
 from caseops_api.db.models import (
+    AuthorityDocument,
     Company,
     CompanyMembership,
     Matter,
@@ -1897,6 +1898,103 @@ class _ReleaseSmokeCachedEvidence:
     source_update: TrackedCaseUpdate
 
 
+def _release_smoke_authority_source_text(
+    session: Session,
+    *,
+    bookmark: TrackedCaseBookmark,
+    update: TrackedCaseUpdate,
+) -> tuple[str, AuthorityDocument, str] | None:
+    """Resolve one exact, accessible corpus copy for a legacy provider event."""
+
+    tracked_case = bookmark.tracked_case
+    case_number = normalize_case_number(tracked_case.case_number)
+    court_name = (tracked_case.court_name or "").strip()
+    if update.order_date is None:
+        return None
+    identity_predicates = []
+    if case_number and court_name:
+        identity_predicates.append(
+            and_(
+                func.upper(func.trim(AuthorityDocument.court_name))
+                == court_name.upper(),
+                or_(
+                    func.upper(func.trim(AuthorityDocument.case_reference))
+                    == case_number,
+                    func.upper(func.trim(AuthorityDocument.case_number)) == case_number,
+                ),
+            )
+        )
+    ecourts_source_reference: str | None = None
+    cnr = normalize_cnr(tracked_case.cnr_number)
+    if (
+        tracked_case.provider == "ecourtsindia"
+        and cnr
+        and update.source_url
+    ):
+        order_match = re.search(
+            rf"/case/{re.escape(cnr)}/order/order-([1-9][0-9]*)\.pdf$",
+            unquote(urlparse(update.source_url).path),
+            flags=re.IGNORECASE,
+        )
+        if order_match:
+            ecourts_source_reference = (
+                f"{cnr}_{order_match.group(1)}_{update.order_date.isoformat()}.pdf"
+            )
+            identity_predicates.append(
+                and_(
+                    AuthorityDocument.source == "ecourts-hc",
+                    func.upper(func.trim(AuthorityDocument.source_reference))
+                    == ecourts_source_reference.upper(),
+                )
+            )
+    if not identity_predicates:
+        return None
+    rows = list(
+        session.scalars(
+            select(AuthorityDocument)
+            .where(
+                AuthorityDocument.source_access_state == "available",
+                AuthorityDocument.document_text.is_not(None),
+                AuthorityDocument.decision_date == update.order_date,
+                or_(*identity_predicates),
+            )
+            .order_by(AuthorityDocument.id)
+            .limit(3)
+        )
+    )
+    matches: list[tuple[AuthorityDocument, str]] = []
+    for row in rows:
+        if (
+            ecourts_source_reference
+            and row.source == "ecourts-hc"
+            and (row.source_reference or "").strip().upper()
+            == ecourts_source_reference.upper()
+        ):
+            matches.append((row, "ecourts_cnr_order_reference"))
+        elif (
+            court_name
+            and row.court_name.strip().upper() == court_name.upper()
+            and (
+                normalize_case_number(row.case_reference) == case_number
+                or normalize_case_number(row.case_number) == case_number
+            )
+        ):
+            matches.append((row, "case_number_court"))
+    if len(matches) != 1:
+        return None
+    authority, match_mode = matches[0]
+    source_text = authority.document_text or ""
+    if not source_text.strip() or not (authority.source_reference or authority.canonical_url):
+        return None
+    source_hash = hashlib.sha256(source_text.encode("utf-8")).hexdigest()
+    if authority.content_hash and authority.content_hash != source_hash:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Stored authority source failed integrity verification.",
+        )
+    return source_text, authority, match_mode
+
+
 def _backfill_release_smoke_source_from_snapshot(
     session: Session,
     *,
@@ -1926,16 +2024,11 @@ def _backfill_release_smoke_source_from_snapshot(
                 continue
             source_record_key = event.get("source_record_key")
             source_url = event.get("source_url")
-            source_text = event.get("text")
             if (
                 not isinstance(source_record_key, str)
                 or not source_record_key
                 or not isinstance(source_url, str)
                 or not source_url
-                or not isinstance(source_text, str)
-                or not source_text.strip()
-                or event.get("text_truncated") is not False
-                or event.get("snapshot_text_preview_truncated") is True
             ):
                 continue
             key = (update_type, source_record_key)
@@ -1975,11 +2068,48 @@ def _backfill_release_smoke_source_from_snapshot(
         event = candidates.get((update.update_type, update.source_record_key))
         if event is None or update.source_url != event["source_url"]:
             continue
-        source_text = str(event["text"])
+        authority: AuthorityDocument | None = None
+        authority_match_mode: str | None = None
+        event_text = event.get("text")
+        if (
+            isinstance(event_text, str)
+            and event_text.strip()
+            and event.get("text_truncated") is False
+            and event.get("snapshot_text_preview_truncated") is not True
+        ):
+            source_text = event_text
+            provenance = "verified_provider_snapshot"
+        else:
+            authority_source = _release_smoke_authority_source_text(
+                session,
+                bookmark=bookmark,
+                update=update,
+            )
+            if authority_source is None:
+                continue
+            source_text, authority, authority_match_mode = authority_source
+            provenance = "verified_authority_document"
         source_text_sha256 = hashlib.sha256(source_text.encode("utf-8")).hexdigest()
         update.source_text = source_text
         update.source_text_sha256 = source_text_sha256
         update.source_text_truncated = False
+        update.provider_metadata_json = {
+            **(update.provider_metadata_json or {}),
+            "source_text_provenance": provenance,
+            **(
+                {
+                    "authority_document_id": authority.id,
+                    "authority_source": authority.source,
+                    "authority_source_reference": authority.source_reference
+                    or authority.canonical_url,
+                    "authority_content_hash": authority.content_hash
+                    or source_text_sha256,
+                    "authority_match_mode": authority_match_mode,
+                }
+                if authority is not None
+                else {}
+            ),
+        }
         session.add(update)
         record_from_context(
             session,
@@ -1989,13 +2119,24 @@ def _backfill_release_smoke_source_from_snapshot(
             target_id=update.id,
             matter_id=bookmark.matter_id,
             metadata={
-                "provenance": "verified_provider_snapshot",
+                "provenance": provenance,
                 "tracked_case_id_sha256": _hash_value(bookmark.tracked_case_id),
                 "source_record_key_sha256": _hash_value(update.source_record_key),
                 "source_text_sha256": source_text_sha256,
                 "provider_evidence_operation_id": operation.id,
                 "provider_snapshot_id": snapshot.id,
                 "provider_snapshot_raw_hash": snapshot.raw_hash,
+                **(
+                    {
+                        "authority_document_id": authority.id,
+                        "authority_source": authority.source,
+                        "authority_content_hash": authority.content_hash
+                        or source_text_sha256,
+                        "authority_match_mode": authority_match_mode,
+                    }
+                    if authority is not None
+                    else {}
+                ),
             },
         )
         session.flush()

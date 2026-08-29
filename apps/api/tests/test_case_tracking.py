@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     AuditEvent,
+    AuthorityDocument,
     CaseTrackingSupportMatrix,
     Company,
     CompanyMembership,
@@ -408,6 +409,17 @@ def test_ecourts_provider_uses_partner_paths_and_normalizes_payloads() -> None:
                                 }
                             ],
                         },
+                        "files": {
+                            "files": [
+                                {
+                                    "pdfFile": "DLHC010012342026-judgment-1.pdf",
+                                    "markdownFile": "DLHC010012342026-judgment-1.md",
+                                    "markdownContent": (
+                                        "# Final judgment\n\nOfficial final directions."
+                                    ),
+                                }
+                            ]
+                        },
                         "descriptions": {
                             "enumLookup": {
                                 "caseStatus": {"PENDING": "Pending"},
@@ -448,6 +460,10 @@ def test_ecourts_provider_uses_partner_paths_and_normalizes_payloads() -> None:
     assert snapshot.orders[0].text == "# Interim order\n\nOfficial directions."
     assert snapshot.orders[0].text_truncated is False
     assert snapshot.judgments[0].title == "Final judgment dated 2026-05-27"
+    assert snapshot.judgments[0].text == (
+        "# Final judgment\n\nOfficial final directions."
+    )
+    assert snapshot.judgments[0].text_truncated is False
     assert requests[1].url.path == "/api/partner/case/DLHC010012342026"
 
     refresh = provider.refresh_cases(cnrs=["DLHC010012342026", "DLHC010012342026"])
@@ -863,6 +879,96 @@ def test_exact_release_smoke_is_qa_only_idempotent_and_reuses_verified_evidence(
         assert backfill_metadata["provider_evidence_operation_id"] == body["operation_id"]
         assert backfill_metadata["provider_snapshot_raw_hash"]
 
+        restored.source_text = None
+        restored.source_text_sha256 = None
+        snapshot = session.scalar(
+            select(TrackedCaseProviderSnapshot).where(
+                TrackedCaseProviderSnapshot.operation_id == body["operation_id"]
+            )
+        )
+        assert snapshot is not None
+        raw_snapshot = dict(snapshot.raw_json)
+        raw_snapshot["orders"] = [dict(item) for item in raw_snapshot["orders"]]
+        raw_snapshot["orders"][0]["text"] = None
+        snapshot.raw_json = raw_snapshot
+        snapshot.raw_hash = hashlib.sha256(
+            json.dumps(
+                raw_snapshot,
+                default=str,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        tracked_case = session.scalar(select(TrackedCase))
+        assert tracked_case is not None
+        tracked_case.case_number = "213400001382024"
+        tracked_case.normalized_case_number = "213400001382024"
+        tracked_case.court_name = "DLHC"
+        authority_text = "Official corpus copy of the court's final directions."
+        authority_hash = hashlib.sha256(authority_text.encode("utf-8")).hexdigest()
+        session.add(
+            AuthorityDocument(
+                source="ecourts-hc",
+                adapter_name="release-smoke-authority-test",
+                court_name="Delhi High Court",
+                forum_level="high_court",
+                document_type="judgment",
+                title="Example Petitioner v Example Respondent",
+                case_reference="WP(C) 1/2026",
+                case_number="WP(C) 1/2026",
+                decision_date=date(2026, 5, 26),
+                canonical_key=f"release-smoke-authority-{authority_hash[:32]}",
+                source_reference="DLHC010012342026_1_2026-05-26.pdf",
+                content_hash=authority_hash,
+                source_version="official-v1",
+                retrieved_at=datetime.now(UTC),
+                source_access_state="available",
+                summary=authority_text,
+                document_text=authority_text,
+                extracted_char_count=len(authority_text),
+            )
+        )
+        session.commit()
+
+    authority_release_sha = "e" * 40
+    monkeypatch.setenv("CASEOPS_RELEASE_SHA", authority_release_sha)
+    get_settings.cache_clear()
+    authority_cached = client.post(
+        f"/api/case-tracking/bookmarks/{bookmark_id}/release-smoke",
+        headers=headers,
+        json={"release_sha": authority_release_sha},
+    )
+    assert authority_cached.status_code == 200, authority_cached.text
+    authority_body = authority_cached.json()
+    assert authority_body["response_class"] == "verified_cached"
+    assert authority_body["source_text_sha256"] == authority_hash
+    assert provider.refresh_calls == ["DLHC010012342026"]
+
+    with get_session_factory()() as session:
+        authority_update = session.scalar(select(TrackedCaseUpdate))
+        assert authority_update is not None
+        assert authority_update.source_text == authority_text
+        assert authority_update.provider_metadata_json["source_text_provenance"] == (
+            "verified_authority_document"
+        )
+        assert authority_update.provider_metadata_json["authority_match_mode"] == (
+            "ecourts_cnr_order_reference"
+        )
+        authority_audit = session.scalar(
+            select(AuditEvent)
+            .where(
+                AuditEvent.action == "case_tracking.source_text_backfilled",
+                AuditEvent.target_id == authority_update.id,
+            )
+            .order_by(AuditEvent.created_at.desc())
+        )
+        assert authority_audit is not None
+        authority_audit_metadata = json.loads(authority_audit.metadata_json or "{}")
+        assert authority_audit_metadata["provenance"] == "verified_authority_document"
+        assert authority_audit_metadata["authority_match_mode"] == (
+            "ecourts_cnr_order_reference"
+        )
+
     jobs = client.get(
         "/api/admin/provider-operations/jobs?include_resolved=true",
         headers=headers,
@@ -927,7 +1033,7 @@ def test_exact_release_smoke_is_qa_only_idempotent_and_reuses_verified_evidence(
                 select(AuditEvent).where(AuditEvent.action == "case_tracking.release_smoke")
             )
         )
-        assert len(audits) == 2
+        assert len(audits) == 3
 
 
 def test_release_smoke_rejects_an_untagged_bookmark(

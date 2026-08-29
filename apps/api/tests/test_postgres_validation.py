@@ -7333,16 +7333,17 @@ def test_login_releases_identity_fence_before_background_audit_on_postgres(
 # ---------- document worker / Notice upload lock order (2026-08-26) ----------
 
 
-def test_document_worker_fences_actor_before_matter_on_postgres(
+def test_document_worker_does_not_contend_with_interactive_actor_fence_on_postgres(
     pg_engine,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A reply upload and its first document worker must never deadlock.
+    """A document worker must not block the next interactive matter write.
 
-    Interactive attachment writes fence Membership/User before Matter. The
-    processor writes MatterActivity with the same membership foreign key, so it
-    must use that order too. Holding the actor fence here makes the worker wait;
-    the upload transaction must still be able to lock Matter while it waits.
+    Interactive attachment writes fence Membership/User for role-revocation
+    safety. Processing is system work and its activity has a nullable actor FK,
+    so it must not acquire that global interactive fence. The parent lifecycle
+    lock must also be released after indexing and before downstream compliance
+    work, which can be provider-bound.
     """
 
     from caseops_api.db.models import (
@@ -7372,8 +7373,7 @@ def test_document_worker_fences_actor_before_matter_on_postgres(
             content_type="text/plain",
             size_bytes=23,
             sha256_hex="a" * 64,
-            document_type="notice",
-            notice_document_role="notice",
+            document_type="order_judgment",
         )
         seed.add(attachment)
         seed.flush()
@@ -7411,22 +7411,20 @@ def test_document_worker_fences_actor_before_matter_on_postgres(
         embed_without_provider,
     )
 
-    application_name = f"pg-document-worker-{uuid4()}"
-    actor_lock_attempted = Event()
-    original_actor_lock = document_jobs.lock_company_memberships_for_assignment
+    compliance_started = Event()
+    release_compliance = Event()
 
-    def named_actor_lock(session, **kwargs):
-        session.execute(
-            text("SELECT set_config('application_name', :name, true)"),
-            {"name": application_name},
-        )
-        actor_lock_attempted.set()
-        return original_actor_lock(session, **kwargs)
+    def blocking_compliance_extraction(*_args, **_kwargs):
+        compliance_started.set()
+        assert release_compliance.wait(timeout=15)
+        return None, []
+
+    from caseops_api.services import compliance_extraction
 
     monkeypatch.setattr(
-        document_jobs,
-        "lock_company_memberships_for_assignment",
-        named_actor_lock,
+        compliance_extraction,
+        "run_compliance_extraction_for_attachment",
+        blocking_compliance_extraction,
     )
 
     with Session(pg_engine) as upload_session:
@@ -7438,30 +7436,20 @@ def test_document_worker_fences_actor_before_matter_on_postgres(
         with ThreadPoolExecutor(max_workers=1) as executor:
             worker = executor.submit(document_jobs.run_document_processing_job, job_id)
             try:
-                assert actor_lock_attempted.wait(timeout=10)
-                _wait_for_postgres_lock_wait(
-                    pg_engine,
-                    application_name=application_name,
-                )
-                locked_matter = upload_session.scalar(
-                    select(Matter)
+                assert compliance_started.wait(timeout=15)
+                upload_session.execute(text("SET LOCAL lock_timeout = '1000ms'"))
+                locked_matter_id = upload_session.scalar(
+                    select(Matter.id)
                     .where(Matter.id == matter_id)
-                    .with_for_update(of=Matter, nowait=True)
+                    .with_for_update()
                 )
-                assert locked_matter is not None
-                upload_session.add(
-                    MatterActivity(
-                        matter_id=matter_id,
-                        actor_membership_id=membership_id,
-                        event_type="attachment_added",
-                        title="Concurrent reply upload",
-                    )
-                )
-                upload_session.commit()
+                assert locked_matter_id == matter_id
+                release_compliance.set()
+                worker.result(timeout=15)
             finally:
+                release_compliance.set()
                 if upload_session.in_transaction():
                     upload_session.rollback()
-            worker.result(timeout=15)
 
     with Session(pg_engine) as verify:
         completed_job = verify.get(DocumentProcessingJob, job_id)
@@ -7471,6 +7459,14 @@ def test_document_worker_fences_actor_before_matter_on_postgres(
         assert processed_attachment is not None
         assert processed_attachment.processing_status == DocumentProcessingStatus.INDEXED
         assert verify.scalar(select(Matter.id).where(Matter.id == matter_id)) == matter_id
+        processing_activity = verify.scalar(
+            select(MatterActivity).where(
+                MatterActivity.matter_id == matter_id,
+                MatterActivity.event_type == "attachment_processed",
+            )
+        )
+        assert processing_activity is not None
+        assert processing_activity.actor_membership_id is None
 
 
 # ---------------------------------------------------------------------------
