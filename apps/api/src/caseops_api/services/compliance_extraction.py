@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 
 from fastapi import HTTPException, status
@@ -45,6 +46,7 @@ from caseops_api.schemas.compliance import (
 from caseops_api.services.audit import record_audit, record_from_context
 from caseops_api.services.llm import (
     LLMCallContext,
+    LLMCompletion,
     LLMMessage,
     LLMProvider,
     LLMProviderError,
@@ -97,6 +99,17 @@ class _AIComplianceItem(BaseModel):
 
 class _AICompliancePayload(BaseModel):
     items: list[_AIComplianceItem] = Field(default_factory=list, max_length=20)
+
+
+@dataclass(frozen=True, slots=True)
+class _PreparedAICompliance:
+    """Provider output held in memory until the parent lifecycle is locked."""
+
+    payload: _AICompliancePayload | None = None
+    completion: LLMCompletion | None = None
+    prompt_hash: str | None = None
+    metadata: dict[str, object] = field(default_factory=dict)
+    error_message_redacted: str | None = None
 
 
 def _now() -> datetime:
@@ -390,6 +403,10 @@ def _create_run(
     actor_membership_id: str | None,
     source_text: str | None,
 ) -> MatterComplianceExtractionRun:
+    # This is the first compliance persistence boundary. Provider work may run
+    # before it, but every run/item/model/audit side effect must be serialized
+    # with disposal under the authoritative parent lifecycle lock.
+    matter = assert_operational_matter(session, matter=matter)
     run = MatterComplianceExtractionRun(
         company_id=matter.company_id,
         matter_id=matter.id,
@@ -590,30 +607,27 @@ def _deterministic_items(
     return created
 
 
-def _ai_items(
+def _prepare_ai_items(
     session: Session,
     *,
-    run: MatterComplianceExtractionRun,
     matter: Matter,
-    court_order: MatterCourtOrder | None,
-    attachment: MatterAttachment | None,
     source_text: str,
     provider: LLMProvider | None,
-) -> list[MatterComplianceItem]:
+) -> _PreparedAICompliance:
+    """Complete provider-bound analysis without creating operational children."""
+
     settings = get_settings()
     if not (
         settings.compliance_ai_extraction_enabled
         and settings.compliance_ai_extraction_auto_run_enabled
     ):
-        return []
+        return _PreparedAICompliance()
     llm = provider or build_provider(purpose="metadata_extract")
     policy = resolve_tenant_policy(session, company_id=matter.company_id)
     if not is_model_allowed(policy, purpose="metadata_extract", model=llm.model):
-        run.metadata_json = {
-            **dict(run.metadata_json or {}),
-            "ai_skipped": "tenant_ai_policy_blocked_model",
-        }
-        return []
+        return _PreparedAICompliance(
+            metadata={"ai_skipped": "tenant_ai_policy_blocked_model"}
+        )
     messages = [
         LLMMessage(
             role="system",
@@ -647,13 +661,41 @@ def _ai_items(
             max_tokens=min(settings.llm_max_output_tokens, 1600),
         )
     except LLMProviderError as exc:
-        run.error_message_redacted = redact_provider_error(exc)
-        run.metadata_json = {**dict(run.metadata_json or {}), "ai_failed": True}
-        return []
-    # The model request may take long enough for a concurrent lifecycle
-    # transition. Lock and recheck before recording model output, compliance
-    # items, delivery intents, tasks, or deadlines.
+        return _PreparedAICompliance(
+            metadata={"ai_failed": True},
+            error_message_redacted=redact_provider_error(exc),
+        )
+    return _PreparedAICompliance(
+        payload=payload,
+        completion=completion,
+        prompt_hash=prompt_hash,
+        metadata={"ai_item_count": len(payload.items)},
+    )
+
+
+def _persist_ai_items(
+    session: Session,
+    *,
+    run: MatterComplianceExtractionRun,
+    matter: Matter,
+    court_order: MatterCourtOrder | None,
+    attachment: MatterAttachment | None,
+    prepared: _PreparedAICompliance,
+) -> list[MatterComplianceItem]:
+    """Persist prepared provider output under the authoritative parent lock."""
+
     matter = assert_operational_matter(session, matter=matter)
+    run.metadata_json = {
+        **dict(run.metadata_json or {}),
+        **prepared.metadata,
+    }
+    if prepared.error_message_redacted is not None:
+        run.error_message_redacted = prepared.error_message_redacted
+    payload = prepared.payload
+    completion = prepared.completion
+    prompt_hash = prepared.prompt_hash
+    if payload is None or completion is None or prompt_hash is None:
+        return []
     model_run = ModelRun(
         company_id=matter.company_id,
         matter_id=matter.id,
@@ -670,10 +712,6 @@ def _ai_items(
     session.add(model_run)
     session.flush()
     run.model_run_id = model_run.id
-    run.metadata_json = {
-        **dict(run.metadata_json or {}),
-        "ai_item_count": len(payload.items),
-    }
     created: list[MatterComplianceItem] = []
     for payload_item in payload.items:
         item = _create_item(
@@ -821,6 +859,12 @@ def run_compliance_extraction_for_order(
         )
         return run, []
     try:
+        prepared_ai = _prepare_ai_items(
+            session,
+            matter=matter,
+            source_text=source_text,
+            provider=provider,
+        )
         created = _deterministic_items(
             session,
             run=run,
@@ -831,14 +875,13 @@ def run_compliance_extraction_for_order(
             order_date=order.order_date,
         )
         created.extend(
-            _ai_items(
+            _persist_ai_items(
                 session,
                 run=run,
                 matter=matter,
                 court_order=order,
                 attachment=None,
-                source_text=source_text,
-                provider=provider,
+                prepared=prepared_ai,
             )
         )
         _finish_run(
@@ -890,17 +933,17 @@ def run_compliance_extraction_for_attachment(
     assert_operational_matter(session, matter=matter, lock_for_write=False)
     source_text, skip_reason = _safe_source_text(attachment=attachment)
     linked_order = attachment.linked_court_order
-    run = _create_run(
-        session,
-        matter=matter,
-        court_order=linked_order,
-        attachment=attachment,
-        source_type=MatterComplianceSourceType.MANUAL_UPLOAD,
-        trigger=trigger,
-        actor_membership_id=actor_membership_id,
-        source_text=source_text,
-    )
     if source_text is None:
+        run = _create_run(
+            session,
+            matter=matter,
+            court_order=linked_order,
+            attachment=attachment,
+            source_type=MatterComplianceSourceType.MANUAL_UPLOAD,
+            trigger=trigger,
+            actor_membership_id=actor_membership_id,
+            source_text=source_text,
+        )
         _finish_run(
             session,
             run=run,
@@ -926,6 +969,25 @@ def run_compliance_extraction_for_attachment(
         if linked_order is not None
         else attachment.document_date or utcnow().date()
     )
+    # Complete provider-bound analysis before acquiring the lifecycle lock.
+    # Nothing from the prepared result is persisted until _create_run locks and
+    # revalidates the Matter below.
+    prepared_ai = _prepare_ai_items(
+        session,
+        matter=matter,
+        source_text=source_text,
+        provider=provider,
+    )
+    run = _create_run(
+        session,
+        matter=matter,
+        court_order=linked_order,
+        attachment=attachment,
+        source_type=MatterComplianceSourceType.MANUAL_UPLOAD,
+        trigger=trigger,
+        actor_membership_id=actor_membership_id,
+        source_text=source_text,
+    )
     try:
         created = _deterministic_items(
             session,
@@ -937,14 +999,13 @@ def run_compliance_extraction_for_attachment(
             order_date=order_date,
         )
         created.extend(
-            _ai_items(
+            _persist_ai_items(
                 session,
                 run=run,
                 matter=matter,
                 court_order=linked_order,
                 attachment=attachment,
-                source_text=source_text,
-                provider=provider,
+                prepared=prepared_ai,
             )
         )
         _finish_run(

@@ -7469,6 +7469,140 @@ def test_document_worker_does_not_contend_with_interactive_actor_fence_on_postgr
         assert processing_activity.actor_membership_id is None
 
 
+def test_matter_disposal_wins_attachment_compliance_preparation_race_on_postgres(
+    pg_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Provider preparation cannot resurrect compliance children after disposal."""
+
+    from caseops_api.db.models import (
+        DocumentProcessingAction,
+        DocumentProcessingJob,
+        DocumentProcessingJobStatus,
+        DocumentProcessingStatus,
+        DocumentProcessingTargetType,
+        Matter,
+        MatterAttachment,
+        MatterComplianceExtractionRun,
+        MatterComplianceItem,
+    )
+    from caseops_api.schemas.matters import MatterLifecycleStatusRequest
+    from caseops_api.services import compliance_extraction, document_jobs
+    from caseops_api.services import matters as matter_service
+
+    with Session(pg_engine) as seed:
+        company_id = _seed_company(seed)
+        membership_id = _seed_membership(seed, company_id, role="admin")
+        matter_id = _seed_matter(seed, company_id)
+        attachment = MatterAttachment(
+            matter_id=matter_id,
+            uploaded_by_membership_id=membership_id,
+            original_filename="disposal-compliance-race.txt",
+            storage_key=f"postgres-validation/{uuid4()}/disposal-compliance-race.txt",
+            content_type="text/plain",
+            size_bytes=128,
+            sha256_hex="b" * 64,
+            document_type="order_judgment",
+        )
+        seed.add(attachment)
+        seed.flush()
+        job = DocumentProcessingJob(
+            company_id=company_id,
+            requested_by_membership_id=membership_id,
+            target_type=DocumentProcessingTargetType.MATTER_ATTACHMENT,
+            attachment_id=attachment.id,
+            action=DocumentProcessingAction.INITIAL_INDEX,
+            status=DocumentProcessingJobStatus.QUEUED,
+        )
+        seed.add(job)
+        seed.commit()
+        job_id = job.id
+
+    worker_session_factory = sessionmaker(bind=pg_engine, expire_on_commit=False)
+    monkeypatch.setattr(document_jobs, "get_session_factory", lambda: worker_session_factory)
+
+    def index_without_storage(target: MatterAttachment) -> None:
+        target.processing_status = DocumentProcessingStatus.INDEXED
+        target.extracted_text = (
+            "The respondent shall file a compliance affidavit within fourteen days "
+            "from the date of this order."
+        )
+        target.extracted_char_count = len(target.extracted_text)
+        target.extraction_error = None
+
+    def embed_without_provider(_session, _attachment, *, before_flush=None) -> int:
+        assert before_flush is not None
+        before_flush()
+        return 0
+
+    monkeypatch.setattr(document_jobs, "index_matter_attachment", index_without_storage)
+    monkeypatch.setattr(
+        document_jobs,
+        "embed_matter_attachment_chunks",
+        embed_without_provider,
+    )
+
+    preparation_started = Event()
+    release_preparation = Event()
+
+    def blocking_preparation(*_args, **_kwargs):
+        preparation_started.set()
+        assert release_preparation.wait(timeout=15)
+        return compliance_extraction._PreparedAICompliance()
+
+    monkeypatch.setattr(compliance_extraction, "_prepare_ai_items", blocking_preparation)
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        worker = executor.submit(document_jobs.run_document_processing_job, job_id)
+        try:
+            assert preparation_started.wait(timeout=15)
+            with Session(pg_engine) as disposal_session:
+                context = _ip_race_context(
+                    disposal_session,
+                    company_id=company_id,
+                    membership_id=membership_id,
+                )
+                matter = disposal_session.get(Matter, matter_id)
+                assert matter is not None
+                disposed = matter_service.transition_matter_lifecycle_status(
+                    disposal_session,
+                    context=context,
+                    matter_id=matter_id,
+                    payload=MatterLifecycleStatusRequest(
+                        to_status="disposed",
+                        expected_from_status="active",
+                        expected_updated_at=matter.updated_at,
+                        reason="Regression proof for compliance child resurrection.",
+                    ),
+                )
+                assert disposed.status == "disposed"
+        finally:
+            release_preparation.set()
+        worker.result(timeout=15)
+
+    with Session(pg_engine) as verify:
+        matter = verify.get(Matter, matter_id)
+        assert matter is not None
+        assert matter.status == "disposed"
+        assert matter.is_active is False
+        assert (
+            verify.scalar(
+                select(MatterComplianceExtractionRun.id).where(
+                    MatterComplianceExtractionRun.matter_id == matter_id
+                )
+            )
+            is None
+        )
+        assert (
+            verify.scalar(
+                select(MatterComplianceItem.id).where(
+                    MatterComplianceItem.matter_id == matter_id
+                )
+            )
+            is None
+        )
+
+
 # ---------------------------------------------------------------------------
 # EH-SGR-04 - invoice number immutability (migration 20260820_0002)
 #
