@@ -802,7 +802,21 @@ def test_exact_release_smoke_is_qa_only_idempotent_and_reuses_verified_evidence(
         tracked_case.last_response_class = "rate_limit"
         tracked_case.last_error = "Provider quota requires operator attention."
         tracked_case.provider_freshness_status = "stale"
+        update = session.scalar(select(TrackedCaseUpdate))
+        assert update is not None
+        update.source_text = None
+        update.source_text_sha256 = None
+        update.source_text_truncated = False
         session.commit()
+        unchanged_health = {
+            "last_response_class": tracked_case.last_response_class,
+            "last_error": tracked_case.last_error,
+            "provider_freshness_status": tracked_case.provider_freshness_status,
+            "last_provider_successful_at": tracked_case.last_provider_successful_at,
+            "last_provider_checked_at": tracked_case.last_provider_checked_at,
+            "last_provider_attempted_at": tracked_case.last_provider_attempted_at,
+            "last_operation_id": tracked_case.last_operation_id,
+        }
 
     cached = client.post(
         f"/api/case-tracking/bookmarks/{bookmark_id}/release-smoke",
@@ -819,6 +833,35 @@ def test_exact_release_smoke_is_qa_only_idempotent_and_reuses_verified_evidence(
     assert cached_body["bookmark"]["tracked_case"]["provider_health"] == "unhealthy"
     assert cached_body["bookmark"]["tracked_case"]["manual_refresh_allowed"] is False
     assert provider.refresh_calls == ["DLHC010012342026"]
+
+    with get_session_factory()() as session:
+        restored = session.scalar(select(TrackedCaseUpdate))
+        assert restored is not None
+        assert restored.source_text == "The court issued directions and listed the matter."
+        assert (
+            restored.source_text_sha256
+            == hashlib.sha256(restored.source_text.encode("utf-8")).hexdigest()
+        )
+        assert restored.source_text_truncated is False
+        tracked_case = session.scalar(select(TrackedCase))
+        assert tracked_case is not None
+        assert {
+            "last_response_class": tracked_case.last_response_class,
+            "last_error": tracked_case.last_error,
+            "provider_freshness_status": tracked_case.provider_freshness_status,
+            "last_provider_successful_at": tracked_case.last_provider_successful_at,
+            "last_provider_checked_at": tracked_case.last_provider_checked_at,
+            "last_provider_attempted_at": tracked_case.last_provider_attempted_at,
+            "last_operation_id": tracked_case.last_operation_id,
+        } == unchanged_health
+        backfill_audit = session.scalar(
+            select(AuditEvent).where(AuditEvent.action == "case_tracking.source_text_backfilled")
+        )
+        assert backfill_audit is not None
+        backfill_metadata = json.loads(backfill_audit.metadata_json or "{}")
+        assert backfill_metadata["provenance"] == "verified_provider_snapshot"
+        assert backfill_metadata["provider_evidence_operation_id"] == body["operation_id"]
+        assert backfill_metadata["provider_snapshot_raw_hash"]
 
     jobs = client.get(
         "/api/admin/provider-operations/jobs?include_resolved=true",

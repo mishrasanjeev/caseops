@@ -80,6 +80,7 @@ from caseops_api.services.notification_delivery import (
 from caseops_api.services.session_context import SessionContext
 
 _MAX_BODY_LENGTH = 500
+_RELEASE_SMOKE_MAX_SNAPSHOT_EVENTS = 200
 _RED_PROVIDER_RESPONSE_CLASSES = {
     "authentication",
     "parse_error",
@@ -1896,9 +1897,116 @@ class _ReleaseSmokeCachedEvidence:
     source_update: TrackedCaseUpdate
 
 
+def _backfill_release_smoke_source_from_snapshot(
+    session: Session,
+    *,
+    context: SessionContext,
+    bookmark: TrackedCaseBookmark,
+    operation: TrackedCaseProviderOperation,
+    snapshot: TrackedCaseProviderSnapshot,
+) -> TrackedCaseUpdate | None:
+    raw = snapshot.raw_json
+    if not isinstance(raw, dict):  # pragma: no cover - verified JSON model invariant
+        return None
+    candidates: dict[tuple[str, str], dict[str, object]] = {}
+    ambiguous: set[tuple[str, str]] = set()
+    inspected = 0
+    for collection, update_type in (
+        ("orders", "new_order"),
+        ("judgments", "new_judgment"),
+    ):
+        events = raw.get(collection)
+        if not isinstance(events, list):
+            continue
+        for event in events:
+            if inspected >= _RELEASE_SMOKE_MAX_SNAPSHOT_EVENTS:
+                break
+            inspected += 1
+            if not isinstance(event, dict):
+                continue
+            source_record_key = event.get("source_record_key")
+            source_url = event.get("source_url")
+            source_text = event.get("text")
+            if (
+                not isinstance(source_record_key, str)
+                or not source_record_key
+                or not isinstance(source_url, str)
+                or not source_url
+                or not isinstance(source_text, str)
+                or not source_text.strip()
+                or event.get("text_truncated") is not False
+                or event.get("snapshot_text_preview_truncated") is True
+            ):
+                continue
+            key = (update_type, source_record_key)
+            if key in candidates:
+                ambiguous.add(key)
+                candidates.pop(key, None)
+                continue
+            if key not in ambiguous:
+                candidates[key] = event
+        if inspected >= _RELEASE_SMOKE_MAX_SNAPSHOT_EVENTS:
+            break
+    if not candidates:
+        return None
+
+    rows = list(
+        session.scalars(
+            select(TrackedCaseUpdate)
+            .where(
+                TrackedCaseUpdate.company_id == bookmark.company_id,
+                TrackedCaseUpdate.tracked_case_id == bookmark.tracked_case_id,
+                TrackedCaseUpdate.update_type.in_(
+                    sorted({update_type for update_type, _ in candidates})
+                ),
+                TrackedCaseUpdate.source_record_key.in_(
+                    sorted({source_key for _, source_key in candidates})
+                ),
+                TrackedCaseUpdate.source_url.is_not(None),
+                TrackedCaseUpdate.source_text.is_(None),
+                TrackedCaseUpdate.source_text_sha256.is_(None),
+                TrackedCaseUpdate.source_text_truncated.is_(False),
+            )
+            .order_by(TrackedCaseUpdate.created_at.desc())
+            .limit(_RELEASE_SMOKE_MAX_SNAPSHOT_EVENTS)
+        )
+    )
+    for update in rows:
+        event = candidates.get((update.update_type, update.source_record_key))
+        if event is None or update.source_url != event["source_url"]:
+            continue
+        source_text = str(event["text"])
+        source_text_sha256 = hashlib.sha256(source_text.encode("utf-8")).hexdigest()
+        update.source_text = source_text
+        update.source_text_sha256 = source_text_sha256
+        update.source_text_truncated = False
+        session.add(update)
+        record_from_context(
+            session,
+            context,
+            action="case_tracking.source_text_backfilled",
+            target_type="tracked_case_update",
+            target_id=update.id,
+            matter_id=bookmark.matter_id,
+            metadata={
+                "provenance": "verified_provider_snapshot",
+                "tracked_case_id_sha256": _hash_value(bookmark.tracked_case_id),
+                "source_record_key_sha256": _hash_value(update.source_record_key),
+                "source_text_sha256": source_text_sha256,
+                "provider_evidence_operation_id": operation.id,
+                "provider_snapshot_id": snapshot.id,
+                "provider_snapshot_raw_hash": snapshot.raw_hash,
+            },
+        )
+        session.flush()
+        return update
+    return None
+
+
 def _release_smoke_cached_evidence(
     session: Session,
     *,
+    context: SessionContext,
     bookmark: TrackedCaseBookmark,
 ) -> _ReleaseSmokeCachedEvidence | None:
     provider_evidence = _verified_provider_snapshot(session, bookmark=bookmark)
@@ -1912,7 +2020,15 @@ def _release_smoke_cached_evidence(
         allow_missing=True,
     )
     if source_update is None:
-        return None
+        source_update = _backfill_release_smoke_source_from_snapshot(
+            session,
+            context=context,
+            bookmark=bookmark,
+            operation=operation,
+            snapshot=snapshot,
+        )
+        if source_update is None:
+            return None
     return _ReleaseSmokeCachedEvidence(
         operation=operation,
         snapshot=snapshot,
@@ -2088,7 +2204,11 @@ def run_release_smoke(
             reused=True,
         )
 
-    cached_evidence = _release_smoke_cached_evidence(session, bookmark=bookmark)
+    cached_evidence = _release_smoke_cached_evidence(
+        session,
+        context=context,
+        bookmark=bookmark,
+    )
     if cached_evidence is not None:
         operation = _create_cached_release_smoke_operation(
             session,
