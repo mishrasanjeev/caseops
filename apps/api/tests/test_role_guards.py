@@ -1,7 +1,8 @@
 """Lint-style sweep over the live FastAPI app: every mutating route
-MUST pass through ``require_capability`` or ``require_role`` before
-its handler runs, unless it's on the deliberate public allowlist
-(``/api/auth/*``, ``/api/bootstrap/*``, payment webhook, health).
+MUST pass through a recognized authorization dependency before its handler
+runs, unless it is on the deliberate public/own-auth allowlist. Tenant routes
+use ``require_capability`` or ``require_role``; the one machine-readiness writer
+uses its exact-body HMAC dependency and has no browser/session authority.
 
 The hand-rolled ``if role not in (...)`` pattern the codebase used to
 ship is a correctness footgun — one forgotten guard is a permission
@@ -19,6 +20,9 @@ from caseops_api.api.dependencies import (
     require_any_capability,
     require_capability,
     require_role,
+)
+from caseops_api.api.routes.machine_readiness import (
+    require_machine_readiness_evidence_auth,
 )
 from caseops_api.main import create_application
 
@@ -129,12 +133,13 @@ PUBLIC_MUTATING_ROUTES: set[tuple[str, str]] = {
 
 
 def _is_guarded(route: APIRoute) -> bool:
-    """True iff the route's dependency chain includes require_role or
-    require_capability at some level."""
+    """Return whether the dependency chain contains an approved auth boundary."""
     for dep in route.dependant.dependencies:
         call = getattr(dep, "call", None)
         if call is None:
             continue
+        if call is require_machine_readiness_evidence_auth:
+            return True
         # Both require_role and require_capability return an inner
         # closure named `_dep`. Identify them by their __closure__
         # contents — this is brittle across decorators but matches the
@@ -194,8 +199,8 @@ def test_every_mutating_api_route_is_role_or_capability_guarded(_app) -> None:
                 missing.append(f"{method} {path}")
 
     assert not missing, (
-        "The following /api mutating routes have no require_role / "
-        "require_capability guard. Either gate them or add them to "
+        "The following /api mutating routes have no recognized authorization "
+        "dependency. Either gate them or add them to "
         "PUBLIC_MUTATING_ROUTES with a written justification:\n  - "
         + "\n  - ".join(missing)
     )
@@ -237,6 +242,16 @@ def test_guard_detection_recognises_platform_admin_dependency():
     guard = require_platform_capability("platform:billing_manage")
     assert guard.__name__ == "_dep"
     assert "platform_capability" in guard.__code__.co_freevars
+
+
+def test_guard_detection_recognises_machine_evidence_auth_dependency(_app):
+    route = next(
+        route
+        for route in _app.routes
+        if isinstance(route, APIRoute)
+        and route.path == "/api/internal/machine-readiness/evidence"
+    )
+    assert _is_guarded(route)
 
 
 def test_no_stray_inspect_use():

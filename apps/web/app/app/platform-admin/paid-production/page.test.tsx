@@ -15,7 +15,7 @@ vi.mock("sonner", () => ({
 }));
 
 import PaidProductionReadinessPage from "@/app/app/platform-admin/paid-production/page";
-import { mockBillingFetch } from "@/test/billing-fixtures";
+import { mockBillingFetch, pineLabsUatReadiness } from "@/test/billing-fixtures";
 
 function renderWithQuery(ui: ReactElement) {
   const client = new QueryClient({
@@ -48,14 +48,14 @@ describe("PaidProductionReadinessPage", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("renders readiness blockers and records UAT/signoff evidence safely", async () => {
+  it("renders fail-closed machine readiness without manual pass controls", async () => {
     const user = userEvent.setup();
     renderWithQuery(<PaidProductionReadinessPage />);
 
     expect(await screen.findByText("Pine Labs UAT evidence")).toBeInTheDocument();
     expect(await screen.findByText("Unified production signoff")).toBeInTheDocument();
     expect(screen.getByText("Historical secret rotation")).toBeInTheDocument();
-    expect(screen.getAllByText("Production billing signoff").length).toBeGreaterThan(0);
+    expect(screen.getByText("Machine-verified billing checks")).toBeInTheDocument();
     expect(screen.getByText("webhook secret")).toBeInTheDocument();
     expect(await screen.findByText("Tampered webhook")).toBeInTheDocument();
     expect(screen.getByText("activation blocked")).toBeInTheDocument();
@@ -66,22 +66,12 @@ describe("PaidProductionReadinessPage", () => {
     expect(screen.getByText("amount_mismatch")).toBeInTheDocument();
     expect(screen.getByText("Delhi High Court")).toBeInTheDocument();
 
-    const passButtons = screen.getAllByRole("button", { name: /^pass$/i });
-    await user.click(passButtons[1]);
+    expect(screen.queryByRole("button", { name: /^pass$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /record blocked placeholder/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /record go/i })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: /record no-go/i }));
-    await user.click(passButtons[3]);
-    await user.click(screen.getByRole("button", { name: /record blocked placeholder/i }));
 
     await waitFor(() => {
-      expect(
-        fetchMock.mock.calls.some(([input, init]) => {
-          const url = String(input);
-          return (
-            url.includes("/api/platform-admin/pine-labs/uat-evidence") &&
-            init?.method === "POST"
-          );
-        }),
-      ).toBe(true);
       expect(
         fetchMock.mock.calls.some(([input, init]) => {
           const url = String(input);
@@ -91,24 +81,71 @@ describe("PaidProductionReadinessPage", () => {
           );
         }),
       ).toBe(true);
+    });
+    expect(
+      fetchMock.mock.calls.some(([input, init]) =>
+        /\/(uat-evidence|billing-signoff\/evidence|production-readiness\/evidence|secret-rotation-readiness\/evidence)/.test(
+          String(input),
+        ) && init?.method === "POST",
+      ),
+    ).toBe(false);
+  });
+
+  it("allows the action-scoped go decision once non-decision prerequisites pass", async () => {
+    const fallback = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("/api/platform-admin/pine-labs/uat-readiness")) {
+        return new Response(
+          JSON.stringify({
+            ...pineLabsUatReadiness,
+            complete: true,
+            missing_required_scenarios: [],
+            activation_prerequisites_met: true,
+            activation_blockers: ["Founder Pine Labs go/no-go decision is not recorded."],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (!fallback) throw new Error("Missing billing fixture implementation.");
+      return fallback(input, init);
+    });
+    const user = userEvent.setup();
+    renderWithQuery(<PaidProductionReadinessPage />);
+
+    const recordGo = await screen.findByRole("button", { name: /record go/i });
+    await waitFor(() => expect(recordGo).toBeEnabled());
+    await user.click(recordGo);
+
+    await waitFor(() => {
       expect(
-        fetchMock.mock.calls.some(([input, init]) => {
-          const url = String(input);
-          return (
-            url.includes("/api/platform-admin/billing-signoff/evidence") &&
-            init?.method === "POST"
-          );
-        }),
-      ).toBe(true);
-      expect(
-        fetchMock.mock.calls.some(([input, init]) => {
-          const url = String(input);
-          return (
-            url.includes("/api/platform-admin/secret-rotation-readiness/evidence") &&
-            init?.method === "POST"
-          );
-        }),
+        fetchMock.mock.calls.some(([input, init]) =>
+          String(input).includes("/api/platform-admin/pine-labs/production-activation") &&
+          init?.method === "POST",
+        ),
       ).toBe(true);
     });
+  });
+
+  it("fails closed against the preceding API revision during a rolling deploy", async () => {
+    const fallback = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("/api/platform-admin/pine-labs/uat-readiness")) {
+        const {
+          activation_prerequisites_met: _newApiOnlyField,
+          ...precedingApiPayload
+        } = pineLabsUatReadiness;
+        return new Response(JSON.stringify(precedingApiPayload), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (!fallback) throw new Error("Missing billing fixture implementation.");
+      return fallback(input, init);
+    });
+
+    renderWithQuery(<PaidProductionReadinessPage />);
+
+    expect(await screen.findByText("Pine Labs UAT evidence")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /record go/i })).toBeDisabled();
   });
 });

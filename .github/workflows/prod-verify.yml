@@ -2,10 +2,9 @@ name: Prod verification (Playwright)
 
 # Runs the brutal-honest prod-Playwright suites against the LIVE
 # caseops.ai + api.caseops.ai surface using the dedicated
-# CaseOps QA Bot workspace (caseops-qa). Per
-# .claude/skills/bug-fixing/SKILL.md "Brutal Honest Testing — No Manual
-# QA Dependence": every fix verdict must name the spec line + commit
-# SHA that proves it. This job is the canonical proof artifact.
+# CaseOps QA Bot workspace (caseops-qa). Every fix verdict must name the
+# automated spec and exact commit SHA that prove it. This job is the canonical
+# machine-owned proof artifact.
 #
 # Test infra has zero dependency on real-user credentials — see
 # feedback_dedicated_test_account_no_real_users.md.
@@ -94,6 +93,8 @@ jobs:
         env:
           CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
           CASEOPS_IP_QA_PASSWORD: ${{ secrets.CASEOPS_IP_QA_PASSWORD }}
+          CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET: ${{ secrets.CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           if [ -z "$CASEOPS_QA_PASSWORD" ]; then
             echo "::error::CASEOPS_QA_PASSWORD secret is not configured."
@@ -103,6 +104,11 @@ jobs:
           if [ -z "$CASEOPS_IP_QA_PASSWORD" ]; then
             echo "::error::CASEOPS_IP_QA_PASSWORD secret is not configured."
             echo "Add it under repo Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -z "$CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET" ]; then
+            echo "::error::CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET is not configured."
+            echo "Provision the same dedicated value in GitHub Actions and the API Secret Manager binding."
             exit 1
           fi
 
@@ -212,6 +218,22 @@ jobs:
           CASEOPS_QA_EMAIL: ${{ vars.CASEOPS_QA_EMAIL }}
           CASEOPS_QA_SLUG: ${{ vars.CASEOPS_QA_SLUG }}
         run: npx playwright test --config=playwright.notice-prod.config.ts --reporter=list --output=test-results/notice
+
+      - name: Record exact-release public-claims evidence
+        if: success() && github.event_name == 'workflow_dispatch'
+        env:
+          CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET: ${{ secrets.CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET }}
+          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
+          SERVING_RELEASE_SHA: ${{ steps.deployed-release.outputs.release_sha }}
+        run: |
+          evidence_ref="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}"
+          python scripts/write_machine_readiness_evidence.py \
+            --api-base "${PROD_API_BASE_URL:-https://api.caseops.ai}" \
+            --producer github-actions/prod-verify \
+            --release-sha "$SERVING_RELEASE_SHA" \
+            --run-id "github-actions:${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" \
+            --evidence-ref "$evidence_ref" \
+            --operational public_claims_reviewed=pass
 
       - name: Upload Playwright report on failure
         if: failure()

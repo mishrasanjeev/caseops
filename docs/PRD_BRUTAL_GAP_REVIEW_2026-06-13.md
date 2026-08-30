@@ -286,7 +286,8 @@ Evidence implemented:
 - `ProductionBillingSignoff`
 - `ProductionBillingSignoffEvidence`
 - `/api/platform-admin/billing-signoff`
-- `/api/platform-admin/billing-signoff/evidence`
+- `/api/platform-admin/billing-signoff/evidence` (historical mutation route;
+  removed 2026-08-30, and operator-entered rows are non-authoritative)
 - `/app/platform-admin/paid-production`
 - runbook `docs/runbooks/production-billing-signoff-2026-06-02.md`
 

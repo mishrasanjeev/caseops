@@ -22,13 +22,10 @@ from caseops_api.schemas.production_safety import (
     FinanceRecordRequest,
     PasswordResetReadinessResponse,
     PineLabsActivationDecisionRequest,
-    PineLabsUATEvidenceRequest,
     PineLabsUATReadinessResponse,
     PineLabsUATRunCreateRequest,
-    PlatformOperationalReadinessEvidenceRequest,
     PlatformOperationalReadinessRecord,
     PlatformProductionReadinessResponse,
-    ProductionBillingSignoffEvidenceRequest,
     ProductionBillingSignoffResponse,
     SecretRotationEvidenceListResponse,
     SecretRotationEvidenceRequest,
@@ -77,10 +74,7 @@ from caseops_api.services.production_safety import (
     pine_labs_uat_readiness,
     production_billing_signoff_status,
     production_readiness_status,
-    record_operational_readiness_evidence,
     record_pine_labs_activation_decision,
-    record_pine_labs_uat_evidence,
-    record_production_billing_signoff_evidence,
     record_secret_rotation_evidence,
     support_matrix_admin_record,
     update_support_matrix_row,
@@ -110,7 +104,7 @@ from caseops_api.services.saas_billing import (
     platform_set_overage_policy,
     platform_usage_report,
 )
-from caseops_api.services.security import require_recent_step_up
+from caseops_api.services.security import require_recent_step_up, require_step_up_always
 from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
@@ -761,37 +755,19 @@ def get_pine_labs_uat_readiness(
     return readiness
 
 
-@router.post("/pine-labs/uat-evidence", response_model=PineLabsUATReadinessResponse)
-def post_pine_labs_uat_evidence(
-    payload: PineLabsUATEvidenceRequest,
-    route_context: PlatformPaymentReconciler,
-    session: DbSession,
-) -> PineLabsUATReadinessResponse:
-    require_recent_step_up(
-        session,
-        context=route_context.context,
-        purpose="payment_activation_change",
-        platform_admin=route_context.platform_admin,
-    )
-    return record_pine_labs_uat_evidence(
-        session,
-        context=route_context.context,
-        platform_admin=route_context.platform_admin,
-        payload=payload,
-    )
-
-
 @router.post("/pine-labs/production-activation")
 def post_pine_labs_production_activation_decision(
     payload: PineLabsActivationDecisionRequest,
     route_context: PlatformPaymentReconciler,
     session: DbSession,
 ) -> dict[str, object]:
-    require_recent_step_up(
+    # A production-payment decision is action-scoped authority, not a general
+    # console session.  Generic step-up rows and the no-enrolment grace path
+    # must never authorize it.
+    require_step_up_always(
         session,
         context=route_context.context,
         purpose="payment_activation_change",
-        platform_admin=route_context.platform_admin,
     )
     return record_pine_labs_activation_decision(
         session,
@@ -928,49 +904,6 @@ def get_platform_operational_readiness_evidence(
     )
     session.commit()
     return rows
-
-
-@router.post(
-    "/production-readiness/evidence",
-    response_model=list[PlatformOperationalReadinessRecord],
-)
-def post_platform_operational_readiness_evidence(
-    payload: PlatformOperationalReadinessEvidenceRequest,
-    route_context: PlatformBillingManager,
-    session: DbSession,
-) -> list[PlatformOperationalReadinessRecord]:
-    require_recent_step_up(
-        session,
-        context=route_context.context,
-        purpose="billing_export",
-        platform_admin=route_context.platform_admin,
-    )
-    return record_operational_readiness_evidence(
-        session,
-        context=route_context.context,
-        platform_admin=route_context.platform_admin,
-        payload=payload,
-    )
-
-
-@router.post("/billing-signoff/evidence", response_model=ProductionBillingSignoffResponse)
-def post_production_billing_signoff_evidence(
-    payload: ProductionBillingSignoffEvidenceRequest,
-    route_context: PlatformBillingManager,
-    session: DbSession,
-) -> ProductionBillingSignoffResponse:
-    require_recent_step_up(
-        session,
-        context=route_context.context,
-        purpose="billing_export",
-        platform_admin=route_context.platform_admin,
-    )
-    return record_production_billing_signoff_evidence(
-        session,
-        context=route_context.context,
-        platform_admin=route_context.platform_admin,
-        payload=payload,
-    )
 
 
 @router.post("/finance/settlement-imports", response_model=SettlementImportResponse)
