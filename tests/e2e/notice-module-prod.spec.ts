@@ -19,9 +19,8 @@ function dateOffset(days: number): string {
 }
 
 async function authHeaders(page: Page): Promise<Record<string, string>> {
-  const cookies = await page.context().cookies([PROD_BASE_URL, PROD_API_BASE_URL]);
+  const cookies = await page.context().cookies([PROD_API_BASE_URL]);
   const cookieHeader = cookies
-    .filter((cookie) => cookie.domain.includes("caseops.ai"))
     .map((cookie) => `${cookie.name}=${cookie.value}`)
     .join("; ");
   const csrf = cookies.find((cookie) => cookie.name === "caseops_csrf")?.value ?? "";

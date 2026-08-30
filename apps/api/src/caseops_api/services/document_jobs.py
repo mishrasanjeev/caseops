@@ -483,9 +483,15 @@ def _process_matter_attachment_job(session: Session, job: DocumentProcessingJob)
         # Suppress autoflush while acquiring the lifecycle lock. The worker is
         # a system actor, so its processing activity deliberately has no human
         # actor FK and never contends with an unrelated interactive membership
-        # fence. The upload activity already preserves human provenance.
+        # fence. The upload activity already preserves human provenance. A
+        # shared parent fence lets an immediate reply upload proceed while
+        # still excluding disposal/reopening until this persistence commits.
         with session.no_autoflush:
-            assert_operational_matter(session, matter=attachment.matter)
+            assert_operational_matter(
+                session,
+                matter=attachment.matter,
+                shared_lifecycle_fence=True,
+            )
         parent_locked_for_persist = True
 
     # Keep the attachment, chunks, and Matter row unlocked throughout the
