@@ -21,7 +21,7 @@ Generated; do not edit.
 | UJ-15 | Browse verified Bare Act | 3 | IPLF-006A, IPLF-006B, IPLF-006C | 3 | 1 | implemented | not_run | false |
 | UJ-16 | Run keyword or contextual research | 4 | IPLF-005A, IPLF-005B | 8 | 2 | implemented | not_run | false |
 | UJ-17 | Open judgment or reference source | 4 | IPLF-003A, IPLF-003B, IPLF-003C, IPLF-004B | 4 | 1 | implemented | not_run | false |
-| UJ-18 | Run intelligent review | 4 | IPLF-063B, IPLF-065B | 8 | 2 | implemented | passed | false |
+| UJ-18 | Run intelligent review | 4 | IPLF-063B, IPLF-065B | 8 | 3 | implemented | passed | true |
 | UJ-19 | Track eCourts/provider case | 5 | IPLF-050B, IPLF-051B | 7 | 2 | implemented | passed | false |
 | UJ-20 | Browse judge and mapped judgments | 4 | IPLF-003B, IPLF-060B | 11 | 3 | implemented | passed | true |
 | UJ-21 | Review watch hit and open action | 4 | IPLF-052B, IPLF-053B | 12 | 2 | implemented | passed | true |

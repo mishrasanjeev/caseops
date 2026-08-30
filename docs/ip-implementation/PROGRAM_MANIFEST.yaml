@@ -2388,10 +2388,11 @@
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "evidence_refs": [
         "docs/ip-implementation/evidence/m6/IPLF-065A/local-2026-08-30.md",
-        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md",
+        "docs/ip-implementation/evidence/m6/release-2026-08-31-065.md"
       ]
     },
     {
@@ -15442,7 +15443,8 @@
         "apps/api/tests/test_role_guards.py"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-065A/local-2026-08-30.md"
+        "docs/ip-implementation/evidence/m6/IPLF-065A/local-2026-08-30.md",
+        "docs/ip-implementation/evidence/m6/release-2026-08-31-065.md"
       ],
       "evidence_metadata": [
         {
@@ -15453,11 +15455,20 @@
           "assertions": "additive migration, tenant foreign keys, idempotent replay, typed and bounded review, terminal lifecycle, role/capability guards, redacted audits, no prompt/answer/source copies, release-gate completeness, exact runtime identity, complete indexes, 512 MiB index health, and post-suite health",
           "result": "passed",
           "recorded_at": "2026-08-30T04:22:46.3545552+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m6/release-2026-08-31-065.md",
+          "revision": "eb584dad11e3a913b1b2182cb1121d024382ff35",
+          "environment": "Exact PR and merged-main CI/Security/CodeQL, Cloud Build, migration-first Cloud Run deployment, production PostgreSQL/index gate, exact API/web identity, one-worker hosted Chromium, and one post-gate QA bootstrap execution",
+          "fixtures": "CaseOps QA production tenants, all eight safety surfaces and eleven safety rules, governed Product Guide and creator-private Assistant feedback, bounded admin review, protected schedulers, and exact machine-readiness evidence",
+          "assertions": "exact release identity, migration and complete index health before traffic, offline safety-release gate, feedback privacy and terminal review, hosted IPLF-065B journey, public-claims evidence, post-load health, one exact-digest QA bootstrap, and protected scheduler non-execution",
+          "result": "passed",
+          "recorded_at": "2026-08-31T01:12:11+05:30"
         }
       ],
       "blockers": [],
       "next_actions": [
-        "Merge the exact locally verified candidate, deploy migration-first, verify the production schema and index gates, and retain the offline release-gate result against the exact deployed revision."
+        "Deployment verified; retain the offline and hosted safety gates while IPLF-066B completes independent private-retrieval activation controls."
       ],
       "data_impact": [
         "Adds one empty tenant-scoped ai_feedback_items table. It stores canonical target IDs/hrefs, typed rating or report fields, submitter/reviewer membership IDs, lifecycle timestamps, and review notes; it never copies prompts, answers, citations, source text, document content, or provider payloads.",
@@ -15516,7 +15527,7 @@
       "allocation_review": "2026-08-30 brutal current-main and duplicate-work review: retain the existing EvaluationRun/EvaluationCase writer, all domain AI writers, permission owners, source registries, audit owner, and IPLF-066 private-retrieval ownership. Add only an offline release evaluator and one content-minimised neutral feedback queue; no duplicate answer, citation, research, Draft, private index, analytics, notification, worker, or scheduler owner is introduced.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_release",
+      "release_status": "deployment_verified",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
@@ -15602,7 +15613,8 @@
         "tests/e2e/iplf-065b-ai-safety-feedback-2026-08-30-prod.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md",
+        "docs/ip-implementation/evidence/m6/release-2026-08-31-065.md"
       ],
       "evidence_metadata": [
         {
@@ -15613,11 +15625,20 @@
           "assertions": "rating/report independence, same-key retry behavior, current-target validation, creator privacy, tenant fencing, surface-specific authorization, redacted audits, admin capability, optimistic terminal review, responsive non-overflow, landing-page truth, exact runtime identity, and post-suite health",
           "result": "passed",
           "recorded_at": "2026-08-30T04:22:46.3545552+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m6/release-2026-08-31-065.md",
+          "revision": "eb584dad11e3a913b1b2182cb1121d024382ff35",
+          "environment": "Exact production API/web release, dedicated CaseOps QA tenants, one-worker hosted Chromium, bounded admin review, and public concurrency-one API",
+          "fixtures": "Current Product Guide command, creator-private Assistant answer, independent rating and typed report, governed admin queue, optimistic terminal review, exact release identity, and post-gate QA bootstrap",
+          "assertions": "The dated IPLF-065B production journey passed in 22.4 seconds; the RAM batch passed 97 tests with four intentional skips, Notice passed two tests, exact identity and machine evidence held, and an unrelated health request returned in about 109 ms",
+          "result": "passed",
+          "recorded_at": "2026-08-31T01:12:11+05:30"
         }
       ],
       "blockers": [],
       "next_actions": [
-        "Merge the exact locally verified candidate, deploy migration-first, run the dated production feedback/admin journey and complete hosted regression batches, then mark deployment verified before starting IPLF-066A."
+        "Deployment verified; preserve the dated feedback/admin journey while shared UJ-22/UJ-23 private-retrieval work continues under IPLF-066B."
       ],
       "data_impact": [
         "The browser submits only server-owned/current catalog or assistant target references plus typed feedback. It never invents tenant scope and never copies prompt, answer, citation, source, document, or provider content.",
@@ -15670,7 +15691,7 @@
       "allocation_review": "2026-08-30 reciprocal and duplicate-work review: owns governed Product Guide/Assistant rating and reporting, bounded admin review, citation/permission/abstention safety evaluation, and release scoring. It extends the existing guide and assistant surfaces without owning the help corpus, assistant session/turn writer, intelligent-review writer, action writer, citation/source registry, private index, analytics store, notification, worker, or scheduler.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_release"
+      "release_status": "deployment_verified"
     },
     {
       "id": "IPLF-066A",
@@ -24208,12 +24229,13 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m6/IPLF-061B/local-2026-08-27.md",
-        "docs/ip-implementation/evidence/m6/IPLF-062B/local-2026-08-27.md"
+        "docs/ip-implementation/evidence/m6/IPLF-062B/local-2026-08-27.md",
+        "docs/ip-implementation/evidence/m6/release-2026-08-31-065.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-061B",
         "IPLF-062B",
@@ -24330,12 +24352,13 @@
         "tests/e2e/iplf-065b-ai-safety-feedback-2026-08-30.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md",
+        "docs/ip-implementation/evidence/m6/release-2026-08-31-065.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-065B"
       ],
@@ -24422,12 +24445,13 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
-        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md",
+        "docs/ip-implementation/evidence/m6/release-2026-08-31-065.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-063B",
         "IPLF-065B"
@@ -24455,12 +24479,13 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
-        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md",
+        "docs/ip-implementation/evidence/m6/release-2026-08-31-065.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-063B",
         "IPLF-065B"
@@ -24488,12 +24513,13 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
-        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md",
+        "docs/ip-implementation/evidence/m6/release-2026-08-31-065.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-063B",
         "IPLF-065B"
@@ -24521,12 +24547,13 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
-        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md",
+        "docs/ip-implementation/evidence/m6/release-2026-08-31-065.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-063B",
         "IPLF-065B"
@@ -24554,12 +24581,13 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
-        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md",
+        "docs/ip-implementation/evidence/m6/release-2026-08-31-065.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-063B",
         "IPLF-065B"
@@ -24587,12 +24615,13 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
-        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md",
+        "docs/ip-implementation/evidence/m6/release-2026-08-31-065.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-063B",
         "IPLF-065B"
@@ -24620,12 +24649,13 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
-        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md",
+        "docs/ip-implementation/evidence/m6/release-2026-08-31-065.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-063B",
         "IPLF-065B"
@@ -24653,12 +24683,13 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
-        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md",
+        "docs/ip-implementation/evidence/m6/release-2026-08-31-065.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-063B",
         "IPLF-065B"
@@ -24686,12 +24717,13 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
-        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md",
+        "docs/ip-implementation/evidence/m6/release-2026-08-31-065.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-063B",
         "IPLF-065B"
@@ -24719,12 +24751,13 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
-        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md",
+        "docs/ip-implementation/evidence/m6/release-2026-08-31-065.md"
       ],
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-063B",
         "IPLF-065B"
@@ -42159,11 +42192,12 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
-        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md",
+        "docs/ip-implementation/evidence/m6/release-2026-08-31-065.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-063B",
         "IPLF-065B"
@@ -48817,11 +48851,12 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
-        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md",
+        "docs/ip-implementation/evidence/m6/release-2026-08-31-065.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-063B",
         "IPLF-065B"
@@ -48853,11 +48888,12 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
-        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md",
+        "docs/ip-implementation/evidence/m6/release-2026-08-31-065.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-063B",
         "IPLF-065B"
@@ -48889,11 +48925,12 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
-        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md",
+        "docs/ip-implementation/evidence/m6/release-2026-08-31-065.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-063B",
         "IPLF-065B"
@@ -48925,11 +48962,12 @@
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m6/IPLF-063B/local-2026-08-28.md",
-        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
+        "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md",
+        "docs/ip-implementation/evidence/m6/release-2026-08-31-065.md"
       ],
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "blocked",
+      "release_status": "deployment_verified",
       "slice_ids": [
         "IPLF-063B",
         "IPLF-065B"
