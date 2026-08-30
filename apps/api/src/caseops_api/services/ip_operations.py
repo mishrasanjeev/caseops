@@ -23,6 +23,7 @@ from caseops_api.db.models import (
     IpControlReviewSampleEvidence,
     IpControlReviewSignature,
     IpCostItem,
+    IpCostItemCorrection,
     IpDeadline,
     IpDeadlineCoverage,
     IpDeadlineIncident,
@@ -69,6 +70,7 @@ from caseops_api.schemas.ip_operations import (
     IpControlReviewSignatureRecord,
     IpControlReviewSignOffRequest,
     IpControlReviewSnapshot,
+    IpCostItemCorrectionRequest,
     IpCostItemCreateRequest,
     IpCostItemRecord,
     IpCostReconciliationReport,
@@ -438,6 +440,7 @@ class _DocketSerializationRows:
     interests: dict[str, list[IpTitleInterest]]
     obligations: dict[str, list[IpRelatedRightObligation]]
     costs: dict[str, list[IpCostItem]]
+    cost_corrections: dict[str, list[IpCostItemCorrection]]
     incident_rows: _IncidentSerializationRows
 
 
@@ -517,7 +520,7 @@ def _load_docket_serialization_rows(
 ) -> _DocketSerializationRows:
     if not docket_ids:
         empty_incidents = _IncidentSerializationRows({}, {}, {}, {})
-        return _DocketSerializationRows({}, {}, {}, {}, {}, {}, {}, {}, empty_incidents)
+        return _DocketSerializationRows({}, {}, {}, {}, {}, {}, {}, {}, {}, empty_incidents)
     particulars = list(
         session.scalars(
             select(IpTrademarkParticularVersion).where(
@@ -604,6 +607,20 @@ def _load_docket_serialization_rows(
             .order_by(IpCostItem.docket_id, IpCostItem.created_at)
         ).all()
     )
+    cost_corrections = list(
+        session.scalars(
+            select(IpCostItemCorrection)
+            .where(
+                IpCostItemCorrection.company_id == company_id,
+                IpCostItemCorrection.docket_id.in_(docket_ids),
+            )
+            .order_by(
+                IpCostItemCorrection.docket_id,
+                IpCostItemCorrection.created_at,
+                IpCostItemCorrection.id,
+            )
+        ).all()
+    )
     incident_rows = _load_incident_serialization_rows(
         session,
         company_id=company_id,
@@ -618,6 +635,7 @@ def _load_docket_serialization_rows(
         interests=_group_rows(interests, "docket_id"),
         obligations=_group_rows(obligations, "docket_id"),
         costs=_group_rows(costs, "docket_id"),
+        cost_corrections=_group_rows(cost_corrections, "docket_id"),
         incident_rows=incident_rows,
     )
 
@@ -686,6 +704,13 @@ def _serialize_docket(
     interests = preload.interests.get(docket.id, [])
     obligations = preload.obligations.get(docket.id, [])
     costs = preload.costs.get(docket.id, [])
+    cost_corrections = preload.cost_corrections.get(docket.id, [])
+    outgoing_corrections = {row.source_cost_item_id: row for row in cost_corrections}
+    incoming_corrections = {
+        row.replacement_cost_item_id: row
+        for row in cost_corrections
+        if row.replacement_cost_item_id is not None
+    }
     if may_read_rates is None:
         may_read_rates = _may_read_confidential_rates(session, context=context)
     return IpDocketRecordResponse(
@@ -722,7 +747,13 @@ def _serialize_docket(
             IpRelatedRightObligationRecord.model_validate(row) for row in obligations
         ],
         cost_items=[
-            _serialize_cost_item(row, may_read_rates=may_read_rates) for row in costs
+            _serialize_cost_item(
+                row,
+                may_read_rates=may_read_rates,
+                outgoing_correction=outgoing_corrections.get(row.id),
+                incoming_correction=incoming_corrections.get(row.id),
+            )
+            for row in costs
         ],
         created_at=docket.created_at,
         updated_at=docket.updated_at,
@@ -3536,7 +3567,13 @@ def _may_read_confidential_rates(session: Session, *, context: SessionContext) -
     )
 
 
-def _serialize_cost_item(cost: IpCostItem, *, may_read_rates: bool) -> IpCostItemRecord:
+def _serialize_cost_item(
+    cost: IpCostItem,
+    *,
+    may_read_rates: bool,
+    outgoing_correction: IpCostItemCorrection | None = None,
+    incoming_correction: IpCostItemCorrection | None = None,
+) -> IpCostItemRecord:
     """Serialize one cost, withholding a confidential rate where required.
 
     Withholding replaces the monetary fields with ``None`` and sets
@@ -3545,7 +3582,33 @@ def _serialize_cost_item(cost: IpCostItem, *, may_read_rates: bool) -> IpCostIte
     withheld, which is a different fact from a cost of nothing.
     """
 
-    record = IpCostItemRecord.model_validate(cost)
+    lineage_status = (
+        "active"
+        if outgoing_correction is None
+        else "voided"
+        if outgoing_correction.action == "void"
+        else "superseded"
+    )
+    lineage = outgoing_correction or incoming_correction
+    record = IpCostItemRecord.model_validate(cost).model_copy(
+        update={
+            "lineage_status": lineage_status,
+            "corrects_cost_item_id": (
+                incoming_correction.source_cost_item_id
+                if incoming_correction is not None
+                else None
+            ),
+            "replacement_cost_item_id": (
+                outgoing_correction.replacement_cost_item_id
+                if outgoing_correction is not None
+                else None
+            ),
+            "correction_reason": lineage.reason if lineage is not None else None,
+            "correction_evidence_reference": (
+                lineage.evidence_reference if lineage is not None else None
+            ),
+        }
+    )
     if not cost.rate_confidential or may_read_rates:
         return record
     return record.model_copy(
@@ -3581,12 +3644,12 @@ def _canonical_billing_value(
 ) -> tuple[int | None, str | None, str]:
     # UJ-52-EXC-04: a provider's estimate is not an expense, so it has no
     # counterpart in the ledger and must never be reported as reconciled.
-    if cost.cost_nature == "estimate":
-        return None, None, "estimate"
     # UJ-52-EXC-01: a nonbillable cost is deliberately outside client billing.
     # It is a distinct answer from "not linked yet", which still expects a link.
     if not cost.billable:
         return None, None, "nonbillable"
+    if cost.cost_nature == "estimate":
+        return None, None, "estimate"
     if not cost.billing_link_type or not cost.billing_link_id:
         return None, None, "unlinked"
     amount: int | None = None
@@ -3666,30 +3729,38 @@ def _apply_cost_reconciliation(
     )
 
 
-def add_ip_cost_item(
-    session: Session,
+def _historical_cost_reconciliation_row(
+    cost: IpCostItem,
     *,
-    context: SessionContext,
-    docket_id: str,
+    correction: IpCostItemCorrection,
+) -> IpCostReconciliationRow:
+    """Serialize an inactive source without overwriting its last active proof."""
+
+    comparison_amount, comparison_currency = _cost_comparison_value(cost)
+    return IpCostReconciliationRow(
+        cost_item_id=cost.id,
+        billing_link_type=cost.billing_link_type,
+        billing_link_id=cost.billing_link_id,
+        evidence_amount_minor=cost.amount_minor,
+        canonical_amount_minor=cost.canonical_amount_minor,
+        difference_minor=cost.reconciliation_difference_minor,
+        currency=cost.currency,
+        comparison_amount_minor=comparison_amount,
+        comparison_currency=comparison_currency,
+        status=cost.reconciliation_status,  # type: ignore[arg-type]
+        lineage_status=("voided" if correction.action == "void" else "superseded"),
+        included_in_totals=False,
+        replacement_cost_item_id=correction.replacement_cost_item_id,
+    )
+
+
+def _validate_cost_against_docket(
+    docket: IpDocketRecord,
+    *,
     payload: IpCostItemCreateRequest,
-) -> IpDocketRecordResponse:
-    context = _lock_ip_writer_context(
-        session,
-        context=context,
-        required_capability="ip:fees_manage",
-    )
-    docket = _docket_or_404(
-        session,
-        context=context,
-        docket_id=docket_id,
-        for_update=True,
-        required_capability="ip:fees_manage",
-    )
-    # UJ-52-EXC-01. The absence of a billing Matter blocks billable capture,
-    # never the capture of the cost itself: an official fee paid to the
-    # registry is incurred whether or not a billing profile exists, and
-    # refusing it here loses the evidence instead of deferring the billing
-    # decision. The caller must state the decision; it is never inferred.
+) -> None:
+    """Apply the server-owned billing boundary to an original or replacement."""
+
     if not docket.matter_id:
         if payload.billable:
             raise HTTPException(
@@ -3708,7 +3779,23 @@ def add_ip_cost_item(
                     "billing record to link the cost to."
                 ),
             )
-    cost = IpCostItem(
+
+
+def _new_cost_item(
+    *,
+    context: SessionContext,
+    docket: IpDocketRecord,
+    payload: IpCostItemCreateRequest,
+) -> IpCostItem:
+    _validate_cost_against_docket(docket, payload=payload)
+    initial_status = (
+        "nonbillable"
+        if not payload.billable
+        else "estimate"
+        if payload.cost_nature == "estimate"
+        else "unlinked"
+    )
+    return IpCostItem(
         company_id=context.company.id,
         docket_id=docket.id,
         matter_id=docket.matter_id,
@@ -3731,8 +3818,34 @@ def add_ip_cost_item(
         evidence_reference=payload.evidence_reference.strip(),
         billing_link_type=payload.billing_link_type,
         billing_link_id=payload.billing_link_id,
+        reconciliation_status=initial_status,
         created_by_membership_id=context.membership.id,
     )
+
+
+def add_ip_cost_item(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+    payload: IpCostItemCreateRequest,
+) -> IpDocketRecordResponse:
+    context = _lock_ip_writer_context(
+        session,
+        context=context,
+        required_capability="ip:fees_manage",
+    )
+    docket = _docket_or_404(
+        session,
+        context=context,
+        docket_id=docket_id,
+        for_update=True,
+        required_capability="ip:fees_manage",
+    )
+    # UJ-52-EXC-01. The absence of a billing Matter blocks billable capture,
+    # never the capture of the cost itself. The helper is shared with the
+    # append-only replacement path so a correction cannot bypass this rule.
+    cost = _new_cost_item(context=context, docket=docket, payload=payload)
     session.add(cost)
     session.flush()
     _apply_cost_reconciliation(session, context=context, cost=cost)
@@ -3754,6 +3867,107 @@ def add_ip_cost_item(
             "cost_nature": payload.cost_nature,
             "rate_confidential": payload.rate_confidential,
             "converted": payload.fx_rate is not None,
+        },
+    )
+    session.commit()
+    return _serialize_docket(session, docket, context=context)
+
+
+def correct_ip_cost_item(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+    cost_item_id: str,
+    payload: IpCostItemCorrectionRequest,
+) -> IpDocketRecordResponse:
+    """Append a void/supersession without rewriting the official evidence."""
+
+    context = _lock_ip_writer_context(
+        session,
+        context=context,
+        required_capability="ip:fees_manage",
+    )
+    docket = _docket_or_404(
+        session,
+        context=context,
+        docket_id=docket_id,
+        for_update=True,
+        required_capability="ip:fees_manage",
+    )
+    source = session.scalar(
+        select(IpCostItem)
+        .where(
+            IpCostItem.id == cost_item_id,
+            IpCostItem.company_id == context.company.id,
+            IpCostItem.docket_id == docket.id,
+        )
+        .with_for_update()
+    )
+    if source is None:
+        raise HTTPException(status_code=404, detail="IP cost item not found.")
+    existing = session.scalar(
+        select(IpCostItemCorrection).where(
+            IpCostItemCorrection.company_id == context.company.id,
+            IpCostItemCorrection.source_cost_item_id == source.id,
+        )
+    )
+    if existing is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This IP cost item is already voided or superseded; correct its "
+                "active replacement instead."
+            ),
+        )
+
+    replacement: IpCostItem | None = None
+    if payload.replacement is not None:
+        replacement = _new_cost_item(
+            context=context,
+            docket=docket,
+            payload=payload.replacement,
+        )
+        session.add(replacement)
+        session.flush()
+        _apply_cost_reconciliation(session, context=context, cost=replacement)
+
+    correction = IpCostItemCorrection(
+        company_id=context.company.id,
+        docket_id=docket.id,
+        source_cost_item_id=source.id,
+        action=payload.action,
+        replacement_cost_item_id=replacement.id if replacement is not None else None,
+        reason=payload.reason.strip(),
+        evidence_reference=payload.evidence_reference.strip(),
+        created_by_membership_id=context.membership.id,
+    )
+    session.add(correction)
+    try:
+        session.flush()
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="The IP cost was corrected concurrently; reload its active lineage.",
+        ) from exc
+
+    record_from_context(
+        session,
+        context,
+        action=(
+            "ip_cost_item.voided"
+            if payload.action == "void"
+            else "ip_cost_item.superseded"
+        ),
+        target_type="ip_cost_item",
+        target_id=source.id,
+        matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
+        metadata={
+            "correction_id": correction.id,
+            "replacement_cost_item_id": correction.replacement_cost_item_id,
+            "correction_evidence_reference": correction.evidence_reference,
         },
     )
     session.commit()
@@ -3784,7 +3998,22 @@ def reconcile_ip_cost_items(
             .with_for_update()
         ).all()
     )
-    rows = [_apply_cost_reconciliation(session, context=context, cost=cost) for cost in costs]
+    corrections = list(
+        session.scalars(
+            select(IpCostItemCorrection).where(
+                IpCostItemCorrection.company_id == context.company.id,
+                IpCostItemCorrection.docket_id == docket.id,
+            )
+        ).all()
+    )
+    outgoing = {row.source_cost_item_id: row for row in corrections}
+    rows = [
+        _historical_cost_reconciliation_row(cost, correction=outgoing[cost.id])
+        if cost.id in outgoing
+        else _apply_cost_reconciliation(session, context=context, cost=cost)
+        for cost in costs
+    ]
+    active_rows = [row for row in rows if row.included_in_totals]
     checksum_payload = [row.model_dump(mode="json") for row in rows]
     checksum = hashlib.sha256(
         json.dumps(checksum_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -3802,9 +4031,11 @@ def reconcile_ip_cost_items(
             "row_count": len(rows),
             "checksum_sha256": checksum,
             "status_counts": {
-                status_value: sum(row.status == status_value for row in rows)
+                status_value: sum(row.status == status_value for row in active_rows)
                 for status_value in _COST_RECONCILIATION_STATUSES
             },
+            "voided_count": sum(row.lineage_status == "voided" for row in rows),
+            "superseded_count": sum(row.lineage_status == "superseded" for row in rows),
         },
     )
     session.commit()
@@ -3812,12 +4043,14 @@ def reconcile_ip_cost_items(
         generated_at=_now(),
         docket_id=docket.id,
         rows=rows,
-        matched_count=sum(row.status == "matched" for row in rows),
-        mismatch_count=sum(row.status == "mismatch" for row in rows),
-        missing_count=sum(row.status == "missing" for row in rows),
-        unlinked_count=sum(row.status == "unlinked" for row in rows),
-        estimate_count=sum(row.status == "estimate" for row in rows),
-        nonbillable_count=sum(row.status == "nonbillable" for row in rows),
+        matched_count=sum(row.status == "matched" for row in active_rows),
+        mismatch_count=sum(row.status == "mismatch" for row in active_rows),
+        missing_count=sum(row.status == "missing" for row in active_rows),
+        unlinked_count=sum(row.status == "unlinked" for row in active_rows),
+        estimate_count=sum(row.status == "estimate" for row in active_rows),
+        nonbillable_count=sum(row.status == "nonbillable" for row in active_rows),
+        voided_count=sum(row.lineage_status == "voided" for row in rows),
+        superseded_count=sum(row.lineage_status == "superseded" for row in rows),
         checksum_sha256=checksum,
     )
 
@@ -3833,6 +4066,11 @@ def _ip_docket_control_report_from_listing(
     withheld = 0
     for docket in listing.dockets:
         for item in docket.cost_items:
+            # Voided and superseded rows stay visible as immutable history but
+            # are not active cost facts. Counting them beside their replacement
+            # would double the portfolio total.
+            if item.lineage_status != "active":
+                continue
             # UJ-52-EXC-05: this listing is already scoped to one reader, and a
             # confidential rate they may not see arrives as None. Summing it
             # raised a TypeError, and since this report is gated on ip:read -
@@ -3942,6 +4180,7 @@ __all__ = [
     "append_ip_docket_version",
     "bulk_reassign_ip_deadline_coverages",
     "complete_ip_related_right_obligation",
+    "correct_ip_cost_item",
     "create_ip_docket",
     "decide_ip_deadline_incident_notification",
     "discover_ip_evidence_candidates",

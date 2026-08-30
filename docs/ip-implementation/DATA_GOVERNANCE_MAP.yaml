@@ -5,7 +5,7 @@
   "policy_status": "pending_named_human_approval",
   "purpose": "Versioned repository inventory for DATA-GOV-01 and DATA-GOV-03. It snapshots SQL tables/columns/indexes and known non-SQL classes so unregistered data-bearing changes fail Definition of Ready.",
   "completion_boundary": "This inventory does not claim approved retention bounds, legal-hold activation, tenant export, purge, offboarding, provider deletion, backup recovery/restore, residency, or data-governance/recovery milestone completion. The only current disposition behavior is fail-closed Definition-of-Ready validation. This release's tenant-scoped company-user lookup, deadline-coverage guards, standalone-deadline offboarding serialization, and bounded Today IP coverage stream expose existing registered SQL classes only. The Today stream is a read projection over ip_deadline_coverages, ip_docket_records, and matter_deadlines that reuses the existing IP docket access predicate; the web endpoint and generated OpenAPI contract changes add no SQL or non-SQL data class, new storage, or disposition authority. IPLF-057B backfills the required ip_trademark_particular_versions compatibility projection for existing trademark_international_registrations dockets; both tables are already registered, Madrid facts retain their canonical owner, and the bounded restore-forward migration adds no data class, storage boundary, retention authority, or disposition handler. EG-009 narrows what failure paths persist: audit-export, authority-ingestion, court-sync, document-job, document-processing, embedding and legal-update errors now store redacted text instead of raw exception strings. This removes infrastructure detail from already-registered columns; it adds no SQL or non-SQL data class, no new storage, and no disposition authority. The 2026-08-27 recurring-job hardening changes only version-controlled Cloud Run commands, arguments, environment and secret references, runtime identity, Cloud SQL attachment, resources, retries, and timeouts. It invokes already-baked application entrypoints, preserves the existing registered SQL/provider/storage boundaries and paused governance writers, and adds no data class, persistence path, provider transmission, retention authority, or disposition handler. The 2026-08-28 API capacity hardening changes only Cloud Run service-level minimum capacity, exact deployment verification, and bounded reads over existing registered Matter and IP data. It adds no SQL or non-SQL data class, persistence path, provider transmission, retention authority, disposition behavior, or data owner. IPLF-062A adds tenant-scoped assistant sessions, explicit polymorphic scope references, turns, and exact citation provenance under the tenant-restricted legal-content profile. The tenant AI policy supplies a bounded session expiry, but automated destruction remains unauthorized until the hold-aware disposition owner is implemented and approved; downgrade therefore refuses retained assistant evidence. IPLF-063 extends the existing recommendation and Draft records with tenant-bound Matter/IP targets, frozen legal-review context and source provenance, lawyer selection/finalization evidence, redacted terminal state, and an idempotent Draft link under the same tenant-restricted legal-content profile. It adds no alternate research, source, drafting, audit, model-run, billing, retention, hold, export, purge, or provider-deletion owner; downgrade refuses retained intelligent-review or linked Draft evidence. The 2026-08-28 production stabilization stores one bounded, hashed official-provider source text on the existing tracked-case update owner so a billing-unavailable certified PDF can fall back only to complete integrity-verified provider markdown; truncation or hash mismatch fails closed, snapshots retain only a bounded preview, and no alternate source, provider, retention, or disposition owner is introduced. The 2026-08-29 follow-up changes only billing-unavailable response classification for that existing bounded cache, bundles already-authorized Matter and IP document projections into the existing foreign-associate workspace read, and raises service-level warm capacity. It adds no SQL or non-SQL data class, persistence path, provider transmission, retention authority, disposition behavior, or data owner. The 2026-08-29 exact-release correction classifies provider HTTP 402 under the existing rate-limit health state and writes one zero-cost verified-cached terminal operation per exact release, linked to an existing hash-verified provider snapshot and complete tracked-case source update. It makes no provider call when valid stored evidence exists, leaves provider freshness and health unchanged, and adds no data class, persistence boundary, provider transmission, retention authority, disposition behavior, or data owner. The 2026-08-29 legacy-evidence correction repairs at most one missing tracked-case source body from an already hash-verified provider snapshot: it requires an exact update-type, source-key, and source-URL match, complete non-truncated text, empty target text and hash fields, bounded candidate work, and immutable provenance audit. It never overwrites existing source evidence, changes provider health or freshness, calls the provider, or introduces a new data class, storage boundary, retention authority, disposition behavior, or data owner. IPLF-066A adds tenant-private index generations, private content projections and typed scopes, idempotent revocation/tombstone events, and content-free saved-output access manifests under fail-closed tenant policies. The only non-SQL class is an identifier-only process cache partitioned by tenant, membership and security generations; every cache hit is reauthorized from current SQL state. It does not merge private content into the public corpus, authorize provider transmission, activate retention or purge, or claim the IPLF-066B user workflow and release proof.",
-  "current_change_note": "IPLF-039F (2026-08-30) adds database triggers to the already-registered ip_cost_items class: the retained legal-cost identity and official-fee evidence reference cannot be updated or deleted, while reconciliation projections remain mutable. Matterless rows remain explicitly nonbillable and cannot become invoice, payment, time, or spend state. This changes enforcement for an existing SQL class only; it adds no data class, storage boundary, retention duration, disposition authority, provider transmission, or alternate accounting owner.",
+  "current_change_note": "IPLF-039F (2026-08-30) strengthens database invariants on the registered ip_cost_items class and adds the tenant-scoped ip_cost_item_corrections lineage class. A correction is append-only void/supersession evidence with a reason, evidence reference, actor and optional immutable replacement; it never becomes invoice, payment, time or spend state. Parent-docket disposition remains possible through the declared cascade while direct row deletion fails closed. Matterless and nonbillable rows are database-enforced terminal nonbillable projections with null canonical/difference amounts, and actor provenance is tenant-correlated at the database boundary. The new lineage class inherits the tenant-restricted legal-content profile and existing unapproved fail-closed disposition policy; this change adds no storage boundary, retention duration, disposition authority, provider transmission, or alternate accounting owner.",
   "requirement_refs": [
     "DATA-GOV-01",
     "DATA-GOV-03"
@@ -140,6 +140,7 @@
   },
   "table_policy_profile_overrides": {
     "ai_feedback_items": "tenant_operational_record",
+    "ip_cost_item_corrections": "tenant_restricted_legal_content",
     "private_index_generations": "security_identity_control",
     "private_index_projections": "tenant_restricted_legal_content",
     "private_index_projection_scopes": "security_identity_control",
@@ -177,6 +178,15 @@
     "drafting_data_extraction_fields": {
       "source_ip_document_id": "tenant_or_access_identifier",
       "source_ip_document_version_id": "tenant_or_access_identifier"
+    },
+    "ip_cost_item_corrections": {
+      "action": "lifecycle_or_audit_evidence",
+      "created_by_membership_id": "tenant_or_access_identifier",
+      "docket_id": "tenant_or_access_identifier",
+      "evidence_reference": "privileged_or_raw_content",
+      "reason": "privileged_or_raw_content",
+      "replacement_cost_item_id": "tenant_or_access_identifier",
+      "source_cost_item_id": "tenant_or_access_identifier"
     },
     "ip_docket_control_reviews": {
       "manifest_sha256": "lifecycle_or_audit_evidence",
@@ -10436,6 +10446,65 @@
         "signer_role": {
           "category_id": "domain_attribute",
           "sql_type": "VARCHAR(16)",
+          "nullable": false
+        }
+      }
+    },
+    {
+      "id": "ip_cost_item_corrections",
+      "table_name": "ip_cost_item_corrections",
+      "purpose": "Repository SQL persistence class `ip_cost_item_corrections`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "tenant_restricted_legal_content",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "action": {
+          "category_id": "lifecycle_or_audit_evidence",
+          "sql_type": "VARCHAR(16)",
+          "nullable": false
+        },
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "created_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "docket_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "evidence_reference": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "VARCHAR(500)",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "reason": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "VARCHAR(1000)",
+          "nullable": false
+        },
+        "replacement_cost_item_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "source_cost_item_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
           "nullable": false
         }
       }
@@ -27810,12 +27879,12 @@
       }
     }
   ],
-  "schema_fingerprint": "e57f9c3cc4d6a6cdde90decaddd8ed99470b22c44d5a72ee153aba40d17e610b",
+  "schema_fingerprint": "e6599adcd578e106381032c09126420a9575d29ec5b66971d8b4cca4a491296d",
   "index_inventory": {
-    "orm_index_count": 1633,
-    "orm_index_fingerprint": "5e20b9cb9d85380b94fd086f19277082c61fd7224beb03b8278cff9857003067",
-    "migration_index_count": 687,
-    "migration_index_fingerprint": "856724a814196b986b95a30be2339d1419691361dd6c01d97f1393614c873a43",
+    "orm_index_count": 1640,
+    "orm_index_fingerprint": "4c6a215e13948bed595e6238e18a28ef8785da2fe6cce97fd91611c1ce62862d",
+    "migration_index_count": 688,
+    "migration_index_fingerprint": "f6cec63fafc6ff48ff77d33823ebe94c240ffcf2a522f59cded3c3f55b770712",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."
   }
 }

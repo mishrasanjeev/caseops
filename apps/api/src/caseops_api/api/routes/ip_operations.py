@@ -131,6 +131,7 @@ from caseops_api.schemas.ip_operations import (
     IpControlReviewRecord,
     IpControlReviewSampleRequest,
     IpControlReviewSignOffRequest,
+    IpCostItemCorrectionRequest,
     IpCostItemCreateRequest,
     IpCostReconciliationReport,
     IpCoverageBulkAcknowledgeRequest,
@@ -356,6 +357,7 @@ from caseops_api.services.ip_operations import (
     bulk_acknowledge_ip_coverage,
     bulk_reassign_ip_deadline_coverages,
     complete_ip_related_right_obligation,
+    correct_ip_cost_item,
     create_ip_control_review,
     create_ip_docket,
     decide_ip_control_review_exception,
@@ -3199,6 +3201,26 @@ async def post_ip_cost_item(
     session: DbSession,
 ) -> IpDocketRecordResponse:
     return add_ip_cost_item(session, context=context, docket_id=docket_id, payload=payload)
+
+
+@router.post(
+    "/dockets/{docket_id}/cost-items/{cost_item_id}/corrections",
+    response_model=IpDocketRecordResponse,
+)
+async def post_ip_cost_item_correction(
+    docket_id: str,
+    cost_item_id: str,
+    payload: IpCostItemCorrectionRequest,
+    context: IpFinance,
+    session: DbSession,
+) -> IpDocketRecordResponse:
+    return correct_ip_cost_item(
+        session,
+        context=context,
+        docket_id=docket_id,
+        cost_item_id=cost_item_id,
+        payload=payload,
+    )
 
 
 @router.post(

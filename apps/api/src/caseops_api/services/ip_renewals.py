@@ -45,6 +45,7 @@ from caseops_api.schemas.ip_renewals import (
     IpRenewalWorkflowRecord,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.ip_cost_lineage import active_ip_cost_predicate
 from caseops_api.services.matter_access import visible_ip_dockets_filter
 from caseops_api.services.notification_delivery import (
     cancel_pending_notification_intents,
@@ -201,10 +202,14 @@ def _cost_item(
             IpCostItem.id == cost_item_id,
             IpCostItem.company_id == context.company.id,
             IpCostItem.docket_id == docket_id,
+            active_ip_cost_predicate(),
         )
     )
     if row is None:
-        raise HTTPException(status_code=404, detail="IP renewal fee cost item not found.")
+        raise HTTPException(
+            status_code=404,
+            detail="Active IP renewal fee cost item not found.",
+        )
     return row
 
 

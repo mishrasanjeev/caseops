@@ -17957,17 +17957,31 @@ class IpCostItem(Base):
         # UJ-52-EXC-01: a docket with no billing Matter may still record the
         # cost, but only as nonbillable evidence with nothing to link to.
         CheckConstraint(
-            "matter_id IS NOT NULL OR (billable = false AND billing_link_type IS NULL)",
+            "matter_id IS NOT NULL OR (billable = false AND billing_link_type IS NULL "
+            "AND reconciliation_status = 'nonbillable' "
+            "AND canonical_amount_minor IS NULL "
+            "AND reconciliation_difference_minor IS NULL)",
             name="ck_ip_cost_item_matterless_is_nonbillable",
         ),
         CheckConstraint(
-            "billable = true OR billing_link_type IS NULL",
+            "billable = true OR (billing_link_type IS NULL "
+            "AND reconciliation_status = 'nonbillable' "
+            "AND canonical_amount_minor IS NULL "
+            "AND reconciliation_difference_minor IS NULL)",
             name="ck_ip_cost_item_nonbillable_has_no_billing_link",
         ),
         # UJ-52-EXC-04: an estimate is not an expense and cannot reconcile.
         CheckConstraint(
-            "cost_nature = 'actual' OR billing_link_type IS NULL",
+            "cost_nature = 'actual' OR (billing_link_type IS NULL "
+            "AND reconciliation_status IN ('estimate', 'nonbillable') "
+            "AND canonical_amount_minor IS NULL "
+            "AND reconciliation_difference_minor IS NULL)",
             name="ck_ip_cost_item_estimate_has_no_billing_link",
+        ),
+        CheckConstraint(
+            "reconciliation_status IN ('matched', 'mismatch', 'missing', "
+            "'unlinked', 'estimate', 'nonbillable')",
+            name="ck_ip_cost_item_reconciliation_status",
         ),
         # UJ-52-EXC-02: preserve original amount/rate/source/time, or none.
         CheckConstraint(
@@ -17993,6 +18007,12 @@ class IpCostItem(Base):
         CheckConstraint(
             "base_currency IS NULL OR base_currency <> currency",
             name="ck_ip_cost_item_fx_distinct_currency",
+        ),
+        UniqueConstraint(
+            "id",
+            "company_id",
+            "docket_id",
+            name="uq_ip_cost_item_id_company_docket",
         ),
         Index("ix_ip_cost_items_company_docket", "company_id", "docket_id"),
     )
@@ -18033,6 +18053,79 @@ class IpCostItem(Base):
         index=True,
     )
     created_by_membership_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class IpCostItemCorrection(Base):
+    """Append-only correction/void lineage for immutable IP cost evidence.
+
+    The source cost is never rewritten. A supersession points to a newly
+    inserted cost row; a void has no replacement. One source can have only one
+    outgoing correction, while a replacement can itself be corrected later.
+    """
+
+    __tablename__ = "ip_cost_item_corrections"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_cost_correction_docket_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["source_cost_item_id", "company_id", "docket_id"],
+            ["ip_cost_items.id", "ip_cost_items.company_id", "ip_cost_items.docket_id"],
+            name="fk_ip_cost_correction_source_scope",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["replacement_cost_item_id", "company_id", "docket_id"],
+            ["ip_cost_items.id", "ip_cost_items.company_id", "ip_cost_items.docket_id"],
+            name="fk_ip_cost_correction_replacement_scope",
+            ondelete="CASCADE",
+        ),
+        CheckConstraint(
+            "action IN ('void', 'supersede')",
+            name="ck_ip_cost_correction_action",
+        ),
+        CheckConstraint(
+            "(action = 'void' AND replacement_cost_item_id IS NULL) OR "
+            "(action = 'supersede' AND replacement_cost_item_id IS NOT NULL)",
+            name="ck_ip_cost_correction_replacement",
+        ),
+        CheckConstraint(
+            "replacement_cost_item_id IS NULL OR "
+            "replacement_cost_item_id <> source_cost_item_id",
+            name="ck_ip_cost_correction_not_self",
+        ),
+        UniqueConstraint(
+            "source_cost_item_id",
+            name="uq_ip_cost_correction_source",
+        ),
+        UniqueConstraint(
+            "replacement_cost_item_id",
+            name="uq_ip_cost_correction_replacement",
+        ),
+        Index(
+            "ix_ip_cost_corrections_company_docket",
+            "company_id",
+            "docket_id",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    source_cost_item_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    action: Mapped[str] = mapped_column(String(16), nullable=False)
+    replacement_cost_item_id: Mapped[str | None] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    reason: Mapped[str] = mapped_column(String(1000), nullable=False)
+    evidence_reference: Mapped[str] = mapped_column(String(500), nullable=False)
+    created_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )

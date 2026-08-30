@@ -9344,6 +9344,8 @@
       ],
       "dependencies": [],
       "implementation_refs": [
+        "apps/api/alembic/versions/20260830_0003_ip_cost_evidence_immutable.py",
+        "apps/api/src/caseops_api/db/models.py",
         "apps/api/src/caseops_api/services/ip_operations.py",
         "apps/web/app/app/ip/page.tsx"
       ],
@@ -9875,11 +9877,13 @@
         "apps/api/tests/test_ip_039f_cost_linkage.py::test_uj52_exc04_a_provider_estimate_is_not_an_actual_expense#IPLF-UJ-52-EXC-04",
         "apps/api/tests/test_ip_039f_cost_linkage.py::test_uj52_exc05_confidential_rates_are_permissioned#IPLF-UJ-52-EXC-05",
         "apps/api/tests/test_ip_039f_cost_linkage.py::test_uj52_cost_invariants_hold_at_the_database_not_only_in_the_request_model",
-        "apps/api/tests/test_20260830_ip_cost_evidence_immutable.py::test_cost_evidence_guard_allows_only_reconciliation_projection_updates",
+        "apps/api/tests/test_20260830_ip_cost_evidence_immutable.py::test_cost_guards_correction_lineage_and_parent_cascade_are_enforced_on_sqlite",
+        "apps/api/tests/test_ip_039f_cost_linkage.py::test_cost_correction_and_void_are_append_only_and_never_double_count",
         "apps/api/tests/test_postgres_validation.py::test_matterless_ip_cost_evidence_is_immutable_on_postgres",
         "apps/web/app/app/ip/page.test.tsx",
         "tests/e2e/iplf-039f-cost-items-2026-08-21.spec.ts::IPLF-039F records a nonbillable cost on a record with no billing Matter",
-        "tests/e2e/iplf-039f-cost-items-2026-08-21.spec.ts::IPLF-039F shows an estimate as an estimate and withholds a confidential rate"
+        "tests/e2e/iplf-039f-cost-items-2026-08-21.spec.ts::IPLF-039F shows an estimate as an estimate and withholds a confidential rate",
+        "tests/e2e/iplf-039f-cost-items-2026-08-30-prod.spec.ts::IPLF-039F deployed matterless correction is append-only and has no billing effect"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
@@ -9887,19 +9891,25 @@
         "docs/ip-implementation/evidence/m3/IPLF-039F/unimplemented-paths-closed-2026-08-20.md",
         "docs/ip-implementation/evidence/m3/IPLF-039F/cost-finalization-2026-08-30.md"
       ],
-      "blockers": [],
-      "next_actions": [
-        "Integrate the 2026-08-30 immutable/nonbilling-effect closure, run full exact-candidate CI, deploy the integrated main revision, and record dated production Playwright before release closure."
+      "blockers": [
+        "The dated deployed acceptance path now exists but has not run against an exact deployed revision in the dedicated production fixture tenant."
       ],
-      "data_impact": [],
-      "documentation_impact": [],
+      "next_actions": [
+        "Integrate the 2026-08-30 append-only correction/nonbilling-effect closure, run full exact-candidate CI, deploy the integrated main revision, and run the fail-closed dated production Playwright configuration before release closure."
+      ],
+      "data_impact": [
+        "Adds tenant-scoped ip_cost_item_corrections as append-only void/supersession lineage and strengthens ip_cost_items database constraints and actor provenance."
+      ],
+      "documentation_impact": [
+        "Updates the IPLF-039F evidence record and generated data-governance inventory for the correction lineage class."
+      ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "source_kind": "prd_explicit",
       "scope_source": "IPLF-039F",
       "primary_behavior": "Add `ip_cost_items` and immutable evidence/billing links; keep time/invoice/payment/spend in existing Matter owners and prove one amount/accounting owner across reports and exports.",
-      "migration_boundary": "No schema change unless named by release evidence; preserve the PRD expand/backfill/verify/switch contract.",
+      "migration_boundary": "Unreleased revision 20260830_0003 normalizes existing projections, adds append-only ip_cost_item_corrections and dialect-specific immutable/cascade-safe/tenant-actor guards, then verifies hostile direct writes on SQLite and PostgreSQL before deployment.",
       "release_boundary": "Compatible-train exact-candidate CI and dated deployed acceptance for activated/supported scope; capability-disabled fail-closed scope may share the train.",
       "evidence_metadata": [
         {
@@ -9912,7 +9922,7 @@
           "recorded_at": "2026-08-02T06:25:00+05:30"
         }
       ],
-      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written. | IPLF-039F 2026-08-20: the four unwritten per-path tests now exist and pass, and the path they described is implemented rather than contradicted. add_ip_cost_item no longer refuses every cost on a docket with no Matter; an exchange conversion preserves the original amount beside the rate, source and conversion time; a provider estimate is a distinct cost nature that cannot reconcile against the ledger; and a confidential rate is withheld from readers without ip:fees_manage. Each rule is enforced by a CHECK constraint as well as by the request model. verification_status stays not_run and release_status stays blocked: this is repository proof, not deployed acceptance. | IPLF-039F 2026-08-30 finalization: the remaining matterless-cost closure is enforced beyond route validation. PostgreSQL and SQLite now freeze the legal cost/evidence identity and retain the row while allowing only reconciliation projections to refresh; API regression proves repeat reconciliation changes no invoice, invoice-line, payment-attempt, invoiced total, or collected amount; and the operator UI explicitly verifies nonbillable evidence without implying a Matter billing path. Local repository and real-PostgreSQL proof are recorded, but exact deployed acceptance is still absent, so status remains in_progress / not_run / blocked."
+      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written. | IPLF-039F 2026-08-20: the four unwritten per-path tests now exist and pass, and the path they described is implemented rather than contradicted. add_ip_cost_item no longer refuses every cost on a docket with no Matter; an exchange conversion preserves the original amount beside the rate, source and conversion time; a provider estimate is a distinct cost nature that cannot reconcile against the ledger; and a confidential rate is withheld from readers without ip:fees_manage. Each rule is enforced by a CHECK constraint as well as by the request model. verification_status stays not_run and release_status stays blocked: this is repository proof, not deployed acceptance. | IPLF-039F 2026-08-30 finalization: the remaining matterless-cost closure is enforced beyond route validation. PostgreSQL and SQLite freeze immutable source facts, enforce terminal matterless/nonbillable projections and tenant-correlated actors, and reject direct deletion while preserving parent-docket cascade. Erroneous evidence is corrected only by an append-only void/supersession record with an optional full replacement; reconciliation, control totals, renewals, foreign-associate spend, Madrid actions and recordals exclude inactive sources. Local Docker and public deployed Playwright paths are separate: the production path has no local shell/database access and fails closed without an exact release plus dedicated tenant/docket/complete-Matter fixture contract. Exact deployed acceptance is still absent, so status remains in_progress / not_run / blocked."
     },
     {
       "id": "IPLF-039G",

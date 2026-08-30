@@ -248,6 +248,7 @@ def _seed_renewal_fixture(client: TestClient) -> tuple[dict, dict[str, str], dic
             billable=False,
             cost_nature="estimate",
             evidence_reference="registry://fees/renewal-v1",
+            reconciliation_status="nonbillable",
             created_by_membership_id=membership_id,
         )
         taxonomy = IpDocumentTaxonomyEntry(
@@ -669,7 +670,7 @@ def test_renewal_portfolio_reminders_and_instruction_cancellation(
         "evidence_reference": "registry://fees/renewal-v1",
         "billing_link_type": None,
         "billing_link_id": None,
-        "reconciliation_status": "unlinked",
+            "reconciliation_status": "nonbillable",
         "reconciled_at": None,
     }
 

@@ -13,52 +13,63 @@ with no Matter only when `billable=false`, rejected billing links, and returned
 the terminal reconciliation status `nonbillable`. That was necessary, but it
 was not enough to support the stronger closure statement in the manifest.
 
-Three gaps remained:
+The first finalization pass was still too shallow. Independent review found
+five release-blocking gaps:
 
-1. The service had no update/delete route, but PostgreSQL still allowed a
-   future writer, import, repair script, or direct SQL session to rewrite the
-   stored `matter_id`, `billable`, amount, currency, evidence reference, or
-   billing link. A matterless cost could therefore be repurposed later despite
-   having been presented as immutable official-fee evidence.
-2. The API regression counted only `MatterInvoice` rows. It did not prove that
-   invoice lines, payment attempts, invoice totals, or collected amounts were
-   unchanged, and it reconciled only once. A shallow implementation could have
-   passed that test while producing an adjacent accounting effect.
-3. The matterless UI called the action **Reconcile with Matter billing**, even
-   though no Matter billing owner exists. It also stopped showing the evidence
-   reference after capture, so the retained evidence was not inspectable from
-   the operator surface.
+1. The initial unconditional `BEFORE DELETE` guard also fired during the
+   declared parent-docket `ON DELETE CASCADE`. It protected direct writes by
+   breaking a lawful future parent disposition path.
+2. “Record a correction” was only prose. There was no append-only void or
+   supersession object, no replacement lineage, and no rule excluding an
+   erroneous source from reconciliation and totals without destroying history.
+3. The request/service enforced matterless nonbilling state, but a hostile SQL
+   writer could still store `unlinked`/`matched`, canonical amounts or a
+   cross-tenant creator/reconciler. Those are database invariants, not caller
+   conventions.
+4. Renewal, foreign-associate, Madrid and recordal consumers resolved a cost
+   only by ID/tenant/docket, so they could re-use a now-inactive historical
+   source after correction.
+5. The dated browser proof mixed local-only Python/database shell helpers with
+   assertions that might later be mistaken for production acceptance. A
+   deployed path must observe billing only through authenticated public APIs,
+   mutate only a declared test tenant and fail closed without exact fixtures.
 
 ## Durable fix
 
-- Alembic revision `20260830_0003` installs SQLite and PostgreSQL triggers over
-  `ip_cost_items`. The cost/evidence identity is immutable and deletion is
-  rejected. Reconciliation status, canonical amount/difference, reviewer, and
-  time remain mutable derived projections, so repeat verification still works.
-- The service/API regression snapshots invoice count, invoice-line count,
-  payment-attempt count, invoice total, and received amount before capture and
-  after repeat reconciliation. Every value must remain identical.
-- The same regression proves PATCH, PUT, and DELETE are not public cost-item
-  operations, then attempts a direct ORM rewrite and verifies the original
-  matterless/nonbillable amount and evidence reference persist.
-- A real PostgreSQL regression proves the trigger permits reconciliation but
-  rejects amount, billable-state, evidence-reference, and delete mutations.
-- The UI now names the action **Verify nonbillable evidence**, states that it
-  cannot create an invoice, invoice line, payment attempt, or collection, and
-  keeps the evidence reference visible before and after verification.
-- The dated Playwright scenario reads the canonical Matter billing/payment
-  tables before capture and after UI verification, asserting the same complete
-  zero-effect snapshot rather than inferring safety from a label.
+- Unreleased Alembic revision `20260830_0003` normalizes existing projections,
+  adds `ip_cost_item_corrections`, strengthens CHECK constraints, and installs
+  SQLite/PostgreSQL guards. Direct row deletion fails while the parent exists;
+  parent deletion remains cascade-safe because the trigger observes that the
+  docket is already absent from the deleting statement's visibility.
+- A source can have exactly one outgoing `void` or `supersede`. Supersession
+  appends a complete independently validated replacement; neither source nor
+  correction can be edited. Both histories remain readable, while only active
+  rows participate in reconciliation, control totals or adjacent cost-link
+  consumers.
+- Matterless and every nonbillable cost are database-enforced as terminal
+  `nonbillable` with no billing link and null canonical/difference amounts on
+  both INSERT and UPDATE. Creator, reconciler and correction actor must be an
+  active membership of the same tenant.
+- Service, API and operator UI expose real correction/void actions and retain
+  source evidence after disposition. The shared active-cost SQL predicate keeps
+  renewals, foreign-associate spend, Madrid and recordal flows aligned.
+- The local Docker Playwright remains explicitly loopback-only and may create
+  fixtures/use a local database shell. The separate `2026-08-30-prod` spec has
+  no shell imports; it requires exact API/web release identity, an explicit
+  dedicated-tenant acknowledgement, a matterless docket and the complete
+  declared Matter set, then compares public Matter workspace billing state
+  before capture/reconciliation and after UI void.
 
-## Verification completed while authoring this record
+## Current candidate verification
 
 | Surface | Command | Result |
 |---|---|---|
-| API + SQLite migration | `uv run --project apps/api --no-sync pytest -q apps/api/tests/test_20260830_ip_cost_evidence_immutable.py apps/api/tests/test_ip_039f_cost_linkage.py` | **13 passed** |
-| PostgreSQL 17 / pgvector | targeted `pytest -m postgres` migration-head and immutable-cost tests against a fresh container | **2 passed**, 105 deselected |
-| API lint | targeted Ruff over migration and changed backend tests | **passed** |
+| API + SQLite focused | migration/correction/invariant tests | **passed during focused iteration; exact final command pending after final edits** |
+| API lint/compile | targeted Ruff and Python compileall over the correction slice | **passed** |
 | IP UI | `npm run test --workspace @caseops/web -- app/app/ip/page.test.tsx` | **28 passed** |
-| Web types | `npm run typecheck --workspace @caseops/web` | **passed** |
+| Web + Playwright types | web typecheck and targeted dated-spec TypeScript compilation | **passed** |
+| PostgreSQL + local Docker Playwright | fresh exact candidate | **pending** |
+| Deployed dated Playwright | `playwright.ip-cost-prod.config.ts` | **not run; exact deployed candidate/fixtures required** |
 
 The exact final-commit Docker/PostgreSQL Playwright result is intentionally not
 self-asserted inside this source-controlled document: it is run only after the

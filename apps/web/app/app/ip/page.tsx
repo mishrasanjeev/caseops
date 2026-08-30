@@ -47,6 +47,7 @@ import {
   createIpDeadlineIncident,
   createManualTrademarkApplication,
   createIpSharedHearing,
+  correctIpCostItem,
   correctIpIdentifier,
   decideIpCoverageTransfer,
   decideIpDeadlineIncidentNotification,
@@ -3527,6 +3528,131 @@ function CostAmount({ row }: { row: IpDocket["cost_items"][number] }) {
   );
 }
 
+function CostCorrectionEditor({
+  docket,
+  row,
+  onChanged,
+}: {
+  docket: IpDocket;
+  row: IpDocket["cost_items"][number];
+  onChanged: () => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [action, setAction] = useState<"void" | "supersede">("supersede");
+  const [reason, setReason] = useState("");
+  const [correctionEvidence, setCorrectionEvidence] = useState("");
+  const [description, setDescription] = useState(row.description);
+  const [amount, setAmount] = useState(
+    row.amount_minor === null ? "" : (row.amount_minor / 100).toFixed(2),
+  );
+  const [replacementEvidence, setReplacementEvidence] = useState(row.evidence_reference);
+
+  const correction = useMutation({
+    mutationFn: () => correctIpCostItem(docket.id, row.id, {
+      action,
+      reason,
+      correctionEvidenceReference: correctionEvidence,
+      replacement: action === "supersede"
+        ? {
+            category: row.category as "official_fee" | "professional_fee" | "associate_fee" | "disbursement" | "other",
+            description,
+            amountMinor: Math.round(Number(amount) * 100),
+            currency: row.currency,
+            evidenceReference: replacementEvidence,
+            billingLinkType: row.billing_link_type,
+            billingLinkId: row.billing_link_id,
+            billable: row.billable,
+            costNature: row.cost_nature,
+            rateConfidential: row.rate_confidential,
+            fxRate: row.fx_rate,
+            fxRateSource: row.fx_rate_source,
+            fxConvertedAt: row.fx_converted_at,
+            baseAmountMinor: row.base_amount_minor,
+            baseCurrency: row.base_currency,
+          }
+        : null,
+    }),
+    onSuccess: async () => {
+      toast.success(action === "void"
+        ? "Cost evidence voided; the original history is retained."
+        : "Replacement cost evidence appended; the original is retained as superseded.");
+      setOpen(false);
+      await onChanged();
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not correct cost evidence.")),
+  });
+
+  if (!open) {
+    return (
+      <Button size="sm" type="button" variant="secondary" onClick={() => setOpen(true)}>
+        Correct or void
+      </Button>
+    );
+  }
+
+  const invalidReplacement = action === "supersede"
+    && (description.length < 3 || !amount || replacementEvidence.length < 3);
+  return (
+    <form
+      className="mt-3 grid min-w-0 gap-2 rounded-md border border-[var(--color-line)] p-3"
+      onSubmit={(event) => { event.preventDefault(); correction.mutate(); }}
+    >
+      <p className="text-xs text-[var(--color-mute)]">
+        The original cost and evidence never change. A supersession appends a new
+        active cost; a void keeps only the historical row. Inactive rows are excluded
+        from reconciliation counts and cost totals.
+      </p>
+      <Field label="Correction action">
+        <select
+          className="h-10 min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
+          value={action}
+          onChange={(event) => setAction(event.target.value as typeof action)}
+        >
+          <option value="supersede">Supersede with corrected evidence</option>
+          <option value="void">Void without replacement</option>
+        </select>
+      </Field>
+      <Field label="Correction reason">
+        <Textarea value={reason} onChange={(event) => setReason(event.target.value)} />
+      </Field>
+      <Field label="Correction evidence reference">
+        <Input value={correctionEvidence} onChange={(event) => setCorrectionEvidence(event.target.value)} />
+      </Field>
+      {action === "supersede" ? (
+        <div className="grid min-w-0 gap-2">
+          <Field label="Corrected description">
+            <Input value={description} onChange={(event) => setDescription(event.target.value)} />
+          </Field>
+          <Field label={`Corrected amount (${row.currency})`}>
+            <Input type="number" min="0" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} />
+          </Field>
+          <Field label="Replacement evidence reference">
+            <Input value={replacementEvidence} onChange={(event) => setReplacementEvidence(event.target.value)} />
+          </Field>
+          {row.base_amount_minor !== null ? (
+            <p className="text-xs text-[var(--color-mute)]">
+              The preserved FX conversion and billing link are carried into the replacement.
+              Void and add a fresh cost instead if those facts are also wrong.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+        <Button
+          size="sm"
+          type="submit"
+          disabled={reason.length < 3 || correctionEvidence.length < 3 || invalidReplacement || correction.isPending}
+        >
+          {action === "void" ? "Void cost evidence" : "Append corrected cost"}
+        </Button>
+        <Button size="sm" type="button" variant="secondary" onClick={() => setOpen(false)}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: boolean; onChanged: () => Promise<void> }) {
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
@@ -3598,17 +3724,34 @@ function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: b
       <CardHeader><CardTitle as="h3">IP cost evidence</CardTitle></CardHeader>
       <CardContent className="flex min-w-0 flex-col gap-3">
         {docket.cost_items.map((row) => (
-          <div key={row.id} className="min-w-0 rounded-md border border-[var(--color-line)] p-3 text-sm">
+          <div
+            key={row.id}
+            className="min-w-0 rounded-md border border-[var(--color-line)] p-3 text-sm"
+            data-testid={`ip-cost-item-${row.id}`}
+          >
             <strong className="break-words">{row.description}</strong>{" "}
             <CostAmount row={row} />
             <div className="mt-1 text-xs text-[var(--color-mute)]">
               {COST_STATUS_LABEL[row.reconciliation_status] ?? row.reconciliation_status}
               {row.cost_nature === "estimate" ? " · Provider estimate" : null}
               {row.rate_confidential ? " · Confidential rate" : null}
+              {row.lineage_status === "voided" ? " · Voided — excluded from totals" : null}
+              {row.lineage_status === "superseded" ? " · Superseded — excluded from totals" : null}
+              {row.corrects_cost_item_id ? ` · Corrects ${row.corrects_cost_item_id}` : null}
             </div>
             <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
               Evidence: {row.evidence_reference}
             </div>
+            {row.correction_reason ? (
+              <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
+                Correction: {row.correction_reason} · Evidence: {row.correction_evidence_reference}
+              </div>
+            ) : null}
+            {enabled && row.lineage_status === "active" ? (
+              <div className="mt-2">
+                <CostCorrectionEditor docket={docket} row={row} onChanged={onChanged} />
+              </div>
+            ) : null}
           </div>
         ))}
         {enabled ? (

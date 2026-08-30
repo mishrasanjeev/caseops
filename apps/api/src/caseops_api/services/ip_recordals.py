@@ -32,6 +32,7 @@ from caseops_api.schemas.ip_recordals import (
     IpRecordalWorkspaceResponse,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.ip_cost_lineage import active_ip_cost_predicate
 from caseops_api.services.ip_deadline_workflow import deadline_workspace
 from caseops_api.services.ip_document_workflow import list_ip_documents
 from caseops_api.services.ip_identifier_rules import normalize_ip_identifier
@@ -242,10 +243,20 @@ def _validate_owned_refs(
         )
         return set(ids) - found
 
-    if missing_ids(IpCostItem, cost_item_refs):
+    active_costs = set(
+        session.scalars(
+            select(IpCostItem.id).where(
+                IpCostItem.company_id == company_id,
+                IpCostItem.docket_id == docket_id,
+                IpCostItem.id.in_(set(cost_item_refs)),
+                active_ip_cost_predicate(),
+            )
+        )
+    )
+    if set(cost_item_refs) - active_costs:
         raise HTTPException(
             status_code=422,
-            detail="Recordal cost references must belong to the selected docket.",
+            detail="Recordal cost references must be active and belong to the selected docket.",
         )
     if missing_ids(IpDeadline, deadline_refs):
         raise HTTPException(

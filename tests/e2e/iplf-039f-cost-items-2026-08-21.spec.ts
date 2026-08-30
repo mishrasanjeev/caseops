@@ -37,6 +37,14 @@ const PASSWORD = "CostEvidence2026!";
 const BOOTSTRAP_TRANSPORT_ATTEMPTS = 2;
 const BOOTSTRAP_TRANSPORT_RETRY_DELAY_MS = 250;
 
+test.beforeAll(() => {
+  const apiHost = new URL(apiBaseUrl).hostname;
+  expect(
+    ["127.0.0.1", "localhost", "::1"],
+    "This spec grants local fixtures and reads the local database; use the dated production spec for deployed acceptance.",
+  ).toContain(apiHost);
+});
+
 function isConnectionReset(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return /(?:ECONNRESET|socket hang up)/i.test(message);
@@ -275,6 +283,22 @@ test("IPLF-039F records a nonbillable cost on a record with no billing Matter", 
   await expect(
     costs.getByText("Evidence: receipt:registry-fee-unbilled-2026", { exact: true }),
   ).toBeVisible();
+  const recordedCost = costs.locator('[data-testid^="ip-cost-item-"]').filter({
+    hasText: "Official filing fee paid before a billing Matter existed.",
+  });
+  await recordedCost.getByRole("button", { name: "Correct or void" }).click();
+  await recordedCost.getByLabel("Correction action").selectOption("void");
+  await recordedCost.getByLabel("Correction reason").fill(
+    "Synthetic local acceptance row is complete and must not remain active.",
+  );
+  await recordedCost.getByLabel("Correction evidence reference").fill(
+    "e2e:void:iplf-039f-2026-08-30",
+  );
+  await recordedCost.getByRole("button", { name: "Void cost evidence" }).click();
+  await expect(recordedCost.getByText(/Voided — excluded from totals/)).toBeVisible();
+  await expect(recordedCost.getByText("Evidence: receipt:registry-fee-unbilled-2026", {
+    exact: true,
+  })).toBeVisible();
   expect(billingEffectSnapshot(tenant.company.id as string)).toEqual(billingBefore);
 
   await api.dispose();
