@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import hashlib
 import json
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from caseops_api.db.models import CompanyMembership, IpDocketRecord, IpDocumentVersion
+from caseops_api.db.models import (
+    CompanyMembership,
+    IpDocketRecord,
+    IpDocumentVersion,
+    PrivateProjectionEvent,
+)
 from caseops_api.db.session import get_session_factory
 from caseops_api.services.document_storage import resolve_storage_path
 from tests.test_auth_company import auth_headers, bootstrap_company
@@ -281,6 +287,28 @@ def test_duplicate_detection_uses_content_and_reuses_one_document_across_links(
     assert linked.status_code == 200, linked.text
     assert len(linked.json()["links"]) == 2
     assert len(linked.json()["versions"]) == 1
+    created_link = next(
+        row for row in linked.json()["links"] if row["target_id"] == dockets[1]
+    )
+    raw_event_key = (
+        f"ip-document-links:{document['id']}:1:"
+        f"{hashlib.sha256(created_link['id'].encode('utf-8')).hexdigest()}"
+    )
+    assert len(raw_event_key) == 121
+    with get_session_factory()() as session:
+        event = session.scalar(
+            select(PrivateProjectionEvent).where(
+                PrivateProjectionEvent.company_id == bootstrap["company"]["id"],
+                PrivateProjectionEvent.target_type == "ip_document",
+                PrivateProjectionEvent.target_id == document["id"],
+                PrivateProjectionEvent.reason_code == "ip_document_links_changed",
+            )
+        )
+        assert event is not None
+        assert len(event.idempotency_key) == 120
+        assert event.idempotency_key.endswith(
+            f":sha256:{hashlib.sha256(raw_event_key.encode('utf-8')).hexdigest()}"
+        )
 
     cross_taxonomy_bytes = b"The same bytes have different legal classification metadata. " * 15
     classified_elsewhere = _upload(

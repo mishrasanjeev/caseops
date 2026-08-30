@@ -8748,3 +8748,162 @@ def test_bounded_renewal_report_reader_runs_on_postgres(
 
     with TestClient(create_application()) as test_client:
         test_iplf_req_report_01_renewal_report_returns_canonical_evidence(test_client)
+
+
+def test_ip_document_link_projection_event_key_is_bounded_on_postgres(
+    pg_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The real POST flow must fit PostgreSQL VARCHAR(120) and stay idempotent."""
+
+    import hashlib
+
+    from fastapi.testclient import TestClient
+
+    from caseops_api.core.settings import get_settings
+    from caseops_api.db.models import (
+        IpDocketRecord,
+        IpDocument,
+        IpDocumentTaxonomyEntry,
+        IpDocumentVersion,
+        PrivateProjectionEvent,
+    )
+    from caseops_api.db.session import clear_engine_cache
+    from caseops_api.main import create_application
+    from caseops_api.services.private_retrieval import (
+        build_private_projection_event_key,
+    )
+
+    postgres_url = os.environ["CASEOPS_TEST_POSTGRES_URL"].strip()
+    monkeypatch.setenv("CASEOPS_DATABASE_URL", postgres_url)
+    monkeypatch.setenv("CASEOPS_ENV", "ci")
+    monkeypatch.setenv("CASEOPS_AUTO_MIGRATE", "false")
+    monkeypatch.setenv(
+        "CASEOPS_AUTH_SECRET",
+        "pg-private-event-key-secret-at-least-32-bytes",
+    )
+    monkeypatch.setenv("CASEOPS_AUTH_RATE_LIMIT_ENABLED", "false")
+    get_settings.cache_clear()
+    clear_engine_cache()
+
+    fixture_id = uuid4().hex
+    try:
+        with TestClient(create_application()) as test_client:
+            bootstrap = test_client.post(
+                "/api/bootstrap/company",
+                json={
+                    "company_name": f"Private event key {fixture_id[:8]}",
+                    "company_slug": f"private-event-key-{fixture_id[:12]}",
+                    "company_type": "law_firm",
+                    "owner_full_name": "PostgreSQL Event Owner",
+                    "owner_email": f"private-event-{fixture_id[:12]}@example.in",
+                    "owner_password": "PostgresEventKey123!",
+                },
+            )
+            assert bootstrap.status_code == 200, bootstrap.text
+            company_id = str(bootstrap.json()["company"]["id"])
+            membership_id = str(bootstrap.json()["membership"]["id"])
+            headers = {
+                "Authorization": f"Bearer {bootstrap.json()['access_token']}"
+            }
+
+            with Session(pg_engine) as seed:
+                taxonomy = IpDocumentTaxonomyEntry(
+                    company_id=company_id,
+                    key=f"event-key-{fixture_id[:8]}",
+                    label="PostgreSQL event key evidence",
+                    is_seeded=False,
+                    is_active=True,
+                    version=1,
+                    updated_by_membership_id=membership_id,
+                )
+                target_docket = IpDocketRecord(
+                    company_id=company_id,
+                    record_type="trademark",
+                    title="PostgreSQL private event target",
+                    status="draft",
+                    is_active=True,
+                    restricted=False,
+                    created_by_membership_id=membership_id,
+                )
+                seed.add_all([taxonomy, target_docket])
+                seed.flush()
+                document = IpDocument(
+                    company_id=company_id,
+                    taxonomy_entry_id=taxonomy.id,
+                    title="PostgreSQL event key document",
+                    confidentiality="internal",
+                    is_privileged=False,
+                    current_version=1,
+                    created_by_membership_id=membership_id,
+                )
+                seed.add(document)
+                seed.flush()
+                version = IpDocumentVersion(
+                    company_id=company_id,
+                    document_id=document.id,
+                    version=1,
+                    original_filename="postgres-event-key.txt",
+                    display_name="postgres-event-key.txt",
+                    storage_key=f"postgres-event-key/{fixture_id}",
+                    content_type="text/plain",
+                    size_bytes=32,
+                    sha256_hex=hashlib.sha256(fixture_id.encode("ascii")).hexdigest(),
+                    processing_status="indexed",
+                    extracted_char_count=32,
+                    state="draft",
+                    uploaded_by_membership_id=membership_id,
+                )
+                seed.add(version)
+                seed.commit()
+                document_id = document.id
+                target_docket_id = target_docket.id
+
+            request = {
+                "expected_current_version": 1,
+                "links": [{"target_type": "docket", "target_id": target_docket_id}],
+            }
+            linked = test_client.post(
+                f"/api/ip/documents/{document_id}/links",
+                headers=headers,
+                json=request,
+            )
+            assert linked.status_code == 200, linked.text
+            assert len(linked.json()["links"]) == 1
+            created_link_id = str(linked.json()["links"][0]["id"])
+
+            # A retry resolves the same operation identity and must not create
+            # another event or advance the private security generation again.
+            retried = test_client.post(
+                f"/api/ip/documents/{document_id}/links",
+                headers=headers,
+                json=request,
+            )
+            assert retried.status_code == 200, retried.text
+
+        raw_key = (
+            f"ip-document-links:{document_id}:1:"
+            f"{hashlib.sha256(created_link_id.encode('utf-8')).hexdigest()}"
+        )
+        assert len(raw_key) == 121
+        with Session(pg_engine) as verify:
+            events = list(
+                verify.scalars(
+                    select(PrivateProjectionEvent).where(
+                        PrivateProjectionEvent.company_id == company_id,
+                        PrivateProjectionEvent.target_type == "ip_document",
+                        PrivateProjectionEvent.target_id == document_id,
+                        PrivateProjectionEvent.reason_code
+                        == "ip_document_links_changed",
+                    )
+                ).all()
+            )
+            assert len(events) == 1
+            assert events[0].status == "applied"
+            assert events[0].idempotency_key == build_private_projection_event_key(
+                raw_key
+            )
+            assert len(events[0].idempotency_key) == 120
+    finally:
+        clear_engine_cache()
+        get_settings.cache_clear()

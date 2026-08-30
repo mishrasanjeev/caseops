@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -17,9 +19,11 @@ from caseops_api.db.models import (
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.services.private_retrieval import (
+    PRIVATE_PROJECTION_EVENT_KEY_MAX_LENGTH,
     PrivateProjectionInput,
     PrivateRetrievalInvariantError,
     ProjectionScopeInput,
+    build_private_projection_event_key,
     create_shadow_private_generation,
     ensure_active_private_generation,
     hydrate_private_projection_results,
@@ -540,3 +544,26 @@ def test_private_cache_key_partitions_every_security_dimension() -> None:
     for changed in variants:
         assert private_retrieval_cache_key(**(base | changed)) != baseline
     assert "opposition evidence" not in baseline
+
+
+def test_projection_event_key_is_bounded_stable_and_collision_resistant() -> None:
+    column_length = PrivateProjectionEvent.__table__.c.idempotency_key.type.length
+    assert column_length == PRIVATE_PROJECTION_EVENT_KEY_MAX_LENGTH == 120
+    exact_boundary = "x" * PRIVATE_PROJECTION_EVENT_KEY_MAX_LENGTH
+    assert build_private_projection_event_key(exact_boundary) == exact_boundary
+
+    document_id = "d" * 36
+    link_ids_hash = hashlib.sha256(("l" * 36).encode("utf-8")).hexdigest()
+    raw_key = f"ip-document-links:{document_id}:1:{link_ids_hash}"
+    assert len(raw_key) == PRIVATE_PROJECTION_EVENT_KEY_MAX_LENGTH + 1
+
+    bounded = build_private_projection_event_key(raw_key)
+    assert len(bounded) == PRIVATE_PROJECTION_EVENT_KEY_MAX_LENGTH
+    assert bounded.endswith(f":sha256:{hashlib.sha256(raw_key.encode('utf-8')).hexdigest()}")
+    assert bounded == build_private_projection_event_key(raw_key)
+    assert build_private_projection_event_key(bounded) == bounded
+
+    other_raw_key = f"{raw_key[:-1]}0"
+    assert build_private_projection_event_key(other_raw_key) != bounded
+    with pytest.raises(PrivateRetrievalInvariantError, match="idempotency key"):
+        build_private_projection_event_key("")
