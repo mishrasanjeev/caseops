@@ -24,16 +24,16 @@ from caseops_api.governance.types import ReviewedDataClass
 PROJECTION_SCHEMA_VERSION = 1
 
 # Fingerprints of the exact artifacts this projection was rendered from.
-MAP_DOCUMENT_FINGERPRINT = "315fb97a88c195df0373a6a81b3e9c8c1e2a19e6d337e2d7bd9afcdafde10b2b"
-MAP_SCHEMA_FINGERPRINT = "7c58fddcd7e51b6277d0975a9e092cd38393706745e2f84c01a7d98c03d19ffe"
+MAP_DOCUMENT_FINGERPRINT = "c54aebef39167e14c2877d75c97f3632178e15b8ce75461cc5abd9586a197324"
+MAP_SCHEMA_FINGERPRINT = "e57f9c3cc4d6a6cdde90decaddd8ed99470b22c44d5a72ee153aba40d17e610b"
 REGISTRY_028A_FINGERPRINT = "dd3c30cf69a9b498cea3820acb485a0368a72bf6d9348c2f0d430b5efa99802d"
 REGISTRY_027A_FINGERPRINT = "10b97a818b23d4fae8fe7f54b63edb50b0e04c16778cf0e646ef907f40e1ad96"
 # The ORM schema at render time. Compared against the live models at runtime, so
 # an image whose models moved after this file was rendered reports stale rather
 # than answering from a projection that no longer describes it.
-ORM_SCHEMA_FINGERPRINT = "a516aa2f7d2f58d6cdf15f2a8e8d4be491a0b46c9317a2c39d20543671a193c6"
+ORM_SCHEMA_FINGERPRINT = "4bd29eb1afa1d5ea78854a70fcd7ce82747dcff2d298907b240ae090af73f969"
 
-PROJECTION_ID = "ebbb5a0e5cc8371b17bf12aaa6a72fea1fb499e2241efa80c21930167b0bac03"
+PROJECTION_ID = "926ac3b9ad26a4af3eb789b60679322985e9b183bae3ede4bf27b1b9b3de9acc"
 
 # Every SQL table the repository-wide map inventories. Membership here is what
 # separates "inventoried but never reviewed" from "no such data class", which
@@ -293,6 +293,11 @@ INVENTORIED_SQL_TABLES = frozenset(
         "predictive_signal_evidence",
         "predictive_signal_items",
         "predictive_signal_runs",
+        "private_index_generations",
+        "private_index_projection_scopes",
+        "private_index_projections",
+        "private_projection_events",
+        "private_saved_output_access",
         "production_billing_signoff_evidence",
         "production_billing_signoffs",
         "provider_cost_profiles",
@@ -358,6 +363,7 @@ INVENTORIED_NON_SQL_CLASSES = frozenset(
         "llm-and-embedding-provider-held-content",
         "matter-attachment-pgvector-index",
         "sql-relational-index-projections",
+        "tenant-private-retrieval-candidate-cache",
     }
 )
 
