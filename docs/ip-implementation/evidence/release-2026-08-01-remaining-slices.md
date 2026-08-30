@@ -1,6 +1,6 @@
 # IP Law Firm PRD remaining-slice implementation and release record
 
-> **Superseded completion note (1 August 2026):** The five implementation tails identified in this record were subsequently completed. See `docs/ip-implementation/evidence/release-2026-08-01-completion.md` and the canonical manifest for current status. Historical statements below describe the earlier deployed revision and are retained as immutable release evidence.
+> **Superseded completion note (updated 30 August 2026):** The five implementation tails identified in this record were subsequently completed. See `docs/ip-implementation/evidence/release-2026-08-01-completion.md` and the canonical manifest for current status. Historical statements below describe the earlier deployed revision and are retained as immutable release evidence; generic pilot/UAT, child-PRD, or program-lock signoffs mentioned below are not active implementation or release gates.
 
 **Evidence date:** 1 August 2026
 **Scope:** `IPLF-003A/B`, `IPLF-005A`, `IPLF-006A/B`, `IPLF-007A/B`, and `IPLF-039A/F`

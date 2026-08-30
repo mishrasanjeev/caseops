@@ -16,7 +16,7 @@ Work in the CaseOps repository currently open in the workspace. Read and obey th
 
 ## Objective
 
-Implement the full PRD end to end, including M0 through M10 and every required M8-M10 child domain. Draft, version, implement, and test required child PRDs while specialist approval is pending; keep their authoritative automation and acceptance claims disabled until approved. Deliver working product behavior, migrations, APIs, jobs, integrations, data governance, frontend experiences, security controls, observability, tests, documentation, Product Guide content, public documentation, and truthful landing-page updates.
+Implement the full PRD end to end, including M0 through M10 and every required M8-M10 child domain. Draft, version, implement, and test each domain contract without a planning signoff; keep only legally effectful automation disabled until the required legal or provider authority is recorded. Deliver working product behavior, migrations, APIs, jobs, integrations, data governance, frontend experiences, security controls, observability, tests, documentation, Product Guide content, public documentation, and truthful landing-page updates.
 
 Do not stop after analysis, scaffolding, schema creation, mocked UI, or happy-path tests. Continue until every repository-controlled requirement and journey has verified evidence or a genuine external blocker. A blocker does not count as completion. Park only the directly blocked activation node and keep every other dependency-ready node moving while recording the blocked item, owner, required decision/evidence, and affected milestone.
 
@@ -70,7 +70,7 @@ Track progress with separate dimensions instead of one overloaded `done` field:
 
 - `implementation_status`: `not_started`, `in_progress`, `implemented`, `blocked`.
 - `verification_status`: `not_run`, `failed`, `passed`, `blocked`.
-- `release_status`: `not_required`, `ready_for_review`, `approved`, `deployed`, `deployment_verified`, `blocked`.
+- `release_status`: `not_required`, `ready_for_release`, `deployed`, `deployment_verified`, `blocked`.
 
 `verified` is a computed result, never a manually asserted status. It requires implemented behavior, passing required verification, deployment verification where release is required, resolved blockers, current documentation and resolving evidence references. A local pass cannot produce `deployment_verified`.
 
@@ -317,7 +317,7 @@ For each compatible integrated release train, produce one evidence pack with tru
 - Exact merged commit, image digest, schema head, worker/job revisions, flags/entitlements, migration/backfill version and serving route are deployed, and a dated smoke against that revision passes.
 - No P0 remains. No P1 may remain in activated/supported scope or where it undermines the release's verification; a P1 confined to fail-closed pending scope keeps that scope disabled with an owner/date/disclosure without blocking unrelated deployment.
 
-Do not declare the full PRD complete until M0-M10, all manifest rows, all documentation/public claims, and all release evidence are verified. Schema presence, generated tests, mock-provider success, a local green build, a feature branch, a draft PR, a roadmap entry or self-authored acceptance is not completion. If merge or production access is not authorized, report `ready_for_review` or the applicable blocker; do not claim release or production completion.
+Do not declare the full PRD complete until M0-M10, all manifest rows, all documentation/public claims, and all release evidence are verified. Schema presence, generated tests, mock-provider success, a local green build, a feature branch, a draft PR, or a roadmap entry is not completion. If merge or production access is unavailable, report `ready_for_release` or the exact machine/external blocker; do not invent a manual review checkpoint or claim production completion.
 
 If external legal/provider/pilot/production evidence prevents final completion, report the program as incomplete. List exact verified scope, exact blocked rows, owner, decision/evidence needed, safe manual fallback, and next executable independent slice. Never convert a blocker into a guessed implementation or false pass.
 

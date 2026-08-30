@@ -24,7 +24,7 @@ Generated; do not edit.
 | IPLF-007C | derived | IPLF-007 | M1 | NOTIF-01, NOTIF-02, NOTIF-03, NOTIF-04, NOTIF-05, NOTIF-06, NOTIF-07, NOTIF-08, NOTIF-09, NOTIF-10, NOTIF-11, NOTIF-12, NOTIF-13, NOTIF-14, NOTIF-15, NOTIF-16, NOTIF-17, NOTIF-18, NOTIF-19, NOTIF-20, NOTIF-21, NOTIF-22, NOTIF-23, NOTIF-24 | UJ-11-EXC-01, UJ-11-EXC-02, UJ-11-NORMAL | implemented | passed | deployment_verified |
 | IPLF-008A | derived | IPLF-008 | M1 |  |  | implemented | passed | deployment_verified |
 | IPLF-008B | derived | IPLF-008 | M1 | TRACK-01, TRACK-02, TRACK-03, TRACK-04, TRACK-05, TRACK-06, TRACK-07, TRACK-08, TRACK-09, TRACK-10, TRACK-11, TRACK-12, TRACK-13, TRACK-14 |  | implemented | passed | deployment_verified |
-| IPLF-019A | derived | IPLF-019 | M2 |  |  | implemented | passed | ready_for_review |
+| IPLF-019A | derived | IPLF-019 | M2 |  |  | implemented | passed | ready_for_release |
 | IPLF-019B | derived | IPLF-019 | M2 | ARCH-OPS-01, ARCH-OPS-02, ARCH-OPS-03, ARCH-OPS-04, ARCH-OPS-05, ARCH-OPS-06, ARCH-OPS-07, ARCH-OPS-08, ARCH-OPS-09, ARCH-OPS-10, ARCH-OPS-11, ARCH-OPS-12, ARCH-OPS-13, ARCH-OPS-14, ARCH-OPS-15, ARCH-OPS-16, ARCH-OPS-17, ARCH-OPS-18, ARCH-OPS-19, ARCH-OPS-20, ARCH-OPS-21, ARCH-OPS-22, ARCH-OPS-23, ARCH-OPS-24, ARCH-OPS-25, ARCH-OPS-26 |  | implemented | passed | deployment_verified |
 | IPLF-020A | derived | IPLF-020 | M2 |  |  | implemented | passed | deployment_verified |
 | IPLF-020B | derived | IPLF-020 | M2 |  | UJ-01-EXC-01, UJ-01-EXC-02, UJ-01-EXC-03, UJ-01-NORMAL | implemented | passed | deployment_verified |
@@ -126,8 +126,8 @@ Generated; do not edit.
 | IPLF-063B | derived | IPLF-063 | M6 | AI-REV-01, AI-REV-02, AI-REV-03, AI-REV-04, AI-REV-05, AI-REV-06, AI-REV-07, AI-REV-08, AI-REV-09, AI-REV-10 | UJ-18-EXC-01, UJ-18-EXC-02, UJ-18-EXC-03, UJ-18-NORMAL | implemented | passed | deployment_verified |
 | IPLF-064A | derived | IPLF-064 | M6 |  |  | implemented | passed | deployment_verified |
 | IPLF-064B | derived | IPLF-064 | M6 | AI-GUIDE-06 | UJ-23-EXC-03, UJ-23-NORMAL | implemented | passed | deployment_verified |
-| IPLF-065A | derived | IPLF-065 | M6 |  |  | implemented | passed | ready_for_review |
-| IPLF-065B | derived | IPLF-065 | M6 | AI-GUIDE-04, AI-GUIDE-05, AI-GUIDE-07, AI-GUIDE-10, AI-REV-01, AI-REV-02, AI-REV-03, AI-REV-04, AI-REV-05, AI-REV-06, AI-REV-07, AI-REV-08, AI-REV-09, AI-REV-10 | UJ-18-EXC-01, UJ-18-EXC-02, UJ-18-EXC-03, UJ-18-NORMAL, UJ-22-NORMAL, UJ-23-EXC-02, UJ-23-NORMAL | implemented | passed | ready_for_review |
+| IPLF-065A | derived | IPLF-065 | M6 |  |  | implemented | passed | ready_for_release |
+| IPLF-065B | derived | IPLF-065 | M6 | AI-GUIDE-04, AI-GUIDE-05, AI-GUIDE-07, AI-GUIDE-10, AI-REV-01, AI-REV-02, AI-REV-03, AI-REV-04, AI-REV-05, AI-REV-06, AI-REV-07, AI-REV-08, AI-REV-09, AI-REV-10 | UJ-18-EXC-01, UJ-18-EXC-02, UJ-18-EXC-03, UJ-18-NORMAL, UJ-22-NORMAL, UJ-23-EXC-02, UJ-23-NORMAL | implemented | passed | ready_for_release |
 | IPLF-066A | derived | IPLF-066 | M6 |  |  | implemented | passed | blocked |
 | IPLF-066B | derived | IPLF-066 | M6 | AI-GUIDE-04, AI-GUIDE-05, AI-GUIDE-08, AI-GUIDE-12, IP-ACCESS-01, IP-ACCESS-02, IP-ACCESS-03, IP-ACCESS-04, IP-ACCESS-05, IP-ACCESS-06, IP-ACCESS-07, IP-ACCESS-08, SEARCH-ACL-01, SEARCH-ACL-02, SEARCH-ACL-03, SEARCH-ACL-04, SEARCH-ACL-05, SEARCH-ACL-06, SEARCH-ACL-07, SEARCH-ACL-08, SEARCH-ACL-09, SEARCH-ACL-10, SEARCH-ACL-11, SEARCH-ACL-12 | UJ-22-NORMAL, UJ-23-EXC-01, UJ-23-EXC-02, UJ-23-EXC-03, UJ-23-NORMAL, UJ-66-EXC-01, UJ-66-EXC-02, UJ-66-EXC-03, UJ-66-EXC-04, UJ-66-NORMAL | not_started | not_run | blocked |
 | IPLF-070A | derived | IPLF-070 | M7-M10 |  |  | not_started | not_run | blocked |

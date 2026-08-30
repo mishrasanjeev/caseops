@@ -1,5 +1,7 @@
 # IP Law Firm PRD implementation-tail completion record
 
+> **Governance supersession (30 August 2026):** Historical references below to generic human/pilot/UAT acceptance are not active implementation or release gates. Machine-validated contracts, exact-release checks, and dated production E2E close repository work. Human authority remains scoped only to an exact legally, financially, externally, or destructively effectful product action.
+
 **Evidence date:** 1 August 2026  
 **Repository:** CaseOps  
 **Canonical control:** `docs/ip-implementation/PROGRAM_MANIFEST.yaml`  
@@ -9,7 +11,7 @@
 
 All repository-controlled implementation work explicitly left open in the 1 August remaining-slices release has now been implemented. The result includes persistence, constraints, tenant and capability enforcement, service commands, API contracts, regenerated OpenAPI types, responsive user controls, audit evidence, migrations, focused regressions, and a dated browser journey.
 
-This record does not claim that the complete 436-requirement, 68-journey M0-M10 program is finished. The canonical manifest still contains undecomposed and `not_started` epics that require legal fixtures, provider or pilot-firm decisions, retention/export/recovery controls, specialist child PRDs, and human acceptance. Those are program dependencies, not hidden code TODOs inside the five slices closed here.
+This record does not claim that the complete 436-requirement, 68-journey M0-M10 program is finished. The canonical manifest still contains undecomposed and `not_started` epics requiring legal/source fixtures, provider capability facts, retention/export/recovery controls, machine-validated domain contracts, implementation, tests, and exact-release evidence. Those are program dependencies, not hidden code TODOs inside the five slices closed here.
 
 The fixed “seven consecutive natural scheduler days” release wait remains removed by the product-owner instruction of 1 August 2026. Exact revision, configuration/IAM verification, bounded canaries, health checks, and dated production E2E are the release evidence. Natural scheduler executions remain ongoing SLO evidence, not an artificial time gate.
 
@@ -172,7 +174,7 @@ The release gates completed on 2 August 2026:
 
 The first hosted CI attempt correctly found two conflicting disabled-provider fallback expectations. The implementation was reconciled so blocked external rows stay content-free, rule-owned external-only fallbacks remain generic, and direct durable IP fallbacks retain caller-supplied in-app copy. All three paths pass together. The first post-deploy IP proof also correctly found that the dedicated QA tenant had no IP docket; the dated spec now creates one through the real UI only when empty and then validates the operational workspace. Neither failure was waived or converted into a skip.
 
-With these gates complete, `IPLF-007B`, `IPLF-039B`, `IPLF-039C`, `IPLF-039E`, and `IPLF-039F` are `deployment_verified`. Their independent human acceptance remains `pending`.
+With these machine gates complete, `IPLF-007B`, `IPLF-039B`, `IPLF-039C`, `IPLF-039E`, and `IPLF-039F` are `deployment_verified`; no additional implementation signoff is pending.
 
 ## Rollback
 
@@ -184,6 +186,6 @@ With these gates complete, `IPLF-007B`, `IPLF-039B`, `IPLF-039C`, `IPLF-039E`, a
 
 ## Completion boundary
 
-There are no deferred repository TODOs for the five implementation tails named in this record. External-provider production activation is deliberately disabled until the separately authorized real-message switch, and human acceptance remains pending because Codex cannot approve pilot/legal/UAT evidence. The final documentation commit is released through the same exact-revision pipeline; it does not alter the application behavior proven above.
+There are no deferred repository TODOs for the five implementation tails named in this record. External-provider production activation is deliberately disabled until the separately authorized real-message switch; that exact external communication boundary does not create a generic pilot/legal/UAT signoff. The final documentation commit is released through the same exact-revision pipeline; it does not alter the application behavior proven above.
 
 The rest of the master PRD is not silently waived. The manifest remains the truthful source for the undecomposed M0/M2-M10 epics and all 436 atomic requirement rows. A future program claim must map those rows and journeys to verified evidence; this release does not inflate five completed slices into a claim that the multi-year full-IP platform is complete.

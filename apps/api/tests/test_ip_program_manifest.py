@@ -59,16 +59,75 @@ def test_active_ip_evidence_cannot_assign_work_to_claude(tmp_path: Path) -> None
 def test_late_domain_execution_uses_machine_gates_not_manual_approval() -> None:
     manifest = _manifest()
     epics = {row["id"]: row for row in manifest["epics"]}
+    milestones = {row["id"]: row for row in manifest["milestones"]}
 
     for epic_id in ("IPLF-080", "IPLF-090", "IPLF-091"):
         title = epics[epic_id]["title"]
         assert "approval is required" not in title.casefold()
         assert "machine-enforced" in title
 
+    assert milestones["M0"]["name"] == "Program contract"
+    assert "machine-validated" in milestones["M0"]["deliverable"]
+    assert "exact-release production acceptance suite" in milestones["M7"][
+        "exit_criteria"
+    ]
+    for milestone_id in ("M8", "M9", "M10"):
+        deliverable = milestones[milestone_id]["deliverable"].casefold()
+        assert "version-controlled" in deliverable or (
+            "machine-validated" in deliverable
+        )
+
+    release_statuses = {
+        row["release_status"]
+        for collection in (
+            "gates",
+            "milestones",
+            "epics",
+            "slices",
+            "requirements",
+            "journeys",
+            "journey_paths",
+        )
+        for row in manifest[collection]
+    }
+    assert "ready_for_review" not in release_statuses
+    assert "approved" not in release_statuses
+
     epics["IPLF-080"]["title"] = "Approval is required before activation."
     errors = ip_program_manifest.validate(manifest)
     assert any(
         "manual approval language is forbidden in execution scope" in error
+        for error in errors
+    )
+
+
+def test_validator_rejects_program_level_manual_gate_kind() -> None:
+    manifest = _manifest()
+    manifest["gates"][0]["kind"] = "manual_approval"
+
+    errors = ip_program_manifest.validate(manifest)
+
+    assert any(
+        "program gates must be machine-enforced" in error for error in errors
+    )
+
+
+def test_validator_rejects_manual_checkpoint_in_active_slice_control() -> None:
+    manifest = _manifest()
+    active = next(
+        row
+        for row in manifest["slices"]
+        if row["implementation_status"] in {"in_progress", "not_started"}
+    )
+    active["next_actions"] = [
+        "Wait for a required approver before implementation can continue."
+    ]
+
+    errors = ip_program_manifest.validate(manifest)
+
+    assert any(
+        "active execution control contains forbidden manual gate language"
+        in error
         for error in errors
     )
 
