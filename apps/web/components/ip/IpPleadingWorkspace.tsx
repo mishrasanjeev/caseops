@@ -230,9 +230,16 @@ export function IpPleadingWorkspace({
   const busy = create.isPending || generate.isPending || save.isPending || transition.isPending || lifecycle.isPending;
   const sourceRows = currentVersion?.source_manifest ?? [];
   const immutableStatus = selected ? ["finalized", "filed", "served"].includes(selected.status) : false;
+  const workspacePending = !selected && (
+    requestedDraft.isPending || templates.isPending || drafts.isPending
+  );
 
   return (
-    <section className="min-w-0 space-y-4 border-t border-[var(--color-line)] pt-4" data-testid="ip-pleading-workspace">
+    <section
+      aria-busy={workspacePending}
+      className="min-w-0 space-y-4 border-t border-[var(--color-line)] pt-4"
+      data-testid="ip-pleading-workspace"
+    >
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
         <h4 className="flex items-center gap-2 font-semibold">
           <FileSignature className="h-4 w-4" /> Trademark pleadings
@@ -245,7 +252,11 @@ export function IpPleadingWorkspace({
       {requestedDraft.isError && !draftRows.some((row) => row.id === initialDraftId) && drafts.isFetched ? (
         <QueryErrorState error={requestedDraft.error} title="Could not load the linked pleading draft" onRetry={() => requestedDraft.refetch()} />
       ) : null}
-      {!selected && (requestedDraft.isPending || templates.isPending || drafts.isPending) ? <Skeleton className="h-32 w-full" /> : null}
+      {workspacePending ? (
+        <div aria-label="Loading pleading workspace" role="status">
+          <Skeleton className="h-32 w-full" />
+        </div>
+      ) : null}
 
       {templates.data && templates.data.templates.length === 0 ? (
         <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm">

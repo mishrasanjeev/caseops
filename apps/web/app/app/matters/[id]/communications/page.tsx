@@ -287,7 +287,7 @@ function TimelineFilterBar({
   onSelect: (filter: CommunicationTimelineFilter) => void;
 }) {
   return (
-    <div className="flex flex-wrap gap-2" aria-label="Timeline filters">
+    <div className="flex flex-wrap gap-2" role="group" aria-label="Timeline filters">
       {TIMELINE_FILTERS.map((filter) => (
         <button
           key={filter.key}

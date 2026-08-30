@@ -331,7 +331,19 @@ def test_workstation_docker_gate_is_migration_first_and_exact_release() -> None:
     assert "condition: service_healthy" in compose
     assert '${CASEOPS_DOCKER_VALKEY_PORT:-16379}:6379' in compose
 
-    assert '$ComposeProject = "caseops-acceptance"' in docker_script
+    assert '$ComposeProject = "caseops-acceptance-$($ReleaseSha.Substring(0, 12))"' in docker_script
+    assert (
+        '$PortBlock = [Convert]::ToInt32($ReleaseSha.Substring(0, 6), 16) % 6000'
+        in docker_script
+    )
+    assert "$PortBase = 20000 + ($PortBlock * 5)" in docker_script
+    assert 'CASEOPS_DOCKER_PUBLIC_API_URL = "http://127.0.0.1:$TestApiPort"' in docker_script
+    assert 'CASEOPS_E2E_API_PORT = $TestApiPort' in docker_script
+    assert (
+        '$TestApiProxyScript = Join-Path $RepoRoot "scripts\\docker-acceptance-api-proxy.mjs"'
+        in docker_script
+    )
+    assert '-ArgumentList @("`"$TestApiProxyScript`"", $TestApiPort, $ApiPort)' in docker_script
     assert "git -C $RepoRoot status" in docker_script
     assert "| Out-String).Trim()" in docker_script
     assert "down --volumes --remove-orphans" in docker_script

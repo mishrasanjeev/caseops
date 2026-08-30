@@ -1752,7 +1752,7 @@ function HearingWorkflowCard({
                   </div>
                   <span className="text-sm font-semibold">{hearing.status}</span>
                 </div>
-                <div className="mt-3 min-w-0 space-y-3" aria-label={`Reminder delivery for ${hearing.purpose}`}>
+                <div className="mt-3 min-w-0 space-y-3" role="group" aria-label={`Reminder delivery for ${hearing.purpose}`}>
                   {reminderGenerations.map((generation) => {
                     const generationRows = hearing.reminders.filter(
                       (row) => row.schedule_generation === generation,

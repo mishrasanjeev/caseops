@@ -256,6 +256,8 @@ describe("MattersPage", () => {
     render(withClient(<MattersPage />));
 
     const grid = await screen.findByTestId("matter-filter-grid");
+    expect(grid).toHaveAttribute("role", "group");
+    expect(grid).toHaveAccessibleName("Matter filters");
     expect(grid).toHaveClass("min-w-0", "sm:grid-cols-2", "lg:grid-cols-3");
     expect(grid).toHaveClass("2xl:grid-cols-6");
     expect(screen.getByLabelText("Search")).toBeInTheDocument();

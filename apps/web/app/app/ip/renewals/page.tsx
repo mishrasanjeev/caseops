@@ -156,7 +156,7 @@ export default function IpRenewalsPage() {
       />
 
       {portfolio.isPending ? (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5" aria-label="Loading renewals">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5" role="status" aria-label="Loading renewals">
           {Array.from({ length: 5 }, (_, index) => (
             <Skeleton className="h-24" key={index} />
           ))}

@@ -209,6 +209,11 @@ test("IPLF-063B completes UJ-18 normal and exception paths", async ({ page }) =>
     await expect(page.getByLabel("Opposition proceeding", { exact: true })).toHaveValue(
       proceeding.id,
     );
+    await expect(page.getByTestId("ip-pleading-workspace")).toHaveAttribute(
+      "aria-busy",
+      "false",
+      { timeout: 60_000 },
+    );
     await expect(page.getByLabel("Pleading draft", { exact: true })).toHaveValue(
       publishedDraftId!,
     );

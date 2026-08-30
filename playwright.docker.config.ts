@@ -11,6 +11,11 @@ export default defineConfig({
   webServer: undefined,
   use: {
     ...appConfig.use,
+    // Docker Desktop on Windows can spend tens of seconds materializing the
+    // first authenticated route after a clean image/volume reset. Keep this
+    // local-only budget below the 120-second test ceiling; production uses its
+    // dedicated latency assertions and exact-release configuration.
+    actionTimeout: 60_000,
     baseURL: dockerWebBaseUrl,
   },
 });
