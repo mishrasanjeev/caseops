@@ -71,7 +71,7 @@ test("IPLF-UJ-22 and IPLF-UJ-23 feedback is responsive and reviewable", async ({
   const ratingRecord = await rating.json();
   await expect(page.getByText("Feedback received")).toBeVisible();
 
-  await page.getByRole("searchbox", { name: "Search the CaseOps guide" }).fill("xylophone nebula");
+  await page.getByRole("searchbox", { name: "Search the CaseOps guide" }).fill("xylophone nebula quasar");
   await page.getByRole("button", { name: "Search" }).click();
   const noMatch = page.getByTestId("product-guide-feedback-no-match");
   await noMatch.getByRole("button", { name: "Report an issue" }).click();

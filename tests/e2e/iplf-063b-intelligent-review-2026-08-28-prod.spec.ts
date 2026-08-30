@@ -326,9 +326,15 @@ test("IPLF-063B production proves the exact UJ-18 release", async ({ page }) => 
     "aria-selected",
     "true",
   );
-  await expect(page.getByLabel("Opposition proceeding")).toHaveValue(proceeding.id);
-  await expect(page.getByLabel("Pleading draft")).toHaveValue(ipPublished.draft_id);
-  await expect(page.getByLabel("Pleading body")).toHaveValue(/source-bounded decision support/i);
+  await expect(page.getByLabel("Opposition proceeding", { exact: true })).toHaveValue(
+    proceeding.id,
+  );
+  await expect(page.getByLabel("Pleading draft", { exact: true })).toHaveValue(
+    ipPublished.draft_id,
+  );
+  await expect(page.getByLabel("Pleading body", { exact: true })).toHaveValue(
+    /source-bounded decision support/i,
+  );
 
   const blocked = await json(
     await page.request.post(`${API}/api/research/reviews`, {

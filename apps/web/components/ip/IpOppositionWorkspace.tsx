@@ -2,7 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, ExternalLink, Plus, Save, Scale, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { cloneElement, useEffect, useId, useMemo, useState } from "react";
+import type { ReactElement } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/Badge";
@@ -64,12 +65,14 @@ const EMPTY_RIGHT: RightDraft = {
   evidence_refs: [],
 };
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children }: { label: string; children: ReactElement<{ id?: string }> }) {
+  const generatedId = useId();
+  const id = children.props.id ?? generatedId;
   return (
-    <Label className="block min-w-0 space-y-1.5">
-      <span className="block">{label}</span>
-      {children}
-    </Label>
+    <div className="block min-w-0 space-y-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      {cloneElement(children, { id })}
+    </div>
   );
 }
 
