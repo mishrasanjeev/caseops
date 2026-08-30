@@ -156,10 +156,11 @@ async function createDocketApplications(
         asset_id: asset.id,
         office: index === 0 ? "IP India" : "UKIPO",
         jurisdiction: index === 0 ? "IN" : "GB",
-        filing_phase: "draft",
+        filing_phase: "filed",
+        source_pending_identifier_allocation: false,
         application_number: {
           raw_value: rawValue,
-          source: "e2e_registry_fixture",
+          source: "historical_registry_fixture",
           effective_from: "2026-08-22",
           is_primary: true,
         },
