@@ -2307,9 +2307,9 @@ The program integration PR includes a generated, per-slice evidence index coveri
 - `IPLF-072`: Current regional/failover, no-dual-send worker recovery, incident and credential-compromise drills with measured RPO/RTO.
 - `IPLF-073`: Add shared access-review campaigns and emergency-access sessions to the existing target-aware access owner; prove expiry, cache/session revocation, independent post-review and no standing-grant residue.
 - `IPLF-079`: Enforce unavailable/intake-only/beta/GA domain labels and child-PRD/source-pack/legal-fixture gates in the server capability catalogue.
-- `IPLF-080`: Implement the patent family/prosecution/opposition/claim-version/annuity/working/title domain and journeys from a versioned child-PRD draft behind unavailable/intake-only flags; approval is required before authoritative automation or beta/GA activation.
-- `IPLF-090`: Implement independent design, copyright, domain, licensing, and enforcement domain slices from versioned child-PRD drafts behind unavailable/intake-only flags; approval is required before activation or supported claims.
-- `IPLF-091`: Implement independent GI, plant-variety, semiconductor-layout, trade-secret, and customs/anti-counterfeiting domain slices from versioned child-PRD drafts behind unavailable/intake-only flags; approval is required before activation or supported claims.
+- `IPLF-080`: Implement the patent family/prosecution/opposition/claim-version/annuity/working/title domain and journeys from a versioned child-PRD behind unavailable/intake-only flags; authoritative automation and beta/GA activate only when machine-enforced source-pack, legal-fixture, capability, regression, and exact-release checks pass.
+- `IPLF-090`: Implement independent design, copyright, domain, licensing, and enforcement domain slices from versioned child-PRDs behind unavailable/intake-only flags; activation and supported claims require machine-enforced source-pack, legal-fixture, capability, regression, and exact-release checks.
+- `IPLF-091`: Implement independent GI, plant-variety, semiconductor-layout, trade-secret, and customs/anti-counterfeiting domain slices from versioned child-PRDs behind unavailable/intake-only flags; activation and supported claims require machine-enforced source-pack, legal-fixture, capability, regression, and exact-release checks.
 - `IPLF-100`: Cross-IP reporting, client operations, migration, security, and full GA.
 
 ## 26. Testing and verification strategy

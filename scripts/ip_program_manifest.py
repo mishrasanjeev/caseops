@@ -713,6 +713,14 @@ def validate(manifest: dict[str, Any]) -> list[str]:
         errors.append("manifest simplified execution_policy is missing or changed")
     if program.get("prd_sha256") != sha256_text(prd):
         errors.append("manifest PRD hash is stale")
+    for collection in ("epics", "slices"):
+        for row in manifest.get(collection, []):
+            title = str(row.get("title", ""))
+            if "approval is required" in title.casefold():
+                errors.append(
+                    f"{collection[:-1]}/{row.get('id', '<missing>')}: "
+                    "manual approval language is forbidden in execution scope"
+                )
     baseline = program.get("baseline", {})
     if baseline != {
         "requirement_count": EXPECTED_REQUIREMENTS,
