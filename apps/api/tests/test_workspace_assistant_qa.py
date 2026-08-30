@@ -14,6 +14,7 @@ from caseops_api.db.models import (
     IpDocumentTaxonomyEntry,
     IpDocumentVersion,
     Matter,
+    MatterAttachment,
     MatterTask,
     ModelRun,
 )
@@ -587,3 +588,48 @@ def test_scope_search_document_policy_work_is_bounded_without_n_plus_one(
     assert len([item for item in many["items"] if item["scope_type"] == "ip_document"]) == 5
     assert many_document_queries <= one_document_queries + 1
     assert many_document_queries <= 20
+
+
+def test_scope_search_uses_canonical_attachment_digest_version(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    membership_id = str(bootstrap["membership"]["id"])
+    _enable_assistant(client, token)
+    matter = _matter(client, token, "-".join(("AI", "062B", "ATTACHMENT")))
+    digest = "b" * 64
+
+    with get_session_factory()() as session:
+        attachment = MatterAttachment(
+            matter_id=matter["id"],
+            uploaded_by_membership_id=membership_id,
+            original_filename="canonical attachment evidence.txt",
+            storage_key="assistant/canonical-attachment-evidence",
+            content_type="text/plain",
+            size_bytes=32,
+            sha256_hex=digest,
+            processing_status="indexed",
+            extracted_char_count=32,
+            extracted_text="Canonical attachment evidence.",
+        )
+        session.add(attachment)
+        session.commit()
+        attachment_id = attachment.id
+
+    response = client.get(
+        "/api/workspace-assistant/scope-options",
+        headers=auth_headers(token),
+        params={"q": "canonical attachment", "limit": 12},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["items"] == [
+        {
+            "scope_type": "matter_document",
+            "scope_id": attachment_id,
+            "label": "canonical attachment evidence.txt",
+            "secondary_text": "Matter document · indexed",
+            "href": f"/app/matters/{matter['id']}",
+            "resource_version": digest,
+        }
+    ]

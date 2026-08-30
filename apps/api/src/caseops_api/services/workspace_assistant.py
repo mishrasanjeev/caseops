@@ -208,6 +208,12 @@ def _resource_version(row: object) -> str | None:
         from caseops_api.services.private_retrieval import private_source_version
 
         return private_source_version(row)
+    if isinstance(row, MatterAttachment):
+        # Attachment content identity is its immutable digest. Using the
+        # generic updated_at fallback here made autocomplete compare an
+        # incidental row timestamp with the sha256 returned by the canonical
+        # ACL resolver, silently hiding every authorized Matter document.
+        return row.sha256_hex
     for attribute in ("current_version",):
         value = getattr(row, attribute, None)
         if value is not None:

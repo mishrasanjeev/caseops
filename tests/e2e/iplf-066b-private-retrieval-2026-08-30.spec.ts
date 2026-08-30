@@ -89,8 +89,13 @@ test("IPLF-UJ-66 revocation hides indexed document answers, citations, cache and
       "a=MatterAttachment(matter_id=os.environ['CASEOPS_E2E_MATTER_ID'],uploaded_by_membership_id=os.environ['CASEOPS_E2E_MEMBERSHIP_ID'],original_filename='066B evidence.txt',storage_key='iplf-066b/'+digest,content_type='text/plain',size_bytes=len(text.encode()),sha256_hex=digest,processing_status='indexed',extracted_char_count=len(text),extracted_text=text)",
       "s.add(a);s.flush()",
       "s.add(MatterAttachmentChunk(attachment_id=a.id,chunk_index=0,content=text,token_count=8))",
+      "attachment_id=a.id;s.commit();s.close()",
+      // Rebuilds deliberately require a clean worker session across the
+      // provider boundary. The browser fixture must exercise that production
+      // contract instead of weakening the stale-write fence for test setup.
+      "s=get_session_factory()()",
       "rebuild_private_index(s,company_id=os.environ['CASEOPS_E2E_COMPANY_ID'],activate=True)",
-      "s.commit();print(a.id);s.close()",
+      "s.commit();s.close();print(attachment_id)",
     ].join(";"),
     {
       CASEOPS_E2E_COMPANY_ID: identity.company.id,
