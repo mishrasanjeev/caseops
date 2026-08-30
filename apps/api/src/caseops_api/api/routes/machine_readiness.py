@@ -4,7 +4,7 @@ import hmac
 import time
 from typing import Annotated
 
-from fastapi import APIRouter, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import ValidationError
 
 from caseops_api.api.dependencies import DbSession
@@ -22,18 +22,12 @@ _MAX_BODY_BYTES = 64 * 1024
 _MAX_CLOCK_SKEW_SECONDS = 300
 
 
-@router.post(
-    "/evidence",
-    response_model=MachineReadinessEvidenceWriteResponse,
-    include_in_schema=False,
-)
-async def write_machine_readiness_evidence(
+async def require_machine_readiness_evidence_auth(
     request: Request,
-    session: DbSession,
     timestamp: Annotated[str | None, Header(alias="X-CaseOps-Machine-Timestamp")] = None,
     signature: Annotated[str | None, Header(alias="X-CaseOps-Machine-Signature")] = None,
-) -> MachineReadinessEvidenceWriteResponse:
-    """Machine-only HMAC boundary; browser and platform-admin JWTs have no authority."""
+) -> MachineReadinessEvidenceWriteRequest:
+    """Authenticate and parse one exact-body machine evidence envelope."""
 
     secret = get_settings().machine_readiness_evidence_secret
     if not secret:
@@ -91,4 +85,21 @@ async def write_machine_readiness_evidence(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Machine evidence payload is malformed.",
         ) from exc
+    return payload
+
+
+@router.post(
+    "/evidence",
+    response_model=MachineReadinessEvidenceWriteResponse,
+    include_in_schema=False,
+)
+def write_machine_readiness_evidence(
+    payload: Annotated[
+        MachineReadinessEvidenceWriteRequest,
+        Depends(require_machine_readiness_evidence_auth),
+    ],
+    session: DbSession,
+) -> MachineReadinessEvidenceWriteResponse:
+    """Machine-only HMAC boundary; browser and platform-admin JWTs have no authority."""
+
     return record_machine_readiness_evidence(session, payload=payload)
