@@ -245,9 +245,9 @@ Generated; do not edit.
 | IP-CLR-05 | IP-CLR | IPLF-039H | 83 | 0 | not_started | not_run | blocked | false |
 | IP-FILE-01 | IP-FILE | IPLF-039H | 83 | 0 | not_started | not_run | blocked | false |
 | IP-FILE-02 | IP-FILE | IPLF-039H | 83 | 0 | not_started | not_run | blocked | false |
-| IP-FILE-03 | IP-FILE | IPLF-039H | 83 | 0 | not_started | not_run | blocked | false |
+| IP-FILE-03 | IP-FILE | IPLF-039G, IPLF-039H | 83 | 1 | in_progress | not_run | blocked | false |
 | IP-FILE-04 | IP-FILE | IPLF-039H | 83 | 0 | not_started | not_run | blocked | false |
-| IP-FILE-05 | IP-FILE | IPLF-039H | 83 | 0 | not_started | not_run | blocked | false |
+| IP-FILE-05 | IP-FILE | IPLF-039G, IPLF-039H | 83 | 1 | in_progress | not_run | blocked | false |
 | IP-FILE-06 | IP-FILE | IPLF-039H | 83 | 0 | not_started | not_run | blocked | false |
 | IP-MAD-01 | IP-MAD | IPLF-057B | 3 | 1 | implemented | passed | deployment_verified | true |
 | IP-MAD-02 | IP-MAD | IPLF-057B | 3 | 1 | implemented | passed | deployment_verified | true |

@@ -9920,10 +9920,17 @@
       "source_kind": "derived",
       "scope_source": "IPLF-039",
       "primary_behavior": "Remaining PRD behavior and exception coverage",
-      "migration_boundary": "Additive expand/backfill/verify/switch boundary when persistence changes; otherwise explicitly no schema change.",
+      "migration_boundary": "Add one empty ip_filing_transactions table, tenant-scoped foreign keys, uniqueness/check constraints, and PostgreSQL/SQLite append-only triggers. No existing application is scanned or backfilled; downgrade is refused after retained legal evidence exists.",
       "release_boundary": "Compatible slices may share one exact integrated candidate, CI matrix, staged rollout, rollback plan, and dated deployed acceptance; this row remains a traceability and activation unit, not a mandatory separate release.",
-      "requirement_ids": [],
-      "journey_path_ids": [],
+      "requirement_ids": [
+        "IP-FILE-03",
+        "IP-FILE-05"
+      ],
+      "journey_path_ids": [
+        "UJ-32-EXC-01",
+        "UJ-32-EXC-02",
+        "UJ-32-EXC-04"
+      ],
       "ownership": [
         {
           "classification": "LINK",
@@ -9936,29 +9943,61 @@
       "dependencies": [
         "IPLF-039F"
       ],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
-      "blockers": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_lifecycle.py",
+        "apps/api/src/caseops_api/services/ip_records.py",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py",
+        "apps/api/src/caseops_api/schemas/ip_filing.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/alembic/versions/20260830_0003_ip_filing_transactions.py"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_039g_filing_transactions.py::test_uj32_transaction_chain_keeps_payment_and_defect_pending_until_acceptance#IPLF-UJ-32-EXC-01",
+        "apps/api/tests/test_ip_039g_filing_transactions.py::test_uj32_transaction_chain_keeps_payment_and_defect_pending_until_acceptance#IPLF-UJ-32-EXC-02",
+        "apps/api/tests/test_ip_039g_filing_transactions.py::test_uj32_transaction_chain_keeps_payment_and_defect_pending_until_acceptance#IPLF-UJ-32-EXC-04",
+        "apps/api/tests/test_ip_039g_filing_transactions.py::test_filing_writer_enforces_entitlement_and_rollout"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-039G/local-2026-08-30.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m3/IPLF-039G/local-2026-08-30.md",
+          "revision": "aaeab1ba4bad2bdb49f073ad97b1ae2c96581b61",
+          "environment": "isolated local worktree with migrated SQLite test database",
+          "fixtures": "deterministic tenant, pre-filing trademark application, two filing attempts, acknowledgement, fee, defect, acceptance, and disabled entitlement/rollout fixtures",
+          "assertions": "ordered append-only transactions; payment remains pending; direct phase/event writers fail closed; defects require corrective resubmission and a fresh acknowledgement; duplicate attempts/idempotency conflict are rejected; accepted evidence alone creates the canonical event and filed phase; database mutation is blocked",
+          "result": "passed",
+          "recorded_at": "2026-08-30T17:30:00+05:30"
+        }
+      ],
+      "blockers": [
+        {
+          "id": "IPLF-039G-RELEASE-VERIFICATION",
+          "state": "active",
+          "summary": "The UJ-32 EXC-01/02/04 transaction boundary is locally verified, but PostgreSQL trigger/constraint validation, exact-candidate CI, a user-visible filing surface with dated Playwright acceptance, and deployed verification have not run. UJ-32-NORMAL and UJ-32-EXC-03 remain outside this cluster, as do clearance/instruction scope and the broader IPLF-039H reconciliation.",
+          "owner": "Codex implementation and release automation",
+          "evidence_needed": "Green exact-candidate CI on PostgreSQL; complete UJ-32 operator UI and dated Playwright journey; exact deployed revision, migration, health, and authenticated acceptance evidence; separately implement UJ-32 EXC-03 and the remaining IPLF-039H allocation.",
+          "safe_fallback": "Keep filing operations behind entitlement and rollout controls; direct filing events and generic filed-phase writes remain fail closed, while historical already-filed intake remains available.",
+          "milestone_impact": "Blocks IPLF-039G release closure and leaves the unimplemented UJ-32/IPLF-039H scope open without invalidating the locally verified exception paths.",
+          "next_independent_slice": "Implement UJ-32 EXC-03 readiness invalidation and the filing-package browser surface without weakening the transaction writer."
+        }
+      ],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Add readiness invalidation when an approved form or fee version changes (UJ-32-EXC-03).",
+        "Build the complete filing-package operator UI and dated Playwright journey, then validate the migration and append-only trigger against PostgreSQL.",
+        "Leave full UJ-32 normal-flow, clearance/instruction integration, production rollout, and parent-epic reconciliation to IPLF-039H."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Adds tenant-scoped ip_filing_transactions legal evidence with immutable transaction, evidence, external-reference, attempt, idempotency, actor, relation, and canonical filing-event lineage."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
+      "documentation_impact": [
+        "Updates the repository data-governance inventory/projection and records a permanent regression rule in AGENTS.md."
+      ],
+      "allocation_review": "Phase 0 mechanical allocation was replaced on 2026-08-30 after auditing IPLF-039A-F, IPLF-039H, the PRD allocations, and current writers. IPLF-039G now owns the coherent UJ-32 EXC-01/02/04 filing-evidence cluster only; the remaining filing and integrated parent scope stays explicitly residual.",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
-      "release_status": "blocked",
-      "administrative_exception": {
-        "prd_citation": "PRD Section 25 and the parent epic title",
-        "reviewer": "CaseOps Phase 0 control-plane reconciliation",
-        "reason": "This bounded technical slice has no direct requirement family or journey path; its parent completion slices carry the full reciprocal allocation.",
-        "date": "2026-08-02",
-        "milestone": "M3"
-      }
+      "release_status": "blocked"
     },
     {
       "id": "IPLF-039H",
@@ -27026,8 +27065,16 @@
         "UJ-61",
         "UJ-62"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_lifecycle.py",
+        "apps/api/src/caseops_api/services/ip_records.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/alembic/versions/20260830_0003_ip_filing_transactions.py"
+      ],
       "test_refs": [
+        "apps/api/tests/test_ip_039g_filing_transactions.py::test_uj32_transaction_chain_keeps_payment_and_defect_pending_until_acceptance#IPLF-UJ-32-EXC-01",
+        "apps/api/tests/test_ip_039g_filing_transactions.py::test_uj32_transaction_chain_keeps_payment_and_defect_pending_until_acceptance#IPLF-UJ-32-EXC-02",
+        "apps/api/tests/test_ip_039g_filing_transactions.py::test_uj32_transaction_chain_keeps_payment_and_defect_pending_until_acceptance#IPLF-UJ-32-EXC-04",
         "apps/api/tests/test_ip_039f_cost_linkage.py::test_uj52_exc01_nonbillable_capture_survives_a_docket_with_no_matter#IPLF-UJ-52-EXC-01",
         "apps/api/tests/test_ip_039f_cost_linkage.py::test_uj52_exc02_conversion_preserves_original_amount_rate_source_and_time#IPLF-UJ-52-EXC-02",
         "apps/api/tests/test_ip_039f_cost_linkage.py::test_uj52_exc04_a_provider_estimate_is_not_an_actual_expense#IPLF-UJ-52-EXC-04",
@@ -27041,10 +27088,7 @@
         "planned:IPLF-UJ-31-EXC-03",
         "planned:IPLF-UJ-31-EXC-04",
         "planned:IPLF-UJ-31-NORMAL",
-        "planned:IPLF-UJ-32-EXC-01",
-        "planned:IPLF-UJ-32-EXC-02",
         "planned:IPLF-UJ-32-EXC-03",
-        "planned:IPLF-UJ-32-EXC-04",
         "planned:IPLF-UJ-32-NORMAL",
         "planned:IPLF-UJ-49-EXC-01",
         "planned:IPLF-UJ-49-EXC-02",
@@ -27112,15 +27156,18 @@
         "planned:IPLF-UJ-62-EXC-05",
         "planned:IPLF-UJ-62-NORMAL"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-039G/local-2026-08-30.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
+        "IPLF-039G",
         "IPLF-039H"
       ],
-      "allocation_rationale": "IP-FILE allocation reviewed against PRD requirement family and parent epic scope: IPLF-039."
+      "allocation_rationale": "IP-FILE allocation reviewed against PRD requirement family and parent epic scope: IPLF-039. IPLF-039G supplies locally verified immutable submission, fee, resubmission, acknowledgement, defect/rejection and acceptance transactions for UJ-32 EXC-01/02/04; service and other journey coverage remains planned under IPLF-039H."
     },
     {
       "id": "IP-FILE-04",
@@ -27262,8 +27309,16 @@
         "UJ-61",
         "UJ-62"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_lifecycle.py",
+        "apps/api/src/caseops_api/services/ip_records.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/alembic/versions/20260830_0003_ip_filing_transactions.py"
+      ],
       "test_refs": [
+        "apps/api/tests/test_ip_039g_filing_transactions.py::test_uj32_transaction_chain_keeps_payment_and_defect_pending_until_acceptance#IPLF-UJ-32-EXC-01",
+        "apps/api/tests/test_ip_039g_filing_transactions.py::test_uj32_transaction_chain_keeps_payment_and_defect_pending_until_acceptance#IPLF-UJ-32-EXC-02",
+        "apps/api/tests/test_ip_039g_filing_transactions.py::test_uj32_transaction_chain_keeps_payment_and_defect_pending_until_acceptance#IPLF-UJ-32-EXC-04",
         "apps/api/tests/test_ip_039f_cost_linkage.py::test_uj52_exc01_nonbillable_capture_survives_a_docket_with_no_matter#IPLF-UJ-52-EXC-01",
         "apps/api/tests/test_ip_039f_cost_linkage.py::test_uj52_exc02_conversion_preserves_original_amount_rate_source_and_time#IPLF-UJ-52-EXC-02",
         "apps/api/tests/test_ip_039f_cost_linkage.py::test_uj52_exc04_a_provider_estimate_is_not_an_actual_expense#IPLF-UJ-52-EXC-04",
@@ -27277,10 +27332,7 @@
         "planned:IPLF-UJ-31-EXC-03",
         "planned:IPLF-UJ-31-EXC-04",
         "planned:IPLF-UJ-31-NORMAL",
-        "planned:IPLF-UJ-32-EXC-01",
-        "planned:IPLF-UJ-32-EXC-02",
         "planned:IPLF-UJ-32-EXC-03",
-        "planned:IPLF-UJ-32-EXC-04",
         "planned:IPLF-UJ-32-NORMAL",
         "planned:IPLF-UJ-49-EXC-01",
         "planned:IPLF-UJ-49-EXC-02",
@@ -27348,15 +27400,18 @@
         "planned:IPLF-UJ-62-EXC-05",
         "planned:IPLF-UJ-62-NORMAL"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-039G/local-2026-08-30.md"
+      ],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
+        "IPLF-039G",
         "IPLF-039H"
       ],
-      "allocation_rationale": "IP-FILE allocation reviewed against PRD requirement family and parent epic scope: IPLF-039."
+      "allocation_rationale": "IP-FILE allocation reviewed against PRD requirement family and parent epic scope: IPLF-039. IPLF-039G supplies locally verified pending-payment, defect/rejection, corrective resubmission and accepted-evidence fences for UJ-32 EXC-01/02/04; wrong-office/class/entity and other journeys remain planned under IPLF-039H."
     },
     {
       "id": "IP-FILE-06",
@@ -42988,17 +43043,20 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-32-EXC-01",
-        "planned:IPLF-UJ-32-EXC-02",
+        "apps/api/tests/test_ip_039g_filing_transactions.py::test_uj32_transaction_chain_keeps_payment_and_defect_pending_until_acceptance#IPLF-UJ-32-EXC-01",
+        "apps/api/tests/test_ip_039g_filing_transactions.py::test_uj32_transaction_chain_keeps_payment_and_defect_pending_until_acceptance#IPLF-UJ-32-EXC-02",
+        "apps/api/tests/test_ip_039g_filing_transactions.py::test_uj32_transaction_chain_keeps_payment_and_defect_pending_until_acceptance#IPLF-UJ-32-EXC-04",
         "planned:IPLF-UJ-32-EXC-03",
-        "planned:IPLF-UJ-32-EXC-04",
         "planned:IPLF-UJ-32-NORMAL"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-039G/local-2026-08-30.md"
+      ],
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
+        "IPLF-039G",
         "IPLF-039H"
       ]
     },
@@ -51570,16 +51628,19 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-32-EXC-01"
+        "apps/api/tests/test_ip_039g_filing_transactions.py::test_uj32_transaction_chain_keeps_payment_and_defect_pending_until_acceptance#IPLF-UJ-32-EXC-01"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-039G/local-2026-08-30.md"
+      ],
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
+        "IPLF-039G",
         "IPLF-039H"
       ],
-      "allocation_rationale": "UJ-32 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-039."
+      "allocation_rationale": "UJ-32 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-039. IPLF-039G proves that an independently recorded fee payment and acknowledgement remain pre-filing until an accepted transaction invokes the canonical event writer."
     },
     {
       "id": "UJ-32-EXC-02",
@@ -51668,16 +51729,19 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-32-EXC-02"
+        "apps/api/tests/test_ip_039g_filing_transactions.py::test_uj32_transaction_chain_keeps_payment_and_defect_pending_until_acceptance#IPLF-UJ-32-EXC-02"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-039G/local-2026-08-30.md"
+      ],
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
+        "IPLF-039G",
         "IPLF-039H"
       ],
-      "allocation_rationale": "UJ-32 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-039."
+      "allocation_rationale": "UJ-32 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-039. IPLF-039G proves that a defect/rejection is immutable, blocks acceptance, and requires a new corrective attempt followed by a fresh acknowledgement."
     },
     {
       "id": "UJ-32-EXC-03",
@@ -51864,16 +51928,19 @@
         "TM-DATA-15"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-32-EXC-04"
+        "apps/api/tests/test_ip_039g_filing_transactions.py::test_uj32_transaction_chain_keeps_payment_and_defect_pending_until_acceptance#IPLF-UJ-32-EXC-04"
       ],
-      "evidence_refs": [],
-      "implementation_status": "not_started",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m3/IPLF-039G/local-2026-08-30.md"
+      ],
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
+        "IPLF-039G",
         "IPLF-039H"
       ],
-      "allocation_rationale": "UJ-32 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-039."
+      "allocation_rationale": "UJ-32 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-039. IPLF-039G rejects a second submission for the same application attempt, supports exact idempotent replay, and rejects reuse of an idempotency key with different evidence."
     },
     {
       "id": "UJ-33-NORMAL",

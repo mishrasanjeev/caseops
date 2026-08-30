@@ -35,7 +35,7 @@ Generated; do not edit.
 | UJ-29 | Manage patent family | 4 | IPLF-080B | 4 | 0 | not_started | not_run | false |
 | UJ-30 | Manage design, copyright, or licence | 3 | IPLF-090B | 3 | 0 | not_started | not_run | false |
 | UJ-31 | Conduct clearance search and obtain filing instruction | 5 | IPLF-039H | 5 | 0 | not_started | not_run | false |
-| UJ-32 | Prepare, submit, and reconcile trademark filing | 5 | IPLF-039H | 5 | 0 | not_started | not_run | false |
+| UJ-32 | Prepare, submit, and reconcile trademark filing | 5 | IPLF-039G, IPLF-039H | 5 | 1 | in_progress | not_run | false |
 | UJ-33 | Monitor journal publication and opposition window | 5 | IPLF-052B, IPLF-053B | 13 | 2 | implemented | passed | true |
 | UJ-34 | Manage multi-class or partial opposition | 4 | IPLF-048B | 4 | 1 | implemented | passed | true |
 | UJ-35 | Manage Madrid international registration or designation | 5 | IPLF-057B | 7 | 1 | implemented | passed | true |
