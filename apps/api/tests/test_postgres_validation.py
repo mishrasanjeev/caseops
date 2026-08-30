@@ -56,12 +56,14 @@ from concurrent.futures import TimeoutError as FutureTimeoutError
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from threading import Event
+from time import monotonic
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import inspect, select, text
+from sqlalchemy import create_engine, inspect, select, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import NullPool
 
 pytestmark = pytest.mark.postgres
 
@@ -435,6 +437,123 @@ def test_alembic_upgrade_to_head_runs_cleanly(pg_engine):
         f"DB at {rows[0][0]} but Alembic graph heads are {heads}; "
         "alembic upgrade head did not advance the DB"
     )
+
+
+def test_uj67_exc01_migration_lock_and_table_scan_windows_are_bounded(
+    pg_engine,
+) -> None:
+    """IPLF-UJ-67-EXC-01 — PostgreSQL aborts unsafe migration work in-budget.
+
+    This uses the same connection-argument builder as ``alembic/env.py``.  The
+    smaller test budgets keep CI bounded; production obtains its 5-second lock
+    and 60-second statement budgets from the same validated settings fields.
+    """
+
+    from caseops_api.db.connection_safety import migration_connect_args
+
+    url = os.environ["CASEOPS_TEST_POSTGRES_URL"].strip()
+    table_name = f"uj67_lock_probe_{uuid4().hex}"
+    quoted_table = f'"{table_name}"'
+
+    with pg_engine.begin() as setup:
+        setup.execute(
+            text(
+                f"CREATE UNLOGGED TABLE {quoted_table} "
+                "(id integer PRIMARY KEY, payload text NOT NULL)"
+            )
+        )
+        setup.execute(
+            text(
+                f"INSERT INTO {quoted_table} (id, payload) "
+                "SELECT value, repeat('x', 64) FROM generate_series(1, 20000) value"
+            )
+        )
+        setup.execute(text(f"ANALYZE {quoted_table}"))
+
+    lock_engine = create_engine(
+        url,
+        future=True,
+        poolclass=NullPool,
+        connect_args=migration_connect_args(
+            url,
+            connect_timeout_seconds=5,
+            statement_timeout_ms=2_000,
+            lock_timeout_ms=200,
+            idle_transaction_timeout_ms=2_000,
+        ),
+    )
+    scan_engine = create_engine(
+        url,
+        future=True,
+        poolclass=NullPool,
+        connect_args=migration_connect_args(
+            url,
+            connect_timeout_seconds=5,
+            statement_timeout_ms=200,
+            lock_timeout_ms=2_000,
+            idle_transaction_timeout_ms=2_000,
+        ),
+    )
+
+    try:
+        # A normal old-revision read holds ACCESS SHARE while the candidate
+        # tries a rewrite requiring ACCESS EXCLUSIVE.  The schema change must
+        # abort on the database lock budget instead of waiting for the deploy
+        # job's much larger task timeout.
+        with pg_engine.connect() as old_revision:
+            old_transaction = old_revision.begin()
+            old_revision.execute(text(f"LOCK TABLE {quoted_table} IN ACCESS SHARE MODE"))
+            with lock_engine.connect() as candidate:
+                assert candidate.scalar(text("SHOW lock_timeout")) == "200ms"
+                started = monotonic()
+                with pytest.raises(DBAPIError) as lock_failure:
+                    candidate.execute(
+                        text(f"ALTER TABLE {quoted_table} ALTER COLUMN id TYPE bigint")
+                    )
+                lock_elapsed = monotonic() - started
+                assert getattr(lock_failure.value.orig, "sqlstate", None) == "55P03"
+                assert 0.10 <= lock_elapsed < 1.5
+                candidate.rollback()
+                assert candidate.scalar(text("SELECT 1")) == 1
+            old_transaction.rollback()
+
+        # A hostile full-table Cartesian scan models an underestimated rewrite
+        # or validation scan.  PostgreSQL cancels it at the statement budget;
+        # the connection is usable after rollback and no partial DDL survived.
+        with scan_engine.connect() as candidate:
+            assert candidate.scalar(text("SHOW statement_timeout")) == "200ms"
+            started = monotonic()
+            with pytest.raises(DBAPIError) as scan_failure:
+                candidate.execute(
+                    text(
+                        f"SELECT count(*) FROM {quoted_table} left_rows "
+                        f"CROSS JOIN {quoted_table} right_rows"
+                    )
+                ).scalar_one()
+            scan_elapsed = monotonic() - started
+            assert getattr(scan_failure.value.orig, "sqlstate", None) == "57014"
+            assert 0.10 <= scan_elapsed < 1.5
+            candidate.rollback()
+            assert candidate.scalar(text("SELECT 1")) == 1
+
+        with pg_engine.connect() as verify:
+            assert (
+                verify.scalar(
+                    text(
+                        "SELECT data_type FROM information_schema.columns "
+                        "WHERE table_schema = current_schema() "
+                        "AND table_name = :table_name AND column_name = 'id'"
+                    ),
+                    {"table_name": table_name},
+                )
+                == "integer"
+            )
+            assert verify.scalar(text(f"SELECT count(*) FROM {quoted_table}")) == 20_000
+    finally:
+        lock_engine.dispose()
+        scan_engine.dispose()
+        with pg_engine.begin() as cleanup:
+            cleanup.execute(text(f"DROP TABLE IF EXISTS {quoted_table}"))
 
 
 def test_billing_account_creation_is_idempotent_under_postgres_race(pg_engine) -> None:
