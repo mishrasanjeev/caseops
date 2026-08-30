@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import UTC, date, datetime
 from urllib.parse import urlparse
 
@@ -30,7 +31,6 @@ from caseops_api.db.models import (
     PineLabsUATScenarioEvidence,
     PlatformAdminMembership,
     PlatformOperationalReadinessEvidence,
-    ProductionBillingSignoff,
     ProductionBillingSignoffEvidence,
     TenantEnterpriseIdentityConfiguration,
 )
@@ -46,16 +46,13 @@ from caseops_api.schemas.production_safety import (
     FinanceRecordRequest,
     PasswordResetReadinessResponse,
     PineLabsActivationDecisionRequest,
-    PineLabsUATEvidenceRequest,
     PineLabsUATReadinessResponse,
     PineLabsUATRunCreateRequest,
     PineLabsUATScenarioStatus,
-    PlatformOperationalReadinessEvidenceRequest,
     PlatformOperationalReadinessRecord,
     PlatformProductionReadinessGate,
     PlatformProductionReadinessResponse,
     ProductionBillingSignoffCheckStatus,
-    ProductionBillingSignoffEvidenceRequest,
     ProductionBillingSignoffResponse,
     SecretRotationEvidenceListResponse,
     SecretRotationEvidenceRecord,
@@ -112,7 +109,7 @@ PLATFORM_OPERATIONAL_GATES: tuple[dict[str, str], ...] = (
         "category": "provider",
         "gate_code": "provider_operations_dead_letter_replay",
         "label": "Provider operations dead-letter replay and redacted-error workflow",
-        "readiness_classification": "founder-only",
+        "readiness_classification": "provider-gated",
         "default_reason": (
             "Provider dead-letter replay, ignore, and mark-resolved evidence is missing."
         ),
@@ -123,31 +120,41 @@ PLATFORM_OPERATIONAL_GATES: tuple[dict[str, str], ...] = (
         "label": (
             "Finance reconciliation exports for refunds, chargebacks, credit notes, GST, and TDS"
         ),
-        "readiness_classification": "founder-only",
+        "readiness_classification": "live",
         "default_reason": "Finance export/reconciliation signoff evidence is missing.",
     },
     {
         "category": "backup_restore",
         "gate_code": "backup_success_and_restore_drill",
         "label": "Backup success evidence and restore drill proof",
-        "readiness_classification": "founder-only",
+        "readiness_classification": "live",
         "default_reason": "Backup proof or restore drill evidence is missing.",
     },
     {
         "category": "docs",
         "gate_code": "public_claims_reviewed",
         "label": "Public claims, runbooks, guides, and machine-readable docs reviewed",
-        "readiness_classification": "founder-only",
+        "readiness_classification": "live",
         "default_reason": "Public claim alignment evidence is missing.",
     },
     {
         "category": "security",
         "gate_code": "mfa_password_reset_and_secret_rotation",
         "label": "MFA, password reset, and historical secret rotation reviewed",
-        "readiness_classification": "founder-only",
+        "readiness_classification": "live",
         "default_reason": "Security gate evidence is missing.",
     },
 )
+
+MACHINE_READINESS_EVIDENCE_SCHEMA = "caseops.machine-readiness/v1"
+MACHINE_READINESS_PRODUCERS = frozenset(
+    {
+        "caseops/config-probe",
+        "caseops/production-probe",
+        "github-actions/prod-verify",
+    }
+)
+_FULL_RELEASE_SHA = re.compile(r"[0-9a-f]{40}")
 
 SECRET_VALUE_MARKERS = (
     "-----BEGIN",
@@ -346,39 +353,45 @@ def record_secret_rotation_evidence(
     return list_secret_rotation_evidence(session)
 
 
-def _operational_record(
-    row: PlatformOperationalReadinessEvidence | None,
+def _exact_release_sha() -> str | None:
+    release_sha = (get_settings().release_sha or "").strip().lower()
+    return release_sha if _FULL_RELEASE_SHA.fullmatch(release_sha) else None
+
+
+def _machine_evidence(
     *,
-    default: dict[str, str] | None = None,
-) -> PlatformOperationalReadinessRecord:
-    if row is None:
-        assert default is not None
-        return PlatformOperationalReadinessRecord(
-            id=None,
-            category=default["category"],
-            gate_code=default["gate_code"],
-            label=default["label"],
-            status="pending",
-            readiness_classification=default["readiness_classification"],  # type: ignore[arg-type]
-            blocker_reason=default["default_reason"],
-            evidence_ref=None,
-            evidence=None,
-            last_evidence_at=None,
-            owner_label=None,
-        )
-    return PlatformOperationalReadinessRecord(
-        id=row.id,
-        category=row.category,
-        gate_code=row.gate_code,
-        label=row.label,
-        status=row.status,  # type: ignore[arg-type]
-        readiness_classification=row.readiness_classification,  # type: ignore[arg-type]
-        blocker_reason=row.blocker_reason,
-        evidence_ref=row.evidence_ref,
-        evidence=row.evidence_json,
-        last_evidence_at=row.last_evidence_at,
-        owner_label=row.owner_label,
-    )
+    evidence: dict | None,
+    recorded_by_platform_admin_id: str | None,
+    recorded_status: str,
+    subject: str,
+) -> dict[str, object] | None:
+    """Accept only automation evidence bound to the exact serving release.
+
+    Historical readiness tables are retained for migration compatibility.  A
+    platform-admin row is human attestation and is deliberately non-authoritative.
+    Machine writers have no public mutation route and must persist the documented
+    envelope with a null platform-admin recorder.
+    """
+
+    release_sha = _exact_release_sha()
+    if release_sha is None or recorded_by_platform_admin_id is not None:
+        return None
+    if recorded_status not in {"pass", "fail", "blocked"} or not isinstance(evidence, dict):
+        return None
+    producer = evidence.get("producer")
+    run_id = evidence.get("run_id")
+    if (
+        evidence.get("schema") != MACHINE_READINESS_EVIDENCE_SCHEMA
+        or not isinstance(producer, str)
+        or producer not in MACHINE_READINESS_PRODUCERS
+        or evidence.get("release_sha") != release_sha
+        or evidence.get("subject") != subject
+        or evidence.get("conclusion") != recorded_status
+        or not isinstance(run_id, str)
+        or not run_id.strip()
+    ):
+        return None
+    return evidence
 
 
 def list_operational_readiness_evidence(
@@ -388,67 +401,61 @@ def list_operational_readiness_evidence(
         (row.category, row.gate_code): row
         for row in session.scalars(select(PlatformOperationalReadinessEvidence))
     }
-    records = [
-        _operational_record(rows.get((gate["category"], gate["gate_code"])), default=gate)
-        for gate in PLATFORM_OPERATIONAL_GATES
-    ]
-    extra_keys = {
-        (gate["category"], gate["gate_code"]) for gate in PLATFORM_OPERATIONAL_GATES
-    }
-    extras = [
-        _operational_record(row)
-        for key, row in sorted(rows.items(), key=lambda item: item[0])
-        if key not in extra_keys
-    ]
-    return records + extras
-
-
-def record_operational_readiness_evidence(
-    session: Session,
-    *,
-    context: SessionContext,
-    platform_admin: PlatformAdminMembership,
-    payload: PlatformOperationalReadinessEvidenceRequest,
-) -> list[PlatformOperationalReadinessRecord]:
-    _assert_no_secret_material(payload.evidence, path="evidence")
-    for field_name in ("blocker_reason", "evidence_ref", "owner_label"):
-        _assert_no_secret_material(getattr(payload, field_name), path=field_name)
-    row = session.scalar(
-        select(PlatformOperationalReadinessEvidence).where(
-            PlatformOperationalReadinessEvidence.category == payload.category.strip().lower(),
-            PlatformOperationalReadinessEvidence.gate_code == payload.gate_code.strip().lower(),
+    records: list[PlatformOperationalReadinessRecord] = []
+    for gate in PLATFORM_OPERATIONAL_GATES:
+        row = rows.get((gate["category"], gate["gate_code"]))
+        machine = (
+            _machine_evidence(
+                evidence=row.evidence_json,
+                recorded_by_platform_admin_id=row.recorded_by_platform_admin_id,
+                recorded_status=row.status,
+                subject=gate["gate_code"],
+            )
+            if row is not None
+            else None
         )
-    )
-    row = row or PlatformOperationalReadinessEvidence(
-        category=payload.category.strip().lower(),
-        gate_code=payload.gate_code.strip().lower(),
-        label=payload.label.strip(),
-    )
-    row.label = payload.label.strip()
-    row.status = payload.status
-    row.readiness_classification = payload.readiness_classification
-    row.blocker_reason = payload.blocker_reason
-    row.evidence_ref = payload.evidence_ref
-    row.evidence_json = payload.evidence
-    row.last_evidence_at = _now()
-    row.owner_label = payload.owner_label
-    row.recorded_by_platform_admin_id = platform_admin.id
-    session.add(row)
-    record_platform_audit(
-        session,
-        context=context,
-        platform_admin=platform_admin,
-        action="platform.operational_readiness_evidence.recorded",
-        target_type="platform_operational_readiness_evidence",
-        target_id=row.id,
-        metadata={
-            "category": row.category,
-            "gate_code": row.gate_code,
-            "status": row.status,
-        },
-    )
-    session.commit()
-    return list_operational_readiness_evidence(session)
+        if row is None or machine is None:
+            reason = gate["default_reason"]
+            if _exact_release_sha() is None:
+                reason += " The serving API has no exact 40-character release identity."
+            else:
+                reason += " No machine evidence exists for the exact serving release."
+            records.append(
+                PlatformOperationalReadinessRecord(
+                    id=None,
+                    category=gate["category"],
+                    gate_code=gate["gate_code"],
+                    label=gate["label"],
+                    status="pending",
+                    readiness_classification=gate["readiness_classification"],  # type: ignore[arg-type]
+                    blocker_reason=reason,
+                    evidence_ref=None,
+                    evidence=None,
+                    last_evidence_at=None,
+                    owner_label=None,
+                )
+            )
+            continue
+        records.append(
+            PlatformOperationalReadinessRecord(
+                id=row.id,
+                category=gate["category"],
+                gate_code=gate["gate_code"],
+                label=gate["label"],
+                status=row.status,  # type: ignore[arg-type]
+                readiness_classification=gate["readiness_classification"],  # type: ignore[arg-type]
+                blocker_reason=(
+                    None
+                    if row.status == "pass"
+                    else row.blocker_reason or gate["default_reason"]
+                ),
+                evidence_ref=row.evidence_ref,
+                evidence=machine,
+                last_evidence_at=row.last_evidence_at,
+                owner_label=f"automation:{machine['producer']}",
+            )
+        )
+    return records
 
 
 def password_reset_readiness() -> PasswordResetReadinessResponse:
@@ -530,7 +537,17 @@ def pine_labs_uat_readiness(
     missing: list[str] = []
     for code, label in PINE_LABS_UAT_SCENARIOS:
         row = rows.get(code)
-        passed = row is not None and row.result_status == "pass"
+        machine = (
+            _machine_evidence(
+                evidence=(row.redacted_payload_json or {}).get("machine_evidence"),
+                recorded_by_platform_admin_id=row.created_by_platform_admin_id,
+                recorded_status=row.result_status,
+                subject=f"pine_labs_uat:{code}",
+            )
+            if row is not None
+            else None
+        )
+        passed = row is not None and machine is not None and row.result_status == "pass"
         if not passed:
             missing.append(code)
         scenarios.append(
@@ -538,12 +555,14 @@ def pine_labs_uat_readiness(
                 scenario_code=code,  # type: ignore[arg-type]
                 label=label,
                 required=True,
-                result_status=(row.result_status if row else "pending"),  # type: ignore[arg-type]
-                provider_order_id=row.provider_order_id if row else None,
-                webhook_id=row.webhook_id if row else None,
-                observed_at=row.observed_at if row else None,
-                operator_notes=row.operator_notes if row else None,
-                attachment_refs=list(row.attachment_refs_json or []) if row else [],
+                result_status=(row.result_status if machine is not None else "pending"),  # type: ignore[arg-type]
+                provider_order_id=row.provider_order_id if machine is not None else None,
+                webhook_id=row.webhook_id if machine is not None else None,
+                observed_at=row.observed_at if machine is not None else None,
+                operator_notes=None,
+                attachment_refs=(
+                    list(row.attachment_refs_json or []) if machine is not None else []
+                ),
             )
         )
     complete = not missing
@@ -585,6 +604,9 @@ def pine_labs_uat_readiness(
         scenarios=scenarios,
         complete=complete,
         missing_required_scenarios=missing,  # type: ignore[arg-type]
+        activation_prerequisites_met=(
+            not missing and pine_env in {"production", "prod", "live"}
+        ),
         production_activation_blocked=bool(activation_blockers),
         activation_blockers=activation_blockers,
         latest_decision=(
@@ -600,65 +622,6 @@ def pine_labs_uat_readiness(
             else None
         ),
     )
-
-
-def record_pine_labs_uat_evidence(
-    session: Session,
-    *,
-    context: SessionContext,
-    platform_admin: PlatformAdminMembership,
-    payload: PineLabsUATEvidenceRequest,
-) -> PineLabsUATReadinessResponse:
-    run = (
-        session.get(PineLabsUATRun, payload.run_id)
-        if payload.run_id
-        else latest_or_create_uat_run(session, platform_admin=platform_admin)
-    )
-    if run is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Pine Labs UAT run not found.",
-        )
-    redacted_payload = redact_provider_payload(payload.redacted_payload or {})
-    if redacted_payload:
-        _assert_no_secret_material(redacted_payload, path="redacted_payload")
-    for field_name in ("provider_order_id", "provider_payment_id", "webhook_id", "operator_notes"):
-        _assert_no_secret_material(getattr(payload, field_name), path=field_name)
-    _assert_no_secret_material(payload.attachment_refs, path="attachment_refs")
-    existing = session.scalar(
-        select(PineLabsUATScenarioEvidence).where(
-            PineLabsUATScenarioEvidence.run_id == run.id,
-            PineLabsUATScenarioEvidence.scenario_code == payload.scenario_code,
-        )
-    )
-    row = existing or PineLabsUATScenarioEvidence(
-        run_id=run.id,
-        scenario_code=payload.scenario_code,
-    )
-    row.result_status = payload.result_status
-    row.provider_order_id = payload.provider_order_id
-    row.provider_payment_id = payload.provider_payment_id
-    row.webhook_id = payload.webhook_id
-    row.webhook_timestamp = payload.webhook_timestamp
-    row.observed_at = _now()
-    row.redacted_payload_json = redacted_payload or None
-    row.operator_notes = payload.operator_notes
-    row.attachment_refs_json = list(payload.attachment_refs or [])
-    row.created_by_platform_admin_id = platform_admin.id
-    session.add(row)
-    session.flush()
-    record_platform_audit(
-        session,
-        context=context,
-        platform_admin=platform_admin,
-        action="platform.pine_labs_uat_evidence.recorded",
-        target_type="pine_labs_uat_scenario_evidence",
-        target_id=row.id,
-        metadata={"scenario_code": payload.scenario_code, "result_status": payload.result_status},
-    )
-    readiness = pine_labs_uat_readiness(session, platform_admin=platform_admin)
-    session.commit()
-    return readiness
 
 
 def record_pine_labs_activation_decision(
@@ -718,122 +681,60 @@ def record_pine_labs_activation_decision(
     }
 
 
-def latest_or_create_billing_signoff(
-    session: Session,
-    *,
-    platform_admin: PlatformAdminMembership,
-) -> ProductionBillingSignoff:
-    row = session.scalar(
-        select(ProductionBillingSignoff)
-        .where(ProductionBillingSignoff.status.in_(["in_progress", "complete"]))
-        .order_by(ProductionBillingSignoff.created_at.desc())
-        .limit(1)
-    )
-    if row is not None:
-        return row
-    row = ProductionBillingSignoff(status="in_progress", signed_off_by_platform_admin_id=None)
-    session.add(row)
-    session.flush()
-    return row
-
-
 def production_billing_signoff_status(
     session: Session,
     *,
     platform_admin: PlatformAdminMembership,
 ) -> ProductionBillingSignoffResponse:
-    signoff = latest_or_create_billing_signoff(session, platform_admin=platform_admin)
-    rows = {
-        row.check_code: row
-        for row in session.scalars(
-            select(ProductionBillingSignoffEvidence).where(
-                ProductionBillingSignoffEvidence.signoff_id == signoff.id
-            )
+    del platform_admin  # Authorization is enforced by the route; readiness is machine-derived.
+    rows: dict[str, ProductionBillingSignoffEvidence] = {}
+    for row in session.scalars(
+        select(ProductionBillingSignoffEvidence).order_by(
+            ProductionBillingSignoffEvidence.recorded_at.desc()
         )
-    }
+    ):
+        rows.setdefault(row.check_code, row)
     checks: list[ProductionBillingSignoffCheckStatus] = []
     missing: list[str] = []
     for code, label in PRODUCTION_BILLING_CHECKS:
         row = rows.get(code)
-        if row is None or row.result_status != "pass":
+        machine = (
+            _machine_evidence(
+                evidence=row.evidence_json,
+                recorded_by_platform_admin_id=row.recorded_by_platform_admin_id,
+                recorded_status=row.result_status,
+                subject=code,
+            )
+            if row is not None
+            else None
+        )
+        result_status = row.result_status if machine is not None else "pending"
+        if result_status != "pass":
             missing.append(code)
         checks.append(
             ProductionBillingSignoffCheckStatus(
                 check_code=code,  # type: ignore[arg-type]
                 label=label,
-                result_status=(row.result_status if row else "pending"),  # type: ignore[arg-type]
-                evidence_ref=row.evidence_ref if row else None,
-                operator_notes=row.operator_notes if row else None,
-                recorded_at=row.recorded_at if row else None,
+                result_status=result_status,  # type: ignore[arg-type]
+                evidence_ref=row.evidence_ref if machine is not None else None,
+                operator_notes=None,
+                recorded_at=row.recorded_at if machine is not None else None,
             )
         )
     complete = not missing
-    if complete and signoff.status != "complete":
-        signoff.status = "complete"
-        signoff.signed_off_by_platform_admin_id = platform_admin.id
-        signoff.signed_off_at = signoff.signed_off_at or _now()
-        session.add(signoff)
-        session.flush()
+    release_sha = _exact_release_sha()
     return ProductionBillingSignoffResponse(
-        signoff_id=signoff.id,
-        status=signoff.status,
+        signoff_id=f"machine:{release_sha or 'unverified-release'}",
+        status="complete" if complete else "blocked",
         complete=complete,
         missing_required_checks=missing,  # type: ignore[arg-type]
         checks=checks,
-        signed_off_at=signoff.signed_off_at,
-        notes=signoff.notes,
+        signed_off_at=None,
+        notes=(
+            "Derived from exact-release machine evidence. Operator-entered pass and "
+            "not-applicable rows are non-authoritative."
+        ),
     )
-
-
-def record_production_billing_signoff_evidence(
-    session: Session,
-    *,
-    context: SessionContext,
-    platform_admin: PlatformAdminMembership,
-    payload: ProductionBillingSignoffEvidenceRequest,
-) -> ProductionBillingSignoffResponse:
-    signoff = (
-        session.get(ProductionBillingSignoff, payload.signoff_id)
-        if payload.signoff_id
-        else latest_or_create_billing_signoff(session, platform_admin=platform_admin)
-    )
-    if signoff is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Billing signoff not found.",
-        )
-    _assert_no_secret_material(payload.evidence, path="evidence")
-    for field_name in ("evidence_ref", "operator_notes"):
-        _assert_no_secret_material(getattr(payload, field_name), path=field_name)
-    row = session.scalar(
-        select(ProductionBillingSignoffEvidence).where(
-            ProductionBillingSignoffEvidence.signoff_id == signoff.id,
-            ProductionBillingSignoffEvidence.check_code == payload.check_code,
-        )
-    )
-    row = row or ProductionBillingSignoffEvidence(
-        signoff_id=signoff.id,
-        check_code=payload.check_code,
-    )
-    row.result_status = payload.result_status
-    row.evidence_ref = payload.evidence_ref
-    row.evidence_json = payload.evidence
-    row.operator_notes = payload.operator_notes
-    row.recorded_by_platform_admin_id = platform_admin.id
-    row.recorded_at = _now()
-    session.add(row)
-    record_platform_audit(
-        session,
-        context=context,
-        platform_admin=platform_admin,
-        action="platform.production_billing_signoff_evidence.recorded",
-        target_type="production_billing_signoff_evidence",
-        target_id=row.id,
-        metadata={"check_code": payload.check_code, "result_status": payload.result_status},
-    )
-    status_response = production_billing_signoff_status(session, platform_admin=platform_admin)
-    session.commit()
-    return status_response
 
 
 def _readiness_gate(
@@ -843,7 +744,7 @@ def _readiness_gate(
     label: str,
     ready: bool,
     reason: str | None,
-    readiness_classification: str = "founder-only",
+    readiness_classification: str = "live",
     evidence_ref: str | None = None,
     last_evidence_at: datetime | None = None,
 ) -> PlatformProductionReadinessGate:
@@ -948,7 +849,7 @@ def production_readiness_status(
     )
 
     for record in operational:
-        ready = record.status in {"pass", "not_applicable"}
+        ready = record.status == "pass"
         gates.append(
             PlatformProductionReadinessGate(
                 category=record.category,

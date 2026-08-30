@@ -11,10 +11,19 @@ from caseops_api.db.models import (
     BillingProviderEvent,
     CaseTrackingSupportMatrix,
     ConnectorSecretRotationEvidence,
+    PineLabsUATScenarioEvidence,
     PlatformAdminMembership,
+    PlatformOperationalReadinessEvidence,
+    ProductionBillingSignoff,
+    ProductionBillingSignoffEvidence,
     UserMFAStepUp,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.services.production_safety import (
+    MACHINE_READINESS_EVIDENCE_SCHEMA,
+    PLATFORM_OPERATIONAL_GATES,
+    PRODUCTION_BILLING_CHECK_CODES,
+)
 from caseops_api.services.security import TOTP_PERIOD_SECONDS, _hotp
 from tests.test_auth_company import auth_headers, bootstrap_company
 
@@ -29,13 +38,10 @@ NEW_P0_ROUTE_REFERENCES = (
     "/api/platform-admin/margin-readiness",
     "/api/platform-admin/pine-labs/uat-runs",
     "/api/platform-admin/pine-labs/uat-readiness",
-    "/api/platform-admin/pine-labs/uat-evidence",
     "/api/platform-admin/pine-labs/production-activation",
     "/api/platform-admin/billing-signoff",
-    "/api/platform-admin/billing-signoff/evidence",
     "/api/platform-admin/password-reset-readiness",
     "/api/platform-admin/production-readiness",
-    "/api/platform-admin/production-readiness/evidence",
     "/api/platform-admin/secret-rotation-readiness",
     "/api/platform-admin/secret-rotation-readiness/evidence",
     "/api/platform-admin/finance/settlement-imports",
@@ -66,6 +72,8 @@ def test_pine_labs_uat_activation_blocker_and_billing_signoff(
     client: TestClient,
     monkeypatch,
 ) -> None:
+    release_sha = "d" * 40
+    monkeypatch.setenv("CASEOPS_RELEASE_SHA", release_sha)
     token = _founder_token(client, monkeypatch)
 
     readiness = client.get(
@@ -84,29 +92,70 @@ def test_pine_labs_uat_activation_blocker_and_billing_signoff(
     assert blocked.json()["blocked"] is True
 
     run_id = readiness.json()["run_id"]
-    for scenario in readiness.json()["missing_required_scenarios"]:
-        evidence = client.post(
-            "/api/platform-admin/pine-labs/uat-evidence",
-            headers=auth_headers(token),
-            json={
-                "run_id": run_id,
-                "scenario_code": scenario,
-                "result_status": "pass",
-                "provider_order_id": f"mock-{scenario}",
-                "webhook_id": f"wh-{scenario}",
-                "redacted_payload": {
-                    "card_number": "4111111111111111",
-                    "status": "pass",
+    scenarios = readiness.json()["missing_required_scenarios"]
+    with get_session_factory()() as session:
+        platform_admin = session.scalar(select(PlatformAdminMembership))
+        assert platform_admin is not None
+        session.add(
+            PineLabsUATScenarioEvidence(
+                run_id=run_id,
+                scenario_code=scenarios[0],
+                result_status="pass",
+                redacted_payload_json={
+                    "machine_evidence": _machine_evidence(
+                        release_sha=release_sha,
+                        subject=f"pine_labs_uat:{scenarios[0]}",
+                    )
                 },
-                "operator_notes": "mock harness evidence",
-            },
+                created_by_platform_admin_id=platform_admin.id,
+            )
         )
-        assert evidence.status_code == 200, evidence.text
+        session.commit()
+
+    human_attestation = client.get(
+        "/api/platform-admin/pine-labs/uat-readiness",
+        headers=auth_headers(token),
+    )
+    assert scenarios[0] in human_attestation.json()["missing_required_scenarios"]
+
+    with get_session_factory()() as session:
+        existing = session.scalar(
+            select(PineLabsUATScenarioEvidence).where(
+                PineLabsUATScenarioEvidence.run_id == run_id,
+                PineLabsUATScenarioEvidence.scenario_code == scenarios[0],
+            )
+        )
+        assert existing is not None
+        existing.created_by_platform_admin_id = None
+        for scenario in scenarios[1:]:
+            session.add(
+                PineLabsUATScenarioEvidence(
+                    run_id=run_id,
+                    scenario_code=scenario,
+                    result_status="pass",
+                    redacted_payload_json={
+                        "machine_evidence": _machine_evidence(
+                            release_sha=release_sha,
+                            subject=f"pine_labs_uat:{scenario}",
+                        )
+                    },
+                    created_by_platform_admin_id=None,
+                )
+            )
+        session.commit()
+
+    removed_uat_attestation = client.post(
+        "/api/platform-admin/pine-labs/uat-evidence",
+        headers=auth_headers(token),
+        json={"scenario_code": scenarios[0], "result_status": "pass"},
+    )
+    assert removed_uat_attestation.status_code == 404
     ready = client.get(
         "/api/platform-admin/pine-labs/uat-readiness",
         headers=auth_headers(token),
     )
     assert ready.json()["complete"] is True
+    assert ready.json()["activation_prerequisites_met"] is False
     assert ready.json()["production_activation_blocked"] is True
     assert any("runtime mode" in blocker for blocker in ready.json()["activation_blockers"])
 
@@ -124,24 +173,202 @@ def test_pine_labs_uat_activation_blocker_and_billing_signoff(
     assert any("runtime mode" in blocker for blocker in go.json()["missing_scenarios"])
     assert go.json()["provider_mode_unchanged"] != "production"
 
+    monkeypatch.setenv("CASEOPS_PINE_LABS_ENV", "production")
+    get_settings.cache_clear()
+    actionable = client.get(
+        "/api/platform-admin/pine-labs/uat-readiness",
+        headers=auth_headers(token),
+    )
+    assert actionable.status_code == 200, actionable.text
+    assert actionable.json()["activation_prerequisites_met"] is True
+    activated = client.post(
+        "/api/platform-admin/pine-labs/production-activation",
+        headers=auth_headers(token),
+        json={
+            "run_id": run_id,
+            "founder_go_no_go": "go",
+            "notes": "Action-scoped go after machine UAT and runtime prerequisites.",
+        },
+    )
+    assert activated.status_code == 200, activated.text
+    assert activated.json()["blocked"] is False
+
     signoff = client.get("/api/platform-admin/billing-signoff", headers=auth_headers(token))
     assert signoff.status_code == 200, signoff.text
-    signoff_id = signoff.json()["signoff_id"]
-    for check_code in signoff.json()["missing_required_checks"]:
-        recorded = client.post(
-            "/api/platform-admin/billing-signoff/evidence",
-            headers=auth_headers(token),
-            json={
-                "signoff_id": signoff_id,
-                "check_code": check_code,
-                "result_status": "pass",
-                "evidence_ref": f"smoke://{check_code}",
-                "operator_notes": "authenticated smoke evidence",
-            },
+    assert signoff.json()["complete"] is False
+    assert set(signoff.json()["missing_required_checks"]) == set(
+        PRODUCTION_BILLING_CHECK_CODES
+    )
+    removed = client.post(
+        "/api/platform-admin/billing-signoff/evidence",
+        headers=auth_headers(token),
+        json={"check_code": "platform_admin", "result_status": "pass"},
+    )
+    assert removed.status_code == 404
+
+
+def _machine_evidence(*, release_sha: str, subject: str) -> dict[str, str]:
+    return {
+        "schema": MACHINE_READINESS_EVIDENCE_SCHEMA,
+        "producer": "github-actions/prod-verify",
+        "release_sha": release_sha,
+        "subject": subject,
+        "conclusion": "pass",
+        "run_id": "github-actions:33304654869",
+    }
+
+
+def test_human_readiness_rows_are_non_authoritative_and_mutation_route_is_removed(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    release_sha = "a" * 40
+    monkeypatch.setenv("CASEOPS_RELEASE_SHA", release_sha)
+    token = _founder_token(client, monkeypatch)
+
+    with get_session_factory()() as session:
+        platform_admin = session.scalar(select(PlatformAdminMembership))
+        assert platform_admin is not None
+        signoff = ProductionBillingSignoff(status="complete")
+        session.add(signoff)
+        session.flush()
+        for check_code in PRODUCTION_BILLING_CHECK_CODES:
+            session.add(
+                ProductionBillingSignoffEvidence(
+                    signoff_id=signoff.id,
+                    check_code=check_code,
+                    result_status="pass",
+                    evidence_ref=f"founder-console://{check_code}",
+                    evidence_json=_machine_evidence(
+                        release_sha=release_sha,
+                        subject=check_code,
+                    ),
+                    recorded_by_platform_admin_id=platform_admin.id,
+                )
+            )
+        gate = PLATFORM_OPERATIONAL_GATES[0]
+        session.add(
+            PlatformOperationalReadinessEvidence(
+                category=gate["category"],
+                gate_code=gate["gate_code"],
+                label=gate["label"],
+                status="not_applicable",
+                evidence_ref="founder-console://not-applicable",
+                evidence_json=_machine_evidence(
+                    release_sha=release_sha,
+                    subject=gate["gate_code"],
+                ),
+                recorded_by_platform_admin_id=platform_admin.id,
+            )
         )
-        assert recorded.status_code == 200, recorded.text
-    complete = client.get("/api/platform-admin/billing-signoff", headers=auth_headers(token))
-    assert complete.json()["complete"] is True
+        session.commit()
+
+    billing = client.get("/api/platform-admin/billing-signoff", headers=auth_headers(token))
+    assert billing.status_code == 200, billing.text
+    assert billing.json()["complete"] is False
+    assert {row["result_status"] for row in billing.json()["checks"]} == {"pending"}
+
+    operational = client.get(
+        "/api/platform-admin/production-readiness/evidence",
+        headers=auth_headers(token),
+    )
+    assert operational.status_code == 200, operational.text
+    first_gate = next(
+        row for row in operational.json() if row["gate_code"] == gate["gate_code"]
+    )
+    assert first_gate["status"] == "pending"
+    assert "machine evidence" in first_gate["blocker_reason"].lower()
+
+    removed = client.post(
+        "/api/platform-admin/production-readiness/evidence",
+        headers=auth_headers(token),
+        json={
+            "category": gate["category"],
+            "gate_code": gate["gate_code"],
+            "label": gate["label"],
+            "status": "pass",
+        },
+    )
+    assert removed.status_code == 405
+
+
+def test_exact_release_machine_evidence_can_pass_read_only_gates(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    release_sha = "b" * 40
+    monkeypatch.setenv("CASEOPS_RELEASE_SHA", release_sha)
+    token = _founder_token(client, monkeypatch)
+
+    with get_session_factory()() as session:
+        signoff = ProductionBillingSignoff(status="in_progress")
+        session.add(signoff)
+        session.flush()
+        for index, check_code in enumerate(PRODUCTION_BILLING_CHECK_CODES):
+            row = ProductionBillingSignoffEvidence(
+                signoff_id=signoff.id,
+                check_code=check_code,
+                result_status="pass",
+                evidence_ref=f"ci://prod-verify/{check_code}",
+                evidence_json=_machine_evidence(
+                    release_sha="c" * 40 if index == 0 else release_sha,
+                    subject=check_code,
+                ),
+                recorded_by_platform_admin_id=None,
+            )
+            session.add(row)
+        gate = PLATFORM_OPERATIONAL_GATES[0]
+        session.add(
+            PlatformOperationalReadinessEvidence(
+                category=gate["category"],
+                gate_code=gate["gate_code"],
+                label=gate["label"],
+                status="pass",
+                evidence_ref="ci://prod-verify/provider-operations",
+                evidence_json=_machine_evidence(
+                    release_sha=release_sha,
+                    subject=gate["gate_code"],
+                ),
+                recorded_by_platform_admin_id=None,
+            )
+        )
+        session.commit()
+
+    stale = client.get("/api/platform-admin/billing-signoff", headers=auth_headers(token))
+    assert stale.status_code == 200, stale.text
+    assert stale.json()["complete"] is False
+    assert stale.json()["missing_required_checks"] == [PRODUCTION_BILLING_CHECK_CODES[0]]
+
+    with get_session_factory()() as session:
+        first = session.scalar(
+            select(ProductionBillingSignoffEvidence).where(
+                ProductionBillingSignoffEvidence.check_code
+                == PRODUCTION_BILLING_CHECK_CODES[0]
+            )
+        )
+        assert first is not None
+        first.evidence_json = _machine_evidence(
+            release_sha=release_sha,
+            subject=PRODUCTION_BILLING_CHECK_CODES[0],
+        )
+        session.commit()
+
+    billing = client.get("/api/platform-admin/billing-signoff", headers=auth_headers(token))
+    assert billing.status_code == 200, billing.text
+    assert billing.json()["complete"] is True
+    assert billing.json()["signoff_id"] == f"machine:{release_sha}"
+    assert {row["result_status"] for row in billing.json()["checks"]} == {"pass"}
+
+    operational = client.get(
+        "/api/platform-admin/production-readiness/evidence",
+        headers=auth_headers(token),
+    )
+    assert operational.status_code == 200, operational.text
+    first_gate = next(
+        row for row in operational.json() if row["gate_code"] == gate["gate_code"]
+    )
+    assert first_gate["status"] == "pass"
+    assert first_gate["owner_label"] == "automation:github-actions/prod-verify"
 
 
 def test_unified_readiness_and_secret_rotation_evidence_are_founder_only_and_secret_safe(
@@ -195,7 +422,7 @@ def test_unified_readiness_and_secret_rotation_evidence_are_founder_only_and_sec
     )
     assert rejected_github_token.status_code == 400
 
-    rejected_signoff_secret = client.post(
+    removed_signoff_mutation = client.post(
         "/api/platform-admin/billing-signoff/evidence",
         headers=auth_headers(token),
         json={
@@ -204,7 +431,7 @@ def test_unified_readiness_and_secret_rotation_evidence_are_founder_only_and_sec
             "evidence": {"client_secret": "do-not-store"},
         },
     )
-    assert rejected_signoff_secret.status_code == 400
+    assert removed_signoff_mutation.status_code == 404
 
     recorded = client.post(
         "/api/platform-admin/secret-rotation-readiness/evidence",

@@ -773,6 +773,7 @@ export const pineLabsUatReadiness = {
   environment: "mock",
   complete: false,
   missing_required_scenarios: ["tampered_webhook"],
+  activation_prerequisites_met: false,
   production_activation_blocked: true,
   activation_blockers: [
     "Missing required Pine Labs UAT scenarios: tampered_webhook",
@@ -1080,30 +1081,11 @@ export function mockBillingFetch(fetchMock: ReturnType<typeof vi.fn>) {
     if (url.includes("/api/platform-admin/margin-simulations")) {
       return jsonResponse(marginSimulations);
     }
-    if (url.includes("/api/platform-admin/pine-labs/uat-evidence")) {
-      return jsonResponse({
-        ...pineLabsUatReadiness,
-        missing_required_scenarios: [],
-        complete: true,
-        production_activation_blocked: true,
-        activation_blockers: [
-          "Founder Pine Labs go/no-go decision is not recorded.",
-          "Pine Labs runtime mode is disabled/mock/test; production payments are not enabled.",
-        ],
-      });
-    }
     if (url.includes("/api/platform-admin/pine-labs/production-activation")) {
       return jsonResponse({ status: "recorded", production_activation_blocked: true });
     }
     if (url.includes("/api/platform-admin/pine-labs/uat-readiness")) {
       return jsonResponse(pineLabsUatReadiness);
-    }
-    if (url.includes("/api/platform-admin/billing-signoff/evidence")) {
-      return jsonResponse({
-        ...billingSignoff,
-        missing_required_checks: [],
-        complete: true,
-      });
     }
     if (url.includes("/api/platform-admin/billing-signoff")) {
       return jsonResponse(billingSignoff);

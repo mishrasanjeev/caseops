@@ -29,20 +29,25 @@ CaseOps does not yet have production signoff for Plural subscriptions or UPI
 AutoPay. Treat subscription/mandate UAT as provider-readiness validation before
 enabling any live recurring payment feature.
 
-The P0 safety slice now adds founder-only UAT evidence records and a
-paid-production readiness console:
+The P0 safety slice adds UAT evidence records and a paid-production readiness
+console. As of 2026-08-30, scenario results are read-only machine evidence:
 
 - `POST /api/platform-admin/pine-labs/uat-runs`
 - `GET /api/platform-admin/pine-labs/uat-readiness`
-- `POST /api/platform-admin/pine-labs/uat-evidence`
 - `POST /api/platform-admin/pine-labs/production-activation`
 - `/app/platform-admin/paid-production`
 
-These records are evidence only. They do not enable production payments, change
-Pine Labs settings, or perform live provider calls.
+There is no browser or platform-admin API that can mark a UAT scenario `pass` or
+`not_applicable`. Historical operator rows do not count. Scenario readiness
+requires a `caseops.machine-readiness/v1` envelope from an allowed automation
+producer, bound to the exact serving release SHA; otherwise it fails closed.
+`scripts/pine_labs_uat_mock_harness.py` now generates local-safe fixture output
+only and cannot record readiness. These records do not enable production
+payments, change Pine Labs settings, or perform live provider calls.
 
-2026-06-13 evidence update:
-- The founder console and API now track hosted checkout, payment links,
+2026-06-13 evidence update (display remains current; manual mutation was retired
+on 2026-08-30):
+- The platform console and API display hosted checkout, payment links,
   subscriptions, failed/pending/expired payments, duplicate/tampered/stale
   webhook handling, settlement import, refunds, credit notes, chargebacks,
   provider fees, GST/TDS fields, and activation decision audit as readiness
@@ -373,15 +378,9 @@ only. It must not be used to claim real Pine Labs UAT completion.
 uv --directory apps/api run python ..\..\scripts\pine_labs_uat_mock_harness.py
 ```
 
-To record mock evidence through the API, provide an authenticated founder
-session or bearer token through environment variables. Do not print the token or
-cookie in terminals, logs, or evidence files.
-
-```powershell
-$env:CASEOPS_SMOKE_API_BASE="http://localhost:8000"
-$env:CASEOPS_SMOKE_BEARER_TOKEN="<founder-token>"
-uv --directory apps/api run python ..\..\scripts\pine_labs_uat_mock_harness.py --record
-```
+The harness has no record mode and accepts no credential. Its JSON is a local
+fixture, not a readiness envelope. Machine evidence must arrive through the
+external CI/probe persistence integration and match the exact serving release.
 
 The harness refuses non-mock/non-UAT-safe mode. Real Pine Labs calls are allowed
 only with explicit UAT credentials, `CASEOPS_PINE_LABS_ENV=uat`, and a base URL
@@ -389,10 +388,12 @@ that is clearly UAT/sandbox/test/staging/local.
 
 ## Evidence Fields
 
-For every required scenario, record:
+For every required scenario, the machine record includes:
 
 - scenario code
-- result status
+- machine conclusion (`pass`, `fail`, or `blocked`)
+- `caseops.machine-readiness/v1` schema
+- allowed producer, exact release SHA, subject, and non-empty run id
 - provider order id, if applicable
 - provider payment id, if applicable
 - webhook id, if applicable
@@ -400,7 +401,7 @@ For every required scenario, record:
 - observed timestamp
 - redacted payload sample or external payload reference
 - screenshot/attachment reference, if storage exists externally
-- operator notes
+- no platform-admin recorder
 
 Do not store raw signed payloads, customer payment instruments, UPI handles,
 card data, webhook secrets, access tokens, client secrets, or dashboard

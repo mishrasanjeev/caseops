@@ -8421,28 +8421,6 @@ export async function fetchPineLabsUatReadiness(): Promise<PineLabsUatReadinessR
   return pineLabsUatReadinessResponse.parse(data);
 }
 
-export async function recordPineLabsUatEvidence(input: {
-  runId?: string | null;
-  scenarioCode: string;
-  resultStatus: "pending" | "pass" | "fail" | "blocked" | "not_applicable";
-  providerOrderId?: string | null;
-  webhookId?: string | null;
-  operatorNotes?: string | null;
-}): Promise<PineLabsUatReadinessResponse> {
-  const data = await apiRequest<unknown>("/api/platform-admin/pine-labs/uat-evidence", {
-    method: "POST",
-    body: {
-      run_id: input.runId ?? null,
-      scenario_code: input.scenarioCode,
-      result_status: input.resultStatus,
-      provider_order_id: input.providerOrderId ?? null,
-      webhook_id: input.webhookId ?? null,
-      operator_notes: input.operatorNotes ?? null,
-    },
-  });
-  return pineLabsUatReadinessResponse.parse(data);
-}
-
 export async function recordPineLabsActivationDecision(input: {
   runId?: string | null;
   founderGoNoGo: "go" | "no_go";
@@ -8509,26 +8487,6 @@ export async function recordSecretRotationEvidence(input: {
     },
   );
   return secretRotationEvidenceListResponse.parse(data);
-}
-
-export async function recordProductionBillingSignoffEvidence(input: {
-  signoffId?: string | null;
-  checkCode: string;
-  resultStatus: "pending" | "pass" | "fail" | "blocked" | "not_applicable";
-  evidenceRef?: string | null;
-  operatorNotes?: string | null;
-}): Promise<ProductionBillingSignoffResponse> {
-  const data = await apiRequest<unknown>("/api/platform-admin/billing-signoff/evidence", {
-    method: "POST",
-    body: {
-      signoff_id: input.signoffId ?? null,
-      check_code: input.checkCode,
-      result_status: input.resultStatus,
-      evidence_ref: input.evidenceRef ?? null,
-      operator_notes: input.operatorNotes ?? null,
-    },
-  });
-  return productionBillingSignoffResponse.parse(data);
 }
 
 export async function fetchPlatformFinanceReport(report: string): Promise<FinanceListResponse> {

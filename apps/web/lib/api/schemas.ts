@@ -3309,6 +3309,7 @@ export const pineLabsUatReadinessResponse = z.object({
   environment: z.string(),
   complete: z.boolean(),
   missing_required_scenarios: z.array(z.string()),
+  activation_prerequisites_met: z.boolean(),
   production_activation_blocked: z.boolean(),
   activation_blockers: z.array(z.string()).default([]),
   latest_decision: z.record(z.string(), z.unknown()).nullable(),

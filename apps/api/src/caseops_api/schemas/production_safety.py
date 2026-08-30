@@ -76,6 +76,7 @@ class PineLabsUATReadinessResponse(BaseModel):
     scenarios: list[PineLabsUATScenarioStatus]
     complete: bool
     missing_required_scenarios: list[PineLabsUATScenarioLiteral]
+    activation_prerequisites_met: bool
     production_activation_blocked: bool
     activation_blockers: list[str] = Field(default_factory=list)
     latest_decision: dict[str, object] | None = None
@@ -85,19 +86,6 @@ class PineLabsUATRunCreateRequest(BaseModel):
     environment: Literal["mock", "uat"] = "uat"
     provider_mode: str = Field(default="mock", max_length=40)
     notes: str | None = Field(default=None, max_length=4000)
-
-
-class PineLabsUATEvidenceRequest(BaseModel):
-    run_id: str | None = None
-    scenario_code: PineLabsUATScenarioLiteral
-    result_status: EvidenceStatusLiteral
-    provider_order_id: str | None = Field(default=None, max_length=255)
-    provider_payment_id: str | None = Field(default=None, max_length=255)
-    webhook_id: str | None = Field(default=None, max_length=255)
-    webhook_timestamp: datetime | None = None
-    redacted_payload: dict[str, object] | None = None
-    operator_notes: str | None = Field(default=None, max_length=4000)
-    attachment_refs: list[str] = Field(default_factory=list, max_length=20)
 
 
 class PineLabsActivationDecisionRequest(BaseModel):
@@ -123,15 +111,6 @@ class ProductionBillingSignoffResponse(BaseModel):
     checks: list[ProductionBillingSignoffCheckStatus]
     signed_off_at: datetime | None = None
     notes: str | None = None
-
-
-class ProductionBillingSignoffEvidenceRequest(BaseModel):
-    signoff_id: str | None = None
-    check_code: ProductionBillingSignoffCheckLiteral
-    result_status: EvidenceStatusLiteral
-    evidence_ref: str | None = Field(default=None, max_length=500)
-    evidence: dict[str, object] | None = None
-    operator_notes: str | None = Field(default=None, max_length=4000)
 
 
 class PasswordResetReadinessResponse(BaseModel):
@@ -199,18 +178,6 @@ class PlatformOperationalReadinessRecord(BaseModel):
     evidence: dict[str, object] | None = None
     last_evidence_at: datetime | None = None
     owner_label: str | None = None
-
-
-class PlatformOperationalReadinessEvidenceRequest(BaseModel):
-    category: str = Field(min_length=2, max_length=80)
-    gate_code: str = Field(min_length=2, max_length=120)
-    label: str = Field(min_length=2, max_length=255)
-    status: EvidenceStatusLiteral = "pending"
-    readiness_classification: ReadinessClassificationLiteral = "founder-only"
-    blocker_reason: str | None = Field(default=None, max_length=4000)
-    evidence_ref: str | None = Field(default=None, max_length=500)
-    evidence: dict[str, object] | None = None
-    owner_label: str | None = Field(default=None, max_length=160)
 
 
 class PlatformProductionReadinessGate(BaseModel):
