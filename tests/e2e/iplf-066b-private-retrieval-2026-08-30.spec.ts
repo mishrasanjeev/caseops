@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import path from "node:path";
 
 import { expect, test } from "@playwright/test";
@@ -36,7 +37,7 @@ function runPrivateFixture(
 test("IPLF-UJ-66 revocation hides indexed document answers, citations, cache and reload", async ({
   page,
 }) => {
-  const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const runId = `${Date.now()}-${randomBytes(4).toString("hex")}`;
   const bootstrap = await page.request.post(`${apiBaseUrl}/api/bootstrap/company`, {
     data: {
       company_name: `Private Retrieval ${runId}`,
