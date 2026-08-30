@@ -164,7 +164,7 @@ test("IPLF-037B completes UJ-26 and renewal exception paths", async ({ page }) =
   await expect(page.getByText("Trade Marks Act and applicable rules")).toBeVisible();
   await expect(page.getByText("registry-renewal-rules-2026-v1")).toBeVisible();
   await expect(page.getByText(/Renewal official fee quote/)).toBeVisible();
-  await expect(page.getByText("Reconciliation: unlinked")).toBeVisible();
+  await expect(page.getByText("Reconciliation: nonbillable")).toBeVisible();
 
   await page.getByRole("button", { name: "Schedule instruction notifications" }).click();
   await expect(page.getByText(/1 delivered · 6 queued/)).toBeVisible();
