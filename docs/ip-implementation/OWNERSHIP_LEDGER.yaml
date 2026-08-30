@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "prd_path": "docs/PRD_IP_LAW_FIRM_PLATFORM_2026-08-01.md",
-  "status": "engineering_control_published_human_program_lock_pending",
+  "status": "engineering_control_published_machine_enforced",
   "recorded_at": "2026-08-06",
   "binding_rule": "Section 11.2 has one canonical state owner. This ledger is a Definition-of-Ready guard, not permission to prebuild later-milestone persistence.",
   "adr_refs": [
@@ -391,7 +391,7 @@
       "epic_id": "IPLF-029",
       "milestone": "M2",
       "components": [
-        {"kind": "contract", "name": "m2-one-writer-reconciliation-gate", "classification": "NEW", "owner_id": "platform-shared-foundations", "canonical_writer": "scripts/ip_ownership_ledger.py and slice-specific reconciliation tests", "state_boundary": "Verification evidence only; it cannot create application state.", "implementation_phase": "M2 release gate"}
+        {"kind": "contract", "name": "m2-one-writer-reconciliation-gate", "classification": "NEW", "owner_id": "platform-shared-foundations", "canonical_writer": "scripts/ip_m2_ownership_audit.py delegating ledger uniqueness to scripts/ip_ownership_ledger.py", "state_boundary": "Verification evidence only; it cannot create application state.", "implementation_phase": "M2 release gate"}
       ]
     },
     {

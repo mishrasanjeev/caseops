@@ -6,7 +6,7 @@ Generated from `PROGRAM_MANIFEST.yaml`; do not edit this view directly.
 
 This is a repository Definition-of-Ready control. It validates required
 canonical-writer, test, and evidence references.
-run a production operation, or convert a blocked slice into
+It does not run a production operation or convert a blocked slice into
 a released capability.
 
 ## M2 slice inventory
@@ -38,7 +38,16 @@ a released capability.
 | `IPLF-028B` | `in_progress` | `blocked` | `repository-evidence-recorded-release-blocked` | 10 | 2 | 1 |
 | `IPLF-028C` | `implemented` | `blocked` | `repository-evidence-recorded-release-blocked` | 3 | 1 | 2 |
 | `IPLF-029A` | `in_progress` | `blocked` | `repository-evidence-recorded-release-blocked` | 2 | 1 | 1 |
-| `IPLF-029B` | `not_started` | `blocked` | `not-started-or-planned` | 0 | 0 | 0 |
+| `IPLF-029B` | `in_progress` | `blocked` | `repository-evidence-recorded-release-blocked` | 5 | 1 | 1 |
+
+## Closure summary
+
+- M2 rows: `26`
+- Deployment-evidence-recorded rows: `14`
+- Rows still awaiting release closure: `12`
+
+IPLF-029B remains active and release-blocked until every M2 row carries
+its independently required one-writer reconciliation and exact-release proof.
 
 ## Release interpretation
 
