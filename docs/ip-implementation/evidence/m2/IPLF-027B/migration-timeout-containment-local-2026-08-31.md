@@ -75,10 +75,10 @@ PG17 proof in 18.50 seconds with pgvector 0.8.3, Alembic head `20260830_0002`,
 and zero retained probe tables.
 
 The canonical manifest records that full immutable implementation revision.
-Because a commit cannot contain its own SHA, the later evidence commit must be
-treated as unverified until an exact-checkout retest completes. The Draft PR
-and operator report record the later exact SHA and its independent PG17 result;
-they must not project that result backward onto an untested commit.
+Because a commit cannot contain its own SHA, later evidence and control-plane
+commits must be treated as unverified until an exact-checkout retest completes.
+The Draft PR and operator report record the later exact SHA and its independent
+PG17 result; they must not project that result backward onto an untested commit.
 
 ## Still open on IPLF-027B
 
