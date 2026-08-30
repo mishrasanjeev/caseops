@@ -31,6 +31,7 @@ PROJECT=perfect-period-305406
 REGION=asia-south1
 REPO=caseops-images
 REGISTRY="${REGION}-docker.pkg.dev/${PROJECT}/${REPO}"
+MACHINE_READINESS_EVIDENCE_SECRET=caseops-machine-readiness-evidence-secret
 API_CPU=2
 API_MEMORY=4Gi
 API_SOURCE_DIR=apps/api
@@ -398,6 +399,7 @@ gcloud run deploy caseops-api \
   --container api \
   --port 8080 \
   --image "${API_IMAGE}" \
+  --update-secrets "CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET=${MACHINE_READINESS_EVIDENCE_SECRET}:latest" \
   --update-env-vars "CASEOPS_RELEASE_SHA=${HEAD_SHA},CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false,CASEOPS_DB_STATEMENT_TIMEOUT_MS=60000,CASEOPS_DB_LOCK_TIMEOUT_MS=5000,CASEOPS_DB_IDLE_TRANSACTION_TIMEOUT_MS=60000" \
   --cpu "${API_CPU}" \
   --memory "${API_MEMORY}" \
@@ -440,13 +442,18 @@ LIVE_API_SERVICE_JSON=$(gcloud run services describe caseops-api \
   --region "${REGION}" \
   --project "${PROJECT}" \
   --format=json)
-if ! LIVE_API_REVISION=$(python - "${HEAD_SHA}" "${API_MIN_INSTANCES}" "${LIVE_API_SERVICE_JSON}" <<'PY'
+if ! LIVE_API_REVISION=$(python - \
+  "${HEAD_SHA}" \
+  "${API_MIN_INSTANCES}" \
+  "${MACHINE_READINESS_EVIDENCE_SECRET}" \
+  "${LIVE_API_SERVICE_JSON}" <<'PY'
 import json
 import sys
 
 expected_sha = sys.argv[1]
 expected_min = sys.argv[2]
-service = json.loads(sys.argv[3])
+expected_machine_readiness_secret = sys.argv[3]
+service = json.loads(sys.argv[4])
 metadata = service.get("metadata") or {}
 spec = service.get("spec") or {}
 status = service.get("status") or {}
@@ -501,11 +508,24 @@ api = next((row for row in containers if row.get("name") == "api"), None)
 if api is None:
     errors.append("api container is missing")
 else:
-    env = {str(row.get("name")): str(row.get("value")) for row in api.get("env") or []}
-    if env.get("CASEOPS_RELEASE_SHA") != expected_sha:
+    env = {str(row.get("name")): row for row in api.get("env") or []}
+    if str((env.get("CASEOPS_RELEASE_SHA") or {}).get("value")) != expected_sha:
         errors.append("CASEOPS_RELEASE_SHA does not match exact HEAD")
-    if env.get("CASEOPS_IP_RULE_GOVERNANCE_ENABLED") != "false":
+    if str((env.get("CASEOPS_IP_RULE_GOVERNANCE_ENABLED") or {}).get("value")) != "false":
         errors.append("CASEOPS_IP_RULE_GOVERNANCE_ENABLED is not explicitly false")
+    machine_secret_ref = (
+        (env.get("CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET") or {})
+        .get("valueFrom", {})
+        .get("secretKeyRef", {})
+    )
+    if (
+        str(machine_secret_ref.get("name")) != expected_machine_readiness_secret
+        or str(machine_secret_ref.get("key")) != "latest"
+    ):
+        errors.append(
+            "CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET is not bound to the "
+            "dedicated latest Secret Manager version"
+        )
 
 if errors:
     print("; ".join(errors), file=sys.stderr)
