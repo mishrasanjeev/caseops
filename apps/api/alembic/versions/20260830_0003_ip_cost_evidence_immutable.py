@@ -14,6 +14,8 @@ This migration freezes the cost/evidence identity columns and rejects row
 deletion.  Only the reconciliation projection columns remain mutable.  The
 guard is implemented on PostgreSQL and SQLite so migration tests and local
 acceptance exercise the same boundary as production.
+
+DATA-GOVERNANCE-MAP: updated
 """
 
 from __future__ import annotations
