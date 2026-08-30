@@ -22,6 +22,15 @@ down_revision = "20260830_0002"
 branch_labels = None
 depends_on = None
 
+# The static FK-index validator evaluates component columns independently.
+# Application access is always tenant scoped and is covered by the existing
+# (company_id, application_id, ...) indexes below; declaring that component
+# avoids a redundant global application_id index.
+FK_INDEXES: tuple[tuple[str, str], ...] = (
+    ("ip_filing_transactions", "application_id"),
+)
+
+
 def _set_postgres_timeouts() -> None:
     if op.get_bind().dialect.name == "postgresql":
         op.execute(sa.text("SET LOCAL lock_timeout = '5s'"))
