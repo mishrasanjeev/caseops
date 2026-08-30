@@ -388,7 +388,7 @@ function GoogleWorkspaceChecklist({
   status: GoogleWorkspaceTenantConfigurationResponse;
 }) {
   return (
-    <div className="grid gap-3 md:grid-cols-2">
+    <div className="grid gap-3 md:grid-cols-3">
       <div>
         <h3 className="text-sm font-semibold text-[var(--color-ink)]">
           Required config
@@ -421,6 +421,27 @@ function GoogleWorkspaceChecklist({
               <Badge tone={item.approved ? "success" : "warning"}>
                 {item.approved ? "approved" : "pending"}
               </Badge>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div data-testid="google-workspace-machine-controls">
+        <h3 className="text-sm font-semibold text-[var(--color-ink)]">
+          Machine controls
+        </h3>
+        <ul className="mt-2 divide-y divide-[var(--color-line)] rounded-md border border-[var(--color-line)]">
+          {status.machine_controls.map((item) => (
+            <li
+              key={item.key}
+              className="flex items-center justify-between gap-2 px-3 py-2 text-sm"
+            >
+              <span>
+                {item.label}
+                <span className="block text-xs text-[var(--color-mute)]">
+                  {item.version}
+                </span>
+              </span>
+              <Badge tone={readinessTone(item.status)}>{item.status}</Badge>
             </li>
           ))}
         </ul>
@@ -559,7 +580,7 @@ function GoogleWorkspaceConfigurationPanel({
           <div className="md:col-span-2">
             <fieldset className="grid gap-2 rounded-md border border-[var(--color-line)] px-3 py-3 text-sm md:grid-cols-2">
               <legend className="px-1 text-xs font-medium text-[var(--color-mute)]">
-                Services and approvals
+                Services, provider authorities, and enablement
               </legend>
               <ConfigCheckbox
                 label="Enable Calendar"
@@ -604,26 +625,6 @@ function GoogleWorkspaceConfigurationPanel({
                 checked={form.scopesApproved}
                 onChange={(checked) =>
                   setForm((current) => ({ ...current, scopesApproved: checked }))
-                }
-              />
-              <ConfigCheckbox
-                label="Webhook runbook reviewed"
-                checked={form.webhookRunbookApproved}
-                onChange={(checked) =>
-                  setForm((current) => ({
-                    ...current,
-                    webhookRunbookApproved: checked,
-                  }))
-                }
-              />
-              <ConfigCheckbox
-                label="Redaction rules approved"
-                checked={form.redactionRulesApproved}
-                onChange={(checked) =>
-                  setForm((current) => ({
-                    ...current,
-                    redactionRulesApproved: checked,
-                  }))
                 }
               />
             </fieldset>
@@ -845,8 +846,6 @@ export default function TenantIntegrationsPage() {
       scopes: GOOGLE_WORKSPACE_SCOPES,
       oauthConsentModelApproved: false,
       scopesApproved: false,
-      webhookRunbookApproved: false,
-      redactionRulesApproved: false,
       calendarEnabled: true,
       gmailEnabled: true,
       driveEnabled: true,
@@ -890,14 +889,6 @@ export default function TenantIntegrationsPage() {
         "oauth_consent_model_approved",
       ),
       scopesApproved: approvalChecked(status.required_approvals, "scopes_approved"),
-      webhookRunbookApproved: approvalChecked(
-        status.required_approvals,
-        "webhook_runbook_approved",
-      ),
-      redactionRulesApproved: approvalChecked(
-        status.required_approvals,
-        "redaction_rules_approved",
-      ),
       calendarEnabled: status.calendar_enabled,
       gmailEnabled: status.gmail_enabled,
       driveEnabled: status.drive_enabled,

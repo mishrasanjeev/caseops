@@ -639,15 +639,22 @@ export const googleWorkspaceConfiguration = {
       label: "Calendar, Gmail, and Drive scopes approved",
       approved: true,
     },
+  ],
+  machine_control_version: "google-workspace-connector-controls/2026-08-30.1",
+  machine_controls: [
     {
-      key: "webhook_runbook_approved",
-      label: "Gmail webhook and disable runbook reviewed",
-      approved: true,
+      key: "provider_retry_policy",
+      label: "Bounded provider retry policy",
+      version: "provider-delivery-retry/v1",
+      status: "passed",
+      detail: "Bounded exponential retry policy loaded.",
     },
     {
-      key: "redaction_rules_approved",
-      label: "Provider error redaction rules approved",
-      approved: true,
+      key: "gmail_webhook_disable_boundary",
+      label: "Gmail webhook configuration and disable boundary",
+      version: "gmail-webhook-fail-closed/v1",
+      status: "passed",
+      detail: "Webhook delivery is fail-closed disabled.",
     },
   ],
   approved_scopes: [
@@ -657,6 +664,7 @@ export const googleWorkspaceConfiguration = {
   ],
   missing_config_names: [],
   missing_approval_keys: [],
+  missing_machine_control_keys: [],
   connection_counts: {
     calendar_connection_count: 1,
     gmail_connection_count: 1,
@@ -674,6 +682,7 @@ export const googleWorkspaceConfiguration = {
 export const googleWorkspaceReadinessTest = {
   provider: "google_workspace",
   status: "passed",
+  machine_control_version: "google-workspace-connector-controls/2026-08-30.1",
   checks: [
     {
       key: "GOOGLE_WORKSPACE_CLIENT_ID",

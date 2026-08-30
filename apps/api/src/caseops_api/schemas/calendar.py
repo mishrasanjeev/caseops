@@ -351,6 +351,14 @@ class OutlookApprovalItemStatus(BaseModel):
     approved: bool
 
 
+class OutlookMachineReadinessControlStatus(BaseModel):
+    key: str
+    label: str
+    version: str
+    status: OutlookReadinessItemStatusLiteral
+    detail: str | None = None
+
+
 class OutlookTenantConfigurationResponse(BaseModel):
     provider: CalendarProviderLiteral = "outlook"
     configured: bool
@@ -358,9 +366,12 @@ class OutlookTenantConfigurationResponse(BaseModel):
     enabled: bool
     required_config: list[OutlookConfigurationItemStatus]
     required_approvals: list[OutlookApprovalItemStatus]
+    machine_control_version: str
+    machine_controls: list[OutlookMachineReadinessControlStatus]
     approved_scopes: list[str] = Field(default_factory=list)
     missing_config_names: list[str] = Field(default_factory=list)
     missing_approval_keys: list[str] = Field(default_factory=list)
+    missing_machine_control_keys: list[str] = Field(default_factory=list)
     connection_count: int = Field(ge=0)
     connected_account_count: int = Field(ge=0)
     last_test_status: OutlookReadinessItemStatusLiteral = "not_run"
@@ -377,9 +388,6 @@ class OutlookTenantConfigurationUpdateRequest(BaseModel):
     scopes: list[str] | None = None
     oauth_consent_model_approved: bool = False
     scopes_approved: bool = False
-    durable_runbook_approved: bool = False
-    rollback_approved: bool = False
-    redaction_rules_approved: bool = False
     enabled: bool = True
 
     @field_validator(
@@ -408,6 +416,7 @@ class OutlookReadinessTestResponse(BaseModel):
     provider: CalendarProviderLiteral = "outlook"
     status: OutlookReadinessItemStatusLiteral
     checks: list[OutlookReadinessCheckResult]
+    machine_control_version: str
     adp20_readiness: OutlookADP20ReadinessLiteral
     tested_at: datetime
 

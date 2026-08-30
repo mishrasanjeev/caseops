@@ -5,8 +5,10 @@ Status: **READY-GATED FOUNDATION IMPLEMENTED** as of 2026-05-26.
 This is the provider-readiness and operations runbook for ADP-20 durable Outlook
 sync. The law firm workspace admin owns the Outlook setup path through
 `/app/admin/outlook`: they can enter approved Microsoft Graph OAuth config,
-record the approval checklist, connect an admin Outlook account, and run the
-end-to-end readiness probe. Durable sync then runs only for tenants whose
+record the provider authorities, connect an admin Outlook account, and run the
+end-to-end readiness probe. Retry, dead-letter/replay, disable/rollback, and
+redaction readiness are executable versioned controls, not operator
+checkboxes. Durable sync then runs only for tenants whose
 readiness reports `ready_for_adp20_implementation`. This document must not
 carry credential values, tenant identifiers, OAuth tokens, redirect URI values,
 Temporal endpoint values, DB URLs, private keys, or local env values.
@@ -20,7 +22,8 @@ Temporal endpoint values, DB URLs, private keys, or local env values.
   only, behind the tenant readiness gate.
 - Current safe sync behavior: bounded manual Outlook sync remains available.
 - Admin readiness UI/API: implemented for tenant-scoped Outlook configuration,
-  approval capture, encrypted client-secret storage, and Graph connection probe.
+  OAuth/scope authority capture, encrypted client-secret storage, versioned
+  machine controls, and Graph connection probe.
 - Unsupported durable sources: task/deadline sync, mailbox read, provider
   webhooks, Outlook-to-CaseOps import, Google Drive sync, and two-way conflict
   automation remain out of scope.
@@ -45,9 +48,9 @@ API but are never echoed back.
 | `OUTLOOK_TENANT_ID` or approved tenant mode | Configured by law firm admin in `/app/admin/outlook` |
 | Approved OAuth consent model | Captured by law firm admin checklist |
 | Approved scopes | Captured by law firm admin checklist |
-| Durable sync/retry/dead-letter/replay runbook | Captured by law firm admin checklist |
-| Rollback/disable procedure | Captured by law firm admin checklist |
-| Provider error redaction rules for ADP-20 | Captured by law firm admin checklist |
+| Durable sync/retry/dead-letter/replay | Executable `calendar-durable-delivery/v1` control |
+| Rollback/disable boundary | Executable `outlook-tenant-disable/v1` control |
+| Provider error redaction | Executable `provider-error-redaction/v1` control |
 
 The bounded manual Outlook flow currently requests these scope names:
 
@@ -59,11 +62,11 @@ These scope names are not approval evidence by themselves. The law firm admin
 must explicitly approve the consent model and scope set on the Outlook
 configuration page before a tenant reports `ready_for_adp20_implementation`.
 
-## Required Approval Evidence Before GO
+## Required Authority And Machine Evidence Before GO
 
 ADP-20 durable hearing sync is enabled by the admin-controlled readiness path. A
-specific tenant remains blocked until all items below are approved in
-`/app/admin/outlook` and the end-to-end test passes:
+specific tenant remains blocked until the provider authorities, configuration,
+machine controls, and end-to-end test below pass:
 
 | Item | Required evidence | Current status |
 | --- | --- | --- |
@@ -71,10 +74,9 @@ specific tenant remains blocked until all items below are approved in
 | Consent model | Tenant-admin consent or per-user OAuth explicitly selected | Admin checklist available |
 | OAuth scopes | Approved scope list and justification | Admin checklist available |
 | Runtime config | Approved secret/config wiring for required names | Admin page available |
-| Token storage policy | Encryption, retention, revocation, and audit policy approved | Admin checklist available |
-| Durable workflow operation | Retry, dead-letter, replay, and monitoring runbook approved | Admin checklist available |
-| Disable/rollback | Operator procedure for stopping durable sync safely | Admin checklist available |
-| Provider error redaction | Redaction rules for Graph/OAuth errors approved | Admin checklist available |
+| Durable workflow operation | Bounded retry, dead-letter, and replay behavior | Machine control tested |
+| Disable/rollback | Tenant disable cannot fall back to environment credentials | Machine control tested |
+| Provider error redaction | Secret-bearing Graph/OAuth errors are redacted | Machine control tested |
 
 ## Admin Setup Flow
 
@@ -83,13 +85,15 @@ specific tenant remains blocked until all items below are approved in
    or tenant ID, and redirect URI.
 3. Confirm the approved scope list: `offline_access`, `User.Read`,
    `Calendars.ReadWrite`.
-4. Mark the OAuth consent, scope, durable operation, rollback/disable, and
-   redaction approvals.
+4. Confirm only the real OAuth consent and scope authorities. Internal
+   runbook, rollback/disable, and redaction acknowledgements are not collected.
 5. Save the configuration. The response shows names/status only.
 6. Connect an admin Outlook account through the OAuth flow.
 7. Run the end-to-end readiness test. It must report
    `ready_for_adp20_implementation` before durable CaseOps-to-Outlook hearing
-   sync runs for the tenant.
+   sync runs for the tenant. The response includes the aggregate
+   `outlook-connector-controls/2026-08-30.1` version and each executable
+   control result.
 
 ## ADP-20 Durable Sync Operations
 
@@ -143,7 +147,8 @@ Durable CaseOps-to-Outlook hearing sync may run for tenants whose admin
 readiness page shows:
 
 - required config names present;
-- every approval checklist item approved;
+- OAuth consent and requested scope authorities approved;
+- every versioned machine control passing;
 - an admin Outlook account connected;
 - the end-to-end Graph readiness probe passed;
 - `adp20_readiness=ready_for_adp20_implementation`;

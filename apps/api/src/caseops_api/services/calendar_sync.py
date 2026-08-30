@@ -54,6 +54,7 @@ from caseops_api.schemas.calendar import (
     OutlookBulkSyncRequest,
     OutlookBulkSyncResponse,
     OutlookConfigurationItemStatus,
+    OutlookMachineReadinessControlStatus,
     OutlookReadinessCheckResult,
     OutlookReadinessTestResponse,
     OutlookTenantConfigurationResponse,
@@ -91,9 +92,15 @@ from caseops_api.services.notification_delivery import (
 from caseops_api.services.security import require_recent_step_up
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.shared_work import resolve_shared_work_target
+from caseops_api.workflows.notification_intent_contracts import (
+    DEFAULT_RETRY_MAXIMUM_ATTEMPTS,
+    DEFAULT_RETRY_MAXIMUM_INTERVAL,
+    OUTLOOK_DURABLE_SYNC_FOUNDATION_VERSION,
+)
 
 OUTLOOK_SCOPES = ["offline_access", "User.Read", "Calendars.ReadWrite"]
 GOOGLE_CALENDAR_SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
+OUTLOOK_MACHINE_CONTROL_VERSION = "outlook-connector-controls/2026-08-30.1"
 _STATE_KINDS = {
     CalendarProvider.OUTLOOK: "outlook_calendar_oauth",
     CalendarProvider.GOOGLE_CALENDAR: "google_calendar_oauth",
@@ -894,9 +901,10 @@ def _outlook_provider(
     session: Session | None = None,
     *,
     context: SessionContext | None = None,
+    runtime_config: OutlookRuntimeConfig | None = None,
 ) -> OutlookProvider:
     return _outlook_provider_override or MicrosoftGraphOutlookProvider(
-        _outlook_runtime_config(session, context=context)
+        runtime_config or _outlook_runtime_config(session, context=context)
     )
 
 
@@ -1029,17 +1037,32 @@ def _outlook_runtime_config(
     *,
     context: SessionContext | None = None,
 ) -> OutlookRuntimeConfig:
+    row = None
     if session is not None and context is not None:
         row = _tenant_outlook_configuration(session, company_id=context.company.id)
-        if row is not None and row.enabled:
-            return OutlookRuntimeConfig(
-                client_id=row.client_id,
-                client_secret=_decrypt_secret(row.encrypted_client_secret_ref),
-                tenant_id=(row.tenant_id or "organizations").strip("/")
-                or "organizations",
-                redirect_uri=row.redirect_uri,
-                source="tenant_admin",
-            )
+    return _outlook_runtime_config_from_row(row)
+
+
+def _outlook_runtime_config_from_row(
+    row: TenantOutlookConfiguration | None,
+) -> OutlookRuntimeConfig:
+    if row is not None:
+        # A tenant row is authoritative even when disabled. Falling back to
+        # process-wide credentials here would turn an explicit tenant kill
+        # switch into a silent re-enable.
+        enabled = bool(row.enabled)
+        return OutlookRuntimeConfig(
+            client_id=row.client_id if enabled else None,
+            client_secret=(
+                _decrypt_secret(row.encrypted_client_secret_ref)
+                if enabled
+                else None
+            ),
+            tenant_id=(row.tenant_id or "organizations").strip("/")
+            or "organizations",
+            redirect_uri=row.redirect_uri if enabled else None,
+            source="tenant_admin",
+        )
     return _environment_runtime_config()
 
 
@@ -1646,10 +1669,65 @@ def _google_calendar_provider_config_status(
 _APPROVAL_LABELS = {
     "oauth_consent_model_approved": "OAuth consent model approved",
     "scopes_approved": "Microsoft Graph scopes approved",
-    "durable_runbook_approved": "Durable sync retry/dead-letter/replay runbook approved",
-    "rollback_approved": "Rollback and disable procedure approved",
-    "redaction_rules_approved": "Provider error redaction rules approved",
 }
+
+
+def _machine_control_items(
+    row: TenantOutlookConfiguration | None,
+    runtime_config: OutlookRuntimeConfig,
+) -> list[OutlookMachineReadinessControlStatus]:
+    first_retry = retry_delay_for_attempt(1)
+    second_retry = retry_delay_for_attempt(2)
+    durable_delivery_ready = bool(
+        OUTLOOK_DURABLE_SYNC_FOUNDATION_VERSION
+        and DEFAULT_RETRY_MAXIMUM_ATTEMPTS >= 2
+        and first_retry.total_seconds() > 0
+        and second_retry > first_retry
+        and second_retry <= DEFAULT_RETRY_MAXIMUM_INTERVAL
+        and calendar_sync_replay_safe_clause() is not None
+        and CalendarEventSyncStatus.RETRY_SCHEDULED
+        != CalendarEventSyncStatus.DEAD_LETTER
+    )
+    redaction_probe = "client_secret=connector-readiness-secret"
+    redacted = redact_provider_error(redaction_probe)
+    disable_boundary_ready = bool(
+        row is None or row.enabled or not runtime_config.configured
+    )
+    return [
+        OutlookMachineReadinessControlStatus(
+            key="durable_retry_dead_letter_replay",
+            label="Durable retry, dead-letter, and replay policy",
+            version="calendar-durable-delivery/v1",
+            status="passed" if durable_delivery_ready else "failed",
+            detail=(
+                "Bounded retry, terminal dead-letter, and replay-safe filtering are loaded."
+                if durable_delivery_ready
+                else "Durable retry, dead-letter, or replay-safe policy is incomplete."
+            ),
+        ),
+        OutlookMachineReadinessControlStatus(
+            key="tenant_disable_boundary",
+            label="Tenant disable and rollback boundary",
+            version="outlook-tenant-disable/v1",
+            status="passed" if disable_boundary_ready else "failed",
+            detail=(
+                "Disabled tenant configuration cannot fall back to environment credentials."
+                if disable_boundary_ready
+                else "Tenant disable boundary did not fail closed."
+            ),
+        ),
+        OutlookMachineReadinessControlStatus(
+            key="provider_error_redaction",
+            label="Provider error redaction policy",
+            version="provider-error-redaction/v1",
+            status=(
+                "passed"
+                if "connector-readiness-secret" not in redacted
+                else "failed"
+            ),
+            detail="Secret-bearing provider errors are redacted before persistence.",
+        ),
+    ]
 
 
 def _config_items(runtime_config: OutlookRuntimeConfig) -> list[OutlookConfigurationItemStatus]:
@@ -1676,23 +1754,38 @@ def _config_items(runtime_config: OutlookRuntimeConfig) -> list[OutlookConfigura
 def _approval_items(
     row: TenantOutlookConfiguration | None,
 ) -> list[OutlookApprovalItemStatus]:
-    return [
-        OutlookApprovalItemStatus(
-            key=key,
-            label=label,
-            approved=bool(getattr(row, key, False)) if row is not None else False,
+    approved_scopes = set(row.scopes_json or ()) if row is not None else set()
+    items: list[OutlookApprovalItemStatus] = []
+    for key, label in _APPROVAL_LABELS.items():
+        approved = bool(getattr(row, key, False)) if row is not None else False
+        if key == "scopes_approved":
+            # A checkbox cannot approve a different or incomplete permission
+            # set.  Bind the authority to the exact scopes the connector will
+            # request so an invented/partial list remains fail-closed.
+            approved = approved and set(OUTLOOK_SCOPES).issubset(approved_scopes)
+        items.append(
+            OutlookApprovalItemStatus(
+                key=key,
+                label=label,
+                approved=approved,
+            )
         )
-        for key, label in _APPROVAL_LABELS.items()
-    ]
+    return items
 
 
 def _readiness_value(
     *,
     configured: bool,
     approvals_ready: bool,
+    machine_controls_ready: bool,
     last_test_status: str | None,
 ) -> str:
-    if configured and approvals_ready and last_test_status == "passed":
+    if (
+        configured
+        and approvals_ready
+        and machine_controls_ready
+        and last_test_status == "passed"
+    ):
         return "ready_for_adp20_implementation"
     return "blocked_pending_admin_configuration"
 
@@ -1735,21 +1828,29 @@ def outlook_tenant_configuration_status(
     context: SessionContext,
 ) -> OutlookTenantConfigurationResponse:
     row = _tenant_outlook_configuration(session, company_id=context.company.id)
-    runtime_config = _outlook_runtime_config(session, context=context)
-    provider = _provider(session, context=context)
+    runtime_config = _outlook_runtime_config_from_row(row)
+    provider = _outlook_provider(
+        session,
+        context=context,
+        runtime_config=runtime_config,
+    )
     config_items = _config_items(runtime_config)
     approvals = _approval_items(row)
+    machine_controls = _machine_control_items(row, runtime_config)
     missing_config = [
         item.name for item in config_items if not item.configured
     ]
     missing_approvals = [
         item.key for item in approvals if not item.approved
     ]
+    missing_machine_controls = [
+        item.key for item in machine_controls if item.status != "passed"
+    ]
     connection_count, connected_account_count = _connection_counts(
         session,
         context=context,
     )
-    if row is not None and row.enabled:
+    if row is not None:
         config_source = "tenant_admin"
     elif provider.configured:
         config_source = runtime_config.source
@@ -1763,11 +1864,14 @@ def outlook_tenant_configuration_status(
         enabled=bool(row.enabled) if row is not None else provider.configured,
         required_config=config_items,
         required_approvals=approvals,
+        machine_control_version=OUTLOOK_MACHINE_CONTROL_VERSION,
+        machine_controls=machine_controls,
         approved_scopes=list(row.scopes_json or OUTLOOK_SCOPES)
         if row is not None
         else OUTLOOK_SCOPES,
         missing_config_names=missing_config,
         missing_approval_keys=missing_approvals,
+        missing_machine_control_keys=missing_machine_controls,
         connection_count=connection_count,
         connected_account_count=connected_account_count,
         last_test_status=last_status,  # type: ignore[arg-type]
@@ -1776,6 +1880,7 @@ def outlook_tenant_configuration_status(
         adp20_readiness=_readiness_value(
             configured=provider.configured,
             approvals_ready=approvals_ready,
+            machine_controls_ready=not missing_machine_controls,
             last_test_status=last_status,
         ),  # type: ignore[arg-type]
     )
@@ -1818,9 +1923,6 @@ def update_outlook_tenant_configuration(
     row.scopes_json = list(payload.scopes or OUTLOOK_SCOPES)
     row.oauth_consent_model_approved = payload.oauth_consent_model_approved
     row.scopes_approved = payload.scopes_approved
-    row.durable_runbook_approved = payload.durable_runbook_approved
-    row.rollback_approved = payload.rollback_approved
-    row.redaction_rules_approved = payload.redaction_rules_approved
     row.enabled = payload.enabled
     row.updated_by_membership_id = context.membership.id
     row.last_test_status = "not_run"
@@ -1843,26 +1945,12 @@ def update_outlook_tenant_configuration(
             "approved_keys": [
                 item.key for item in _approval_items(row) if item.approved
             ],
+            "machine_control_version": OUTLOOK_MACHINE_CONTROL_VERSION,
             "enabled": row.enabled,
         },
     )
     session.commit()
     return outlook_tenant_configuration_status(session, context=context)
-
-
-def _current_admin_connection(
-    session: Session,
-    *,
-    context: SessionContext,
-) -> UserCalendarConnection | None:
-    return session.scalar(
-        select(UserCalendarConnection).where(
-            UserCalendarConnection.company_id == context.company.id,
-            UserCalendarConnection.membership_id == context.membership.id,
-            UserCalendarConnection.provider == CalendarProvider.OUTLOOK,
-            UserCalendarConnection.status == CalendarConnectionStatus.CONNECTED,
-        )
-    )
 
 
 def _test_outlook_tenant_configuration_fenced(
@@ -1917,8 +2005,21 @@ def _test_outlook_tenant_configuration_fenced(
             )
             for item in status_summary.required_approvals
         ),
+        *(
+            OutlookReadinessCheckResult(
+                key=item.key,
+                label=f"{item.label} ({item.version})",
+                status=item.status,
+                detail=item.detail,
+            )
+            for item in status_summary.machine_controls
+        ),
     ]
-    if status_summary.missing_config_names or status_summary.missing_approval_keys:
+    if (
+        status_summary.missing_config_names
+        or status_summary.missing_approval_keys
+        or status_summary.missing_machine_control_keys
+    ):
         row.last_test_status = "blocked"
         row.last_tested_at = tested_at
         row.last_error_redacted = "Outlook provider readiness prerequisites are incomplete."
@@ -1927,6 +2028,7 @@ def _test_outlook_tenant_configuration_fenced(
         return OutlookReadinessTestResponse(
             status="blocked",
             checks=checks,
+            machine_control_version=OUTLOOK_MACHINE_CONTROL_VERSION,
             adp20_readiness="blocked_pending_admin_configuration",
             tested_at=tested_at,
         )
@@ -1958,6 +2060,7 @@ def _test_outlook_tenant_configuration_fenced(
         return OutlookReadinessTestResponse(
             status="blocked",
             checks=checks,
+            machine_control_version=OUTLOOK_MACHINE_CONTROL_VERSION,
             adp20_readiness="blocked_pending_admin_configuration",
             tested_at=tested_at,
         )
@@ -2076,12 +2179,17 @@ def _test_outlook_tenant_configuration_fenced(
         target_type="tenant_outlook_configuration",
         target_id=row.id,
         result=audit_result,
-        metadata={"provider": CalendarProvider.OUTLOOK, "check_count": len(checks)},
+        metadata={
+            "provider": CalendarProvider.OUTLOOK,
+            "check_count": len(checks),
+            "machine_control_version": OUTLOOK_MACHINE_CONTROL_VERSION,
+        },
     )
     session.commit()
     return OutlookReadinessTestResponse(
         status="failed" if probe_error is not None else "passed",
         checks=checks,
+        machine_control_version=OUTLOOK_MACHINE_CONTROL_VERSION,
         adp20_readiness=(
             "blocked_pending_admin_configuration"
             if probe_error is not None
@@ -2099,130 +2207,6 @@ def test_outlook_tenant_configuration(
     return _test_outlook_tenant_configuration_fenced(
         session,
         context=context,
-    )
-
-    # Unreachable legacy body retained below until the guarded implementation
-    # is fully exercised by compatibility tests.
-    row = _ensure_tenant_outlook_configuration(session, context=context)
-    tested_at = datetime.now(UTC)
-    status_summary = outlook_tenant_configuration_status(session, context=context)
-    checks: list[OutlookReadinessCheckResult] = []
-    for item in status_summary.required_config:
-        checks.append(
-            OutlookReadinessCheckResult(
-                key=item.name,
-                label=item.name,
-                status="passed" if item.configured else "blocked",
-            )
-        )
-    for approval in status_summary.required_approvals:
-        checks.append(
-            OutlookReadinessCheckResult(
-                key=approval.key,
-                label=approval.label,
-                status="passed" if approval.approved else "blocked",
-            )
-        )
-
-    if status_summary.missing_config_names or status_summary.missing_approval_keys:
-        row.last_test_status = "blocked"
-        row.last_tested_at = tested_at
-        row.last_error_redacted = "Outlook provider readiness prerequisites are incomplete."
-        session.add(row)
-        session.commit()
-        return OutlookReadinessTestResponse(
-            status="blocked",
-            checks=checks,
-            adp20_readiness="blocked_pending_admin_configuration",
-            tested_at=tested_at,
-        )
-
-    connection = _current_admin_connection(session, context=context)
-    if connection is None:
-        checks.append(
-            OutlookReadinessCheckResult(
-                key="OUTLOOK_USER_CONNECTION",
-                label="Admin Outlook OAuth connection",
-                status="blocked",
-                detail="Connect an Outlook account before running the end-to-end test.",
-            )
-        )
-        row.last_test_status = "blocked"
-        row.last_tested_at = tested_at
-        row.last_error_redacted = "Outlook OAuth connection is required."
-        session.add(row)
-        session.commit()
-        return OutlookReadinessTestResponse(
-            status="blocked",
-            checks=checks,
-            adp20_readiness="blocked_pending_admin_configuration",
-            tested_at=tested_at,
-        )
-
-    try:
-        token_payload = _decrypt_token_payload(connection.encrypted_token_ref)
-        provider = _provider(session, context=context)
-        session.commit()
-        provider.validate_connection(
-            token_payload=token_payload,
-        )
-    except Exception as exc:
-        error = _safe_error(exc)
-        checks.append(
-            OutlookReadinessCheckResult(
-                key="MICROSOFT_GRAPH_ME",
-                label="Microsoft Graph /me probe",
-                status="failed",
-                detail=error,
-            )
-        )
-        row.last_test_status = "failed"
-        row.last_tested_at = tested_at
-        row.last_error_redacted = error
-        record_from_context(
-            session,
-            context,
-            action="outlook.configuration.test_failed",
-            target_type="tenant_outlook_configuration",
-            target_id=row.id,
-            result="failed",
-            metadata={"provider": CalendarProvider.OUTLOOK, "error": error},
-        )
-        session.commit()
-        return OutlookReadinessTestResponse(
-            status="failed",
-            checks=checks,
-            adp20_readiness="blocked_pending_admin_configuration",
-            tested_at=tested_at,
-        )
-
-    checks.append(
-        OutlookReadinessCheckResult(
-            key="MICROSOFT_GRAPH_ME",
-            label="Microsoft Graph /me probe",
-            status="passed",
-        )
-    )
-    row.last_test_status = "passed"
-    row.last_tested_at = tested_at
-    row.last_error_redacted = None
-    record_from_context(
-        session,
-        context,
-        action="outlook.configuration.test_passed",
-        target_type="tenant_outlook_configuration",
-        target_id=row.id,
-        metadata={
-            "provider": CalendarProvider.OUTLOOK,
-            "check_count": len(checks),
-        },
-    )
-    session.commit()
-    return OutlookReadinessTestResponse(
-        status="passed",
-        checks=checks,
-        adp20_readiness="ready_for_adp20_implementation",
-        tested_at=tested_at,
     )
 
 
