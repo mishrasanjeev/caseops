@@ -76,6 +76,35 @@ def _is_owner(context: SessionContext) -> bool:
     return context.membership.role == MembershipRole.OWNER
 
 
+def _propagate_private_access_change(
+    session: Session,
+    *,
+    context: SessionContext,
+    target_type: str,
+    target_id: str,
+    target_version: int,
+    reason_code: str,
+    operation_id: str,
+) -> None:
+    """Atomically invalidate private candidates, cache epochs, and saved outputs."""
+
+    from caseops_api.services.private_retrieval import (
+        propagate_private_projection_change,
+    )
+
+    propagate_private_projection_change(
+        session,
+        company_id=context.company.id,
+        actor_membership_id=context.membership.id,
+        idempotency_key=operation_id,
+        event_type="access_changed",
+        target_type=target_type,
+        target_id=target_id,
+        target_version=str(target_version),
+        reason_code=reason_code,
+    )
+
+
 def can_access(
     session: Session,
     *,
@@ -1914,6 +1943,15 @@ def apply_ip_access_change(
     session.add(docket)
     session.flush()
     operation_id = str(uuid4())
+    _propagate_private_access_change(
+        session,
+        context=context,
+        target_type="ip_docket",
+        target_id=docket.id,
+        target_version=docket.access_policy_version,
+        reason_code=f"ip_access_{payload.action}",
+        operation_id=operation_id,
+    )
     record_from_context(
         session,
         context,
@@ -2389,6 +2427,7 @@ def set_restricted_access(
     if matter.restricted_access == restricted:
         return matter
     matter.restricted_access = restricted
+    matter.access_policy_version += 1
     session.add(matter)
     session.flush()
     _assert_matter_access_preserves_live_ip_roles(
@@ -2398,6 +2437,15 @@ def set_restricted_access(
         dockets=dockets,
         memberships=memberships,
         role_ids_by_docket=role_ids_by_docket,
+    )
+    _propagate_private_access_change(
+        session,
+        context=context,
+        target_type="matter",
+        target_id=matter.id,
+        target_version=matter.access_policy_version,
+        reason_code="matter_restricted_access_changed",
+        operation_id=str(uuid4()),
     )
     record_from_context(
         session,
@@ -2454,6 +2502,8 @@ def add_access_grant(
         granted_by_membership_id=context.membership.id,
     )
     session.add(grant)
+    matter.access_policy_version += 1
+    session.add(matter)
     session.flush()
     _assert_matter_access_preserves_live_ip_roles(
         session,
@@ -2462,6 +2512,15 @@ def add_access_grant(
         dockets=dockets,
         memberships=memberships,
         role_ids_by_docket=role_ids_by_docket,
+    )
+    _propagate_private_access_change(
+        session,
+        context=context,
+        target_type="matter",
+        target_id=matter.id,
+        target_version=matter.access_policy_version,
+        reason_code="matter_access_grant_added",
+        operation_id=str(uuid4()),
     )
     record_from_context(
         session,
@@ -2507,6 +2566,8 @@ def remove_access_grant(
             status_code=status.HTTP_404_NOT_FOUND, detail="Grant not found."
         )
     session.delete(grant)
+    matter.access_policy_version += 1
+    session.add(matter)
     session.flush()
     _assert_matter_access_preserves_live_ip_roles(
         session,
@@ -2515,6 +2576,15 @@ def remove_access_grant(
         dockets=dockets,
         memberships=memberships,
         role_ids_by_docket=role_ids_by_docket,
+    )
+    _propagate_private_access_change(
+        session,
+        context=context,
+        target_type="matter",
+        target_id=matter.id,
+        target_version=matter.access_policy_version,
+        reason_code="matter_access_grant_removed",
+        operation_id=str(uuid4()),
     )
     record_from_context(
         session,
@@ -2567,6 +2637,8 @@ def add_ethical_wall(
         created_by_membership_id=context.membership.id,
     )
     session.add(wall)
+    matter.access_policy_version += 1
+    session.add(matter)
     session.flush()
     _assert_matter_access_preserves_live_ip_roles(
         session,
@@ -2575,6 +2647,15 @@ def add_ethical_wall(
         dockets=dockets,
         memberships=memberships,
         role_ids_by_docket=role_ids_by_docket,
+    )
+    _propagate_private_access_change(
+        session,
+        context=context,
+        target_type="matter",
+        target_id=matter.id,
+        target_version=matter.access_policy_version,
+        reason_code="matter_ethical_wall_added",
+        operation_id=str(uuid4()),
     )
     record_from_context(
         session,
@@ -2620,6 +2701,8 @@ def remove_ethical_wall(
         )
     excluded = wall.excluded_membership_id
     session.delete(wall)
+    matter.access_policy_version += 1
+    session.add(matter)
     session.flush()
     _assert_matter_access_preserves_live_ip_roles(
         session,
@@ -2628,6 +2711,15 @@ def remove_ethical_wall(
         dockets=dockets,
         memberships=memberships,
         role_ids_by_docket=role_ids_by_docket,
+    )
+    _propagate_private_access_change(
+        session,
+        context=context,
+        target_type="matter",
+        target_id=matter.id,
+        target_version=matter.access_policy_version,
+        reason_code="matter_ethical_wall_removed",
+        operation_id=str(uuid4()),
     )
     record_from_context(
         session,

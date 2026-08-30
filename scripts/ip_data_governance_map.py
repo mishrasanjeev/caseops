@@ -606,6 +606,25 @@ def _non_sql_data_classes() -> list[dict[str, object]]:
         },
         {
             **defaults,
+            "id": "tenant-private-retrieval-candidate-cache",
+            "kind": "cache",
+            "purpose": (
+                "Ephemeral process-local private-retrieval candidate identifiers. Keys are "
+                "partitioned by tenant, membership, active index generation, access epoch, "
+                "tombstone epoch, query hash, filters and locale; values contain identifiers "
+                "only, and every hit is hydrated and reauthorized against current SQL state."
+            ),
+            "sensitivity": "confidential_access_identifiers",
+            "source_licence_limits": (
+                "Never cache source content, snippets, ranks, grants or authorization "
+                "decisions; tenant invalidation and hydration reauthorization are mandatory."
+            ),
+            "implementation_refs": [
+                "apps/api/src/caseops_api/services/private_retrieval.py",
+            ],
+        },
+        {
+            **defaults,
             "id": "sql-relational-index-projections",
             "kind": "sql_index_projection",
             "purpose": (

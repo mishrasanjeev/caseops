@@ -4,7 +4,7 @@ import hashlib
 import json
 from collections import defaultdict
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, Literal
 
 from fastapi import HTTPException
 from sqlalchemy import or_, select
@@ -70,6 +70,35 @@ from caseops_api.services.matter_access import visible_ip_dockets_filter
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.storage_governance import assert_storage_quota_allows_upload
 from caseops_api.services.virus_scan import reject_if_infected
+
+
+def _propagate_private_document_change(
+    session: Session,
+    *,
+    context: SessionContext,
+    document: IpDocument,
+    event_type: Literal[
+        "source_changed", "access_changed", "revoked", "tombstoned", "reindex"
+    ],
+    reason_code: str,
+    idempotency_key: str,
+) -> None:
+    from caseops_api.services.private_retrieval import (
+        propagate_private_projection_change,
+    )
+
+    propagate_private_projection_change(
+        session,
+        company_id=context.company.id,
+        actor_membership_id=context.membership.id,
+        idempotency_key=idempotency_key,
+        event_type=event_type,
+        target_type="ip_document",
+        target_id=document.id,
+        target_version=str(document.current_version),
+        reason_code=reason_code,
+    )
+
 
 LOW_OCR_QUALITY_THRESHOLD = 0.65
 _TARGET_MODELS = {
@@ -966,6 +995,14 @@ def upload_ip_document_version(
         version.sha256_hex = stored.sha256_hex
         previous.state = "superseded"
         document.current_version = next_version
+        _propagate_private_document_change(
+            session,
+            context=context,
+            document=document,
+            event_type="source_changed",
+            reason_code="ip_document_version_superseded",
+            idempotency_key=f"ip-document-version:{document.id}:{next_version}",
+        )
         job = enqueue_processing_job(
             session,
             company_id=context.company.id,
@@ -1072,6 +1109,17 @@ def add_ip_document_links(
             target=target,
         )
         created.append(row.id)
+    _propagate_private_document_change(
+        session,
+        context=context,
+        document=document,
+        event_type="access_changed",
+        reason_code="ip_document_links_changed",
+        idempotency_key=(
+            f"ip-document-links:{document.id}:{document.current_version}:"
+            f"{hashlib.sha256('|'.join(sorted(created)).encode('utf-8')).hexdigest()}"
+        ),
+    )
     record_from_context(
         session,
         context,
@@ -1131,6 +1179,17 @@ def transition_ip_document_state(
         version.locked_at = utcnow()
     version.state = payload.target_state
     session.add(version)
+    _propagate_private_document_change(
+        session,
+        context=context,
+        document=document,
+        event_type="source_changed",
+        reason_code="ip_document_state_changed",
+        idempotency_key=(
+            f"ip-document-state:{document.id}:{version.version}:"
+            f"{payload.expected_state}:{payload.target_state}"
+        ),
+    )
     record_from_context(
         session,
         context,
@@ -1281,6 +1340,14 @@ def apply_ip_document_bulk_update(
         document.taxonomy_entry_id = taxonomy.id
         version.display_name = preview.proposed_display_name
         session.add_all([document, version])
+        _propagate_private_document_change(
+            session,
+            context=context,
+            document=document,
+            event_type="source_changed",
+            reason_code="ip_document_metadata_changed",
+            idempotency_key=f"ip-document-bulk:{payload.preview_token}:{document.id}",
+        )
     record_from_context(
         session,
         context,
