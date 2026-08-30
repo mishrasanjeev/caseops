@@ -10,6 +10,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from caseops_api.core.redaction import redact_provider_error
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     CalendarConnectionStatus,
@@ -27,12 +28,14 @@ from caseops_api.schemas.google_workspace import (
     GoogleWorkspaceApprovalItemStatus,
     GoogleWorkspaceConfigurationItemStatus,
     GoogleWorkspaceConnectionCounts,
+    GoogleWorkspaceMachineReadinessControlStatus,
     GoogleWorkspaceReadinessCheckResult,
     GoogleWorkspaceReadinessTestResponse,
     GoogleWorkspaceTenantConfigurationResponse,
     GoogleWorkspaceTenantConfigurationUpdateRequest,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.notification_delivery import retry_delay_for_attempt
 from caseops_api.services.session_context import SessionContext
 
 GoogleWorkspaceConnector = Literal["calendar", "gmail", "drive"]
@@ -48,6 +51,9 @@ GOOGLE_WORKSPACE_SCOPES = sorted(
         *GOOGLE_WORKSPACE_GMAIL_SCOPES,
         *GOOGLE_WORKSPACE_DRIVE_SCOPES,
     }
+)
+GOOGLE_WORKSPACE_MACHINE_CONTROL_VERSION = (
+    "google-workspace-connector-controls/2026-08-30.1"
 )
 
 _CONNECTOR_REQUIRED_CONFIG_NAMES = {
@@ -85,8 +91,6 @@ _ENV_REQUIRED_CONFIG_NAMES = {
 _APPROVAL_LABELS = {
     "oauth_consent_model_approved": "Google Workspace OAuth consent approved",
     "scopes_approved": "Calendar, Gmail, and Drive scopes approved",
-    "webhook_runbook_approved": "Gmail webhook and disable runbook reviewed",
-    "redaction_rules_approved": "Provider error redaction rules approved",
 }
 
 
@@ -351,6 +355,94 @@ def _approval_items(
     ]
 
 
+def _machine_control_items(
+    session: Session,
+    *,
+    context: SessionContext,
+    row: TenantGoogleWorkspaceConfiguration | None,
+) -> list[GoogleWorkspaceMachineReadinessControlStatus]:
+    first_retry = retry_delay_for_attempt(1)
+    second_retry = retry_delay_for_attempt(2)
+    settings = get_settings()
+    webhook_values = (
+        bool(settings.gmail_pubsub_topic),
+        bool(settings.gmail_webhook_verification_token),
+    )
+    gmail_enabled = bool(row is None or (row.enabled and row.gmail_enabled))
+    webhook_configuration_consistent = bool(
+        not gmail_enabled or all(webhook_values) or not any(webhook_values)
+    )
+    disable_boundary_ready = bool(
+        row is None
+        or row.enabled
+        or all(
+            not google_workspace_oauth_config(
+                session,
+                context=context,
+                connector=connector,
+            ).configured
+            for connector in ("calendar", "gmail", "drive")
+        )
+    )
+    redaction_probe = "client_secret=connector-readiness-secret"
+    redacted = redact_provider_error(redaction_probe)
+    return [
+        GoogleWorkspaceMachineReadinessControlStatus(
+            key="provider_retry_policy",
+            label="Bounded provider retry policy",
+            version="provider-delivery-retry/v1",
+            status=(
+                "passed"
+                if first_retry.total_seconds() > 0 and second_retry >= first_retry
+                else "failed"
+            ),
+            detail="Bounded exponential retry policy loaded.",
+        ),
+        GoogleWorkspaceMachineReadinessControlStatus(
+            key="gmail_webhook_disable_boundary",
+            label="Gmail webhook configuration and disable boundary",
+            version="gmail-webhook-fail-closed/v1",
+            status="passed" if webhook_configuration_consistent else "blocked",
+            detail=(
+                "Gmail is tenant-disabled; webhook delivery remains disabled."
+                if not gmail_enabled
+                else (
+                    "Webhook signing configuration is complete."
+                    if all(webhook_values)
+                    else (
+                        "Webhook delivery is fail-closed disabled because no webhook "
+                        "configuration is present."
+                        if not any(webhook_values)
+                        else "Webhook configuration is partial; configure both required values."
+                    )
+                )
+            ),
+        ),
+        GoogleWorkspaceMachineReadinessControlStatus(
+            key="tenant_disable_boundary",
+            label="Tenant connector disable boundary",
+            version="google-workspace-tenant-disable/v1",
+            status="passed" if disable_boundary_ready else "failed",
+            detail=(
+                "Disabled tenant connectors cannot fall back to environment credentials."
+                if disable_boundary_ready
+                else "Tenant disable boundary did not fail closed."
+            ),
+        ),
+        GoogleWorkspaceMachineReadinessControlStatus(
+            key="provider_error_redaction",
+            label="Provider error redaction policy",
+            version="provider-error-redaction/v1",
+            status=(
+                "passed"
+                if "connector-readiness-secret" not in redacted
+                else "failed"
+            ),
+            detail="Secret-bearing provider errors are redacted before persistence.",
+        ),
+    ]
+
+
 def _enabled_connectors(
     row: TenantGoogleWorkspaceConfiguration | None,
 ) -> tuple[GoogleWorkspaceConnector, ...]:
@@ -453,9 +545,15 @@ def _readiness_value(
     *,
     configured: bool,
     approvals_ready: bool,
+    machine_controls_ready: bool,
     last_test_status: str | None,
 ) -> str:
-    if configured and approvals_ready and last_test_status == "passed":
+    if (
+        configured
+        and approvals_ready
+        and machine_controls_ready
+        and last_test_status == "passed"
+    ):
         return "ready_for_user_connections"
     return "blocked_pending_admin_configuration"
 
@@ -477,6 +575,11 @@ def google_workspace_tenant_configuration_status(
     }
     required_config = _config_items(row)
     required_approvals = _approval_items(row)
+    machine_controls = _machine_control_items(
+        session,
+        context=context,
+        row=row,
+    )
     missing_config_names: list[str] = []
     if row is not None:
         for connector in enabled_connectors:
@@ -493,6 +596,9 @@ def google_workspace_tenant_configuration_status(
                 missing_config_names.append(item.name)
     missing_approval_keys = [
         item.key for item in required_approvals if not item.approved
+    ]
+    missing_machine_control_keys = [
+        item.key for item in machine_controls if item.status != "passed"
     ]
     configured = bool(
         enabled_connectors
@@ -528,9 +634,12 @@ def google_workspace_tenant_configuration_status(
         drive_enabled=drive_enabled,
         required_config=required_config,
         required_approvals=required_approvals,
+        machine_control_version=GOOGLE_WORKSPACE_MACHINE_CONTROL_VERSION,
+        machine_controls=machine_controls,
         approved_scopes=scopes,
         missing_config_names=missing_config_names,
         missing_approval_keys=missing_approval_keys,
+        missing_machine_control_keys=missing_machine_control_keys,
         connection_counts=_connection_counts(session, context=context),
         last_test_status=last_test_status,  # type: ignore[arg-type]
         last_tested_at=last_tested_at,
@@ -538,6 +647,7 @@ def google_workspace_tenant_configuration_status(
         readiness=_readiness_value(
             configured=configured,
             approvals_ready=approvals_ready,
+            machine_controls_ready=not missing_machine_control_keys,
             last_test_status=last_test_status,
         ),  # type: ignore[arg-type]
     )
@@ -563,8 +673,6 @@ def update_google_workspace_tenant_configuration(
     row.scopes_json = list(payload.scopes or GOOGLE_WORKSPACE_SCOPES)
     row.oauth_consent_model_approved = payload.oauth_consent_model_approved
     row.scopes_approved = payload.scopes_approved
-    row.webhook_runbook_approved = payload.webhook_runbook_approved
-    row.redaction_rules_approved = payload.redaction_rules_approved
     row.calendar_enabled = payload.calendar_enabled
     row.gmail_enabled = payload.gmail_enabled
     row.drive_enabled = payload.drive_enabled
@@ -587,6 +695,7 @@ def update_google_workspace_tenant_configuration(
             "approved_keys": [
                 item.key for item in _approval_items(row) if item.approved
             ],
+            "machine_control_version": GOOGLE_WORKSPACE_MACHINE_CONTROL_VERSION,
             "enabled": row.enabled,
             "calendar_enabled": row.calendar_enabled,
             "gmail_enabled": row.gmail_enabled,
@@ -627,6 +736,15 @@ def test_google_workspace_tenant_configuration(
                 detail=None if item.approved else "Tenant admin approval is pending.",
             )
         )
+    for item in status_summary.machine_controls:
+        checks.append(
+            GoogleWorkspaceReadinessCheckResult(
+                key=item.key,
+                label=f"{item.label} ({item.version})",
+                status=item.status,
+                detail=item.detail,
+            )
+        )
     if not (
         status_summary.calendar_enabled
         or status_summary.gmail_enabled
@@ -643,7 +761,11 @@ def test_google_workspace_tenant_configuration(
     passed = all(item.status == "passed" for item in checks)
     row.last_test_status = "passed" if passed else "blocked"
     row.last_tested_at = tested_at
-    row.last_error_redacted = None if passed else "Configuration or approvals are incomplete."
+    row.last_error_redacted = (
+        None
+        if passed
+        else "Configuration, provider authority, or machine controls are incomplete."
+    )
     session.add(row)
     record_from_context(
         session,
@@ -656,6 +778,10 @@ def test_google_workspace_tenant_configuration(
             "status": row.last_test_status,
             "missing_config_names": status_summary.missing_config_names,
             "missing_approval_keys": status_summary.missing_approval_keys,
+            "missing_machine_control_keys": (
+                status_summary.missing_machine_control_keys
+            ),
+            "machine_control_version": GOOGLE_WORKSPACE_MACHINE_CONTROL_VERSION,
             "external_provider_calls": 0,
         },
     )
@@ -664,6 +790,7 @@ def test_google_workspace_tenant_configuration(
     return GoogleWorkspaceReadinessTestResponse(
         status=row.last_test_status,  # type: ignore[arg-type]
         checks=checks,
+        machine_control_version=GOOGLE_WORKSPACE_MACHINE_CONTROL_VERSION,
         readiness=latest.readiness,
         tested_at=tested_at,
     )

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
 from urllib.parse import parse_qs, urlparse
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from caseops_api.core.settings import get_settings
 from caseops_api.db.models import AuditEvent, TenantGoogleWorkspaceConfiguration
 from caseops_api.db.session import get_session_factory
 from tests.test_legalworkspace_calendar_sync import _auth, _bootstrap_company
@@ -30,8 +32,6 @@ def _configure_google_workspace(client: TestClient, token: str) -> None:
             ],
             "oauth_consent_model_approved": True,
             "scopes_approved": True,
-            "webhook_runbook_approved": True,
-            "redaction_rules_approved": True,
             "calendar_enabled": True,
             "gmail_enabled": True,
             "drive_enabled": True,
@@ -41,6 +41,14 @@ def _configure_google_workspace(client: TestClient, token: str) -> None:
     assert response.status_code == 200, response.text
     assert response.json()["configured"] is True
     assert response.json()["config_source"] == "tenant_admin"
+    assert {
+        item["key"] for item in response.json()["required_approvals"]
+    } == {"oauth_consent_model_approved", "scopes_approved"}
+    assert response.json()["missing_machine_control_keys"] == []
+    assert all(
+        item["status"] == "passed"
+        for item in response.json()["machine_controls"]
+    )
     assert "tenant-google-secret" not in response.text
     assert "tenant-google-client" not in response.text
 
@@ -70,6 +78,8 @@ def test_google_workspace_tenant_config_is_secret_safe_audited_and_used_for_oaut
         assert row.encrypted_client_secret_ref is not None
         assert row.encrypted_client_secret_ref.startswith("fernet:")
         assert "tenant-google-secret" not in row.encrypted_client_secret_ref
+        assert row.webhook_runbook_approved is False
+        assert row.redaction_rules_approved is False
         audit = session.scalar(
             select(AuditEvent).where(
                 AuditEvent.action == "google_workspace.configuration.updated"
@@ -83,6 +93,9 @@ def test_google_workspace_tenant_config_is_secret_safe_audited_and_used_for_oaut
     )
     assert tested.status_code == 200, tested.text
     assert tested.json()["status"] == "passed"
+    assert tested.json()["machine_control_version"].startswith(
+        "google-workspace-connector-controls/"
+    )
     assert "tenant-google-secret" not in tested.text
     with factory() as session:
         audit = session.scalar(
@@ -91,6 +104,9 @@ def test_google_workspace_tenant_config_is_secret_safe_audited_and_used_for_oaut
             )
         )
         assert audit is not None
+        metadata = json.loads(audit.metadata_json or "{}")
+        assert metadata["external_provider_calls"] == 0
+        assert metadata["missing_machine_control_keys"] == []
 
     calendar_start = client.post(
         "/api/calendar/connections/google-calendar/start",
@@ -175,6 +191,51 @@ def test_google_workspace_tenant_config_is_secret_safe_audited_and_used_for_oaut
         "required_config_names"
     ]
     assert "tenant-google-secret" not in readiness.text
+
+
+def test_google_readiness_blocks_partial_webhook_configuration_offline(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    bootstrap = _bootstrap_company(
+        client,
+        slug="google-workspace-partial-webhook",
+        email="owner@google-workspace-partial-webhook.example",
+    )
+    token = str(bootstrap["access_token"])
+    _configure_google_workspace(client, token)
+    monkeypatch.setenv(
+        "CASEOPS_GMAIL_PUBSUB_TOPIC",
+        "projects/caseops/topics/partial-webhook",
+    )
+    monkeypatch.delenv("CASEOPS_GMAIL_WEBHOOK_VERIFICATION_TOKEN", raising=False)
+    get_settings.cache_clear()
+
+    tested = client.post(
+        "/api/admin/google-workspace-configuration/test",
+        headers=_auth(token),
+    )
+    assert tested.status_code == 200, tested.text
+    assert tested.json()["status"] == "blocked"
+    control = next(
+        item
+        for item in tested.json()["checks"]
+        if item["key"] == "gmail_webhook_disable_boundary"
+    )
+    assert control["status"] == "blocked"
+
+    with get_session_factory()() as session:
+        audit = session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.action == "google_workspace.configuration.tested"
+            )
+        )
+        assert audit is not None
+        metadata = json.loads(audit.metadata_json or "{}")
+        assert metadata["external_provider_calls"] == 0
+        assert metadata["missing_machine_control_keys"] == [
+            "gmail_webhook_disable_boundary"
+        ]
 
 
 def test_google_workspace_configuration_is_cross_tenant_scoped(

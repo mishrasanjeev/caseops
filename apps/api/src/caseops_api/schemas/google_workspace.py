@@ -34,6 +34,14 @@ class GoogleWorkspaceApprovalItemStatus(BaseModel):
     approved: bool
 
 
+class GoogleWorkspaceMachineReadinessControlStatus(BaseModel):
+    key: str
+    label: str
+    version: str
+    status: GoogleWorkspaceReadinessItemStatusLiteral
+    detail: str | None = None
+
+
 class GoogleWorkspaceConnectionCounts(BaseModel):
     calendar_connection_count: int = Field(ge=0)
     gmail_connection_count: int = Field(ge=0)
@@ -53,9 +61,12 @@ class GoogleWorkspaceTenantConfigurationResponse(BaseModel):
     drive_enabled: bool
     required_config: list[GoogleWorkspaceConfigurationItemStatus]
     required_approvals: list[GoogleWorkspaceApprovalItemStatus]
+    machine_control_version: str
+    machine_controls: list[GoogleWorkspaceMachineReadinessControlStatus]
     approved_scopes: list[str] = Field(default_factory=list)
     missing_config_names: list[str] = Field(default_factory=list)
     missing_approval_keys: list[str] = Field(default_factory=list)
+    missing_machine_control_keys: list[str] = Field(default_factory=list)
     connection_counts: GoogleWorkspaceConnectionCounts
     last_test_status: GoogleWorkspaceReadinessItemStatusLiteral = "not_run"
     last_tested_at: datetime | None = None
@@ -72,8 +83,6 @@ class GoogleWorkspaceTenantConfigurationUpdateRequest(BaseModel):
     scopes: list[str] | None = None
     oauth_consent_model_approved: bool = False
     scopes_approved: bool = False
-    webhook_runbook_approved: bool = False
-    redaction_rules_approved: bool = False
     calendar_enabled: bool = True
     gmail_enabled: bool = True
     drive_enabled: bool = True
@@ -106,5 +115,6 @@ class GoogleWorkspaceReadinessTestResponse(BaseModel):
     provider: GoogleWorkspaceProviderLiteral = "google_workspace"
     status: GoogleWorkspaceReadinessItemStatusLiteral
     checks: list[GoogleWorkspaceReadinessCheckResult]
+    machine_control_version: str
     readiness: GoogleWorkspaceReadinessLiteral
     tested_at: datetime

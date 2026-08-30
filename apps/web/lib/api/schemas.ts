@@ -2243,6 +2243,14 @@ export const outlookApprovalItemStatus = z.object({
   approved: z.boolean(),
 });
 
+export const outlookMachineReadinessControlStatus = z.object({
+  key: z.string(),
+  label: z.string(),
+  version: z.string(),
+  status: z.enum(["passed", "failed", "blocked", "not_run"]),
+  detail: z.string().nullable().optional(),
+});
+
 export const outlookTenantConfigurationResponse = z.object({
   provider: z.literal("outlook").default("outlook"),
   configured: z.boolean(),
@@ -2250,9 +2258,12 @@ export const outlookTenantConfigurationResponse = z.object({
   enabled: z.boolean(),
   required_config: z.array(outlookConfigurationItemStatus),
   required_approvals: z.array(outlookApprovalItemStatus),
+  machine_control_version: z.string(),
+  machine_controls: z.array(outlookMachineReadinessControlStatus),
   approved_scopes: z.array(z.string()).default([]),
   missing_config_names: z.array(z.string()).default([]),
   missing_approval_keys: z.array(z.string()).default([]),
+  missing_machine_control_keys: z.array(z.string()).default([]),
   connection_count: z.number().int().min(0),
   connected_account_count: z.number().int().min(0),
   last_test_status: z
@@ -2277,6 +2288,7 @@ export const outlookReadinessTestResponse = z.object({
   provider: z.literal("outlook").default("outlook"),
   status: z.enum(["passed", "failed", "blocked", "not_run"]),
   checks: z.array(outlookReadinessCheckResult),
+  machine_control_version: z.string(),
   adp20_readiness: z.enum([
     "blocked_pending_admin_configuration",
     "ready_for_adp20_implementation",
@@ -2293,6 +2305,14 @@ export const googleWorkspaceApprovalItemStatus = z.object({
   key: z.string(),
   label: z.string(),
   approved: z.boolean(),
+});
+
+export const googleWorkspaceMachineReadinessControlStatus = z.object({
+  key: z.string(),
+  label: z.string(),
+  version: z.string(),
+  status: z.enum(["passed", "failed", "blocked", "not_run"]),
+  detail: z.string().nullable().optional(),
 });
 
 export const googleWorkspaceConnectionCounts = z.object({
@@ -2314,9 +2334,12 @@ export const googleWorkspaceTenantConfigurationResponse = z.object({
   drive_enabled: z.boolean(),
   required_config: z.array(googleWorkspaceConfigurationItemStatus),
   required_approvals: z.array(googleWorkspaceApprovalItemStatus),
+  machine_control_version: z.string(),
+  machine_controls: z.array(googleWorkspaceMachineReadinessControlStatus),
   approved_scopes: z.array(z.string()).default([]),
   missing_config_names: z.array(z.string()).default([]),
   missing_approval_keys: z.array(z.string()).default([]),
+  missing_machine_control_keys: z.array(z.string()).default([]),
   connection_counts: googleWorkspaceConnectionCounts,
   last_test_status: z
     .enum(["passed", "failed", "blocked", "not_run"])
@@ -2340,6 +2363,7 @@ export const googleWorkspaceReadinessTestResponse = z.object({
   provider: z.literal("google_workspace").default("google_workspace"),
   status: z.enum(["passed", "failed", "blocked", "not_run"]),
   checks: z.array(googleWorkspaceReadinessCheckResult),
+  machine_control_version: z.string(),
   readiness: z.enum([
     "blocked_pending_admin_configuration",
     "ready_for_user_connections",

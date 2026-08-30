@@ -96,6 +96,23 @@ Calendar, Gmail, and Drive status. Calendar and Gmail route to `/app/calendar`
 for connection/import/watch actions. Drive connects and lists recent file
 metadata in the same panel. Durable Drive sync/import is still not enabled.
 
+The admin records only real provider authorities: Google OAuth consent and the
+requested scope set. The page does not ask an operator to approve internal
+webhook, retry, disable, or redaction runbooks. Those checks are reported from
+the versioned `google-workspace-connector-controls/2026-08-30.1` machine policy:
+
+- bounded provider retry policy;
+- complete webhook signing configuration, or a verified fail-closed disabled
+  webhook when both values are absent;
+- tenant disable without environment-credential fallback;
+- provider-error redaction.
+
+The Google readiness test remains offline and records
+`external_provider_calls=0`; it validates configuration shape and the machine
+boundaries without inventing a provider call. Real OAuth, scopes, credentials,
+enabled-service state, webhook signing values when webhook delivery is enabled,
+and each provider's own fail-closed checks remain mandatory.
+
 Tenant users with document upload access use:
 
 ```text

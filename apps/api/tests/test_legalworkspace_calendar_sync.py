@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     AuditEvent,
     CalendarConnectionStatus,
@@ -251,9 +252,6 @@ def _configure_ready_outlook(
             "scopes": ["offline_access", "User.Read", "Calendars.ReadWrite"],
             "oauth_consent_model_approved": True,
             "scopes_approved": True,
-            "durable_runbook_approved": True,
-            "rollback_approved": True,
-            "redaction_rules_approved": True,
             "enabled": True,
         },
     )
@@ -729,9 +727,6 @@ def test_admin_outlook_configuration_stores_secret_encrypted_and_names_only(
             "scopes": ["offline_access", "User.Read", "Calendars.ReadWrite"],
             "oauth_consent_model_approved": True,
             "scopes_approved": True,
-            "durable_runbook_approved": True,
-            "rollback_approved": True,
-            "redaction_rules_approved": True,
             "enabled": True,
         },
     )
@@ -741,6 +736,12 @@ def test_admin_outlook_configuration_stores_secret_encrypted_and_names_only(
     assert body["config_source"] == "tenant_admin"
     assert body["missing_config_names"] == []
     assert body["missing_approval_keys"] == []
+    assert body["missing_machine_control_keys"] == []
+    assert {item["key"] for item in body["required_approvals"]} == {
+        "oauth_consent_model_approved",
+        "scopes_approved",
+    }
+    assert all(item["status"] == "passed" for item in body["machine_controls"])
     assert "fixture-credential-value" not in response.text
     assert "client-id-value" not in response.text
 
@@ -752,6 +753,50 @@ def test_admin_outlook_configuration_stores_secret_encrypted_and_names_only(
         assert row.encrypted_client_secret_ref is not None
         assert row.encrypted_client_secret_ref.startswith("fernet:")
         assert "fixture-credential-value" not in row.encrypted_client_secret_ref
+        # Old columns remain only for a safe mixed-revision rollout. They are
+        # not written by the current API and do not gate readiness.
+        assert row.durable_runbook_approved is False
+        assert row.rollback_approved is False
+        assert row.redaction_rules_approved is False
+
+
+def test_disabled_tenant_outlook_never_falls_back_to_environment_credentials(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    monkeypatch.setenv("CASEOPS_OUTLOOK_CLIENT_ID", "environment-client")
+    monkeypatch.setenv("CASEOPS_OUTLOOK_CLIENT_SECRET", "environment-secret")
+    monkeypatch.setenv(
+        "CASEOPS_OUTLOOK_REDIRECT_URI",
+        "https://environment.example.test/outlook/callback",
+    )
+    get_settings.cache_clear()
+
+    disabled = client.patch(
+        "/api/admin/outlook-configuration",
+        headers=_auth(token),
+        json={
+            "client_id": "tenant-client",
+            "client_secret": "tenant-secret",
+            "redirect_uri": "https://tenant.example.test/outlook/callback",
+            "oauth_consent_model_approved": True,
+            "scopes_approved": True,
+            "enabled": False,
+        },
+    )
+    assert disabled.status_code == 200, disabled.text
+    assert disabled.json()["configured"] is False
+    assert disabled.json()["enabled"] is False
+
+    start = client.post(
+        "/api/calendar/connections/outlook/start",
+        headers=_auth(token),
+    )
+    assert start.status_code == 200, start.text
+    assert start.json()["provider_available"] is False
+    assert "environment-client" not in start.text
 
 
 def test_admin_outlook_readiness_test_requires_connection_then_unblocks(
@@ -773,9 +818,6 @@ def test_admin_outlook_readiness_test_requires_connection_then_unblocks(
                 "scopes": ["offline_access", "User.Read", "Calendars.ReadWrite"],
                 "oauth_consent_model_approved": True,
                 "scopes_approved": True,
-                "durable_runbook_approved": True,
-                "rollback_approved": True,
-                "redaction_rules_approved": True,
                 "enabled": True,
             },
         )
