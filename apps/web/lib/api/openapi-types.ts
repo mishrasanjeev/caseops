@@ -11608,6 +11608,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/private-retrieval/integrity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read safe tenant-private projection release aggregates. */
+        get: operations["get_private_retrieval_integrity_api_private_retrieval_integrity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/private-retrieval/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Search current permitted tenant-private projections. */
+        post: operations["search_private_retrieval_api_private_retrieval_search_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/product-guide/catalog": {
         parameters: {
             query?: never;
@@ -38807,6 +38841,83 @@ export interface components {
             sample_size: number;
             /** Top Outcome Label */
             top_outcome_label: string | null;
+        };
+        /** PrivateRetrievalIntegrityResponse */
+        PrivateRetrievalIntegrityResponse: {
+            /** Activation Reason */
+            activation_reason: string;
+            /** Active Generation Id */
+            active_generation_id: string | null;
+            /** Blockers */
+            blockers: string[];
+            /** Failed Event Count */
+            failed_event_count: number;
+            /** Generation Manifest Matches */
+            generation_manifest_matches: boolean;
+            /** Live Projection Count */
+            live_projection_count: number;
+            /** Oldest Pending Lag Seconds */
+            oldest_pending_lag_seconds: number | null;
+            /** Orphan Scope Count */
+            orphan_scope_count: number;
+            /** Pending Event Count */
+            pending_event_count: number;
+            /** Release Blocked */
+            release_blocked: boolean;
+            /** Stale Source Count */
+            stale_source_count: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "ready" | "blocked" | "disabled";
+            /** Tombstoned Projection Count */
+            tombstoned_projection_count: number;
+            /** Unsafe Tombstone Count */
+            unsafe_tombstone_count: number;
+        };
+        /** PrivateRetrievalResultRecord */
+        PrivateRetrievalResultRecord: {
+            /** Content */
+            content: string;
+            /** Label */
+            label: string;
+            /** Projection Id */
+            projection_id: string;
+            /** Score */
+            score: number;
+            /** Source Id */
+            source_id: string;
+            /** Source Type */
+            source_type: string;
+            /** Source Version */
+            source_version: string;
+        };
+        /** PrivateRetrievalSearchRequest */
+        PrivateRetrievalSearchRequest: {
+            /**
+             * Limit
+             * @default 10
+             */
+            limit: number;
+            /**
+             * Locale
+             * @default en-IN
+             */
+            locale: string;
+            /** Query */
+            query: string;
+            /** Scope Ids */
+            scope_ids?: {
+                [key: string]: string[];
+            };
+            /** Source Types */
+            source_types?: ("client" | "matter" | "matter_document" | "ip_docket" | "ip_document")[];
+        };
+        /** PrivateRetrievalSearchResponse */
+        PrivateRetrievalSearchResponse: {
+            /** Items */
+            items: components["schemas"]["PrivateRetrievalResultRecord"][];
         };
         /** ProceedingIntelligenceResponse */
         ProceedingIntelligenceResponse: {
@@ -66348,6 +66459,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortalInstructionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_private_retrieval_integrity_api_private_retrieval_integrity_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrivateRetrievalIntegrityResponse"];
+                };
+            };
+        };
+    };
+    search_private_retrieval_api_private_retrieval_search_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrivateRetrievalSearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrivateRetrievalSearchResponse"];
                 };
             };
             /** @description Validation Error */

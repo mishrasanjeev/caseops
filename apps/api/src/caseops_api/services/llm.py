@@ -227,7 +227,11 @@ def _mock_workspace_assistant_response(prompt: str) -> str:
             separators=(",", ":"),
         )
     first_id, first_label, first_text = sources[0]
-    preview = " ".join(first_text.split()[:55])
+    # The deterministic provider must exercise the same untrusted-source
+    # boundary as a real provider; echoing source instructions makes local E2E
+    # safety evidence meaningless and can teach fixtures the wrong contract.
+    safe_text = _mock_remove_document_instructions(first_text)
+    preview = " ".join((safe_text or first_text).split()[:55])
     return json.dumps(
         {
             "status": "answered",

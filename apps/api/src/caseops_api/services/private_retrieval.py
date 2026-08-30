@@ -22,6 +22,7 @@ from typing import Literal
 from sqlalchemy import and_, delete, exists, func, not_, or_, select
 from sqlalchemy.orm import Session
 
+from caseops_api.core.settings import Settings, get_settings
 from caseops_api.db.models import (
     AssistantTurn,
     Client,
@@ -38,13 +39,21 @@ from caseops_api.db.models import (
     PrivateSavedOutputAccess,
     User,
 )
-from caseops_api.services.capabilities import membership_has_capability
+from caseops_api.services.capabilities import (
+    membership_has_capability,
+    resolve_membership_capabilities,
+)
+from caseops_api.services.ip_capability_catalog import (
+    IPFeatureDecision,
+    evaluate_ip_feature,
+)
 from caseops_api.services.ip_document_workflow import get_ip_document_policies
 from caseops_api.services.matter_access import (
     visible_ip_dockets_filter,
     visible_matters_filter,
 )
 from caseops_api.services.session_context import SessionContext
+from caseops_api.services.tenant_ai_policy import resolve_tenant_policy
 
 PrivateSourceType = Literal[
     "client", "matter", "matter_document", "ip_docket", "ip_document"
@@ -128,6 +137,76 @@ class HydratedPrivateResult:
     label: str
     content: str
     score: float
+
+
+@dataclass(frozen=True, slots=True)
+class PrivateRetrievalActivation:
+    """Current server-owned activation decision for a private consumer."""
+
+    available: bool
+    reason: str
+    feature: IPFeatureDecision
+
+
+def private_retrieval_activation(
+    session: Session,
+    *,
+    context: SessionContext,
+    settings: Settings | None = None,
+) -> PrivateRetrievalActivation:
+    """Re-evaluate auth, entitlement, rollout and tenant AI policy.
+
+    A frontend flag or a context captured at login is never sufficient to
+    activate private retrieval. ``workspace_core`` is the existing canonical
+    IP entitlement/rollout owner; the tenant AI policy remains the independent
+    consent boundary for sending workspace content to an assistant.
+    """
+
+    current = _refreshed_context(
+        session,
+        context=context,
+        required_capability="ai:generate",
+    )
+    capabilities = (
+        resolve_membership_capabilities(session, current.membership)
+        if current is not None
+        else set()
+    )
+    from caseops_api.services.saas_billing import current_entitlements_for_company
+
+    feature = evaluate_ip_feature(
+        "workspace_core",
+        granted_capabilities=capabilities,
+        entitlements=current_entitlements_for_company(session, context.company.id),
+        settings=settings or get_settings(),
+    )
+    if current is None:
+        return PrivateRetrievalActivation(
+            available=False,
+            reason="missing_capability",
+            feature=feature,
+        )
+    policy = resolve_tenant_policy(session, company_id=context.company.id)
+    if not policy.workspace_assistant_enabled:
+        return PrivateRetrievalActivation(
+            available=False,
+            reason="tenant_ai_policy_disabled",
+            feature=feature,
+        )
+    return PrivateRetrievalActivation(
+        available=feature.available,
+        reason=feature.reason,
+        feature=feature,
+    )
+
+
+def private_source_version(row: Client | Matter | IpDocketRecord) -> str:
+    """Return a version that changes for source edits and ACL changes."""
+
+    updated = row.updated_at.isoformat() if row.updated_at is not None else "missing"
+    if isinstance(row, (Matter, IpDocketRecord)):
+        return f"{row.access_policy_version}:{updated}"
+    return updated
 
 
 def _active_generation_statement(company_id: str):
@@ -586,6 +665,8 @@ def prefilter_private_projection_ids(
         "document_id",
         "source_id",
         "source_version",
+        "scope_ids",
+        "source_refs",
     }
     unknown_filters = set(normalized_filters) - supported_filters
     if unknown_filters:
@@ -612,6 +693,92 @@ def prefilter_private_projection_ids(
                 )
             )
         )
+    selection_predicates = []
+    requested_scopes = normalized_filters.get("scope_ids")
+    if requested_scopes is not None:
+        if not isinstance(requested_scopes, dict) or not requested_scopes:
+            raise PrivateRetrievalInvariantError(
+                "Private retrieval scope_ids must be a non-empty mapping."
+            )
+        scope_predicates = []
+        for scope_type, raw_ids in sorted(requested_scopes.items()):
+            if scope_type not in {"client", "matter", "ip_docket"}:
+                raise PrivateRetrievalInvariantError(
+                    f"Unsupported private retrieval scope type: {scope_type!r}"
+                )
+            if not isinstance(raw_ids, (list, tuple, set)):
+                raise PrivateRetrievalInvariantError(
+                    "Private retrieval scoped identifiers must be a bounded collection."
+                )
+            scope_ids = tuple(
+                sorted(
+                    {
+                        value.strip()
+                        for value in raw_ids
+                        if isinstance(value, str) and value.strip()
+                    }
+                )
+            )
+            if not scope_ids or len(scope_ids) > 24 or len(scope_ids) != len(raw_ids):
+                raise PrivateRetrievalInvariantError(
+                    "Private retrieval accepts 1 to 24 unique non-empty scope identifiers."
+                )
+            scope_predicates.append(
+                exists(
+                    select(PrivateIndexProjectionScope.id).where(
+                        PrivateIndexProjectionScope.company_id == context.company.id,
+                        PrivateIndexProjectionScope.projection_id
+                        == PrivateIndexProjection.id,
+                        PrivateIndexProjectionScope.scope_type == scope_type,
+                        PrivateIndexProjectionScope.scope_id.in_(scope_ids),
+                    )
+                )
+            )
+        selection_predicates.extend(scope_predicates)
+    requested_sources = normalized_filters.get("source_refs")
+    if requested_sources is not None:
+        if not isinstance(requested_sources, dict) or not requested_sources:
+            raise PrivateRetrievalInvariantError(
+                "Private retrieval source_refs must be a non-empty mapping."
+            )
+        source_predicates = []
+        for source_type, raw_ids in sorted(requested_sources.items()):
+            if source_type not in {
+                "client",
+                "matter",
+                "matter_document",
+                "ip_docket",
+                "ip_document",
+            }:
+                raise PrivateRetrievalInvariantError(
+                    f"Unsupported private retrieval source type: {source_type!r}"
+                )
+            if not isinstance(raw_ids, (list, tuple, set)):
+                raise PrivateRetrievalInvariantError(
+                    "Private retrieval source identifiers must be a bounded collection."
+                )
+            source_ids = tuple(
+                sorted(
+                    {
+                        value.strip()
+                        for value in raw_ids
+                        if isinstance(value, str) and value.strip()
+                    }
+                )
+            )
+            if not source_ids or len(source_ids) > 24 or len(source_ids) != len(raw_ids):
+                raise PrivateRetrievalInvariantError(
+                    "Private retrieval accepts 1 to 24 unique non-empty source identifiers."
+                )
+            source_predicates.append(
+                and_(
+                    PrivateIndexProjection.source_type == source_type,
+                    PrivateIndexProjection.source_id.in_(source_ids),
+                )
+            )
+        selection_predicates.extend(source_predicates)
+    if selection_predicates:
+        statement = statement.where(or_(*selection_predicates))
     document_id = normalized_filters.get("document_id")
     if document_id is not None:
         if not isinstance(document_id, str) or not document_id.strip():
@@ -680,7 +847,7 @@ def _source_versions_still_current(
                 Client.is_active.is_(True),
             )
         ).all():
-            expected = str(row.updated_at.isoformat() if row.updated_at else "1")
+            expected = private_source_version(row)
             allowed.update(
                 item.id
                 for item in projections
@@ -704,7 +871,7 @@ def _source_versions_still_current(
                 for item in projections
                 if item.source_type == "matter"
                 and item.source_id == row.id
-                and item.source_version == str(row.access_policy_version)
+                and item.source_version == private_source_version(row)
             )
 
     attachment_ids = grouped.get("matter_document", set())
@@ -715,6 +882,7 @@ def _source_versions_still_current(
             .where(
                 Matter.company_id == context.company.id,
                 Matter.is_active.is_(True),
+                MatterAttachment.processing_status == "indexed",
                 MatterAttachment.id.in_(attachment_ids),
                 visible_matters_filter(session, context=context),
             )
@@ -742,7 +910,7 @@ def _source_versions_still_current(
                 for item in projections
                 if item.source_type == "ip_docket"
                 and item.source_id == row.id
-                and item.source_version == str(row.access_policy_version)
+                and item.source_version == private_source_version(row)
             )
 
     document_ids = grouped.get("ip_document", set())
@@ -1243,6 +1411,7 @@ __all__ = [
     "HydratedPrivateResult",
     "PRIVATE_PROJECTION_EVENT_KEY_MAX_LENGTH",
     "PrivateProjectionInput",
+    "PrivateRetrievalActivation",
     "PrivateRetrievalInvariantError",
     "ProjectionScopeInput",
     "activate_private_generation",
@@ -1253,7 +1422,9 @@ __all__ = [
     "hydrate_private_projection_results",
     "mark_private_generation_ready",
     "prefilter_private_projection_ids",
+    "private_retrieval_activation",
     "private_retrieval_cache_key",
+    "private_source_version",
     "propagate_private_projection_change",
     "reauthorize_private_saved_outputs",
     "register_private_saved_output",

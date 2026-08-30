@@ -46,6 +46,7 @@ from caseops_api.api.routes import (
     platform_admin,
     portal,
     portal_ip,
+    private_retrieval,
     product_guide,
     provider_operations,
     recommendations,
@@ -113,6 +114,11 @@ api_router.include_router(
     workspace_assistant.router,
     prefix="/workspace-assistant",
     tags=["workspace-assistant"],
+)
+api_router.include_router(
+    private_retrieval.router,
+    prefix="/private-retrieval",
+    tags=["private-retrieval"],
 )
 api_router.include_router(recommendations.router, tags=["recommendations"])
 api_router.include_router(

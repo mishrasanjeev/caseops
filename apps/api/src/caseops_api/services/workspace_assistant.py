@@ -142,6 +142,10 @@ def _scope_access_denied(
 
 
 def _resource_version(row: object) -> str | None:
+    if isinstance(row, (Client, Matter, IpDocketRecord)):
+        from caseops_api.services.private_retrieval import private_source_version
+
+        return private_source_version(row)
     for attribute in ("current_version",):
         value = getattr(row, attribute, None)
         if value is not None:
@@ -1088,6 +1092,107 @@ def _sources_for_scopes(
                 href="/app/ip/documents",
             )
             candidates[candidate.key] = candidate
+
+    # IPLF-066B: when the independent tenant entitlement, rollout switch,
+    # capability and AI policy are all current, private content retrieval goes
+    # through the one canonical service. Direct record metadata above remains
+    # the legacy/default-off path; indexed document text from this point is
+    # always SQL-prefiltered and hydration-reauthorized by private_retrieval.
+    from caseops_api.services.private_retrieval import (
+        private_retrieval_activation,
+        retrieve_private_content,
+    )
+
+    activation = private_retrieval_activation(session, context=context)
+    if activation.available:
+        # Once the private index is active for the tenant, document bytes may
+        # not fall back to the legacy direct-extracted-text path. An absent,
+        # lagging or tombstoned projection must therefore produce abstention.
+        for key in tuple(candidates):
+            if candidates[key].source_type in {"matter_document", "ip_document"}:
+                candidates.pop(key)
+        tenant_scope = bool(grouped.get("tenant"))
+        filters: dict[str, object] = {}
+        if not tenant_scope:
+            scope_ids = {
+                scope_type: sorted(grouped[scope_type])
+                for scope_type in ("client", "matter", "ip_docket")
+                if grouped.get(scope_type)
+            }
+            source_refs = {
+                source_type: sorted(grouped[source_type])
+                for source_type in ("matter_document", "ip_document")
+                if grouped.get(source_type)
+            }
+            if scope_ids:
+                filters["scope_ids"] = scope_ids
+            if source_refs:
+                filters["source_refs"] = source_refs
+        private_rows = (
+            retrieve_private_content(
+                session,
+                context=context,
+                query=question,
+                filters=filters,
+                limit=MAX_RETRIEVAL_SOURCES,
+            )
+            if tenant_scope or filters
+            else ()
+        )
+        private_by_source: dict[str, list[str]] = defaultdict(list)
+        private_metadata: dict[str, tuple[str, str, str]] = {}
+        for row in private_rows:
+            key = f"{row.source_type}:{row.source_id}"
+            private_by_source[key].append(row.content)
+            private_metadata[key] = (
+                row.source_type,
+                row.source_id,
+                row.source_version,
+            )
+        for key, chunks in private_by_source.items():
+            existing = candidates.get(key)
+            source_type, source_id, source_version = private_metadata[key]
+            if existing is not None:
+                href = existing.href
+                label = existing.label
+            elif source_type == "matter":
+                href = f"/app/matters/{source_id}"
+                label = next(
+                    row.label for row in private_rows if row.source_id == source_id
+                )
+            elif source_type == "ip_docket":
+                href = f"/app/ip?docket={source_id}&view=overview"
+                label = next(
+                    row.label for row in private_rows if row.source_id == source_id
+                )
+            elif source_type == "ip_document":
+                href = "/app/ip/documents"
+                label = next(
+                    row.label for row in private_rows if row.source_id == source_id
+                )
+            elif source_type == "matter_document":
+                attachment = session.get(MatterAttachment, source_id)
+                href = (
+                    f"/app/matters/{attachment.matter_id}"
+                    if attachment is not None
+                    else "/app/matters"
+                )
+                label = next(
+                    row.label for row in private_rows if row.source_id == source_id
+                )
+            else:
+                href = "/app/clients"
+                label = next(
+                    row.label for row in private_rows if row.source_id == source_id
+                )
+            candidates[key] = _source(
+                scope_type=source_type,
+                scope_id=source_id,
+                version=source_version,
+                label=label,
+                text=" ".join(chunks),
+                href=href,
+            )
 
     return list(candidates.values())[:MAX_RETRIEVAL_SOURCES]
 

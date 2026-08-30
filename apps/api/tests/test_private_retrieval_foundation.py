@@ -30,6 +30,7 @@ from caseops_api.services.private_retrieval import (
     mark_private_generation_ready,
     prefilter_private_projection_ids,
     private_retrieval_cache_key,
+    private_source_version,
     propagate_private_projection_change,
     retrieve_private_content,
     upsert_private_projection,
@@ -79,7 +80,7 @@ def _projection_payload(matter: Matter, *, text: str) -> PrivateProjectionInput:
     return PrivateProjectionInput(
         source_type="matter",
         source_id=matter.id,
-        source_version=str(matter.access_policy_version),
+        source_version=private_source_version(matter),
         chunk_ordinal=0,
         label="Restricted trademark strategy",
         content=text,
