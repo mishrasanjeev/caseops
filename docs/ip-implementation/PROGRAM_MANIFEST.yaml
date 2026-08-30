@@ -6558,7 +6558,10 @@
       ],
       "implementation_refs": [
         ".github/workflows/prod-verify.yml",
+        "apps/api/alembic/env.py",
         "apps/api/src/caseops_api/core/settings.py",
+        "apps/api/src/caseops_api/db/connection_safety.py",
+        "apps/api/src/caseops_api/db/session.py",
         "apps/api/src/caseops_api/scripts/ip_rule_governance_fingerprint.py",
         "apps/api/src/caseops_api/services/ip_deadline_workflow.py",
         "playwright.app.config.ts",
@@ -6576,13 +6579,16 @@
         "apps/api/tests/test_ip_deadline_workflow.py",
         "apps/api/tests/test_deploy_prod_hardening.py",
         "apps/api/tests/test_ip_rule_governance_fingerprint.py",
+        "apps/api/tests/test_migration_connection_safety.py",
+        "apps/api/tests/test_postgres_validation.py::test_uj67_exc01_migration_lock_and_table_scan_windows_are_bounded#IPLF-UJ-67-EXC-01",
         "apps/api/tests/test_postgres_validation.py::test_ip_rule_governance_fingerprint_uses_real_postgres_read_only_snapshot",
         "tests/e2e/iplf-023b-deadline-workflow-2026-08-09.spec.ts",
         "tests/e2e/iplf-027b-a0-quiescence-2026-08-14-prod.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-027B/a0-quiescence-2026-08-14.md",
-        "docs/ip-implementation/evidence/m2/IPLF-027B/a0-production-checkpoint-2026-08-15.md"
+        "docs/ip-implementation/evidence/m2/IPLF-027B/a0-production-checkpoint-2026-08-15.md",
+        "docs/ip-implementation/evidence/m2/IPLF-027B/lock-window-local-2026-08-31.md"
       ],
       "evidence_metadata": [
         {
@@ -6602,6 +6608,15 @@
           "assertions": "Two earlier deployment attempts aborted before API routing on release-control defects and left predecessor caseops-api-00293-nf2 serving. The final default-off deploy passed exact build/image, migration, scheduler/job, QA-no-execute, fingerprint, revision, release identity, and 100%-traffic controls. Pre-route, immediate post-route, and first-drain PostgreSQL fingerprints were exactly equal at 07e68feb13e82fbedd42150df38904a10ce73a89b0348674de31833e7642673d with dataset counts 1/1/1/2; the first-drain old-cohort log review passed after more than 301 seconds from T_ROUTE. Production workflow 31864693967 passed the dedicated one-test A0 step and two-test Notice step, while its overall failure remained truthful because the broader RAM batch had 69 passed, three provider-quota 503 failures, and four skipped. A resealed, independently reviewed local packet proved an exact 36-name oldest-first preview and strict hold state at manifest SHA 11828e81ff62691d919e0cc1be0d79ba87598664355af8c81121f627bf50d21f, but it is historical evidence only: revision deletion was not approved or run, T_FENCE is undefined, the second drain does not exist, and A1/A2 remain forbidden. Scheduled Gitleaks failure 31865741914 was remediated by exact-fingerprint PR #230 and a local official 8.24.3 full-origin-ref scan found zero results across 1,041 commits; a fresh scheduled GitHub full-history pass is still pending because push Security 31871239057 scanned zero commits",
           "result": "a0_deployed_first_drain_passed_fence_not_authorized",
           "recorded_at": "2026-08-15T13:29:12+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m2/IPLF-027B/lock-window-local-2026-08-31.md",
+          "revision": "ddc338f8",
+          "environment": "Windows 11 local workstation with an isolated Docker pgvector/pgvector:pg17 container, locked CPython 3.13 API dependencies, Alembic upgraded to the canonical eb584dad migration head, and the exact migration connection-argument builder used by alembic/env.py. Production deployment and exact-serving acceptance were not run",
+          "fixtures": "A disposable unlogged 20,000-row PostgreSQL table created after the application migrations, one old-revision ACCESS SHARE transaction, one candidate rewrite connection, and one deliberately underestimated Cartesian scan. No tenant, client, legal, provider, filing, payment, message, or production data",
+          "assertions": "Server-reported lock and statement timeout settings; blocked ACCESS EXCLUSIVE rewrite rejected with SQLSTATE 55P03 inside the bounded window; underestimated table scan rejected with SQLSTATE 57014 inside the bounded window; failed transactions recover after rollback; candidate column type and every fixture row remain unchanged; shared runtime and Alembic timeout-option construction; SQLite exclusion; and positive-budget validation",
+          "result": "local_postgresql_path_passed_release_not_run",
+          "recorded_at": "2026-08-31T00:13:02+05:30"
         }
       ],
       "blockers": [
@@ -6640,6 +6655,12 @@
           "disposition": "created",
           "owner": "IP rule governance and release control plane",
           "evidence": "PR #227/#228/#229 A0 lineage plus source-only PR #230 security lineage, two fail-closed pre-route attempts, exact deployed A0 build/image/migration/job/revision identity distinct from later canonical source, three equal fingerprints, dated A0 and Notice production passes, truthful quota-only RAM failure, first-drain proof, independently reviewed historical pre-deletion packet, local full-current-origin-ref Gitleaks parity with external scheduled proof still pending, and explicit unapproved deletion/T_FENCE/A1/A2 gates"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m2/IPLF-027B/lock-window-local-2026-08-31.md",
+          "disposition": "created",
+          "owner": "Codex and the machine-enforced migration control plane",
+          "evidence": "UJ-67-EXC-01 real PostgreSQL 17/pgvector lock and table-scan timing proof using the exact Alembic connection-budget builder; the remaining IPLF-027B paths and deployment proof stay explicitly open"
         },
         {
           "artifact": "docs/ip-implementation/PROGRAM_MANIFEST.yaml",
@@ -45652,12 +45673,13 @@
         "apps/api/tests/test_ip_mixed_revision_rollback.py::test_uj67_exc02_mixed_version_contract_fails_closed#IPLF-UJ-67-EXC-02",
         "apps/api/tests/test_ip_mixed_revision_rollback.py::test_uj67_exc05_rollback_preserves_history_without_duplicate_consumers#IPLF-UJ-67-EXC-05",
         "apps/api/tests/test_ip_mixed_revision_rollback.py::test_uj67_normal_old_and_new_revisions_coexist#IPLF-UJ-67-NORMAL",
-        "planned:IPLF-UJ-67-EXC-01",
+        "apps/api/tests/test_postgres_validation.py::test_uj67_exc01_migration_lock_and_table_scan_windows_are_bounded#IPLF-UJ-67-EXC-01",
         "planned:IPLF-UJ-67-EXC-03",
         "planned:IPLF-UJ-67-EXC-04",
         "planned:IPLF-UJ-67-EXC-06"
       ],
       "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-027B/lock-window-local-2026-08-31.md",
         "docs/ip-implementation/evidence/m2/IPLF-027E/local-2026-08-14.md"
       ],
       "implementation_status": "in_progress",
@@ -64013,9 +64035,11 @@
         "RULE-GOV-08"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-67-EXC-01"
+        "apps/api/tests/test_postgres_validation.py::test_uj67_exc01_migration_lock_and_table_scan_windows_are_bounded#IPLF-UJ-67-EXC-01"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-027B/lock-window-local-2026-08-31.md"
+      ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
