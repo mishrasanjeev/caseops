@@ -57,6 +57,7 @@ PrivateEventType = Literal[
 MAX_PREFILTER_CANDIDATES = 200
 MAX_PRIVATE_RESULTS = 20
 MAX_QUERY_TERMS = 8
+PRIVATE_PROJECTION_EVENT_KEY_MAX_LENGTH = 120
 _CACHE_TTL = timedelta(seconds=30)
 _CACHE_MAX_ENTRIES = 256
 _CACHE_LOCK = threading.Lock()
@@ -66,6 +67,27 @@ _TERM_RE = re.compile(r"[\w-]+", re.UNICODE)
 
 class PrivateRetrievalInvariantError(RuntimeError):
     """A private-index state transition would weaken a security invariant."""
+
+
+def build_private_projection_event_key(raw_key: str) -> str:
+    """Return the stable database key for one projection event operation.
+
+    Existing keys that already fit remain byte-for-byte compatible. Oversized
+    keys retain a readable prefix and the full SHA-256 digest of the unbounded
+    operation identity, so every producer gets the same 120-character boundary
+    without weakening retry semantics or truncating away collision resistance.
+    """
+
+    if not raw_key:
+        raise PrivateRetrievalInvariantError(
+            "A private projection event requires an idempotency key."
+        )
+    if len(raw_key) <= PRIVATE_PROJECTION_EVENT_KEY_MAX_LENGTH:
+        return raw_key
+    marker = ":sha256:"
+    digest = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+    prefix_length = PRIVATE_PROJECTION_EVENT_KEY_MAX_LENGTH - len(marker) - len(digest)
+    return f"{raw_key[:prefix_length]}{marker}{digest}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -948,10 +970,11 @@ def enqueue_private_projection_event(
     target_version: str | None,
     reason_code: str,
 ) -> PrivateProjectionEvent:
+    canonical_key = build_private_projection_event_key(idempotency_key)
     existing = session.scalar(
         select(PrivateProjectionEvent).where(
             PrivateProjectionEvent.company_id == company_id,
-            PrivateProjectionEvent.idempotency_key == idempotency_key,
+            PrivateProjectionEvent.idempotency_key == canonical_key,
         )
     )
     if existing is not None:
@@ -964,7 +987,7 @@ def enqueue_private_projection_event(
     row = PrivateProjectionEvent(
         company_id=company_id,
         generation_id=generation.id,
-        idempotency_key=idempotency_key,
+        idempotency_key=canonical_key,
         event_type=event_type,
         target_type=target_type,
         target_id=target_id,
@@ -1218,11 +1241,13 @@ def reauthorize_private_saved_outputs(
 
 __all__ = [
     "HydratedPrivateResult",
+    "PRIVATE_PROJECTION_EVENT_KEY_MAX_LENGTH",
     "PrivateProjectionInput",
     "PrivateRetrievalInvariantError",
     "ProjectionScopeInput",
     "activate_private_generation",
     "apply_private_projection_event",
+    "build_private_projection_event_key",
     "create_shadow_private_generation",
     "ensure_active_private_generation",
     "hydrate_private_projection_results",
