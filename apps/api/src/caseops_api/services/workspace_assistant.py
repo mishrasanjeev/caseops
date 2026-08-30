@@ -57,7 +57,10 @@ from caseops_api.schemas.workspace_assistant import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.capabilities import membership_has_capability
-from caseops_api.services.ip_document_workflow import get_ip_document_policies
+from caseops_api.services.ip_document_workflow import (
+    get_accessible_ip_document_ids,
+    get_ip_document_policies,
+)
 from caseops_api.services.llm import (
     PURPOSE_ASSISTANT,
     build_provider,
@@ -236,6 +239,7 @@ def _resolve_scope_versions(
     context: SessionContext,
     scopes: list[AssistantScopeInput],
     strict: bool,
+    require_ip_document_ai_retrieval: bool = False,
 ) -> dict[tuple[str, str], str | None]:
     """Resolve scope references in bounded batches and apply current ACLs.
 
@@ -343,14 +347,31 @@ def _resolve_scope_versions(
                 IpDocument.id.in_(ip_document_ids),
             )
         ).all()
-        policies = get_ip_document_policies(
-            session,
-            context=context,
-            document_ids={document.id for document in documents},
-        )
+        document_ids = {document.id for document in documents}
+        if require_ip_document_ai_retrieval:
+            policies = get_ip_document_policies(
+                session,
+                context=context,
+                document_ids=document_ids,
+            )
+            accessible_ids = {
+                document_id
+                for document_id, policy in policies.items()
+                if policy.ai_retrieval_allowed
+            }
+        else:
+            # A document can be a valid, authorized conversation scope before
+            # extraction/indexing completes. Content retrieval has a separate,
+            # stricter delivery-time policy gate; conflating the two would make
+            # a current ACL look like a missing record and break saved scope
+            # selection for otherwise visible documents.
+            accessible_ids = get_accessible_ip_document_ids(
+                session,
+                context=context,
+                document_ids=document_ids,
+            )
         for document in documents:
-            policy = policies.get(document.id)
-            if policy is not None and policy.ai_retrieval_allowed:
+            if document.id in accessible_ids:
                 resolved[("ip_document", document.id)] = str(document.current_version)
 
     requested = {(scope.scope_type, scope.scope_id) for scope in scopes}
@@ -929,6 +950,7 @@ def search_assistant_scopes(
             for option in ordered
         ],
         strict=False,
+        require_ip_document_ai_retrieval=True,
     )
     current = [
         option
@@ -1472,6 +1494,7 @@ def _resolved_source_versions(
     *,
     context: SessionContext,
     sources: list[_SourceCandidate],
+    require_ip_document_ai_retrieval: bool = False,
 ) -> dict[tuple[str, str], str | None]:
     unique = {
         (source.source_type, source.source_id): AssistantScopeInput(
@@ -1489,6 +1512,7 @@ def _resolved_source_versions(
                 context=context,
                 scopes=inputs[offset : offset + MAX_SESSION_SCOPES],
                 strict=False,
+                require_ip_document_ai_retrieval=require_ip_document_ai_retrieval,
             )
         )
     return resolved
@@ -1504,6 +1528,7 @@ def _current_sources(
         session,
         context=context,
         sources=sources,
+        require_ip_document_ai_retrieval=True,
     )
     return {
         source.key: source
@@ -1652,6 +1677,7 @@ def _serialize_turns(
         session,
         context=context,
         sources=[*citation_sources, *saved_output_sources],
+        require_ip_document_ai_retrieval=True,
     )
     from caseops_api.services.private_retrieval import (
         reauthorize_private_saved_outputs,

@@ -505,6 +505,18 @@ def test_scope_search_document_policy_work_is_bounded_without_n_plus_one(
                 )
 
         add_documents(0, 1)
+        # Scope existence and AI-content eligibility are separate boundaries:
+        # this record is visible enough to be selected as a saved session
+        # scope, but it must not leak its title through AI autocomplete until
+        # a current indexed version passes the document policy.
+        session.add(
+            IpDocument(
+                company_id=company_id,
+                taxonomy_entry_id=taxonomy.id,
+                title="Assistant batch pending private evidence",
+                created_by_membership_id=membership_id,
+            )
+        )
         session.commit()
 
     def measured_search() -> tuple[int, dict]:
@@ -529,6 +541,10 @@ def test_scope_search_document_policy_work_is_bounded_without_n_plus_one(
 
     one_document_queries, first = measured_search()
     assert len([item for item in first["items"] if item["scope_type"] == "ip_document"]) == 1
+    assert all(
+        item["label"] != "Assistant batch pending private evidence"
+        for item in first["items"]
+    )
 
     with get_session_factory()() as session:
         taxonomy = session.scalar(
