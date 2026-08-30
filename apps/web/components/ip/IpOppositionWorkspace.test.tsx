@@ -338,7 +338,13 @@ describe("IpOppositionWorkspace", () => {
       docketId: "docket-1",
       proceedingId: "opposition-2",
     }));
-    expect(await screen.findByLabelText("Opposition proceeding")).toHaveValue("opposition-2");
+    const proceedingSelect = await screen.findByRole("combobox", {
+      name: /^Opposition proceeding$/,
+    });
+    expect(proceedingSelect).toHaveValue("opposition-2");
+    expect(screen.getAllByLabelText("Opposition proceeding", { exact: true })).toEqual([
+      proceedingSelect,
+    ]);
     await waitFor(() => expect(pleadingWorkspaceMock).toHaveBeenCalledWith(
       expect.objectContaining({
         proceedingId: "opposition-2",
@@ -364,9 +370,9 @@ describe("IpOppositionWorkspace", () => {
       />,
     ));
 
-    expect(await screen.findByLabelText("Opposition proceeding")).toHaveValue(
-      "opposition-1",
-    );
+    expect(
+      await screen.findByRole("combobox", { name: /^Opposition proceeding$/ }),
+    ).toHaveValue("opposition-1");
     await waitFor(() => expect(pleadingWorkspaceMock).toHaveBeenCalledWith(
       expect.objectContaining({
         proceedingId: "opposition-1",
