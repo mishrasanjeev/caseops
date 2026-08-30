@@ -437,11 +437,19 @@ def test_deploy_prod_fences_rule_governance_and_verifies_exact_traffic() -> None
     script = _read_repo_text("scripts/deploy-prod.sh")
 
     assert "CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false" in script
+    assert ("MACHINE_READINESS_EVIDENCE_SECRET=caseops-machine-readiness-evidence-secret") in script
+    assert (
+        '--update-secrets "CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET='
+        '${MACHINE_READINESS_EVIDENCE_SECRET}:latest"'
+    ) in script
     assert "LIVE_API_SERVICE_JSON=$(gcloud run services describe caseops-api" in script
     assert 'str(metadata.get("generation")) != str(status.get("observedGeneration"))' in script
     assert "len(status_traffic) != 1" in script
-    assert 'env.get("CASEOPS_RELEASE_SHA") != expected_sha' in script
-    assert 'env.get("CASEOPS_IP_RULE_GOVERNANCE_ENABLED") != "false"' in script
+    assert 'env.get("CASEOPS_RELEASE_SHA") or {}' in script
+    assert 'env.get("CASEOPS_IP_RULE_GOVERNANCE_ENABLED") or {}' in script
+    assert 'env.get("CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET")' in script
+    assert 'str(machine_secret_ref.get("name")) != expected_machine_readiness_secret' in script
+    assert 'str(machine_secret_ref.get("key")) != "latest"' in script
     assert "LIVE_API_REVISION_IMAGE=$(gcloud run revisions describe" in script
     assert '"${LIVE_API_REVISION_IMAGE}" != "${API_IMMUTABLE_IMAGE}"' in script
 
@@ -905,6 +913,7 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
   FAKE_TRAFFIC_LATEST='true'
   FAKE_OBSERVED_GENERATION='2'
   FAKE_GOVERNANCE_FLAG='false'
+  FAKE_MACHINE_SECRET='caseops-machine-readiness-evidence-secret'
   FAKE_SERVICE_MIN='4'
   if [[ "${FAKE_TRAFFIC_MODE}" == "drift" ]]; then
     FAKE_TRAFFIC_REVISION='caseops-api-old'
@@ -915,6 +924,8 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
     FAKE_GOVERNANCE_FLAG='true'
   elif [[ "${FAKE_TRAFFIC_MODE}" == "capacity-drift" ]]; then
     FAKE_SERVICE_MIN='1'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "secret-drift" ]]; then
+    FAKE_MACHINE_SECRET='wrong-machine-readiness-secret'
   fi
   printf '%s' \
     '{"metadata":{"generation":2,"annotations":{' \
@@ -924,7 +935,10 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
     '{"name":"CASEOPS_RELEASE_SHA",' \
     '"value":"abcdef1234567890abcdef1234567890abcdef12"},' \
     '{"name":"CASEOPS_IP_RULE_GOVERNANCE_ENABLED","value":"' \
-    "${FAKE_GOVERNANCE_FLAG}" '"}' \
+    "${FAKE_GOVERNANCE_FLAG}" '"},' \
+    '{"name":"CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET",' \
+    '"valueFrom":{"secretKeyRef":{"key":"latest","name":"' \
+    "${FAKE_MACHINE_SECRET}" '"}}}' \
     ']}]}}},' \
     '"status":{"observedGeneration":' "${FAKE_OBSERVED_GENERATION}" ',' \
     '"latestCreatedRevisionName":"caseops-api-test",' \
@@ -1227,6 +1241,14 @@ def test_deploy_prod_accepts_clean_head_and_healthy_api(tmp_path: Path) -> None:
         "run deploy caseops-api"
     )
     assert not any("run jobs execute caseops-ip-qa-bootstrap" in call for call in calls)
+    assert any(
+        "run deploy caseops-api" in call
+        and "--update-secrets "
+        "CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET="
+        "caseops-machine-readiness-evidence-secret:latest"
+        in call
+        for call in calls
+    )
     assert (
         "gh workflow run prod-verify.yml --repo mishrasanjeev/caseops --ref main "
         "-f expected_release_sha=abcdef1234567890abcdef1234567890abcdef12"
@@ -1373,6 +1395,7 @@ def test_fingerprint_wrapper_fails_on_local_expected_digest_mismatch(
         ("generation-drift", "TRAFFIC/REVISION DRIFT"),
         ("flag-enabled", "TRAFFIC/REVISION DRIFT"),
         ("capacity-drift", "TRAFFIC/REVISION DRIFT"),
+        ("secret-drift", "TRAFFIC/REVISION DRIFT"),
         ("image-drift", "REVISION IMAGE DRIFT"),
     ],
 )
