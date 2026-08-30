@@ -70,6 +70,50 @@ function grantIpEntitlement(companyId: string): void {
   expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
 }
 
+type BillingEffectSnapshot = {
+  invoice_count: number;
+  invoice_line_count: number;
+  payment_attempt_count: number;
+  invoice_total_minor: number;
+  amount_received_minor: number;
+};
+
+/** Read the existing Matter billing/payment owners without going through IP. */
+function billingEffectSnapshot(companyId: string): BillingEffectSnapshot {
+  const python = process.platform === "win32"
+    ? path.join(repoRoot, "apps", "api", ".venv", "Scripts", "python.exe")
+    : path.join(repoRoot, "apps", "api", ".venv", "bin", "python");
+  const script = [
+    "import json, os",
+    "from sqlalchemy import func, select",
+    "from caseops_api.db.models import MatterInvoice, MatterInvoiceLineItem, MatterInvoicePaymentAttempt",
+    "from caseops_api.db.session import get_session_factory",
+    "company_id=os.environ['CASEOPS_E2E_COMPANY_ID']",
+    "session=get_session_factory()()",
+    "invoice_count=int(session.scalar(select(func.count()).select_from(MatterInvoice).where(MatterInvoice.company_id==company_id)) or 0)",
+    "invoice_line_count=int(session.scalar(select(func.count()).select_from(MatterInvoiceLineItem).join(MatterInvoice, MatterInvoice.id==MatterInvoiceLineItem.invoice_id).where(MatterInvoice.company_id==company_id)) or 0)",
+    "payment_attempt_count=int(session.scalar(select(func.count()).select_from(MatterInvoicePaymentAttempt).where(MatterInvoicePaymentAttempt.company_id==company_id)) or 0)",
+    "invoice_total_minor=int(session.scalar(select(func.coalesce(func.sum(MatterInvoice.total_amount_minor),0)).where(MatterInvoice.company_id==company_id)) or 0)",
+    "amount_received_minor=int(session.scalar(select(func.coalesce(func.sum(MatterInvoicePaymentAttempt.amount_received_minor),0)).where(MatterInvoicePaymentAttempt.company_id==company_id)) or 0)",
+    "session.close()",
+    "print(json.dumps({'invoice_count':invoice_count,'invoice_line_count':invoice_line_count,'payment_attempt_count':payment_attempt_count,'invoice_total_minor':invoice_total_minor,'amount_received_minor':amount_received_minor}))",
+  ].join("; ");
+  const result = spawnSync(python, ["-c", script], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      ...e2eEnv,
+      CASEOPS_E2E_COMPANY_ID: companyId,
+      PYTHONPATH: [path.join(repoRoot, "apps", "api", "src"), process.env.PYTHONPATH]
+        .filter(Boolean)
+        .join(path.delimiter),
+    },
+  });
+  expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+  return JSON.parse(result.stdout.trim()) as BillingEffectSnapshot;
+}
+
 async function bootstrap(api: APIRequestContext) {
   for (let attempt = 1; attempt <= BOOTSTRAP_TRANSPORT_ATTEMPTS; attempt += 1) {
     const slug = `cost-evidence-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -189,6 +233,7 @@ test("IPLF-039F records a nonbillable cost on a record with no billing Matter", 
   const tenant = await bootstrap(api);
   const headers = await enableWorkspace(api, tenant);
   await createMatterlessDocket(api, headers);
+  const billingBefore = billingEffectSnapshot(tenant.company.id as string);
 
   await signIn(page, tenant.slug, tenant.email);
   await page.goto("/app/ip");
@@ -215,6 +260,22 @@ test("IPLF-039F records a nonbillable cost on a record with no billing Matter", 
   // contain the word "nonbillable", so a loose match resolves to four elements
   // and proves nothing about the recorded row's status.
   await expect(costs.getByText("Nonbillable", { exact: true })).toBeVisible();
+  await expect(
+    costs.getByText("Evidence: receipt:registry-fee-unbilled-2026", { exact: true }),
+  ).toBeVisible();
+
+  // The matterless action is status verification, not a misleading billing
+  // reconciliation.  It remains terminally nonbillable and does not mutate
+  // any invoice/payment owner, even when repeated.
+  const verify = costs.getByRole("button", { name: "Verify nonbillable evidence" });
+  await expect(verify).toBeVisible();
+  await expect(costs.getByRole("button", { name: "Reconcile with Matter billing" })).toHaveCount(0);
+  await verify.click();
+  await expect(page.getByText(/Verified: 1 nonbillable cost item\(s\); no billing effect/i)).toBeVisible();
+  await expect(
+    costs.getByText("Evidence: receipt:registry-fee-unbilled-2026", { exact: true }),
+  ).toBeVisible();
+  expect(billingEffectSnapshot(tenant.company.id as string)).toEqual(billingBefore);
 
   await api.dispose();
 });

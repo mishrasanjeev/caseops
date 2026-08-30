@@ -1137,6 +1137,17 @@ describe("IpDocketPage", () => {
     expect(
       screen.getByText(/captured as\s+nonbillable evidence/i),
     ).toBeVisible();
+    expect(
+      screen.getByText(/cannot create an invoice, invoice line, payment\s+attempt, or collection/i),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Verify nonbillable evidence" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Reconcile with Matter billing" }),
+    ).toBeNull();
+    expect(screen.queryByLabelText("Matter billing link type")).toBeNull();
+    expect(screen.queryByLabelText("Matter billing record ID")).toBeNull();
 
     // A withheld rate reads as withheld. Rendering 0.00 would be undetectable.
     expect(
@@ -1149,6 +1160,7 @@ describe("IpDocketPage", () => {
     expect(screen.getByText(/Nonbillable/)).toBeVisible();
     // The non-confidential cost on the same record is unaffected.
     expect(screen.getByText("INR 9000.00")).toBeVisible();
+    expect(screen.getByText(/Evidence: receipt:registry-fee-unbilled-2026/)).toBeVisible();
   });
 
   it("surfaces deadline exceptions and keeps every confirmation control visible on mobile", async () => {

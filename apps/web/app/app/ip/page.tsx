@@ -3583,7 +3583,9 @@ function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: b
   const reconcile = useMutation({
     mutationFn: () => reconcileIpCosts(docket.id),
     onSuccess: async (report) => {
-      toast.success(`Reconciled: ${report.matched_count} matched, ${report.mismatch_count} mismatched.`);
+      toast.success(hasBillingOwner
+        ? `Reconciled: ${report.matched_count} matched, ${report.mismatch_count} mismatched.`
+        : `Verified: ${report.nonbillable_count} nonbillable cost item(s); no billing effect.`);
       await onChanged();
     },
     onError: (error) => toast.error(apiErrorMessage(error, "Could not reconcile IP costs.")),
@@ -3604,6 +3606,9 @@ function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: b
               {row.cost_nature === "estimate" ? " · Provider estimate" : null}
               {row.rate_confidential ? " · Confidential rate" : null}
             </div>
+            <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
+              Evidence: {row.evidence_reference}
+            </div>
           </div>
         ))}
         {enabled ? (
@@ -3612,7 +3617,9 @@ function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: b
               <p className="text-xs text-[var(--color-mute)]">
                 This record has no Matter billing owner, so the cost is captured as
                 nonbillable evidence. Link the record to a Matter to bill it; Matter
-                billing remains the only accounting owner either way.
+                billing remains the only accounting owner either way. Capture and
+                status verification cannot create an invoice, invoice line, payment
+                attempt, or collection.
               </p>
             ) : null}
             <Field label="Description"><Input value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
@@ -3670,7 +3677,9 @@ function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: b
               <Button size="sm" className="w-full sm:w-auto" type="submit" disabled={description.length < 3 || !amount || evidence.length < 3 || (canLinkBilling && Boolean(billingLinkType) !== Boolean(billingLinkId)) || conversionIncomplete || mutation.isPending}>
                 {hasBillingOwner ? "Add cost evidence" : "Add nonbillable cost evidence"}
               </Button>
-              <Button size="sm" className="w-full sm:w-auto" type="button" variant="secondary" onClick={() => reconcile.mutate()} disabled={reconcile.isPending}>Reconcile with Matter billing</Button>
+              <Button size="sm" className="w-full sm:w-auto" type="button" variant="secondary" onClick={() => reconcile.mutate()} disabled={reconcile.isPending}>
+                {hasBillingOwner ? "Reconcile with Matter billing" : "Verify nonbillable evidence"}
+              </Button>
             </div>
           </form>
         ) : null}

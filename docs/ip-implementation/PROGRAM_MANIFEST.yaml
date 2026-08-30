@@ -9875,6 +9875,8 @@
         "apps/api/tests/test_ip_039f_cost_linkage.py::test_uj52_exc04_a_provider_estimate_is_not_an_actual_expense#IPLF-UJ-52-EXC-04",
         "apps/api/tests/test_ip_039f_cost_linkage.py::test_uj52_exc05_confidential_rates_are_permissioned#IPLF-UJ-52-EXC-05",
         "apps/api/tests/test_ip_039f_cost_linkage.py::test_uj52_cost_invariants_hold_at_the_database_not_only_in_the_request_model",
+        "apps/api/tests/test_20260830_ip_cost_evidence_immutable.py::test_cost_evidence_guard_allows_only_reconciliation_projection_updates",
+        "apps/api/tests/test_postgres_validation.py::test_matterless_ip_cost_evidence_is_immutable_on_postgres",
         "apps/web/app/app/ip/page.test.tsx",
         "tests/e2e/iplf-039f-cost-items-2026-08-21.spec.ts::IPLF-039F records a nonbillable cost on a record with no billing Matter",
         "tests/e2e/iplf-039f-cost-items-2026-08-21.spec.ts::IPLF-039F shows an estimate as an estimate and withholds a confidential rate"
@@ -9882,12 +9884,12 @@
       "evidence_refs": [
         "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
         "docs/ip-implementation/evidence/m3/IPLF-039F/per-path-2026-08-15.md",
-        "docs/ip-implementation/evidence/m3/IPLF-039F/unimplemented-paths-closed-2026-08-20.md"
+        "docs/ip-implementation/evidence/m3/IPLF-039F/unimplemented-paths-closed-2026-08-20.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039F/cost-finalization-2026-08-30.md"
       ],
       "blockers": [],
       "next_actions": [
-        "Run the exact-candidate CI and dated deployed acceptance for the four closed UJ-52 paths; repository proof exists but deployed proof does not.",
-        "Prove by service, API, PostgreSQL and UI regression that a cost with no Matter remains explicitly nonbillable, cannot create or reconcile an invoice/payment effect, and retains immutable official-fee evidence before this slice claims release closure."
+        "Integrate the 2026-08-30 immutable/nonbilling-effect closure, run full exact-candidate CI, deploy the integrated main revision, and record dated production Playwright before release closure."
       ],
       "data_impact": [],
       "documentation_impact": [],
@@ -9910,7 +9912,7 @@
           "recorded_at": "2026-08-02T06:25:00+05:30"
         }
       ],
-      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written. | IPLF-039F 2026-08-20: the four unwritten per-path tests now exist and pass, and the path they described is implemented rather than contradicted. add_ip_cost_item no longer refuses every cost on a docket with no Matter; an exchange conversion preserves the original amount beside the rate, source and conversion time; a provider estimate is a distinct cost nature that cannot reconcile against the ledger; and a confidential rate is withheld from readers without ip:fees_manage. Each rule is enforced by a CHECK constraint as well as by the request model. verification_status stays not_run and release_status stays blocked: this is repository proof, not deployed acceptance."
+      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written. | IPLF-039F 2026-08-20: the four unwritten per-path tests now exist and pass, and the path they described is implemented rather than contradicted. add_ip_cost_item no longer refuses every cost on a docket with no Matter; an exchange conversion preserves the original amount beside the rate, source and conversion time; a provider estimate is a distinct cost nature that cannot reconcile against the ledger; and a confidential rate is withheld from readers without ip:fees_manage. Each rule is enforced by a CHECK constraint as well as by the request model. verification_status stays not_run and release_status stays blocked: this is repository proof, not deployed acceptance. | IPLF-039F 2026-08-30 finalization: the remaining matterless-cost closure is enforced beyond route validation. PostgreSQL and SQLite now freeze the legal cost/evidence identity and retain the row while allowing only reconciliation projections to refresh; API regression proves repeat reconciliation changes no invoice, invoice-line, payment-attempt, invoiced total, or collected amount; and the operator UI explicitly verifies nonbillable evidence without implying a Matter billing path. Local repository and real-PostgreSQL proof are recorded, but exact deployed acceptance is still absent, so status remains in_progress / not_run / blocked."
     },
     {
       "id": "IPLF-039G",

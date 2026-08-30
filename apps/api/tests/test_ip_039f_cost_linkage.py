@@ -45,6 +45,8 @@ from caseops_api.db.models import (
     CompanyMembership,
     IpCostItem,
     MatterInvoice,
+    MatterInvoiceLineItem,
+    MatterInvoicePaymentAttempt,
     MembershipRole,
 )
 from caseops_api.db.session import get_session_factory
@@ -179,6 +181,56 @@ def _docket(client, headers, docket_id):
     return response.json()
 
 
+def _billing_effect_snapshot(company_id: str) -> tuple[int, int, int, int, int]:
+    """Counts and monetary state owned by Matter billing/payment services."""
+
+    with get_session_factory()() as session:
+        invoice_count = int(
+            session.scalar(
+                select(func.count()).select_from(MatterInvoice).where(
+                    MatterInvoice.company_id == company_id
+                )
+            )
+            or 0
+        )
+        line_count = int(
+            session.scalar(
+                select(func.count())
+                .select_from(MatterInvoiceLineItem)
+                .join(MatterInvoice, MatterInvoice.id == MatterInvoiceLineItem.invoice_id)
+                .where(MatterInvoice.company_id == company_id)
+            )
+            or 0
+        )
+        payment_count = int(
+            session.scalar(
+                select(func.count()).select_from(MatterInvoicePaymentAttempt).where(
+                    MatterInvoicePaymentAttempt.company_id == company_id
+                )
+            )
+            or 0
+        )
+        invoice_total = int(
+            session.scalar(
+                select(func.coalesce(func.sum(MatterInvoice.total_amount_minor), 0)).where(
+                    MatterInvoice.company_id == company_id
+                )
+            )
+            or 0
+        )
+        amount_received = int(
+            session.scalar(
+                select(
+                    func.coalesce(
+                        func.sum(MatterInvoicePaymentAttempt.amount_received_minor), 0
+                    )
+                ).where(MatterInvoicePaymentAttempt.company_id == company_id)
+            )
+            or 0
+        )
+    return invoice_count, line_count, payment_count, invoice_total, amount_received
+
+
 def test_uj52_exc01_nonbillable_capture_survives_a_docket_with_no_matter(
     client: TestClient,
 ) -> None:
@@ -191,6 +243,7 @@ def test_uj52_exc01_nonbillable_capture_survives_a_docket_with_no_matter(
     """
 
     headers, docket = _setup_without_matter(client)
+    before_billing = _billing_effect_snapshot(docket["company_id"])
 
     # A *billable* cost is still refused, and the refusal says what to do
     # instead rather than simply closing the door.
@@ -237,6 +290,40 @@ def test_uj52_exc01_nonbillable_capture_survives_a_docket_with_no_matter(
     # Matter billing is still the only accounting owner; this created no second
     # ledger for unbilled costs to live in.
     assert report["accounting_owner"] == "matter_billing"
+
+    # Repeat the read-only reconciliation to prove idempotence.  Neither cost
+    # capture nor reconciliation may create an invoice, an invoice line, a
+    # payment attempt, or change either billing/collection amount.
+    second_report = _reconcile(client, headers, docket["id"]).json()
+    assert second_report["nonbillable_count"] == 1
+    assert second_report["checksum_sha256"] == report["checksum_sha256"]
+    assert _billing_effect_snapshot(docket["company_id"]) == before_billing
+
+    # The public API has no rewrite or delete path for retained cost evidence.
+    for method in ("PATCH", "PUT", "DELETE"):
+        response = client.request(
+            method,
+            f"/api/ip/dockets/{docket['id']}/cost-items",
+            headers=headers,
+            json={"amount_minor": 1},
+        )
+        assert response.status_code == 405, response.text
+
+    # Even a writer bypassing the service cannot repurpose this row after a
+    # Matter is later created.  The database freezes the original amount,
+    # evidence reference and nonbillable/matterless identity.
+    with get_session_factory()() as session:
+        stored = session.get(IpCostItem, cost["id"])
+        assert stored is not None
+        stored.amount_minor = 1
+        with pytest.raises(IntegrityError, match="IP cost evidence is immutable"):
+            session.commit()
+
+    persisted = _docket(client, headers, docket["id"])["cost_items"][0]
+    assert persisted["matter_id"] is None
+    assert persisted["billable"] is False
+    assert persisted["amount_minor"] == 900000
+    assert persisted["evidence_reference"] == "receipt:registry-fee-unbilled-2026"
 
 
 def test_uj52_exc02_conversion_preserves_original_amount_rate_source_and_time(

@@ -9095,3 +9095,97 @@ def test_ip_document_link_projection_event_key_is_bounded_on_postgres(
     finally:
         clear_engine_cache()
         get_settings.cache_clear()
+
+
+def test_matterless_ip_cost_evidence_is_immutable_on_postgres(pg_engine):
+    """IPLF-039F: PostgreSQL enforces the nonbillable evidence boundary.
+
+    Reconciliation may refresh its derived projection, but no direct writer
+    can later rewrite or delete the official-fee fact and thereby turn a
+    matterless/nonbillable cost into invoice or payment input.
+    """
+
+    docket_id = str(uuid4())
+    cost_id = str(uuid4())
+    now = datetime.now(UTC)
+
+    with Session(pg_engine) as session:
+        company_id = _seed_company(session)
+        session.execute(
+            text(
+                "INSERT INTO ip_docket_records ("
+                "id, company_id, record_type, title, status, is_active, "
+                "lifecycle_version, restricted, access_policy_version, "
+                "current_version, created_at, updated_at"
+                ") VALUES ("
+                ":id, :company, 'trademark', 'PostgreSQL matterless cost', "
+                "'draft', true, 0, false, 0, 1, :now, :now)"
+            ),
+            {"id": docket_id, "company": company_id, "now": now},
+        )
+        session.execute(
+            text(
+                "INSERT INTO ip_cost_items ("
+                "id, company_id, docket_id, matter_id, category, description, "
+                "amount_minor, currency, billable, cost_nature, rate_confidential, "
+                "evidence_reference, reconciliation_status, created_at"
+                ") VALUES ("
+                ":id, :company, :docket, NULL, 'official_fee', "
+                "'Official filing fee paid before a Matter existed', 900000, 'INR', "
+                "false, 'actual', false, 'receipt:registry-fee-unbilled-2026', "
+                "'nonbillable', :now)"
+            ),
+            {
+                "id": cost_id,
+                "company": company_id,
+                "docket": docket_id,
+                "now": now,
+            },
+        )
+        session.commit()
+
+    # The reconciliation projection is intentionally mutable.
+    with Session(pg_engine) as session:
+        session.execute(
+            text(
+                "UPDATE ip_cost_items SET reconciliation_status = 'nonbillable', "
+                "canonical_amount_minor = NULL, "
+                "reconciliation_difference_minor = NULL, reconciled_at = :now "
+                "WHERE id = :id"
+            ),
+            {"id": cost_id, "now": datetime.now(UTC)},
+        )
+        session.commit()
+
+    for statement in (
+        "UPDATE ip_cost_items SET amount_minor = 1 WHERE id = :id",
+        "UPDATE ip_cost_items SET billable = true WHERE id = :id",
+        "UPDATE ip_cost_items SET evidence_reference = 'rewritten' WHERE id = :id",
+    ):
+        with Session(pg_engine) as session, pytest.raises(
+            DBAPIError, match="IP cost evidence is immutable"
+        ):
+            session.execute(text(statement), {"id": cost_id})
+            session.commit()
+
+    with Session(pg_engine) as session, pytest.raises(
+        DBAPIError, match="IP cost evidence is retained"
+    ):
+        session.execute(text("DELETE FROM ip_cost_items WHERE id = :id"), {"id": cost_id})
+        session.commit()
+
+    with Session(pg_engine) as session:
+        row = session.execute(
+            text(
+                "SELECT matter_id, billable, amount_minor, evidence_reference, "
+                "reconciliation_status FROM ip_cost_items WHERE id = :id"
+            ),
+            {"id": cost_id},
+        ).one()
+        assert tuple(row) == (
+            None,
+            False,
+            900000,
+            "receipt:registry-fee-unbilled-2026",
+            "nonbillable",
+        )
