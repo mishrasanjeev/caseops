@@ -119,4 +119,3 @@ def test_private_index_downgrade_refuses_retained_security_evidence(
     with pytest.raises(RuntimeError, match="private projection"):
         migration.downgrade()
     assert dropped == []
-
