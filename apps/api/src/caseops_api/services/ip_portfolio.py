@@ -778,7 +778,7 @@ def _portfolio_counts(
     *,
     context: SessionContext,
     statement: Select,
-) -> IpPortfolioCounts:
+) -> tuple[IpPortfolioCounts, datetime | None, datetime | None]:
     projection = (
         statement.with_only_columns(
             TrademarkApplication.id.label("application_id"),
@@ -787,6 +787,7 @@ def _portfolio_counts(
             TrademarkApplication.source_pending_identifier_allocation.label("pending_identifier"),
             TrademarkApplication.office.label("office"),
             TrademarkApplication.jurisdiction.label("jurisdiction"),
+            TrademarkApplication.updated_at.label("record_updated_at"),
             IpAsset.id.label("asset_id"),
             IpAsset.title.label("asset_title"),
             _latest_registry_sync_at().label("registry_last_success_at"),
@@ -814,7 +815,16 @@ def _portfolio_counts(
         IpDeadline.result_on < today,
     )
     freshness_threshold = datetime.now(UTC) - REGISTRY_FRESHNESS_WINDOW
-    total, complete_records, unconfirmed, overdue, stale, synchronized = session.execute(
+    (
+        total,
+        complete_records,
+        unconfirmed,
+        overdue,
+        stale,
+        synchronized,
+        latest_record_updated_at,
+        latest_registry_success_at,
+    ) = session.execute(
         select(
             func.count(),
             func.count().filter(complete),
@@ -827,19 +837,27 @@ def _portfolio_counts(
                 )
             ),
             func.count().filter(projection.c.registry_last_success_at.is_not(None)),
+            func.max(projection.c.record_updated_at),
+            func.max(projection.c.registry_last_success_at),
         ).select_from(projection)
     ).one()
     total = int(total or 0)
     complete_records = int(complete_records or 0)
-    return IpPortfolioCounts(
-        total=total,
-        complete_records=complete_records,
-        incomplete_records=total - complete_records,
-        unconfirmed_deadline_records=int(unconfirmed or 0),
-        overdue_records=int(overdue or 0),
-        stale_sync_records=int(stale or 0),
-        sync_failure_records=None,
-        registry_sync_state="available" if int(synchronized or 0) else "unavailable",
+    synchronized = int(synchronized or 0)
+    return (
+        IpPortfolioCounts(
+            total=total,
+            complete_records=complete_records,
+            incomplete_records=total - complete_records,
+            unconfirmed_deadline_records=int(unconfirmed or 0),
+            overdue_records=int(overdue or 0),
+            stale_sync_records=int(stale or 0),
+            synchronized_records=synchronized,
+            sync_failure_records=None,
+            registry_sync_state="available" if synchronized else "unavailable",
+        ),
+        latest_record_updated_at,
+        latest_registry_success_at,
     )
 
 
@@ -973,7 +991,11 @@ def list_ip_portfolio(
             )
         )
 
-    counts = _portfolio_counts(session, context=context, statement=statement)
+    counts, latest_record_updated_at, latest_registry_success_at = _portfolio_counts(
+        session,
+        context=context,
+        statement=statement,
+    )
     next_cursor = (
         _encode_cursor(rows[-1].updated_at, rows[-1].application_id) if has_more and rows else None
     )
@@ -983,6 +1005,8 @@ def list_ip_portfolio(
         filters=filters,
         limit=limit,
         next_cursor=next_cursor,
+        latest_record_updated_at=latest_record_updated_at,
+        latest_registry_success_at=latest_registry_success_at,
     )
 
 

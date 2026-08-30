@@ -318,7 +318,7 @@ test("IPLF-041 completes the governed applicant opposition journey", async ({ pa
   const matter = await createMatter(api, headers);
   const application = await createApplication(api, headers, matter.id);
   await signIn(page, tenant);
-  await page.goto(`/app/ip?docket=${application.docket.id}`);
+  await page.goto(`/app/ip?docket=${application.docket.id}&view=proceedings`);
   const opposition = page.getByTestId("ip-opposition-workspace");
   await opposition.getByRole("button", { name: "Applicant" }).click();
   await opposition.getByLabel("Opposition number").fill("");

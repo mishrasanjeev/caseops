@@ -22,10 +22,14 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = REPO_ROOT / "docs" / "ip-implementation" / "PROGRAM_MANIFEST.yaml"
+LEDGER_PATH = REPO_ROOT / "docs" / "ip-implementation" / "OWNERSHIP_LEDGER.yaml"
 GENERATED_VIEW_PATH = (
     REPO_ROOT / "docs" / "ip-implementation" / "generated" / "M2_OWNERSHIP_AUDIT.md"
 )
 MILESTONE_ID = "M2"
+RECONCILIATION_SLICE_ID = "IPLF-029B"
+RECONCILIATION_EPIC_ID = "IPLF-029"
+RECONCILIATION_COMPONENT = "m2-one-writer-reconciliation-gate"
 ACTIVE_IMPLEMENTATION_STATUSES = {"implemented", "in_progress"}
 DEPLOYMENT_VERIFIED_STATUS = "deployment_verified"
 REFERENCE_PATH = re.compile(
@@ -154,13 +158,111 @@ def _active_slice_errors(row: Mapping[str, Any]) -> list[str]:
     return errors
 
 
+def _reconciliation_control_errors(
+    manifest: Mapping[str, Any], ledger: Mapping[str, Any]
+) -> list[str]:
+    """Bind IPLF-029B to the one canonical M2 reconciliation control."""
+
+    errors: list[str] = []
+    completion_rows = [
+        row
+        for row in _m2_slices(manifest)
+        if row.get("id") == RECONCILIATION_SLICE_ID
+    ]
+    if len(completion_rows) != 1:
+        return [
+            f"{RECONCILIATION_SLICE_ID}: requires exactly one M2 completion slice"
+        ]
+    completion = completion_rows[0]
+    if completion.get("implementation_status") not in ACTIVE_IMPLEMENTATION_STATUSES:
+        errors.append(
+            f"{RECONCILIATION_SLICE_ID}: the checked-in reconciliation workflow "
+            "must remain active"
+        )
+
+    expected_requirement_ids = [
+        str(row.get("id"))
+        for row in manifest.get("requirements", [])
+        if isinstance(row, Mapping) and row.get("family") == "ARCH-OPS"
+    ]
+    if completion.get("requirement_ids") != expected_requirement_ids:
+        errors.append(
+            f"{RECONCILIATION_SLICE_ID}: requirement_ids must exactly cover the "
+            "manifest ARCH-OPS controls"
+        )
+
+    decisions = [
+        row
+        for row in ledger.get("epic_decisions", [])
+        if isinstance(row, Mapping) and row.get("epic_id") == RECONCILIATION_EPIC_ID
+    ]
+    if len(decisions) != 1:
+        errors.append(
+            f"{RECONCILIATION_SLICE_ID}: ownership ledger requires exactly one "
+            f"{RECONCILIATION_EPIC_ID} decision"
+        )
+        return errors
+    decision_components = [
+        row
+        for row in decisions[0].get("components", [])
+        if isinstance(row, Mapping)
+    ]
+    components = [
+        row
+        for row in decision_components
+        if row.get("name") == RECONCILIATION_COMPONENT
+    ]
+    if len(decision_components) != 1 or len(components) != 1:
+        errors.append(
+            f"{RECONCILIATION_SLICE_ID}: ownership ledger requires exactly one "
+            f"{RECONCILIATION_COMPONENT} component"
+        )
+        return errors
+    ledger_component = components[0]
+    if ledger_component.get("kind") != "contract":
+        errors.append(
+            f"{RECONCILIATION_SLICE_ID}: reconciliation component must be a contract"
+        )
+    if ledger_component.get("owner_id") != "platform-shared-foundations":
+        errors.append(
+            f"{RECONCILIATION_SLICE_ID}: reconciliation component must retain the "
+            "platform-shared-foundations owner"
+        )
+
+    ownership = completion.get("ownership", [])
+    matching_ownership = [
+        row
+        for row in ownership
+        if isinstance(row, Mapping) and row.get("component") == RECONCILIATION_COMPONENT
+    ]
+    if len(ownership) != 1 or len(matching_ownership) != 1:
+        errors.append(
+            f"{RECONCILIATION_SLICE_ID}: manifest ownership must identify exactly one "
+            f"{RECONCILIATION_COMPONENT}"
+        )
+        return errors
+    manifest_owner = matching_ownership[0]
+    for field in ("classification", "canonical_writer"):
+        if manifest_owner.get(field) != ledger_component.get(field):
+            errors.append(
+                f"{RECONCILIATION_SLICE_ID}: manifest {field} must match the "
+                f"ownership ledger {RECONCILIATION_COMPONENT}"
+            )
+    return errors
+
+
 def validate(
-    manifest: dict[str, Any] | None = None, *, check_generated_view: bool = True
+    manifest: dict[str, Any] | None = None,
+    ledger: dict[str, Any] | None = None,
+    *,
+    check_generated_view: bool = True,
 ) -> list[str]:
     """Return every M2 audit failure without changing program state."""
 
     if manifest is None:
         manifest = _load(MANIFEST_PATH)
+    if ledger is None:
+        ledger = _load(LEDGER_PATH)
     errors: list[str] = []
     rows = _m2_slices(manifest)
     if not rows:
@@ -191,6 +293,7 @@ def validate(
                 )
         else:
             errors.append(f"{slice_id}: unknown implementation_status {status!r}")
+    errors.extend(_reconciliation_control_errors(manifest, ledger))
     if check_generated_view and not errors:
         expected = _render_markdown(manifest)
         if not GENERATED_VIEW_PATH.is_file():
@@ -230,7 +333,7 @@ def _render_markdown(manifest: Mapping[str, Any]) -> str:
         "",
         "This is a repository Definition-of-Ready control. It validates required",
         "canonical-writer, test, and evidence references.",
-        "run a production operation, or convert a blocked slice into",
+        "It does not run a production operation or convert a blocked slice into",
         "a released capability.",
         "",
         "## M2 slice inventory",
@@ -255,6 +358,17 @@ def _render_markdown(manifest: Mapping[str, Any]) -> str:
         )
     lines.extend(
         [
+            "",
+            "## Closure summary",
+            "",
+            f"- M2 rows: `{len(rows)}`",
+            f"- Deployment-evidence-recorded rows: `"
+            f"{sum(row.get('release_status') == DEPLOYMENT_VERIFIED_STATUS for row in rows)}`",
+            f"- Rows still awaiting release closure: `"
+            f"{sum(row.get('release_status') != DEPLOYMENT_VERIFIED_STATUS for row in rows)}`",
+            "",
+            "IPLF-029B remains active and release-blocked until every M2 row carries",
+            "its independently required one-writer reconciliation and exact-release proof.",
             "",
             "## Release interpretation",
             "",

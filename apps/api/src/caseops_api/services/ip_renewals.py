@@ -6,7 +6,7 @@ from collections import Counter
 from datetime import UTC, date, datetime, time, timedelta
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
@@ -77,6 +77,7 @@ _REMINDER_TERMINAL_STATES = {
     "completed",
     "cancelled",
 }
+_MAX_RENEWAL_PORTFOLIO_LIMIT = 1000
 
 
 def _now() -> datetime:
@@ -257,12 +258,22 @@ def _instructions(session: Session, *, company_id: str, term_id: str) -> list[Ip
     )
 
 
-def _record(session: Session, row: IpRenewalTerm) -> IpRenewalTermRecord:
+def _record(
+    session: Session,
+    row: IpRenewalTerm,
+    *,
+    instructions: list[IpClientInstruction] | None = None,
+) -> IpRenewalTermRecord:
+    resolved_instructions = (
+        instructions
+        if instructions is not None
+        else _instructions(session, company_id=row.company_id, term_id=row.id)
+    )
     return IpRenewalTermRecord.model_validate(row).model_copy(
         update={
             "instructions": [
                 IpClientInstructionRecord.model_validate(instruction)
-                for instruction in _instructions(session, company_id=row.company_id, term_id=row.id)
+                for instruction in resolved_instructions
             ]
         }
     )
@@ -401,12 +412,14 @@ def _workflow_record(
     term: IpRenewalTerm,
     deadline_by_id: dict[str, IpDeadline],
     cost_by_id: dict[str, IpCostItem],
+    instructions_by_term: dict[str, list[IpClientInstruction]],
+    include_instruction_history: bool,
     reminders_by_term: dict[str, list[NotificationDeliveryIntent]],
     today: date,
 ) -> IpRenewalWorkflowRecord:
     renewal_deadline = deadline_by_id[term.renewal_deadline_id]
     grace_deadline = deadline_by_id.get(term.grace_deadline_id) if term.grace_deadline_id else None
-    instructions = _instructions(session, company_id=term.company_id, term_id=term.id)
+    instructions = instructions_by_term.get(term.id, [])
     phase = (
         "closed"
         if term.state in {"completed", "cancelled"}
@@ -424,7 +437,11 @@ def _workflow_record(
         docket_title=docket.title,
         primary_identifier=docket.primary_identifier,
         record_type=docket.record_type,
-        term=_record(session, term),
+        term=_record(
+            session,
+            term,
+            instructions=instructions if include_instruction_history else [],
+        ),
         renewal_deadline=_deadline_summary(renewal_deadline),
         grace_deadline=_deadline_summary(grace_deadline) if grace_deadline else None,
         fee=_fee_summary(cost_by_id.get(term.fee_cost_item_id or "")),
@@ -445,33 +462,53 @@ def _workflow_record(
 
 
 def list_renewal_portfolio(
-    session: Session, *, context: SessionContext
+    session: Session,
+    *,
+    context: SessionContext,
+    limit: int | None = None,
+    include_instruction_history: bool = True,
+    include_reminder_history: bool = True,
 ) -> IpRenewalPortfolioResponse:
-    dockets = list(
-        session.scalars(
-            select(IpDocketRecord).where(
-                IpDocketRecord.company_id == context.company.id,
-                IpDocketRecord.is_active.is_(True),
-                IpDocketRecord.archived_by_matter_disposal.is_(False),
-                visible_ip_dockets_filter(session, context=context),
-            )
-        ).all()
-    )
-    docket_by_id = {row.id: row for row in dockets}
-    if not docket_by_id:
-        return IpRenewalPortfolioResponse(
-            generated_at=_now(), items=[], counts=IpRenewalPortfolioCounts()
+    """Read the canonical renewal projection with an optional total-work cap."""
+
+    if limit is not None and not 1 <= limit <= _MAX_RENEWAL_PORTFOLIO_LIMIT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"limit must be between 1 and {_MAX_RENEWAL_PORTFOLIO_LIMIT}.",
         )
-    terms = list(
-        session.scalars(
-            select(IpRenewalTerm)
-            .where(
-                IpRenewalTerm.company_id == context.company.id,
-                IpRenewalTerm.docket_id.in_(sorted(docket_by_id)),
-            )
-            .order_by(IpRenewalTerm.updated_at.desc(), IpRenewalTerm.id)
-        ).all()
+    statement = (
+        select(IpRenewalTerm, IpDocketRecord)
+        .join(
+            IpDocketRecord,
+            and_(
+                IpDocketRecord.id == IpRenewalTerm.docket_id,
+                IpDocketRecord.company_id == IpRenewalTerm.company_id,
+            ),
+        )
+        .where(
+            IpRenewalTerm.company_id == context.company.id,
+            IpDocketRecord.is_active.is_(True),
+            IpDocketRecord.archived_by_matter_disposal.is_(False),
+            visible_ip_dockets_filter(session, context=context),
+        )
+        .order_by(IpRenewalTerm.updated_at.desc(), IpRenewalTerm.id)
     )
+    if limit is not None:
+        statement = statement.limit(limit + 1)
+    pairs = list(session.execute(statement).all())
+    has_more = limit is not None and len(pairs) > limit
+    if has_more:
+        pairs = pairs[:limit]
+    terms = [term for term, _docket in pairs]
+    docket_by_id = {docket.id: docket for _term, docket in pairs}
+    if not terms:
+        return IpRenewalPortfolioResponse(
+            generated_at=_now(),
+            items=[],
+            counts=IpRenewalPortfolioCounts(),
+            counts_are_complete=not has_more,
+            has_more=has_more,
+        )
     deadline_ids = {
         deadline_id
         for term in terms
@@ -501,6 +538,42 @@ def list_renewal_portfolio(
         else []
     )
     cost_by_id = {row.id: row for row in costs}
+    instruction_statement = select(IpClientInstruction).where(
+        IpClientInstruction.company_id == context.company.id,
+        IpClientInstruction.renewal_term_id.in_([term.id for term in terms]),
+    )
+    if not include_instruction_history:
+        latest_versions = (
+            select(
+                IpClientInstruction.renewal_term_id.label("term_id"),
+                func.max(IpClientInstruction.instruction_version).label("latest_version"),
+            )
+            .where(
+                IpClientInstruction.company_id == context.company.id,
+                IpClientInstruction.renewal_term_id.in_([term.id for term in terms]),
+            )
+            .group_by(IpClientInstruction.renewal_term_id)
+            .subquery()
+        )
+        instruction_statement = instruction_statement.join(
+            latest_versions,
+            and_(
+                latest_versions.c.term_id == IpClientInstruction.renewal_term_id,
+                latest_versions.c.latest_version
+                == IpClientInstruction.instruction_version,
+            ),
+        )
+    instructions = list(
+        session.scalars(
+            instruction_statement.order_by(
+                IpClientInstruction.renewal_term_id,
+                IpClientInstruction.instruction_version,
+            )
+        ).all()
+    )
+    instructions_by_term: dict[str, list[IpClientInstruction]] = {}
+    for instruction in instructions:
+        instructions_by_term.setdefault(instruction.renewal_term_id, []).append(instruction)
     intents = (
         list(
             session.scalars(
@@ -511,7 +584,7 @@ def list_renewal_portfolio(
                 )
             ).all()
         )
-        if terms
+        if terms and include_reminder_history
         else []
     )
     reminders_by_term: dict[str, list[NotificationDeliveryIntent]] = {}
@@ -525,6 +598,8 @@ def list_renewal_portfolio(
             term=term,
             deadline_by_id=deadline_by_id,
             cost_by_id=cost_by_id,
+            instructions_by_term=instructions_by_term,
+            include_instruction_history=include_instruction_history,
             reminders_by_term=reminders_by_term,
             today=today,
         )
@@ -540,6 +615,8 @@ def list_renewal_portfolio(
             action_required=sum(row.action_required != "none" for row in items),
             **{state: counts[state] for state in _TRANSITIONS},
         ),
+        counts_are_complete=not has_more,
+        has_more=has_more,
     )
 
 

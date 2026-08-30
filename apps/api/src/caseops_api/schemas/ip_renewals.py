@@ -293,6 +293,8 @@ class IpRenewalPortfolioResponse(BaseModel):
     generated_at: datetime
     items: list[IpRenewalWorkflowRecord]
     counts: IpRenewalPortfolioCounts
+    counts_are_complete: bool = True
+    has_more: bool = False
 
 
 class IpRenewalReminderScheduleRequest(BaseModel):

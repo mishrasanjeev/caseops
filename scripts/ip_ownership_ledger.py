@@ -25,6 +25,7 @@ LEDGER_PATH = REPO_ROOT / "docs" / "ip-implementation" / "OWNERSHIP_LEDGER.yaml"
 CLASSIFICATIONS = {"NEW", "EXTEND", "LINK", "REPLACE"}
 COMPONENT_KINDS = {"table", "service", "route", "page", "job", "contract"}
 MILESTONES = {"M2", "M3"}
+LEDGER_STATUS = "engineering_control_published_machine_enforced"
 IPLF_027_COMPONENTS_BY_KIND = {
     "table": {
         "api_idempotency_records",
@@ -158,6 +159,8 @@ def validate(
 
     if ledger.get("schema_version") != 1:
         errors.append("ownership ledger schema_version must be 1")
+    if ledger.get("status") != LEDGER_STATUS:
+        errors.append(f"ownership ledger status must be {LEDGER_STATUS}")
     if ledger.get("prd_path") != str(PRD_PATH.relative_to(REPO_ROOT)).replace("\\", "/"):
         errors.append("ownership ledger prd_path does not identify the binding PRD")
 
