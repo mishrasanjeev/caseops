@@ -35,7 +35,12 @@ from caseops_api.schemas.google_workspace import (
     GoogleWorkspaceTenantConfigurationUpdateRequest,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.notification_delivery import retry_delay_for_attempt
+from caseops_api.services.http_retries import (
+    DEFAULT_SAFE_HTTP_RETRY_BACKOFF_SECONDS,
+    DEFAULT_SAFE_HTTP_RETRY_MAX_ATTEMPTS,
+    RETRYABLE_READ_STATUS_CODES,
+    SAFE_RETRY_METHODS,
+)
 from caseops_api.services.session_context import SessionContext
 
 GoogleWorkspaceConnector = Literal["calendar", "gmail", "drive"]
@@ -234,32 +239,49 @@ def google_workspace_oauth_config(
     context: SessionContext | None = None,
     connector: GoogleWorkspaceConnector,
 ) -> GoogleWorkspaceOAuthConfig:
+    row = None
     if session is not None and context is not None:
         row = tenant_google_workspace_configuration(
             session,
             company_id=context.company.id,
         )
-        if row is not None:
-            client_secret = _decrypt_secret(row.encrypted_client_secret_ref)
-            redirect_uri = _tenant_connector_redirect(row, connector=connector)
-            missing = []
-            if not row.client_id:
-                missing.append("GOOGLE_WORKSPACE_CLIENT_ID")
-            if not client_secret:
-                missing.append("GOOGLE_WORKSPACE_CLIENT_SECRET")
-            if not redirect_uri:
-                missing.append(_CONNECTOR_REQUIRED_CONFIG_NAMES[connector][2])
-            enabled = _tenant_connector_enabled(row, connector=connector)
-            if not enabled:
-                missing.append(f"GOOGLE_WORKSPACE_{connector.upper()}_ENABLED")
-            return GoogleWorkspaceOAuthConfig(
-                client_id=row.client_id if enabled else None,
-                client_secret=client_secret if enabled else None,
-                redirect_uri=redirect_uri if enabled else None,
-                source="tenant_admin",
-                enabled=enabled,
-                missing_config_names=tuple(missing),
-            )
+    return _google_workspace_oauth_config_from_row(row, connector=connector)
+
+
+def _google_workspace_oauth_config_from_row(
+    row: TenantGoogleWorkspaceConfiguration | None,
+    *,
+    connector: GoogleWorkspaceConnector,
+) -> GoogleWorkspaceOAuthConfig:
+    """Resolve one already-loaded tenant row without repeated tenant queries."""
+
+    if row is not None:
+        enabled = _tenant_connector_enabled(row, connector=connector)
+        # Disabled rows are an authoritative kill switch. Do not even decrypt
+        # their stored secret, and never continue to environment fallback.
+        client_secret = (
+            _decrypt_secret(row.encrypted_client_secret_ref)
+            if enabled
+            else None
+        )
+        redirect_uri = _tenant_connector_redirect(row, connector=connector)
+        missing = []
+        if not row.client_id:
+            missing.append("GOOGLE_WORKSPACE_CLIENT_ID")
+        if not client_secret:
+            missing.append("GOOGLE_WORKSPACE_CLIENT_SECRET")
+        if not redirect_uri:
+            missing.append(_CONNECTOR_REQUIRED_CONFIG_NAMES[connector][2])
+        if not enabled:
+            missing.append(f"GOOGLE_WORKSPACE_{connector.upper()}_ENABLED")
+        return GoogleWorkspaceOAuthConfig(
+            client_id=row.client_id if enabled else None,
+            client_secret=client_secret if enabled else None,
+            redirect_uri=redirect_uri if enabled else None,
+            source="tenant_admin",
+            enabled=enabled,
+            missing_config_names=tuple(missing),
+        )
     env_config = _env_oauth_config(connector=connector)
     if env_config.configured:
         return env_config
@@ -345,24 +367,53 @@ def _config_items(
 def _approval_items(
     row: TenantGoogleWorkspaceConfiguration | None,
 ) -> list[GoogleWorkspaceApprovalItemStatus]:
-    return [
-        GoogleWorkspaceApprovalItemStatus(
-            key=key,
-            label=label,
-            approved=bool(getattr(row, key, False)) if row is not None else False,
+    required_scopes: set[str] = set()
+    if row is not None and row.enabled:
+        if row.calendar_enabled:
+            required_scopes.update(GOOGLE_WORKSPACE_CALENDAR_SCOPES)
+        if row.gmail_enabled:
+            required_scopes.update(GOOGLE_WORKSPACE_GMAIL_SCOPES)
+        if row.drive_enabled:
+            required_scopes.update(GOOGLE_WORKSPACE_DRIVE_SCOPES)
+    approved_scopes = set(row.scopes_json or ()) if row is not None else set()
+    items: list[GoogleWorkspaceApprovalItemStatus] = []
+    for key, label in _APPROVAL_LABELS.items():
+        approved = bool(getattr(row, key, False)) if row is not None else False
+        if key == "scopes_approved":
+            # Scope authority is meaningful only when it covers every enabled
+            # connector.  The stored boolean alone must never bless a partial
+            # or invented permission set.
+            approved = bool(
+                approved
+                and required_scopes
+                and required_scopes.issubset(approved_scopes)
+            )
+        items.append(
+            GoogleWorkspaceApprovalItemStatus(
+                key=key,
+                label=label,
+                approved=approved,
+            )
         )
-        for key, label in _APPROVAL_LABELS.items()
-    ]
+    return items
 
 
 def _machine_control_items(
-    session: Session,
     *,
-    context: SessionContext,
     row: TenantGoogleWorkspaceConfiguration | None,
+    connector_configs: dict[
+        GoogleWorkspaceConnector,
+        GoogleWorkspaceOAuthConfig,
+    ],
 ) -> list[GoogleWorkspaceMachineReadinessControlStatus]:
-    first_retry = retry_delay_for_attempt(1)
-    second_retry = retry_delay_for_attempt(2)
+    provider_retry_ready = bool(
+        DEFAULT_SAFE_HTTP_RETRY_MAX_ATTEMPTS >= 2
+        and DEFAULT_SAFE_HTTP_RETRY_BACKOFF_SECONDS > 0
+        and {"GET", "HEAD"}.issubset(SAFE_RETRY_METHODS)
+        and {408, 429, 500, 502, 503, 504}.issubset(
+            RETRYABLE_READ_STATUS_CODES
+        )
+    )
     settings = get_settings()
     webhook_values = (
         bool(settings.gmail_pubsub_topic),
@@ -376,11 +427,7 @@ def _machine_control_items(
         row is None
         or row.enabled
         or all(
-            not google_workspace_oauth_config(
-                session,
-                context=context,
-                connector=connector,
-            ).configured
+            not connector_configs[connector].configured
             for connector in ("calendar", "gmail", "drive")
         )
     )
@@ -391,12 +438,12 @@ def _machine_control_items(
             key="provider_retry_policy",
             label="Bounded provider retry policy",
             version="provider-delivery-retry/v1",
-            status=(
-                "passed"
-                if first_retry.total_seconds() > 0 and second_retry >= first_retry
-                else "failed"
+            status="passed" if provider_retry_ready else "failed",
+            detail=(
+                "Safe read-only provider retries are bounded with exponential backoff."
+                if provider_retry_ready
+                else "Safe provider retry policy is incomplete or unbounded."
             ),
-            detail="Bounded exponential retry policy loaded.",
         ),
         GoogleWorkspaceMachineReadinessControlStatus(
             key="gmail_webhook_disable_boundary",
@@ -565,29 +612,27 @@ def google_workspace_tenant_configuration_status(
 ) -> GoogleWorkspaceTenantConfigurationResponse:
     row = tenant_google_workspace_configuration(session, company_id=context.company.id)
     enabled_connectors = _enabled_connectors(row)
-    connector_configured = {
-        connector: google_workspace_connector_configured(
-            session,
-            context=context,
+    connector_configs = {
+        connector: _google_workspace_oauth_config_from_row(
+            row,
             connector=connector,
         )
         for connector in ("calendar", "gmail", "drive")
     }
+    connector_configured = {
+        connector: config.configured
+        for connector, config in connector_configs.items()
+    }
     required_config = _config_items(row)
     required_approvals = _approval_items(row)
     machine_controls = _machine_control_items(
-        session,
-        context=context,
         row=row,
+        connector_configs=connector_configs,
     )
     missing_config_names: list[str] = []
     if row is not None:
         for connector in enabled_connectors:
-            for name in google_workspace_connector_missing_config_names(
-                session,
-                context=context,
-                connector=connector,
-            ):
+            for name in connector_configs[connector].missing_config_names:
                 if name not in missing_config_names:
                     missing_config_names.append(name)
     else:

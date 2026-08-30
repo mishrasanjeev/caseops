@@ -92,6 +92,11 @@ from caseops_api.services.notification_delivery import (
 from caseops_api.services.security import require_recent_step_up
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.shared_work import resolve_shared_work_target
+from caseops_api.workflows.notification_intent_contracts import (
+    DEFAULT_RETRY_MAXIMUM_ATTEMPTS,
+    DEFAULT_RETRY_MAXIMUM_INTERVAL,
+    OUTLOOK_DURABLE_SYNC_FOUNDATION_VERSION,
+)
 
 OUTLOOK_SCOPES = ["offline_access", "User.Read", "Calendars.ReadWrite"]
 GOOGLE_CALENDAR_SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
@@ -896,9 +901,10 @@ def _outlook_provider(
     session: Session | None = None,
     *,
     context: SessionContext | None = None,
+    runtime_config: OutlookRuntimeConfig | None = None,
 ) -> OutlookProvider:
     return _outlook_provider_override or MicrosoftGraphOutlookProvider(
-        _outlook_runtime_config(session, context=context)
+        runtime_config or _outlook_runtime_config(session, context=context)
     )
 
 
@@ -1031,25 +1037,32 @@ def _outlook_runtime_config(
     *,
     context: SessionContext | None = None,
 ) -> OutlookRuntimeConfig:
+    row = None
     if session is not None and context is not None:
         row = _tenant_outlook_configuration(session, company_id=context.company.id)
-        if row is not None:
-            # A tenant row is authoritative even when disabled. Falling back
-            # to process-wide credentials here would turn an explicit tenant
-            # kill switch into a silent re-enable.
-            enabled = bool(row.enabled)
-            return OutlookRuntimeConfig(
-                client_id=row.client_id if enabled else None,
-                client_secret=(
-                    _decrypt_secret(row.encrypted_client_secret_ref)
-                    if enabled
-                    else None
-                ),
-                tenant_id=(row.tenant_id or "organizations").strip("/")
-                or "organizations",
-                redirect_uri=row.redirect_uri if enabled else None,
-                source="tenant_admin",
-            )
+    return _outlook_runtime_config_from_row(row)
+
+
+def _outlook_runtime_config_from_row(
+    row: TenantOutlookConfiguration | None,
+) -> OutlookRuntimeConfig:
+    if row is not None:
+        # A tenant row is authoritative even when disabled. Falling back to
+        # process-wide credentials here would turn an explicit tenant kill
+        # switch into a silent re-enable.
+        enabled = bool(row.enabled)
+        return OutlookRuntimeConfig(
+            client_id=row.client_id if enabled else None,
+            client_secret=(
+                _decrypt_secret(row.encrypted_client_secret_ref)
+                if enabled
+                else None
+            ),
+            tenant_id=(row.tenant_id or "organizations").strip("/")
+            or "organizations",
+            redirect_uri=row.redirect_uri if enabled else None,
+            source="tenant_admin",
+        )
     return _environment_runtime_config()
 
 
@@ -1665,6 +1678,16 @@ def _machine_control_items(
 ) -> list[OutlookMachineReadinessControlStatus]:
     first_retry = retry_delay_for_attempt(1)
     second_retry = retry_delay_for_attempt(2)
+    durable_delivery_ready = bool(
+        OUTLOOK_DURABLE_SYNC_FOUNDATION_VERSION
+        and DEFAULT_RETRY_MAXIMUM_ATTEMPTS >= 2
+        and first_retry.total_seconds() > 0
+        and second_retry > first_retry
+        and second_retry <= DEFAULT_RETRY_MAXIMUM_INTERVAL
+        and calendar_sync_replay_safe_clause() is not None
+        and CalendarEventSyncStatus.RETRY_SCHEDULED
+        != CalendarEventSyncStatus.DEAD_LETTER
+    )
     redaction_probe = "client_secret=connector-readiness-secret"
     redacted = redact_provider_error(redaction_probe)
     disable_boundary_ready = bool(
@@ -1675,12 +1698,12 @@ def _machine_control_items(
             key="durable_retry_dead_letter_replay",
             label="Durable retry, dead-letter, and replay policy",
             version="calendar-durable-delivery/v1",
-            status=(
-                "passed"
-                if first_retry.total_seconds() > 0 and second_retry >= first_retry
-                else "failed"
+            status="passed" if durable_delivery_ready else "failed",
+            detail=(
+                "Bounded retry, terminal dead-letter, and replay-safe filtering are loaded."
+                if durable_delivery_ready
+                else "Durable retry, dead-letter, or replay-safe policy is incomplete."
             ),
-            detail="Bounded exponential retry and terminal dead-letter policy loaded.",
         ),
         OutlookMachineReadinessControlStatus(
             key="tenant_disable_boundary",
@@ -1731,14 +1754,23 @@ def _config_items(runtime_config: OutlookRuntimeConfig) -> list[OutlookConfigura
 def _approval_items(
     row: TenantOutlookConfiguration | None,
 ) -> list[OutlookApprovalItemStatus]:
-    return [
-        OutlookApprovalItemStatus(
-            key=key,
-            label=label,
-            approved=bool(getattr(row, key, False)) if row is not None else False,
+    approved_scopes = set(row.scopes_json or ()) if row is not None else set()
+    items: list[OutlookApprovalItemStatus] = []
+    for key, label in _APPROVAL_LABELS.items():
+        approved = bool(getattr(row, key, False)) if row is not None else False
+        if key == "scopes_approved":
+            # A checkbox cannot approve a different or incomplete permission
+            # set.  Bind the authority to the exact scopes the connector will
+            # request so an invented/partial list remains fail-closed.
+            approved = approved and set(OUTLOOK_SCOPES).issubset(approved_scopes)
+        items.append(
+            OutlookApprovalItemStatus(
+                key=key,
+                label=label,
+                approved=approved,
+            )
         )
-        for key, label in _APPROVAL_LABELS.items()
-    ]
+    return items
 
 
 def _readiness_value(
@@ -1796,8 +1828,12 @@ def outlook_tenant_configuration_status(
     context: SessionContext,
 ) -> OutlookTenantConfigurationResponse:
     row = _tenant_outlook_configuration(session, company_id=context.company.id)
-    runtime_config = _outlook_runtime_config(session, context=context)
-    provider = _provider(session, context=context)
+    runtime_config = _outlook_runtime_config_from_row(row)
+    provider = _outlook_provider(
+        session,
+        context=context,
+        runtime_config=runtime_config,
+    )
     config_items = _config_items(runtime_config)
     approvals = _approval_items(row)
     machine_controls = _machine_control_items(row, runtime_config)
@@ -1814,7 +1850,7 @@ def outlook_tenant_configuration_status(
         session,
         context=context,
     )
-    if row is not None and row.enabled:
+    if row is not None:
         config_source = "tenant_admin"
     elif provider.configured:
         config_source = runtime_config.source

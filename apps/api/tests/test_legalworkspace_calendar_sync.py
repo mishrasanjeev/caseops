@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import event, select
 
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
@@ -30,6 +30,7 @@ from caseops_api.db.models import (
     UserCalendarConnection,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.services import calendar_sync as calendar_sync_service
 from caseops_api.services.calendar_projection_safety import (
     CALENDAR_UPSERT_UNKNOWN_OUTCOME_REASON,
 )
@@ -727,6 +728,12 @@ def test_admin_outlook_configuration_stores_secret_encrypted_and_names_only(
             "scopes": ["offline_access", "User.Read", "Calendars.ReadWrite"],
             "oauth_consent_model_approved": True,
             "scopes_approved": True,
+            # A previous web revision may still send these during a rolling
+            # deploy. Pydantic accepts/ignores them, and the service must not
+            # write the legacy database columns.
+            "durable_runbook_approved": True,
+            "rollback_approved": True,
+            "redaction_rules_approved": True,
             "enabled": True,
         },
     )
@@ -758,6 +765,149 @@ def test_admin_outlook_configuration_stores_secret_encrypted_and_names_only(
         assert row.durable_runbook_approved is False
         assert row.rollback_approved is False
         assert row.redaction_rules_approved is False
+        row.durable_runbook_approved = True
+        row.rollback_approved = True
+        row.redaction_rules_approved = True
+        session.add(row)
+        session.commit()
+
+    # Even pre-existing true values are inert: they neither appear as current
+    # authorities nor affect readiness.
+    legacy_true = client.get(
+        "/api/admin/outlook-configuration",
+        headers=_auth(token),
+    )
+    assert legacy_true.status_code == 200, legacy_true.text
+    assert legacy_true.json()["missing_approval_keys"] == []
+    assert {item["key"] for item in legacy_true.json()["required_approvals"]} == {
+        "oauth_consent_model_approved",
+        "scopes_approved",
+    }
+
+
+def test_outlook_scope_authority_rejects_partial_approved_scope_set(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    response = client.patch(
+        "/api/admin/outlook-configuration",
+        headers=_auth(token),
+        json={
+            "client_id": "tenant-client",
+            "client_secret": "tenant-secret",
+            "redirect_uri": "https://tenant.example.test/outlook/callback",
+            "scopes": ["offline_access", "User.Read"],
+            "oauth_consent_model_approved": True,
+            "scopes_approved": True,
+            "enabled": True,
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["configured"] is True
+    assert response.json()["missing_approval_keys"] == ["scopes_approved"]
+    scopes = next(
+        item
+        for item in response.json()["required_approvals"]
+        if item["key"] == "scopes_approved"
+    )
+    assert scopes["approved"] is False
+
+
+def test_outlook_status_loads_tenant_configuration_once(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    saved = client.patch(
+        "/api/admin/outlook-configuration",
+        headers=_auth(token),
+        json={
+            "client_id": "tenant-client",
+            "client_secret": "tenant-secret",
+            "redirect_uri": "https://tenant.example.test/outlook/callback",
+            "oauth_consent_model_approved": True,
+            "scopes_approved": True,
+            "enabled": True,
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    factory = get_session_factory()
+    with factory() as session:
+        bind = session.bind
+    assert bind is not None
+    tenant_selects = 0
+
+    def count_tenant_selects(
+        _connection,
+        _cursor,
+        statement,
+        _parameters,
+        _context,
+        _executemany,
+    ) -> None:
+        nonlocal tenant_selects
+        normalized = str(statement).lower()
+        if (
+            normalized.lstrip().startswith("select")
+            and "tenant_outlook_configurations" in normalized
+        ):
+            tenant_selects += 1
+
+    event.listen(bind, "before_cursor_execute", count_tenant_selects)
+    try:
+        response = client.get(
+            "/api/admin/outlook-configuration",
+            headers=_auth(token),
+        )
+    finally:
+        event.remove(bind, "before_cursor_execute", count_tenant_selects)
+    assert response.status_code == 200, response.text
+    assert tenant_selects == 1
+
+
+def test_outlook_machine_controls_fail_closed_when_policy_checks_fail(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    saved = client.patch(
+        "/api/admin/outlook-configuration",
+        headers=_auth(token),
+        json={
+            "client_id": "tenant-client",
+            "client_secret": "tenant-secret",
+            "redirect_uri": "https://tenant.example.test/outlook/callback",
+            "oauth_consent_model_approved": True,
+            "scopes_approved": True,
+            "enabled": True,
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    monkeypatch.setattr(
+        calendar_sync_service,
+        "retry_delay_for_attempt",
+        lambda _attempt: timedelta(0),
+    )
+    monkeypatch.setattr(
+        calendar_sync_service,
+        "redact_provider_error",
+        lambda value: str(value),
+    )
+
+    status_response = client.get(
+        "/api/admin/outlook-configuration",
+        headers=_auth(token),
+    )
+    assert status_response.status_code == 200, status_response.text
+    assert set(status_response.json()["missing_machine_control_keys"]) == {
+        "durable_retry_dead_letter_replay",
+        "provider_error_redaction",
+    }
+    assert status_response.json()["adp20_readiness"] == (
+        "blocked_pending_admin_configuration"
+    )
 
 
 def test_disabled_tenant_outlook_never_falls_back_to_environment_credentials(
@@ -789,6 +939,7 @@ def test_disabled_tenant_outlook_never_falls_back_to_environment_credentials(
     assert disabled.status_code == 200, disabled.text
     assert disabled.json()["configured"] is False
     assert disabled.json()["enabled"] is False
+    assert disabled.json()["config_source"] == "tenant_admin"
 
     start = client.post(
         "/api/calendar/connections/outlook/start",

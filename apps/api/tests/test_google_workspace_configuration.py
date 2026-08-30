@@ -4,11 +4,12 @@ import json
 from urllib.parse import parse_qs, urlparse
 
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import event, select
 
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import AuditEvent, TenantGoogleWorkspaceConfiguration
 from caseops_api.db.session import get_session_factory
+from caseops_api.services import google_workspace as google_workspace_service
 from tests.test_legalworkspace_calendar_sync import _auth, _bootstrap_company
 
 
@@ -32,6 +33,11 @@ def _configure_google_workspace(client: TestClient, token: str) -> None:
             ],
             "oauth_consent_model_approved": True,
             "scopes_approved": True,
+            # Compatibility input from a previous web revision; current API
+            # ignores these internal acknowledgements instead of persisting
+            # them as readiness evidence.
+            "webhook_runbook_approved": True,
+            "redaction_rules_approved": True,
             "calendar_enabled": True,
             "gmail_enabled": True,
             "drive_enabled": True,
@@ -80,6 +86,10 @@ def test_google_workspace_tenant_config_is_secret_safe_audited_and_used_for_oaut
         assert "tenant-google-secret" not in row.encrypted_client_secret_ref
         assert row.webhook_runbook_approved is False
         assert row.redaction_rules_approved is False
+        row.webhook_runbook_approved = True
+        row.redaction_rules_approved = True
+        session.add(row)
+        session.commit()
         audit = session.scalar(
             select(AuditEvent).where(
                 AuditEvent.action == "google_workspace.configuration.updated"
@@ -107,6 +117,17 @@ def test_google_workspace_tenant_config_is_secret_safe_audited_and_used_for_oaut
         metadata = json.loads(audit.metadata_json or "{}")
         assert metadata["external_provider_calls"] == 0
         assert metadata["missing_machine_control_keys"] == []
+
+    legacy_true = client.get(
+        "/api/admin/google-workspace-configuration",
+        headers=_auth(token),
+    )
+    assert legacy_true.status_code == 200, legacy_true.text
+    assert legacy_true.json()["missing_approval_keys"] == []
+    assert {item["key"] for item in legacy_true.json()["required_approvals"]} == {
+        "oauth_consent_model_approved",
+        "scopes_approved",
+    }
 
     calendar_start = client.post(
         "/api/calendar/connections/google-calendar/start",
@@ -236,6 +257,177 @@ def test_google_readiness_blocks_partial_webhook_configuration_offline(
         assert metadata["missing_machine_control_keys"] == [
             "gmail_webhook_disable_boundary"
         ]
+
+
+def test_google_scope_authority_rejects_partial_approved_scope_set(
+    client: TestClient,
+) -> None:
+    bootstrap = _bootstrap_company(
+        client,
+        slug="google-workspace-partial-scopes",
+        email="owner@google-workspace-partial-scopes.example",
+    )
+    token = str(bootstrap["access_token"])
+    _configure_google_workspace(client, token)
+
+    response = client.patch(
+        "/api/admin/google-workspace-configuration",
+        headers=_auth(token),
+        json={
+            "scopes": ["https://www.googleapis.com/auth/calendar.events"],
+            "oauth_consent_model_approved": True,
+            "scopes_approved": True,
+            "calendar_enabled": True,
+            "gmail_enabled": True,
+            "drive_enabled": True,
+            "enabled": True,
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["configured"] is True
+    assert response.json()["missing_approval_keys"] == ["scopes_approved"]
+    scopes = next(
+        item
+        for item in response.json()["required_approvals"]
+        if item["key"] == "scopes_approved"
+    )
+    assert scopes["approved"] is False
+
+
+def test_disabled_google_tenant_row_never_falls_back_to_environment_credentials(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    bootstrap = _bootstrap_company(
+        client,
+        slug="google-workspace-disabled-env",
+        email="owner@google-workspace-disabled-env.example",
+    )
+    token = str(bootstrap["access_token"])
+    _configure_google_workspace(client, token)
+    for prefix in ("GOOGLE_CALENDAR", "GMAIL", "GOOGLE_DRIVE"):
+        monkeypatch.setenv(f"CASEOPS_{prefix}_CLIENT_ID", "environment-client")
+        monkeypatch.setenv(f"CASEOPS_{prefix}_CLIENT_SECRET", "environment-secret")
+        monkeypatch.setenv(
+            f"CASEOPS_{prefix}_REDIRECT_URI",
+            f"https://environment.example.test/{prefix.lower()}/callback",
+        )
+    get_settings.cache_clear()
+
+    disabled = client.patch(
+        "/api/admin/google-workspace-configuration",
+        headers=_auth(token),
+        json={
+            "oauth_consent_model_approved": True,
+            "scopes_approved": True,
+            "calendar_enabled": True,
+            "gmail_enabled": True,
+            "drive_enabled": True,
+            "enabled": False,
+        },
+    )
+    assert disabled.status_code == 200, disabled.text
+    assert disabled.json()["configured"] is False
+    assert disabled.json()["config_source"] == "tenant_admin"
+    # The kill switch must not depend on being able to decrypt a dormant
+    # credential (for example, during key rotation).
+    with get_session_factory()() as session:
+        row = session.scalar(select(TenantGoogleWorkspaceConfiguration))
+        assert row is not None
+        row.encrypted_client_secret_ref = "legacy-unreadable-secret-ref"
+        session.add(row)
+        session.commit()
+
+    for path in (
+        "/api/calendar/connections/google-calendar/start",
+        "/api/mailbox/gmail/start",
+        "/api/drive/google/start",
+    ):
+        start = client.post(path, headers=_auth(token))
+        assert start.status_code == 200, start.text
+        assert start.json()["provider_available"] is False
+        assert "environment-client" not in start.text
+        assert "environment-secret" not in start.text
+
+
+def test_google_workspace_status_loads_tenant_configuration_once(
+    client: TestClient,
+) -> None:
+    bootstrap = _bootstrap_company(
+        client,
+        slug="google-workspace-query-bound",
+        email="owner@google-workspace-query-bound.example",
+    )
+    token = str(bootstrap["access_token"])
+    _configure_google_workspace(client, token)
+    factory = get_session_factory()
+    with factory() as session:
+        bind = session.bind
+    assert bind is not None
+    tenant_selects = 0
+
+    def count_tenant_selects(
+        _connection,
+        _cursor,
+        statement,
+        _parameters,
+        _context,
+        _executemany,
+    ) -> None:
+        nonlocal tenant_selects
+        normalized = str(statement).lower()
+        if (
+            normalized.lstrip().startswith("select")
+            and "tenant_google_workspace_configurations" in normalized
+        ):
+            tenant_selects += 1
+
+    event.listen(bind, "before_cursor_execute", count_tenant_selects)
+    try:
+        response = client.get(
+            "/api/admin/google-workspace-configuration",
+            headers=_auth(token),
+        )
+    finally:
+        event.remove(bind, "before_cursor_execute", count_tenant_selects)
+    assert response.status_code == 200, response.text
+    assert tenant_selects == 1
+
+
+def test_google_machine_controls_fail_closed_when_policy_checks_fail(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    bootstrap = _bootstrap_company(
+        client,
+        slug="google-workspace-policy-failure",
+        email="owner@google-workspace-policy-failure.example",
+    )
+    token = str(bootstrap["access_token"])
+    _configure_google_workspace(client, token)
+    monkeypatch.setattr(
+        google_workspace_service,
+        "DEFAULT_SAFE_HTTP_RETRY_MAX_ATTEMPTS",
+        1,
+    )
+    monkeypatch.setattr(
+        google_workspace_service,
+        "redact_provider_error",
+        lambda value: str(value),
+    )
+
+    status_response = client.get(
+        "/api/admin/google-workspace-configuration",
+        headers=_auth(token),
+    )
+    assert status_response.status_code == 200, status_response.text
+    assert set(status_response.json()["missing_machine_control_keys"]) == {
+        "provider_retry_policy",
+        "provider_error_redaction",
+    }
+    assert status_response.json()["readiness"] == (
+        "blocked_pending_admin_configuration"
+    )
 
 
 def test_google_workspace_configuration_is_cross_tenant_scoped(
