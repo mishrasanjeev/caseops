@@ -2436,7 +2436,8 @@
       "verification_status": "not_run",
       "release_status": "blocked",
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m6/IPLF-066A/local-2026-08-30.md"
+        "docs/ip-implementation/evidence/m6/IPLF-066A/local-2026-08-30.md",
+        "docs/ip-implementation/evidence/m6/IPLF-066B/local-2026-08-30.md"
       ]
     },
     {
@@ -15848,8 +15849,22 @@
       "dependencies": [
         "IPLF-066A"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/api/routes/private_retrieval.py",
+        "apps/api/src/caseops_api/schemas/private_retrieval.py",
+        "apps/api/src/caseops_api/scripts/private_projection_integrity.py",
+        "apps/api/src/caseops_api/services/private_retrieval.py",
+        "apps/api/src/caseops_api/services/private_retrieval_jobs.py",
+        "apps/api/src/caseops_api/services/workspace_assistant.py",
+        "apps/web/lib/api/openapi-types.ts",
+        "docs/ip-implementation/PRIVATE_RETRIEVAL_WORKFLOW.md"
+      ],
       "test_refs": [
+        "apps/api/tests/test_private_retrieval_foundation.py",
+        "apps/api/tests/test_private_retrieval_workflow.py",
+        "apps/api/tests/test_postgres_validation.py::test_private_retrieval_prefilters_before_bounded_rank_on_postgres",
+        "apps/api/tests/test_workspace_assistant_qa.py",
+        "tests/e2e/iplf-066b-private-retrieval-2026-08-30.spec.ts",
         "planned:IPLF-UJ-22-NORMAL",
         "planned:IPLF-UJ-23-EXC-01",
         "planned:IPLF-UJ-23-EXC-02",
@@ -15861,18 +15876,73 @@
         "planned:IPLF-UJ-66-EXC-04",
         "planned:IPLF-UJ-66-NORMAL"
       ],
-      "evidence_refs": [],
-      "evidence_metadata": [],
-      "blockers": [],
+      "evidence_refs": [
+        "docs/ip-implementation/PRIVATE_RETRIEVAL_WORKFLOW.md",
+        "docs/ip-implementation/evidence/m6/IPLF-066B/local-2026-08-30.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m6/IPLF-066B/local-2026-08-30.md",
+          "revision": "55d2af96e38b1b8eaa1150646c2de69f66df3424",
+          "environment": "Windows 11 isolated worktree rebased onto origin/main 45ba2853b2a4d7fff316161922cb5d080e3f6ade; locked uv/npm dependencies; synthetic SQLite API fixtures; local Next production build; dated local Playwright; disposable PostgreSQL 17/pgvector scale selection. No hosted CI, merge, push, deployment, production request, or real provider call.",
+          "fixtures": "Synthetic entitled and non-entitled tenants, owner and downgraded membership, same-tenant and second-tenant Matters, indexed attachment with malicious source instruction, stale source version, pending revocation event, provider spy, 1,200 permitted PostgreSQL projections and forged cross-tenant candidate; no real client content or legal effect.",
+          "assertions": "Single private_retrieval owner; current activation and canonical ACL/ethical-wall/lifecycle/source enforcement before bounded rank; hydration and saved-output reauthorization; identifier-only partitioned cache; no legacy document-text fallback after activation; bounded tenant-isolated provider batches; event lag/integrity blockers and tombstone neutralization; reload-safe answer/citation lock; 360-pixel Playwright; PostgreSQL candidate and query-count caps.",
+          "result": "passed",
+          "recorded_at": "2026-08-30T14:36:19+05:30"
+        }
+      ],
+      "blockers": [
+        {
+          "id": "IPLF-066B-RECIPROCAL-SCOPE",
+          "summary": "Workspace Assistant private retrieval is locally proven, but private intelligent-review/report saved-output registration, privacy-bounded AI-GUIDE-12 analytics, provider deletion outcomes and remaining portal/export/purge adversarial paths are not implemented and machine-verified.",
+          "owner": "Codex IPLF-066B completion",
+          "evidence_needed": "Focused API/browser tests for review/report manifests, safe analytics and portal/internal/export/reindex/purge/provider exception paths.",
+          "safe_fallback": "Keep those private consumers disabled or on their existing non-private path; do not create a second saved-output, analytics, provider or ACL owner.",
+          "milestone_impact": "Keeps IPLF-066B and parent IPLF-066 in progress and blocks release activation.",
+          "next_independent_slice": "Complete the remaining reciprocal consumer and adversarial paths on this canonical service."
+        },
+        {
+          "id": "IPLF-066B-EXACT-RELEASE",
+          "summary": "The candidate has local focused, browser and PostgreSQL-scale evidence only; exact-main hosted CI/Security/CodeQL, durable production worker scheduling, deployment and dated exact-image production verification have not run.",
+          "owner": "Codex release automation",
+          "evidence_needed": "Reviewed integration to current main, complete hosted gates, worker/retry/lag-SLO proof, feature-off migration-first deployment, revision identity and dated production acceptance.",
+          "safe_fallback": "Keep rollout disabled and preserve the last verified generation, event ledger, saved-output locks and fail-closed hydration.",
+          "milestone_impact": "Blocks release and production activation without invalidating the local implementation evidence.",
+          "next_independent_slice": "Run the exact integrated release workflow only after reciprocal scope is complete."
+        }
+      ],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Review and integrate implementation commit 55d2af96e38b1b8eaa1150646c2de69f66df3424 onto current main without weakening the fail-closed activation boundary.",
+        "Complete private intelligent-review/report manifests, safe AI-GUIDE-12 analytics, portal/internal and export/reindex-after-purge/provider exception coverage through the existing canonical owners.",
+        "Wire the bounded event/rebuild entry point to the canonical durable worker, then run complete PostgreSQL and hosted CI/Security/CodeQL before any feature-off migration-first deployment and dated production acceptance."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No schema change. A bounded one-tenant rebuild can write IPLF-066A shadow-generation projections from currently active/eligible canonical Clients, Matters, indexed Matter attachments, IP dockets and indexed internal non-privileged IP documents; public authority data is excluded.",
+        "Provider batches contain at most 32 bounded source-text values from one tenant and omit tenant/record identifiers, labels, ACL/scopes and projection metadata; external provider use remains an explicit fail-closed service decision.",
+        "Bounded event processing mutates only the existing private projection/event/saved-output security records; canonical source, lifecycle, access, document and Assistant owners are unchanged."
       ],
-      "documentation_impact": [],
-      "allocation_review": "2026-08-27 reciprocal AI-GUIDE review: owns private record/document retrieval, hydration reauthorization, permitted global record search, citation access, revocation propagation, and non-employee-scoring assistant/action analytics. It does not own the public help corpus, assistant session writer, proposed-action writer, or feedback queue.",
-      "implementation_status": "not_started",
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/PRIVATE_RETRIEVAL_WORKFLOW.md",
+          "disposition": "created",
+          "owner": "Private retrieval / existing access, source and Assistant owners",
+          "evidence": "Activation, consumer, prefilter/hydration, worker/provider, revocation, integrity, rollback and remaining-release contract"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m6/IPLF-066B/local-2026-08-30.md",
+          "disposition": "created",
+          "owner": "Engineering/QA",
+          "evidence": "Immutable code revision, synthetic fixtures, focused API/build/Playwright/PostgreSQL results, proved assertions and explicit remaining blockers"
+        },
+        {
+          "artifact": "docs/ip-implementation/PROGRAM_MANIFEST.yaml",
+          "disposition": "updated",
+          "owner": "Program control plane",
+          "evidence": "Concrete implementation/test/evidence traceability with truthful in-progress, not-run and release-blocked status"
+        }
+      ],
+      "allocation_review": "2026-08-30 reciprocal and duplicate-owner review: the locally implemented consumer, worker and integrity paths extend the single IPLF-066A private_retrieval owner and canonical MatterAccessGrant/EthicalWall, lifecycle, document-policy and Assistant provenance owners. They do not create a second public/private corpus, grant registry, source writer, answer writer, provider path, workflow framework or manual approval gate. The slice remains incomplete for review/report manifests, safe analytics, provider/purge exceptions and exact-release proof.",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked"
     },
@@ -24393,7 +24463,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -45589,7 +45659,7 @@
         "planned:IPLF-UJ-66-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -63741,7 +63811,7 @@
         "planned:IPLF-UJ-66-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -63782,7 +63852,7 @@
         "planned:IPLF-UJ-66-EXC-01"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -63823,7 +63893,7 @@
         "planned:IPLF-UJ-66-EXC-02"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -63864,7 +63934,7 @@
         "planned:IPLF-UJ-66-EXC-03"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -63905,7 +63975,7 @@
         "planned:IPLF-UJ-66-EXC-04"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [

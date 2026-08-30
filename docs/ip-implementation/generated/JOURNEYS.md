@@ -69,6 +69,6 @@ Generated; do not edit.
 | UJ-63 | Grant, use, expire, and review emergency access | 5 | IPLF-073B | 5 | 0 | not_started | not_run | false |
 | UJ-64 | Place legal hold, export, and purge governed tenant data | 6 | IPLF-071B | 6 | 0 | not_started | not_run | false |
 | UJ-65 | Restore CaseOps and resume legal operations without duplicate effects | 6 | IPLF-028B, IPLF-072B | 6 | 0 | in_progress | not_run | false |
-| UJ-66 | Revoke private content from search and AI projections | 5 | IPLF-066B | 5 | 0 | not_started | not_run | false |
+| UJ-66 | Revoke private content from search and AI projections | 5 | IPLF-066B | 5 | 0 | in_progress | not_run | false |
 | UJ-67 | Deploy an additive migration through mixed revisions and rollback | 7 | IPLF-027B, IPLF-027E | 7 | 1 | in_progress | not_run | false |
 | UJ-68 | Rotate or disconnect an integration credential | 6 | IPLF-001B, IPLF-002B, IPLF-056B | 6 | 2 | implemented | not_run | false |
