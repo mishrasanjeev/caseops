@@ -31,7 +31,7 @@ Generated; do not edit.
 | UJ-25 | Operate failed integration | 4 | IPLF-001A, IPLF-001B, IPLF-002B, IPLF-056B | 4 | 2 | implemented | not_run | false |
 | UJ-26 | Manage renewal | 4 | IPLF-037B | 4 | 1 | implemented | passed | false |
 | UJ-27 | Share client report and instruction | 4 | IPLF-038B, IPLF-055B | 10 | 1 | in_progress | not_run | false |
-| UJ-28 | Export or offboard portfolio | 4 | IPLF-028B, IPLF-071B | 4 | 0 | not_started | not_run | false |
+| UJ-28 | Export or offboard portfolio | 4 | IPLF-028B, IPLF-071B | 4 | 0 | in_progress | not_run | false |
 | UJ-29 | Manage patent family | 4 | IPLF-080B | 4 | 0 | not_started | not_run | false |
 | UJ-30 | Manage design, copyright, or licence | 3 | IPLF-090B | 3 | 0 | not_started | not_run | false |
 | UJ-31 | Conduct clearance search and obtain filing instruction | 5 | IPLF-039H | 5 | 0 | not_started | not_run | false |
@@ -68,7 +68,7 @@ Generated; do not edit.
 | UJ-62 | Synchronize an external calendar without surrendering docket authority | 6 | IPLF-025B, IPLF-035B, IPLF-039C, IPLF-039H | 10 | 3 | in_progress | not_run | false |
 | UJ-63 | Grant, use, expire, and review emergency access | 5 | IPLF-073B | 5 | 0 | not_started | not_run | false |
 | UJ-64 | Place legal hold, export, and purge governed tenant data | 6 | IPLF-071B | 6 | 0 | not_started | not_run | false |
-| UJ-65 | Restore CaseOps and resume legal operations without duplicate effects | 6 | IPLF-028B, IPLF-072B | 6 | 0 | not_started | not_run | false |
+| UJ-65 | Restore CaseOps and resume legal operations without duplicate effects | 6 | IPLF-028B, IPLF-072B | 6 | 0 | in_progress | not_run | false |
 | UJ-66 | Revoke private content from search and AI projections | 5 | IPLF-066B | 5 | 0 | not_started | not_run | false |
 | UJ-67 | Deploy an additive migration through mixed revisions and rollback | 7 | IPLF-027B, IPLF-027E | 7 | 1 | in_progress | not_run | false |
 | UJ-68 | Rotate or disconnect an integration credential | 6 | IPLF-001B, IPLF-002B, IPLF-056B | 6 | 2 | implemented | not_run | false |
