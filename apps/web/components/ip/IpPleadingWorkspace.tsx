@@ -18,7 +18,7 @@ import {
   Send,
   WandSparkles,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/Badge";
@@ -83,6 +83,7 @@ export function IpPleadingWorkspace({
   initialDraftId?: string | null;
 }) {
   const queryClient = useQueryClient();
+  const controlId = useId();
   const queryKey = ["ip", "pleading-drafts", docketId, proceedingId] as const;
   const templates = useQuery({
     queryKey: ["ip", "pleading-templates", docketId, proceedingId],
@@ -236,9 +237,9 @@ export function IpPleadingWorkspace({
             create.mutate({ docketId, proceedingId, title, templateKey });
           }}
         >
-          <Label className="min-w-0 space-y-1.5">
+          <Label className="min-w-0 space-y-1.5" htmlFor={`${controlId}-template`}>
             <span className="block">Template</span>
-            <select className={SELECT_CLASS} value={templateKey} onChange={(event) => {
+            <select id={`${controlId}-template`} className={SELECT_CLASS} value={templateKey} onChange={(event) => {
               const key = event.target.value;
               setTemplateKey(key);
               setTitle(templates.data.templates.find((row) => row.key === key)?.label ?? "");
@@ -246,9 +247,9 @@ export function IpPleadingWorkspace({
               {templates.data.templates.map((row) => <option key={row.key} value={row.key}>{row.label} v{row.version}</option>)}
             </select>
           </Label>
-          <Label className="min-w-0 space-y-1.5">
+          <Label className="min-w-0 space-y-1.5" htmlFor={`${controlId}-title`}>
             <span className="block">Draft title</span>
-            <Input value={title} onChange={(event) => setTitle(event.target.value)} />
+            <Input id={`${controlId}-title`} value={title} onChange={(event) => setTitle(event.target.value)} />
           </Label>
           <div className="flex items-end">
             <Button className="w-full" type="submit" disabled={!canCreate || title.trim().length < 3 || create.isPending}>
@@ -259,9 +260,9 @@ export function IpPleadingWorkspace({
       ) : null}
 
       {drafts.data?.drafts.length ? (
-        <Label className="block min-w-0 space-y-1.5">
+        <Label className="block min-w-0 space-y-1.5" htmlFor={`${controlId}-draft`}>
           <span className="block">Pleading draft</span>
-          <select className={SELECT_CLASS} value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>
+          <select id={`${controlId}-draft`} className={SELECT_CLASS} value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>
             {drafts.data.drafts.map((row) => <option key={row.id} value={row.id}>{row.title} - {row.status.replaceAll("_", " ")}</option>)}
           </select>
         </Label>
@@ -269,9 +270,9 @@ export function IpPleadingWorkspace({
 
       {selected ? (
         <div className="min-w-0 space-y-3">
-          <Label className="block min-w-0 space-y-1.5">
+          <Label className="block min-w-0 space-y-1.5" htmlFor={`${controlId}-focus`}>
             <span className="block">Generation focus</span>
-            <Textarea value={focusNote} onChange={(event) => setFocusNote(event.target.value)} placeholder="Issues or reliefs to emphasize" />
+            <Textarea id={`${controlId}-focus`} value={focusNote} onChange={(event) => setFocusNote(event.target.value)} placeholder="Issues or reliefs to emphasize" />
           </Label>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" type="button" onClick={() => generate.mutate({ docketId, proceedingId, draftId: selected.id, focusNote })} disabled={!canGenerate || immutableStatus || generate.isPending}>
@@ -288,9 +289,9 @@ export function IpPleadingWorkspace({
                 <span>{currentVersion.verified_citation_count} verified citation{currentVersion.verified_citation_count === 1 ? "" : "s"}</span>
                 <span>{sourceRows.length} frozen source version{sourceRows.length === 1 ? "" : "s"}</span>
               </div>
-              <Label className="block min-w-0 space-y-1.5">
+              <Label className="block min-w-0 space-y-1.5" htmlFor={`${controlId}-body`}>
                 <span className="block">Pleading body</span>
-                <Textarea className="min-h-80 font-mono" value={body} onChange={(event) => setBody(event.target.value)} disabled={!canEdit || immutableStatus} />
+                <Textarea id={`${controlId}-body`} className="min-h-80 font-mono" value={body} onChange={(event) => setBody(event.target.value)} disabled={!canEdit || immutableStatus} />
               </Label>
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" type="button" onClick={() => save.mutate({ docketId, proceedingId, draftId: selected.id, body })} disabled={!canEdit || immutableStatus || body.trim() === currentVersion.body.trim() || save.isPending}><Save className="h-4 w-4" /> Save revision</Button>
@@ -311,9 +312,9 @@ export function IpPleadingWorkspace({
                   <div className="mt-2 grid gap-2 sm:grid-cols-2"><span>Added: {comparison.data.lines_added} lines, {comparison.data.citations_added.length} citations</span><span>Removed: {comparison.data.lines_removed} lines, {comparison.data.citations_removed.length} citations</span></div>
                 </details>
               ) : null}
-              <Label className="block min-w-0 space-y-1.5">
+              <Label className="block min-w-0 space-y-1.5" htmlFor={`${controlId}-review-notes`}>
                 <span className="block">Review notes</span>
-                <Input value={reviewNotes} onChange={(event) => setReviewNotes(event.target.value)} />
+                <Input id={`${controlId}-review-notes`} value={reviewNotes} onChange={(event) => setReviewNotes(event.target.value)} />
               </Label>
               <div className="flex flex-wrap gap-2">
                 {(selected.status === "draft" || selected.status === "changes_requested") ? <Button size="sm" type="button" variant="outline" disabled={!canEdit || busy} onClick={() => transition.mutate({ docketId, proceedingId, draftId: selected.id, action: "submit", notes: reviewNotes })}><Send className="h-4 w-4" /> Submit</Button> : null}
@@ -323,8 +324,8 @@ export function IpPleadingWorkspace({
               </div>
               {["finalized", "filed"].includes(selected.status) ? (
                 <div className="grid gap-3 border-t border-[var(--color-line)] pt-3 md:grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)_auto]">
-                  <Label className="space-y-1.5"><span className="block">Registry reference</span><Input value={lifecycleReference} onChange={(event) => setLifecycleReference(event.target.value)} /></Label>
-                  <Label className="space-y-1.5"><span className="block">Service method</span><Input value={serviceMethod} onChange={(event) => setServiceMethod(event.target.value)} disabled={selected.status !== "filed"} /></Label>
+                  <Label className="space-y-1.5" htmlFor={`${controlId}-registry-reference`}><span className="block">Registry reference</span><Input id={`${controlId}-registry-reference`} value={lifecycleReference} onChange={(event) => setLifecycleReference(event.target.value)} /></Label>
+                  <Label className="space-y-1.5" htmlFor={`${controlId}-service-method`}><span className="block">Service method</span><Input id={`${controlId}-service-method`} value={serviceMethod} onChange={(event) => setServiceMethod(event.target.value)} disabled={selected.status !== "filed"} /></Label>
                   <div className="flex flex-wrap items-end gap-2">
                     {selected.status === "finalized" ? <Button size="sm" type="button" disabled={!canFinalize || !lifecycleReference.trim() || validation.data?.can_file === false || busy} onClick={() => lifecycle.mutate({ docketId, proceedingId, draftId: selected.id, action: "file", reference: lifecycleReference, notes: reviewNotes })}><FileUp className="h-4 w-4" /> Mark filed</Button> : null}
                     {selected.status === "filed" ? <Button size="sm" type="button" variant="outline" disabled={!canFinalize || !lifecycleReference.trim() || busy} onClick={() => lifecycle.mutate({ docketId, proceedingId, draftId: selected.id, action: "reject-filing", reference: lifecycleReference, notes: reviewNotes })}><Ban className="h-4 w-4" /> Rejected</Button> : null}

@@ -138,8 +138,9 @@ async function disposeCreatedMatter(
     "read production feedback Matter for cleanup",
   );
   const current: MatterRecord = await currentResponse.json();
-  expect(current.matter_code).toBe(`AI-FEEDBACK-PROD-${state.runId}`);
-  expect(current.title).toBe(`Production AI feedback ${state.runId}`);
+  expect(current.id).toBe(state.matter.id);
+  expect(current.matter_code).toBe(state.matter.matter_code);
+  expect(current.title).toBe(state.matter.title);
   if (current.status === "disposed") return;
   const disposed = await api.patch(
     `${API}/api/matters/${current.id}/lifecycle/status`,
@@ -315,24 +316,28 @@ test("IPLF-065B production proves exact feedback and review behavior", async ({
   );
 
   await page.goto(`${WEB}/guide`, {
-    waitUntil: "domcontentloaded",
+    waitUntil: "load",
     timeout: 30_000,
   });
+  const matchedSearch = await page.request.get(
+    `${API}/api/product-guide/search`,
+    {
+      headers,
+      params: { q: "deadline control", limit: 5 },
+      timeout: 20_000,
+    },
+  );
+  await expectStatus(matchedSearch, 200, "matched production guide search");
+  expect((await matchedSearch.json()).status).toBe("matched");
   const search = page.getByRole("searchbox", {
     name: "Search the CaseOps guide",
   });
   await search.fill("deadline control");
-  const [matchedSearch] = await Promise.all([
-    page.waitForResponse(
-      (response) =>
-        new URL(response.url()).pathname === "/api/product-guide/search" &&
-        response.request().method() === "GET",
-      { timeout: 20_000 },
-    ),
-    page.getByRole("button", { name: "Search" }).click(),
-  ]);
-  expect(matchedSearch.status()).toBe(200);
-  expect((await matchedSearch.json()).status).toBe("matched");
+  await page.getByRole("button", { name: "Search" }).click();
+  const guideCommand = page.getByTestId(
+    "product-guide-feedback-command-deadline-control",
+  );
+  await expect(guideCommand).toBeVisible({ timeout: 20_000 });
   const [guideRating] = await Promise.all([
     page.waitForResponse(
       (response) =>
@@ -340,27 +345,24 @@ test("IPLF-065B production proves exact feedback and review behavior", async ({
         response.request().method() === "POST",
       { timeout: 20_000 },
     ),
-    page
-      .getByTestId("product-guide-feedback-command-deadline-control")
-      .getByRole("button", { name: "Mark as helpful" })
-      .click(),
+    guideCommand.getByRole("button", { name: "Mark as helpful" }).click(),
   ]);
   expect(guideRating.status()).toBe(201);
   const ratingRecord: FeedbackRecord = await guideRating.json();
   state.feedbackIds.add(ratingRecord.id);
 
-  await search.fill("xylophone nebula quasar");
-  const [noMatchSearch] = await Promise.all([
-    page.waitForResponse(
-      (response) =>
-        new URL(response.url()).pathname === "/api/product-guide/search" &&
-        response.request().method() === "GET",
-      { timeout: 20_000 },
-    ),
-    page.getByRole("button", { name: "Search" }).click(),
-  ]);
-  expect(noMatchSearch.status()).toBe(200);
+  const noMatchSearch = await page.request.get(
+    `${API}/api/product-guide/search`,
+    {
+      headers,
+      params: { q: "xylophone nebula quasar", limit: 5 },
+      timeout: 20_000,
+    },
+  );
+  await expectStatus(noMatchSearch, 200, "no-match production guide search");
   expect((await noMatchSearch.json()).status).toBe("no_match");
+  await search.fill("xylophone nebula quasar");
+  await page.getByRole("button", { name: "Search" }).click();
   const noMatch = page.getByTestId("product-guide-feedback-no-match");
   await expect(noMatch).toBeVisible({ timeout: 10_000 });
   await noMatch.getByRole("button", { name: "Report an issue" }).click();
@@ -384,7 +386,7 @@ test("IPLF-065B production proves exact feedback and review behavior", async ({
   state.feedbackIds.add(reportRecord.id);
 
   await page.goto(`${WEB}/app/assistant`, {
-    waitUntil: "domcontentloaded",
+    waitUntil: "load",
     timeout: 30_000,
   });
   await page
@@ -420,7 +422,7 @@ test("IPLF-065B production proves exact feedback and review behavior", async ({
   state.feedbackIds.add(assistantRecord.id);
 
   await page.goto(`${WEB}/app/admin/ai-feedback`, {
-    waitUntil: "domcontentloaded",
+    waitUntil: "load",
     timeout: 30_000,
   });
   const reportRow = page.locator(`[data-feedback-id="${reportRecord.id}"]`);
@@ -442,7 +444,7 @@ test("IPLF-065B production proves exact feedback and review behavior", async ({
   await expect(reportRow).toContainText("In Review");
 
   await page.setViewportSize({ width: 360, height: 800 });
-  await page.reload({ waitUntil: "domcontentloaded", timeout: 30_000 });
+  await page.reload({ waitUntil: "load", timeout: 30_000 });
   await expect(
     page.getByRole("heading", { name: "Feedback review" }),
   ).toBeVisible();
