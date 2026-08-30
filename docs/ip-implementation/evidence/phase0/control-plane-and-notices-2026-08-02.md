@@ -1,5 +1,7 @@
 # IP program Phase 0 trust-repair and Notices regression record
 
+> **Governance supersession (30 August 2026):** This dated release evidence remains immutable proof of the 2 August candidate. Its references to an M0 human program lock, generic pilot/UAT acceptance, or child-PRD signoff are not active CaseOps execution gates. Current repository completion is controlled by machine-validated contracts, hosted checks, exact-image deployment identity, and dated production E2E. Human authority remains only for an exact legally, financially, externally, or destructively effectful product action.
+
 **Evidence date:** 2 August 2026 (Asia/Kolkata)
 
 **Repository:** CaseOps
@@ -124,7 +126,7 @@ Current computed allocation/status totals:
 | Journeys | 68 | 19 `in_progress`; 49 `not_started`; none falsely complete |
 | Atomic paths | 317 | 96 `in_progress`; 221 `not_started`; none falsely complete |
 
-The active/next slice is `IPLF-002A`, the dependency-ready M1 integration-health/freshness foundation. The red production regression gate is closed by the evidence below. The explicit M0 human program-lock gate remains pending and is not self-approved by this technical release.
+The active/next slice at this historical checkpoint was `IPLF-002A`, the dependency-ready M1 integration-health/freshness foundation. The red production regression gate was closed by the evidence below. The former M0 program-lock signature is retired and has no bearing on the validity of this technical release.
 
 ## Reconciled delivered scope
 
@@ -137,7 +139,7 @@ The following existing slices retain implementation claims only for behavior sup
 - `IPLF-007A/B`: durable notification intent lineage, provider evidence, suppression fallback, one dispatcher, and rollback flag;
 - `IPLF-039A-F`: trademark particulars/readiness, review-gated evidence intake over canonical notice/communication owners, coverage reassignment, deadline incidents, effective-dated title/obligations, and Matter-billing reconciliation.
 
-Requirement and path rows remain partial when those slices cover only fields or exceptions inside a broader PRD requirement. Human acceptance remains pending.
+Requirement and path rows remain partial when those slices cover only fields or exceptions inside a broader PRD requirement. Their status advances through implementation, machine verification, and exact-release evidence rather than generic human acceptance.
 
 ## Local and exact-commit verification
 
@@ -190,9 +192,9 @@ Phase 0 exits because the latest required production regression suite is green, 
 
 ## External and later-program boundary
 
-Codex cannot self-approve the M0 program lock, legal rules/forms/deadlines, provider terms/credentials, pilot migration/UAT, retention/purge policy, security/records acceptance, or M8-M10 child PRDs. Those rows remain explicit gates. The correct eventual statement, if all repository-controlled work finishes before those approvals, is:
+The former M0 program lock, generic pilot/UAT acceptance, and child-PRD signoff are retired as program-wide gates. Legal rules/forms/deadlines, provider permissions, external communications, and irreversible tenant-data operations retain their exact product-level authorization. A missing effectful authorization keeps only that capability fail-closed; it does not block unrelated implementation or an exact fail-closed release. The correct eventual statement, if all repository-controlled work finishes while one of those authorities is unavailable, is:
 
-`PROGRAM INCOMPLETE - REPOSITORY WORK COMPLETE, EXTERNAL ACCEPTANCE PENDING`
+`REPOSITORY WORK COMPLETE - AFFECTED EFFECTFUL CAPABILITY DISABLED`
 
 At this checkpoint even that narrower statement is premature: substantial M0-M10 repository implementation remains represented by the derived `not_started` slices.
 

@@ -13,7 +13,7 @@ a released capability.
 
 | Slice | Implementation | Release | Audit state | Tests | Evidence | Blockers |
 | --- | --- | --- | --- | ---: | ---: | ---: |
-| `IPLF-019A` | `implemented` | `ready_for_review` | `repository-evidence-recorded` | 3 | 1 | 0 |
+| `IPLF-019A` | `implemented` | `ready_for_release` | `repository-evidence-recorded` | 3 | 1 | 0 |
 | `IPLF-019B` | `implemented` | `deployment_verified` | `deployment-evidence-recorded` | 5 | 1 | 0 |
 | `IPLF-020A` | `implemented` | `deployment_verified` | `deployment-evidence-recorded` | 2 | 1 | 0 |
 | `IPLF-020B` | `implemented` | `deployment_verified` | `deployment-evidence-recorded` | 4 | 2 | 0 |

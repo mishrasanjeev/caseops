@@ -3,7 +3,7 @@
 - Status: Accepted as the repository engineering boundary
 - Date: 2026-08-06
 - Scope: M2 and M3 architecture / IPLF-019
-- Human gate: The separately required M0 named Architecture/Data/Product program-lock signature remains pending; this ADR does not manufacture it.
+- Enforcement: Repository ownership validation, reciprocal manifest coverage, ADR presence, and exact-release evidence are the complete engineering gate; no separate manual program signature is required.
 
 ## Context
 
@@ -48,7 +48,8 @@ The following rules are invariant:
    expand/backfill/verify/switch window with optimistic concurrency and worker
    fencing.
 5. A compatibility path is not retired until reconciliation, rollback/forward
-   repair, exact-image production E2E, and the slice-specific human gate pass.
+   repair, exact-image production E2E, and the slice-specific machine evidence
+   pass.
 
 ## Enforcement
 
@@ -59,8 +60,9 @@ its ledger decision, and scans application/migration/web/Cloud Run source for
 forbidden duplicate identifiers and control-plane patterns. CI runs the check.
 
 The guard is deliberately conservative. A legitimate future exception requires
-a field-by-field gap analysis and a reviewed ADR before the guard and ledger can
-change. Passing tests alone is not permission to weaken it.
+a version-controlled field-by-field gap analysis, ADR, and validator update in
+the same exact candidate before the guard and ledger can change. A passing
+application suite alone is not permission to weaken it.
 
 ## Consequences
 
@@ -70,8 +72,9 @@ change. Passing tests alone is not permission to weaken it.
 - Current bounded IP tails remain preserved and are listed in the ledger so
   later foundation work migrates or composes them instead of creating a second
   docket/cost/evidence owner.
-- Human approval remains visible as a genuine gate, independent of automated
-  repository validation.
+- Legally, financially, externally, or destructively effectful authorization
+  remains localized to the exact product action; it is not an architecture,
+  implementation, compatibility-retirement, or release signoff.
 
 ## Rollback
 

@@ -4,7 +4,7 @@
   "program": {
     "id": "PRD-IPLF-2026-08-01",
     "prd_path": "docs/PRD_IP_LAW_FIRM_PLATFORM_2026-08-01.md",
-    "prd_sha256": "fe71f897e2be733cb799588d90323c64e763227cbdca748e863423a8b720822e",
+    "prd_sha256": "96b655bc84dd8ae705c036de04f1cd3b12128c325d673c6cfa8d68485a874cf3",
     "baseline": {
       "requirement_count": 436,
       "family_count": 50,
@@ -34,10 +34,10 @@
   "milestones": [
     {
       "id": "M0",
-      "name": "Program lock",
+      "name": "Program contract",
       "target": "14 Aug 2026",
-      "deliverable": "Approved scope, pilot firms, source policy, initial taxonomy/rule inputs, staffed baseline, and signed `NEW/EXTEND/LINK/REPLACE` ownership ledger for every M1-M3 component",
-      "exit_criteria": "Named product/engineering/data/security/legal owners; duplicate-subsystem ADR audit accepted; required pilot data named; unresolved provider choices explicitly gated rather than assumed",
+      "deliverable": "Version-controlled scope, source policy, initial taxonomy/rule inputs, synthetic pilot fixtures, and a machine-validated `NEW/EXTEND/LINK/REPLACE` ownership ledger for every M1-M3 component",
+      "exit_criteria": "Named accountability boundaries; duplicate-subsystem and ADR validators pass; required fixture data is versioned; unresolved provider choices remain capability-scoped and fail-closed",
       "blockers": [],
       "implementation_status": "implemented",
       "verification_status": "passed",
@@ -45,6 +45,7 @@
       "epic_ids": [],
       "gate_ids": [],
       "evidence_refs": [
+        "docs/ip-implementation/evidence/phase0/approval-gate-retirement-2026-08-30.md",
         "docs/ip-implementation/evidence/m6/IPLF-061A/local-2026-08-26.md",
         "docs/ip-implementation/evidence/m6/IPLF-061B/local-2026-08-27.md",
         "docs/ip-implementation/evidence/m6/IPLF-062A/local-2026-08-27.md",
@@ -114,7 +115,7 @@
       "name": "Trademark Operations MVP",
       "target": "30 Jun 2027",
       "deliverable": "Complete filing particulars, IP portfolio, prosecution/renewal, legal deadlines and filing evidence integrated into existing intake/conflict, task/hearing/calendar, CompanyNotice/inbox/Communication, notification and Matter billing owners; neutral import orchestration and volume-appropriate reporting",
-      "exit_criteria": "UJ-02 through UJ-10, UJ-14, UJ-26, UJ-31, UJ-32, UJ-49 through UJ-59, UJ-61, and UJ-62 pass pilot UAT; accepted legal notices exist once in `/app/notices`; imports have one job-state owner; costs have one amount/accounting owner; no duplicate shared row/control plane; critical deadlines have accepted coverage; restored-worker no-dual-send drill; allowlisted production smoke; no direct external send outside durable delivery service",
+      "exit_criteria": "UJ-02 through UJ-10, UJ-14, UJ-26, UJ-31, UJ-32, UJ-49 through UJ-59, UJ-61, and UJ-62 pass the versioned synthetic/pilot-data acceptance suite; accepted legal notices exist once in `/app/notices`; imports have one job-state owner; costs have one amount/accounting owner; no duplicate shared row/control plane; critical deadlines have accepted coverage; restored-worker no-dual-send drill; allowlisted production smoke; no direct external send outside durable delivery service",
       "blockers": [],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -225,7 +226,7 @@
       "name": "Trademark General Availability",
       "target": "29 Sep 2028",
       "deliverable": "Access-review/emergency-access controls, automated export/purge/offboarding, migration toolkit, hardening, performance, accessibility, current DR/security/incident proof, support/runbooks, billing/packaging and GA rollout",
-      "exit_criteria": "UJ-28/UJ-58/UJ-63/UJ-64/UJ-65/UJ-67/UJ-68; access expiry/review, regional/failover and purge/tombstone drills; 30-day SLO evidence; zero P0/P1; signed pilot acceptance; support/finance readiness",
+      "exit_criteria": "UJ-28/UJ-58/UJ-63/UJ-64/UJ-65/UJ-67/UJ-68; access expiry/review, regional/failover and purge/tombstone drills; 30-day SLO evidence; zero P0/P1; exact-release production acceptance suite; support/finance readiness checks",
       "blockers": [],
       "implementation_status": "not_started",
       "verification_status": "not_run",
@@ -248,8 +249,8 @@
       "id": "M8",
       "name": "Patent Docket Beta",
       "target": "30 Jun 2029",
-      "deliverable": "Child-PRD-approved families, PCT/national phase, office actions/oppositions, claim/document versions, annuities/working, title/licensing and patent deadlines",
-      "exit_criteria": "UJ-29, UJ-39, UJ-40, UJ-60, UJ-61, patent legal fixtures and SME UAT pass; no trademark-rule/status leakage; beta label derives from capability evidence",
+      "deliverable": "Version-controlled patent-domain contract covering families, PCT/national phase, office actions/oppositions, claim/document versions, annuities/working, title/licensing and patent deadlines",
+      "exit_criteria": "UJ-29, UJ-39, UJ-40, UJ-60, UJ-61 and machine-validated patent legal fixtures pass; no trademark-rule/status leakage; beta label derives from capability evidence; legally effectful rules remain disabled until their required legal authority is recorded",
       "blockers": [],
       "implementation_status": "not_started",
       "verification_status": "not_run",
@@ -272,8 +273,8 @@
       "id": "M9",
       "name": "Designs, Copyright, Licensing Beta",
       "target": "31 Jan 2030",
-      "deliverable": "Child-PRD-approved type-specific assets, registrations, renewals, enforcement, ownership/licensing obligations",
-      "exit_criteria": "UJ-30, UJ-41 through UJ-43, UJ-60, UJ-61 and type-specific fixtures/UAT; contract/registry deadline and confidentiality separation proven",
+      "deliverable": "Version-controlled type-specific domain contracts covering assets, registrations, renewals, enforcement, ownership and licensing obligations",
+      "exit_criteria": "UJ-30, UJ-41 through UJ-43, UJ-60, UJ-61 and machine-validated type-specific fixtures pass; contract/registry deadline and confidentiality separation are proven; legally effectful rules remain disabled until their required legal authority is recorded",
       "blockers": [],
       "implementation_status": "not_started",
       "verification_status": "not_run",
@@ -296,8 +297,8 @@
       "id": "M10",
       "name": "Full IP Platform GA",
       "target": "31 Jul 2032",
-      "deliverable": "Independently staffed and child-PRD-approved trademark, patent, design, copyright, GI, plant variety, layout design, trade secret, domain/customs enforcement, and licensing operations",
-      "exit_criteria": "UJ-44/UJ-45/UJ-60/UJ-61 plus every domain's specialist journeys/fixtures; cross-module security/performance/DR audit; migration, documentation, capability labels, pricing and support readiness",
+      "deliverable": "Machine-validated domain contracts for trademark, patent, design, copyright, GI, plant variety, layout design, trade secret, domain/customs enforcement, and licensing operations",
+      "exit_criteria": "UJ-44/UJ-45/UJ-60/UJ-61 plus every domain's specialist journeys/fixtures; cross-module security/performance/DR audit; migration, documentation, capability labels, pricing and support readiness checks",
       "blockers": [],
       "implementation_status": "not_started",
       "verification_status": "not_run",
@@ -4628,7 +4629,7 @@
       "blockers": [],
       "next_actions": [
         "Preserve the exact release evidence and one-writer guard while later slices add just-in-time behavior.",
-        "Honor declared dependencies for IPLF-019B and IPLF-020A while every other dependency-ready node continues; do not infer M0 human program-lock approval."
+        "Honor declared dependencies for IPLF-019B and IPLF-020A while every other dependency-ready node continues; no separate program-wide implementation signoff exists."
       ],
       "data_impact": [
         "No schema, application row, tenant object, provider, credential, scheduler, or job mutation.",
@@ -4660,10 +4661,10 @@
           "evidence": "Existing Temporal, Cloud Run Job, outbox, retry, lease, cancellation, and fencing ownership"
         }
       ],
-      "allocation_review": "Administrative foundation slice: it implements repository governance and CI only. IPLF-019B retains ARCH-OPS-01 through ARCH-OPS-26 and the full epic release-proof allocation. The M0 named human program-lock approval remains pending and is not inferred.",
+      "allocation_review": "Administrative foundation slice: it implements repository governance and CI only. IPLF-019B retains ARCH-OPS-01 through ARCH-OPS-26 and the full epic release-proof allocation. Machine validation and exact-release evidence are the complete engineering gate.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_review",
+      "release_status": "ready_for_release",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
@@ -6606,17 +6607,17 @@
       "blockers": [
         {
           "id": "IPLF-027B-A0-A1-A2-RELEASE-GATE",
-          "summary": "Exact schema-free A0 merge 6a78850100b5be0fddcf4278f42bcbc930e89d62 is deployed default-off at 100% API/web traffic and has passed pre-route, post-route, and first-drain fingerprint equality, dedicated A0 production acceptance, and first-drain old-cohort log review. Canonical source is now 5154af359b5351224c34db7468eef5704d3d0faa after a source-only exact-fingerprint Gitleaks remediation; production was not relabeled or redeployed. The independently reviewed pre-deletion packet remains a historical local snapshot: the 36 writer-capable revisions have not been approved for deletion or deleted, T_FENCE is undefined, no second drain exists, and A1/A2 remain forbidden. Production run 31864693967 remains overall red for three provider-quota-only RAM failures despite successful A0 and Notice steps; a fresh scheduled GitHub full-history Gitleaks pass is still pending despite the merged remediation and local 1,041-commit zero-result parity scan.",
-          "owner": "Engineering, Release/SRE, Security, and the authorized IP rule-governance operator",
-          "evidence_needed": "Keep exact deployed A0 6a788501 default-off and distinguish it from canonical source 5154af35. After one consolidated policy-compliant approval event binds every required approver to an unexpired immutable operation manifest, impose the deployment/operational-write freeze and rerun and independently reseal the complete fail-closed packet: exact 36-name deletion preview, API/web topology and no-newer-revision assertions, strict terminal job state, captured 20-job inventory, exact material equality for the six canonical recurring jobs plus QA-bootstrap and fingerprint jobs, exact material equality for all nine schedulers, six recurring-job IAM bindings, zero traffic/tags, legal hold and incident conditions, immutable A0 image/source/config recovery anchors, database backup facts, fixed-window logs, and unchanged governance fingerprint. If that manifest remains unexpired and unchanged, delete only that exact cohort oldest first and predecessor last; prove each target NOT_FOUND, an empty fresh-list intersection, and one successful Admin Activity event per deletion before defining T_FENCE. Capture the at-fence fingerprint, wait at least 301 seconds plus log-ingestion slack, then require another identical fingerprint and no legacy logs/jobs. Preserve the exact-fingerprint Gitleaks fix and local full-origin-ref parity pass, and obtain a fresh scheduled GitHub full-history pass. Only after the complete A0 fence may A1 be implemented with the flag false; A1 must enforce rollout expiry, current-company entitlement, qualified distinct reviewer capability, unsupported-kind evaluator failure, effective-range/emergency-disable behavior, and strict PostgreSQL ownership/concurrency proof. Only exact deployed evidence for every gate permits A2.",
-          "safe_fallback": "Keep exact serving A0 6a78850100b5be0fddcf4278f42bcbc930e89d62 with CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false. Impact, workspace, readiness, and the five existing legal-deadline writers remain available. Do not delete revisions without an unexpired consolidated approval manifest containing every policy-required approver, do not define T_FENCE from elapsed time alone, do not run A1 while any termination/no-write proof is missing, and never enable A2 until every A1 runtime, entitlement/expiry, qualified-reviewer, unsupported-kind evaluator, effective-range/emergency-disable, strict PostgreSQL ownership/concurrency, negative-test, security, and exact-deployed gate has passed.",
+          "summary": "Exact schema-free A0 merge 6a78850100b5be0fddcf4278f42bcbc930e89d62 is deployed default-off at 100% API/web traffic and has passed pre-route, post-route, and first-drain fingerprint equality, dedicated A0 production acceptance, and first-drain old-cohort log review. Canonical source is now 5154af359b5351224c34db7468eef5704d3d0faa after a source-only exact-fingerprint Gitleaks remediation; production was not relabeled or redeployed. The historical pre-deletion packet is stale: the exact 36 writer-capable revisions have not passed a fresh signed-manifest preflight or been deleted, T_FENCE is undefined, no second drain exists, and A1/A2 remain forbidden. Production run 31864693967 remains overall red for three provider-quota-only RAM failures despite successful A0 and Notice steps; a fresh scheduled GitHub full-history Gitleaks pass is still pending despite the merged remediation and local 1,041-commit zero-result parity scan.",
+          "owner": "Codex, using the machine-enforced Release/SRE and Security controls",
+          "evidence_needed": "Keep exact deployed A0 6a788501 default-off and distinguish it from canonical source 5154af35. Generate a short-lived signed operation manifest and impose the deployment/operational-write freeze; machine-reseal the complete fail-closed packet: exact 36-name deletion preview, API/web topology and no-newer-revision assertions, strict terminal job state, captured 20-job inventory, exact material equality for the six canonical recurring jobs plus QA-bootstrap and fingerprint jobs, exact material equality for all nine schedulers, six recurring-job IAM bindings, zero traffic/tags, legal hold and incident conditions, immutable A0 image/source/config recovery anchors, database backup facts, fixed-window logs, and unchanged governance fingerprint. If every assertion remains green and the manifest remains unexpired and unchanged, Codex deletes only that exact cohort oldest first and predecessor last; each target must become NOT_FOUND, the fresh-list intersection must be empty, and every deletion must have a successful Admin Activity event before T_FENCE is defined. Capture the at-fence fingerprint, wait at least 301 seconds plus log-ingestion slack, then require another identical fingerprint and no legacy logs/jobs. Preserve the exact-fingerprint Gitleaks fix and local full-origin-ref parity pass, and obtain a fresh scheduled GitHub full-history pass. Only after the complete A0 fence may A1 be implemented with the flag false; A1 must enforce rollout expiry, current-company entitlement, qualified distinct reviewer capability, unsupported-kind evaluator failure, effective-range/emergency-disable behavior, and strict PostgreSQL ownership/concurrency proof. Only exact deployed evidence for every gate permits A2.",
+          "safe_fallback": "Keep exact serving A0 6a78850100b5be0fddcf4278f42bcbc930e89d62 with CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false. Impact, workspace, readiness, and the five existing legal-deadline writers remain available. Do not delete revisions unless every assertion in the unexpired signed operation manifest passes immediately before deletion, do not define T_FENCE from elapsed time alone, do not run A1 while any termination/no-write proof is missing, and never enable A2 until every A1 runtime, entitlement/expiry, qualified-reviewer, unsupported-kind evaluator, effective-range/emergency-disable, strict PostgreSQL ownership/concurrency, negative-test, security, and exact-deployed gate has passed.",
           "milestone_impact": "Blocks IPLF-027B, A1/A2, RULE-GOV-01..08 reciprocal closure, UJ-47/UJ-67 completion, and their affected M2 activation/release claim while preserving the already released IPLF-023B and IPLF-027A evidence. It does not block unrelated dependency-ready M2 repository implementation or fail-closed release scope.",
-          "next_independent_slice": "Execute every other dependency-ready M0-M10 repository node now. For A0 retirement, obtain one consolidated approval event containing every policy-required approver for an unexpired immutable manifest, impose the required freeze, and replace the historical packet with a fresh independently sealed capture before any deletion; complete T_FENCE and the second drain only while the exact scope remains authorized. Keep the pending scheduled full-history Gitleaks proof and all A1/A2 work separate."
+          "next_independent_slice": "Execute every other dependency-ready M0-M10 repository node now. For A0 retirement, generate the short-lived signed operation manifest, impose the required freeze, and replace the historical packet with a fresh machine-sealed capture before any deletion; Codex completes T_FENCE and the second drain only while every exact-scope assertion remains green. Keep the pending scheduled full-history Gitleaks proof and all A1/A2 work separate."
         }
       ],
       "next_actions": [
         "Preserve exact default-off A0 merge 6a78850100b5be0fddcf4278f42bcbc930e89d62, its immutable API/web images, T_ROUTE, three equal fingerprints, dedicated A0 production pass, and first-drain log proof. Do not relabel overall production run 31864693967 green: its three provider-quota RAM failures remain recorded, while the A0 and Notice steps passed independently.",
-        "Treat the independently reviewed pre-deletion packet (manifest SHA-256 11828e81ff62691d919e0cc1be0d79ba87598664355af8c81121f627bf50d21f) as historical local evidence only. Obtain one consolidated approval event containing every policy-required approver for an unexpired immutable operation manifest; then impose a deployment/operational-write freeze and rerun, revalidate, reseal, and independently hash-review the exact 36-revision packet, including zero traffic/tags, strict no-nonterminal and no-newer-revision holds, all-20 job inventory, six-recurring-plus-two-special job material equality, all-nine-scheduler material equality, six recurring-job IAM bindings, exact A0 recovery anchors, backup facts, fixed-window logs, unchanged fingerprint, and oldest-first preview. While that manifest remains unexpired and unchanged, prove per-target NOT_FOUND, empty fresh-list intersection, and successful Admin Activity events before T_FENCE, then complete the second 301-second-plus-ingestion drain and enforced fingerprint/log/job proof. Until then, no destructive action is authorized.",
+        "Treat the historical pre-deletion packet (manifest SHA-256 11828e81ff62691d919e0cc1be0d79ba87598664355af8c81121f627bf50d21f) as local evidence only. Generate a fresh short-lived signed operation manifest, impose a deployment/operational-write freeze, and machine-revalidate/reseal the exact 36-revision packet, including zero traffic/tags, strict no-nonterminal and no-newer-revision holds, all-20 job inventory, six-recurring-plus-two-special job material equality, all-nine-scheduler material equality, six recurring-job IAM bindings, exact A0 recovery anchors, backup facts, fixed-window logs, unchanged fingerprint, and oldest-first preview. While that manifest remains unexpired and unchanged, Codex proves per-target NOT_FOUND, empty fresh-list intersection, and successful Admin Activity events before T_FENCE, then completes the second 301-second-plus-ingestion drain and enforced fingerprint/log/job proof. Until every preflight assertion passes, no destructive action is authorized.",
         "Preserve scheduled Security failure 31865741914 and its nine reviewed non-secret findings as history. PR #230 merged only their exact fingerprints, its exact-head checks passed, and an official Gitleaks 8.24.3 full-origin-ref local parity scan found zero SARIF results across 1,041 commits; nevertheless require a fresh scheduled GitHub full-history pass because push Security run 31871239057 scanned zero commits.",
         "Do not implement A1 until the complete A0 deletion, T_FENCE, and second-drain proof exists. Meanwhile execute every other dependency-ready M0-M10 node. After that fence, implement A1 additive tenant ownership, compatibility/backfill/reconciliation, locking/concurrency, and standalone policy selection with the A0 flag false; guard the new endpoint from birth and enforce rollout expiry, current-company ip_rule_governance entitlement, and distinct qualified reviewer capability server-side. Keep unsupported form/fee activation fail-closed until dedicated evaluators exist; require effective-range overlap enforcement and complete emergency-disable new-calculation/auto-confirm/candidate/alert/history behavior; and require strict PostgreSQL zero-drift ownership plus proposal/overlap/policy/disable concurrency proof.",
         "Before A2, pass negative service/API/PostgreSQL/audit/alert tests proving flag-enabled unentitled, expired, unqualified-reviewer, unsupported-kind, overlapping-range, and disabled-rule paths fail closed and complete the required evidence behavior, then obtain exact deployed evidence for every gate. Only then use a config-only A2 revision of the same image for authorized enablement and rerun the dated acceptance suite. Roll back only to the exact A1 image/configuration with the flag false; never route to a pre-A0/pre-fence image and never downgrade the additive ownership schema after migration/backfill or legal state exists."
@@ -6966,36 +6967,36 @@
         {
           "id": "IPLF-028A-POLICY-AND-HOLD-AUTHORIZATION",
           "summary": "Two of the four named artefacts now exist and two do not. IMPLEMENTED: the legal-hold activation/release workflow (DATA-GOV-05), and the step-up/four-eyes decision for data-operation execution (PR #267). MECHANISM ONLY: the retention schedule has a propose/approve/activate/retire lifecycle under four eyes and step-up (PR #273), but no schedule CONTENT has been approved - which classes are kept, for how long, on what legal basis is a legal decision, and while none exists a retention purge cannot be authorized at all. CLOSED 2026-08-22: the tenant-facing review contract now exists. Three routes expose the previously unrouted approval service - review/request, review/reject and review/approve - gated on a new data_operations:review capability mapped to owner+admin rather than on the owner-only audit:export the read routes use, because a four-eyes control reachable only by owners is unsatisfiable for a single-owner tenant. Approving authorises an execution in status planned and performs none: execute still refuses with a typed 503 and the approve response carries executed:false. Six route tests plus the role-guard sweep; the capability choice was falsified by flipping the route back to audit:export and watching two tests fail. NOT closed by this: no UI screen yet, so the workflow is reachable by an integration and not by a lawyer in a browser; and no deployed acceptance. STILL OPEN and not closeable by code: no retention schedule CONTENT has been approved - which classes are kept, for how long, on what legal basis is a legal decision, and while none exists a retention purge cannot be authorized at all. Evidence: docs/ip-implementation/evidence/m2/IPLF-028A/policy-authorization-2026-08-20.md, docs/ip-implementation/evidence/m2/IPLF-028A/tenant-review-contract-2026-08-20.md and docs/ip-implementation/evidence/m2/IPLF-028A/tenant-review-contract-implemented-2026-08-22.md. | RETENTION CONTENT 2026-08-22: the owner instructed engineering to assume suitable values rather than wait, so an assumed baseline now exists for all six admitted data classes with per-class reasoning and the statute a practitioner must confirm. It is labelled assumed_baseline, not approved: no version is activated and approve_execution still refuses a retention purge citing no active version. The blocker narrows rather than closes - the content question is answered well enough to build on but not authoritatively, and it is no longer a reason to stop. Evidence: docs/ip-implementation/RETENTION_SCHEDULE_BASELINE_2026-08-22.md.",
-          "owner": "Authorized legal/privacy owner, security owner, and product owner",
-          "evidence_needed": "Approved policy/version authority, named dual-approval and step-up controls, jurisdiction/tenant exceptions, and reviewed user workflow tests.",
+      "owner": "Codex for implementation/evidence; the authorized legal/privacy owner only for the retention-policy legal authority",
+      "evidence_needed": "An immutable policy version with recorded legal authority, machine-enforced dual-control and step-up controls, explicit jurisdiction/tenant exceptions, and executable user-workflow tests.",
           "safe_fallback": "Keep execution impossible in the schema and service; preserve only opaque dry-run evidence and typed 503 execute rejection.",
-          "milestone_impact": "Blocks legal-hold lifecycle and all real export/purge/offboarding/restore behavior.",
-          "next_independent_slice": "Do not infer legal authorization from schema presence or synthetic tests."
+      "milestone_impact": "Blocks only activation of retention-driven destructive execution. It does not block the legal-hold lifecycle, implementation, verification, dry-run behavior, or a fail-closed release.",
+      "next_independent_slice": "Codex completes and exact-release tests every fail-closed path; do not infer legal authority for destructive retention effects from schema presence or synthetic tests."
         },
         {
-          "id": "IPLF-028A-RES-13-REHEARSAL",
-          "summary": "OWNER-WAIVED 2026-08-19 as a gate; the underlying fact is unchanged. No database-plus-object application-cutover restore rehearsal or tenant-export dry run has been performed against any approved environment, so it is not known whether the production database can be restored or how long it would take. Point-in-time recovery is disabled on caseops-db, giving a real RPO near 24 hours against the 15-minute RES-01 target. See docs/ip-implementation/OWNER_WAIVER_RES13_RESTORE_REHEARSAL_2026-08-19.md. This entry is retained rather than deleted so the unproven state stays visible on the row.",
-          "owner": "Sanjeev Kumar (program owner) waived the gate; an authorized SRE/incident operator and Engineering/QA remain the owners if it is ever run.",
-          "evidence_needed": "None required for release under the owner waiver. To close this on evidence rather than waiver: dated, sanitized database/object/image/schema/operator/reviewer evidence with measured application readiness and a tested tenant-export dry run.",
-          "safe_fallback": "Do not treat an isolated SQLite migration test, or this waiver, as backup, object-store, restore, or resilience evidence. The waiver removes a verification; it does not supply one.",
-          "milestone_impact": "No longer blocks deployment/acceptance closure for IPLF-028. RES-13 remains verification_status not_run and must never be reported as verified.",
-          "next_independent_slice": "Proceed with the remaining IPLF-028A blockers. Non-live rehearsal tooling can still be built at any time; named authorization remains mandatory before an operator runs it against non-anonymized tenant data."
+      "id": "IPLF-028A-RES-13-REHEARSAL-EVIDENCE",
+      "summary": "No database-plus-object application-cutover restore rehearsal or tenant-export dry run has been completed on a current sanitized production-shaped environment, so application readiness and measured recovery time remain unproven. Point-in-time recovery is disabled on caseops-db, giving a real RPO near 24 hours against the 15-minute RES-01 target. The earlier skipped-test note is historical context, not acceptance evidence and not an active control.",
+      "owner": "Codex using the canonical restore/export automation",
+      "evidence_needed": "A dated automated rehearsal on sanitized production-shaped database/object/image/schema fixtures, with measured application readiness, RPO/RTO, tenant-export verification, worker fencing, tombstone reapplication and unrelated-endpoint responsiveness.",
+      "safe_fallback": "Keep recovery claims blocked. Do not treat an isolated SQLite migration test or a historical skipped-test note as backup, object-store, restore, export, or resilience evidence.",
+      "milestone_impact": "Blocks the RES-13 recovery claim until the automated sanitized rehearsal passes; no additional checkpoint exists.",
+      "next_independent_slice": "Codex builds and runs the sanitized rehearsal through the canonical automation; a customer-data execution, if ever necessary, uses its separate immutable destructive-operation authorization."
         },
         {
           "id": "IPLF-028A-DATA-CLASS-COVERAGE",
           "summary": "All six admitted data classes are governance metadata - holds, hold items, retention policies, retention versions, data operations and operation items. None is client data. So no retention schedule over the admitted set can authorise purging a matter file, a document, a communication or a billing record, whatever periods it names: those classes are not registered, and an unregistered class cannot be purged. Drafting the schedule surfaced this; it was previously hidden behind the assumption that approved content was the last step before a working purge workflow.",
-          "owner": "Records/Privacy owner with engineering",
-          "evidence_needed": "A reviewed registration of the client-data classes a purge is meant to reach, each with its own retention terms, before any export/purge/offboarding workflow can do anything for a real tenant.",
+      "owner": "Codex for the data-class registry; Records/Privacy supplies only the legally authoritative retention terms",
+      "evidence_needed": "Machine-validated registration of every client-data class the operation can reach, each bound to versioned retention terms and legal authority, before any export/purge/offboarding workflow can affect a real tenant.",
           "safe_fallback": "Unregistered classes stay unpurgeable, which is the fail-closed direction: the gap costs capability, never data.",
           "milestone_impact": "Bounds what IPLF-028A can deliver. The lifecycle, four eyes, step-up, review contract and UI are all complete and correct over a set that contains no client data.",
-          "next_independent_slice": "Register client-data classes through the reviewed data-class process; do not widen the runtime allowlist directly."
+      "next_independent_slice": "Codex registers client-data classes through the machine-validated data-class process; do not widen the runtime allowlist directly."
         }
       ],
       "next_actions": [
         "Keep the new records-governance tables unseeded and all repository implementation fail-closed; complete dry-run routes, workers, schedulers, adapters, tests, and deployment wiring now, but do not activate effectful execute mode.",
         "DONE 2026-08-19: the six-class dry-run constant is replaced by a compiled runtime projection of the reviewed IPLF-028A/IPLF-027A registries, rendered by scripts/ip_data_class_projection.py and gated in CI by its validate verb. What changed is provenance, versioning and failure behaviour: the projection carries fingerprints of the artifacts and the ORM schema it was rendered from, refuses the whole request when it is missing or no longer describes the build, and distinguishes an inventoried-but-unreviewed table from an unknown id. What did NOT change is which classes are admitted - still exactly the six reviewed ones. The remaining 260 inventoried tables are now a published count in the data_class_review_coverage integrity check rather than an absence.",
-        "Design, build, test, and deploy real-command contracts behind default-off, dry-run, effectless controls; obtain explicit legal/privacy/security approval for policy, holds, step-up, four-eyes, and user workflow before activation or any non-anonymized tenant-data effect.",
-        "After exact integrated-candidate CI and approved non-live resilience preparation, run the required database-plus-object cutover restore and tenant-export dry run with named operators and reviewers."
+    "Design, build, test, and deploy real-command contracts behind default-off, dry-run, effectless controls; Codex closes policy schema, hold, step-up, four-eyes, and user-workflow evidence. Require the exact legal/privacy authority only immediately before a non-anonymized retention-driven effect.",
+    "After exact integrated-candidate CI and machine preflight, Codex runs the required sanitized database-plus-object cutover restore and tenant-export dry run and records the automated evidence."
       ],
       "data_impact": [
         "Additive migration 20260813_0001 creates six unseeded company-scoped records-governance tables. It creates no retention policy, legal hold, tenant operation, export, purge, offboarding, restore, object, provider, or backup mutation.",
@@ -7327,8 +7328,8 @@
         {
           "id": "IPLF-029A-UNRESOLVED-M2-ROWS",
           "summary": "The audit validates repository references and makes active blocked work explicit, but it cannot close IPLF-026B provider failures, IPLF-027B/028B unimplemented user workflows, IPLF-028 policy/recovery gates.",
-          "owner": "Program control with the named slice, provider, Records/Privacy/Legal/Security, and acceptance owners",
-          "evidence_needed": "Each remaining M2 slice needs its specified canonical-writer journey proof, exact serving release evidence where applicable, external-provider recovery, approved data/recovery evidence, and named acceptance without inference.",
+      "owner": "Codex program control with the canonical slice, provider, Records/Privacy/Legal/Security owners",
+      "evidence_needed": "Each remaining M2 slice needs its specified canonical-writer journey proof, executable regression coverage, exact serving release evidence where applicable, external-provider readiness or a truthful default-off state, and machine-recorded data/recovery evidence. Any legally or destructively effectful authority remains scoped to that exact action and is not an M2 signoff.",
           "safe_fallback": "Keep every unresolved row visibly blocked or not-started; the audit must not upgrade a status or enable an application operation.",
           "milestone_impact": "M2 cannot claim its one-writer/reconciliation exit until every row has its independently required evidence.",
           "next_independent_slice": "Maintain the CI audit while implementing only the next bounded, dependency-ready repository slice."
@@ -9886,7 +9887,7 @@
       "blockers": [],
       "next_actions": [
         "Run the exact-candidate CI and dated deployed acceptance for the four closed UJ-52 paths; repository proof exists but deployed proof does not.",
-        "Confirm with the finance owner that a nonbillable cost with no Matter is the intended capture for an already-paid official fee before this slice claims release closure."
+        "Prove by service, API, PostgreSQL and UI regression that a cost with no Matter remains explicitly nonbillable, cannot create or reconcile an invoice/payment effect, and retains immutable official-fee evidence before this slice claims release closure."
       ],
       "data_impact": [],
       "documentation_impact": [],
@@ -9897,7 +9898,7 @@
       "scope_source": "IPLF-039F",
       "primary_behavior": "Add `ip_cost_items` and immutable evidence/billing links; keep time/invoice/payment/spend in existing Matter owners and prove one amount/accounting owner across reports and exports.",
       "migration_boundary": "No schema change unless named by release evidence; preserve the PRD expand/backfill/verify/switch contract.",
-      "release_boundary": "Compatible-train exact-candidate CI and dated deployed acceptance for activated/supported scope; fail-closed acceptance-pending scope may share the train.",
+      "release_boundary": "Compatible-train exact-candidate CI and dated deployed acceptance for activated/supported scope; capability-disabled fail-closed scope may share the train.",
       "evidence_metadata": [
         {
           "ref": "docs/ip-implementation/evidence/release-2026-08-01-completion.md",
@@ -15515,7 +15516,7 @@
       "allocation_review": "2026-08-30 brutal current-main and duplicate-work review: retain the existing EvaluationRun/EvaluationCase writer, all domain AI writers, permission owners, source registries, audit owner, and IPLF-066 private-retrieval ownership. Add only an offline release evaluator and one content-minimised neutral feedback queue; no duplicate answer, citation, research, Draft, private index, analytics, notification, worker, or scheduler owner is introduced.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_review",
+      "release_status": "ready_for_release",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
         "reviewer": "CaseOps Phase 0 control-plane reconciliation",
@@ -15669,7 +15670,7 @@
       "allocation_review": "2026-08-30 reciprocal and duplicate-work review: owns governed Product Guide/Assistant rating and reporting, bounded admin review, citation/permission/abstention safety evaluation, and release scoring. It extends the existing guide and assistant surfaces without owning the help corpus, assistant session/turn writer, intelligent-review writer, action writer, citation/source registry, private index, analytics store, notification, worker, or scheduler.",
       "implementation_status": "implemented",
       "verification_status": "passed",
-      "release_status": "ready_for_review"
+      "release_status": "ready_for_release"
     },
     {
       "id": "IPLF-066A",
@@ -37645,8 +37646,8 @@
     {
       "id": "IP-SCOPE-10",
       "family": "IP-SCOPE",
-      "text": "M8-M10 cannot exit on schema presence. The approved child PRD, journeys, legal/provider evidence, migration, security, performance, support, and pilot acceptance gate the affected domain's authoritative activation, beta/GA claim, and milestone exit; they do not block deployment of its fail-closed repository implementation.",
-      "text_sha256": "95af36c7d83f9ca8cd78027093635a0d33bccc7f312c1b44e7f54bda0d831b4d",
+      "text": "M8-M10 cannot exit on schema presence. A version-controlled domain contract, complete journey inventory, machine-validated legal/source packs, migration, security, performance, support, and exact-release evidence gate the affected domain's beta/GA claim and milestone exit. Missing legal or provider authority keeps only the affected capability fail-closed; it does not block deployment or completion of the repository implementation.",
+      "text_sha256": "f9a1edc2df9129680b24376c26b6bc10e267834e0e8857cbf5ef0489fd8b75fa",
       "journey_ids": [
         "UJ-29",
         "UJ-30",
@@ -45080,8 +45081,8 @@
     {
       "id": "UJ-60",
       "title": "Qualify and launch a non-trademark IP domain",
-      "actor": "Product Owner and Specialist IP Lawyer, with Engineering/Security/Operations reviewers.",
-      "preconditions": "Proposed domain, jurisdictions, pilot users and target beta/GA claim are named.",
+      "actor": "Codex owns implementation and release evidence; a Specialist IP Lawyer supplies authority only for legally effectful rules or conclusions.",
+      "preconditions": "Proposed domain, jurisdictions, versioned source/legal pack, synthetic acceptance fixtures and target beta/GA claim are named.",
       "acceptance": "No domain is represented as supported merely because a table enum, roadmap row, or generic form exists.",
       "exception_source_sha256": "15652a13687d5a039a0e09d986c9075447ee2508a1b9c6671d4e96b94667bfda",
       "path_ids": [

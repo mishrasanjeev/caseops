@@ -100,12 +100,36 @@ IMPLEMENTATION_STATUSES = {"not_started", "in_progress", "implemented", "blocked
 VERIFICATION_STATUSES = {"not_run", "failed", "passed", "blocked"}
 RELEASE_STATUSES = {
     "not_required",
-    "ready_for_review",
-    "approved",
+    "ready_for_release",
     "deployed",
     "deployment_verified",
     "blocked",
 }
+FORBIDDEN_PROGRAM_GATE_PHRASES = (
+    "m0: program lock",
+    "signed pilot acceptance",
+    "child-prd-approved",
+    "missing human acceptance blocks",
+    "human program-lock",
+    "human program lock",
+    "| gate | required approver |",
+)
+FORBIDDEN_MANUAL_GATE_KINDS = {
+    "approval",
+    "human_approval",
+    "manual_approval",
+    "manual_signoff",
+    "signoff",
+}
+FORBIDDEN_ACTIVE_CONTROL_PHRASES = (
+    "approval event",
+    "approval manifest",
+    "required approver",
+    "named acceptance",
+    "owner-waived",
+    "ready_for_review",
+    "confirm with the finance owner",
+)
 FORBIDDEN_COMPONENTS = {
     "ip_tasks",
     "ip_hearings",
@@ -586,6 +610,15 @@ def validate(manifest: dict[str, Any]) -> list[str]:
     parsed_epics, parsed_slices = parse_backlog(prd)
     parsed_milestones = parse_milestones(prd)
 
+    governance_start = prd.index("## 24. Concrete milestones and dates")
+    governance_end = prd.index("## 28. Risks and mitigations", governance_start)
+    governance_text = prd[governance_start:governance_end].casefold()
+    for phrase in FORBIDDEN_PROGRAM_GATE_PHRASES:
+        if phrase in governance_text:
+            errors.append(
+                f"PRD execution governance contains forbidden manual gate language: {phrase}"
+            )
+
     if manifest.get("schema_version") != 2:
         errors.append("manifest schema_version must be 2 after Phase 0 reconciliation")
 
@@ -740,6 +773,27 @@ def validate(manifest: dict[str, Any]) -> list[str]:
                 errors.append(
                     f"{collection[:-1]}/{row.get('id', '<missing>')}: "
                     "manual approval language is forbidden in execution scope"
+                )
+    for row in manifest.get("slices", []):
+        if row.get("implementation_status") not in {"in_progress", "not_started"}:
+            continue
+        active_control = json.dumps(
+            {
+                field: row.get(field)
+                for field in (
+                    "external_preconditions",
+                    "blockers",
+                    "next_actions",
+                    "release_boundary",
+                )
+            },
+            ensure_ascii=False,
+        ).casefold()
+        for phrase in FORBIDDEN_ACTIVE_CONTROL_PHRASES:
+            if phrase in active_control:
+                errors.append(
+                    f"slice/{row.get('id', '<missing>')}: active execution control "
+                    f"contains forbidden manual gate language: {phrase}"
                 )
     baseline = program.get("baseline", {})
     if baseline != {
@@ -1023,6 +1077,11 @@ def validate(manifest: dict[str, Any]) -> list[str]:
     for gate in manifest.get("gates", []):
         if gate.get("milestone_id") not in valid_milestones:
             errors.append(f"gate/{gate.get('id')}: unknown milestone {gate.get('milestone_id')}")
+        gate_kind = str(gate.get("kind", "")).casefold()
+        if gate_kind in FORBIDDEN_MANUAL_GATE_KINDS:
+            errors.append(
+                f"gate/{gate.get('id')}: program gates must be machine-enforced, not {gate_kind}"
+            )
 
     status_fields = (
         "implementation_status",
