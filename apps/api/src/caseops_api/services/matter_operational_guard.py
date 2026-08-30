@@ -32,20 +32,27 @@ def assert_operational_matter(
     *,
     matter: Matter,
     lock_for_write: bool = True,
+    shared_lifecycle_fence: bool = False,
 ) -> Matter:
     """Reload and optionally lock a matter before an operational write.
 
     ``populate_existing`` is essential: without it SQLAlchemy can return the
     stale identity-map object that was loaded before a concurrent disposal.
     The row lock serializes the final check with the lifecycle transition.
+    Independent operational child writers may request a shared lifecycle
+    fence; PostgreSQL permits those fences together but still blocks the
+    exclusive parent update used by disposal and reopening.
     """
+
+    if shared_lifecycle_fence and not lock_for_write:
+        raise ValueError("A shared lifecycle fence requires a write lock.")
 
     stmt = select(Matter).where(
         Matter.id == matter.id,
         Matter.company_id == matter.company_id,
     )
     if lock_for_write:
-        stmt = stmt.with_for_update()
+        stmt = stmt.with_for_update(read=shared_lifecycle_fence)
     current = session.scalar(stmt.execution_options(populate_existing=True))
     if current is None or not matter_is_operational(current):
         raise MatterNotOperationalError(

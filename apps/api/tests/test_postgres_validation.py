@@ -7333,6 +7333,194 @@ def test_login_releases_identity_fence_before_background_audit_on_postgres(
 # ---------- document worker / Notice upload lock order (2026-08-26) ----------
 
 
+def test_notice_reply_upload_shares_worker_lifecycle_fence_on_postgres(
+    pg_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An immediate reply must not time out behind initial Notice processing.
+
+    Both transactions are operational child writers, so their shared parent
+    fences are compatible. Disposal remains an exclusive parent update and
+    must wait until the worker commits before it neutralizes child work.
+    """
+
+    from hashlib import sha256
+    from io import BytesIO
+
+    from caseops_api.db.models import (
+        DocumentProcessingAction,
+        DocumentProcessingJob,
+        DocumentProcessingJobStatus,
+        DocumentProcessingStatus,
+        DocumentProcessingTargetType,
+        Matter,
+        MatterAttachment,
+    )
+    from caseops_api.schemas.matters import MatterLifecycleStatusRequest
+    from caseops_api.services import document_jobs
+    from caseops_api.services import matters as matter_service
+    from caseops_api.services.document_storage import StoredDocument
+
+    with Session(pg_engine) as seed:
+        company_id = _seed_company(seed)
+        membership_id = _seed_membership(seed, company_id, role="admin")
+        matter_id = _seed_matter(seed, company_id)
+        primary = MatterAttachment(
+            matter_id=matter_id,
+            uploaded_by_membership_id=membership_id,
+            original_filename="received-notice.txt",
+            storage_key=f"postgres-validation/{uuid4()}/received-notice.txt",
+            content_type="text/plain",
+            size_bytes=27,
+            sha256_hex="a" * 64,
+            document_type="notice",
+            notice_direction="received",
+            notice_document_role="notice",
+            notice_reply_required=True,
+            notice_reply_due_on=date.today() + timedelta(days=7),
+        )
+        seed.add(primary)
+        seed.flush()
+        job = DocumentProcessingJob(
+            company_id=company_id,
+            requested_by_membership_id=membership_id,
+            target_type=DocumentProcessingTargetType.MATTER_ATTACHMENT,
+            attachment_id=primary.id,
+            action=DocumentProcessingAction.INITIAL_INDEX,
+            status=DocumentProcessingJobStatus.QUEUED,
+        )
+        seed.add(job)
+        seed.commit()
+        job_id = job.id
+        primary_id = primary.id
+
+    worker_session_factory = sessionmaker(bind=pg_engine, expire_on_commit=False)
+    monkeypatch.setattr(document_jobs, "get_session_factory", lambda: worker_session_factory)
+
+    def index_without_storage(target: MatterAttachment) -> None:
+        target.processing_status = DocumentProcessingStatus.INDEXED
+        target.extracted_text = "Received Notice processing"
+        target.extracted_char_count = len(target.extracted_text)
+        target.extraction_error = None
+
+    worker_fence_held = Event()
+    release_worker = Event()
+
+    def hold_worker_lifecycle_fence(_session, _attachment, *, before_flush=None) -> int:
+        assert before_flush is not None
+        before_flush()
+        worker_fence_held.set()
+        assert release_worker.wait(timeout=15)
+        return 0
+
+    monkeypatch.setattr(document_jobs, "index_matter_attachment", index_without_storage)
+    monkeypatch.setattr(
+        document_jobs,
+        "embed_matter_attachment_chunks",
+        hold_worker_lifecycle_fence,
+    )
+
+    def persist_without_external_storage(**kwargs) -> StoredDocument:
+        content = kwargs["stream"].read()
+        before_store = kwargs.get("before_store")
+        if before_store is not None:
+            before_store(len(content))
+        return StoredDocument(
+            storage_key=f"postgres-validation/{uuid4()}/reply.txt",
+            size_bytes=len(content),
+            sha256_hex=sha256(content).hexdigest(),
+        )
+
+    monkeypatch.setattr(
+        matter_service,
+        "persist_matter_attachment",
+        persist_without_external_storage,
+    )
+
+    disposal_application_name = f"pg-notice-disposal-{uuid4()}"
+
+    def dispose_after_reply():
+        with Session(pg_engine) as disposal_session:
+            disposal_session.execute(
+                text("SELECT set_config('application_name', :name, true)"),
+                {"name": disposal_application_name},
+            )
+            context = _ip_race_context(
+                disposal_session,
+                company_id=company_id,
+                membership_id=membership_id,
+            )
+            matter = disposal_session.get(Matter, matter_id)
+            assert matter is not None
+            return matter_service.transition_matter_lifecycle_status(
+                disposal_session,
+                context=context,
+                matter_id=matter_id,
+                payload=MatterLifecycleStatusRequest(
+                    to_status="disposed",
+                    expected_from_status="active",
+                    expected_updated_at=matter.updated_at,
+                    reason="Prove the shared Notice fence remains fail closed.",
+                ),
+            )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        worker = executor.submit(document_jobs.run_document_processing_job, job_id)
+        disposal = None
+        try:
+            assert worker_fence_held.wait(timeout=15)
+            with Session(pg_engine) as reply_session:
+                reply_session.execute(text("SET LOCAL lock_timeout = '1000ms'"))
+                context = _ip_race_context(
+                    reply_session,
+                    company_id=company_id,
+                    membership_id=membership_id,
+                )
+                reply, _reply_job_id = matter_service.create_matter_attachment(
+                    reply_session,
+                    context=context,
+                    matter_id=matter_id,
+                    filename="reply.txt",
+                    content_type="text/plain",
+                    stream=BytesIO(b"Immediate reply to received Notice"),
+                    document_type="notice",
+                    notice_direction="sent",
+                    notice_document_role="reply",
+                    notice_parent_attachment_id=primary_id,
+                    notice_reply_sent=True,
+                    notice_reply_sent_on=date.today(),
+                )
+                reply_id = reply.id
+
+            disposal = executor.submit(dispose_after_reply)
+            _wait_for_postgres_lock_wait(
+                pg_engine,
+                application_name=disposal_application_name,
+            )
+        finally:
+            release_worker.set()
+        worker.result(timeout=15)
+        assert disposal is not None
+        disposed = disposal.result(timeout=15)
+        assert disposed.status == "disposed"
+
+    with Session(pg_engine) as verify:
+        matter = verify.get(Matter, matter_id)
+        processed_primary = verify.get(MatterAttachment, primary_id)
+        persisted_reply = verify.get(MatterAttachment, reply_id)
+        completed_job = verify.get(DocumentProcessingJob, job_id)
+        assert matter is not None
+        assert matter.status == "disposed"
+        assert matter.is_active is False
+        assert processed_primary is not None
+        assert processed_primary.processing_status == DocumentProcessingStatus.INDEXED
+        assert processed_primary.notice_reply_sent is True
+        assert persisted_reply is not None
+        assert persisted_reply.notice_parent_attachment_id == primary_id
+        assert completed_job is not None
+        assert completed_job.status == DocumentProcessingJobStatus.COMPLETED
+
+
 def test_document_worker_does_not_contend_with_interactive_actor_fence_on_postgres(
     pg_engine,
     monkeypatch: pytest.MonkeyPatch,

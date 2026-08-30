@@ -102,6 +102,20 @@ def test_postgresql_matter_lock_statement_locks_only_parent_table() -> None:
     assert " join " not in sql
     assert "for update of matters" in sql
 
+    shared_sql = str(
+        _matter_lock_statement(
+            company_id="company-id",
+            matter_id="matter-id",
+            shared=True,
+        ).compile(
+            dialect=postgresql.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    ).lower()
+
+    assert " join " not in shared_sql
+    assert "for share of matters" in shared_sql
+
 
 def test_legacy_core_guard_treats_inactive_nonterminal_row_as_nonoperational() -> None:
     inconsistent = Matter(

@@ -1716,18 +1716,25 @@ def _matter_loader_options() -> tuple[object, ...]:
     )
 
 
-def _matter_lock_statement(*, company_id: str, matter_id: str):
-    """Compile to a bare ``FOR UPDATE OF matters`` on PostgreSQL.
+def _matter_lock_statement(
+    *,
+    company_id: str,
+    matter_id: str,
+    shared: bool = False,
+):
+    """Compile to a bare parent-row lifecycle lock on PostgreSQL.
 
     Locking the eager-load statement would ask PostgreSQL to lock nullable
     outer-join rows and can fail with ``FOR UPDATE cannot be applied to the
-    nullable side of an outer join``.
+    nullable side of an outer join``. ``FOR SHARE`` is used by independent
+    operational child writers: they may proceed together, while still fencing
+    the ``UPDATE`` performed by disposal or reopening.
     """
 
     return (
         select(Matter)
         .where(Matter.id == matter_id, Matter.company_id == company_id)
-        .with_for_update(of=Matter)
+        .with_for_update(of=Matter, read=shared)
     )
 
 
@@ -1737,12 +1744,16 @@ def _get_matter_model(
     context: SessionContext,
     matter_id: str,
     lock_for_update: bool = False,
+    lock_for_share: bool = False,
 ) -> Matter:
-    if lock_for_update:
+    if lock_for_update and lock_for_share:
+        raise ValueError("Matter lock cannot be both exclusive and shared.")
+    if lock_for_update or lock_for_share:
         matter = session.scalar(
             _matter_lock_statement(
                 company_id=context.company.id,
                 matter_id=matter_id,
+                shared=lock_for_share,
             ).execution_options(populate_existing=True)
         )
     else:
@@ -1754,7 +1765,7 @@ def _get_matter_model(
     if not matter:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Matter not found.")
     assert_access(session, context=context, matter=matter)
-    if lock_for_update:
+    if lock_for_update or lock_for_share:
         # The row lock is already held. Populate relationships in a separate,
         # non-locking statement so nullable eager joins never participate in
         # the PostgreSQL lock clause.
@@ -5050,15 +5061,16 @@ def create_matter_attachment(
             "create_matter_attachment"
         ],
     )
-    # Hold the lifecycle row while deriving notice deadlines and enqueueing
-    # document work. This serializes attachment mutations with disposal: either
-    # the upload commits first and disposal neutralizes its work, or disposal
-    # wins and the derived deadline path observes the terminal state.
+    # Hold a shared lifecycle fence while deriving notice deadlines and
+    # enqueueing document work. Independent uploads/processors may proceed
+    # together, while disposal/reopening remains exclusive: either this upload
+    # commits first and disposal neutralizes its work, or disposal wins and the
+    # derived deadline path observes the terminal state.
     matter = _get_matter_model(
         session,
         context=context,
         matter_id=matter_id,
-        lock_for_update=True,
+        lock_for_share=True,
     )
     _assert_matter_not_disposed(matter, operation="upload an attachment")
     audit_matter_id = matter.id
