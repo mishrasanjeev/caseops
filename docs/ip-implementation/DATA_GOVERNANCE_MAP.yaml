@@ -442,11 +442,14 @@
       "status": "inventory_registered_runtime_policy_unapproved",
       "id": "connector-and-payment-provider-held-records",
       "kind": "provider_held_object",
-      "purpose": "External mailbox, calendar, Drive, court/source, and payment-provider objects referenced by connector or provider operations. On 2026-08-29, the eCourts adapter began retaining bounded order markdown already embedded in a provider response and the case-tracking service began resolving exact, unique eCourts CNR/order source lineage to an available reviewed authority-corpus record when an older provider snapshot lacks text. The persisted case update records the selected authority ID, source reference, source URL, decision date, content hash, match mode, and source metadata; no fuzzy or ambiguous source is admitted. A 2026-08-29 follow-up makes an available exact CNR/order reference exclusive: generic case/court/date fallback is permitted only when that exact order reference cannot be derived.",
+      "purpose": "External mailbox, calendar, Drive, court/source, and payment-provider objects referenced by connector or provider operations. On 2026-08-29, the eCourts adapter began retaining bounded order markdown already embedded in a provider response and the case-tracking service began resolving exact, unique eCourts CNR/order source lineage to an available reviewed authority-corpus record when an older provider snapshot lacks text. The persisted case update records the selected authority ID, source reference, source URL, decision date, content hash, match mode, and source metadata; no fuzzy or ambiguous source is admitted. A 2026-08-29 follow-up makes an available exact CNR/order reference exclusive: generic case/court/date fallback is permitted only when that exact order reference cannot be derived. The 2026-08-30 connector-readiness hardening reads existing tenant connector configuration and credential references to enforce authoritative disabled-tenant boundaries, required OAuth scope coverage, versioned retry/dead-letter/replay/redaction controls, and fail-closed readiness. The shared HTTP retry module defines bounded safe-read retry constants used by provider clients and readiness checks; neither change adds a data class, persistence path, provider transmission, retention authority, disposition behavior, or secret exposure.",
       "sensitivity": "confidential_provider_and_client_data",
       "source_licence_limits": "Every provider/source contract, consent, permitted use, retention, and deletion capability must be approved before activation or data-operation execution.",
       "implementation_refs": [
         "apps/api/src/caseops_api/services/integrations.py",
+        "apps/api/src/caseops_api/services/calendar_sync.py",
+        "apps/api/src/caseops_api/services/google_workspace.py",
+        "apps/api/src/caseops_api/services/http_retries.py",
         "apps/api/src/caseops_api/services/case_tracking.py",
         "apps/api/src/caseops_api/services/case_tracking_providers.py",
         "apps/api/src/caseops_api/services/pine_labs.py"
