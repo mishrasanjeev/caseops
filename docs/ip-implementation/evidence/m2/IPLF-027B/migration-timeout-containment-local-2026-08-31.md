@@ -69,12 +69,16 @@ and leave the column type and all 20,000 rows unchanged.
 
 ## Immutable evidence chain
 
-The canonical manifest records the full immutable implementation revision that
-was tested before this evidence-only update. Because a commit cannot contain
-its own SHA, the later evidence commit must be treated as unverified until an
-exact-checkout retest completes. The Draft PR and operator report record the
-later exact SHA and its independent PG17 result; they must not project that
-result backward onto an untested commit.
+Exact clean implementation revision
+`d7541ff8e262b7c468f785af9a45c2cd737ccc4a` passed the three-case fresh Docker
+PG17 proof in 18.50 seconds with pgvector 0.8.3, Alembic head `20260830_0002`,
+and zero retained probe tables.
+
+The canonical manifest records that full immutable implementation revision.
+Because a commit cannot contain its own SHA, the later evidence commit must be
+treated as unverified until an exact-checkout retest completes. The Draft PR
+and operator report record the later exact SHA and its independent PG17 result;
+they must not project that result backward onto an untested commit.
 
 ## Still open on IPLF-027B
 

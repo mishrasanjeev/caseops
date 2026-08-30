@@ -6612,12 +6612,12 @@
         },
         {
           "ref": "docs/ip-implementation/evidence/m2/IPLF-027B/migration-timeout-containment-local-2026-08-31.md",
-          "revision": "ddc338f8",
-          "environment": "Windows 11 local workstation with an isolated Docker pgvector/pgvector:pg17 container, locked CPython 3.13 API dependencies, Alembic upgraded to the canonical migration head, and the exact migration connection-argument builder used by alembic/env.py. This is post-start defensive containment only; UJ-67-EXC-01 estimate/preflight refusal and production exact-serving acceptance were not run",
+          "revision": "d7541ff8e262b7c468f785af9a45c2cd737ccc4a",
+          "environment": "Exact clean implementation revision d7541ff8e262b7c468f785af9a45c2cd737ccc4a on a Windows 11 local workstation with a fresh isolated Docker pgvector/pgvector:pg17 container, locked CPython 3.13 API dependencies, Alembic upgraded to canonical head 20260830_0002, pgvector 0.8.3, and the exact migration connection-argument builder used by alembic/env.py. Three focused PostgreSQL cases passed in 18.50 seconds and left zero probe tables. This is post-start defensive containment only; UJ-67-EXC-01 estimate/preflight refusal and production exact-serving acceptance were not run",
           "fixtures": "A disposable unlogged 20,000-row PostgreSQL table created after the application migrations, one old-revision ACCESS SHARE transaction, one candidate rewrite connection, one deliberately underestimated Cartesian scan, and a URL-supplied non-timeout libpq option plus conflicting timeout options. No tenant, client, legal, provider, filing, payment, message, or production data",
           "assertions": "Actual Alembic env.py to engine_from_config wiring; dedicated migration settings independent of runtime settings; checked-in Cloud Run migration-job values plus production deploy update/read-back refusal on drift; URL-supplied non-timeout option preservation with owned timeout GUCs authoritative; server-reported lock and statement timeout settings; blocked ACCESS EXCLUSIVE rewrite rejected with SQLSTATE 55P03 inside the bounded window; underestimated table scan rejected with SQLSTATE 57014 inside the bounded window; failed transactions recover after rollback; candidate column type and every fixture row remain unchanged; SQLite exclusion; and positive-budget validation. This does not assert a pre-start estimate or UJ-67-EXC-01 closure",
           "result": "local_postgresql_defensive_containment_passed_release_not_run",
-          "recorded_at": "2026-08-31T00:13:02+05:30"
+          "recorded_at": "2026-08-31T00:51:07+05:30"
         }
       ],
       "blockers": [
