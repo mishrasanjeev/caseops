@@ -174,7 +174,7 @@ export default function IpDocketPage() {
     enabled:
       canView &&
       readiness.data?.workspace_available === true &&
-      !deepLinkDocketPending,
+      !requestedDocketId,
   });
   const dockets = listing.data?.dockets ?? [];
   const selected = useMemo(
@@ -278,7 +278,7 @@ export default function IpDocketPage() {
         </TabsList>
         <TabsContent value="documents">
           <IpDocumentWorkspace
-            dockets={dockets}
+            dockets={portfolioDockets}
             canUpload={canWrite && canUploadDocuments}
             canManage={canWrite && canManageDocuments}
             canReview={canReview}
@@ -290,6 +290,12 @@ export default function IpDocketPage() {
             <IpAccessWorkspaceLoading />
           ) : deepLinkDocketPending ? (
             <Card><CardContent className="py-10 text-sm">Loading IP docket…</CardContent></Card>
+          ) : requestedDocketId && requestedDocket.isError ? (
+            <EmptyState
+              title="Could not load the linked IP docket"
+              description={apiErrorMessage(requestedDocket.error, "The selected IP record is unavailable.")}
+              action={<Button onClick={() => requestedDocket.refetch()}>Retry linked docket</Button>}
+            />
           ) : listing.isPending && !selected ? (
             <Card><CardContent className="py-10 text-sm">Loading IP docket…</CardContent></Card>
           ) : listing.isError && !selected ? (
@@ -305,14 +311,21 @@ export default function IpDocketPage() {
             />
           ) : (
             <div className="flex min-w-0 flex-col gap-5">
-              <CoverageDecisionsCard onChanged={refresh} />
+              {!requestedDocketId ? <CoverageDecisionsCard onChanged={refresh} /> : null}
               <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.4fr)]">
           <Card className="min-w-0">
             <CardHeader><CardTitle as="h2">Portfolio</CardTitle></CardHeader>
             <CardContent className="flex flex-col gap-2">
-              {listing.isPending ? (
+              {requestedDocketId ? (
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--color-line)] pb-3 text-xs text-[var(--color-mute)]" role="status">
+                  <span>Showing the record selected by this link.</span>
+                  <Link className="font-semibold text-[var(--color-brand-700)]" href="/app/ip/portfolio">
+                    Open full portfolio
+                  </Link>
+                </div>
+              ) : listing.isFetching ? (
                 <p className="text-sm text-[var(--color-mute)]" role="status">
-                  Loading the rest of the portfolio…
+                  Loading the portfolio…
                 </p>
               ) : listing.isError ? (
                 <Button variant="secondary" onClick={() => listing.refetch()}>
@@ -1399,6 +1412,9 @@ function DocketWorkspace({
 }) {
   const classes = docket.current_particulars.classes_json;
   const [activeView, setActiveView] = useState<DocketView>(initialView);
+  const [focusDraftOnly, setFocusDraftOnly] = useState(
+    Boolean(initialProceedingId && initialDraftId),
+  );
   return (
     <div className="flex min-w-0 flex-col gap-5" data-testid="ip-docket-workspace">
       <Card className="min-w-0">
@@ -1458,19 +1474,30 @@ function DocketWorkspace({
               currentMembershipId={currentMembershipId}
               initialProceedingId={initialProceedingId}
               initialDraftId={initialDraftId}
+              focusDraftOnly={focusDraftOnly}
             />
-            <IpPostRegistrationWorkspace
-              docket={docket}
-              canWrite={canWrite}
-              canReview={canReview}
-              currentMembershipId={currentMembershipId}
-            />
-            <ProsecutionCard
-              docket={docket}
-              enabled={canWrite}
-              currentMembershipId={currentMembershipId}
-              onChanged={onChanged}
-            />
+            {focusDraftOnly ? (
+              <div className="flex min-w-0 items-start xl:col-span-2">
+                <Button variant="secondary" onClick={() => setFocusDraftOnly(false)}>
+                  Open all proceeding tools
+                </Button>
+              </div>
+            ) : (
+              <>
+                <IpPostRegistrationWorkspace
+                  docket={docket}
+                  canWrite={canWrite}
+                  canReview={canReview}
+                  currentMembershipId={currentMembershipId}
+                />
+                <ProsecutionCard
+                  docket={docket}
+                  enabled={canWrite}
+                  currentMembershipId={currentMembershipId}
+                  onChanged={onChanged}
+                />
+              </>
+            )}
           </div>
         </TabsContent>
         <TabsContent value="schedule">

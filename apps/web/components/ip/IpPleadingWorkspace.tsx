@@ -35,6 +35,7 @@ import {
   downloadIpPleadingDraft,
   downloadIpPleadingFilingBundle,
   generateIpPleadingDraft,
+  getIpPleadingDraft,
   listIpPleadingDrafts,
   listIpPleadingTemplates,
   saveIpPleadingDraft,
@@ -85,13 +86,26 @@ export function IpPleadingWorkspace({
   const queryClient = useQueryClient();
   const controlId = useId();
   const queryKey = ["ip", "pleading-drafts", docketId, proceedingId] as const;
+  const requestedDraft = useQuery({
+    queryKey: [...queryKey, "detail", initialDraftId],
+    queryFn: () => getIpPleadingDraft({
+      docketId,
+      proceedingId,
+      draftId: initialDraftId!,
+    }),
+    enabled: Boolean(initialDraftId),
+    retry: false,
+  });
+  const supportingQueriesEnabled = !initialDraftId || requestedDraft.isFetched;
   const templates = useQuery({
     queryKey: ["ip", "pleading-templates", docketId, proceedingId],
     queryFn: () => listIpPleadingTemplates({ docketId, proceedingId }),
+    enabled: supportingQueriesEnabled,
   });
   const drafts = useQuery({
     queryKey,
     queryFn: () => listIpPleadingDrafts({ docketId, proceedingId }),
+    enabled: supportingQueriesEnabled,
   });
   const [templateKey, setTemplateKey] = useState("");
   const [title, setTitle] = useState("");
@@ -108,17 +122,24 @@ export function IpPleadingWorkspace({
       setTitle(templates.data.templates[0].label);
     }
   }, [templateKey, templates.data?.templates]);
-  useEffect(() => {
-    if (!drafts.data) return;
+  const draftRows = useMemo(() => {
     const rows = drafts.data?.drafts ?? [];
+    if (requestedDraft.data && !rows.some((row) => row.id === requestedDraft.data.id)) {
+      return [requestedDraft.data, ...rows];
+    }
+    return rows;
+  }, [drafts.data?.drafts, requestedDraft.data]);
+  useEffect(() => {
+    if (!drafts.data && !requestedDraft.data) return;
+    const rows = draftRows;
     if (!selectedId && rows[0]) setSelectedId(rows[0].id);
     if (selectedId && !rows.some((row) => row.id === selectedId)) {
       setSelectedId(rows[0]?.id ?? "");
     }
-  }, [drafts.data?.drafts, selectedId]);
+  }, [draftRows, drafts.data, requestedDraft.data, selectedId]);
   const selected = useMemo(
-    () => drafts.data?.drafts.find((row) => row.id === selectedId) ?? null,
-    [drafts.data?.drafts, selectedId],
+    () => draftRows.find((row) => row.id === selectedId) ?? null,
+    [draftRows, selectedId],
   );
   const currentVersion = useMemo(
     () => selected?.versions.find((row) => row.id === selected.current_version_id) ?? null,
@@ -221,7 +242,10 @@ export function IpPleadingWorkspace({
 
       {templates.isError ? <QueryErrorState error={templates.error} title="Could not load pleading templates" onRetry={() => templates.refetch()} /> : null}
       {drafts.isError ? <QueryErrorState error={drafts.error} title="Could not load pleading drafts" onRetry={() => drafts.refetch()} /> : null}
-      {templates.isPending || drafts.isPending ? <Skeleton className="h-32 w-full" /> : null}
+      {requestedDraft.isError && !draftRows.some((row) => row.id === initialDraftId) && drafts.isFetched ? (
+        <QueryErrorState error={requestedDraft.error} title="Could not load the linked pleading draft" onRetry={() => requestedDraft.refetch()} />
+      ) : null}
+      {!selected && (requestedDraft.isPending || templates.isPending || drafts.isPending) ? <Skeleton className="h-32 w-full" /> : null}
 
       {templates.data && templates.data.templates.length === 0 ? (
         <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm">
@@ -259,11 +283,11 @@ export function IpPleadingWorkspace({
         </form>
       ) : null}
 
-      {drafts.data?.drafts.length ? (
+      {draftRows.length ? (
         <Label className="block min-w-0 space-y-1.5" htmlFor={`${controlId}-draft`}>
           <span className="block">Pleading draft</span>
-          <select id={`${controlId}-draft`} className={SELECT_CLASS} value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>
-            {drafts.data.drafts.map((row) => <option key={row.id} value={row.id}>{row.title} - {row.status.replaceAll("_", " ")}</option>)}
+          <select aria-label="Pleading draft" id={`${controlId}-draft`} className={SELECT_CLASS} value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>
+            {draftRows.map((row) => <option key={row.id} value={row.id}>{row.title} - {row.status.replaceAll("_", " ")}</option>)}
           </select>
         </Label>
       ) : null}
@@ -291,7 +315,7 @@ export function IpPleadingWorkspace({
               </div>
               <Label className="block min-w-0 space-y-1.5" htmlFor={`${controlId}-body`}>
                 <span className="block">Pleading body</span>
-                <Textarea id={`${controlId}-body`} className="min-h-80 font-mono" value={body} onChange={(event) => setBody(event.target.value)} disabled={!canEdit || immutableStatus} />
+                <Textarea aria-label="Pleading body" id={`${controlId}-body`} className="min-h-80 font-mono" value={body} onChange={(event) => setBody(event.target.value)} disabled={!canEdit || immutableStatus} />
               </Label>
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" type="button" onClick={() => save.mutate({ docketId, proceedingId, draftId: selected.id, body })} disabled={!canEdit || immutableStatus || body.trim() === currentVersion.body.trim() || save.isPending}><Save className="h-4 w-4" /> Save revision</Button>

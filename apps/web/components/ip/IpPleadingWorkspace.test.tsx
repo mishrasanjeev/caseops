@@ -8,6 +8,7 @@ const {
   createMock,
   downloadMock,
   generateMock,
+  getDraftMock,
   listDraftsMock,
   listTemplatesMock,
   lifecycleMock,
@@ -20,6 +21,7 @@ const {
   createMock: vi.fn(),
   downloadMock: vi.fn(),
   generateMock: vi.fn(),
+  getDraftMock: vi.fn(),
   listDraftsMock: vi.fn(),
   listTemplatesMock: vi.fn(),
   lifecycleMock: vi.fn(),
@@ -34,6 +36,7 @@ vi.mock("@/lib/api/endpoints", () => ({
   downloadIpPleadingDraft: downloadMock,
   downloadIpPleadingFilingBundle: bundleMock,
   generateIpPleadingDraft: generateMock,
+  getIpPleadingDraft: getDraftMock,
   listIpPleadingDrafts: listDraftsMock,
   listIpPleadingTemplates: listTemplatesMock,
   saveIpPleadingDraft: saveMock,
@@ -101,6 +104,7 @@ describe("IpPleadingWorkspace", () => {
       }],
     });
     listDraftsMock.mockResolvedValue({ drafts: [draft], next_cursor: null });
+    getDraftMock.mockResolvedValue(draft);
     generateMock.mockResolvedValue(draft);
     saveMock.mockResolvedValue(draft);
     transitionMock.mockResolvedValue({ ...draft, status: "in_review" });
@@ -213,10 +217,12 @@ describe("IpPleadingWorkspace", () => {
         body: "Approved source-bounded intelligent review.",
       }],
     };
-    listDraftsMock.mockResolvedValue({
-      drafts: [draft, requestedDraft],
-      next_cursor: null,
-    });
+    let resolveRequestedDraft: ((value: typeof requestedDraft) => void) | undefined;
+    getDraftMock.mockReturnValue(new Promise((resolve) => {
+      resolveRequestedDraft = resolve;
+    }));
+    listDraftsMock.mockReturnValue(new Promise(() => {}));
+    listTemplatesMock.mockReturnValue(new Promise(() => {}));
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     });
@@ -236,6 +242,16 @@ describe("IpPleadingWorkspace", () => {
       </QueryClientProvider>,
     );
 
+    await waitFor(() => expect(getDraftMock).toHaveBeenCalledWith({
+      docketId: "docket-1",
+      proceedingId: "proceeding-1",
+      draftId: "draft-from-review",
+    }));
+    expect(listDraftsMock).not.toHaveBeenCalled();
+    expect(listTemplatesMock).not.toHaveBeenCalled();
+
+    resolveRequestedDraft?.(requestedDraft);
+
     const draftSelect = await screen.findByRole("combobox", {
       name: /^Pleading draft$/,
     });
@@ -243,6 +259,7 @@ describe("IpPleadingWorkspace", () => {
     expect(screen.getAllByLabelText("Pleading draft", { exact: true })).toEqual([
       draftSelect,
     ]);
+    expect(draftSelect).toHaveAccessibleName("Pleading draft");
     expect(screen.getByLabelText("Pleading body", { exact: true })).toHaveValue(
       "Approved source-bounded intelligent review.",
     );
@@ -251,6 +268,8 @@ describe("IpPleadingWorkspace", () => {
       proceedingId: "proceeding-1",
       draftId: "draft-from-review",
     });
+    expect(listDraftsMock).toHaveBeenCalledOnce();
+    expect(listTemplatesMock).toHaveBeenCalledOnce();
   });
 
   it("compares revisions, exports a filing bundle, and records filing", async () => {

@@ -386,6 +386,57 @@ describe("IpOppositionWorkspace", () => {
     expect(await screen.findByText("TM-APP-100")).toBeVisible();
   });
 
+  it("starts the exact deep-linked pleading before the proceeding catalog finishes", async () => {
+    fetchCoreMock.mockReturnValue(new Promise(() => {}));
+
+    render(withClient(
+      <IpOppositionWorkspace
+        docket={docket}
+        canWrite
+        canReview
+        currentMembershipId="membership-1"
+        initialProceedingId="opposition-from-link"
+        initialDraftId="draft-from-review"
+        focusDraftOnly
+      />,
+    ));
+
+    await waitFor(() => expect(pleadingWorkspaceMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        proceedingId: "opposition-from-link",
+        initialDraftId: "draft-from-review",
+      }),
+    ));
+    expect(screen.getByTestId("pleading-workspace-stub")).toBeVisible();
+    expect(fetchWorkspaceMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps a focused Draft link isolated after the proceeding catalog resolves", async () => {
+    render(withClient(
+      <IpOppositionWorkspace
+        docket={docket}
+        canWrite
+        canReview
+        currentMembershipId="membership-1"
+        initialProceedingId="opposition-1"
+        initialDraftId="draft-from-review"
+        focusDraftOnly
+      />,
+    ));
+
+    expect(
+      await screen.findByRole("combobox", { name: /^Opposition proceeding$/ }),
+    ).toHaveValue("opposition-1");
+    await waitFor(() => expect(pleadingWorkspaceMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        proceedingId: "opposition-1",
+        initialDraftId: "draft-from-review",
+      }),
+    ));
+    expect(screen.getByText("Focused draft")).toBeVisible();
+    expect(fetchWorkspaceMock).not.toHaveBeenCalled();
+  });
+
   it("refreshes both represented-side workflows after a stage transition", async () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },

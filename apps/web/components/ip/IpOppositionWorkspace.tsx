@@ -106,6 +106,7 @@ export function IpOppositionWorkspace({
   currentMembershipId,
   initialProceedingId = null,
   initialDraftId = null,
+  focusDraftOnly = false,
 }: {
   docket: IpDocket;
   canWrite: boolean;
@@ -118,6 +119,7 @@ export function IpOppositionWorkspace({
   currentMembershipId: string | null;
   initialProceedingId?: string | null;
   initialDraftId?: string | null;
+  focusDraftOnly?: boolean;
 }) {
   const queryClient = useQueryClient();
   const core = useQuery({
@@ -130,6 +132,9 @@ export function IpOppositionWorkspace({
   );
   const [selectedId, setSelectedId] = useState(initialProceedingId ?? "");
   const selectedOpposition = oppositions.find((row) => row.id === selectedId) ?? null;
+  const pleadingProceedingId = selectedOpposition?.id ?? (
+    selectedId === initialProceedingId ? initialProceedingId : null
+  );
   useEffect(() => {
     if (!core.data) return;
     if (!selectedId && oppositions[0]) setSelectedId(oppositions[0].id);
@@ -141,7 +146,7 @@ export function IpOppositionWorkspace({
   const workspace = useQuery({
     queryKey: ["ip", "opposition-workspace", docket.id, selectedId],
     queryFn: () => fetchIpOppositionWorkspace({ docketId: docket.id, proceedingId: selectedId }),
-    enabled: Boolean(selectedOpposition),
+    enabled: Boolean(selectedOpposition) && !focusDraftOnly,
   });
 
   const [applicationId, setApplicationId] = useState("");
@@ -313,6 +318,44 @@ export function IpOppositionWorkspace({
     onError: (error) => toast.error(apiErrorMessage(error, "Could not update the opposition stage.")),
   });
 
+  const pleadingWorkspace = pleadingProceedingId ? (
+    <IpPleadingWorkspace
+      docketId={docket.id}
+      proceedingId={pleadingProceedingId}
+      canCreate={canWrite && canCreateDraft}
+      canEdit={canWrite && canEditDraft}
+      canGenerate={canWrite && canGenerateDraft}
+      canReview={canReview && canReviewDraft}
+      canFinalize={canReview && canFinalizeDraft}
+      initialDraftId={pleadingProceedingId === initialProceedingId ? initialDraftId : null}
+    />
+  ) : null;
+
+  if (focusDraftOnly && initialProceedingId && initialDraftId) {
+    return (
+      <Card className="min-w-0 xl:col-span-2" data-testid="ip-opposition-workspace">
+        <CardHeader>
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+            <CardTitle as="h3">Trademark opposition</CardTitle>
+            <Badge tone="brand">Focused draft</Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="flex min-w-0 flex-col gap-5">
+          {core.isPending ? <Skeleton className="h-24 w-full" /> : null}
+          {core.isError ? <QueryErrorState error={core.error} title="Could not load opposition records" onRetry={() => core.refetch()} /> : null}
+          {oppositions.length ? (
+            <Field label="Opposition proceeding">
+              <select className={SELECT_CLASS} value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>
+                {oppositions.map((row) => <option key={row.id} value={row.id}>{row.side} · {readable(row.stage)} · {row.office}</option>)}
+              </select>
+            </Field>
+          ) : null}
+          {pleadingWorkspace}
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card className="min-w-0 xl:col-span-2" data-testid="ip-opposition-workspace">
       <CardHeader>
@@ -368,18 +411,7 @@ export function IpOppositionWorkspace({
 
         {workspace.isPending ? <Skeleton className="h-80 w-full" /> : null}
         {workspace.isError ? <QueryErrorState error={workspace.error} title="Could not load the opposition workspace" onRetry={() => workspace.refetch()} /> : null}
-        {selectedOpposition ? (
-          <IpPleadingWorkspace
-            docketId={docket.id}
-            proceedingId={selectedOpposition.id}
-            canCreate={canWrite && canCreateDraft}
-            canEdit={canWrite && canEditDraft}
-            canGenerate={canWrite && canGenerateDraft}
-            canReview={canReview && canReviewDraft}
-            canFinalize={canReview && canFinalizeDraft}
-            initialDraftId={selectedOpposition.id === initialProceedingId ? initialDraftId : null}
-          />
-        ) : null}
+        {pleadingWorkspace}
         {workspace.data ? (
           <>
             <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-4">
