@@ -236,8 +236,14 @@ describe("IpPleadingWorkspace", () => {
       </QueryClientProvider>,
     );
 
-    expect(await screen.findByLabelText("Pleading draft")).toHaveValue("draft-from-review");
-    expect(screen.getByLabelText("Pleading body")).toHaveValue(
+    const draftSelect = await screen.findByRole("combobox", {
+      name: /^Pleading draft$/,
+    });
+    expect(draftSelect).toHaveValue("draft-from-review");
+    expect(screen.getAllByLabelText("Pleading draft", { exact: true })).toEqual([
+      draftSelect,
+    ]);
+    expect(screen.getByLabelText("Pleading body", { exact: true })).toHaveValue(
       "Approved source-bounded intelligent review.",
     );
     expect(validationMock).toHaveBeenCalledWith({
