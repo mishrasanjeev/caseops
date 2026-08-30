@@ -1,7 +1,9 @@
 # IPLF-027B — UJ-67-EXC-01 PostgreSQL lock-window evidence
 
-**Date:** 31 August 2026  
-**Scope:** only `UJ-67-EXC-01` (lock/table-scan estimate exceeds the deploy window)  
+**Date:** 31 August 2026
+
+**Scope:** only `UJ-67-EXC-01` (lock/table-scan estimate exceeds the deploy window)
+
 **Status:** repository implementation and local PostgreSQL proof; not deployed
 
 ## Root cause and correction
