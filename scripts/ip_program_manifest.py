@@ -22,6 +22,13 @@ PRD_PATH = REPO_ROOT / "docs" / "PRD_IP_LAW_FIRM_PLATFORM_2026-08-01.md"
 CONTROL_ROOT = REPO_ROOT / "docs" / "ip-implementation"
 MANIFEST_PATH = CONTROL_ROOT / "PROGRAM_MANIFEST.yaml"
 GENERATED_ROOT = CONTROL_ROOT / "generated"
+ACTIVE_EXECUTION_DOCUMENTS = (
+    REPO_ROOT / "docs" / "AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md",
+    REPO_ROOT / "docs" / "BENCH_AWARE_APPEAL_DRAFTING_TASKLIST_2026-04-24.md",
+    REPO_ROOT / "docs" / "PRD_CLAUDE_CODE_2026-04-23.md",
+    REPO_ROOT / "docs" / "STRICT_ENTERPRISE_GAP_TASKLIST.md",
+    REPO_ROOT / "docs" / "WORK_TO_BE_DONE.md",
+)
 
 EXPECTED_REQUIREMENTS = 436
 EXPECTED_FAMILIES = 50
@@ -30,9 +37,26 @@ EXPECTED_EXECUTION_POLICY = (
     "codex_owned_single_ordered_queue; implement first and run the "
     "automated check and exact-release verification batch at the end"
 )
-FORBIDDEN_WORK_ASSIGNMENT_PHRASES = (
-    "assigned to claude",
-    "claude remains assigned",
+FORBIDDEN_WORK_ASSIGNMENT_PATTERNS = tuple(
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in (
+        r"\b(?:assigned|assignment)\s+(?:to\s+)?claude(?:\s+code)?\b",
+        r"\bclaude(?:\s+code)?\s+(?:remains\s+)?assigned\b",
+        r"\bclaude(?:\s+code)?[- ]owned\s+"
+        r"(?:lane|work(?:stream)?|task|queue|slice|implementation|execution|track|assignment)\b",
+        r"\bclaude(?:\s+code)?\s+half\b",
+        r"\bclaude(?:\s+code)?\s+must\b",
+        r"\b(?:(?:work|execution|implementation|assigned)\s+)?owner"
+        r"(?:\s+target)?\s*(?::|=|\bis\b)\s*[^\n]*\bclaude(?:\s+code)?\b",
+        r"\bclaude(?:\s+code)?\s+(?:is\s+)?(?:the\s+)?"
+        r"(?:work|execution|implementation)\s+owner\b",
+        r"\b(?:execution\s+(?:baseline|contract)|source\s+of\s+truth)"
+        r"[^\n]*\bclaude(?:\s+code)?\b",
+        r"\bclaude(?:\s+code)?\s+execution\s+(?:baseline|contract)\b",
+        r"\bfor\s+claude\s+code\s+execution\b",
+        r"\bprd\s+for\s+claude\s+code\b",
+        r"\bclaude(?:\s+code)?\s+(?:fix\s+order|work)\b",
+    )
 )
 GENERATED_DERIVED_PHASES = {
     "Foundation, ownership, and backend contract",
@@ -153,17 +177,33 @@ def sha256_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
-def forbidden_work_assignment_matches(root: Path = CONTROL_ROOT) -> list[str]:
-    """Return active IP evidence lines that assign execution work to Claude."""
+def forbidden_work_assignment_matches(root: Path | None = None) -> list[str]:
+    """Return active control lines that assign execution work to Claude.
+
+    The matcher deliberately targets ownership and instruction grammar. Historical
+    attribution, compatibility paths such as ``.claude/skills``, migration names,
+    and provider/model references are outside that grammar and remain valid.
+    """
 
     matches: list[str] = []
-    for path in sorted(root.rglob("*.md")):
+    if root is None:
+        paths = sorted(
+            {
+                *CONTROL_ROOT.rglob("*.md"),
+                *(path for path in ACTIVE_EXECUTION_DOCUMENTS if path.is_file()),
+            }
+        )
+        display_root = REPO_ROOT
+    else:
+        paths = [root] if root.is_file() else sorted(root.rglob("*.md"))
+        display_root = root.parent if root.is_file() else root
+
+    for path in paths:
         for line_number, line in enumerate(
             path.read_text(encoding="utf-8").splitlines(), start=1
         ):
-            folded = line.casefold()
-            if any(phrase in folded for phrase in FORBIDDEN_WORK_ASSIGNMENT_PHRASES):
-                matches.append(f"{path.relative_to(root)}:{line_number}")
+            if any(pattern.search(line) for pattern in FORBIDDEN_WORK_ASSIGNMENT_PATTERNS):
+                matches.append(f"{path.relative_to(display_root)}:{line_number}")
     return matches
 
 

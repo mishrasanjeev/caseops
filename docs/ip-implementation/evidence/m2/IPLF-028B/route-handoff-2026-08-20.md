@@ -105,7 +105,6 @@ still unproven.
 ## Boundary note
 
 Produced entirely by observation. No route, schema, generated client, or UI file
-in the Codex half of IPLF-028B was edited, and no API test was added to it. The
-probe was a throwaway not committed to the repository. `IPLF-028B status, test,
-and evidence references` is the Claude half of this slice under the reconciled
-`parallel_work_allocation`.
+in IPLF-028B was edited, and no API test was added to it. The probe was a
+throwaway not committed to the repository. Codex owns the slice's status, test,
+and evidence references under the reconciled single-owner execution policy.

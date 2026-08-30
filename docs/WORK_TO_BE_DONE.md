@@ -33,7 +33,7 @@
 > [`docs/STRICT_ENTERPRISE_GAP_TASKLIST.md`](./STRICT_ENTERPRISE_GAP_TASKLIST.md).
 > This file is a planning backlog, not closure evidence.
 >
-> The unified execution PRD for Claude work now lives at
+> The unified execution PRD for Codex work now lives at
 > [`docs/PRD_CLAUDE_CODE_2026-04-23.md`](./PRD_CLAUDE_CODE_2026-04-23.md).
 > Use that for merged product scope, journey detail, test mapping, and
 > source-data rules.

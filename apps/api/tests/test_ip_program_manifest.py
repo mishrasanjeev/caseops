@@ -47,13 +47,47 @@ def test_manifest_contains_no_human_approval_control_fields() -> None:
 
 
 def test_active_ip_evidence_cannot_assign_work_to_claude(tmp_path: Path) -> None:
-    evidence = tmp_path / "evidence.md"
-    evidence.write_text("Claude remains assigned to IPLF-039F.\n", encoding="utf-8")
+    forbidden_lines = (
+        "Claude remains assigned to IPLF-039F.",
+        "IPLF-039F is assigned to Claude Code.",
+        "Neither Claude-owned lane was modified.",
+        "This is the Claude half of the slice.",
+        "Claude must complete the release proof.",
+        "Owner target: Claude Code / Codex implementation worker",
+        "Execution owner is Claude Code.",
+        "Assigned owner=Claude.",
+        "Claude Code is the execution owner.",
+        "Status: Execution baseline for engineering and Claude Code",
+        "This is the source of truth for Claude Code execution.",
+        "CaseOps Product PRD for Claude Code",
+        "Claude Fix Order",
+        "The unified PRD for Claude work lives here.",
+    )
+    for index, line in enumerate(forbidden_lines, start=1):
+        (tmp_path / f"{index:02d}.md").write_text(f"{line}\n", encoding="utf-8")
 
     assert ip_program_manifest.forbidden_work_assignment_matches(tmp_path) == [
-        "evidence.md:1"
+        f"{index:02d}.md:1" for index in range(1, len(forbidden_lines) + 1)
     ]
     assert ip_program_manifest.forbidden_work_assignment_matches() == []
+
+
+def test_historical_and_provider_claude_references_remain_valid(tmp_path: Path) -> None:
+    evidence = tmp_path / "evidence.md"
+    evidence.write_text(
+        "\n".join(
+            (
+                "Historical branch: claude/ip-fasttrack-20260813.",
+                "Read `.claude/skills/impeccable/SKILL.md` for compatibility.",
+                "Anthropic (`claude-sonnet-4-6`) remains a supported provider model.",
+                "Migration `20260821_0005` follows Claude-owned `20260821_0004`.",
+                "Completed historical fact: Claude repaired the generated client.",
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    assert ip_program_manifest.forbidden_work_assignment_matches(tmp_path) == []
 
 
 def test_late_domain_execution_uses_machine_gates_not_manual_approval() -> None:

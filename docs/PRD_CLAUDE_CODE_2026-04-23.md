@@ -1,8 +1,8 @@
-# CaseOps Unified Product PRD for Claude Code
+# CaseOps Unified Product PRD for Codex
 
 Document version: 2.1
 Date: 2026-04-23
-Status: Execution baseline for product, engineering, QA, and Claude Code
+Status: Execution baseline for product, engineering, QA, and Codex
 Audience: Founder, product, engineering, QA, security, and any agent working in this repo
 
 ## 1. Purpose
@@ -27,7 +27,7 @@ Related execution addenda:
   slices, story IDs, test IDs, and current repo truth.
 
 No future feature work should treat any one of those inputs as sufficient on its
-own. This document is the merged source of truth for Claude Code execution.
+own. This document is the merged source of truth for Codex execution.
 
 ## 2. Five-Pass Validation Rule
 
@@ -162,7 +162,7 @@ Status legend:
 ### 6.1 External Module Audit Reconciliation
 
 The workbook `C:\Users\mishr\Downloads\CaseOps_Modules_Analysis_2026-04-23.xlsx`
-marks every listed module as `Missing` in production. Claude must not copy that
+marks every listed module as `Missing` in production. Codex must not copy that
 claim forward without reconciling it to current repo truth. The corrected
 mapping is:
 
@@ -1314,7 +1314,7 @@ Production ingestion order:
 - `SEC-026` Matter summary generation respects tenant AI policy and does not
   leak raw provider internals or unauthorized private context.
 
-## 15. Claude Code Execution Contract
+## 15. Codex Execution Contract
 
 Before any CaseOps feature planning, implementation, review, or rewrite:
 
@@ -1325,7 +1325,7 @@ Before any CaseOps feature planning, implementation, review, or rewrite:
 5. Read `docs/STRICT_ENTERPRISE_GAP_TASKLIST.md` when the task touches product
    scope, hardening, or architecture.
 
-Claude must then:
+Codex must then:
 
 - map the task to one or more journey IDs
 - map the task to one or more module IDs
