@@ -9097,7 +9097,10 @@ def test_ip_document_link_projection_event_key_is_bounded_on_postgres(
         get_settings.cache_clear()
 
 
-def test_private_retrieval_prefilters_before_bounded_rank_on_postgres(pg_engine) -> None:
+def test_private_retrieval_prefilters_before_bounded_rank_on_postgres(
+    pg_engine,
+    monkeypatch,
+) -> None:
     """IPLF-066B keeps production-scale candidate work tenant-bounded."""
 
     from sqlalchemy import event
@@ -9108,13 +9111,19 @@ def test_private_retrieval_prefilters_before_bounded_rank_on_postgres(pg_engine)
         Matter,
         PrivateIndexProjection,
         PrivateIndexProjectionScope,
+        PrivateProjectionEvent,
         User,
     )
+    from caseops_api.services import private_retrieval_jobs
     from caseops_api.services.private_retrieval import (
+        enqueue_private_projection_event,
         ensure_active_private_generation,
         hydrate_private_projection_results,
         prefilter_private_projection_ids,
         private_source_version,
+    )
+    from caseops_api.services.private_retrieval_jobs import (
+        process_pending_private_projection_events,
     )
     from caseops_api.services.session_context import SessionContext
 
@@ -9280,3 +9289,63 @@ def test_private_retrieval_prefilters_before_bounded_rank_on_postgres(pg_engine)
             projection_ids=[forged_other.id],
             query="bounded needle",
         ) == ()
+
+        first_event = enqueue_private_projection_event(
+            session,
+            company_id=company_id,
+            actor_membership_id=membership_id,
+            idempotency_key=f"pg-private-savepoint-fail:{matter_id}",
+            event_type="revoked",
+            target_type="matter",
+            target_id=matter_id,
+            target_version=None,
+            reason_code="forced_postgres_failure",
+        )
+        second_event = enqueue_private_projection_event(
+            session,
+            company_id=company_id,
+            actor_membership_id=membership_id,
+            idempotency_key=f"pg-private-savepoint-pass:{matter_id}",
+            event_type="revoked",
+            target_type="matter",
+            target_id=matter_id,
+            target_version=None,
+            reason_code="postgres_revocation",
+        )
+        first_event.created_at = now
+        second_event.created_at = now + timedelta(seconds=1)
+        first_event_id = first_event.id
+        second_event_id = second_event.id
+        session.commit()
+
+        real_apply = private_retrieval_jobs.apply_private_projection_event
+
+        def postgres_failure_then_apply(event_session, *, event_id):
+            if event_id == first_event_id:
+                event_session.execute(text("SELECT 1 / 0"))
+            return real_apply(event_session, event_id=event_id)
+
+        monkeypatch.setattr(
+            private_retrieval_jobs,
+            "apply_private_projection_event",
+            postgres_failure_then_apply,
+        )
+        applied = process_pending_private_projection_events(
+            session,
+            company_id=company_id,
+        )
+        session.commit()
+        assert applied == (second_event_id,)
+        failed = session.get(PrivateProjectionEvent, first_event_id)
+        succeeded = session.get(PrivateProjectionEvent, second_event_id)
+        assert failed is not None and failed.status == "failed"
+        assert failed.error_code == "DataError"
+        assert succeeded is not None and succeeded.status == "applied"
+        assert session.scalar(
+            select(PrivateIndexProjection.id).where(
+                PrivateIndexProjection.company_id == company_id,
+                PrivateIndexProjection.source_type == "matter",
+                PrivateIndexProjection.source_id == matter_id,
+                PrivateIndexProjection.is_tombstoned.is_(False),
+            )
+        ) is None

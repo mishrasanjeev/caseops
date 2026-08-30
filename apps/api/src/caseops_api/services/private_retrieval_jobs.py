@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 
@@ -51,6 +53,7 @@ MAX_PRIVATE_REBUILD_PROJECTIONS = 2_000
 MAX_PRIVATE_PROVIDER_BATCH = 32
 MAX_PRIVATE_EMBED_TEXT_CHARS = 4_000
 MAX_PENDING_EVENTS_PER_RUN = 100
+DEFAULT_PRIVATE_PROVIDER_DEADLINE_SECONDS = 30.0
 LOW_OCR_QUALITY_THRESHOLD = 0.65
 
 
@@ -365,6 +368,7 @@ def _embed_private_payloads(
     *,
     provider: EmbeddingProvider,
     allow_external_provider: bool,
+    provider_deadline_seconds: float,
 ) -> tuple[list[PrivateProjectionInput], int]:
     provider_name = str(provider.name).casefold()
     if provider_name not in {"mock", "fastembed"} and not allow_external_provider:
@@ -373,12 +377,23 @@ def _embed_private_payloads(
         )
     embedded: list[PrivateProjectionInput] = []
     batch_count = 0
+    deadline = max(0.01, min(float(provider_deadline_seconds), 120.0))
     for offset in range(0, len(payloads), MAX_PRIVATE_PROVIDER_BATCH):
         batch = list(payloads[offset : offset + MAX_PRIVATE_PROVIDER_BATCH])
         # The provider receives only the already-approved, bounded source text.
         # Labels, tenant IDs, record IDs, ACLs and projection metadata stay local.
         texts = [payload.content[:MAX_PRIVATE_EMBED_TEXT_CHARS] for payload in batch]
-        result = provider.embed(texts, input_type="document")
+        executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="private-embed")
+        future = executor.submit(provider.embed, texts, input_type="document")
+        try:
+            result = future.result(timeout=deadline)
+        except FuturesTimeoutError as exc:
+            future.cancel()
+            raise PrivateRetrievalInvariantError(
+                "The private embedding provider exceeded its bounded deadline."
+            ) from exc
+        finally:
+            executor.shutdown(wait=False, cancel_futures=True)
         if len(result.vectors) != len(batch):
             raise PrivateRetrievalInvariantError(
                 "The embedding provider returned an incomplete private batch."
@@ -402,6 +417,7 @@ def rebuild_private_index(
     company_id: str,
     provider: EmbeddingProvider | None = None,
     allow_external_provider: bool = False,
+    provider_deadline_seconds: float = DEFAULT_PRIVATE_PROVIDER_DEADLINE_SECONDS,
     projection_limit: int = MAX_PRIVATE_REBUILD_PROJECTIONS,
     activate: bool = False,
 ) -> PrivateRebuildSummary:
@@ -421,6 +437,7 @@ def rebuild_private_index(
                 payloads,
                 provider=provider,
                 allow_external_provider=allow_external_provider,
+                provider_deadline_seconds=provider_deadline_seconds,
             )
         for payload in payloads:
             upsert_private_projection(
@@ -483,13 +500,15 @@ def process_pending_private_projection_events(
     applied: list[str] = []
     for event_id in event_ids:
         try:
-            apply_private_projection_event(session, event_id=event_id)
+            with session.begin_nested():
+                apply_private_projection_event(session, event_id=event_id)
         except Exception as exc:
             event = session.get(PrivateProjectionEvent, event_id)
             if event is not None:
-                event.status = "failed"
-                event.error_code = type(exc).__name__[:80]
-                session.flush()
+                with session.begin_nested():
+                    event.status = "failed"
+                    event.error_code = type(exc).__name__[:80]
+                    session.flush()
             continue
         applied.append(event_id)
     return tuple(applied)
@@ -510,6 +529,7 @@ def inspect_private_index_integrity(
             PrivateIndexGeneration.state == "active",
         )
     )
+    active_generation_id = generation.id if generation is not None else ""
     live_count = 0
     tombstoned_count = 0
     manifest_matches = False
@@ -584,6 +604,8 @@ def inspect_private_index_integrity(
             )
             .where(
                 PrivateIndexProjectionScope.company_id == company_id,
+                PrivateIndexProjection.generation_id == active_generation_id,
+                PrivateIndexProjection.is_tombstoned.is_(False),
                 or_(
                     and_(
                         PrivateIndexProjectionScope.scope_type == "client",
@@ -629,6 +651,7 @@ def inspect_private_index_integrity(
         session.scalar(
             select(func.count(PrivateIndexProjection.id)).where(
                 PrivateIndexProjection.company_id == company_id,
+                PrivateIndexProjection.generation_id == active_generation_id,
                 PrivateIndexProjection.is_tombstoned.is_(False),
                 ~exists(
                     select(PrivateIndexProjectionScope.id).where(
@@ -647,6 +670,7 @@ def inspect_private_index_integrity(
             select(PrivateIndexProjection)
             .where(
                 PrivateIndexProjection.company_id == company_id,
+                PrivateIndexProjection.generation_id == active_generation_id,
                 PrivateIndexProjection.is_tombstoned.is_(False),
             )
             .order_by(PrivateIndexProjection.id)
@@ -768,6 +792,7 @@ def inspect_private_index_integrity(
 
 
 __all__ = [
+    "DEFAULT_PRIVATE_PROVIDER_DEADLINE_SECONDS",
     "MAX_PENDING_EVENTS_PER_RUN",
     "MAX_PRIVATE_PROVIDER_BATCH",
     "MAX_PRIVATE_REBUILD_PROJECTIONS",

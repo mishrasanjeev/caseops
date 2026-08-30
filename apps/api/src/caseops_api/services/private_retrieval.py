@@ -802,6 +802,10 @@ def prefilter_private_projection_ids(
             )
         statement = statement.where(column == value)
     terms = _query_terms(query)
+    if require_lexical_match and not terms:
+        # A punctuation-only or one-character query must not degrade into a
+        # newest-row listing of otherwise private content.
+        return ()
     if terms and require_lexical_match:
         lowered = func.lower(PrivateIndexProjection.content_text)
         statement = statement.where(or_(*(lowered.contains(term) for term in terms)))
@@ -1337,16 +1341,22 @@ def register_private_saved_output(
         raise PrivateRetrievalInvariantError("Saved assistant output does not exist.")
     generation = ensure_active_private_generation(session, company_id=company_id)
     now = datetime.now(UTC)
-    rows: list[PrivateSavedOutputAccess] = []
-    for source_type, source_id, source_version, source_sha256 in sources:
-        row = session.scalar(
+    source_rows = tuple(sources)
+    existing_rows = list(
+        session.scalars(
             select(PrivateSavedOutputAccess).where(
+                PrivateSavedOutputAccess.company_id == company_id,
                 PrivateSavedOutputAccess.assistant_turn_id == assistant_turn_id,
-                PrivateSavedOutputAccess.source_type == source_type,
-                PrivateSavedOutputAccess.source_id == source_id,
-                PrivateSavedOutputAccess.source_version == source_version,
             )
-        )
+        ).all()
+    )
+    existing_by_key = {
+        (row.source_type, row.source_id, row.source_version): row
+        for row in existing_rows
+    }
+    rows: list[PrivateSavedOutputAccess] = []
+    for source_type, source_id, source_version, source_sha256 in source_rows:
+        row = existing_by_key.get((source_type, source_id, source_version))
         if row is None:
             row = PrivateSavedOutputAccess(
                 company_id=company_id,
