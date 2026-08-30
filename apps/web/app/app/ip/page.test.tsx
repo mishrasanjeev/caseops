@@ -460,17 +460,19 @@ describe("IpDocketPage", () => {
     expect(screen.getByRole("button", { name: "Create application" })).toBeDisabled();
   });
 
-  it("renders a deep-linked docket without waiting for the full portfolio", async () => {
+  it("keeps a deep-linked docket focused instead of starting the full portfolio request", async () => {
     window.history.replaceState(null, "", "/app/ip?docket=ip-1&view=access");
-    fetchIpDocketsMock.mockReturnValue(new Promise(() => {}));
 
     render(withClient(<IpDocketPage />));
 
     expect(await screen.findByTestId("ip-access-workspace")).toBeVisible();
     expect(fetchIpDocketMock).toHaveBeenCalledWith("ip-1");
-    expect(
-      await screen.findByText("Loading the rest of the portfolio…"),
-    ).toBeVisible();
+    expect(fetchIpDocketsMock).not.toHaveBeenCalled();
+    expect(screen.getByText("Showing the record selected by this link.")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Open full portfolio" })).toHaveAttribute(
+      "href",
+      "/app/ip/portfolio",
+    );
   });
 
   it("prioritizes a deep-linked docket before portfolio and document requests", async () => {
@@ -491,6 +493,17 @@ describe("IpDocketPage", () => {
     expect(fetchIpDocketsMock).not.toHaveBeenCalled();
     expect(fetchIpDocumentsMock).not.toHaveBeenCalled();
     expect(fetchIpDocumentTaxonomyMock).not.toHaveBeenCalled();
+  });
+
+  it("fails a missing deep-linked docket explicitly without falling back to a portfolio scan", async () => {
+    window.history.replaceState(null, "", "/app/ip?docket=missing-ip-record&view=proceedings");
+    fetchIpDocketMock.mockRejectedValue(new Error("Linked IP docket not found."));
+
+    render(withClient(<IpDocketPage />));
+
+    expect(await screen.findByText("Could not load the linked IP docket")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Retry linked docket" })).toBeVisible();
+    expect(fetchIpDocketsMock).not.toHaveBeenCalled();
   });
 
   it("opens ordinary docket links on overview and honors an explicit schedule view", async () => {

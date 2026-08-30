@@ -195,15 +195,24 @@ test("IPLF-063B completes UJ-18 normal and exception paths", async ({ page }) =>
       `/app/ip\\?docket=${application.docket.id}&view=proceedings&proceeding=${proceeding.id}&draft=[^&]+$`,
     );
     await expect(draftLink).toHaveAttribute("href", expectedHref);
+    const publishedDraftId = new URL(
+      (await draftLink.getAttribute("href")) ?? "",
+      "http://caseops.test",
+    ).searchParams.get("draft");
+    expect(publishedDraftId).toBeTruthy();
     await draftLink.click();
     await expect(page).toHaveURL(expectedHref);
     await expect(page.getByRole("tab", { name: "Proceedings" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
-    await expect(page.getByLabel("Opposition proceeding")).toHaveValue(proceeding.id);
-    await expect(page.getByLabel("Pleading draft")).toHaveValue(/.+/);
-    await expect(page.getByLabel("Pleading body")).toHaveValue(
+    await expect(page.getByLabel("Opposition proceeding", { exact: true })).toHaveValue(
+      proceeding.id,
+    );
+    await expect(page.getByLabel("Pleading draft", { exact: true })).toHaveValue(
+      publishedDraftId!,
+    );
+    await expect(page.getByLabel("Pleading body", { exact: true })).toHaveValue(
       /source-bounded decision support/i,
     );
   });

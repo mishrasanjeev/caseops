@@ -2114,6 +2114,17 @@ export async function listIpPleadingDrafts(input: {
   return draftList.parse(data);
 }
 
+export async function getIpPleadingDraft(input: {
+  docketId: string;
+  proceedingId: string;
+  draftId: string;
+}): Promise<Draft> {
+  const data = await apiRequest<unknown>(
+    `${ipPleadingBase(input.docketId, input.proceedingId)}/drafts/${encodeURIComponent(input.draftId)}`,
+  );
+  return draft.parse(data);
+}
+
 export async function createIpPleadingDraft(input: {
   docketId: string;
   proceedingId: string;
