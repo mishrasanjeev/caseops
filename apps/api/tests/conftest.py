@@ -150,6 +150,10 @@ def client(
     # would reload all 148 revision modules to discover it has nothing to do.
     monkeypatch.setenv("CASEOPS_AUTO_MIGRATE", "false")
     monkeypatch.setenv("CASEOPS_AUTH_SECRET", "test-secret-should-be-at-least-32-bytes")
+    monkeypatch.setenv(
+        "CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET",
+        "test-machine-readiness-evidence-secret-32-bytes",
+    )
     monkeypatch.setenv("CASEOPS_PUBLIC_APP_URL", "http://testserver")
     monkeypatch.setenv("CASEOPS_CORS_ORIGINS", '["http://localhost:3000","http://testserver"]')
     monkeypatch.setenv("CASEOPS_DOCUMENT_STORAGE_PATH", storage_path.as_posix())

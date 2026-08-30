@@ -55,6 +55,9 @@ _EXEMPT_PATHS = frozenset({
     "/api/auth/password-reset/start",
     "/api/auth/password-reset/complete",
     "/api/bootstrap/company",
+    # Server-to-server readiness writer authenticates the exact body with a
+    # dedicated HMAC key and never accepts browser/app session authority.
+    "/api/internal/machine-readiness/evidence",
     "/api/billing/trials",
     "/api/billing/enrollments/demo-request",
 })

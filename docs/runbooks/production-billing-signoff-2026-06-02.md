@@ -105,6 +105,22 @@ There is no `POST /api/platform-admin/production-readiness/evidence` and no
 `POST /api/platform-admin/billing-signoff/evidence`. The former returns `405`
 because the read-only path exists; the latter returns `404`.
 
+Approved automation writes through the hidden server-to-server endpoint
+`POST /api/internal/machine-readiness/evidence`. It accepts no browser session,
+Bearer token, platform-admin role, or operator conclusion. The caller must HMAC
+the exact request bytes with the dedicated
+`CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET`; the envelope binds an allow-listed
+producer, exact serving 40-character release SHA, machine run ID, subject,
+conclusion, and evidence reference. Stored rows carry a second HMAC proof, so a
+later row or envelope edit fails closed. Rotate this key independently from the
+application auth secret; a rotation intentionally makes older release evidence
+non-authoritative.
+
+The exact-release `prod-verify.yml` dispatch records only
+`public_claims_reviewed=pass` after every required production Playwright suite is
+green. It does not manufacture billing, Pine Labs, finance, security, provider,
+or backup evidence; those remain pending until their dedicated probes exist.
+
 Do not paste secret values, OAuth tokens, raw webhook payloads, internal cost
 exports, gross profit, margin, or platform-only notes into tenant-facing UI or
 tenant-facing APIs. Platform-only cost/profit/readiness evidence stays under

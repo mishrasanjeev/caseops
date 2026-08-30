@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, select
 
+from caseops_api.core.machine_readiness_auth import machine_readiness_evidence_proof
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     BillingProviderEvent,
@@ -139,8 +140,11 @@ def test_pine_labs_uat_activation_blocker_and_billing_signoff(
                     "machine_evidence": _machine_evidence(
                         release_sha=release_sha,
                         subject=f"pine_labs_uat:{scenarios[0]}",
+                        evidence_ref=f"probe://pine/{run_id}/{scenarios[0]}",
+                        producer="caseops/production-probe",
                     )
                 },
+                attachment_refs_json=[f"probe://pine/{run_id}/{scenarios[0]}"],
                 created_by_platform_admin_id=platform_admin.id,
             )
         )
@@ -171,8 +175,11 @@ def test_pine_labs_uat_activation_blocker_and_billing_signoff(
                         "machine_evidence": _machine_evidence(
                             release_sha=release_sha,
                             subject=f"pine_labs_uat:{scenario}",
+                            evidence_ref=f"probe://pine/{run_id}/{scenario}",
+                            producer="caseops/production-probe",
                         )
                     },
+                    attachment_refs_json=[f"probe://pine/{run_id}/{scenario}"],
                     created_by_platform_admin_id=None,
                 )
             )
@@ -264,9 +271,7 @@ def test_pine_labs_uat_activation_blocker_and_billing_signoff(
     signoff = client.get("/api/platform-admin/billing-signoff", headers=auth_headers(token))
     assert signoff.status_code == 200, signoff.text
     assert signoff.json()["complete"] is False
-    assert set(signoff.json()["missing_required_checks"]) == set(
-        PRODUCTION_BILLING_CHECK_CODES
-    )
+    assert set(signoff.json()["missing_required_checks"]) == set(PRODUCTION_BILLING_CHECK_CODES)
     removed = client.post(
         "/api/platform-admin/billing-signoff/evidence",
         headers=auth_headers(token),
@@ -275,15 +280,29 @@ def test_pine_labs_uat_activation_blocker_and_billing_signoff(
     assert removed.status_code == 404
 
 
-def _machine_evidence(*, release_sha: str, subject: str) -> dict[str, str]:
-    return {
+def _machine_evidence(
+    *,
+    release_sha: str,
+    subject: str,
+    evidence_ref: str,
+    producer: str = "github-actions/prod-verify",
+) -> dict[str, str]:
+    envelope = {
         "schema": MACHINE_READINESS_EVIDENCE_SCHEMA,
-        "producer": "github-actions/prod-verify",
+        "producer": producer,
         "release_sha": release_sha,
         "subject": subject,
         "conclusion": "pass",
         "run_id": "github-actions:33304654869",
+        "evidence_ref": evidence_ref,
     }
+    secret = get_settings().machine_readiness_evidence_secret
+    assert secret is not None
+    envelope["proof"] = machine_readiness_evidence_proof(
+        secret=secret,
+        evidence=envelope,
+    )
+    return envelope
 
 
 def test_human_readiness_rows_are_non_authoritative_and_mutation_route_is_removed(
@@ -310,6 +329,7 @@ def test_human_readiness_rows_are_non_authoritative_and_mutation_route_is_remove
                     evidence_json=_machine_evidence(
                         release_sha=release_sha,
                         subject=check_code,
+                        evidence_ref=f"founder-console://{check_code}",
                     ),
                     recorded_by_platform_admin_id=platform_admin.id,
                 )
@@ -325,6 +345,7 @@ def test_human_readiness_rows_are_non_authoritative_and_mutation_route_is_remove
                 evidence_json=_machine_evidence(
                     release_sha=release_sha,
                     subject=gate["gate_code"],
+                    evidence_ref="founder-console://not-applicable",
                 ),
                 recorded_by_platform_admin_id=platform_admin.id,
             )
@@ -341,9 +362,7 @@ def test_human_readiness_rows_are_non_authoritative_and_mutation_route_is_remove
         headers=auth_headers(token),
     )
     assert operational.status_code == 200, operational.text
-    first_gate = next(
-        row for row in operational.json() if row["gate_code"] == gate["gate_code"]
-    )
+    first_gate = next(row for row in operational.json() if row["gate_code"] == gate["gate_code"])
     assert first_gate["status"] == "pending"
     assert "machine evidence" in first_gate["blocker_reason"].lower()
 
@@ -373,9 +392,11 @@ def test_exact_release_machine_evidence_can_pass_read_only_gates(
         session.add(signoff)
         session.flush()
         for index, check_code in enumerate(PRODUCTION_BILLING_CHECK_CODES):
+            evidence_ref = f"ci://prod-verify/{check_code}"
             evidence = _machine_evidence(
                 release_sha="c" * 40 if index == 0 else release_sha,
                 subject=check_code,
+                evidence_ref=evidence_ref,
             )
             if index == 1:
                 evidence["run_id"] = "malformed run id with spaces"
@@ -383,7 +404,7 @@ def test_exact_release_machine_evidence_can_pass_read_only_gates(
                 signoff_id=signoff.id,
                 check_code=check_code,
                 result_status="pass",
-                evidence_ref=f"ci://prod-verify/{check_code}",
+                evidence_ref=evidence_ref,
                 evidence_json=evidence,
                 recorded_by_platform_admin_id=None,
             )
@@ -399,6 +420,7 @@ def test_exact_release_machine_evidence_can_pass_read_only_gates(
                 evidence_json=_machine_evidence(
                     release_sha=release_sha,
                     subject=gate["gate_code"],
+                    evidence_ref="ci://prod-verify/provider-operations",
                 ),
                 recorded_by_platform_admin_id=None,
             )
@@ -408,32 +430,30 @@ def test_exact_release_machine_evidence_can_pass_read_only_gates(
     stale = client.get("/api/platform-admin/billing-signoff", headers=auth_headers(token))
     assert stale.status_code == 200, stale.text
     assert stale.json()["complete"] is False
-    assert stale.json()["missing_required_checks"] == list(
-        PRODUCTION_BILLING_CHECK_CODES[:2]
-    )
+    assert stale.json()["missing_required_checks"] == list(PRODUCTION_BILLING_CHECK_CODES[:2])
 
     with get_session_factory()() as session:
         first = session.scalar(
             select(ProductionBillingSignoffEvidence).where(
-                ProductionBillingSignoffEvidence.check_code
-                == PRODUCTION_BILLING_CHECK_CODES[0]
+                ProductionBillingSignoffEvidence.check_code == PRODUCTION_BILLING_CHECK_CODES[0]
             )
         )
         assert first is not None
         first.evidence_json = _machine_evidence(
             release_sha=release_sha,
             subject=PRODUCTION_BILLING_CHECK_CODES[0],
+            evidence_ref=first.evidence_ref or "",
         )
         second = session.scalar(
             select(ProductionBillingSignoffEvidence).where(
-                ProductionBillingSignoffEvidence.check_code
-                == PRODUCTION_BILLING_CHECK_CODES[1]
+                ProductionBillingSignoffEvidence.check_code == PRODUCTION_BILLING_CHECK_CODES[1]
             )
         )
         assert second is not None
         second.evidence_json = _machine_evidence(
             release_sha=release_sha,
             subject=PRODUCTION_BILLING_CHECK_CODES[1],
+            evidence_ref=second.evidence_ref or "",
         )
         session.commit()
 
@@ -448,9 +468,7 @@ def test_exact_release_machine_evidence_can_pass_read_only_gates(
         headers=auth_headers(token),
     )
     assert operational.status_code == 200, operational.text
-    first_gate = next(
-        row for row in operational.json() if row["gate_code"] == gate["gate_code"]
-    )
+    first_gate = next(row for row in operational.json() if row["gate_code"] == gate["gate_code"])
     assert first_gate["status"] == "pass"
     assert first_gate["owner_label"] == "automation:github-actions/prod-verify"
 
@@ -476,9 +494,7 @@ def test_unified_readiness_and_secret_rotation_evidence_are_founder_only_and_sec
     enterprise_payload = enterprise.json()
     assert enterprise_payload["enterprise_identity"]["enabled"] is False
     assert enterprise_payload["enterprise_identity"]["readiness_classification"] == "planned"
-    assert (
-        enterprise_payload["agent_trust_plane"]["autonomous_execution_enabled"] is False
-    )
+    assert enterprise_payload["agent_trust_plane"]["autonomous_execution_enabled"] is False
 
     rejected = client.post(
         "/api/platform-admin/secret-rotation-readiness/evidence",

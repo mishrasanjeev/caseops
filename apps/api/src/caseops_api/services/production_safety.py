@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import re
 from datetime import UTC, date, datetime
 from urllib.parse import urlparse
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session
 
+from caseops_api.core.machine_readiness_auth import machine_readiness_evidence_proof
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     AgentExecution,
@@ -31,9 +33,11 @@ from caseops_api.db.models import (
     PineLabsUATScenarioEvidence,
     PlatformAdminMembership,
     PlatformOperationalReadinessEvidence,
+    ProductionBillingSignoff,
     ProductionBillingSignoffEvidence,
     TenantEnterpriseIdentityConfiguration,
 )
+from caseops_api.db.session import serialize_sqlite_writer
 from caseops_api.schemas.production_safety import (
     AgentTrustReadinessResponse,
     AIGovernanceReadinessResponse,
@@ -44,6 +48,8 @@ from caseops_api.schemas.production_safety import (
     CreditNoteCreateRequest,
     EnterpriseIdentityReadinessResponse,
     FinanceRecordRequest,
+    MachineReadinessEvidenceWriteRequest,
+    MachineReadinessEvidenceWriteResponse,
     PasswordResetReadinessResponse,
     PineLabsActivationDecisionRequest,
     PineLabsUATReadinessResponse,
@@ -154,6 +160,11 @@ MACHINE_READINESS_PRODUCERS = frozenset(
         "github-actions/prod-verify",
     }
 )
+MACHINE_READINESS_BILLING_PRODUCERS = frozenset(
+    {"caseops/production-probe", "github-actions/prod-verify"}
+)
+MACHINE_READINESS_OPERATIONAL_PRODUCERS = MACHINE_READINESS_PRODUCERS
+MACHINE_READINESS_PINE_PRODUCERS = frozenset({"caseops/production-probe"})
 _FULL_RELEASE_SHA = re.compile(r"[0-9a-f]{40}")
 _MACHINE_RUN_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{2,199}")
 
@@ -267,9 +278,7 @@ def _secret_rotation_response(
 ) -> SecretRotationEvidenceListResponse:
     not_ready: list[str] = []
     if not rows:
-        not_ready.append(
-            "No secret rotation proof is recorded for historical connector secrets."
-        )
+        not_ready.append("No secret rotation proof is recorded for historical connector secrets.")
     for row in rows:
         if row.status not in {"rotated", "revoked", "validated", "not_applicable"}:
             not_ready.append(
@@ -365,6 +374,8 @@ def _machine_evidence(
     recorded_by_platform_admin_id: str | None,
     recorded_status: str,
     subject: str,
+    evidence_ref: str | None,
+    allowed_producers: frozenset[str] = MACHINE_READINESS_PRODUCERS,
 ) -> dict[str, object] | None:
     """Accept only automation evidence bound to the exact serving release.
 
@@ -374,8 +385,10 @@ def _machine_evidence(
     envelope with a null platform-admin recorder.
     """
 
+    settings = get_settings()
     release_sha = _exact_release_sha()
-    if release_sha is None or recorded_by_platform_admin_id is not None:
+    secret = settings.machine_readiness_evidence_secret
+    if release_sha is None or not secret or recorded_by_platform_admin_id is not None:
         return None
     if recorded_status not in {"pass", "fail", "blocked"} or not isinstance(evidence, dict):
         return None
@@ -384,15 +397,242 @@ def _machine_evidence(
     if (
         evidence.get("schema") != MACHINE_READINESS_EVIDENCE_SCHEMA
         or not isinstance(producer, str)
-        or producer not in MACHINE_READINESS_PRODUCERS
+        or producer not in allowed_producers
         or evidence.get("release_sha") != release_sha
         or evidence.get("subject") != subject
         or evidence.get("conclusion") != recorded_status
+        or evidence.get("evidence_ref") != evidence_ref
         or not isinstance(run_id, str)
         or _MACHINE_RUN_ID.fullmatch(run_id) is None
     ):
         return None
+    proof = evidence.get("proof")
+    expected_proof = machine_readiness_evidence_proof(secret=secret, evidence=evidence)
+    if not isinstance(proof, str) or not hmac.compare_digest(proof, expected_proof):
+        return None
     return evidence
+
+
+def _lock_machine_readiness_writer(session: Session) -> None:
+    if session.get_bind().dialect.name == "sqlite":
+        serialize_sqlite_writer(session)
+        return
+    if session.get_bind().dialect.name == "postgresql":
+        session.execute(
+            text(
+                "SELECT pg_advisory_xact_lock("
+                "hashtextextended('caseops:machine-readiness-writer', 0))"
+            )
+        )
+
+
+def _machine_envelope(
+    *,
+    secret: str,
+    producer: str,
+    release_sha: str,
+    run_id: str,
+    subject: str,
+    conclusion: str,
+    evidence_ref: str,
+) -> dict[str, object]:
+    envelope: dict[str, object] = {
+        "schema": MACHINE_READINESS_EVIDENCE_SCHEMA,
+        "producer": producer,
+        "release_sha": release_sha,
+        "subject": subject,
+        "conclusion": conclusion,
+        "run_id": run_id,
+        "evidence_ref": evidence_ref,
+    }
+    envelope["proof"] = machine_readiness_evidence_proof(
+        secret=secret,
+        evidence=envelope,
+    )
+    return envelope
+
+
+def record_machine_readiness_evidence(
+    session: Session,
+    *,
+    payload: MachineReadinessEvidenceWriteRequest,
+) -> MachineReadinessEvidenceWriteResponse:
+    """Atomically upsert authenticated CI/probe evidence for one exact release."""
+
+    settings = get_settings()
+    serving_sha = _exact_release_sha()
+    secret = settings.machine_readiness_evidence_secret
+    if serving_sha is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The serving API has no exact release identity.",
+        )
+    if not secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Machine readiness evidence ingestion is not configured.",
+        )
+    if payload.release_sha != serving_sha:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Machine evidence release does not match the exact serving API release.",
+        )
+
+    billing_codes = set(PRODUCTION_BILLING_CHECK_CODES)
+    operational_gates = {gate["gate_code"]: gate for gate in PLATFORM_OPERATIONAL_GATES}
+    pine_codes = set(PINE_LABS_UAT_SCENARIO_CODES)
+    producer_kinds = {
+        "billing_check": MACHINE_READINESS_BILLING_PRODUCERS,
+        "operational_gate": MACHINE_READINESS_OPERATIONAL_PRODUCERS,
+        "pine_labs_uat": MACHINE_READINESS_PINE_PRODUCERS,
+    }
+    for item in payload.items:
+        if payload.producer not in producer_kinds[item.kind]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(f"Producer {payload.producer!r} cannot write {item.kind!r} evidence."),
+            )
+        allowed_subjects = (
+            billing_codes
+            if item.kind == "billing_check"
+            else operational_gates.keys()
+            if item.kind == "operational_gate"
+            else pine_codes
+        )
+        if item.subject not in allowed_subjects:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unknown {item.kind} subject {item.subject!r}.",
+            )
+        _assert_no_secret_material(item.evidence_ref, path="evidence_ref")
+
+    _lock_machine_readiness_writer(session)
+    now = _now()
+    billing_signoff: ProductionBillingSignoff | None = None
+    billing_note = f"machine:{payload.release_sha}:{payload.producer}:{payload.run_id}"
+    if any(item.kind == "billing_check" for item in payload.items):
+        billing_signoff = session.scalar(
+            select(ProductionBillingSignoff)
+            .where(ProductionBillingSignoff.notes == billing_note)
+            .with_for_update()
+        )
+        if billing_signoff is None:
+            billing_signoff = ProductionBillingSignoff(
+                status="in_progress",
+                notes=billing_note,
+                signed_off_by_platform_admin_id=None,
+                signed_off_at=None,
+            )
+            session.add(billing_signoff)
+            session.flush()
+
+    latest_uat_run = session.scalar(
+        select(PineLabsUATRun)
+        .where(PineLabsUATRun.status.in_(["in_progress", "complete"]))
+        .order_by(PineLabsUATRun.started_at.desc())
+        .limit(1)
+        .with_for_update()
+    )
+    for item in payload.items:
+        stored_subject = (
+            f"pine_labs_uat:{item.subject}" if item.kind == "pine_labs_uat" else item.subject
+        )
+        envelope = _machine_envelope(
+            secret=secret,
+            producer=payload.producer,
+            release_sha=payload.release_sha,
+            run_id=payload.run_id,
+            subject=stored_subject,
+            conclusion=item.conclusion,
+            evidence_ref=item.evidence_ref,
+        )
+        if item.kind == "billing_check":
+            assert billing_signoff is not None
+            row = session.scalar(
+                select(ProductionBillingSignoffEvidence)
+                .where(
+                    ProductionBillingSignoffEvidence.signoff_id == billing_signoff.id,
+                    ProductionBillingSignoffEvidence.check_code == item.subject,
+                )
+                .with_for_update()
+            )
+            row = row or ProductionBillingSignoffEvidence(
+                signoff_id=billing_signoff.id,
+                check_code=item.subject,
+            )
+            row.result_status = item.conclusion
+            row.evidence_ref = item.evidence_ref
+            row.evidence_json = envelope
+            row.operator_notes = None
+            row.recorded_by_platform_admin_id = None
+            row.recorded_at = now
+            session.add(row)
+        elif item.kind == "operational_gate":
+            gate = operational_gates[item.subject]
+            row = session.scalar(
+                select(PlatformOperationalReadinessEvidence)
+                .where(
+                    PlatformOperationalReadinessEvidence.category == gate["category"],
+                    PlatformOperationalReadinessEvidence.gate_code == item.subject,
+                )
+                .with_for_update()
+            )
+            row = row or PlatformOperationalReadinessEvidence(
+                category=gate["category"],
+                gate_code=item.subject,
+                label=gate["label"],
+            )
+            row.label = gate["label"]
+            row.status = item.conclusion
+            row.readiness_classification = gate["readiness_classification"]
+            row.blocker_reason = (
+                None if item.conclusion == "pass" else f"Machine probe concluded {item.conclusion}."
+            )
+            row.evidence_ref = item.evidence_ref
+            row.evidence_json = envelope
+            row.last_evidence_at = now
+            row.owner_label = f"automation:{payload.producer}"
+            row.recorded_by_platform_admin_id = None
+            session.add(row)
+        else:
+            if latest_uat_run is None or latest_uat_run.id != item.target_run_id:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Pine Labs evidence must target the current UAT run.",
+                )
+            row = session.scalar(
+                select(PineLabsUATScenarioEvidence)
+                .where(
+                    PineLabsUATScenarioEvidence.run_id == latest_uat_run.id,
+                    PineLabsUATScenarioEvidence.scenario_code == item.subject,
+                )
+                .with_for_update()
+            )
+            row = row or PineLabsUATScenarioEvidence(
+                run_id=latest_uat_run.id,
+                scenario_code=item.subject,
+            )
+            row.result_status = item.conclusion
+            row.redacted_payload_json = {"machine_evidence": envelope}
+            row.provider_order_id = None
+            row.provider_payment_id = None
+            row.webhook_id = None
+            row.webhook_timestamp = None
+            row.operator_notes = None
+            row.attachment_refs_json = [item.evidence_ref]
+            row.created_by_platform_admin_id = None
+            row.observed_at = now
+            session.add(row)
+
+    session.commit()
+    evidence_digest = _hash_json(payload.model_dump(by_alias=True, mode="json"))
+    return MachineReadinessEvidenceWriteResponse(
+        release_sha=payload.release_sha,
+        producer=payload.producer,
+        run_id=payload.run_id,
+        recorded_count=len(payload.items),
+        evidence_digest=evidence_digest,
+    )
 
 
 def list_operational_readiness_evidence(
@@ -411,6 +651,8 @@ def list_operational_readiness_evidence(
                 recorded_by_platform_admin_id=row.recorded_by_platform_admin_id,
                 recorded_status=row.status,
                 subject=gate["gate_code"],
+                evidence_ref=row.evidence_ref,
+                allowed_producers=MACHINE_READINESS_OPERATIONAL_PRODUCERS,
             )
             if row is not None
             else None
@@ -446,9 +688,7 @@ def list_operational_readiness_evidence(
                 status=row.status,  # type: ignore[arg-type]
                 readiness_classification=gate["readiness_classification"],  # type: ignore[arg-type]
                 blocker_reason=(
-                    None
-                    if row.status == "pass"
-                    else row.blocker_reason or gate["default_reason"]
+                    None if row.status == "pass" else row.blocker_reason or gate["default_reason"]
                 ),
                 evidence_ref=row.evidence_ref,
                 evidence=machine,
@@ -520,9 +760,7 @@ def _evidence_rows(session: Session, *, run_id: str) -> dict[str, PineLabsUATSce
     return {
         row.scenario_code: row
         for row in session.scalars(
-            select(PineLabsUATScenarioEvidence).where(
-                PineLabsUATScenarioEvidence.run_id == run_id
-            )
+            select(PineLabsUATScenarioEvidence).where(PineLabsUATScenarioEvidence.run_id == run_id)
         )
     }
 
@@ -544,6 +782,12 @@ def pine_labs_uat_readiness(
                 recorded_by_platform_admin_id=row.created_by_platform_admin_id,
                 recorded_status=row.result_status,
                 subject=f"pine_labs_uat:{code}",
+                evidence_ref=(
+                    (row.attachment_refs_json or [None])[0]
+                    if row.attachment_refs_json is not None
+                    else None
+                ),
+                allowed_producers=MACHINE_READINESS_PINE_PRODUCERS,
             )
             if row is not None
             else None
@@ -602,17 +846,20 @@ def pine_labs_uat_readiness(
             recorded_by_platform_admin_id=row.created_by_platform_admin_id,
             recorded_status=row.result_status,
             subject=f"pine_labs_uat:{code}",
+            evidence_ref=(
+                (row.attachment_refs_json or [None])[0]
+                if row.attachment_refs_json is not None
+                else None
+            ),
+            allowed_producers=MACHINE_READINESS_PINE_PRODUCERS,
         )
         is not None
     ]
     newest_evidence_at = max(verified_evidence_times, default=None)
-    decision_is_current = (
-        decision is not None
-        and (
-            newest_evidence_at is None
-            or decision.decided_at.replace(tzinfo=decision.decided_at.tzinfo or UTC)
-            >= newest_evidence_at.replace(tzinfo=newest_evidence_at.tzinfo or UTC)
-        )
+    decision_is_current = decision is not None and (
+        newest_evidence_at is None
+        or decision.decided_at.replace(tzinfo=decision.decided_at.tzinfo or UTC)
+        >= newest_evidence_at.replace(tzinfo=newest_evidence_at.tzinfo or UTC)
     )
     if decision is None:
         activation_blockers.append("Founder Pine Labs go/no-go decision is not recorded.")
@@ -638,9 +885,7 @@ def pine_labs_uat_readiness(
         scenarios=scenarios,
         complete=complete,
         missing_required_scenarios=missing,  # type: ignore[arg-type]
-        activation_prerequisites_met=(
-            not missing and pine_env in {"production", "prod", "live"}
-        ),
+        activation_prerequisites_met=(not missing and pine_env in {"production", "prod", "live"}),
         production_activation_blocked=bool(activation_blockers),
         activation_blockers=activation_blockers,
         latest_decision=(
@@ -743,6 +988,8 @@ def production_billing_signoff_status(
                 recorded_by_platform_admin_id=row.recorded_by_platform_admin_id,
                 recorded_status=row.result_status,
                 subject=code,
+                evidence_ref=row.evidence_ref,
+                allowed_producers=MACHINE_READINESS_BILLING_PRODUCERS,
             )
             if row is not None
             else None
@@ -1587,9 +1834,7 @@ def support_matrix_match(
     court_name: str | None = None,
 ) -> CaseTrackingSupportMatrix | None:
     court_values = {
-        value.strip().lower()
-        for value in (court_code, court_name)
-        if value and value.strip()
+        value.strip().lower() for value in (court_code, court_name) if value and value.strip()
     }
     if not court_values:
         return None

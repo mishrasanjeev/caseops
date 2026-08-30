@@ -20,7 +20,7 @@ spec:
         # through Secret Manager, never as a raw env value in the
         # manifest. Auth secret + DB URL + future SendGrid /
         # Anthropic / Pine Labs keys all use secretKeyRef.
-        run.googleapis.com/secrets: "caseops-auth-secret:projects/__PROJECT_NUMBER__/secrets/caseops-auth-secret,caseops-database-url:projects/__PROJECT_NUMBER__/secrets/caseops-database-url,caseops-openai-api-key:projects/__PROJECT_NUMBER__/secrets/caseops-openai-api-key,caseops-sendgrid-webhook-public-key:projects/__PROJECT_NUMBER__/secrets/caseops-sendgrid-webhook-public-key,caseops-ecourtsindia-api-token:projects/__PROJECT_NUMBER__/secrets/caseops-ecourtsindia-api-token"
+        run.googleapis.com/secrets: "caseops-auth-secret:projects/__PROJECT_NUMBER__/secrets/caseops-auth-secret,caseops-machine-readiness-evidence-secret:projects/__PROJECT_NUMBER__/secrets/caseops-machine-readiness-evidence-secret,caseops-database-url:projects/__PROJECT_NUMBER__/secrets/caseops-database-url,caseops-openai-api-key:projects/__PROJECT_NUMBER__/secrets/caseops-openai-api-key,caseops-sendgrid-webhook-public-key:projects/__PROJECT_NUMBER__/secrets/caseops-sendgrid-webhook-public-key,caseops-ecourtsindia-api-token:projects/__PROJECT_NUMBER__/secrets/caseops-ecourtsindia-api-token"
     spec:
       # 2026-06-08 incident: one blocking request pinned the API event
       # loop and every subsequent request to the same instance timed out.
@@ -91,6 +91,13 @@ spec:
                 secretKeyRef:
                   name: "caseops-auth-secret"
                   key: "__AUTH_SECRET_VERSION__"
+            # Dedicated machine-to-machine key. Browser JWTs and platform-admin
+            # sessions cannot use it to manufacture readiness evidence.
+            - name: CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: "caseops-machine-readiness-evidence-secret"
+                  key: "latest"
             # 2026-04-30: gpt-5.1 is the sole LLM provider. The prior
             # Anthropic→Haiku→OpenAI fallback ladder (commit 4104265)
             # was removed because the 3x token burn per click was
