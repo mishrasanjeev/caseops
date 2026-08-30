@@ -1,12 +1,98 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  googleWorkspaceReadinessTestResponse,
+  googleWorkspaceTenantConfigurationResponse,
+  outlookReadinessTestResponse,
+  outlookTenantConfigurationResponse,
   outsideCounselAssignmentStatus,
   outsideCounselSpendStatus,
   panelStatus,
   providerAdapterContractRecord,
   providerOperationRecord,
 } from "@/lib/api/schemas";
+
+describe("connector readiness mixed-revision compatibility", () => {
+  it("accepts an older Outlook API response but forces machine readiness blocked", () => {
+    const parsed = outlookTenantConfigurationResponse.parse({
+      provider: "outlook",
+      configured: true,
+      config_source: "tenant_admin",
+      enabled: true,
+      required_config: [],
+      required_approvals: [],
+      approved_scopes: [],
+      missing_config_names: [],
+      missing_approval_keys: [],
+      connection_count: 1,
+      connected_account_count: 1,
+      last_test_status: "passed",
+      last_tested_at: "2026-08-30T00:00:00Z",
+      last_error_redacted: null,
+      adp20_readiness: "ready_for_adp20_implementation",
+    });
+
+    expect(parsed.machine_control_version).toBe("legacy-api-unversioned");
+    expect(parsed.missing_machine_control_keys).toEqual([
+      "machine_controls_unavailable",
+    ]);
+    expect(parsed.machine_controls[0]?.status).toBe("blocked");
+    expect(parsed.last_test_status).toBe("blocked");
+    expect(parsed.adp20_readiness).toBe("blocked_pending_admin_configuration");
+  });
+
+  it("accepts older Google and probe responses without allowing an always-green gate", () => {
+    const configuration = googleWorkspaceTenantConfigurationResponse.parse({
+      provider: "google_workspace",
+      configured: true,
+      config_source: "tenant_admin",
+      enabled: true,
+      calendar_enabled: true,
+      gmail_enabled: true,
+      drive_enabled: true,
+      required_config: [],
+      required_approvals: [],
+      approved_scopes: [],
+      missing_config_names: [],
+      missing_approval_keys: [],
+      connection_counts: {
+        calendar_connection_count: 0,
+        gmail_connection_count: 0,
+        drive_connection_count: 0,
+        connected_calendar_account_count: 0,
+        connected_gmail_account_count: 0,
+        connected_drive_account_count: 0,
+      },
+      last_test_status: "passed",
+      last_tested_at: "2026-08-30T00:00:00Z",
+      last_error_redacted: null,
+      readiness: "ready_for_user_connections",
+    });
+    const googleProbe = googleWorkspaceReadinessTestResponse.parse({
+      provider: "google_workspace",
+      status: "passed",
+      checks: [],
+      readiness: "ready_for_user_connections",
+      tested_at: "2026-08-30T00:00:00Z",
+    });
+    const outlookProbe = outlookReadinessTestResponse.parse({
+      provider: "outlook",
+      status: "passed",
+      checks: [],
+      adp20_readiness: "ready_for_adp20_implementation",
+      tested_at: "2026-08-30T00:00:00Z",
+    });
+
+    expect(configuration.readiness).toBe("blocked_pending_admin_configuration");
+    expect(configuration.machine_controls[0]?.status).toBe("blocked");
+    expect(googleProbe.status).toBe("blocked");
+    expect(googleProbe.readiness).toBe("blocked_pending_admin_configuration");
+    expect(outlookProbe.status).toBe("blocked");
+    expect(outlookProbe.adp20_readiness).toBe(
+      "blocked_pending_admin_configuration",
+    );
+  });
+});
 
 // All three enums below MUST match
 // apps/api/src/caseops_api/db/models.py (OutsideCounselPanelStatus,

@@ -2243,6 +2243,23 @@ export const outlookApprovalItemStatus = z.object({
   approved: z.boolean(),
 });
 
+export const outlookMachineReadinessControlStatus = z.object({
+  key: z.string(),
+  label: z.string(),
+  version: z.string(),
+  status: z.enum(["passed", "failed", "blocked", "not_run"]),
+  detail: z.string().nullable().optional(),
+});
+
+const LEGACY_CONNECTOR_MACHINE_CONTROL_VERSION = "legacy-api-unversioned";
+const legacyMachineControlUnavailable = {
+  key: "machine_controls_unavailable",
+  label: "Machine readiness controls unavailable",
+  version: LEGACY_CONNECTOR_MACHINE_CONTROL_VERSION,
+  status: "blocked",
+  detail: "Wait for the connector-readiness API revision before enabling automation.",
+} as const;
+
 export const outlookTenantConfigurationResponse = z.object({
   provider: z.literal("outlook").default("outlook"),
   configured: z.boolean(),
@@ -2250,9 +2267,18 @@ export const outlookTenantConfigurationResponse = z.object({
   enabled: z.boolean(),
   required_config: z.array(outlookConfigurationItemStatus),
   required_approvals: z.array(outlookApprovalItemStatus),
+  machine_control_version: z
+    .string()
+    .default(LEGACY_CONNECTOR_MACHINE_CONTROL_VERSION),
+  machine_controls: z
+    .array(outlookMachineReadinessControlStatus)
+    .default([legacyMachineControlUnavailable]),
   approved_scopes: z.array(z.string()).default([]),
   missing_config_names: z.array(z.string()).default([]),
   missing_approval_keys: z.array(z.string()).default([]),
+  missing_machine_control_keys: z
+    .array(z.string())
+    .default([legacyMachineControlUnavailable.key]),
   connection_count: z.number().int().min(0),
   connected_account_count: z.number().int().min(0),
   last_test_status: z
@@ -2264,7 +2290,15 @@ export const outlookTenantConfigurationResponse = z.object({
     "blocked_pending_admin_configuration",
     "ready_for_adp20_implementation",
   ]),
-});
+}).transform((value) =>
+  value.machine_control_version === LEGACY_CONNECTOR_MACHINE_CONTROL_VERSION
+    ? {
+        ...value,
+        last_test_status: "blocked" as const,
+        adp20_readiness: "blocked_pending_admin_configuration" as const,
+      }
+    : value,
+);
 
 export const outlookReadinessCheckResult = z.object({
   key: z.string(),
@@ -2277,12 +2311,23 @@ export const outlookReadinessTestResponse = z.object({
   provider: z.literal("outlook").default("outlook"),
   status: z.enum(["passed", "failed", "blocked", "not_run"]),
   checks: z.array(outlookReadinessCheckResult),
+  machine_control_version: z
+    .string()
+    .default(LEGACY_CONNECTOR_MACHINE_CONTROL_VERSION),
   adp20_readiness: z.enum([
     "blocked_pending_admin_configuration",
     "ready_for_adp20_implementation",
   ]),
   tested_at: z.string(),
-});
+}).transform((value) =>
+  value.machine_control_version === LEGACY_CONNECTOR_MACHINE_CONTROL_VERSION
+    ? {
+        ...value,
+        status: "blocked" as const,
+        adp20_readiness: "blocked_pending_admin_configuration" as const,
+      }
+    : value,
+);
 
 export const googleWorkspaceConfigurationItemStatus = z.object({
   name: z.string(),
@@ -2293,6 +2338,14 @@ export const googleWorkspaceApprovalItemStatus = z.object({
   key: z.string(),
   label: z.string(),
   approved: z.boolean(),
+});
+
+export const googleWorkspaceMachineReadinessControlStatus = z.object({
+  key: z.string(),
+  label: z.string(),
+  version: z.string(),
+  status: z.enum(["passed", "failed", "blocked", "not_run"]),
+  detail: z.string().nullable().optional(),
 });
 
 export const googleWorkspaceConnectionCounts = z.object({
@@ -2314,9 +2367,18 @@ export const googleWorkspaceTenantConfigurationResponse = z.object({
   drive_enabled: z.boolean(),
   required_config: z.array(googleWorkspaceConfigurationItemStatus),
   required_approvals: z.array(googleWorkspaceApprovalItemStatus),
+  machine_control_version: z
+    .string()
+    .default(LEGACY_CONNECTOR_MACHINE_CONTROL_VERSION),
+  machine_controls: z
+    .array(googleWorkspaceMachineReadinessControlStatus)
+    .default([legacyMachineControlUnavailable]),
   approved_scopes: z.array(z.string()).default([]),
   missing_config_names: z.array(z.string()).default([]),
   missing_approval_keys: z.array(z.string()).default([]),
+  missing_machine_control_keys: z
+    .array(z.string())
+    .default([legacyMachineControlUnavailable.key]),
   connection_counts: googleWorkspaceConnectionCounts,
   last_test_status: z
     .enum(["passed", "failed", "blocked", "not_run"])
@@ -2327,7 +2389,15 @@ export const googleWorkspaceTenantConfigurationResponse = z.object({
     "blocked_pending_admin_configuration",
     "ready_for_user_connections",
   ]),
-});
+}).transform((value) =>
+  value.machine_control_version === LEGACY_CONNECTOR_MACHINE_CONTROL_VERSION
+    ? {
+        ...value,
+        last_test_status: "blocked" as const,
+        readiness: "blocked_pending_admin_configuration" as const,
+      }
+    : value,
+);
 
 export const googleWorkspaceReadinessCheckResult = z.object({
   key: z.string(),
@@ -2340,12 +2410,23 @@ export const googleWorkspaceReadinessTestResponse = z.object({
   provider: z.literal("google_workspace").default("google_workspace"),
   status: z.enum(["passed", "failed", "blocked", "not_run"]),
   checks: z.array(googleWorkspaceReadinessCheckResult),
+  machine_control_version: z
+    .string()
+    .default(LEGACY_CONNECTOR_MACHINE_CONTROL_VERSION),
   readiness: z.enum([
     "blocked_pending_admin_configuration",
     "ready_for_user_connections",
   ]),
   tested_at: z.string(),
-});
+}).transform((value) =>
+  value.machine_control_version === LEGACY_CONNECTOR_MACHINE_CONTROL_VERSION
+    ? {
+        ...value,
+        status: "blocked" as const,
+        readiness: "blocked_pending_admin_configuration" as const,
+      }
+    : value,
+);
 
 export const outlookBulkSyncItem = z.object({
   source_type: z.enum(["matter_hearing", "matter_deadline", "matter_task"]),
