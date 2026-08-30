@@ -31,6 +31,18 @@ def test_validator_requires_exact_section_11_2_and_m2_m3_coverage() -> None:
     assert any("do not exactly cover every M2/M3 epic" in error for error in errors)
 
 
+def test_validator_rejects_non_machine_enforced_status() -> None:
+    ledger = _ledger()
+    ledger["status"] = "engineering_control_published_pending"
+
+    errors = ip_ownership_ledger.validate(ledger, scan_repository=False)
+
+    assert any(
+        "status must be engineering_control_published_machine_enforced" in error
+        for error in errors
+    )
+
+
 def test_validator_rejects_forbidden_proposal_and_replace_without_adr() -> None:
     ledger = _ledger()
     proposal = ledger["epic_decisions"][0]["components"][0]

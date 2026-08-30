@@ -48,11 +48,14 @@ semantic map update without `render` fails CI. Its
 not activate retention, holds, export, purge, offboarding, restore, provider
 deletion, or backup recovery. Each operation remains fail-closed until its
 machine-enforced policy and exact-release conditions pass.
-`ip_m2_ownership_audit.py` is the IPLF-029A M2 reconciliation control. It
-requires every active M2 slice to retain a canonical-writer contract, checked-in
-test references, evidence artifact, and (when blocked) a named blocker. Its
-generated view is evidence inventory only: it does not replace a production
-journey, external-provider recovery, or recovery rehearsal.
+`ip_m2_ownership_audit.py` is the IPLF-029A/IPLF-029B M2 reconciliation
+control. It binds IPLF-029B to the single `M2M3-IPLF-029` ownership-ledger
+contract and exact ARCH-OPS requirement inventory, and requires every active M2
+slice to retain a canonical-writer contract, checked-in test references,
+evidence artifact, and (when blocked) a named blocker. CI owns the decision;
+the ledger status is machine-enforced. Its generated view is evidence
+inventory only: it does not replace a production journey, external-provider
+recovery, or recovery rehearsal.
 
 `IP_CAPABILITY_MODEL.md` documents the IPLF-020A extension of the existing
 backend/frontend capability catalogues. Server capability, billing entitlement,

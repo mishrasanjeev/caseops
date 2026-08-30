@@ -16,6 +16,10 @@ def _manifest() -> dict:
     return copy.deepcopy(ip_m2_ownership_audit._load(ip_m2_ownership_audit.MANIFEST_PATH))
 
 
+def _ledger() -> dict:
+    return copy.deepcopy(ip_m2_ownership_audit._load(ip_m2_ownership_audit.LEDGER_PATH))
+
+
 def _slice(manifest: dict, slice_id: str) -> dict:
     return next(row for row in manifest["slices"] if row["id"] == slice_id)
 
@@ -67,6 +71,36 @@ def test_audit_rejects_not_started_slice_with_implementation_evidence() -> None:
     )
 
 
+def test_audit_binds_completion_slice_to_arch_ops_and_ledger_control() -> None:
+    manifest = _manifest()
+    ledger = _ledger()
+    row = _slice(manifest, "IPLF-029B")
+    row["requirement_ids"].pop()
+    row["ownership"][0]["canonical_writer"] = "untracked second audit writer"
+
+    errors = ip_m2_ownership_audit.validate(
+        manifest, ledger, check_generated_view=False
+    )
+
+    assert any("exactly cover the manifest ARCH-OPS controls" in error for error in errors)
+    assert any("canonical_writer must match" in error for error in errors)
+
+
+def test_audit_rejects_retiring_the_checked_in_completion_workflow() -> None:
+    manifest = _manifest()
+    row = _slice(manifest, "IPLF-029B")
+    row["implementation_status"] = "not_started"
+    row["implementation_refs"] = []
+    row["evidence_refs"] = []
+    row["evidence_metadata"] = []
+
+    errors = ip_m2_ownership_audit.validate(
+        manifest, _ledger(), check_generated_view=False
+    )
+
+    assert any("checked-in reconciliation workflow must remain active" in error for error in errors)
+
+
 def test_audit_rejects_a_stale_generated_view(tmp_path: Path, monkeypatch) -> None:
     target = tmp_path / "M2_OWNERSHIP_AUDIT.md"
     target.write_text("stale\n", encoding="utf-8")
@@ -87,4 +121,6 @@ def test_render_is_explicit_about_repository_evidence_boundary(tmp_path: Path, m
     rendered = target.read_text(encoding="utf-8")
 
     assert "canonical-writer, test, and evidence references" in rendered
+    assert "It does not run a production operation" in rendered
+    assert "Rows still awaiting release closure" in rendered
     assert "repository-evidence-recorded-release-blocked" in rendered

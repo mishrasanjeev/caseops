@@ -7400,30 +7400,69 @@
       "journey_path_ids": [],
       "ownership": [
         {
-          "classification": "EXTEND",
-          "component": "IPLF-029 canonical scope: Run the M2 duplicate-ownership audit and close every M2 row with a canonical-writer test, compatibility retirement gate and production evidence; later milestone owners must remain unmodified unless required by a proven M2 dependency.",
-          "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
-          "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
-          "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
+          "classification": "NEW",
+          "component": "m2-one-writer-reconciliation-gate",
+          "canonical_writer": "scripts/ip_m2_ownership_audit.py delegating ledger uniqueness to scripts/ip_ownership_ledger.py",
+          "compatibility_path": "PROGRAM_MANIFEST.yaml and OWNERSHIP_LEDGER.yaml remain the canonical inputs; the generated M2 audit is a disposable read-only projection.",
+          "retirement_gate": "The audit stays machine-enforced until every M2 slice has its own canonical-writer reconciliation, compatibility retirement proof, and exact-release evidence."
         }
       ],
       "dependencies": [
         "IPLF-029A"
       ],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
+      "implementation_refs": [
+        "scripts/ip_m2_ownership_audit.py",
+        "scripts/ip_ownership_ledger.py",
+        "scripts/ip_program_manifest.py",
+        "docs/ip-implementation/OWNERSHIP_LEDGER.yaml",
+        "docs/ip-implementation/ARCH_OPS_CONTRACT.yaml",
+        ".github/workflows/ci.yml"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_m2_ownership_audit.py::test_committed_m2_slices_have_one_writer_reconciliation_evidence",
+        "apps/api/tests/test_ip_m2_ownership_audit.py::test_audit_binds_completion_slice_to_arch_ops_and_ledger_control",
+        "apps/api/tests/test_ip_m2_ownership_audit.py::test_audit_rejects_retiring_the_checked_in_completion_workflow",
+        "apps/api/tests/test_ip_ownership_ledger.py::test_committed_ip_ownership_ledger_and_repository_have_one_writer",
+        "apps/api/tests/test_ip_ownership_ledger.py::test_validator_rejects_non_machine_enforced_status"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m2/IPLF-029B/local-2026-08-30.md"
+      ],
       "evidence_metadata": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-029B-M2-RELEASE-CLOSURE",
+          "summary": "The repository audit is executable and bound to one ledger owner, but M2 rows remain without deployment-verified release evidence.",
+          "owner": "Codex program control with each canonical M2 slice owner",
+          "evidence_needed": "Each unresolved M2 row must pass its manifest-defined automated reconciliation, exact-image deployment, and dated release verification before IPLF-029B can close.",
+          "safe_fallback": "Keep IPLF-029B in progress and release-blocked; the audit remains read-only and every effectful operation retains its machine-enforced fail-closed boundary.",
+          "milestone_impact": "M2 ownership closure and IPLF-029B release remain blocked without changing independent slice execution.",
+          "next_independent_slice": "Codex continues the next dependency-ready repository slice while CI keeps the M2 ownership audit active."
+        }
+      ],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Keep the deterministic ownership and ARCH-OPS validators in CI and reject any unbound or duplicate reconciliation control.",
+        "Drive every unresolved M2 row through its own automated reconciliation and exact-release checks; do not infer production proof from this repository audit."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No schema, application-data, provider, queue, file-store, or external mutation is introduced; the audit reads checked-in control-plane files only."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/evidence/m2/IPLF-029B/local-2026-08-30.md",
+          "disposition": "created",
+          "owner": "Codex program control",
+          "evidence": "No-migration audit, exact ledger binding, automated negative tests, and truthful remaining M2 release inventory"
+        },
+        {
+          "artifact": "docs/ip-implementation/generated/M2_OWNERSHIP_AUDIT.md",
+          "disposition": "updated",
+          "owner": "Program control plane",
+          "evidence": "Generated closure totals and explicit repository-versus-release boundary"
+        }
+      ],
+      "allocation_review": "No-migration reconciliation reviewed against PRD ARCH-OPS-01..26, Section 11.2, IPLF-029, and the M2M3-IPLF-029 ownership-ledger decision. The repository control is executable; M2 release closure remains independently blocked.",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "administrative_exception": {
