@@ -33,6 +33,7 @@ from caseops_api.api.routes import (
     ip_registry,
     ip_watch,
     judge_mapping,
+    machine_readiness,
     mailbox,
     matter_billing,
     matter_tags,
@@ -58,6 +59,11 @@ from caseops_api.api.routes import (
 api_router = APIRouter()
 api_router.include_router(health.router, tags=["health"])
 api_router.include_router(meta.router, tags=["meta"])
+api_router.include_router(
+    machine_readiness.router,
+    prefix="/internal/machine-readiness",
+    tags=["machine-readiness"],
+)
 api_router.include_router(bootstrap.router, prefix="/bootstrap", tags=["bootstrap"])
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(billing.router, prefix="/billing", tags=["billing"])

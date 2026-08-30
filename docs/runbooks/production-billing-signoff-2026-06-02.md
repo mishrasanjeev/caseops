@@ -1,7 +1,28 @@
 # Production Billing Signoff Runbook - 2026-06-02
 
-**Scope:** Manual production signoff for CaseOps SaaS billing, tenant downloads,
-platform-admin billing visibility, and Pine Labs disabled-state safety.
+**Scope:** Machine-derived production readiness for CaseOps SaaS billing, tenant
+downloads, platform-admin billing visibility, and Pine Labs disabled-state safety.
+
+## 2026-08-30 Machine-Evidence Update
+
+The paid-production console is now read-only for general readiness and billing
+checks. The browser and platform-admin APIs cannot mark those checks `pass` or
+`not_applicable`. Historical operator-entered rows remain in the database only
+for migration/audit compatibility and do not affect readiness.
+
+An operational or billing check passes only when its stored machine envelope:
+
+- uses schema `caseops.machine-readiness/v1`;
+- names an allowed CI/probe producer;
+- is bound to the exact 40-character SHA served by the API;
+- names the same check/gate and machine conclusion; and
+- has no platform-admin recorder.
+
+Missing, malformed, operator-recorded, or stale-release evidence fails closed.
+The current release does not add a public machine-evidence ingestion endpoint;
+external CI/probe integration remains a prerequisite. Pine Labs live-payment
+activation remains a separate decision after UAT and runtime prerequisites
+pass, and always requires a payment-activation-specific recent MFA step-up.
 
 **Do not:**
 
@@ -16,15 +37,15 @@ platform-admin billing visibility, and Pine Labs disabled-state safety.
 
 | Area | Status | Evidence owner |
 |---|---|---|
-| Billing implementation deployed | Pending manual evidence | Founder/operator |
+| Billing implementation deployed | Pending exact-release machine evidence | CI/probe |
 | Pine Labs production payments | Disabled; must remain disabled | Founder/operator |
-| Platform admin | Founder-only smoke pending | Founder |
-| Tenant billing | Smoke pending on designated smoke tenant | Founder/operator |
-| Tenant downloads/exports | Smoke pending on designated smoke tenant | Founder/operator |
+| Platform admin | Machine probe pending | CI/probe |
+| Tenant billing | Machine smoke pending on designated smoke tenant | CI/probe |
+| Tenant downloads/exports | Machine smoke pending on designated smoke tenant | CI/probe |
 | Tenant integrations registry | Smoke pending on designated smoke tenant | Founder/operator |
 | Platform integrations/costs | Founder-only smoke pending | Founder |
 | Margin simulation evidence | Founder-only smoke pending | Founder |
-| Paid-production readiness console | Implemented; evidence pending | Founder |
+| Paid-production readiness console | Read-only; exact-release evidence pending | CI/probe |
 | MFA/step-up protection | Implemented with founder grace path | Founder/operator |
 | Password reset readiness metadata | Implemented; delivery evidence pending | Founder/operator |
 | Internal cost/profit leakage | Smoke pending | Founder/operator |
@@ -59,7 +80,7 @@ platform-admin billing visibility, and Pine Labs disabled-state safety.
 
 ## 2026-06-13 Unified Gate Update
 
-Founder signoff now has one aggregate endpoint:
+The platform has one aggregate, read-only endpoint:
 
 ```text
 GET /api/platform-admin/production-readiness
@@ -71,15 +92,34 @@ operations evidence, finance reconciliation evidence, backup/restore evidence,
 docs evidence, and security evidence. A production launch is not ready while
 any gate returns a `not_ready_reason`.
 
-Evidence-only endpoints:
+Read-only evidence endpoints:
 
 ```text
 GET /api/platform-admin/secret-rotation-readiness
 POST /api/platform-admin/secret-rotation-readiness/evidence
 GET /api/platform-admin/production-readiness/evidence
-POST /api/platform-admin/production-readiness/evidence
 GET /api/admin/enterprise-readiness
 ```
+
+There is no `POST /api/platform-admin/production-readiness/evidence` and no
+`POST /api/platform-admin/billing-signoff/evidence`. The former returns `405`
+because the read-only path exists; the latter returns `404`.
+
+Approved automation writes through the hidden server-to-server endpoint
+`POST /api/internal/machine-readiness/evidence`. It accepts no browser session,
+Bearer token, platform-admin role, or operator conclusion. The caller must HMAC
+the exact request bytes with the dedicated
+`CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET`; the envelope binds an allow-listed
+producer, exact serving 40-character release SHA, machine run ID, subject,
+conclusion, and evidence reference. Stored rows carry a second HMAC proof, so a
+later row or envelope edit fails closed. Rotate this key independently from the
+application auth secret; a rotation intentionally makes older release evidence
+non-authoritative.
+
+The exact-release `prod-verify.yml` dispatch records only
+`public_claims_reviewed=pass` after every required production Playwright suite is
+green. It does not manufacture billing, Pine Labs, finance, security, provider,
+or backup evidence; those remain pending until their dedicated probes exist.
 
 Do not paste secret values, OAuth tokens, raw webhook payloads, internal cost
 exports, gross profit, margin, or platform-only notes into tenant-facing UI or
@@ -163,7 +203,7 @@ screenshots, or operational metadata that should not be committed.
 | Cost-profile evidence | Source name only, effective date, category, unit minor/BPS; no invoices with secrets |
 | Margin simulation evidence | Scenario name, revenue/cost/margin output, warnings, screenshot/link stored externally |
 | Pine UAT evidence row | Scenario code, status, provider order id, webhook id, timestamp, redacted payload reference, attachment reference |
-| Billing signoff evidence row | Check code, pass/fail/blocked status, evidence reference, operator notes, recorded timestamp |
+| Billing machine evidence row | Schema, producer, exact release SHA, check code, conclusion, run id, evidence reference, recorded timestamp; platform-admin recorder must be null |
 | Password reset readiness | Reset link domain, reset path, sender name, template kind, TTL, provider configured boolean |
 | Finance operations evidence | Settlement import id, exception count, export filename/hash, accountant review location |
 | Case support matrix evidence | Provider, court, lookup method, cost source reference, enabled/disabled state |
@@ -276,21 +316,22 @@ Expected result: configured actual costs are visible only to founder platform
 admin and are used by founder-only calculations, with fallback defaults when no
 actual profile exists.
 
-## Founder Paid-Production Readiness Evidence
+## Paid-Production Readiness Evidence
 
-Run only as the configured founder/company-owner.
+The platform-admin console may inspect results but cannot manufacture them.
 
-Required Pine Labs UAT evidence fields per scenario:
+Required Pine Labs UAT machine-evidence fields per scenario:
 
 - scenario code
-- result status: `pending`, `pass`, `fail`, `blocked`, or `not_applicable`
+- machine conclusion: `pass`, `fail`, or `blocked`
+- schema `caseops.machine-readiness/v1`
+- allowed producer id, exact serving release SHA, and non-empty run id
 - provider order id, if applicable
 - provider payment id, if applicable
 - webhook id, if applicable
 - webhook timestamp, if applicable
 - redacted payload sample or external reference
 - screenshot/attachment reference, if stored externally
-- operator notes
 - recorded timestamp
 
 Production activation pass/fail criteria:
@@ -299,23 +340,28 @@ Production activation pass/fail criteria:
   `go`.
 - Fail/block when any required scenario is missing, failed, blocked, or
   unverified.
+- Operator-entered `pass` and `not_applicable` values do not count.
 - Recording `go` only records readiness. It must not flip
   `CASEOPS_PINE_LABS_ENV`, enable subscriptions, or enable live Pine Labs calls.
 
-Required billing signoff evidence fields:
+Required billing machine-evidence fields:
 
-- check code
-- result status
-- evidence reference
-- optional structured evidence with no secrets
-- operator notes
-- recorded timestamp
+- schema `caseops.machine-readiness/v1`
+- allowed producer id
+- exact serving release SHA
+- check code as the machine-evidence subject
+- machine conclusion (`pass`, `fail`, or `blocked`)
+- non-empty CI/probe run id
+- evidence reference and recorded timestamp
+- null platform-admin recorder
 
 Billing signoff pass/fail criteria:
 
-- Pass only when every required check is `pass`.
+- Pass only when every required check has current exact-release machine evidence
+  with conclusion `pass`.
 - Fail/block if tenant access, tenant downloads, disabled checkout behavior, or
   no-leak checks cannot be verified.
+- Operator-entered `pass` and all `not_applicable` values are non-authoritative.
 - Any tenant-facing response or export containing internal cost/profit/provider
   fee/gross margin fields is a blocker.
 
@@ -452,23 +498,10 @@ customer-sensitive data.
 - Platform admin is founder-only at launch; adding more platform admins requires
   a separate security review.
 
-## Signoff
+## Readiness Conclusion
 
-| Gate | Result | Evidence link/location | Signoff |
-|---|---|---|---|
-| Founder-only platform admin smoke | Pending |  |  |
-| Tenant billing smoke | Pending |  |  |
-| Tenant downloads/exports | Pending |  |  |
-| Tenant integrations registry | Pending |  |  |
-| Founder integrations/costs/margin simulation | Pending |  |  |
-| Pine Labs disabled-state verification | Pending |  |  |
-| No tenant cost/profit leakage | Pending |  |  |
-| Backup/migration/deploy evidence | Pending |  |  |
-| Known caveats accepted | Pending |  |  |
-| MFA/step-up protected founder flows | Pending |  |  |
-| Password reset readiness and delivery smoke | Pending |  |  |
-| Settlement/refund/credit-note/chargeback/TDS exports | Pending |  |  |
-| Case tracking support matrix no-leak check | Pending |  |  |
-
-Production billing is ready for manual founder smoke when all preconditions are
-true. It is signed off only after every gate above is marked pass with evidence.
+`GET /api/platform-admin/production-readiness` is the conclusion. Production is
+ready only when every returned gate is machine-derived or independently
+configuration-derived and `ready=true`. There is no manual signoff table to
+complete. External prerequisites without machine evidence remain explicitly
+blocked; they must not be converted to `not_applicable` to obtain a green result.

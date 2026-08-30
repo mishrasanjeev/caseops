@@ -5,9 +5,6 @@ import json
 import os
 import sys
 from datetime import UTC, datetime
-from urllib.error import HTTPError, URLError
-from urllib.parse import urljoin
-from urllib.request import Request, urlopen
 
 SCENARIOS = (
     "plan_payment_success",
@@ -51,39 +48,19 @@ def _evidence_payload(scenario: str) -> dict[str, object]:
             "status": "recorded",
             "generated_at": stamp,
         },
-        "operator_notes": "Recorded by local-safe Pine Labs UAT mock harness.",
+        "operator_notes": "Generated local fixture only; not production-readiness evidence.",
         "attachment_refs": [],
     }
 
 
-def _post(base_url: str, token: str, payload: dict[str, object]) -> tuple[int, bytes]:
-    request = Request(
-        urljoin(base_url.rstrip("/") + "/", "/api/platform-admin/pine-labs/uat-evidence"),
-        method="POST",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": "Bearer " + token,
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        },
-    )
-    try:
-        with urlopen(request, timeout=20) as response:
-            return response.status, response.read(500_000)
-    except HTTPError as exc:
-        return exc.code, exc.read(100_000)
-    except URLError as exc:
-        return 0, str(exc.reason).encode("utf-8", errors="replace")
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Generate or record local-safe Pine Labs UAT evidence."
+        description=(
+            "Generate local-safe Pine Labs UAT fixture output. This helper cannot "
+            "record production-readiness evidence."
+        )
     )
     parser.add_argument("--scenario", choices=SCENARIOS, action="append")
-    parser.add_argument("--api-base", default=os.environ.get("CASEOPS_SMOKE_API_BASE"))
-    parser.add_argument("--token", default=os.environ.get("CASEOPS_SMOKE_BEARER_TOKEN"))
-    parser.add_argument("--record", action="store_true")
     args = parser.parse_args(argv)
 
     if not _safe_env():
@@ -91,21 +68,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     scenarios = args.scenario or list(SCENARIOS)
     payloads = [_evidence_payload(scenario) for scenario in scenarios]
-    if not args.record:
-        print(json.dumps({"evidence": payloads}, indent=2, sort_keys=True))
-        return 0
-    if not args.api_base or not args.token:
-        print("FAIL: --record needs --api-base and --token or matching env vars.")
-        return 2
-    ok = True
-    for payload in payloads:
-        status, body = _post(args.api_base, args.token, payload)
-        passed = status == 200
-        ok = ok and passed
-        print(f"{'PASS' if passed else 'FAIL'}: {payload['scenario_code']} status={status}")
-        if not passed:
-            print(body.decode("utf-8", errors="ignore")[:500])
-    return 0 if ok else 1
+    print(json.dumps({"fixtures": payloads}, indent=2, sort_keys=True))
+    return 0
 
 
 if __name__ == "__main__":

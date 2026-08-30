@@ -1,3 +1,4 @@
+import hmac
 from datetime import datetime
 from functools import lru_cache
 
@@ -75,6 +76,9 @@ class Settings(BaseSettings):
     db_lock_timeout_ms: int = Field(default=5_000, ge=1)
     db_idle_transaction_timeout_ms: int = Field(default=60_000, ge=1)
     auth_secret: str = Field(default=PLACEHOLDER_AUTH_SECRET, min_length=32)
+    # Dedicated HMAC key for the machine-only readiness ingestion boundary.
+    # It is intentionally separate from browser/app JWT signing material.
+    machine_readiness_evidence_secret: str | None = Field(default=None, min_length=32)
     access_token_ttl_minutes: int = Field(default=120)
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
     # EG-002 (2026-04-23): default still True for local/dev so the
@@ -494,6 +498,18 @@ class Settings(BaseSettings):
             raise ValueError(
                 "CASEOPS_AUTH_SECRET must be set to a non-placeholder value when "
                 f"CASEOPS_ENV={self.env!r}.",
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _separate_machine_readiness_secret(self) -> "Settings":
+        if self.machine_readiness_evidence_secret and hmac.compare_digest(
+            self.machine_readiness_evidence_secret,
+            self.auth_secret,
+        ):
+            raise ValueError(
+                "CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET must be distinct from "
+                "CASEOPS_AUTH_SECRET.",
             )
         return self
 
