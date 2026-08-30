@@ -216,12 +216,32 @@ def _active_generation_statement(company_id: str):
     )
 
 
+def _lock_private_company(session: Session, *, company_id: str) -> Company:
+    """Serialize generation/event authority changes on one stable tenant row."""
+
+    company = session.scalar(
+        select(Company)
+        .where(Company.id == company_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if company is None:
+        raise PrivateRetrievalInvariantError("Private index company does not exist.")
+    return company
+
+
 def ensure_active_private_generation(
     session: Session, *, company_id: str
 ) -> PrivateIndexGeneration:
     """Return the one active generation, creating an empty bootstrap safely."""
 
-    rows = list(session.scalars(_active_generation_statement(company_id)).all())
+    rows = list(
+        session.scalars(
+            _active_generation_statement(company_id).execution_options(
+                populate_existing=True
+            )
+        ).all()
+    )
     if len(rows) > 1:
         raise PrivateRetrievalInvariantError("More than one private index generation is active.")
     if rows:
@@ -234,7 +254,9 @@ def ensure_active_private_generation(
     )
     if company is None:
         raise PrivateRetrievalInvariantError("Private index company does not exist.")
-    row = session.scalar(_active_generation_statement(company_id))
+    row = session.scalar(
+        _active_generation_statement(company_id).execution_options(populate_existing=True)
+    )
     if row is not None:
         return row
     now = datetime.now(UTC)
@@ -259,12 +281,14 @@ def ensure_active_private_generation(
 def create_shadow_private_generation(
     session: Session, *, company_id: str
 ) -> PrivateIndexGeneration:
+    _lock_private_company(session, company_id=company_id)
     current = ensure_active_private_generation(session, company_id=company_id)
     generations = list(
         session.scalars(
             select(PrivateIndexGeneration)
             .where(PrivateIndexGeneration.company_id == company_id)
             .with_for_update()
+            .execution_options(populate_existing=True)
         ).all()
     )
     if any(row.state in {"building", "ready"} for row in generations):
@@ -288,6 +312,8 @@ def mark_private_generation_ready(
     company_id: str,
     generation_id: str,
     expected_projection_count: int,
+    expected_access_policy_generation: int | None = None,
+    expected_tombstone_generation: int | None = None,
 ) -> PrivateIndexGeneration:
     row = session.scalar(
         select(PrivateIndexGeneration)
@@ -296,9 +322,20 @@ def mark_private_generation_ready(
             PrivateIndexGeneration.company_id == company_id,
         )
         .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if row is None or row.state != "building":
         raise PrivateRetrievalInvariantError("Only a building private generation can be verified.")
+    if (
+        expected_access_policy_generation is not None
+        and row.access_policy_generation != expected_access_policy_generation
+    ) or (
+        expected_tombstone_generation is not None
+        and row.tombstone_generation != expected_tombstone_generation
+    ):
+        raise PrivateRetrievalInvariantError(
+            "A stale private rebuild cannot verify after an access or tombstone change."
+        )
     count = int(
         session.scalar(
             select(func.count(PrivateIndexProjection.id)).where(
@@ -342,11 +379,13 @@ def activate_private_generation(
     generation_id: str,
     expected_active_generation_id: str,
 ) -> PrivateIndexGeneration:
+    _lock_private_company(session, company_id=company_id)
     generations = list(
         session.scalars(
             select(PrivateIndexGeneration)
             .where(PrivateIndexGeneration.company_id == company_id)
             .with_for_update()
+            .execution_options(populate_existing=True)
         ).all()
     )
     current = next((row for row in generations if row.state == "active"), None)
@@ -418,8 +457,10 @@ def upsert_private_projection(
     company_id: str,
     generation_id: str,
     payload: PrivateProjectionInput,
+    expected_access_policy_generation: int,
+    expected_tombstone_generation: int,
 ) -> PrivateIndexProjection:
-    """Write one chunk into a building or active tenant-private generation."""
+    """Write one chunk only under the security epochs that produced its payload."""
 
     _assert_projection_input(payload)
     generation = session.scalar(
@@ -430,9 +471,17 @@ def upsert_private_projection(
             PrivateIndexGeneration.state.in_(("building", "active")),
         )
         .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if generation is None:
         raise PrivateRetrievalInvariantError("Private generation is not writable.")
+    if (
+        generation.access_policy_generation != expected_access_policy_generation
+        or generation.tombstone_generation != expected_tombstone_generation
+    ):
+        raise PrivateRetrievalInvariantError(
+            "A stale private projection writer cannot cross an access or tombstone change."
+        )
     row = session.scalar(
         select(PrivateIndexProjection).where(
             PrivateIndexProjection.generation_id == generation_id,
@@ -1143,6 +1192,7 @@ def enqueue_private_projection_event(
     reason_code: str,
 ) -> PrivateProjectionEvent:
     canonical_key = build_private_projection_event_key(idempotency_key)
+    _lock_private_company(session, company_id=company_id)
     existing = session.scalar(
         select(PrivateProjectionEvent).where(
             PrivateProjectionEvent.company_id == company_id,
@@ -1150,8 +1200,25 @@ def enqueue_private_projection_event(
         )
     )
     if existing is not None:
+        if (
+            existing.event_type != event_type
+            or existing.target_type != target_type
+            or existing.target_id != target_id
+            or existing.target_version != target_version
+            or existing.reason_code != reason_code[:120]
+            or existing.actor_membership_id != actor_membership_id
+        ):
+            raise PrivateRetrievalInvariantError(
+                "A private projection idempotency key cannot identify a different event."
+            )
         return existing
-    generation = ensure_active_private_generation(session, company_id=company_id)
+    generation = session.scalar(
+        _active_generation_statement(company_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if generation is None:
+        generation = ensure_active_private_generation(session, company_id=company_id)
     if event_type == "access_changed":
         generation.access_policy_generation += 1
     else:

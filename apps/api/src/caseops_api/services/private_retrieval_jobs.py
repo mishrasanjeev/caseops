@@ -421,17 +421,36 @@ def rebuild_private_index(
     projection_limit: int = MAX_PRIVATE_REBUILD_PROJECTIONS,
     activate: bool = False,
 ) -> PrivateRebuildSummary:
-    """Build and verify one tenant shadow without disturbing last-good reads."""
+    """Build and verify one tenant shadow without stale-worker resurrection.
 
+    Source enumeration and shadow creation are committed before any provider
+    call.  The provider therefore runs without tenant/generation row locks.
+    Every later write presents the exact access/tombstone epochs captured with
+    that source snapshot; an event landing during provider I/O makes the job
+    stale and the shadow is failed rather than populated or activated.
+    """
+
+    if session.new or session.dirty or session.deleted:
+        raise PrivateRetrievalInvariantError(
+            "Private rebuild requires a clean worker session before its provider boundary."
+        )
     active = ensure_active_private_generation(session, company_id=company_id)
     shadow = create_shadow_private_generation(session, company_id=company_id)
+    payloads = _private_projection_inputs(
+        session,
+        company_id=company_id,
+        limit=projection_limit,
+    )
+    previous_generation_id = str(active.id)
+    shadow_generation_id = str(shadow.id)
+    expected_access_policy_generation = int(shadow.access_policy_generation)
+    expected_tombstone_generation = int(shadow.tombstone_generation)
+    # A provider callback must be able to commit a revocation while this job is
+    # waiting. The job owns this transaction boundary and publishes only an
+    # empty, non-readable building generation before releasing its locks.
+    session.commit()
+    provider_batches = 0
     try:
-        payloads = _private_projection_inputs(
-            session,
-            company_id=company_id,
-            limit=projection_limit,
-        )
-        provider_batches = 0
         if provider is not None and payloads:
             payloads, provider_batches = _embed_private_payloads(
                 payloads,
@@ -443,32 +462,48 @@ def rebuild_private_index(
             upsert_private_projection(
                 session,
                 company_id=company_id,
-                generation_id=shadow.id,
+                generation_id=shadow_generation_id,
                 payload=payload,
+                expected_access_policy_generation=expected_access_policy_generation,
+                expected_tombstone_generation=expected_tombstone_generation,
             )
         mark_private_generation_ready(
             session,
             company_id=company_id,
-            generation_id=shadow.id,
+            generation_id=shadow_generation_id,
             expected_projection_count=len(payloads),
+            expected_access_policy_generation=expected_access_policy_generation,
+            expected_tombstone_generation=expected_tombstone_generation,
         )
         if activate:
             activate_private_generation(
                 session,
                 company_id=company_id,
-                generation_id=shadow.id,
-                expected_active_generation_id=active.id,
+                generation_id=shadow_generation_id,
+                expected_active_generation_id=previous_generation_id,
             )
         session.flush()
     except Exception as exc:
-        shadow.state = "failed"
-        shadow.failure_code = type(exc).__name__[:80]
-        session.flush()
+        session.rollback()
+        failed_shadow = session.scalar(
+            select(PrivateIndexGeneration)
+            .where(
+                PrivateIndexGeneration.id == shadow_generation_id,
+                PrivateIndexGeneration.company_id == company_id,
+                PrivateIndexGeneration.state.in_(("building", "ready")),
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if failed_shadow is not None:
+            failed_shadow.state = "failed"
+            failed_shadow.failure_code = type(exc).__name__[:80]
+            session.commit()
         raise
     return PrivateRebuildSummary(
         company_id=company_id,
-        previous_generation_id=active.id,
-        generation_id=shadow.id,
+        previous_generation_id=previous_generation_id,
+        generation_id=shadow_generation_id,
         projection_count=len(payloads),
         provider_batch_count=provider_batches,
         provider_text_count=len(payloads) if provider is not None else 0,

@@ -19,6 +19,7 @@ from caseops_api.db.models import (
     Matter,
     MatterAttachment,
     MatterAttachmentChunk,
+    PrivateIndexGeneration,
     PrivateIndexProjection,
     PrivateProjectionEvent,
     PrivateSavedOutputAccess,
@@ -556,6 +557,99 @@ def test_all_provider_sources_are_manifested_and_any_revocation_hides_answer(
     assert saved["render_status"] == "permission_changed"
     assert saved["citations"] == []
     assert "ManifestPairUnique" not in saved["content"]
+    exported = client.get(
+        f"/api/workspace-assistant/sessions/{assistant_session['id']}/export",
+        headers=auth_headers(token),
+    )
+    assert exported.status_code == 200, exported.text
+    exported_saved = next(
+        item for item in exported.json()["turns"] if item["id"] == turn_id
+    )
+    assert exported_saved["render_status"] == "permission_changed"
+    assert exported_saved["citations"] == []
+    assert "ManifestPairUnique" not in exported_saved["content"]
+
+
+def test_provider_deletion_during_rebuild_fences_stale_projection_writer(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    company_id = str(bootstrap["company"]["id"])
+    membership_id = str(bootstrap["membership"]["id"])
+    matter = _matter(client, token, "IPLF-066B-PROVIDER-DELETE")
+    with get_session_factory()() as session:
+        row = session.get(Matter, str(matter["id"]))
+        assert row is not None
+        row.description = "ProviderDeleteUnique private source content."
+        session.commit()
+    with get_session_factory()() as session:
+        rebuild_private_index(session, company_id=company_id, activate=True)
+        session.commit()
+
+    class DeletingProvider(_SpyEmbeddingProvider):
+        def __init__(self) -> None:
+            super().__init__()
+            self.deleted = False
+
+        def embed(self, texts, *, input_type="document"):
+            if not self.deleted:
+                self.deleted = True
+                with get_session_factory()() as concurrent:
+                    propagate_private_projection_change(
+                        concurrent,
+                        company_id=company_id,
+                        actor_membership_id=membership_id,
+                        idempotency_key="iplf-066b-provider-deletion-during-rebuild",
+                        event_type="tombstoned",
+                        target_type="matter",
+                        target_id=str(matter["id"]),
+                        target_version=None,
+                        reason_code="provider_deletion_completed",
+                    )
+                    concurrent.commit()
+            return super().embed(texts, input_type=input_type)
+
+    with get_session_factory()() as session:
+        with pytest.raises(
+            PrivateRetrievalInvariantError,
+            match="stale private projection writer",
+        ):
+            rebuild_private_index(
+                session,
+                company_id=company_id,
+                provider=DeletingProvider(),
+                allow_external_provider=True,
+                activate=True,
+            )
+
+    with get_session_factory()() as session:
+        active = session.scalar(
+            select(PrivateIndexGeneration).where(
+                PrivateIndexGeneration.company_id == company_id,
+                PrivateIndexGeneration.state == "active",
+            )
+        )
+        assert active is not None
+        source_rows = list(
+            session.scalars(
+                select(PrivateIndexProjection).where(
+                    PrivateIndexProjection.company_id == company_id,
+                    PrivateIndexProjection.source_type == "matter",
+                    PrivateIndexProjection.source_id == str(matter["id"]),
+                )
+            )
+        )
+        assert source_rows
+        assert all(row.is_tombstoned for row in source_rows)
+        assert all(row.content_text == "" and row.embedding_json is None for row in source_rows)
+        assert all(row.generation_id == active.id for row in source_rows)
+        context = _context(company_id, membership_id)
+        assert retrieve_private_content(
+            session,
+            context=context,
+            query="ProviderDeleteUnique",
+        ) == ()
 
 
 @pytest.mark.parametrize(
