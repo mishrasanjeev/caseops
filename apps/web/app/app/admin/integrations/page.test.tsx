@@ -73,6 +73,12 @@ describe("TenantIntegrationsPage", () => {
     expect(
       screen.getByText("Tenant-owned OAuth setup for Calendar, Gmail, and Drive."),
     ).toBeInTheDocument();
+    expect(screen.getByTestId("google-workspace-machine-controls")).toHaveTextContent(
+      "provider-delivery-retry/v1",
+    );
+    expect(
+      screen.queryByRole("checkbox", { name: /webhook runbook|redaction rules/i }),
+    ).not.toBeInTheDocument();
     expect(await screen.findByTestId("google-workspace-setup")).toBeInTheDocument();
     expect(screen.getByText("Google Workspace")).toBeInTheDocument();
     expect(screen.getByTestId("google-workspace-google_calendar")).toHaveTextContent(
@@ -129,6 +135,8 @@ describe("TenantIntegrationsPage", () => {
           drive_redirect_uri: "https://tenant.example/drive/callback",
         }),
       );
+      expect(body).not.toHaveProperty("webhook_runbook_approved");
+      expect(body).not.toHaveProperty("redaction_rules_approved");
     });
 
     fireEvent.click(screen.getByTestId("google-workspace-test"));

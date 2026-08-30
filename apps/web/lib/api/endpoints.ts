@@ -7193,9 +7193,6 @@ export type OutlookTenantConfigurationInput = {
   scopes?: string[] | null;
   oauthConsentModelApproved: boolean;
   scopesApproved: boolean;
-  durableRunbookApproved: boolean;
-  rollbackApproved: boolean;
-  redactionRulesApproved: boolean;
   enabled: boolean;
 };
 
@@ -7217,9 +7214,6 @@ export async function updateOutlookTenantConfiguration(
       scopes: input.scopes,
       oauth_consent_model_approved: input.oauthConsentModelApproved,
       scopes_approved: input.scopesApproved,
-      durable_runbook_approved: input.durableRunbookApproved,
-      rollback_approved: input.rollbackApproved,
-      redaction_rules_approved: input.redactionRulesApproved,
       enabled: input.enabled,
     },
   });
@@ -7243,8 +7237,6 @@ export type GoogleWorkspaceTenantConfigurationInput = {
   scopes?: string[] | null;
   oauthConsentModelApproved: boolean;
   scopesApproved: boolean;
-  webhookRunbookApproved: boolean;
-  redactionRulesApproved: boolean;
   calendarEnabled: boolean;
   gmailEnabled: boolean;
   driveEnabled: boolean;
@@ -7272,8 +7264,6 @@ export async function updateGoogleWorkspaceTenantConfiguration(
         scopes: input.scopes,
         oauth_consent_model_approved: input.oauthConsentModelApproved,
         scopes_approved: input.scopesApproved,
-        webhook_runbook_approved: input.webhookRunbookApproved,
-        redaction_rules_approved: input.redactionRulesApproved,
         calendar_enabled: input.calendarEnabled,
         gmail_enabled: input.gmailEnabled,
         drive_enabled: input.driveEnabled,

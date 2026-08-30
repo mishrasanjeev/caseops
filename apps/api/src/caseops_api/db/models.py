@@ -2747,6 +2747,10 @@ class TenantOutlookConfiguration(Base):
         Boolean, nullable=False, default=False
     )
     scopes_approved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Legacy mixed-revision columns. They are intentionally retained so an
+    # older binary can roll forward safely, but current readiness never reads
+    # or writes these operator-entered internal acknowledgements. Retry,
+    # disable and redaction controls are executable, versioned code policy.
     durable_runbook_approved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     rollback_approved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     redaction_rules_approved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -2816,6 +2820,9 @@ class TenantGoogleWorkspaceConfiguration(Base):
         Boolean, nullable=False, default=False
     )
     scopes_approved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Legacy mixed-revision columns; see TenantOutlookConfiguration. Current
+    # readiness derives webhook/disable and redaction controls from versioned
+    # configuration and executable checks instead of these stored booleans.
     webhook_runbook_approved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     redaction_rules_approved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     calendar_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
