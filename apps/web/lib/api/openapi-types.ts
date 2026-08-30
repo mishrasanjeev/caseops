@@ -20277,6 +20277,22 @@ export interface components {
             /** Gmail Connection Count */
             gmail_connection_count: number;
         };
+        /** GoogleWorkspaceMachineReadinessControlStatus */
+        GoogleWorkspaceMachineReadinessControlStatus: {
+            /** Detail */
+            detail?: string | null;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "passed" | "failed" | "blocked" | "not_run";
+            /** Version */
+            version: string;
+        };
         /** GoogleWorkspaceReadinessCheckResult */
         GoogleWorkspaceReadinessCheckResult: {
             /** Detail */
@@ -20295,6 +20311,8 @@ export interface components {
         GoogleWorkspaceReadinessTestResponse: {
             /** Checks */
             checks: components["schemas"]["GoogleWorkspaceReadinessCheckResult"][];
+            /** Machine Control Version */
+            machine_control_version: string;
             /**
              * Provider
              * @default google_workspace
@@ -20347,10 +20365,16 @@ export interface components {
             last_test_status: "passed" | "failed" | "blocked" | "not_run";
             /** Last Tested At */
             last_tested_at?: string | null;
+            /** Machine Control Version */
+            machine_control_version: string;
+            /** Machine Controls */
+            machine_controls: components["schemas"]["GoogleWorkspaceMachineReadinessControlStatus"][];
             /** Missing Approval Keys */
             missing_approval_keys?: string[];
             /** Missing Config Names */
             missing_config_names?: string[];
+            /** Missing Machine Control Keys */
+            missing_machine_control_keys?: string[];
             /**
              * Provider
              * @default google_workspace
@@ -20404,11 +20428,6 @@ export interface components {
              * @default false
              */
             oauth_consent_model_approved: boolean;
-            /**
-             * Redaction Rules Approved
-             * @default false
-             */
-            redaction_rules_approved: boolean;
             /** Scopes */
             scopes?: string[] | null;
             /**
@@ -20416,11 +20435,6 @@ export interface components {
              * @default false
              */
             scopes_approved: boolean;
-            /**
-             * Webhook Runbook Approved
-             * @default false
-             */
-            webhook_runbook_approved: boolean;
         };
         /** HearingCoachFeedbackItem */
         HearingCoachFeedbackItem: {
@@ -36693,6 +36707,22 @@ export interface components {
             /** Synced */
             synced: number;
         };
+        /** OutlookMachineReadinessControlStatus */
+        OutlookMachineReadinessControlStatus: {
+            /** Detail */
+            detail?: string | null;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "passed" | "failed" | "blocked" | "not_run";
+            /** Version */
+            version: string;
+        };
         /** OutlookMailCandidateCreateRequest */
         OutlookMailCandidateCreateRequest: {
             /**
@@ -36742,6 +36772,8 @@ export interface components {
             adp20_readiness: "blocked_pending_admin_configuration" | "ready_for_adp20_implementation";
             /** Checks */
             checks: components["schemas"]["OutlookReadinessCheckResult"][];
+            /** Machine Control Version */
+            machine_control_version: string;
             /**
              * Provider
              * @default outlook
@@ -36791,10 +36823,16 @@ export interface components {
             last_test_status: "passed" | "failed" | "blocked" | "not_run";
             /** Last Tested At */
             last_tested_at?: string | null;
+            /** Machine Control Version */
+            machine_control_version: string;
+            /** Machine Controls */
+            machine_controls: components["schemas"]["OutlookMachineReadinessControlStatus"][];
             /** Missing Approval Keys */
             missing_approval_keys?: string[];
             /** Missing Config Names */
             missing_config_names?: string[];
+            /** Missing Machine Control Keys */
+            missing_machine_control_keys?: string[];
             /**
              * Provider
              * @default outlook
@@ -36813,11 +36851,6 @@ export interface components {
             /** Client Secret */
             client_secret?: string | null;
             /**
-             * Durable Runbook Approved
-             * @default false
-             */
-            durable_runbook_approved: boolean;
-            /**
              * Enabled
              * @default true
              */
@@ -36827,18 +36860,8 @@ export interface components {
              * @default false
              */
             oauth_consent_model_approved: boolean;
-            /**
-             * Redaction Rules Approved
-             * @default false
-             */
-            redaction_rules_approved: boolean;
             /** Redirect Uri */
             redirect_uri?: string | null;
-            /**
-             * Rollback Approved
-             * @default false
-             */
-            rollback_approved: boolean;
             /** Scopes */
             scopes?: string[] | null;
             /**

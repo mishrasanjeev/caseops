@@ -66,9 +66,6 @@ export default function AdminOutlookConfigurationPage() {
     scopes: APPROVED_SCOPES,
     oauthConsentModelApproved: false,
     scopesApproved: false,
-    durableRunbookApproved: false,
-    rollbackApproved: false,
-    redactionRulesApproved: false,
     enabled: true,
   });
 
@@ -90,15 +87,6 @@ export default function AdminOutlookConfigurationPage() {
       ),
       scopesApproved: query.data.required_approvals.some(
         (item) => item.key === "scopes_approved" && item.approved,
-      ),
-      durableRunbookApproved: query.data.required_approvals.some(
-        (item) => item.key === "durable_runbook_approved" && item.approved,
-      ),
-      rollbackApproved: query.data.required_approvals.some(
-        (item) => item.key === "rollback_approved" && item.approved,
-      ),
-      redactionRulesApproved: query.data.required_approvals.some(
-        (item) => item.key === "redaction_rules_approved" && item.approved,
       ),
       enabled: query.data.enabled,
     }));
@@ -277,7 +265,7 @@ export default function AdminOutlookConfigurationPage() {
                 <div className="md:col-span-2">
                   <fieldset className="grid gap-2 rounded-md border border-[var(--color-line)] px-3 py-3 text-sm md:grid-cols-2">
                     <legend className="px-1 text-xs font-medium text-[var(--color-mute)]">
-                      Approval checklist
+                      Provider authorities and enablement
                     </legend>
                     <ApprovalCheckbox
                       label="OAuth consent model approved"
@@ -294,33 +282,6 @@ export default function AdminOutlookConfigurationPage() {
                       checked={form.scopesApproved}
                       onChange={(checked) =>
                         setForm((f) => ({ ...f, scopesApproved: checked }))
-                      }
-                    />
-                    <ApprovalCheckbox
-                      label="Durable operation runbook approved"
-                      checked={form.durableRunbookApproved}
-                      onChange={(checked) =>
-                        setForm((f) => ({
-                          ...f,
-                          durableRunbookApproved: checked,
-                        }))
-                      }
-                    />
-                    <ApprovalCheckbox
-                      label="Rollback and disable procedure approved"
-                      checked={form.rollbackApproved}
-                      onChange={(checked) =>
-                        setForm((f) => ({ ...f, rollbackApproved: checked }))
-                      }
-                    />
-                    <ApprovalCheckbox
-                      label="Provider error redaction rules approved"
-                      checked={form.redactionRulesApproved}
-                      onChange={(checked) =>
-                        setForm((f) => ({
-                          ...f,
-                          redactionRulesApproved: checked,
-                        }))
                       }
                     />
                     <ApprovalCheckbox
@@ -394,6 +355,7 @@ export default function AdminOutlookConfigurationPage() {
               <Checklist
                 config={status.required_config}
                 approvals={status.required_approvals}
+                machineControls={status.machine_controls}
               />
               {lastTest ? (
                 <div data-testid="outlook-config-test-results">
@@ -506,12 +468,19 @@ function ApprovalCheckbox({
 function Checklist({
   config,
   approvals,
+  machineControls,
 }: {
   config: { name: string; configured: boolean }[];
   approvals: { key: string; label: string; approved: boolean }[];
+  machineControls: {
+    key: string;
+    label: string;
+    version: string;
+    status: "passed" | "failed" | "blocked" | "not_run";
+  }[];
 }) {
   return (
-    <div className="grid gap-3 md:grid-cols-2">
+    <div className="grid gap-3 md:grid-cols-3">
       <div>
         <h3 className="text-sm font-semibold text-[var(--color-ink)]">
           Required config
@@ -544,6 +513,27 @@ function Checklist({
               <Badge tone={item.approved ? "success" : "warning"}>
                 {item.approved ? "approved" : "pending"}
               </Badge>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div data-testid="outlook-machine-controls">
+        <h3 className="text-sm font-semibold text-[var(--color-ink)]">
+          Machine controls
+        </h3>
+        <ul className="mt-2 divide-y divide-[var(--color-line)] rounded-md border border-[var(--color-line)]">
+          {machineControls.map((item) => (
+            <li
+              key={item.key}
+              className="flex items-center justify-between gap-2 px-3 py-2 text-sm"
+            >
+              <span>
+                {item.label}
+                <span className="block text-xs text-[var(--color-mute)]">
+                  {item.version}
+                </span>
+              </span>
+              <Badge tone={statusTone(item.status)}>{item.status}</Badge>
             </li>
           ))}
         </ul>

@@ -8,6 +8,8 @@ import httpx
 
 RETRYABLE_READ_STATUS_CODES = frozenset({408, 429, 500, 502, 503, 504})
 SAFE_RETRY_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+DEFAULT_SAFE_HTTP_RETRY_MAX_ATTEMPTS = 3
+DEFAULT_SAFE_HTTP_RETRY_BACKOFF_SECONDS = 0.25
 
 
 def _send_safe_request(
@@ -55,8 +57,8 @@ def request_with_retries(
     url: str,
     *,
     client: httpx.Client | None = None,
-    max_attempts: int = 3,
-    backoff_seconds: float = 0.25,
+    max_attempts: int = DEFAULT_SAFE_HTTP_RETRY_MAX_ATTEMPTS,
+    backoff_seconds: float = DEFAULT_SAFE_HTTP_RETRY_BACKOFF_SECONDS,
     retry_status_codes: Container[int] = RETRYABLE_READ_STATUS_CODES,
     raise_for_status: bool = True,
     **kwargs: Any,

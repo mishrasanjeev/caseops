@@ -68,20 +68,29 @@ function readinessStatus(overrides = {}) {
         label: "Microsoft Graph scopes approved",
         approved: false,
       },
+    ],
+    machine_control_version: "outlook-connector-controls/2026-08-30.1",
+    machine_controls: [
       {
-        key: "durable_runbook_approved",
-        label: "Durable sync retry/dead-letter/replay runbook approved",
-        approved: false,
+        key: "durable_retry_dead_letter_replay",
+        label: "Durable retry, dead-letter, and replay policy",
+        version: "calendar-durable-delivery/v1",
+        status: "passed",
+        detail: "Bounded retry policy loaded.",
       },
       {
-        key: "rollback_approved",
-        label: "Rollback and disable procedure approved",
-        approved: false,
+        key: "tenant_disable_boundary",
+        label: "Tenant disable and rollback boundary",
+        version: "outlook-tenant-disable/v1",
+        status: "passed",
+        detail: "Tenant disable is fail closed.",
       },
       {
-        key: "redaction_rules_approved",
-        label: "Provider error redaction rules approved",
-        approved: false,
+        key: "provider_error_redaction",
+        label: "Provider error redaction policy",
+        version: "provider-error-redaction/v1",
+        status: "passed",
+        detail: "Provider errors are redacted.",
       },
     ],
     approved_scopes: ["offline_access", "User.Read", "Calendars.ReadWrite"],
@@ -93,10 +102,8 @@ function readinessStatus(overrides = {}) {
     missing_approval_keys: [
       "oauth_consent_model_approved",
       "scopes_approved",
-      "durable_runbook_approved",
-      "rollback_approved",
-      "redaction_rules_approved",
     ],
+    missing_machine_control_keys: [],
     connection_count: 0,
     connected_account_count: 0,
     last_test_status: "not_run",
@@ -128,6 +135,7 @@ describe("AdminOutlookConfigurationPage", () => {
       provider: "outlook",
       status: "passed",
       checks: [{ key: "MICROSOFT_GRAPH_ME", label: "Graph probe", status: "passed" }],
+      machine_control_version: "outlook-connector-controls/2026-08-30.1",
       adp20_readiness: "ready_for_adp20_implementation",
       tested_at: "2026-05-26T00:00:00Z",
     });
@@ -140,7 +148,7 @@ describe("AdminOutlookConfigurationPage", () => {
     expect(fetchOutlookTenantConfigurationMock).not.toHaveBeenCalled();
   });
 
-  it("saves names-only Outlook configuration and approval state", async () => {
+  it("saves names-only Outlook configuration and provider authority", async () => {
     const user = userEvent.setup();
     render(withClient(<AdminOutlookConfigurationPage />));
 
@@ -150,9 +158,6 @@ describe("AdminOutlookConfigurationPage", () => {
     for (const label of [
       "OAuth consent model approved",
       "Graph scopes approved",
-      "Durable operation runbook approved",
-      "Rollback and disable procedure approved",
-      "Provider error redaction rules approved",
     ]) {
       await user.click(screen.getByLabelText(label));
     }
@@ -166,12 +171,24 @@ describe("AdminOutlookConfigurationPage", () => {
           redirectUri: "https://api.example.test/callback",
           oauthConsentModelApproved: true,
           scopesApproved: true,
-          durableRunbookApproved: true,
-          rollbackApproved: true,
-          redactionRulesApproved: true,
         }),
       ),
     );
+    const submitted = updateOutlookTenantConfigurationMock.mock.calls[0]?.[0];
+    expect(submitted).not.toHaveProperty("durableRunbookApproved");
+    expect(submitted).not.toHaveProperty("rollbackApproved");
+    expect(submitted).not.toHaveProperty("redactionRulesApproved");
+  });
+
+  it("shows versioned machine controls without internal approval checkboxes", async () => {
+    render(withClient(<AdminOutlookConfigurationPage />));
+
+    expect(await screen.findByTestId("outlook-machine-controls")).toHaveTextContent(
+      "calendar-durable-delivery/v1",
+    );
+    expect(
+      screen.queryByRole("checkbox", { name: /runbook|rollback|redaction/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("runs the readiness probe and renders check results", async () => {
