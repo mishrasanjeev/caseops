@@ -15,7 +15,7 @@ from caseops_api.scripts.check_database_indexes import build_index_health_report
 
 PREVIOUS_HEAD = "20260828_0001"
 MIGRATION_HEAD = "20260828_0002"
-CURRENT_HEAD = "20260830_0002"
+CURRENT_HEAD = "20260830_0003"
 
 
 def _config() -> Config:

@@ -33,7 +33,7 @@ from caseops_api.schemas.ip_watch import (
 from caseops_api.services import ip_watch as ip_watch_service
 from caseops_api.services.ip_watch import run_journal_watch_scheduler
 from tests.test_auth_company import auth_headers, bootstrap_company
-from tests.test_ip_record_workflow import _application, _asset, _docket
+from tests.test_ip_record_workflow import _asset, _docket
 
 
 def _fixture(client: TestClient, title: str = "ASTER") -> tuple[dict, dict, dict, dict]:
@@ -41,7 +41,25 @@ def _fixture(client: TestClient, title: str = "ASTER") -> tuple[dict, dict, dict
     headers = auth_headers(str(bootstrap["access_token"]))
     docket = _docket(client, headers, title)
     asset = _asset(client, headers, docket["id"], title)
-    application = _application(client, headers, docket["id"], asset["id"])
+    application_response = client.post(
+        f"/api/ip/dockets/{docket['id']}/applications",
+        headers=headers,
+        json={
+            "asset_id": asset["id"],
+            "office": "IP India",
+            "jurisdiction": "IN",
+            "filing_phase": "filed",
+            "source_pending_identifier_allocation": False,
+            "application_number": {
+                "raw_value": f"TM/JOURNAL/{title}/2026",
+                "source": "historical_registry_fixture",
+                "effective_from": "2026-08-07",
+                "is_primary": True,
+            },
+        },
+    )
+    assert application_response.status_code == 201, application_response.text
+    application = application_response.json()["application"]
     return bootstrap, headers, docket, application
 
 

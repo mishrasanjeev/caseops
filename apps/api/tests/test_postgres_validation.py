@@ -134,89 +134,103 @@ def test_ip_filing_transactions_are_append_only_on_postgres(pg_engine) -> None:
 
     now = datetime.now(UTC)
     suffix = uuid4().hex
-    with Session(pg_engine) as session:
-        company_id = _seed_company(session)
-        user = User(
-            email=f"ip-filing-append-only-{suffix}@example.test",
-            full_name="IP filing append-only test",
-            password_hash="not-used",
-        )
-        session.add(user)
-        session.flush()
-        membership = CompanyMembership(
-            company_id=company_id,
-            user_id=user.id,
-            role="owner",
-        )
-        session.add(membership)
-        session.flush()
-        docket = IpDocketRecord(
-            company_id=company_id,
-            record_type="trademark",
-            title="PostgreSQL append-only filing",
-            status="draft",
-            created_by_membership_id=membership.id,
-        )
-        session.add(docket)
-        session.flush()
-        asset = IpAsset(
-            company_id=company_id,
-            docket_id=docket.id,
-            asset_kind="trademark",
-            jurisdiction="IN",
-            title="Append-only mark",
-        )
-        session.add(asset)
-        session.flush()
-        application = TrademarkApplication(
-            company_id=company_id,
-            docket_id=docket.id,
-            asset_id=asset.id,
-            office="Trade Marks Registry",
-            jurisdiction="IN",
-            filing_phase="pre_filing",
-        )
-        session.add(application)
-        session.flush()
-        transaction = IpFilingTransaction(
-            company_id=company_id,
-            docket_id=docket.id,
-            application_id=application.id,
-            transaction_kind="submitted",
-            attempt_key=f"attempt-{suffix}",
-            idempotency_key=f"idempotency-{suffix}",
-            request_fingerprint="a" * 64,
-            external_reference=f"registry:{suffix}",
-            evidence_reference=f"document:{suffix}",
-            occurred_at=now,
-            details_json={},
-            recorded_by_membership_id=membership.id,
-        )
-        session.add(transaction)
-        session.commit()
-        transaction_id = transaction.id
+    with pg_engine.connect() as connection:
+        outer_transaction = connection.begin()
+        try:
+            # This test runs before destructive migration probes in the same
+            # module. Keep its immutable legal-evidence fixture inside a
+            # rollback-only savepoint so the later schema-reset helper never
+            # needs to bypass the production TRUNCATE guard.
+            with Session(bind=connection, join_transaction_mode="create_savepoint") as session:
+                company_id = _seed_company(session)
+                user = User(
+                    email=f"ip-filing-append-only-{suffix}@example.test",
+                    full_name="IP filing append-only test",
+                    password_hash="not-used",
+                )
+                session.add(user)
+                session.flush()
+                membership = CompanyMembership(
+                    company_id=company_id,
+                    user_id=user.id,
+                    role="owner",
+                )
+                session.add(membership)
+                session.flush()
+                docket = IpDocketRecord(
+                    company_id=company_id,
+                    record_type="trademark",
+                    title="PostgreSQL append-only filing",
+                    status="draft",
+                    created_by_membership_id=membership.id,
+                )
+                session.add(docket)
+                session.flush()
+                asset = IpAsset(
+                    company_id=company_id,
+                    docket_id=docket.id,
+                    asset_kind="trademark",
+                    jurisdiction="IN",
+                    title="Append-only mark",
+                )
+                session.add(asset)
+                session.flush()
+                application = TrademarkApplication(
+                    company_id=company_id,
+                    docket_id=docket.id,
+                    asset_id=asset.id,
+                    office="Trade Marks Registry",
+                    jurisdiction="IN",
+                    filing_phase="pre_filing",
+                )
+                session.add(application)
+                session.flush()
+                transaction = IpFilingTransaction(
+                    company_id=company_id,
+                    docket_id=docket.id,
+                    application_id=application.id,
+                    transaction_kind="submitted",
+                    attempt_key=f"attempt-{suffix}",
+                    idempotency_key=f"idempotency-{suffix}",
+                    request_fingerprint="a" * 64,
+                    external_reference=f"registry:{suffix}",
+                    evidence_reference=f"document:{suffix}",
+                    occurred_at=now,
+                    details_json={},
+                    recorded_by_membership_id=membership.id,
+                )
+                session.add(transaction)
+                session.flush()
+                transaction_id = transaction.id
 
-    mutations = (
-        (
-            "UPDATE ip_filing_transactions "
-            "SET external_reference = 'tampered' WHERE id = :transaction_id",
-            {"transaction_id": transaction_id},
-        ),
-        (
-            "DELETE FROM ip_filing_transactions WHERE id = :transaction_id",
-            {"transaction_id": transaction_id},
-        ),
-        ("TRUNCATE TABLE ip_filing_transactions", {}),
-    )
-    for statement, parameters in mutations:
-        with pg_engine.connect() as connection:
-            transaction_scope = connection.begin()
-            with pytest.raises(DBAPIError, match="append-only"):
-                connection.execute(text(statement), parameters)
-            transaction_scope.rollback()
+                mutations = (
+                    (
+                        "UPDATE ip_filing_transactions "
+                        "SET external_reference = 'tampered' WHERE id = :transaction_id",
+                        {"transaction_id": transaction_id},
+                    ),
+                    (
+                        "DELETE FROM ip_filing_transactions WHERE id = :transaction_id",
+                        {"transaction_id": transaction_id},
+                    ),
+                    ("TRUNCATE TABLE ip_filing_transactions", {}),
+                )
+                for statement, parameters in mutations:
+                    mutation_savepoint = connection.begin_nested()
+                    try:
+                        with pytest.raises(DBAPIError, match="append-only"):
+                            connection.execute(text(statement), parameters)
+                    finally:
+                        if mutation_savepoint.is_active:
+                            mutation_savepoint.rollback()
 
-    with Session(pg_engine) as session:
-        assert session.get(IpFilingTransaction, transaction_id) is not None
+                assert session.get(IpFilingTransaction, transaction_id) is not None
+        finally:
+            if outer_transaction.is_active:
+                outer_transaction.rollback()
+
+    with Session(pg_engine) as verification_session:
+        assert verification_session.get(IpFilingTransaction, transaction_id) is None
 
 
 def _enqueue_shared_lifecycle_event(
@@ -422,16 +436,23 @@ def _wait_for_postgres_lock_wait(pg_engine, *, application_name: str) -> None:
     )
 
 
-def _truncate_postgres_application_tables(pg_engine) -> None:
+def _prepare_postgres_destructive_migration_probe(pg_engine, alembic_config) -> None:
     """Give destructive migration probes an isolated, schema-only database.
 
     The PostgreSQL validation module intentionally keeps ordinary test rows
     between cases.  A downgrade probe is different: rows created by a newer
     contract can make an older migration fail before the probe has installed
     its own legacy fixture, leaving every later test on a partially downgraded
-    schema.  Clear application rows while retaining ``alembic_version`` so the
-    three downgrade/upgrade tests remain independent of collection order.
+    schema.  First use the filing-evidence migration's own fail-closed downgrade
+    to prove no immutable filing rows exist and remove its TRUNCATE trigger.
+    Only then clear application rows while retaining ``alembic_version`` so the
+    three older downgrade/upgrade tests remain independent of collection order.
     """
+
+    from alembic import command
+
+    pg_engine.dispose()
+    command.downgrade(alembic_config, "20260830_0002")
 
     with pg_engine.begin() as connection:
         # Tenant fixtures all descend from one of these roots.  Keep global
@@ -440,6 +461,7 @@ def _truncate_postgres_application_tables(pg_engine) -> None:
         connection.execute(
             text("TRUNCATE TABLE companies, users RESTART IDENTITY CASCADE")
         )
+    pg_engine.dispose()
 
 
 def _seed_notice(
@@ -1863,8 +1885,7 @@ def test_notification_convergence_backfills_boolean_on_postgres(
     config.set_main_option("script_location", str(project_root / "alembic"))
     config.set_main_option("sqlalchemy.url", url)
 
-    _truncate_postgres_application_tables(pg_engine)
-    pg_engine.dispose()
+    _prepare_postgres_destructive_migration_probe(pg_engine, config)
     command.downgrade(config, "20260804_0003")
 
     reminder_id = str(uuid4())
@@ -1976,7 +1997,7 @@ def test_lifecycle_migration_neutralizes_legacy_children_on_postgres(
     config.set_main_option("script_location", str(project_root / "alembic"))
     config.set_main_option("sqlalchemy.url", url)
 
-    _truncate_postgres_application_tables(pg_engine)
+    _prepare_postgres_destructive_migration_probe(pg_engine, config)
     company_id = str(uuid4())
     user_id = str(uuid4())
     membership_id = str(uuid4())
@@ -2834,7 +2855,7 @@ def test_shared_reliability_actual_postgres_downgrade_refuses_evidence(pg_engine
     config = Config(str(project_root / "alembic.ini"))
     config.set_main_option("script_location", str(project_root / "alembic"))
     config.set_main_option("sqlalchemy.url", url)
-    _truncate_postgres_application_tables(pg_engine)
+    _prepare_postgres_destructive_migration_probe(pg_engine, config)
     now = datetime(2026, 8, 12, 6, 55, tzinfo=UTC)
     with Session(pg_engine) as seed:
         company_id = _seed_company(seed)

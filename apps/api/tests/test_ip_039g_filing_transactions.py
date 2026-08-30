@@ -15,6 +15,11 @@ from caseops_api.db.models import (
 from caseops_api.db.session import get_session_factory
 from tests.test_auth_company import auth_headers, bootstrap_company
 
+_TRANSACTION_PATHS = {
+    "preparation": "/api/ip/applications/{application_id}/filing-transactions/preparation",
+    "confirmation": "/api/ip/applications/{application_id}/filing-transactions/confirmation",
+}
+
 
 def _particulars() -> dict:
     return {
@@ -136,7 +141,7 @@ def _transaction(
         **extra,
     }
     return client.post(
-        f"/api/ip/applications/{application_id}/filing-transactions/{endpoint}",
+        _TRANSACTION_PATHS[endpoint].format(application_id=application_id),
         headers=headers,
         json=body,
     )

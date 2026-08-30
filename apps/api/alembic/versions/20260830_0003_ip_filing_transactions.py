@@ -22,7 +22,6 @@ down_revision = "20260830_0002"
 branch_labels = None
 depends_on = None
 
-
 def _set_postgres_timeouts() -> None:
     if op.get_bind().dialect.name == "postgresql":
         op.execute(sa.text("SET LOCAL lock_timeout = '5s'"))
@@ -194,6 +193,26 @@ def upgrade() -> None:
         ["company_id", "application_id", "attempt_key", "occurred_at"],
     )
     op.create_index(
+        "ix_fk_ip_filing_transactions_docket_id_compa_7c733195",
+        "ip_filing_transactions",
+        ["docket_id", "company_id"],
+    )
+    op.create_index(
+        "ix_fk_ip_filing_transactions_filing_event_id_da631b60",
+        "ip_filing_transactions",
+        ["filing_event_id", "company_id"],
+    )
+    op.create_index(
+        "ix_fk_ip_filing_transactions_recorded_by_mem_946a0c91",
+        "ip_filing_transactions",
+        ["recorded_by_membership_id", "company_id"],
+    )
+    op.create_index(
+        "ix_fk_ip_filing_transactions_related_transac_13bf6951",
+        "ip_filing_transactions",
+        ["related_transaction_id", "company_id"],
+    )
+    op.create_index(
         "uq_ip_filing_transaction_one_acceptance",
         "ip_filing_transactions",
         ["company_id", "application_id"],
@@ -234,6 +253,22 @@ def downgrade() -> None:
     )
     op.drop_index(
         "ix_ip_filing_transactions_company_application",
+        table_name="ip_filing_transactions",
+    )
+    op.drop_index(
+        "ix_fk_ip_filing_transactions_related_transac_13bf6951",
+        table_name="ip_filing_transactions",
+    )
+    op.drop_index(
+        "ix_fk_ip_filing_transactions_recorded_by_mem_946a0c91",
+        table_name="ip_filing_transactions",
+    )
+    op.drop_index(
+        "ix_fk_ip_filing_transactions_filing_event_id_da631b60",
+        table_name="ip_filing_transactions",
+    )
+    op.drop_index(
+        "ix_fk_ip_filing_transactions_docket_id_compa_7c733195",
         table_name="ip_filing_transactions",
     )
     op.drop_table("ip_filing_transactions")

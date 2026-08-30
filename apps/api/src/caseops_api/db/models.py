@@ -15649,8 +15649,8 @@ class IpFilingTransaction(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    docket_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
-    application_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    application_id: Mapped[str] = mapped_column(String(36), nullable=False)
     transaction_kind: Mapped[str] = mapped_column(String(40), nullable=False)
     attempt_key: Mapped[str] = mapped_column(String(120), nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
