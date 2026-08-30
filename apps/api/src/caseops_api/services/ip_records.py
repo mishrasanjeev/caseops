@@ -82,9 +82,7 @@ def _project_current_particulars(
             version=particulars.version,
             representation_kind=particulars.mark_kind,
             display_text=(particulars.representation_json or {}).get("text"),
-            document_reference=(particulars.representation_json or {}).get(
-                "document_reference"
-            ),
+            document_reference=(particulars.representation_json or {}).get("document_reference"),
             content_sha256=sha256(representation_payload.encode()).hexdigest(),
             metadata_json={"source": source},
         )
@@ -118,6 +116,7 @@ def _project_current_particulars(
             )
         )
         current_parties.add((role, name.casefold()))
+
 
 def assert_application_can_enter_filed_phase(
     application: TrademarkApplication,
@@ -386,9 +385,7 @@ def create_manual_trademark_application(
                 office=payload.office,
                 jurisdiction=payload.jurisdiction,
                 filing_phase=payload.filing_phase,
-                source_pending_identifier_allocation=(
-                    payload.source_pending_identifier_allocation
-                ),
+                source_pending_identifier_allocation=(payload.source_pending_identifier_allocation),
                 application_number=payload.application_number,
             ),
             commit=False,
@@ -448,9 +445,7 @@ def create_ip_proceeding(
                 )
             )
         ),
-        source_pending_identifier_allocation=(
-            payload.source_pending_identifier_allocation
-        ),
+        source_pending_identifier_allocation=(payload.source_pending_identifier_allocation),
     )
     session.add(row)
     session.flush()
@@ -624,7 +619,8 @@ def _assert_identifier_owner_exists(
         )
     else:
         owner = session.scalar(
-            select(IpProceeding).where(
+            select(IpProceeding)
+            .where(
                 IpProceeding.id == proceeding_id,
                 IpProceeding.company_id == company_id,
                 IpProceeding.docket_id == docket_id,
@@ -765,8 +761,7 @@ def update_trademark_application_phase(
     payload: TrademarkApplicationPhaseUpdateRequest,
 ) -> TrademarkApplication:
     candidate = session.scalar(
-        select(TrademarkApplication)
-        .where(
+        select(TrademarkApplication).where(
             TrademarkApplication.id == application_id,
             TrademarkApplication.company_id == context.company.id,
         )
@@ -798,17 +793,28 @@ def update_trademark_application_phase(
         )
     if row.version != payload.expected_version:
         raise HTTPException(status_code=409, detail="Application version changed; reload.")
-    row.source_pending_identifier_allocation = payload.source_pending_identifier_allocation
-    identifiers = list(
-        session.scalars(
-            select(IpIdentifier).where(
-                IpIdentifier.company_id == context.company.id,
-                IpIdentifier.application_id == row.id,
-            )
-        ).all()
-    )
     if payload.filing_phase == "filed":
-        assert_application_can_enter_filed_phase(row, identifiers)
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "ip_filing_transaction_required",
+                "message": (
+                    "Filed phase is created only by an accepted filing transaction; "
+                    "record submission and acknowledgement evidence first."
+                ),
+            },
+        )
+    if row.filing_phase not in {"draft", "pre_filing"}:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "ip_application_phase_event_required",
+                "message": (
+                    "A legal filing phase cannot be rewritten through the generic phase route."
+                ),
+            },
+        )
+    row.source_pending_identifier_allocation = payload.source_pending_identifier_allocation
     row.filing_phase = payload.filing_phase
     row.version += 1
     row.updated_at = datetime.now(UTC)
@@ -823,9 +829,7 @@ def update_trademark_application_phase(
         metadata={
             "filing_phase": row.filing_phase,
             "version": row.version,
-            "source_pending_identifier_allocation": (
-                row.source_pending_identifier_allocation
-            ),
+            "source_pending_identifier_allocation": (row.source_pending_identifier_allocation),
         },
     )
     session.commit()

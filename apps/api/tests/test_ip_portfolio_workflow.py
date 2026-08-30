@@ -77,9 +77,7 @@ def _rich_portfolio_fixture(client: TestClient) -> tuple[dict[str, str], dict, d
                     }
                 ],
                 "use_priority": None,
-                "parties": [
-                    {"role": "applicant", "name": "Aster Products Private Limited"}
-                ],
+                "parties": [{"role": "applicant", "name": "Aster Products Private Limited"}],
                 "agent": {"name": "Rao Trademark Agents"},
                 "filing_manifest": [
                     {
@@ -95,26 +93,24 @@ def _rich_portfolio_fixture(client: TestClient) -> tuple[dict[str, str], dict, d
     assert docket_response.status_code == 201, docket_response.text
     docket = docket_response.json()
     asset = _asset(client, headers, docket_id=docket["id"], title="Aster Device")
-    application = _application(
-        client,
-        headers,
-        docket_id=docket["id"],
-        asset_id=asset["id"],
-    )
-    _identifier(
-        client,
-        headers,
-        docket_id=docket["id"],
-        kind="application",
-        value="TM / 2026 / 00421",
-        application_id=application["id"],
-    )
-    filed = client.patch(
-        f"/api/ip/applications/{application['id']}/filing-phase",
+    application_response = client.post(
+        f"/api/ip/dockets/{docket['id']}/applications",
         headers=headers,
-        json={"expected_version": 1, "filing_phase": "filed"},
+        json={
+            "asset_id": asset["id"],
+            "office": "Trade Marks Registry Mumbai",
+            "jurisdiction": "IN",
+            "filing_phase": "filed",
+            "application_number": {
+                "raw_value": "TM / 2026 / 00421",
+                "source": "historical_registry_fixture",
+                "effective_from": "2026-08-21",
+                "is_primary": True,
+            },
+        },
     )
-    assert filed.status_code == 200, filed.text
+    assert application_response.status_code == 201, application_response.text
+    application = application_response.json()["application"]
     proceeding_response = client.post(
         f"/api/ip/dockets/{docket['id']}/proceedings",
         headers=headers,

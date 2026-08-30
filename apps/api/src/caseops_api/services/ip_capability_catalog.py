@@ -323,6 +323,46 @@ def assert_ip_rollout_enabled(
     )
 
 
+def assert_ip_feature_available(
+    session: Session,
+    *,
+    context: SessionContext,
+    feature_id: str,
+    settings: Settings | None = None,
+    now: datetime | None = None,
+) -> IPFeatureDecision:
+    """Enforce capability, entitlement, and rollout at an IP writer boundary."""
+
+    from caseops_api.services.capabilities import resolve_membership_capabilities
+    from caseops_api.services.saas_billing import current_entitlements_for_company
+
+    decision = evaluate_ip_feature(
+        feature_id,
+        granted_capabilities=resolve_membership_capabilities(session, context.membership),
+        entitlements=current_entitlements_for_company(session, context.company.id),
+        settings=settings or get_settings(),
+        now=now,
+    )
+    if decision.available:
+        return decision
+    if decision.reason in {"unknown_feature", "rollout_disabled", "rollout_expired"}:
+        response_status = status.HTTP_503_SERVICE_UNAVAILABLE
+    else:
+        response_status = status.HTTP_403_FORBIDDEN
+    raise HTTPException(
+        status_code=response_status,
+        detail={
+            "code": "ip_feature_unavailable",
+            "feature_id": feature_id,
+            "reason": decision.reason,
+            "missing_capabilities": list(decision.missing_capabilities),
+            "entitlement_key": decision.entitlement_key,
+            "rollout_flag": decision.rollout_flag,
+            "rollout_owner": decision.owner,
+        },
+    )
+
+
 def ip_workspace_readiness(
     session: Session,
     *,

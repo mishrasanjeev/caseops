@@ -90,6 +90,7 @@ def test_uj06_event_preview_commit_reconcile_correct_and_report(
         "form_evidence",
         "fee_evidence",
         "approval_evidence",
+        "filing_transaction_required",
     }
 
     event_payload = _event(
@@ -145,9 +146,10 @@ def test_uj06_event_preview_commit_reconcile_correct_and_report(
     )
     assert duplicate_preview.status_code == 200
     assert duplicate_preview.json()["duplicate_candidate_ids"] == [original["id"]]
-    assert "duplicate_reconciliation_required" in duplicate_preview.json()[
-        "unresolved_exception_codes"
-    ]
+    assert (
+        "duplicate_reconciliation_required"
+        in duplicate_preview.json()["unresolved_exception_codes"]
+    )
 
     candidate_response = client.post(
         f"/api/ip/dockets/{docket['id']}/events",
@@ -204,9 +206,9 @@ def test_uj06_event_preview_commit_reconcile_correct_and_report(
     assert backdated.status_code == 200, backdated.text
     assert backdated.json()["backdated"] is True
     assert backdated.json()["recalculation_required"] is True
-    assert "backdated_recalculation_review_required" in backdated.json()[
-        "unresolved_exception_codes"
-    ]
+    assert (
+        "backdated_recalculation_review_required" in backdated.json()["unresolved_exception_codes"]
+    )
 
     backdated_payload = _event(
         membership_id=membership_id,
@@ -221,21 +223,19 @@ def test_uj06_event_preview_commit_reconcile_correct_and_report(
         json=backdated_payload,
     )
     assert refused_backdated.status_code == 409, refused_backdated.text
-    backdated_payload["acknowledged_exception_codes"] = [
-        "backdated_recalculation_review_required"
-    ]
+    backdated_payload["acknowledged_exception_codes"] = ["backdated_recalculation_review_required"]
     committed_backdated = client.post(
         f"/api/ip/dockets/{docket['id']}/events",
         headers=headers,
         json=backdated_payload,
     )
     assert committed_backdated.status_code == 201, committed_backdated.text
-    assert committed_backdated.json()["payload_json"][
-        "acknowledged_exception_codes"
-    ] == ["backdated_recalculation_review_required"]
-    assert committed_backdated.json()["payload_json"][
-        "recalculation_preserved_current_phase"
-    ] is True
+    assert committed_backdated.json()["payload_json"]["acknowledged_exception_codes"] == [
+        "backdated_recalculation_review_required"
+    ]
+    assert (
+        committed_backdated.json()["payload_json"]["recalculation_preserved_current_phase"] is True
+    )
 
     workspace = client.get(
         f"/api/ip/dockets/{docket['id']}/prosecution",

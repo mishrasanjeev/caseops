@@ -116,7 +116,7 @@ def test_identifier_workflow_preserves_types_history_search_and_duplicates(
         json={"expected_version": 1, "filing_phase": "filed"},
     )
     assert filed_without_number.status_code == 409
-    assert "ip_application_identifier_required" in filed_without_number.text
+    assert filed_without_number.json()["code"] == "ip_filing_transaction_required"
 
     created_number = client.post(
         f"/api/ip/dockets/{first_docket['id']}/identifiers",
@@ -165,9 +165,7 @@ def test_identifier_workflow_preserves_types_history_search_and_duplicates(
     )
     assert duplicate.status_code == 201, duplicate.text
     assert duplicate.json()["identifier"]["reconciliation_status"] == "needs_review"
-    assert [row["id"] for row in duplicate.json()["duplicate_candidates"]] == [
-        first_number["id"]
-    ]
+    assert [row["id"] for row in duplicate.json()["duplicate_candidates"]] == [first_number["id"]]
     assert second_app["id"] != first_app["id"]
 
     proceeding = client.post(
@@ -249,20 +247,17 @@ def test_identifier_workflow_preserves_types_history_search_and_duplicates(
     assert identifiers[first_number["id"]]["effective_until"] == "2026-08-08"
     assert identifiers[corrected["id"]]["raw_value"] == "TM/123A/2026"
 
-    filed = client.patch(
+    filed_without_transaction = client.patch(
         f"/api/ip/applications/{first_app['id']}/filing-phase",
         headers=headers,
         json={"expected_version": 1, "filing_phase": "filed"},
     )
-    assert filed.status_code == 200, filed.text
-    assert filed.json()["filing_phase"] == "filed"
-    assert filed.json()["version"] == 2
+    assert filed_without_transaction.status_code == 409
+    assert filed_without_transaction.json()["code"] == "ip_filing_transaction_required"
 
     with get_session_factory()() as session:
         all_rows = list(
-            session.scalars(
-                select(IpIdentifier).where(IpIdentifier.company_id == company_id)
-            ).all()
+            session.scalars(select(IpIdentifier).where(IpIdentifier.company_id == company_id)).all()
         )
         assert len(all_rows) == 4
         actions = set(
@@ -276,7 +271,6 @@ def test_identifier_workflow_preserves_types_history_search_and_duplicates(
         "ip_proceeding.created",
         "ip_identifier.created",
         "ip_identifier.corrected",
-        "ip_application.phase_changed",
     }.issubset(actions)
 
 
