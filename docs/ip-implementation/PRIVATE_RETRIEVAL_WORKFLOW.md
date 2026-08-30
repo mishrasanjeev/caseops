@@ -58,6 +58,15 @@ scopes, projection metadata, and payloads from another tenant are never placed
 in a provider batch. Local mock and `fastembed` providers remain available for
 offline verification.
 
+The rebuild publishes only an empty non-readable building generation before
+provider I/O and holds no tenant or generation database lock while waiting for
+the provider. Every later projection write and verification presents the exact
+access-policy and tombstone generations captured with the source snapshot. An
+access, purge, or provider-deletion event landing during provider I/O therefore
+fails the stale shadow instead of deadlocking the event or resurrecting content.
+Generation activation and event enqueue serialize on the stable tenant row and
+refresh locked generation state before making their decision.
+
 Rebuild writes a shadow generation, verifies its live projection count and
 ordered content-hash manifest, and may atomically activate it against the
 expected current generation. Generation activation retains the IPLF-066A
@@ -81,6 +90,14 @@ and at a 360-pixel viewport. It also proves that malicious instructions inside
 an indexed source are treated as untrusted content by the deterministic local
 provider.
 
+Client-portal reports continue to use a closed client-safe field allowlist and
+never read private projection text. Document publications recheck their
+canonical document, current version, privilege, confidentiality, shareable
+state, tenant, docket version and grant on list, open and download; an old
+publication is reduced to `review_required` with no document metadata after a
+canonical source restriction. A tombstone event blanks private text and
+embeddings and locks copied Assistant output before a stale worker can write.
+
 ## Integrity and release boundary
 
 `GET /api/private-retrieval/integrity` and the company-scoped command-line
@@ -93,10 +110,10 @@ it is an operational entry point, not a second workflow owner.
 The repository-local slice remains incomplete until the unimplemented
 reciprocal scope is added and the exact integrated release is verified. In
 particular, private intelligent-review/report saved-output registration,
-privacy-bounded AI-GUIDE-12 analytics, portal/internal and export-after-purge
-adversarial coverage, provider deletion outcomes, durable production worker
-scheduling, hosted CI/Security/CodeQL, deployment, and dated production proof
-remain release blockers. No local result is production evidence.
+privacy-bounded AI-GUIDE-12 analytics, the IPLF-071 canonical purge/provider
+executor and provider receipt/exception integration, durable production worker
+scheduling, complete hosted CI/Security/CodeQL, deployment, and dated production
+proof remain release blockers. No local result is production evidence.
 
 ## Rollback
 
