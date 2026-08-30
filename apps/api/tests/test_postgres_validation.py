@@ -9263,7 +9263,7 @@ def test_matterless_ip_cost_evidence_is_immutable_on_postgres(pg_engine):
         session.execute(text("DELETE FROM ip_cost_items WHERE id = :id"), {"id": cost_id})
         session.commit()
     with Session(pg_engine) as session, pytest.raises(
-        DBAPIError, match="IP cost correction history is retained"
+        DBAPIError, match="IP cost corrections are retained"
     ):
         session.execute(
             text("DELETE FROM ip_cost_item_corrections WHERE id = :id"),
@@ -9274,6 +9274,10 @@ def test_matterless_ip_cost_evidence_is_immutable_on_postgres(pg_engine):
     # Parent-owned disposition remains possible: the BEFORE DELETE guard sees
     # that the docket is already being removed by its declared CASCADE.
     with Session(pg_engine) as session:
+        # A regression in the cascade-safe trigger must fail promptly instead
+        # of leaving a validation worker waiting indefinitely on a lock.
+        session.execute(text("SET LOCAL lock_timeout = '5s'"))
+        session.execute(text("SET LOCAL statement_timeout = '10s'"))
         session.execute(
             text("DELETE FROM ip_docket_records WHERE id = :id"),
             {"id": docket_id},

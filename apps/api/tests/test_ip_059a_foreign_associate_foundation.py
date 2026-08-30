@@ -355,6 +355,39 @@ def _transaction(
     )
 
 
+def _supersede_cost_item(
+    client: TestClient,
+    *,
+    headers: dict[str, str],
+    docket_id: str,
+    source_cost_item_id: str,
+    replacement: dict[str, object],
+    reason: str,
+    evidence_reference: str,
+) -> str:
+    """Replace immutable evidence through the supported correction contract."""
+
+    response = client.post(
+        f"/api/ip/dockets/{docket_id}/cost-items/{source_cost_item_id}/corrections",
+        headers=headers,
+        json={
+            "action": "supersede",
+            "reason": reason,
+            "evidence_reference": evidence_reference,
+            "replacement": replacement,
+        },
+    )
+    assert response.status_code == 200, response.text
+    rows = {row["id"]: row for row in response.json()["cost_items"]}
+    source = rows[source_cost_item_id]
+    assert source["lineage_status"] == "superseded"
+    replacement_id = source["replacement_cost_item_id"]
+    assert replacement_id is not None
+    assert rows[replacement_id]["lineage_status"] == "active"
+    assert rows[replacement_id]["corrects_cost_item_id"] == source_cost_item_id
+    return str(replacement_id)
+
+
 def test_foreign_associate_contract_separates_delivery_ack_and_evidence(
     client: TestClient,
 ) -> None:
@@ -420,25 +453,61 @@ def test_foreign_associate_contract_separates_delivery_ack_and_evidence(
     assert missing_assignment_budget.status_code == 422
     assert "budget ceiling" in missing_assignment_budget.text
     with get_session_factory()() as session:
-        estimate = session.get(IpCostItem, records["estimate_id"])
         assignment = session.get(
             MatterOutsideCounselAssignment, records["assignment_id"]
         )
-        assert estimate is not None and assignment is not None
+        assert assignment is not None
         assignment.budget_amount_minor = 250000
-        estimate.amount_minor = 250001
         session.commit()
 
+    over_budget_estimate_id = _supersede_cost_item(
+        client,
+        headers=headers,
+        docket_id=docket["id"],
+        source_cost_item_id=records["estimate_id"],
+        reason="The associate supplied a revised amount above the approved budget.",
+        evidence_reference="correction:associate-estimate-over-budget",
+        replacement={
+            "category": "associate_fee",
+            "description": "US filing estimate above the approved budget",
+            "amount_minor": 250001,
+            "currency": "USD",
+            "billable": True,
+            "cost_nature": "estimate",
+            "evidence_reference": "Liberty over-budget estimate dated 25 August 2026",
+        },
+    )
+    over_budget_payload = {
+        **payload,
+        "estimate_cost_item_id": over_budget_estimate_id,
+    }
+
     over_budget = client.post(
-        "/api/ip/foreign-associate-instructions", headers=headers, json=payload
+        "/api/ip/foreign-associate-instructions",
+        headers=headers,
+        json=over_budget_payload,
     )
     assert over_budget.status_code == 422
     assert "budget" in over_budget.text
-    with get_session_factory()() as session:
-        estimate = session.get(IpCostItem, records["estimate_id"])
-        assert estimate is not None
-        estimate.amount_minor = 250000
-        session.commit()
+
+    corrected_estimate_id = _supersede_cost_item(
+        client,
+        headers=headers,
+        docket_id=docket["id"],
+        source_cost_item_id=over_budget_estimate_id,
+        reason="The associate corrected the estimate back to the approved amount.",
+        evidence_reference="correction:associate-estimate-approved-amount",
+        replacement={
+            "category": "associate_fee",
+            "description": "Corrected US filing estimate",
+            "amount_minor": 250000,
+            "currency": "USD",
+            "billable": True,
+            "cost_nature": "estimate",
+            "evidence_reference": "Corrected Liberty estimate dated 25 August 2026",
+        },
+    )
+    payload = {**payload, "estimate_cost_item_id": corrected_estimate_id}
 
     created = client.post(
         "/api/ip/foreign-associate-instructions", headers=headers, json=payload
@@ -664,11 +733,25 @@ def test_foreign_associate_contract_separates_delivery_ack_and_evidence(
     )
     assert verified.status_code == 201, verified.text
 
-    with get_session_factory()() as session:
-        actual = session.get(IpCostItem, records["actual_id"])
-        assert actual is not None
-        actual.amount_minor = 1
-        session.commit()
+    mismatched_actual_id = _supersede_cost_item(
+        client,
+        headers=headers,
+        docket_id=docket["id"],
+        source_cost_item_id=records["actual_id"],
+        reason="The first invoice transcription contained an incorrect amount.",
+        evidence_reference="correction:associate-invoice-mismatch",
+        replacement={
+            "category": "associate_fee",
+            "description": "US filing actual with transcribed mismatch",
+            "amount_minor": 1,
+            "currency": "USD",
+            "billable": True,
+            "cost_nature": "actual",
+            "evidence_reference": "Liberty invoice INV-101 mismatched transcription",
+            "billing_link_type": "invoice",
+            "billing_link_id": "client-invoice-101",
+        },
+    )
     mismatched_invoice = _transaction(
         client,
         headers=headers,
@@ -678,18 +761,34 @@ def test_foreign_associate_contract_separates_delivery_ack_and_evidence(
         membership_id=membership_id,
         kind="link_invoice",
         extra={
-            "actual_cost_item_id": records["actual_id"],
+            "actual_cost_item_id": mismatched_actual_id,
             "spend_record_id": records["spend_id"],
             "evidence_refs": ["Associate invoice INV-101"],
         },
     )
     assert mismatched_invoice.status_code == 422
     assert "reconcile" in mismatched_invoice.text
-    with get_session_factory()() as session:
-        actual = session.get(IpCostItem, records["actual_id"])
-        assert actual is not None
-        actual.amount_minor = 265000
-        session.commit()
+
+    corrected_actual_id = _supersede_cost_item(
+        client,
+        headers=headers,
+        docket_id=docket["id"],
+        source_cost_item_id=mismatched_actual_id,
+        reason="The associate invoice was re-entered from the retained original.",
+        evidence_reference="correction:associate-invoice-restored",
+        replacement={
+            "category": "associate_fee",
+            "description": "Corrected US filing actual",
+            "amount_minor": 265000,
+            "currency": "USD",
+            "billable": True,
+            "cost_nature": "actual",
+            "evidence_reference": "Liberty invoice INV-101 corrected transcription",
+            "billing_link_type": "invoice",
+            "billing_link_id": "client-invoice-101",
+        },
+    )
+    records["actual_id"] = corrected_actual_id
 
     invoiced = _transaction(
         client,

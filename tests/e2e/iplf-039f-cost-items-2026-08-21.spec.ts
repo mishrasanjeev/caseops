@@ -352,8 +352,18 @@ test("IPLF-039F shows an estimate as an estimate and withholds a confidential ra
   // UJ-52-EXC-04: the row remains a provider estimate, while the absence of a
   // billing Matter makes its database-owned reconciliation status terminally
   // nonbillable rather than a misleading ledger state.
-  await expect(ownerCosts.getByText(/Provider estimate/)).toBeVisible();
-  await expect(ownerCosts.getByText("Nonbillable", { exact: true })).toHaveCount(2);
+  const ordinaryCost = ownerCosts.locator('[data-testid^="ip-cost-item-"]').filter({
+    hasText: "Ordinary official fee, visible to everyone.",
+  });
+  const estimateCost = ownerCosts.locator('[data-testid^="ip-cost-item-"]').filter({
+    hasText: "Negotiated associate quote under a confidential arrangement.",
+  });
+  await expect(ordinaryCost.getByText("Nonbillable", { exact: true })).toBeVisible();
+  await expect(
+    estimateCost.getByText("Nonbillable · Provider estimate · Confidential rate", {
+      exact: true,
+    }),
+  ).toBeVisible();
 
   // A partner holds ip:fees_view but not ip:fees_manage.
   const partnerEmail = `partner-${tenant.slug}@example.com`;
