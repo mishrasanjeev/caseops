@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+from pydantic import ValidationError
 from sqlalchemy import select, text
 from sqlalchemy.exc import DatabaseError
 
@@ -13,12 +15,122 @@ from caseops_api.db.models import (
     IpFilingTransaction,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.schemas.ip_filing import (
+    IpFilingConfirmationTransactionRequest,
+    IpFilingPreparationTransactionRequest,
+)
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 _TRANSACTION_PATHS = {
     "preparation": "/api/ip/applications/{application_id}/filing-transactions/preparation",
     "confirmation": "/api/ip/applications/{application_id}/filing-transactions/confirmation",
 }
+
+
+def _filing_request_contract(**overrides: object) -> dict[str, object]:
+    request: dict[str, object] = {
+        "expected_lifecycle_version": 0,
+        "expected_application_version": 1,
+        "attempt_key": "attempt-contract",
+        "idempotency_key": "idempotency-contract",
+        "related_transaction_id": None,
+        "external_reference": "registry:contract",
+        "evidence_reference": "document:contract",
+        "occurred_at": "2026-08-30T10:00:00Z",
+        "details": {},
+    }
+    request.update(overrides)
+    return request
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("attempt_key", "   "),
+        ("idempotency_key", "        "),
+        ("external_reference", "   "),
+        ("evidence_reference", "   "),
+    ],
+)
+def test_filing_request_contract_rejects_blank_identifiers(
+    field: str,
+    value: str,
+) -> None:
+    with pytest.raises(ValidationError, match="cannot be blank"):
+        IpFilingPreparationTransactionRequest.model_validate(
+            _filing_request_contract(transaction_kind="fee_paid", **{field: value})
+        )
+
+
+def test_filing_request_contract_requires_timezone() -> None:
+    with pytest.raises(ValidationError, match="must include a timezone"):
+        IpFilingPreparationTransactionRequest.model_validate(
+            _filing_request_contract(
+                transaction_kind="fee_paid",
+                occurred_at="2026-08-30T10:00:00",
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    ("transaction_kind", "related_transaction_id", "message"),
+    [
+        ("submitted", "prior-transaction", "initial submission cannot supersede"),
+        ("resubmitted", None, "resubmission must identify"),
+    ],
+)
+def test_preparation_request_contract_enforces_relationship_semantics(
+    transaction_kind: str,
+    related_transaction_id: str | None,
+    message: str,
+) -> None:
+    with pytest.raises(ValidationError, match=message):
+        IpFilingPreparationTransactionRequest.model_validate(
+            _filing_request_contract(
+                transaction_kind=transaction_kind,
+                related_transaction_id=related_transaction_id,
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    ("override", "message"),
+    [
+        ({"related_transaction_id": None}, "must identify its related transaction"),
+        ({"authorized_confirmation": None}, "authorized confirmation"),
+        ({"document_refs": []}, "immutable filing evidence"),
+        ({"form_refs": []}, "approved form version"),
+        ({"fee_evidence_refs": []}, "fee evidence"),
+        ({"approval_reference": "   "}, "approval evidence reference"),
+    ],
+)
+def test_acceptance_request_contract_requires_complete_evidence(
+    override: dict[str, object],
+    message: str,
+) -> None:
+    request = _filing_request_contract(
+        transaction_kind="accepted",
+        related_transaction_id="submitted-transaction",
+        authorized_confirmation="Registry acceptance confirmed.",
+        document_refs=["document:filing-receipt"],
+        form_refs=["form:TM-A:2026.1"],
+        fee_evidence_refs=["receipt:filing-fee"],
+        approval_reference="approval:attorney",
+    )
+    request.update(override)
+    with pytest.raises(ValidationError, match=message):
+        IpFilingConfirmationTransactionRequest.model_validate(request)
+
+
+def test_non_acceptance_confirmation_rejects_acceptance_authority() -> None:
+    with pytest.raises(ValidationError, match="reserved for an accepted filing"):
+        IpFilingConfirmationTransactionRequest.model_validate(
+            _filing_request_contract(
+                transaction_kind="acknowledgement_received",
+                related_transaction_id="submitted-transaction",
+                authorized_confirmation="Registry acceptance confirmed.",
+            )
+        )
 
 
 def _particulars() -> dict:
