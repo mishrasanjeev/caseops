@@ -9892,7 +9892,16 @@
         "docs/ip-implementation/evidence/m3/IPLF-039F/cost-finalization-2026-08-30.md"
       ],
       "blockers": [
-        "The dated deployed acceptance path now exists but has not run against an exact deployed revision in the dedicated production fixture tenant."
+        {
+          "id": "IPLF-039F-EXACT-DEPLOYED-ACCEPTANCE",
+          "state": "active",
+          "summary": "The dated deployed acceptance path now exists but has not run against an exact deployed revision in the dedicated production fixture tenant.",
+          "owner": "Codex release workflow",
+          "evidence_needed": "Deploy the integrated main revision, verify its public release identity, and pass the fail-closed IPLF-039F production Playwright path in the dedicated test tenant without local database or shell access.",
+          "safe_fallback": "Keep the slice release-blocked and retain all matterless costs as nonbillable immutable evidence; do not infer deployed acceptance from repository or local Docker proof.",
+          "milestone_impact": "Blocks only IPLF-039F deployment-verified closure; repository implementation and local verification can proceed independently.",
+          "next_independent_slice": "Continue the next dependency-ready IP repository slice while exact deployed acceptance remains pending."
+        }
       ],
       "next_actions": [
         "Integrate the 2026-08-30 append-only correction/nonbilling-effect closure, run full exact-candidate CI, deploy the integrated main revision, and run the fail-closed dated production Playwright configuration before release closure."
