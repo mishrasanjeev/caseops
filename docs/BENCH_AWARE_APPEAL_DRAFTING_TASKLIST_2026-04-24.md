@@ -3,7 +3,7 @@
 Date: 2026-04-24
 Status: Queued
 Priority: P1 product-scope gap
-Owner target: Claude Code / Codex implementation worker
+Owner: Codex
 
 ## Verdict
 

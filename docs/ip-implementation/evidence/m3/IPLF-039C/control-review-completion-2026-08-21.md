@@ -60,8 +60,8 @@ The first PostgreSQL invocation used only `CASEOPS_TEST_POSTGRES_URL`; Alembic d
 2. Push the exact candidate and pass every required hosted check, including `postgres-validation`, security, and generated-client drift.
 3. Merge through normal review, deploy the exact merge revision, and capture dated production acceptance. No deployment or production claim is made here.
 
-## Parallel ownership
+## Codex ownership
 
 - Codex owns `IPLF-028A/IPLF-028B` evidence; `docs/iplf028a-evidence-20260820` is retained only as historical branch provenance.
 - Codex owns `IPLF-039F` cost-item/billing work; `feat/iplf039f-cost-items-20260820` is retained only as historical branch provenance.
-- Neither Claude-owned lane was modified by this increment.
+- Neither referenced Codex-owned lane was modified by this increment.

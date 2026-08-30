@@ -2,7 +2,7 @@
 
 Date: 2026-04-25
 Verdict: `NO-GO` for eliminating manual testers today
-Audience: Claude Code, Codex, engineering, QA
+Audience: Codex, engineering, QA
 
 ## Scope
 
@@ -325,7 +325,7 @@ Remaining closure:
 
 ## Exhaustive Automated Test Case List
 
-Claude must use this list as the minimum automation contract. A route, page, or
+Codex must use this list as the minimum automation contract. A route, page, or
 feature is not "manual-tester free" until every applicable item is either
 automated or explicitly waived with owner, date, expiry, and rationale.
 
@@ -430,7 +430,7 @@ automated or explicitly waived with owner, date, expiry, and rationale.
 - `SEC-013` PII/provider payload redaction at rest and in logs.
 - `SEC-014` No raw exception leakage to user-visible API errors.
 
-## Claude Fix Order
+## Codex Fix Order
 
 1. Fix frontend coverage reliability.
    Target: `npm run test:coverage --workspace @caseops/web` passes and uploads
