@@ -23,6 +23,22 @@ types, optional typed scopes, locale, and a maximum of 20 results. It invokes
 the canonical SQL prefilter before ranking. The response has no total, facet,
 or “more results” indicator from which restricted candidates could be inferred.
 
+The same owner exposes three deliberately narrow companion surfaces:
+
+- `POST /api/private-retrieval/autocomplete` returns only current authorized
+  labels and content-free source references, never snippets;
+- `POST /api/private-retrieval/count` returns only a bounded visible count,
+  its explicit 200-row ceiling and a conservative capped flag; and
+- `POST /api/private-retrieval/search/stream` emits no-store NDJSON and opens a
+  fresh database session to reauthorize the exact actor, capability, active
+  generation, ACL/tombstone epochs and canonical source before every row.
+
+If a stream fence changes, delivery terminates instead of skipping the failed
+row and continuing. A revoke before the first row produces zero bytes; a revoke
+after one authorized row prevents every later row. Autocomplete and count cross
+the same final fence, so a stale prefilter result cannot disclose a revoked
+title, snippet, source reference or match count.
+
 Workspace Assistant resolves the requested tenant/client/Matter/IP docket or
 document scope in the existing session owner and delegates private retrieval to
 the same service. The service:
@@ -35,13 +51,19 @@ the same service. The service:
 3. caps candidates at 200 before lexical/vector ranking; and
 4. reloads current membership/capability, active generation, record/document
    access, lifecycle/source eligibility, source version and document policy at
-   hydration.
+   hydration and immediately before delivery.
 
 A candidate failing hydration disappears without a label, snippet, score,
 count, or citation. Candidate caches hold identifiers only and partition by
 company, membership, capability, generation, access epoch, tombstone epoch,
 query hash, source type, filters, and locale. Cache hits cross the same current
 hydration authorization boundary.
+
+Workspace Assistant scope autocomplete also performs one final bounded actor,
+tenant-policy, ACL, lifecycle, document-policy and exact resource-version pass.
+Initial search rows are never serialized directly. The final pass uses the
+fresh membership role rather than the request-start role and keeps document
+policy work bounded without N+1 queries.
 
 ## Projection and provider workflow
 
@@ -133,8 +155,7 @@ it is an operational entry point, not a second workflow owner.
 
 The repository-local slice remains incomplete until the remaining reciprocal
 scope and exact integrated release are verified. The IPLF-071 canonical
-purge/provider executor and provider receipt/exception integration,
-revoked-during-stream and autocomplete/count adversarial coverage, durable
+purge/provider executor and provider receipt/exception integration, durable
 production worker scheduling, complete hosted gates on the latest commit,
 deployment, and dated production proof remain release blockers. No local result
 is production evidence.
