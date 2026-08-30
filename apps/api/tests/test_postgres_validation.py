@@ -120,6 +120,105 @@ def _seed_company(session: Session) -> str:
     return company_id
 
 
+def test_ip_filing_transactions_are_append_only_on_postgres(pg_engine) -> None:
+    """The production dialect must reject update, delete, and truncate paths."""
+
+    from caseops_api.db.models import (
+        CompanyMembership,
+        IpAsset,
+        IpDocketRecord,
+        IpFilingTransaction,
+        TrademarkApplication,
+        User,
+    )
+
+    now = datetime.now(UTC)
+    suffix = uuid4().hex
+    with Session(pg_engine) as session:
+        company_id = _seed_company(session)
+        user = User(
+            email=f"ip-filing-append-only-{suffix}@example.test",
+            full_name="IP filing append-only test",
+            password_hash="not-used",
+        )
+        session.add(user)
+        session.flush()
+        membership = CompanyMembership(
+            company_id=company_id,
+            user_id=user.id,
+            role="owner",
+        )
+        session.add(membership)
+        session.flush()
+        docket = IpDocketRecord(
+            company_id=company_id,
+            record_type="trademark",
+            title="PostgreSQL append-only filing",
+            status="draft",
+            created_by_membership_id=membership.id,
+        )
+        session.add(docket)
+        session.flush()
+        asset = IpAsset(
+            company_id=company_id,
+            docket_id=docket.id,
+            asset_kind="trademark",
+            jurisdiction="IN",
+            title="Append-only mark",
+        )
+        session.add(asset)
+        session.flush()
+        application = TrademarkApplication(
+            company_id=company_id,
+            docket_id=docket.id,
+            asset_id=asset.id,
+            office="Trade Marks Registry",
+            jurisdiction="IN",
+            filing_phase="pre_filing",
+        )
+        session.add(application)
+        session.flush()
+        transaction = IpFilingTransaction(
+            company_id=company_id,
+            docket_id=docket.id,
+            application_id=application.id,
+            transaction_kind="submitted",
+            attempt_key=f"attempt-{suffix}",
+            idempotency_key=f"idempotency-{suffix}",
+            request_fingerprint="a" * 64,
+            external_reference=f"registry:{suffix}",
+            evidence_reference=f"document:{suffix}",
+            occurred_at=now,
+            details_json={},
+            recorded_by_membership_id=membership.id,
+        )
+        session.add(transaction)
+        session.commit()
+        transaction_id = transaction.id
+
+    mutations = (
+        (
+            "UPDATE ip_filing_transactions "
+            "SET external_reference = 'tampered' WHERE id = :transaction_id",
+            {"transaction_id": transaction_id},
+        ),
+        (
+            "DELETE FROM ip_filing_transactions WHERE id = :transaction_id",
+            {"transaction_id": transaction_id},
+        ),
+        ("TRUNCATE TABLE ip_filing_transactions", {}),
+    )
+    for statement, parameters in mutations:
+        with pg_engine.connect() as connection:
+            transaction_scope = connection.begin()
+            with pytest.raises(DBAPIError, match="append-only"):
+                connection.execute(text(statement), parameters)
+            transaction_scope.rollback()
+
+    with Session(pg_engine) as session:
+        assert session.get(IpFilingTransaction, transaction_id) is not None
+
+
 def _enqueue_shared_lifecycle_event(
     session: Session,
     *,

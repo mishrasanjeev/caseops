@@ -53,6 +53,15 @@ def _create_append_only_guard() -> None:
                 """
             )
         )
+        op.execute(
+            sa.text(
+                """
+                CREATE TRIGGER trg_ip_filing_transactions_append_only_truncate
+                BEFORE TRUNCATE ON ip_filing_transactions
+                FOR EACH STATEMENT EXECUTE FUNCTION prevent_ip_filing_transaction_mutation()
+                """
+            )
+        )
         return
     if bind.dialect.name == "sqlite":
         for operation in ("UPDATE", "DELETE"):
@@ -72,6 +81,12 @@ def _create_append_only_guard() -> None:
 def _drop_append_only_guard() -> None:
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
+        op.execute(
+            sa.text(
+                "DROP TRIGGER IF EXISTS trg_ip_filing_transactions_append_only_truncate "
+                "ON ip_filing_transactions"
+            )
+        )
         op.execute(
             sa.text(
                 "DROP TRIGGER IF EXISTS trg_ip_filing_transactions_append_only "

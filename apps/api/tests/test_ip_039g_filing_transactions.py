@@ -6,7 +6,12 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import DatabaseError
 
 from caseops_api.core.settings import get_settings
-from caseops_api.db.models import AuditEvent, BillingSubscription, IpFilingTransaction
+from caseops_api.db.models import (
+    AuditEvent,
+    BillingSubscription,
+    IpDocketRecord,
+    IpFilingTransaction,
+)
 from caseops_api.db.session import get_session_factory
 from tests.test_auth_company import auth_headers, bootstrap_company
 
@@ -179,13 +184,31 @@ def test_uj32_transaction_chain_keeps_payment_and_defect_pending_until_acceptanc
     assert direct_event.status_code == 409
     assert direct_event.json()["code"] == "ip_filing_transaction_required"
 
+    disguised_phase_event = client.post(
+        f"/api/ip/dockets/{docket['id']}/events",
+        headers=headers,
+        json={
+            "expected_lifecycle_version": 0,
+            "expected_application_version": 1,
+            "application_id": application["id"],
+            "event_kind": "formalities",
+            "source": "manual",
+            "effective_at": "2026-08-30T09:01:00Z",
+            "responsible_membership_id": bootstrap["membership"]["id"],
+            "reason": "Attempt to disguise a filing phase write.",
+            "after_phase": "filed",
+        },
+    )
+    assert disguised_phase_event.status_code == 409
+    assert disguised_phase_event.json()["code"] == "ip_filing_transaction_required"
+
     submitted = _transaction(
         client,
         headers,
         application["id"],
         endpoint="preparation",
         kind="submitted",
-        attempt="attempt-1",
+        attempt="  attempt-1  ",
         idempotency="submit-attempt-1",
         occurred_at="2026-08-30T09:05:00Z",
     )
@@ -334,6 +357,20 @@ def test_uj32_transaction_chain_keeps_payment_and_defect_pending_until_acceptanc
     assert replay.json()["idempotent_replay"] is True
     assert replay.json()["transaction"]["id"] == accepted_body["transaction"]["id"]
 
+    post_acceptance_submission = _transaction(
+        client,
+        headers,
+        application["id"],
+        endpoint="preparation",
+        kind="submitted",
+        attempt="attempt-after-acceptance",
+        idempotency="submit-after-acceptance",
+        occurred_at="2026-08-30T09:13:00Z",
+        expected_application_version=2,
+    )
+    assert post_acceptance_submission.status_code == 409
+    assert post_acceptance_submission.json()["code"] == "ip_filing_phase_closed"
+
     conflicting_replay = _transaction(
         client,
         headers,
@@ -414,3 +451,54 @@ def test_filing_writer_enforces_entitlement_and_rollout(client, monkeypatch) -> 
     )
     assert disabled.status_code == 503
     assert disabled.json()["reason"] == "rollout_disabled"
+
+
+def test_filing_writer_rejects_terminal_docket_and_blank_acceptance_evidence(
+    client,
+    monkeypatch,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    company_id = str(bootstrap["company"]["id"])
+    _enable_filing(company_id, monkeypatch)
+    docket, application = _application(client, headers)
+
+    blank_evidence = _transaction(
+        client,
+        headers,
+        application["id"],
+        endpoint="confirmation",
+        kind="accepted",
+        attempt="attempt-blank-evidence",
+        idempotency="accept-blank-evidence",
+        occurred_at="2026-08-30T10:01:00Z",
+        related="00000000-0000-0000-0000-000000000001",
+        authorized_confirmation="Attorney confirmed the acknowledgement.",
+        document_refs=[""],
+        form_refs=["   "],
+        fee_evidence_refs=[""],
+        approval_reference="approval:attorney",
+    )
+    assert blank_evidence.status_code == 422
+
+    with get_session_factory()() as session:
+        stored_docket = session.get(IpDocketRecord, docket["id"])
+        assert stored_docket is not None
+        stored_docket.status = "closed"
+        stored_docket.is_active = False
+        stored_docket.lifecycle_version = 1
+        session.commit()
+
+    terminal_write = _transaction(
+        client,
+        headers,
+        application["id"],
+        endpoint="preparation",
+        kind="submitted",
+        attempt="attempt-terminal",
+        idempotency="submit-terminal-docket",
+        occurred_at="2026-08-30T10:02:00Z",
+        expected_lifecycle_version=1,
+    )
+    assert terminal_write.status_code == 409
+    assert terminal_write.json()["code"] == "ip_filing_docket_terminal"

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from caseops_api.schemas.ip_lifecycle import IpDocketEventResponse
 from caseops_api.schemas.ip_records import TrademarkApplicationResponse
@@ -19,6 +19,18 @@ class _IpFilingTransactionRequest(BaseModel):
     evidence_reference: str = Field(min_length=3, max_length=500)
     occurred_at: datetime
     details: dict[str, object] = Field(default_factory=dict)
+
+    @field_validator(
+        "attempt_key",
+        "idempotency_key",
+        "external_reference",
+        "evidence_reference",
+    )
+    @classmethod
+    def validate_non_blank_reference(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Filing identifiers and evidence references cannot be blank.")
+        return value.strip()
 
     @model_validator(mode="after")
     def validate_common_contract(self) -> _IpFilingTransactionRequest:
@@ -51,6 +63,21 @@ class IpFilingConfirmationTransactionRequest(_IpFilingTransactionRequest):
     form_refs: list[str] = Field(default_factory=list, max_length=100)
     fee_evidence_refs: list[str] = Field(default_factory=list, max_length=100)
     approval_reference: str | None = Field(default=None, max_length=500)
+
+    @field_validator("document_refs", "form_refs", "fee_evidence_refs")
+    @classmethod
+    def validate_evidence_refs(cls, value: list[str]) -> list[str]:
+        normalized = [item.strip() for item in value]
+        if any(not item or len(item) > 500 for item in normalized):
+            raise ValueError(
+                "Filing evidence references must be non-blank and at most 500 characters."
+            )
+        return normalized
+
+    @field_validator("authorized_confirmation", "approval_reference")
+    @classmethod
+    def normalize_optional_evidence(cls, value: str | None) -> str | None:
+        return value.strip() if value is not None else None
 
     @model_validator(mode="after")
     def validate_confirmation_contract(self) -> IpFilingConfirmationTransactionRequest:

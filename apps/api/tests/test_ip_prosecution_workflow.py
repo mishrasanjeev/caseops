@@ -14,7 +14,7 @@ from caseops_api.db.models import (
 from caseops_api.db.session import get_session_factory
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_clients import _mk_matter
-from tests.test_ip_record_workflow import _application, _asset, _docket
+from tests.test_ip_record_workflow import _asset, _docket
 
 
 def _event(
@@ -60,6 +60,35 @@ def _event(
     return payload
 
 
+def _historical_filed_application(
+    client: TestClient,
+    headers: dict[str, str],
+    docket_id: str,
+    asset_id: str,
+) -> dict:
+    """Seed a filed legal record without exercising the current filing writer."""
+
+    response = client.post(
+        f"/api/ip/dockets/{docket_id}/applications",
+        headers=headers,
+        json={
+            "asset_id": asset_id,
+            "office": "IP India",
+            "jurisdiction": "IN",
+            "filing_phase": "filed",
+            "source_pending_identifier_allocation": False,
+            "application_number": {
+                "raw_value": "TM/PROSECUTION/2026",
+                "source": "historical_registry_fixture",
+                "effective_from": "2026-08-07",
+                "is_primary": True,
+            },
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["application"]
+
+
 def test_uj06_event_preview_commit_reconcile_correct_and_report(
     client: TestClient,
 ) -> None:
@@ -68,7 +97,7 @@ def test_uj06_event_preview_commit_reconcile_correct_and_report(
     membership_id = str(bootstrap["membership"]["id"])
     docket = _docket(client, headers, "PROSECUTION MARK")
     asset = _asset(client, headers, docket["id"], "PROSECUTION MARK")
-    application = _application(client, headers, docket["id"], asset["id"])
+    application = _historical_filed_application(client, headers, docket["id"], asset["id"])
 
     filing_preview = client.post(
         f"/api/ip/dockets/{docket['id']}/events/preview",
@@ -104,7 +133,7 @@ def test_uj06_event_preview_commit_reconcile_correct_and_report(
         json=event_payload,
     )
     assert preview.status_code == 200, preview.text
-    assert preview.json()["current_phase"] == "draft"
+    assert preview.json()["current_phase"] == "filed"
     assert preview.json()["proposed_phase"] == "formalities"
     assert preview.json()["operational_effects_are_proposals"] is True
 
@@ -116,7 +145,7 @@ def test_uj06_event_preview_commit_reconcile_correct_and_report(
     assert created.status_code == 201, created.text
     original = created.json()
     assert original["sequence"] == 1
-    assert original["before_phase"] == "draft"
+    assert original["before_phase"] == "filed"
     assert original["after_phase"] == "formalities"
     assert original["payload_json"]["operational_completion"] is True
     assert original["payload_json"]["filing_evidence"] is False
@@ -272,7 +301,7 @@ def test_application_terminal_state_is_fail_closed_and_restoration_is_controlled
     membership_id = str(bootstrap["membership"]["id"])
     docket = _docket(client, headers, "TERMINAL APPLICATION")
     asset = _asset(client, headers, docket["id"], "TERMINAL APPLICATION")
-    application = _application(client, headers, docket["id"], asset["id"])
+    application = _historical_filed_application(client, headers, docket["id"], asset["id"])
 
     refusal = client.post(
         f"/api/ip/dockets/{docket['id']}/events",

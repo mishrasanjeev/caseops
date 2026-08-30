@@ -737,6 +737,16 @@ def _append_locked_event(
                 ),
             )
         before_phase = application.filing_phase
+        if (
+            apply_phase
+            and application.filing_phase in {"draft", "pre_filing"}
+            and proposed_phase not in {None, application.filing_phase}
+            and authorized_filing_transaction_id is None
+        ):
+            raise _filing_problem(
+                "ip_filing_transaction_required",
+                "A pre-filing application can advance only through an accepted filing transaction.",
+            )
         if proposed_phase is not None and apply_phase:
             if payload.event_kind == "filing":
                 identifiers = list(
@@ -1067,10 +1077,20 @@ def record_ip_filing_transaction(
             else None
         )
         return application, replay, replay_event, True
+    if not docket.is_active:
+        raise _filing_problem(
+            "ip_filing_docket_terminal",
+            "Terminal IP records cannot accept filing transactions.",
+        )
     if not application.is_active:
         raise _filing_problem(
             "ip_filing_application_terminal",
             "Terminal trademark applications cannot accept filing transactions.",
+        )
+    if application.filing_phase != "pre_filing":
+        raise _filing_problem(
+            "ip_filing_phase_closed",
+            "Filing transactions are accepted only while the application is in pre-filing phase.",
         )
     if application.version != payload.expected_application_version:
         raise _filing_problem(

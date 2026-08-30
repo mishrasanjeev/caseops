@@ -4305,6 +4305,57 @@ export interface paths {
         patch: operations["patch_trademark_application_phase_api_ip_applications__application_id__filing_phase_patch"];
         trace?: never;
     };
+    "/api/ip/applications/{application_id}/filing-transactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ip Filing Transactions */
+        get: operations["get_ip_filing_transactions_api_ip_applications__application_id__filing_transactions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/applications/{application_id}/filing-transactions/confirmation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Filing Confirmation Transaction */
+        post: operations["post_ip_filing_confirmation_transaction_api_ip_applications__application_id__filing_transactions_confirmation_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/applications/{application_id}/filing-transactions/preparation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Filing Preparation Transaction */
+        post: operations["post_ip_filing_preparation_transaction_api_ip_applications__application_id__filing_transactions_preparation_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/calendar-projections/drift-check": {
         parameters: {
             query?: never;
@@ -25174,6 +25225,139 @@ export interface components {
             rollout_expires_at: string | null;
             /** Rollout Flag */
             rollout_flag: string | null;
+        };
+        /** IpFilingConfirmationTransactionRequest */
+        IpFilingConfirmationTransactionRequest: {
+            /** Approval Reference */
+            approval_reference?: string | null;
+            /** Attempt Key */
+            attempt_key: string;
+            /** Authorized Confirmation */
+            authorized_confirmation?: string | null;
+            /** Details */
+            details?: {
+                [key: string]: unknown;
+            };
+            /** Document Refs */
+            document_refs?: string[];
+            /** Evidence Reference */
+            evidence_reference: string;
+            /** Expected Application Version */
+            expected_application_version: number;
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version: number;
+            /** External Reference */
+            external_reference: string;
+            /** Fee Evidence Refs */
+            fee_evidence_refs?: string[];
+            /** Form Refs */
+            form_refs?: string[];
+            /** Idempotency Key */
+            idempotency_key: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Related Transaction Id */
+            related_transaction_id?: string | null;
+            /**
+             * Transaction Kind
+             * @enum {string}
+             */
+            transaction_kind: "acknowledgement_received" | "defect_recorded" | "rejected" | "accepted";
+        };
+        /** IpFilingPreparationTransactionRequest */
+        IpFilingPreparationTransactionRequest: {
+            /** Attempt Key */
+            attempt_key: string;
+            /** Details */
+            details?: {
+                [key: string]: unknown;
+            };
+            /** Evidence Reference */
+            evidence_reference: string;
+            /** Expected Application Version */
+            expected_application_version: number;
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version: number;
+            /** External Reference */
+            external_reference: string;
+            /** Idempotency Key */
+            idempotency_key: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Related Transaction Id */
+            related_transaction_id?: string | null;
+            /**
+             * Transaction Kind
+             * @enum {string}
+             */
+            transaction_kind: "submitted" | "fee_paid" | "resubmitted";
+        };
+        /** IpFilingTransactionListResponse */
+        IpFilingTransactionListResponse: {
+            /** Application Id */
+            application_id: string;
+            /** Transactions */
+            transactions: components["schemas"]["IpFilingTransactionRecord"][];
+        };
+        /** IpFilingTransactionMutationResponse */
+        IpFilingTransactionMutationResponse: {
+            application: components["schemas"]["TrademarkApplicationResponse"];
+            event?: components["schemas"]["IpDocketEventResponse"] | null;
+            /**
+             * Idempotent Replay
+             * @default false
+             */
+            idempotent_replay: boolean;
+            transaction: components["schemas"]["IpFilingTransactionRecord"];
+        };
+        /** IpFilingTransactionRecord */
+        IpFilingTransactionRecord: {
+            /** Application Id */
+            application_id: string;
+            /** Attempt Key */
+            attempt_key: string;
+            /** Authorized Confirmation */
+            authorized_confirmation: string | null;
+            /** Company Id */
+            company_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Details Json */
+            details_json: {
+                [key: string]: unknown;
+            };
+            /** Docket Id */
+            docket_id: string;
+            /** Evidence Reference */
+            evidence_reference: string;
+            /** External Reference */
+            external_reference: string;
+            /** Filing Event Id */
+            filing_event_id: string | null;
+            /** Id */
+            id: string;
+            /** Idempotency Key */
+            idempotency_key: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Recorded By Membership Id */
+            recorded_by_membership_id: string;
+            /** Related Transaction Id */
+            related_transaction_id: string | null;
+            /** Transaction Kind */
+            transaction_kind: string;
         };
         /** IpForeignAssociateCreateRequest */
         IpForeignAssociateCreateRequest: {
@@ -51137,6 +51321,107 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TrademarkApplicationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ip_filing_transactions_api_ip_applications__application_id__filing_transactions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpFilingTransactionListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_filing_confirmation_transaction_api_ip_applications__application_id__filing_transactions_confirmation_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpFilingConfirmationTransactionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpFilingTransactionMutationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_filing_preparation_transaction_api_ip_applications__application_id__filing_transactions_preparation_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpFilingPreparationTransactionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpFilingTransactionMutationResponse"];
                 };
             };
             /** @description Validation Error */
