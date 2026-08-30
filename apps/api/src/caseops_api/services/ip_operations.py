@@ -100,6 +100,7 @@ from caseops_api.schemas.ip_operations import (
     IpDeadlineIncidentRecord,
     IpDeadlineIncidentVerifyRequest,
     IpDocketControlReport,
+    IpDocketControlRow,
     IpDocketCreateRequest,
     IpDocketListResponse,
     IpDocketQueueListResponse,
@@ -3852,8 +3853,36 @@ def _ip_docket_control_report_from_listing(
             select(CompanyMembership).where(CompanyMembership.company_id == context.company.id)
         ).all()
     }
+    control_rows: list[IpDocketControlRow] = []
+    for docket in listing.dockets:
+        uncovered = docket.matter_id is not None and not docket.deadline_coverages
+        open_incidents = sum(
+            incident.status != "verified" for incident in docket.deadline_incidents
+        )
+        unprojected = sum(
+            coverage.calendar_projection_status != "projected"
+            for coverage in docket.deadline_coverages
+        )
+        inactive = sum(
+            not membership_active.get(coverage.responsible_membership_id, False)
+            for coverage in docket.deadline_coverages
+        )
+        control_rows.append(
+            IpDocketControlRow(
+                docket_id=docket.id,
+                docket_title=docket.title,
+                primary_identifier=docket.primary_identifier,
+                docket_status=docket.status,
+                deadline_coverage_count=len(docket.deadline_coverages),
+                uncovered_deadline=uncovered,
+                open_incident_count=open_incidents,
+                unprojected_calendar_count=unprojected,
+                inactive_coverage_count=inactive,
+            )
+        )
     return IpDocketControlReport(
         generated_at=generated_at,
+        source_cutoff=max((row.updated_at for row in listing.dockets), default=None),
         docket_count=listing.count,
         ready_count=sum(row.status == "ready" for row in listing.dockets),
         uncovered_deadline_count=sum(
@@ -3876,11 +3905,18 @@ def _ip_docket_control_report_from_listing(
         ),
         total_cost_minor_by_currency=totals,
         withheld_cost_item_count=withheld,
+        counts_are_complete=not listing.has_more,
+        rows=control_rows,
     )
 
 
-def ip_docket_control_report(session: Session, *, context: SessionContext) -> IpDocketControlReport:
-    listing = list_ip_dockets(session, context=context)
+def ip_docket_control_report(
+    session: Session,
+    *,
+    context: SessionContext,
+    limit: int = 100,
+) -> IpDocketControlReport:
+    listing = list_ip_dockets(session, context=context, limit=limit)
     return _ip_docket_control_report_from_listing(
         session,
         context=context,
