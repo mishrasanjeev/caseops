@@ -8715,3 +8715,36 @@ def test_iplf057b_madrid_projection_and_source_reconciliation_on_postgres(pg_eng
                 ),
             )
         assert stale.value.status_code == 409
+
+
+def test_bounded_renewal_report_reader_runs_on_postgres(
+    pg_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """IPLF-038B exercises its bounded canonical renewal join on PostgreSQL."""
+
+    from fastapi.testclient import TestClient
+
+    from caseops_api.core.settings import get_settings
+    from caseops_api.db.session import clear_engine_cache
+    from caseops_api.main import create_application
+    from tests.test_ip_report_workflow import (
+        test_iplf_req_report_01_renewal_report_returns_canonical_evidence,
+    )
+
+    monkeypatch.setenv(
+        "CASEOPS_DATABASE_URL",
+        os.environ["CASEOPS_TEST_POSTGRES_URL"].strip(),
+    )
+    monkeypatch.setenv("CASEOPS_ENV", "ci")
+    monkeypatch.setenv("CASEOPS_AUTO_MIGRATE", "false")
+    monkeypatch.setenv(
+        "CASEOPS_AUTH_SECRET",
+        "pg-report-reader-secret-at-least-32-bytes",
+    )
+    monkeypatch.setenv("CASEOPS_AUTH_RATE_LIMIT_ENABLED", "false")
+    get_settings.cache_clear()
+    clear_engine_cache()
+
+    with TestClient(create_application()) as test_client:
+        test_iplf_req_report_01_renewal_report_returns_canonical_evidence(test_client)

@@ -105,6 +105,7 @@ _DEFINITIONS = (
         canonical_sources=["connector_health_records"],
     ),
 )
+_RENEWAL_REPORT_SCAN_LIMIT = 1000
 
 
 def ip_report_foundation_contract() -> IpReportFoundationContract:
@@ -134,29 +135,27 @@ def _portfolio_payload(
         limit=payload.row_limit,
     )
     rows = [row.model_dump(mode="json") for row in portfolio.rows]
-    latest = max((row.updated_at for row in portfolio.rows), default=None)
-    registry_cutoffs = [
-        row.registry_last_success_at
-        for row in portfolio.rows
-        if row.registry_last_success_at is not None
-    ]
-    registry_cutoff = max(registry_cutoffs, default=None)
-    registry_current = bool(portfolio.rows) and all(
-        row.registry_sync_state == "current" and row.registry_last_success_at is not None
-        for row in portfolio.rows
+    counts = portfolio.counts
+    registry_incomplete = counts.synchronized_records < counts.total
+    registry_current = counts.total == 0 or (
+        not registry_incomplete and counts.stale_sync_records == 0
     )
-    registry_unavailable = registry_cutoff is None
     freshness = IpReportFreshness(
         status="current" if registry_current else "mixed",
         generated_at=generated_at,
-        source_cutoffs={"portfolio_records": latest, "registry_sync": registry_cutoff},
-        unavailable_sources=["registry_sync"] if registry_unavailable else [],
+        source_cutoffs={
+            "portfolio_records": portfolio.latest_record_updated_at,
+            "registry_sync": portfolio.latest_registry_success_at,
+        },
+        unavailable_sources=["registry_sync"] if registry_incomplete else [],
     )
+    summary = counts.model_dump(mode="json")
+    summary.update({"returned": len(rows), "counts_are_complete": True})
     return (
         generated_at,
-        portfolio.counts.model_dump(mode="json"),
+        summary,
         rows,
-        portfolio.counts.total > len(rows),
+        counts.total > len(rows),
         freshness,
     )
 
@@ -201,19 +200,27 @@ def _deadline_payload(
     session: Session,
     *,
     context: SessionContext,
+    payload: IpReportPreviewRequest,
 ) -> tuple[datetime, dict[str, Any], list[dict[str, Any]], bool, IpReportFreshness]:
-    report = ip_docket_control_report(session, context=context)
+    report = ip_docket_control_report(
+        session,
+        context=context,
+        limit=payload.row_limit,
+    )
     freshness = IpReportFreshness(
         status="mixed",
         generated_at=report.generated_at,
-        source_cutoffs={"docket_control": report.generated_at, "provider_freshness": None},
+        source_cutoffs={
+            "docket_control": report.source_cutoff,
+            "provider_freshness": None,
+        },
         unavailable_sources=["provider_freshness"],
     )
     return (
         report.generated_at,
-        report.model_dump(mode="json"),
-        [],
-        False,
+        report.model_dump(mode="json", exclude={"generated_at", "rows"}),
+        [row.model_dump(mode="json") for row in report.rows],
+        not report.counts_are_complete,
         freshness,
     )
 
@@ -224,16 +231,26 @@ def _renewal_payload(
     context: SessionContext,
     payload: IpReportPreviewRequest,
 ) -> tuple[datetime, dict[str, Any], list[dict[str, Any]], bool, IpReportFreshness]:
-    portfolio = list_renewal_portfolio(session, context=context)
+    scan_limit = _RENEWAL_REPORT_SCAN_LIMIT if payload.renewal_states else payload.row_limit
+    portfolio = list_renewal_portfolio(
+        session,
+        context=context,
+        limit=scan_limit,
+        include_instruction_history=False,
+        include_reminder_history=False,
+    )
     selected = [
         row
         for row in portfolio.items
         if not payload.renewal_states or row.reporting_state in payload.renewal_states
     ]
     visible = selected[: payload.row_limit]
-    latest = max((row.term.updated_at for row in selected), default=None)
+    latest = max((row.term.updated_at for row in portfolio.items), default=None)
     summary = {
         "total": len(selected),
+        "returned": len(visible),
+        "scanned": len(portfolio.items),
+        "counts_are_complete": portfolio.counts_are_complete,
         "due": 0,
         "instructed": 0,
         "filing_in_progress": 0,
@@ -255,11 +272,18 @@ def _renewal_payload(
         source_cutoffs={"renewal_terms": latest, "registry_freshness": None},
         unavailable_sources=["registry_freshness"],
     )
+    rows = [row.model_dump(mode="json") for row in visible]
+    for row in rows:
+        # The report needs current instruction-derived state, not an unbounded
+        # instruction-history export. Full history remains with the canonical
+        # renewal workspace rather than being copied into this projection.
+        row["term"].pop("instructions", None)
+        row.pop("reminders", None)
     return (
         portfolio.generated_at,
         summary,
-        [row.model_dump(mode="json") for row in visible],
-        len(selected) > len(visible),
+        rows,
+        portfolio.has_more or len(selected) > len(visible),
         freshness,
     )
 
@@ -278,19 +302,25 @@ def _data_quality_payload(
         limit=1,
     )
     counts = portfolio.counts.model_dump(mode="json")
+    counts.update({"counts_are_complete": True})
     rows = [
         {"metric": key, "value": value, "available": value is not None}
         for key, value in counts.items()
-        if key != "registry_sync_state"
+        if key not in {"registry_sync_state", "counts_are_complete"}
     ]
     visible = rows[: payload.row_limit]
-    unavailable = ["registry_sync"] if portfolio.counts.registry_sync_state == "unavailable" else []
+    registry_incomplete = portfolio.counts.synchronized_records < portfolio.counts.total
+    unavailable = ["registry_sync"] if registry_incomplete else []
     freshness = IpReportFreshness(
-        status="mixed" if unavailable else "current",
+        status=(
+            "current"
+            if not registry_incomplete and portfolio.counts.stale_sync_records == 0
+            else "mixed"
+        ),
         generated_at=generated_at,
         source_cutoffs={
-            "portfolio_records": (portfolio.rows[0].updated_at if portfolio.rows else None),
-            "registry_sync": None,
+            "portfolio_records": portfolio.latest_record_updated_at,
+            "registry_sync": portfolio.latest_registry_success_at,
         },
         unavailable_sources=unavailable,
     )
@@ -407,7 +437,7 @@ def preview_ip_report(
         )
     elif payload.report_kind == "deadline_control":
         generated_at, summary, rows, truncated, freshness = _deadline_payload(
-            session, context=context
+            session, context=context, payload=payload
         )
     elif payload.report_kind == "renewal":
         generated_at, summary, rows, truncated, freshness = _renewal_payload(

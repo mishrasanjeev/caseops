@@ -24023,6 +24023,11 @@ export interface components {
         };
         /** IpDocketControlReport */
         IpDocketControlReport: {
+            /**
+             * Counts Are Complete
+             * @default true
+             */
+            counts_are_complete: boolean;
             /** Docket Count */
             docket_count: number;
             /**
@@ -24036,6 +24041,10 @@ export interface components {
             open_incident_count: number;
             /** Ready Count */
             ready_count: number;
+            /** Rows */
+            rows?: components["schemas"]["IpDocketControlRow"][];
+            /** Source Cutoff */
+            source_cutoff?: string | null;
             /** Total Cost Minor By Currency */
             total_cost_minor_by_currency: {
                 [key: string]: number;
@@ -24049,6 +24058,30 @@ export interface components {
              * @default 0
              */
             withheld_cost_item_count: number;
+        };
+        /**
+         * IpDocketControlRow
+         * @description One visible docket's deadline-control posture.
+         */
+        IpDocketControlRow: {
+            /** Deadline Coverage Count */
+            deadline_coverage_count: number;
+            /** Docket Id */
+            docket_id: string;
+            /** Docket Status */
+            docket_status: string;
+            /** Docket Title */
+            docket_title: string;
+            /** Inactive Coverage Count */
+            inactive_coverage_count: number;
+            /** Open Incident Count */
+            open_incident_count: number;
+            /** Primary Identifier */
+            primary_identifier: string | null;
+            /** Uncovered Deadline */
+            uncovered_deadline: boolean;
+            /** Unprojected Calendar Count */
+            unprojected_calendar_count: number;
         };
         /** IpDocketCreateRequest */
         IpDocketCreateRequest: {
@@ -27578,6 +27611,11 @@ export interface components {
             stale_sync_records: number;
             /** Sync Failure Records */
             sync_failure_records?: number | null;
+            /**
+             * Synchronized Records
+             * @default 0
+             */
+            synchronized_records: number;
             /** Total */
             total: number;
             /** Unconfirmed Deadline Records */
@@ -27801,6 +27839,10 @@ export interface components {
         IpPortfolioListResponse: {
             counts: components["schemas"]["IpPortfolioCounts"];
             filters: components["schemas"]["IpPortfolioFilters"];
+            /** Latest Record Updated At */
+            latest_record_updated_at?: string | null;
+            /** Latest Registry Success At */
+            latest_registry_success_at?: string | null;
             /** Limit */
             limit: number;
             /** Next Cursor */
@@ -29195,10 +29237,20 @@ export interface components {
         IpRenewalPortfolioResponse: {
             counts: components["schemas"]["IpRenewalPortfolioCounts"];
             /**
+             * Counts Are Complete
+             * @default true
+             */
+            counts_are_complete: boolean;
+            /**
              * Generated At
              * Format: date-time
              */
             generated_at: string;
+            /**
+             * Has More
+             * @default false
+             */
+            has_more: boolean;
             /** Items */
             items: components["schemas"]["IpRenewalWorkflowRecord"][];
         };

@@ -1426,8 +1426,8 @@
         "IPLF-038A",
         "IPLF-038B"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "evidence_refs": []
     },
@@ -9144,7 +9144,13 @@
       ],
       "implementation_refs": [
         "apps/api/src/caseops_api/schemas/ip_reports.py",
+        "apps/api/src/caseops_api/schemas/ip_operations.py",
+        "apps/api/src/caseops_api/schemas/ip_portfolio.py",
+        "apps/api/src/caseops_api/schemas/ip_renewals.py",
         "apps/api/src/caseops_api/services/ip_reports.py",
+        "apps/api/src/caseops_api/services/ip_operations.py",
+        "apps/api/src/caseops_api/services/ip_portfolio.py",
+        "apps/api/src/caseops_api/services/ip_renewals.py",
         "apps/api/src/caseops_api/services/connector_health.py",
         "apps/web/app/app/ip/reports/page.tsx",
         "apps/web/lib/api/endpoints.ts",
@@ -9155,20 +9161,26 @@
       "test_refs": [
         "apps/api/tests/test_ip_report_workflow.py::test_iplf_req_report_01_status_reports_preserve_registry_identifiers#IPLF-REQ-REPORT-01",
         "apps/api/tests/test_ip_report_workflow.py::test_iplf_req_report_01_operational_reports_are_honest#IPLF-REQ-REPORT-01",
+        "apps/api/tests/test_ip_report_workflow.py::test_iplf_req_report_01_portfolio_deadline_and_quality_reports_are_bounded_and_complete#IPLF-REQ-REPORT-01",
+        "apps/api/tests/test_ip_report_workflow.py::test_iplf_req_report_01_renewal_report_returns_canonical_evidence#IPLF-REQ-REPORT-01",
         "apps/api/tests/test_ip_report_workflow.py::test_iplf_req_report_02_rejects_filters_that_cannot_be_applied#IPLF-REQ-REPORT-02",
+        "apps/api/tests/test_postgres_validation.py::test_bounded_renewal_report_reader_runs_on_postgres#IPLF-REQ-REPORT-01",
         "apps/web/app/app/ip/reports/page.test.tsx",
         "tests/e2e/iplf-038b-reports-2026-08-23.spec.ts",
-        "planned:IPLF-UJ-27-EXC-01",
-        "planned:IPLF-UJ-27-EXC-02",
-        "planned:IPLF-UJ-27-EXC-03",
-        "planned:IPLF-UJ-27-NORMAL",
-        "planned:IPLF-UJ-59-EXC-01",
-        "planned:IPLF-UJ-59-EXC-02",
-        "planned:IPLF-UJ-59-EXC-03",
-        "planned:IPLF-UJ-59-NORMAL"
+        "apps/api/tests/test_portal_ip.py::test_ip_portal_report_instruction_acknowledgement_and_revoke#IPLF-UJ-27-NORMAL",
+        "apps/api/tests/test_portal_ip.py::test_ip_portal_report_instruction_acknowledgement_and_revoke#IPLF-UJ-27-EXC-01",
+        "apps/api/tests/test_portal_ip.py::test_document_publication_allows_only_granted_approved_nonprivileged_version#IPLF-UJ-27-EXC-02",
+        "apps/api/tests/test_portal_ip.py::test_ip_portal_report_instruction_acknowledgement_and_revoke#IPLF-UJ-27-EXC-03",
+        "apps/api/tests/test_ip_control_review_signoff.py::test_uj59_normal_produce_and_sign_off_a_control_review#IPLF-UJ-59-NORMAL",
+        "apps/api/tests/test_ip_control_review_signoff.py::test_uj59_exc01_stale_source_or_failed_query_blocks_clean_sign_off#IPLF-UJ-59-EXC-01",
+        "apps/api/tests/test_ip_control_review_signoff.py::test_uj59_exc02_and_uj50_exc01_restricted_work_never_leaks_into_counts#IPLF-UJ-59-EXC-02",
+        "apps/api/tests/test_ip_control_review_signoff.py::test_uj59_exc03_export_failure_does_not_mark_review_complete#IPLF-UJ-59-EXC-03"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m3/IPLF-038B/local-2026-08-23.md"
+        "docs/ip-implementation/evidence/m3/IPLF-038B/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m3/IPLF-038B/local-2026-08-30.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039C/control-review-completion-2026-08-21.md",
+        "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
       ],
       "evidence_metadata": [
         {
@@ -9179,18 +9191,36 @@
           "assertions": "nine strict report definitions; canonical-reader reuse; separate application/opposition identifiers; truthful freshness/unavailability; read-only connector-health projection; relevant-filter enforcement; hidden-count policy; audit digest; responsive internal UI",
           "result": "passed",
           "recorded_at": "2026-08-23T02:20:00+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m3/IPLF-038B/local-2026-08-30.md",
+          "revision": "f52d66082efae3261b8c3e9c96e5151406aac28f",
+          "environment": "local SQLite fixtures, isolated PostgreSQL 17/pgvector, generated OpenAPI types, Vitest, and TypeScript",
+          "fixtures": "two authorized portfolio records behind a one-row preview, stable deadline control, two canonical renewal terms, UJ-27 portal publication fixtures, and UJ-59 signed-control fixtures",
+          "assertions": "full-scope portfolio/data-quality counts, stable deadline rows and snapshots, 200-row output cap, 1000-candidate filtered-renewal cap, one batched instruction query for two terms, honest truncation, existing publication/sign-off ownership, and no schema or background control plane",
+          "result": "passed",
+          "recorded_at": "2026-08-30T12:20:00+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m3/IPLF-039C/control-review-completion-2026-08-21.md",
+          "revision": "b47724a8171576be9f74f8d5677cdce2a7f10731",
+          "environment": "local SQLite plus ephemeral PostgreSQL 17/pgvector and fresh local API/web Playwright servers",
+          "fixtures": "deterministic tenant-isolated docket-control fixtures and two independent authenticated members; no live provider credential",
+          "assertions": "UJ-59 exception decisions, reviewer sampling, two-role signatures, report archive authorization, signed deltas, append-only persistence, tenant correlation, UI download, and independent two-user E2E",
+          "result": "passed",
+          "recorded_at": "2026-08-21T07:35:00+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md",
+          "revision": "22acb0b159dc2d8e538fee0387217c5c4ad18871",
+          "environment": "local API and responsive React component tests",
+          "fixtures": "client-visible identifiers/events/dates, approved reports/documents, current/stale publications, and pending client decisions",
+          "assertions": "UJ-27 normal and three exception paths, explicit grants, sensitive exclusions, delivery escalation, revocation, and no automatic legal-state mutation",
+          "result": "passed",
+          "recorded_at": "2026-08-25T20:30:00+05:30"
         }
       ],
       "blockers": [
-        {
-          "id": "IPLF-038B-M5-CLIENT-DELIVERY",
-          "state": "active",
-          "summary": "UJ-27 client publication and REPORT-03 scheduled delivery are not authorized in M3 and have no active portal-publication or neutral scheduled-report contract.",
-          "evidence_needed": "M5 portal grant/publication contract, neutral notification-delivery integration, delivery-result UI, exception tests, and exact deployed client UAT.",
-          "owner": "IPLF-100B and M5 portal/report activation owners",
-          "milestone_impact": "Keeps UJ-27 and REPORT-03 open; it does not block the locally verified internal synchronous workspace.",
-          "next_independent_slice": "Continue the next unblocked M3 manifest node."
-        },
         {
           "id": "IPLF-038B-WATCH-PROVIDER",
           "state": "active",
@@ -9203,29 +9233,30 @@
         {
           "id": "IPLF-038B-RELEASE-VERIFY",
           "state": "active",
-          "summary": "The internal reporting subset is locally verified; exact-head CI, merged-main recheck, deployment and authenticated production acceptance remain pending.",
-          "evidence_needed": "Green CI/PostgreSQL/security/CodeQL on the exact PR head and merged main, deployed runtime identity, health, and authenticated production report-contract/browser evidence.",
+          "summary": "The bounded synchronous definitions are locally verified at f52d66082efae3261b8c3e9c96e5151406aac28f; hosted exact-head CI, current-main integration, deployment and authenticated production acceptance remain pending.",
+          "evidence_needed": "Green CI/PostgreSQL/security/CodeQL on the exact candidate and integrated main, deployed runtime identity, health, and authenticated production report-contract/browser evidence.",
           "owner": "CaseOps release workflow",
-          "milestone_impact": "Blocks release_status for the implemented subset only.",
-          "next_independent_slice": "Open and merge the exact implementation candidate before starting another release lane."
+          "milestone_impact": "Blocks release_status only; repository implementation and local verification are complete.",
+          "next_independent_slice": "Integrate this exact candidate after current-main compatibility review."
         }
       ],
       "next_actions": [
-        "Run exact-head CI/PostgreSQL/security/CodeQL, merge only when green, rerun on merged main, deploy the exact revision, and attach authenticated production contract/browser evidence.",
-        "Leave report_jobs/report_artifacts absent until representative-volume evidence proves the synchronous 200-row ceiling is insufficient.",
-        "Leave client publication, scheduled delivery and active watch reporting to their named M5 owners; do not substitute the outside-counsel portal, existing portfolio export job, signed docket-control review, renewal notifications, or legal-update watchlists."
+        "Run hosted exact-head CI/PostgreSQL/security/CodeQL, integrate with current main after compatibility review, rerun on integrated main, deploy the exact revision, and attach authenticated production contract/browser evidence.",
+        "Keep report_jobs/report_artifacts absent until measured representative-volume evidence proves the 200-row output and 1000-candidate filtered-renewal ceilings insufficient.",
+        "Keep active watch reporting fail-closed until the named lawful provider is activated; preserve IPLF-055 portal publication/delivery and IPLF-039C signed docket control as the existing owners."
       ],
       "data_impact": [
-        "No schema, queue, artifact, scheduler or delivery change. Report adapters read existing access-filtered portfolio, docket-control, renewal, daily-docket and persisted connector-health projections; preview writes only ip.report.previewed through the shared audit service."
+        "No schema, queue, artifact, scheduler or delivery change. Report adapters read existing access-filtered portfolio, docket-control, renewal, daily-docket and persisted connector-health projections; output is capped at 200 rows, filtered renewal candidates at 1000, child histories are batch-loaded or omitted from the report shape, and preview writes only ip.report.previewed through the shared audit service."
       ],
       "documentation_impact": [
         "apps/web/app/guide/page.tsx",
         "apps/web/app/law-firms/page.tsx",
-        "docs/ip-implementation/evidence/m3/IPLF-038B/local-2026-08-23.md"
+        "docs/ip-implementation/evidence/m3/IPLF-038B/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m3/IPLF-038B/local-2026-08-30.md"
       ],
-      "allocation_review": "2026-08-23 current-main reconciliation and two-pass implementation review: IPLF-030A/030B remain the portfolio and export owners, IPLF-039C remains the signed docket-control/UJ-59 owner, IPLF-037 remains the renewal owner, daily docket remains the workload owner, connector health remains the freshness owner, and shared access/audit services remain canonical. IPLF-038B adds only nine strict synchronous internal definitions and a responsive internal workspace. Application and opposition status preserve separate registry identifiers. The watch definition is fail-closed unavailable until M5. No report job, artifact, scheduler, delivery, portal, notification, legal-date, watchlist, docket, renewal, export or connector-health duplicate was added. Local verification passed at exact implementation revision 09aeb25ef85966064c15b806789067b70cee1bbe. The slice stays in progress because UJ-27, REPORT-03 and activated watch reporting remain legitimately blocked, while UJ-59 implementation remains credited only to IPLF-039C.",
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "allocation_review": "2026-08-30 current-main audit and exact-revision verification: IPLF-030A/030B remain the portfolio/export owners, IPLF-037 remains the renewal owner, IPLF-039C remains the signed docket-control/UJ-59 owner, IPLF-055 remains the portal publication/delivery/UJ-27 owner, daily docket remains the workload owner, connector health remains the freshness owner, and shared access/audit services remain canonical. IPLF-038B extends only their schema-free synchronous reporting projection. Revision f52d66082efae3261b8c3e9c96e5151406aac28f fixes full-scope freshness/count accuracy, stable deadline cutoffs and detail rows, bounded set-based renewal reads, explicit completeness, and real-PostgreSQL compatibility without a migration or background control plane. UJ-27 and UJ-59 tests/evidence are now concrete rather than planned; REPORT-03's remaining cross-program allocation stays with IPLF-039F/IPLF-100B. The watch definition remains honestly unavailable until its lawful provider is activated. Repository implementation and local verification are complete; only hosted integration/deployment acceptance blocks release.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked"
     },
     {
@@ -42488,8 +42519,8 @@
       "evidence_refs": [
         "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-038B",
@@ -50164,8 +50195,8 @@
       "evidence_refs": [
         "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-038B",
@@ -50204,8 +50235,8 @@
       "evidence_refs": [
         "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-038B",
@@ -50244,8 +50275,8 @@
       "evidence_refs": [
         "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-038B",
@@ -50284,8 +50315,8 @@
       "evidence_refs": [
         "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-038B",

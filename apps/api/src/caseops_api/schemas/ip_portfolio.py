@@ -95,6 +95,7 @@ class IpPortfolioCounts(BaseModel):
     unconfirmed_deadline_records: int
     overdue_records: int
     stale_sync_records: int = 0
+    synchronized_records: int = 0
     sync_failure_records: int | None = None
     registry_sync_state: Literal["available", "unavailable"] = "unavailable"
 
@@ -105,6 +106,8 @@ class IpPortfolioListResponse(BaseModel):
     filters: IpPortfolioFilters
     limit: int
     next_cursor: str | None = None
+    latest_record_updated_at: datetime | None = None
+    latest_registry_success_at: datetime | None = None
 
 
 class IpPortfolioFamilyMember(BaseModel):
