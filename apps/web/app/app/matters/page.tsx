@@ -391,6 +391,7 @@ export default function MattersPage() {
     <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-[var(--color-line)] bg-white p-3">
       <div
         className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6"
+        role="group"
         aria-label="Matter filters"
         data-testid="matter-filter-grid"
       >

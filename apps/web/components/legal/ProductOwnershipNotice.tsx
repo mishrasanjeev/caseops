@@ -21,7 +21,11 @@ export function ProductOwnershipNotice() {
             </strong>
             .
           </p>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1" aria-label="Owner emails">
+          <div
+            aria-label="Owner emails"
+            className="flex flex-wrap items-center gap-x-3 gap-y-1"
+            role="group"
+          >
             {siteConfig.ownership.emails.map((email) => (
               <a
                 key={email}

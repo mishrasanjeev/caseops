@@ -180,6 +180,7 @@ export default function IpJournalWatchPage() {
           </select>
         </div>
         <div
+          role="group"
           aria-label="Watch views"
           className="grid w-full min-w-0 grid-cols-2 overflow-hidden rounded-md border border-[var(--color-line)] bg-white sm:w-auto sm:grid-cols-4"
         >

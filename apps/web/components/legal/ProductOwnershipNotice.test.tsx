@@ -12,6 +12,7 @@ describe("ProductOwnershipNotice", () => {
     });
     expect(notice).toHaveTextContent("CaseOps is owned by Orchestrum Technologies LLP");
     expect(notice).toHaveTextContent("Inventor/Owner: Sanjeev Kumar");
+    expect(screen.getByRole("group", { name: "Owner emails" })).toBeVisible();
     expect(screen.getByRole("link", { name: "sanjeev@orchestrum.in" })).toHaveAttribute(
       "href",
       "mailto:sanjeev@orchestrum.in",
