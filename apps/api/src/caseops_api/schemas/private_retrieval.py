@@ -32,6 +32,24 @@ class PrivateRetrievalSearchResponse(BaseModel):
     items: list[PrivateRetrievalResultRecord]
 
 
+class PrivateRetrievalAutocompleteRecord(BaseModel):
+    projection_id: str
+    source_type: str
+    source_id: str
+    source_version: str
+    label: str
+
+
+class PrivateRetrievalAutocompleteResponse(BaseModel):
+    items: list[PrivateRetrievalAutocompleteRecord]
+
+
+class PrivateRetrievalCountResponse(BaseModel):
+    visible_match_count: int = Field(ge=0)
+    count_limit: int = Field(ge=1)
+    count_is_capped: bool
+
+
 class PrivateRetrievalIntegrityResponse(BaseModel):
     state: Literal["ready", "blocked", "disabled"]
     activation_reason: str
@@ -50,6 +68,9 @@ class PrivateRetrievalIntegrityResponse(BaseModel):
 
 
 __all__ = [
+    "PrivateRetrievalAutocompleteRecord",
+    "PrivateRetrievalAutocompleteResponse",
+    "PrivateRetrievalCountResponse",
     "PrivateRetrievalIntegrityResponse",
     "PrivateRetrievalResultRecord",
     "PrivateRetrievalSearchRequest",

@@ -11625,6 +11625,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/private-retrieval/autocomplete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Autocomplete from current permitted private labels without snippets. */
+        post: operations["autocomplete_private_retrieval_api_private_retrieval_autocomplete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/private-retrieval/count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Count a bounded set of current permitted private matches. */
+        post: operations["count_private_retrieval_api_private_retrieval_count_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/private-retrieval/integrity": {
         parameters: {
             query?: never;
@@ -11653,6 +11687,23 @@ export interface paths {
         put?: never;
         /** Search current permitted tenant-private projections. */
         post: operations["search_private_retrieval_api_private_retrieval_search_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/private-retrieval/search/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stream private results with a fresh authorization check per row. */
+        post: operations["stream_private_retrieval_api_private_retrieval_search_stream_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -38950,6 +39001,33 @@ export interface components {
             sample_size: number;
             /** Top Outcome Label */
             top_outcome_label: string | null;
+        };
+        /** PrivateRetrievalAutocompleteRecord */
+        PrivateRetrievalAutocompleteRecord: {
+            /** Label */
+            label: string;
+            /** Projection Id */
+            projection_id: string;
+            /** Source Id */
+            source_id: string;
+            /** Source Type */
+            source_type: string;
+            /** Source Version */
+            source_version: string;
+        };
+        /** PrivateRetrievalAutocompleteResponse */
+        PrivateRetrievalAutocompleteResponse: {
+            /** Items */
+            items: components["schemas"]["PrivateRetrievalAutocompleteRecord"][];
+        };
+        /** PrivateRetrievalCountResponse */
+        PrivateRetrievalCountResponse: {
+            /** Count Is Capped */
+            count_is_capped: boolean;
+            /** Count Limit */
+            count_limit: number;
+            /** Visible Match Count */
+            visible_match_count: number;
         };
         /** PrivateRetrievalIntegrityResponse */
         PrivateRetrievalIntegrityResponse: {
@@ -66612,6 +66690,72 @@ export interface operations {
             };
         };
     };
+    autocomplete_private_retrieval_api_private_retrieval_autocomplete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrivateRetrievalSearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrivateRetrievalAutocompleteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    count_private_retrieval_api_private_retrieval_count_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrivateRetrievalSearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrivateRetrievalCountResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_private_retrieval_integrity_api_private_retrieval_integrity_get: {
         parameters: {
             query?: never;
@@ -66652,6 +66796,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PrivateRetrievalSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_private_retrieval_api_private_retrieval_search_stream_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrivateRetrievalSearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Authorized NDJSON records; delivery stops on any security or source change. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-ndjson": string;
                 };
             };
             /** @description Validation Error */

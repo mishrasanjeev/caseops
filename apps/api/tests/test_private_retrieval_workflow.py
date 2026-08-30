@@ -27,16 +27,20 @@ from caseops_api.db.models import (
     User,
 )
 from caseops_api.db.session import get_engine, get_session_factory
-from caseops_api.services import private_retrieval_jobs
+from caseops_api.services import private_retrieval, private_retrieval_jobs
 from caseops_api.services.embeddings import EmbeddingResult
 from caseops_api.services.llm_types import LLMCompletion
+from caseops_api.services.matter_access import remove_access_grant
 from caseops_api.services.private_retrieval import (
     PrivateRetrievalInvariantError,
+    capture_private_retrieval_fence,
     enqueue_private_projection_event,
     hydrate_private_projection_results,
+    prefilter_private_projection_ids,
     private_retrieval_activation,
     propagate_private_projection_change,
     retrieve_private_content,
+    stream_private_content,
 )
 from caseops_api.services.private_retrieval_jobs import (
     MAX_PRIVATE_PROVIDER_BATCH,
@@ -124,6 +128,31 @@ def _other_company(client: TestClient) -> dict:
     )
     assert response.status_code == 200, response.text
     return response.json()
+
+
+def _private_search_member(client: TestClient, owner_token: str) -> tuple[str, str]:
+    password = "".join(("Private", "Delivery", "123!"))
+    created = client.post(
+        "/api/companies/current/users",
+        headers=auth_headers(owner_token),
+        json={
+            "full_name": "Private Delivery Member",
+            "email": "private-delivery-member@asterlegal.in",
+            "password": password,
+            "role": "member",
+        },
+    )
+    assert created.status_code == 200, created.text
+    login = client.post(
+        "/api/auth/login",
+        json={
+            "email": "private-delivery-member@asterlegal.in",
+            "password": password,
+            "company_slug": "aster-legal",
+        },
+    )
+    assert login.status_code == 200, login.text
+    return str(created.json()["membership_id"]), str(login.json()["access_token"])
 
 
 def _indexed_matter_attachment(
@@ -313,6 +342,239 @@ def test_rebuild_batches_only_one_tenant_and_search_reauthorizes_current_source(
     )
     assert cross_tenant.status_code == 200, cross_tenant.text
     assert cross_tenant.json()["items"] == []
+
+
+def test_stream_autocomplete_and_count_fail_closed_on_acl_epoch_change(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    owner_token = str(bootstrap["access_token"])
+    company_id = str(bootstrap["company"]["id"])
+    owner_membership_id = str(bootstrap["membership"]["id"])
+    member_id, member_token = _private_search_member(client, owner_token)
+    _enable_assistant(client, owner_token)
+    _set_ip_workspace_entitlement(company_id)
+    monkeypatch.setenv("CASEOPS_IP_WORKSPACE_ENABLED", "true")
+    get_settings.cache_clear()
+
+    matter_code = "-".join(("PD", "BOUNDARY"))
+    matter = _matter(client, owner_token, matter_code)
+    restricted = client.post(
+        f"/api/matters/{matter['id']}/access/restricted",
+        headers=auth_headers(owner_token),
+        json={"restricted": True},
+    )
+    assert restricted.status_code == 200, restricted.text
+    grant = client.post(
+        f"/api/matters/{matter['id']}/access/grants",
+        headers=auth_headers(owner_token),
+        json={"membership_id": member_id, "reason": "Bounded delivery test."},
+    )
+    assert grant.status_code == 200, grant.text
+    secret = "StreamFenceUnique private opposition sequence."
+    attachment_id = _indexed_matter_attachment(
+        matter_id=str(matter["id"]),
+        membership_id=owner_membership_id,
+        text="StreamFenceUnique attachment evidence that must stop after revoke.",
+    )
+    with get_session_factory()() as session:
+        row = session.get(Matter, str(matter["id"]))
+        assert row is not None
+        row.description = secret
+        row.updated_at = datetime.now(UTC) + timedelta(seconds=1)
+        session.commit()
+    with get_session_factory()() as session:
+        rebuild_private_index(session, company_id=company_id, activate=True)
+        session.commit()
+
+    query = "StreamFenceUnique"
+    request = {
+        "query": query,
+        "scope_ids": {"matter": [matter["id"]]},
+        "limit": 10,
+    }
+    autocomplete = client.post(
+        "/api/private-retrieval/autocomplete",
+        headers=auth_headers(member_token),
+        json=request,
+    )
+    assert autocomplete.status_code == 200, autocomplete.text
+    assert {item["source_id"] for item in autocomplete.json()["items"]} == {
+        matter["id"],
+        attachment_id,
+    }
+    assert all("content" not in item for item in autocomplete.json()["items"])
+    assert secret not in autocomplete.text
+    counted = client.post(
+        "/api/private-retrieval/count",
+        headers=auth_headers(member_token),
+        json=request,
+    )
+    assert counted.status_code == 200, counted.text
+    assert counted.json() == {
+        "visible_match_count": 2,
+        "count_limit": 200,
+        "count_is_capped": False,
+    }
+    streamed = client.post(
+        "/api/private-retrieval/search/stream",
+        headers=auth_headers(member_token),
+        json=request,
+    )
+    assert streamed.status_code == 200, streamed.text
+    assert streamed.headers["content-type"].startswith("application/x-ndjson")
+    assert streamed.headers["cache-control"] == "no-store"
+    assert streamed.headers["x-content-type-options"] == "nosniff"
+    frames = [json.loads(line) for line in streamed.text.splitlines() if line]
+    assert {frame["source_id"] for frame in frames} == {matter["id"], attachment_id}
+    assert any(secret in frame["content"] for frame in frames)
+    scope_options = client.get(
+        "/api/workspace-assistant/scope-options",
+        headers=auth_headers(member_token),
+        params={"q": matter_code, "limit": 10},
+    )
+    assert scope_options.status_code == 200, scope_options.text
+    assert any(item["scope_id"] == matter["id"] for item in scope_options.json()["items"])
+
+    with get_session_factory()() as session:
+        member_context = _context(company_id, member_id)
+        fence = capture_private_retrieval_fence(session, context=member_context)
+        candidate_ids = prefilter_private_projection_ids(
+            session,
+            context=member_context,
+            query=query,
+            filters={"matter_id": str(matter["id"])},
+        )
+    assert fence is not None
+    assert len(candidate_ids) == 2
+
+    in_flight = stream_private_content(
+        fence=fence,
+        projection_ids=candidate_ids,
+        query=query,
+        session_factory=get_session_factory(),
+    )
+    first_frame = next(in_flight)
+    assert first_frame.source_id in {matter["id"], attachment_id}
+
+    # Force the canonical revoke after count candidate selection but before
+    # count delivery. This models an adversarial race without relying on test
+    # timing and proves the final count fence cannot disclose the stale match.
+    original_prefilter = private_retrieval.prefilter_private_projection_ids
+
+    def prefilter_then_revoke(session, **kwargs):
+        selected = original_prefilter(session, **kwargs)
+        assert selected
+        remove_access_grant(
+            session,
+            context=_context(company_id, owner_membership_id),
+            matter_id=str(matter["id"]),
+            grant_id=str(grant.json()["id"]),
+        )
+        return selected
+
+    monkeypatch.setattr(
+        private_retrieval,
+        "prefilter_private_projection_ids",
+        prefilter_then_revoke,
+    )
+    with get_session_factory()() as session:
+        raced_count = private_retrieval.count_private_content(
+            session,
+            context=_context(company_id, member_id),
+            query=query,
+            filters={"scope_ids": {"matter": [str(matter["id"])]}},
+        )
+    assert raced_count == 0
+    monkeypatch.setattr(
+        private_retrieval,
+        "prefilter_private_projection_ids",
+        original_prefilter,
+    )
+
+    # The stream delivered its first frame while access was current. Advancing
+    # it after the revoke must terminate instead of emitting the second source.
+    assert list(in_flight) == []
+
+    # A stream that captured the same generation but had not emitted yet must
+    # also terminate with zero bytes.
+    assert list(
+        stream_private_content(
+            fence=fence,
+            projection_ids=candidate_ids,
+            query=query,
+            session_factory=get_session_factory(),
+        )
+    ) == []
+
+    for path in ("autocomplete", "search/stream"):
+        response = client.post(
+            f"/api/private-retrieval/{path}",
+            headers=auth_headers(member_token),
+            json=request,
+        )
+        assert response.status_code == 200, response.text
+        assert str(matter["id"]) not in response.text
+        assert secret not in response.text
+    revoked_count = client.post(
+        "/api/private-retrieval/count",
+        headers=auth_headers(member_token),
+        json=request,
+    )
+    assert revoked_count.status_code == 200, revoked_count.text
+    assert revoked_count.json()["visible_match_count"] == 0
+    revoked_scope_options = client.get(
+        "/api/workspace-assistant/scope-options",
+        headers=auth_headers(member_token),
+        params={"q": matter_code, "limit": 10},
+    )
+    assert revoked_scope_options.status_code == 200, revoked_scope_options.text
+    assert revoked_scope_options.json() == {
+        "query": matter_code,
+        "items": [],
+        "truncated": False,
+    }
+
+    other = _other_company(client)
+    other_token = str(other["access_token"])
+    other_company_id = str(other["company"]["id"])
+    _enable_assistant(client, other_token)
+    _set_ip_workspace_entitlement(other_company_id)
+    with get_session_factory()() as session:
+        rebuild_private_index(session, company_id=other_company_id, activate=True)
+        session.commit()
+    for path in ("autocomplete", "search/stream"):
+        response = client.post(
+            f"/api/private-retrieval/{path}",
+            headers=auth_headers(other_token),
+            json=request,
+        )
+        assert response.status_code == 200, response.text
+        assert response.text in {'{"items":[]}', ""}
+    cross_count = client.post(
+        "/api/private-retrieval/count",
+        headers=auth_headers(other_token),
+        json=request,
+    )
+    assert cross_count.status_code == 200, cross_count.text
+    assert cross_count.json()["visible_match_count"] == 0
+
+    with get_session_factory()() as session:
+        owner_context = _context(company_id, owner_membership_id)
+        generation = session.scalar(
+            select(PrivateIndexGeneration).where(
+                PrivateIndexGeneration.company_id == company_id,
+                PrivateIndexGeneration.state == "active",
+            )
+        )
+        assert generation is not None
+        assert fence.access_policy_generation < generation.access_policy_generation
+        assert retrieve_private_content(
+            session,
+            context=owner_context,
+            query=query,
+        ) == ()
 
 
 def test_pending_event_worker_exposes_lag_then_tombstones_all_saved_candidates(

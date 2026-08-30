@@ -9,7 +9,7 @@ from urllib.parse import quote_plus
 
 from fastapi import HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from caseops_api.core.problem_details import ProblemHTTPException
@@ -57,10 +57,7 @@ from caseops_api.schemas.workspace_assistant import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.capabilities import membership_has_capability
-from caseops_api.services.ip_document_workflow import (
-    get_accessible_ip_document_ids,
-    get_ip_document_policies,
-)
+from caseops_api.services.ip_document_workflow import get_ip_document_policies
 from caseops_api.services.llm import (
     PURPOSE_ASSISTANT,
     build_provider,
@@ -127,6 +124,50 @@ def _assistant_policy_or_403(session: Session, *, context: SessionContext) -> Re
     return policy
 
 
+def _current_assistant_context(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> SessionContext | None:
+    """Reload one exact active actor boundary for final delivery."""
+
+    actor = session.execute(
+        select(Company, CompanyMembership, User)
+        .join(
+            CompanyMembership,
+            and_(
+                CompanyMembership.company_id == Company.id,
+                CompanyMembership.id == context.membership.id,
+                CompanyMembership.user_id == context.user.id,
+                CompanyMembership.is_active.is_(True),
+            ),
+        )
+        .join(
+            User,
+            and_(
+                User.id == CompanyMembership.user_id,
+                User.id == context.user.id,
+                User.is_active.is_(True),
+            ),
+        )
+        .where(
+            Company.id == context.company.id,
+            Company.is_active.is_(True),
+        )
+    ).one_or_none()
+    if actor is None:
+        return None
+    company, membership, user = actor
+    if not membership_has_capability(session, membership, "ai:generate"):
+        return None
+    return SessionContext(
+        company=company,
+        membership=membership,
+        user=user,
+        token_issued_at=context.token_issued_at,
+    )
+
+
 def _assistant_capability_is_current(
     session: Session,
     *,
@@ -134,32 +175,7 @@ def _assistant_capability_is_current(
 ) -> bool:
     """Recheck the actor boundary after any provider wait."""
 
-    membership = session.scalar(
-        select(CompanyMembership).where(
-            CompanyMembership.id == context.membership.id,
-            CompanyMembership.company_id == context.company.id,
-            CompanyMembership.user_id == context.user.id,
-            CompanyMembership.is_active.is_(True),
-        )
-    )
-    company = session.scalar(
-        select(Company.id).where(
-            Company.id == context.company.id,
-            Company.is_active.is_(True),
-        )
-    )
-    user = session.scalar(
-        select(User.id).where(
-            User.id == context.user.id,
-            User.is_active.is_(True),
-        )
-    )
-    return bool(
-        membership is not None
-        and company is not None
-        and user is not None
-        and membership_has_capability(session, membership, "ai:generate")
-    )
+    return _current_assistant_context(session, context=context) is not None
 
 
 def _scope_access_denied(
@@ -246,7 +262,11 @@ def _resolve_scope_versions(
     client_ids = grouped.get("client", set())
     if client_ids:
         rows = session.scalars(
-            select(Client).where(Client.company_id == company_id, Client.id.in_(client_ids))
+            select(Client).where(
+                Client.company_id == company_id,
+                Client.id.in_(client_ids),
+                Client.is_active.is_(True),
+            )
         ).all()
         resolved.update({("client", row.id): _resource_version(row) for row in rows})
 
@@ -265,6 +285,7 @@ def _resolve_scope_versions(
             select(Matter).where(
                 Matter.company_id == company_id,
                 Matter.id.in_(matter_ids),
+                Matter.is_active.is_(True),
                 visible_matters_filter(session, context=context),
             )
         ).all()
@@ -300,6 +321,8 @@ def _resolve_scope_versions(
             select(IpDocketRecord).where(
                 IpDocketRecord.company_id == company_id,
                 IpDocketRecord.id.in_(docket_ids),
+                IpDocketRecord.is_active.is_(True),
+                IpDocketRecord.archived_by_matter_disposal.is_(False),
                 visible_ip_dockets_filter(session, context=context),
             )
         ).all()
@@ -320,13 +343,14 @@ def _resolve_scope_versions(
                 IpDocument.id.in_(ip_document_ids),
             )
         ).all()
-        accessible_ids = get_accessible_ip_document_ids(
+        policies = get_ip_document_policies(
             session,
             context=context,
             document_ids={document.id for document in documents},
         )
         for document in documents:
-            if document.id in accessible_ids:
+            policy = policies.get(document.id)
+            if policy is not None and policy.ai_retrieval_allowed:
                 resolved[("ip_document", document.id)] = str(document.current_version)
 
     requested = {(scope.scope_type, scope.scope_id) for scope in scopes}
@@ -676,7 +700,6 @@ def search_assistant_scopes(
     query: str,
     limit: int,
 ) -> AssistantScopeSearchResponse:
-    _assistant_policy_or_403(session, context=context)
     bounded_limit = min(limit, MAX_SCOPE_SEARCH_RESULTS)
     per_type_limit = min(5, bounded_limit)
     pattern = _like_pattern(query.strip())
@@ -697,7 +720,11 @@ def search_assistant_scopes(
 
     clients = session.scalars(
         select(Client)
-        .where(Client.company_id == company_id, Client.name.ilike(pattern, escape="\\"))
+        .where(
+            Client.company_id == company_id,
+            Client.is_active.is_(True),
+            Client.name.ilike(pattern, escape="\\"),
+        )
         .order_by(Client.name.asc(), Client.id.asc())
         .limit(per_type_limit)
     ).all()
@@ -716,6 +743,7 @@ def search_assistant_scopes(
         select(Matter)
         .where(
             Matter.company_id == company_id,
+            Matter.is_active.is_(True),
             visible_matters_filter(session, context=context),
             or_(
                 Matter.title.ilike(pattern, escape="\\"),
@@ -741,6 +769,8 @@ def search_assistant_scopes(
         select(IpDocketRecord)
         .where(
             IpDocketRecord.company_id == company_id,
+            IpDocketRecord.is_active.is_(True),
+            IpDocketRecord.archived_by_matter_disposal.is_(False),
             visible_ip_dockets_filter(session, context=context),
             or_(
                 IpDocketRecord.title.ilike(pattern, escape="\\"),
@@ -875,17 +905,7 @@ def search_assistant_scopes(
         .order_by(IpDocument.updated_at.desc(), IpDocument.id.desc())
         .limit(per_type_limit)
     ).all()
-    document_policies = get_ip_document_policies(
-        session,
-        context=context,
-        document_ids={row.id for row in documents},
-    )
     for row in documents:
-        policy = document_policies.get(row.id)
-        if policy is None:
-            continue
-        if not policy.ai_retrieval_allowed:
-            continue
         option = _option(
             scope_type="ip_document",
             scope_id=row.id,
@@ -896,11 +916,29 @@ def search_assistant_scopes(
         )
         options[(option.scope_type, option.scope_id)] = option
 
-    ordered = list(options.values())
-    truncated = len(ordered) > bounded_limit
+    ordered = list(options.values())[: bounded_limit + 1]
+    current_context = _current_assistant_context(session, context=context)
+    if current_context is None:
+        return AssistantScopeSearchResponse(query=query, items=[], truncated=False)
+    _assistant_policy_or_403(session, context=current_context)
+    resolved = _resolve_scope_versions(
+        session,
+        context=current_context,
+        scopes=[
+            AssistantScopeInput(scope_type=option.scope_type, scope_id=option.scope_id)
+            for option in ordered
+        ],
+        strict=False,
+    )
+    current = [
+        option
+        for option in ordered
+        if resolved.get((option.scope_type, option.scope_id)) == option.resource_version
+    ]
+    truncated = len(current) > bounded_limit
     return AssistantScopeSearchResponse(
         query=query,
-        items=ordered[:bounded_limit],
+        items=current[:bounded_limit],
         truncated=truncated,
     )
 

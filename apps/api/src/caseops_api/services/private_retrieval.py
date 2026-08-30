@@ -14,7 +14,7 @@ import math
 import re
 import threading
 from collections import OrderedDict
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Literal
@@ -132,6 +132,31 @@ class HydratedPrivateResult:
     label: str
     content: str
     score: float
+
+
+@dataclass(frozen=True, slots=True)
+class PrivateAutocompleteSuggestion:
+    """Content-free private suggestion released only after final reauthorization."""
+
+    projection_id: str
+    source_type: str
+    source_id: str
+    source_version: str
+    label: str
+
+
+@dataclass(frozen=True, slots=True)
+class PrivateRetrievalFence:
+    """Exact identity and security epochs captured before asynchronous work."""
+
+    company_id: str
+    membership_id: str
+    user_id: str
+    generation_id: str
+    access_policy_generation: int
+    tombstone_generation: int
+    required_capability: str
+    activation_required: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -577,6 +602,95 @@ def _refreshed_context(
     )
 
 
+def capture_private_retrieval_fence(
+    session: Session,
+    *,
+    context: SessionContext,
+    required_capability: str = "ai:generate",
+    require_activation: bool = False,
+) -> PrivateRetrievalFence | None:
+    """Capture the exact active generation and actor boundary for later delivery."""
+
+    current = _refreshed_context(
+        session,
+        context=context,
+        required_capability=required_capability,
+    )
+    if current is None:
+        return None
+    generation = session.scalar(_active_generation_statement(current.company.id))
+    if generation is None:
+        return None
+    return PrivateRetrievalFence(
+        company_id=current.company.id,
+        membership_id=current.membership.id,
+        user_id=current.user.id,
+        generation_id=generation.id,
+        access_policy_generation=generation.access_policy_generation,
+        tombstone_generation=generation.tombstone_generation,
+        required_capability=required_capability,
+        activation_required=require_activation,
+    )
+
+
+def _private_delivery_context(
+    session: Session,
+    *,
+    fence: PrivateRetrievalFence,
+) -> tuple[SessionContext, PrivateIndexGeneration] | None:
+    """Reopen an asynchronous delivery only at its exact current security epochs."""
+
+    actor = session.execute(
+        select(Company, CompanyMembership, User)
+        .join(
+            CompanyMembership,
+            and_(
+                CompanyMembership.company_id == Company.id,
+                CompanyMembership.id == fence.membership_id,
+                CompanyMembership.user_id == fence.user_id,
+                CompanyMembership.is_active.is_(True),
+            ),
+        )
+        .join(
+            User,
+            and_(
+                User.id == CompanyMembership.user_id,
+                User.id == fence.user_id,
+                User.is_active.is_(True),
+            ),
+        )
+        .where(
+            Company.id == fence.company_id,
+            Company.is_active.is_(True),
+        )
+    ).one_or_none()
+    if actor is None:
+        return None
+    company, membership, user = actor
+    if not membership_has_capability(session, membership, fence.required_capability):
+        return None
+    generation = session.scalar(
+        _active_generation_statement(fence.company_id).where(
+            PrivateIndexGeneration.id == fence.generation_id,
+            PrivateIndexGeneration.access_policy_generation
+            == fence.access_policy_generation,
+            PrivateIndexGeneration.tombstone_generation == fence.tombstone_generation,
+        )
+    )
+    if generation is None:
+        return None
+    current = SessionContext(
+        company=company,
+        membership=membership,
+        user=user,
+    )
+    if fence.activation_required:
+        activation = private_retrieval_activation(session, context=current)
+        if not activation.available:
+            return None
+    return current, generation
+
+
 def _authorized_projection_ids_statement(
     session: Session,
     *,
@@ -973,6 +1087,49 @@ def _source_versions_still_current(
     return allowed
 
 
+def _current_authorized_projection_rows(
+    session: Session,
+    *,
+    context: SessionContext,
+    generation: PrivateIndexGeneration,
+    projection_ids: Iterable[str],
+) -> tuple[PrivateIndexProjection, ...]:
+    ids = tuple(dict.fromkeys(projection_ids))[:MAX_PREFILTER_CANDIDATES]
+    if not ids:
+        return ()
+    authorized_ids = set(
+        session.scalars(
+            _authorized_projection_ids_statement(
+                session,
+                context=context,
+                generation=generation,
+            ).where(PrivateIndexProjection.id.in_(ids))
+        ).all()
+    )
+    if not authorized_ids:
+        return ()
+    rows = list(
+        session.scalars(
+            select(PrivateIndexProjection).where(
+                PrivateIndexProjection.company_id == context.company.id,
+                PrivateIndexProjection.generation_id == generation.id,
+                PrivateIndexProjection.id.in_(authorized_ids),
+            )
+        ).all()
+    )
+    current_source_ids = _source_versions_still_current(
+        session,
+        context=context,
+        projections=rows,
+    )
+    by_id = {
+        row.id: row
+        for row in rows
+        if row.id in authorized_ids and row.id in current_source_ids
+    }
+    return tuple(by_id[row_id] for row_id in ids if row_id in by_id)
+
+
 def hydrate_private_projection_results(
     session: Session,
     *,
@@ -998,36 +1155,15 @@ def hydrate_private_projection_results(
     generation = session.scalar(_active_generation_statement(context.company.id))
     if generation is None:
         return ()
-    authorized_ids = set(
-        session.scalars(
-            _authorized_projection_ids_statement(
-                session,
-                context=current_context,
-                generation=generation,
-            ).where(PrivateIndexProjection.id.in_(ids))
-        ).all()
-    )
-    if not authorized_ids:
-        return ()
-    rows = list(
-        session.scalars(
-            select(PrivateIndexProjection).where(
-                PrivateIndexProjection.company_id == context.company.id,
-                PrivateIndexProjection.generation_id == generation.id,
-                PrivateIndexProjection.id.in_(authorized_ids),
-            )
-        ).all()
-    )
-    current_source_ids = _source_versions_still_current(
+    rows = _current_authorized_projection_rows(
         session,
         context=current_context,
-        projections=rows,
+        generation=generation,
+        projection_ids=ids,
     )
     terms = _query_terms(query)
     ranked: list[tuple[float, PrivateIndexProjection]] = []
     for row in rows:
-        if row.id not in current_source_ids:
-            continue
         lowered = row.content_text.casefold()
         lexical = sum(lowered.count(term) for term in terms) / max(1, len(terms))
         vector = 0.0
@@ -1105,17 +1241,23 @@ def retrieve_private_content(
     locale: str = "en-IN",
     query_embedding: Sequence[float] | None = None,
     required_capability: str = "ai:generate",
+    require_activation: bool = False,
     limit: int = MAX_PRIVATE_RESULTS,
 ) -> tuple[HydratedPrivateResult, ...]:
-    generation = session.scalar(_active_generation_statement(context.company.id))
-    if generation is None:
+    fence = capture_private_retrieval_fence(
+        session,
+        context=context,
+        required_capability=required_capability,
+        require_activation=require_activation,
+    )
+    if fence is None:
         return ()
     key = private_retrieval_cache_key(
         company_id=context.company.id,
         membership_id=context.membership.id,
-        generation_id=generation.id,
-        access_policy_generation=generation.access_policy_generation,
-        tombstone_generation=generation.tombstone_generation,
+        generation_id=fence.generation_id,
+        access_policy_generation=fence.access_policy_generation,
+        tombstone_generation=fence.tombstone_generation,
         query=query,
         source_types=set(source_types or ()),
         filters=filters,
@@ -1149,15 +1291,195 @@ def retrieve_private_content(
                 _CANDIDATE_CACHE.popitem(last=False)
     # Cached IDs are never returned directly.  This reauthorization is the
     # security boundary that makes a stale cache harmless after revocation.
-    return hydrate_private_projection_results(
+    return _private_results_for_delivery(
         session,
-        context=context,
+        fence=fence,
         projection_ids=candidate_ids,
         query=query,
         query_embedding=query_embedding,
-        required_capability=required_capability,
         limit=limit,
     )
+
+
+def _private_results_for_delivery(
+    session: Session,
+    *,
+    fence: PrivateRetrievalFence,
+    projection_ids: Iterable[str],
+    query: str,
+    query_embedding: Sequence[float] | None = None,
+    limit: int = MAX_PRIVATE_RESULTS,
+) -> tuple[HydratedPrivateResult, ...]:
+    """Reauthorize exact epochs and sources immediately before serialization."""
+
+    ids = tuple(dict.fromkeys(projection_ids))[:MAX_PREFILTER_CANDIDATES]
+    delivery = _private_delivery_context(session, fence=fence)
+    if delivery is None or not ids:
+        return ()
+    context, generation = delivery
+    rows = _current_authorized_projection_rows(
+        session,
+        context=context,
+        generation=generation,
+        projection_ids=ids,
+    )
+    # This function is called only at the final serialization boundary. Stream
+    # callers open a fresh session for each row, so this one bounded query set
+    # is both the last authorization decision and resistant to N+1 work.
+    terms = _query_terms(query)
+    ranked: list[tuple[float, PrivateIndexProjection]] = []
+    for row in rows:
+        lowered = row.content_text.casefold()
+        lexical = sum(lowered.count(term) for term in terms) / max(1, len(terms))
+        vector = 0.0
+        if query_embedding is not None and row.embedding_json:
+            try:
+                embedding = tuple(float(value) for value in json.loads(row.embedding_json))
+            except (TypeError, ValueError, json.JSONDecodeError):
+                embedding = ()
+            vector = _cosine_similarity(tuple(query_embedding), embedding)
+        ranked.append((lexical + vector, row))
+    ranked.sort(key=lambda item: (-item[0], item[1].id))
+    bounded = max(1, min(limit, MAX_PRIVATE_RESULTS))
+    return tuple(
+        HydratedPrivateResult(
+            projection_id=row.id,
+            source_type=row.source_type,
+            source_id=row.source_id,
+            source_version=row.source_version,
+            label=row.label,
+            content=row.content_text,
+            score=score,
+        )
+        for score, row in ranked[:bounded]
+    )
+
+
+def autocomplete_private_content(
+    session: Session,
+    *,
+    context: SessionContext,
+    query: str,
+    source_types: set[PrivateSourceType] | None = None,
+    filters: dict[str, object] | None = None,
+    required_capability: str = "ai:generate",
+    limit: int = 12,
+) -> tuple[PrivateAutocompleteSuggestion, ...]:
+    """Return authorized labels only; private content never enters the response."""
+
+    fence = capture_private_retrieval_fence(
+        session,
+        context=context,
+        required_capability=required_capability,
+        require_activation=True,
+    )
+    if fence is None:
+        return ()
+    candidate_ids = prefilter_private_projection_ids(
+        session,
+        context=context,
+        query=query,
+        source_types=source_types,
+        filters=filters,
+        required_capability=required_capability,
+        limit=min(limit, MAX_PRIVATE_RESULTS),
+    )
+    rows = _private_results_for_delivery(
+        session,
+        fence=fence,
+        projection_ids=candidate_ids,
+        query=query,
+        limit=limit,
+    )
+    return tuple(
+        PrivateAutocompleteSuggestion(
+            projection_id=row.projection_id,
+            source_type=row.source_type,
+            source_id=row.source_id,
+            source_version=row.source_version,
+            label=row.label,
+        )
+        for row in rows
+    )
+
+
+def count_private_content(
+    session: Session,
+    *,
+    context: SessionContext,
+    query: str,
+    source_types: set[PrivateSourceType] | None = None,
+    filters: dict[str, object] | None = None,
+    required_capability: str = "ai:generate",
+) -> int:
+    """Count only bounded, current rows reauthorized at count delivery time."""
+
+    fence = capture_private_retrieval_fence(
+        session,
+        context=context,
+        required_capability=required_capability,
+        require_activation=True,
+    )
+    if fence is None:
+        return 0
+    candidate_ids = prefilter_private_projection_ids(
+        session,
+        context=context,
+        query=query,
+        source_types=source_types,
+        filters=filters,
+        required_capability=required_capability,
+        limit=MAX_PREFILTER_CANDIDATES,
+    )
+    delivery = _private_delivery_context(session, fence=fence)
+    if delivery is None:
+        return 0
+    current_context, generation = delivery
+    rows = _current_authorized_projection_rows(
+        session,
+        context=current_context,
+        generation=generation,
+        projection_ids=candidate_ids,
+    )
+    return len(rows)
+
+
+def stream_private_content(
+    *,
+    fence: PrivateRetrievalFence,
+    projection_ids: Iterable[str],
+    query: str,
+    session_factory: Callable[[], Session],
+    limit: int = MAX_PRIVATE_RESULTS,
+) -> Iterator[HydratedPrivateResult]:
+    """Stream rows with a fresh security/source check before every emission."""
+
+    candidate_ids = tuple(dict.fromkeys(projection_ids))[:MAX_PREFILTER_CANDIDATES]
+    if not candidate_ids:
+        return
+    with session_factory() as ordering_session:
+        ordered = _private_results_for_delivery(
+            ordering_session,
+            fence=fence,
+            projection_ids=candidate_ids,
+            query=query,
+            limit=limit,
+        )
+        ordered_ids = tuple(row.projection_id for row in ordered)
+    for projection_id in ordered_ids:
+        with session_factory() as delivery_session:
+            delivered = _private_results_for_delivery(
+                delivery_session,
+                fence=fence,
+                projection_ids=(projection_id,),
+                query=query,
+                limit=1,
+            )
+        if len(delivered) != 1:
+            # Do not skip and continue: absence may mean a mid-stream revoke.
+            # Termination exposes neither which row changed nor any later text.
+            return
+        yield delivered[0]
 
 
 def capture_private_saved_source_manifest(
@@ -1613,16 +1935,22 @@ def reauthorize_private_saved_outputs(
 
 __all__ = [
     "HydratedPrivateResult",
+    "MAX_PREFILTER_CANDIDATES",
     "PRIVATE_PROJECTION_EVENT_KEY_MAX_LENGTH",
     "PRIVATE_SAVED_SOURCE_SCHEMA",
+    "PrivateAutocompleteSuggestion",
     "PrivateProjectionInput",
     "PrivateRetrievalActivation",
+    "PrivateRetrievalFence",
     "PrivateRetrievalInvariantError",
     "ProjectionScopeInput",
     "activate_private_generation",
     "apply_private_projection_event",
+    "autocomplete_private_content",
     "build_private_projection_event_key",
+    "capture_private_retrieval_fence",
     "capture_private_saved_source_manifest",
+    "count_private_content",
     "create_shadow_private_generation",
     "ensure_active_private_generation",
     "hydrate_private_projection_results",
@@ -1636,5 +1964,6 @@ __all__ = [
     "reauthorize_private_saved_outputs",
     "register_private_saved_output",
     "retrieve_private_content",
+    "stream_private_content",
     "upsert_private_projection",
 ]
