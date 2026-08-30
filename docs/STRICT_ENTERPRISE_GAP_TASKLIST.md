@@ -1,7 +1,7 @@
 # Strict Enterprise Gap Tasklist
 
 This is the fail-closed enterprise hardening ledger for CaseOps.
-`docs/WORK_TO_BE_DONE.md` is planning input only. Claude must cross-check
+`docs/WORK_TO_BE_DONE.md` is planning input only. Codex must cross-check
 backlog claims against code, tests, and deploy manifests before changing any
 status here.
 
@@ -795,14 +795,14 @@ ledger is `P1-002` / `P1-003` / `AQ-003` / `AQ-004` above.
   `apps/web/components/drafting/BenchContextCard.test.tsx`. Plus
   73-test drafting-suite green after the per-template prompt wiring.
 
-## Claude Discipline
+## Codex Discipline
 
-- Claude must read `.claude/skills/enterprise-hardening/SKILL.md` before any
+- Codex must read `.claude/skills/enterprise-hardening/SKILL.md` before any
   enterprise-readiness, scale-hardening, or `WORK_TO_BE_DONE.md` audit.
-- Claude must update this file in the same task as the audit.
-- Claude must not close a hardening item without evidence from code, tests, and
+- Codex must update this file in the same task as the audit.
+- Codex must not close a hardening item without evidence from code, tests, and
   deploy or runtime state where relevant.
-- Claude must call out doc drift explicitly instead of silently trusting or
+- Codex must call out doc drift explicitly instead of silently trusting or
   rewriting old backlog text.
 
 ---
