@@ -144,8 +144,8 @@
       "deliverable": "Applicant/opponent workflows, partial/multi-class scope, service/evidence/translation, hearing/order/appeal, rectification foundation, reviewed templates",
       "exit_criteria": "UJ-12, UJ-13, UJ-24, UJ-33, UJ-34, and UJ-38 pass with anonymized matters; lawyer signs rule/workflow fixtures/templates; terminal lifecycle and recalculation regressions pass",
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "epic_ids": [
         "IPLF-040",
@@ -1426,8 +1426,8 @@
         "IPLF-038A",
         "IPLF-038B"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "evidence_refs": []
     },
@@ -1587,8 +1587,8 @@
         "IPLF-040A",
         "IPLF-040B"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "evidence_refs": [
         "docs/ip-implementation/evidence/m4/IPLF-040A/local-2026-08-23.md"
@@ -9183,7 +9183,13 @@
       ],
       "implementation_refs": [
         "apps/api/src/caseops_api/schemas/ip_reports.py",
+        "apps/api/src/caseops_api/schemas/ip_operations.py",
+        "apps/api/src/caseops_api/schemas/ip_portfolio.py",
+        "apps/api/src/caseops_api/schemas/ip_renewals.py",
         "apps/api/src/caseops_api/services/ip_reports.py",
+        "apps/api/src/caseops_api/services/ip_operations.py",
+        "apps/api/src/caseops_api/services/ip_portfolio.py",
+        "apps/api/src/caseops_api/services/ip_renewals.py",
         "apps/api/src/caseops_api/services/connector_health.py",
         "apps/web/app/app/ip/reports/page.tsx",
         "apps/web/lib/api/endpoints.ts",
@@ -9194,20 +9200,26 @@
       "test_refs": [
         "apps/api/tests/test_ip_report_workflow.py::test_iplf_req_report_01_status_reports_preserve_registry_identifiers#IPLF-REQ-REPORT-01",
         "apps/api/tests/test_ip_report_workflow.py::test_iplf_req_report_01_operational_reports_are_honest#IPLF-REQ-REPORT-01",
+        "apps/api/tests/test_ip_report_workflow.py::test_iplf_req_report_01_portfolio_deadline_and_quality_reports_are_bounded_and_complete#IPLF-REQ-REPORT-01",
+        "apps/api/tests/test_ip_report_workflow.py::test_iplf_req_report_01_renewal_report_returns_canonical_evidence#IPLF-REQ-REPORT-01",
         "apps/api/tests/test_ip_report_workflow.py::test_iplf_req_report_02_rejects_filters_that_cannot_be_applied#IPLF-REQ-REPORT-02",
+        "apps/api/tests/test_postgres_validation.py::test_bounded_renewal_report_reader_runs_on_postgres#IPLF-REQ-REPORT-01",
         "apps/web/app/app/ip/reports/page.test.tsx",
         "tests/e2e/iplf-038b-reports-2026-08-23.spec.ts",
-        "planned:IPLF-UJ-27-EXC-01",
-        "planned:IPLF-UJ-27-EXC-02",
-        "planned:IPLF-UJ-27-EXC-03",
-        "planned:IPLF-UJ-27-NORMAL",
-        "planned:IPLF-UJ-59-EXC-01",
-        "planned:IPLF-UJ-59-EXC-02",
-        "planned:IPLF-UJ-59-EXC-03",
-        "planned:IPLF-UJ-59-NORMAL"
+        "apps/api/tests/test_portal_ip.py::test_ip_portal_report_instruction_acknowledgement_and_revoke#IPLF-UJ-27-NORMAL",
+        "apps/api/tests/test_portal_ip.py::test_ip_portal_report_instruction_acknowledgement_and_revoke#IPLF-UJ-27-EXC-01",
+        "apps/api/tests/test_portal_ip.py::test_document_publication_allows_only_granted_approved_nonprivileged_version#IPLF-UJ-27-EXC-02",
+        "apps/api/tests/test_portal_ip.py::test_ip_portal_report_instruction_acknowledgement_and_revoke#IPLF-UJ-27-EXC-03",
+        "apps/api/tests/test_ip_control_review_signoff.py::test_uj59_normal_produce_and_sign_off_a_control_review#IPLF-UJ-59-NORMAL",
+        "apps/api/tests/test_ip_control_review_signoff.py::test_uj59_exc01_stale_source_or_failed_query_blocks_clean_sign_off#IPLF-UJ-59-EXC-01",
+        "apps/api/tests/test_ip_control_review_signoff.py::test_uj59_exc02_and_uj50_exc01_restricted_work_never_leaks_into_counts#IPLF-UJ-59-EXC-02",
+        "apps/api/tests/test_ip_control_review_signoff.py::test_uj59_exc03_export_failure_does_not_mark_review_complete#IPLF-UJ-59-EXC-03"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m3/IPLF-038B/local-2026-08-23.md"
+        "docs/ip-implementation/evidence/m3/IPLF-038B/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m3/IPLF-038B/local-2026-08-30.md",
+        "docs/ip-implementation/evidence/m3/IPLF-039C/control-review-completion-2026-08-21.md",
+        "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
       ],
       "evidence_metadata": [
         {
@@ -9218,18 +9230,36 @@
           "assertions": "nine strict report definitions; canonical-reader reuse; separate application/opposition identifiers; truthful freshness/unavailability; read-only connector-health projection; relevant-filter enforcement; hidden-count policy; audit digest; responsive internal UI",
           "result": "passed",
           "recorded_at": "2026-08-23T02:20:00+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m3/IPLF-038B/local-2026-08-30.md",
+          "revision": "f52d66082efae3261b8c3e9c96e5151406aac28f",
+          "environment": "local SQLite fixtures, isolated PostgreSQL 17/pgvector, generated OpenAPI types, Vitest, and TypeScript",
+          "fixtures": "two authorized portfolio records behind a one-row preview, stable deadline control, two canonical renewal terms, UJ-27 portal publication fixtures, and UJ-59 signed-control fixtures",
+          "assertions": "full-scope portfolio/data-quality counts, stable deadline rows and snapshots, 200-row output cap, 1000-candidate filtered-renewal cap, one batched instruction query for two terms, honest truncation, existing publication/sign-off ownership, and no schema or background control plane",
+          "result": "passed",
+          "recorded_at": "2026-08-30T12:20:00+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m3/IPLF-039C/control-review-completion-2026-08-21.md",
+          "revision": "b47724a8171576be9f74f8d5677cdce2a7f10731",
+          "environment": "local SQLite plus ephemeral PostgreSQL 17/pgvector and fresh local API/web Playwright servers",
+          "fixtures": "deterministic tenant-isolated docket-control fixtures and two independent authenticated members; no live provider credential",
+          "assertions": "UJ-59 exception decisions, reviewer sampling, two-role signatures, report archive authorization, signed deltas, append-only persistence, tenant correlation, UI download, and independent two-user E2E",
+          "result": "passed",
+          "recorded_at": "2026-08-21T07:35:00+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md",
+          "revision": "22acb0b159dc2d8e538fee0387217c5c4ad18871",
+          "environment": "local API and responsive React component tests",
+          "fixtures": "client-visible identifiers/events/dates, approved reports/documents, current/stale publications, and pending client decisions",
+          "assertions": "UJ-27 normal and three exception paths, explicit grants, sensitive exclusions, delivery escalation, revocation, and no automatic legal-state mutation",
+          "result": "passed",
+          "recorded_at": "2026-08-25T20:30:00+05:30"
         }
       ],
       "blockers": [
-        {
-          "id": "IPLF-038B-M5-CLIENT-DELIVERY",
-          "state": "active",
-          "summary": "UJ-27 client publication and REPORT-03 scheduled delivery are not authorized in M3 and have no active portal-publication or neutral scheduled-report contract.",
-          "evidence_needed": "M5 portal grant/publication contract, neutral notification-delivery integration, delivery-result UI, exception tests, and exact deployed client UAT.",
-          "owner": "IPLF-100B and M5 portal/report activation owners",
-          "milestone_impact": "Keeps UJ-27 and REPORT-03 open; it does not block the locally verified internal synchronous workspace.",
-          "next_independent_slice": "Continue the next unblocked M3 manifest node."
-        },
         {
           "id": "IPLF-038B-WATCH-PROVIDER",
           "state": "active",
@@ -9242,29 +9272,30 @@
         {
           "id": "IPLF-038B-RELEASE-VERIFY",
           "state": "active",
-          "summary": "The internal reporting subset is locally verified; exact-head CI, merged-main recheck, deployment and authenticated production acceptance remain pending.",
-          "evidence_needed": "Green CI/PostgreSQL/security/CodeQL on the exact PR head and merged main, deployed runtime identity, health, and authenticated production report-contract/browser evidence.",
+          "summary": "The bounded synchronous definitions are locally verified at f52d66082efae3261b8c3e9c96e5151406aac28f; hosted exact-head CI, current-main integration, deployment and authenticated production acceptance remain pending.",
+          "evidence_needed": "Green CI/PostgreSQL/security/CodeQL on the exact candidate and integrated main, deployed runtime identity, health, and authenticated production report-contract/browser evidence.",
           "owner": "CaseOps release workflow",
-          "milestone_impact": "Blocks release_status for the implemented subset only.",
-          "next_independent_slice": "Open and merge the exact implementation candidate before starting another release lane."
+          "milestone_impact": "Blocks release_status only; repository implementation and local verification are complete.",
+          "next_independent_slice": "Integrate this exact candidate after current-main compatibility review."
         }
       ],
       "next_actions": [
-        "Run exact-head CI/PostgreSQL/security/CodeQL, merge only when green, rerun on merged main, deploy the exact revision, and attach authenticated production contract/browser evidence.",
-        "Leave report_jobs/report_artifacts absent until representative-volume evidence proves the synchronous 200-row ceiling is insufficient.",
-        "Leave client publication, scheduled delivery and active watch reporting to their named M5 owners; do not substitute the outside-counsel portal, existing portfolio export job, signed docket-control review, renewal notifications, or legal-update watchlists."
+        "Run hosted exact-head CI/PostgreSQL/security/CodeQL, integrate with current main after compatibility review, rerun on integrated main, deploy the exact revision, and attach authenticated production contract/browser evidence.",
+        "Keep report_jobs/report_artifacts absent until measured representative-volume evidence proves the 200-row output and 1000-candidate filtered-renewal ceilings insufficient.",
+        "Keep active watch reporting fail-closed until the named lawful provider is activated; preserve IPLF-055 portal publication/delivery and IPLF-039C signed docket control as the existing owners."
       ],
       "data_impact": [
-        "No schema, queue, artifact, scheduler or delivery change. Report adapters read existing access-filtered portfolio, docket-control, renewal, daily-docket and persisted connector-health projections; preview writes only ip.report.previewed through the shared audit service."
+        "No schema, queue, artifact, scheduler or delivery change. Report adapters read existing access-filtered portfolio, docket-control, renewal, daily-docket and persisted connector-health projections; output is capped at 200 rows, filtered renewal candidates at 1000, child histories are batch-loaded or omitted from the report shape, and preview writes only ip.report.previewed through the shared audit service."
       ],
       "documentation_impact": [
         "apps/web/app/guide/page.tsx",
         "apps/web/app/law-firms/page.tsx",
-        "docs/ip-implementation/evidence/m3/IPLF-038B/local-2026-08-23.md"
+        "docs/ip-implementation/evidence/m3/IPLF-038B/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m3/IPLF-038B/local-2026-08-30.md"
       ],
-      "allocation_review": "2026-08-23 current-main reconciliation and two-pass implementation review: IPLF-030A/030B remain the portfolio and export owners, IPLF-039C remains the signed docket-control/UJ-59 owner, IPLF-037 remains the renewal owner, daily docket remains the workload owner, connector health remains the freshness owner, and shared access/audit services remain canonical. IPLF-038B adds only nine strict synchronous internal definitions and a responsive internal workspace. Application and opposition status preserve separate registry identifiers. The watch definition is fail-closed unavailable until M5. No report job, artifact, scheduler, delivery, portal, notification, legal-date, watchlist, docket, renewal, export or connector-health duplicate was added. Local verification passed at exact implementation revision 09aeb25ef85966064c15b806789067b70cee1bbe. The slice stays in progress because UJ-27, REPORT-03 and activated watch reporting remain legitimately blocked, while UJ-59 implementation remains credited only to IPLF-039C.",
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "allocation_review": "2026-08-30 current-main audit and exact-revision verification: IPLF-030A/030B remain the portfolio/export owners, IPLF-037 remains the renewal owner, IPLF-039C remains the signed docket-control/UJ-59 owner, IPLF-055 remains the portal publication/delivery/UJ-27 owner, daily docket remains the workload owner, connector health remains the freshness owner, and shared access/audit services remain canonical. IPLF-038B extends only their schema-free synchronous reporting projection. Revision f52d66082efae3261b8c3e9c96e5151406aac28f fixes full-scope freshness/count accuracy, stable deadline cutoffs and detail rows, bounded set-based renewal reads, explicit completeness, and real-PostgreSQL compatibility without a migration or background control plane. UJ-27 and UJ-59 tests/evidence are now concrete rather than planned; REPORT-03's remaining cross-program allocation stays with IPLF-039F/IPLF-100B. The watch definition remains honestly unavailable until its lawful provider is activated. Repository implementation and local verification are complete; only hosted integration/deployment acceptance blocks release.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked"
     },
     {
@@ -10320,7 +10351,7 @@
       "scope_source": "IPLF-040",
       "primary_behavior": "User workflow, exceptions, and release proof",
       "migration_boundary": "Additive revision 20260823_0002 adds a nullable proceeding-scoped party link and widens the existing opposition-event mutation guard to lawyer-confirmed profile revisions. There is no backfill or parallel profile table; downgrade refuses while scoped parties or profile evidence remain.",
-      "release_boundary": "The baseline must pass SQLite and PostgreSQL migration/immutability proof, API and browser journeys for both represented sides, full web validation, hosted CI/security/CodeQL, exact-main CI, one-revision migration/API/web deployment, and dated production identity/health/acceptance proof. Full UJ-12/UJ-13 activation remains fail-closed behind IPLF-041 through IPLF-043.",
+      "release_boundary": "The baseline must pass SQLite and PostgreSQL migration/immutability proof, API and browser journeys for both represented sides, full web validation, hosted CI/security/CodeQL, exact-main CI, one-revision migration/API/web deployment, and dated production identity/health/acceptance proof. IPLF-041 through IPLF-043 now provide the specialized UJ-12/UJ-13 work product, deadline, evidence, hearing, order, appeal, withdrawal, and exception paths; exact deployed production revalidation of those dated browser journeys remains a release-only gate.",
       "requirement_ids": [
         "IP-OPP-01",
         "IP-OPP-02",
@@ -10374,10 +10405,16 @@
         "apps/api/src/caseops_api/db/models.py",
         "apps/api/src/caseops_api/schemas/ip_oppositions.py",
         "apps/api/src/caseops_api/services/ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_applicant.py",
+        "apps/api/src/caseops_api/services/ip_opposition_opponent.py",
+        "apps/api/src/caseops_api/services/ip_opposition_shared.py",
         "apps/api/src/caseops_api/services/ip_oppositions.py",
         "apps/api/src/caseops_api/services/ip_lifecycle.py",
         "apps/api/src/caseops_api/api/routes/ip_operations.py",
         "apps/web/components/ip/IpOppositionWorkspace.tsx",
+        "apps/web/components/ip/IpOppositionApplicantWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionOpponentWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionSharedWorkflow.tsx",
         "apps/web/app/app/ip/page.tsx",
         "apps/web/lib/api/endpoints.ts",
         "apps/web/lib/api/openapi-types.ts",
@@ -10392,18 +10429,26 @@
         "apps/web/components/ip/IpOppositionWorkspace.test.tsx",
         "apps/web/app/app/ip/page.test.tsx",
         "tests/e2e/iplf-040b-opposition-workspace-2026-08-23.spec.ts",
-        "planned:IPLF-UJ-12-EXC-01",
-        "planned:IPLF-UJ-12-EXC-02",
-        "planned:IPLF-UJ-12-EXC-03",
-        "planned:IPLF-UJ-12-NORMAL",
-        "planned:IPLF-UJ-13-EXC-01",
-        "planned:IPLF-UJ-13-EXC-02",
-        "planned:IPLF-UJ-13-EXC-03",
-        "planned:IPLF-UJ-13-NORMAL"
+        "IPLF-UJ-12-NORMAL:apps/api/tests/test_ip_opposition_applicant_workflow.py::test_uj12_normal_runs_confirmed_deadlines_and_applicant_work_product",
+        "IPLF-UJ-12-EXC-01:apps/api/tests/test_ip_opposition_applicant_workflow.py::test_uj12_exc01_pending_opposition_number_is_explicit",
+        "IPLF-UJ-12-EXC-02:apps/api/tests/test_ip_opposition_applicant_workflow.py::test_uj12_exc02_exception_requires_source_evidence_and_approval",
+        "IPLF-UJ-12-EXC-03:apps/api/tests/test_ip_opposition_applicant_workflow.py::test_uj12_normal_runs_confirmed_deadlines_and_applicant_work_product",
+        "tests/e2e/iplf-041-applicant-workflow-2026-08-23.spec.ts",
+        "IPLF-UJ-13-NORMAL:apps/api/tests/test_ip_opposition_opponent_workflow.py::test_iplf_uj_13_normal_tracks_notice_rule45_and_rule47",
+        "IPLF-UJ-13-EXC-01:apps/api/tests/test_ip_opposition_opponent_workflow.py::test_iplf_uj_13_exc_01_closes_watch_hit_without_filing",
+        "IPLF-UJ-13-EXC-02:apps/api/tests/test_ip_opposition_opponent_workflow.py::test_iplf_uj_13_exc_02_pending_instruction_escalates_before_limitation",
+        "IPLF-UJ-13-EXC-03:apps/api/tests/test_ip_opposition_opponent_workflow.py::test_iplf_uj_13_exc_03_rejection_opens_task_without_filed_stage",
+        "tests/e2e/iplf-042-opponent-workflow-2026-08-23.spec.ts",
+        "apps/api/tests/test_ip_opposition_shared_workflow.py",
+        "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m4/IPLF-040B/local-2026-08-23.md",
-        "docs/ip-implementation/evidence/m4/IPLF-040B/release-2026-08-23.md"
+        "docs/ip-implementation/evidence/m4/IPLF-040B/release-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md"
       ],
       "evidence_metadata": [
         {
@@ -10421,20 +10466,29 @@
           "environment": "hosted PR and exact-main CI plus production API/web/migration/schedulers",
           "fixtures": "production-safe exact-identity, RAM, IPLF-027B A0 and notice acceptance; no live legal filing or fabricated governed renewal IDs",
           "assertions": "exact-head merge fences; exact-main CI, security and CodeQL; migration success; immutable images; 100 percent API/web traffic; health; scheduler reconciliation; stable production identity and broad production regression acceptance",
-          "result": "bounded baseline passed; independent IPLF-037B renewal governance IDs remain fail-closed",
+          "result": "passed",
           "recorded_at": "2026-08-23T12:15:49+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+          "revision": "820e34bbf71750d9513ba0efbae6ab614963e916",
+          "environment": "Current origin/main source at 820e34bb; local SQLite API regressions, focused web unit regressions, a fresh locked production web build followed by current-source API/web Playwright servers, and canonical manifest validation",
+          "fixtures": "Deterministic synthetic applicant-side and opponent-side trademark matters, governed rule/calendar fixtures, hearing/order/appeal records, and tenant/capability boundaries; no live registry filing, provider operation, client record, or external legal effect",
+          "assertions": "The deployed IPLF-040B canonical workspace is extended by the already-merged IPLF-041 applicant, IPLF-042 opponent, and IPLF-043 shared resolution owners; all eight UJ-12/UJ-13 normal and exception paths have executable API/browser references; no planned reference remains on the slice; and the exact production revalidation boundary is kept separate from repository implementation closure",
+          "result": "passed",
+          "recorded_at": "2026-08-30T00:00:00+05:30"
         }
       ],
       "blockers": [
         {
-          "id": "IPLF-040B-JOURNEY-COMPLETION",
+          "id": "IPLF-040B-PRODUCTION-REVALIDATION",
           "state": "open",
-          "summary": "The bounded opposition workspace baseline is deployment-verified. Complete UJ-12/UJ-13 work product, deadlines, exception decisions, evidence, hearing, order and appeal paths remain allocated to IPLF-041 through IPLF-043 and are not claimed here."
+          "summary": "Repository implementation and local verification are complete, and the canonical IPLF-040B baseline was deployed. The subsequently merged IPLF-041 through IPLF-043 dated browser journeys still need exact-serving-revision production revalidation before the consolidated slice can be labelled deployment-verified."
         }
       ],
       "next_actions": [
-        "Continue IPLF-041 through IPLF-043 for role-specific TM-O pleadings, statutory deadline/evidence workflows, hearing/order/appeal detail, and the remaining UJ-12/UJ-13 normal and exception paths.",
-        "Keep IPLF-037B renewal activation fail-closed until genuine governed production calendar and rule version IDs are supplied."
+        "Run the existing dated IPLF-041, IPLF-042, and IPLF-043 Playwright journeys against the exact serving production revision using production-safe synthetic data, then attach the immutable run and release identity before changing release_status.",
+        "Keep unrelated IPLF-037B renewal activation fail-closed until genuine governed production calendar and rule version IDs are supplied."
       ],
       "data_impact": [
         "Adds a nullable proceeding_id foreign key and tenant-scoped composite index to existing ip_parties_and_roles; legacy docket-level parties remain unchanged.",
@@ -10446,9 +10500,9 @@
         "docs/ip-implementation/generated/DATA_GOVERNANCE_MAP.md",
         "docs/ip-implementation/evidence/m4/IPLF-040B/local-2026-08-23.md"
       ],
-      "allocation_review": "2026-08-23 duplicate-work review confirms this baseline composes the existing proceeding, identifier, party, event, docket, Matter, access, and audit owners. It does not duplicate IPLF-041 applicant workflow, IPLF-042 opponent workflow, or IPLF-043 evidence/hearing/order/appeal owners. Because this row is reciprocally allocated all IP-OPP requirements and UJ-12/UJ-13 paths, it remains in progress despite passing bounded baseline tests; specialized normal/exception coverage is still planned and is not claimed by the local evidence.",
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "allocation_review": "2026-08-30 consolidation review confirms the deployed baseline composes the existing proceeding, identifier, party, event, docket, Matter, access, and audit owners and does not duplicate IPLF-041 applicant, IPLF-042 opponent, or IPLF-043 shared-resolution writers. Those dependency slices are implemented and provide executable coverage for every UJ-12/UJ-13 path formerly listed as planned. Repository implementation is therefore complete; only exact-serving-revision production revalidation remains blocked.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked"
     },
     {
@@ -20976,31 +21030,39 @@
         "UJ-34",
         "UJ-38"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-OPP-01",
-        "planned:IPLF-UJ-12-EXC-01",
-        "planned:IPLF-UJ-12-EXC-02",
-        "planned:IPLF-UJ-12-EXC-03",
-        "planned:IPLF-UJ-12-NORMAL",
-        "planned:IPLF-UJ-13-EXC-01",
-        "planned:IPLF-UJ-13-EXC-02",
-        "planned:IPLF-UJ-13-EXC-03",
-        "planned:IPLF-UJ-13-NORMAL",
-        "planned:IPLF-UJ-34-EXC-01",
-        "planned:IPLF-UJ-34-EXC-02",
-        "planned:IPLF-UJ-34-EXC-03",
-        "planned:IPLF-UJ-34-NORMAL",
-        "planned:IPLF-UJ-38-EXC-01",
-        "planned:IPLF-UJ-38-EXC-02",
-        "planned:IPLF-UJ-38-EXC-03",
-        "planned:IPLF-UJ-38-EXC-04",
-        "planned:IPLF-UJ-38-NORMAL"
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260823_0002_ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_applicant.py",
+        "apps/api/src/caseops_api/services/ip_opposition_opponent.py",
+        "apps/api/src/caseops_api/services/ip_opposition_shared.py",
+        "apps/web/components/ip/IpOppositionWorkspace.tsx",
+        "apps/web/components/ip/IpOppositionApplicantWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionOpponentWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionSharedWorkflow.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_opposition_foundation.py",
+        "apps/api/tests/test_ip_opposition_workspace.py",
+        "apps/api/tests/test_ip_opposition_applicant_workflow.py",
+        "apps/api/tests/test_ip_opposition_opponent_workflow.py",
+        "apps/api/tests/test_ip_opposition_shared_workflow.py",
+        "apps/api/tests/test_ip_post_registration.py",
+        "tests/e2e/iplf-041-applicant-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-042-opponent-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -21023,31 +21085,39 @@
         "UJ-34",
         "UJ-38"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-OPP-02",
-        "planned:IPLF-UJ-12-EXC-01",
-        "planned:IPLF-UJ-12-EXC-02",
-        "planned:IPLF-UJ-12-EXC-03",
-        "planned:IPLF-UJ-12-NORMAL",
-        "planned:IPLF-UJ-13-EXC-01",
-        "planned:IPLF-UJ-13-EXC-02",
-        "planned:IPLF-UJ-13-EXC-03",
-        "planned:IPLF-UJ-13-NORMAL",
-        "planned:IPLF-UJ-34-EXC-01",
-        "planned:IPLF-UJ-34-EXC-02",
-        "planned:IPLF-UJ-34-EXC-03",
-        "planned:IPLF-UJ-34-NORMAL",
-        "planned:IPLF-UJ-38-EXC-01",
-        "planned:IPLF-UJ-38-EXC-02",
-        "planned:IPLF-UJ-38-EXC-03",
-        "planned:IPLF-UJ-38-EXC-04",
-        "planned:IPLF-UJ-38-NORMAL"
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260823_0002_ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_applicant.py",
+        "apps/api/src/caseops_api/services/ip_opposition_opponent.py",
+        "apps/api/src/caseops_api/services/ip_opposition_shared.py",
+        "apps/web/components/ip/IpOppositionWorkspace.tsx",
+        "apps/web/components/ip/IpOppositionApplicantWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionOpponentWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionSharedWorkflow.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_opposition_foundation.py",
+        "apps/api/tests/test_ip_opposition_workspace.py",
+        "apps/api/tests/test_ip_opposition_applicant_workflow.py",
+        "apps/api/tests/test_ip_opposition_opponent_workflow.py",
+        "apps/api/tests/test_ip_opposition_shared_workflow.py",
+        "apps/api/tests/test_ip_post_registration.py",
+        "tests/e2e/iplf-041-applicant-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-042-opponent-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -21070,31 +21140,39 @@
         "UJ-34",
         "UJ-38"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-OPP-03",
-        "planned:IPLF-UJ-12-EXC-01",
-        "planned:IPLF-UJ-12-EXC-02",
-        "planned:IPLF-UJ-12-EXC-03",
-        "planned:IPLF-UJ-12-NORMAL",
-        "planned:IPLF-UJ-13-EXC-01",
-        "planned:IPLF-UJ-13-EXC-02",
-        "planned:IPLF-UJ-13-EXC-03",
-        "planned:IPLF-UJ-13-NORMAL",
-        "planned:IPLF-UJ-34-EXC-01",
-        "planned:IPLF-UJ-34-EXC-02",
-        "planned:IPLF-UJ-34-EXC-03",
-        "planned:IPLF-UJ-34-NORMAL",
-        "planned:IPLF-UJ-38-EXC-01",
-        "planned:IPLF-UJ-38-EXC-02",
-        "planned:IPLF-UJ-38-EXC-03",
-        "planned:IPLF-UJ-38-EXC-04",
-        "planned:IPLF-UJ-38-NORMAL"
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260823_0002_ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_applicant.py",
+        "apps/api/src/caseops_api/services/ip_opposition_opponent.py",
+        "apps/api/src/caseops_api/services/ip_opposition_shared.py",
+        "apps/web/components/ip/IpOppositionWorkspace.tsx",
+        "apps/web/components/ip/IpOppositionApplicantWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionOpponentWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionSharedWorkflow.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_opposition_foundation.py",
+        "apps/api/tests/test_ip_opposition_workspace.py",
+        "apps/api/tests/test_ip_opposition_applicant_workflow.py",
+        "apps/api/tests/test_ip_opposition_opponent_workflow.py",
+        "apps/api/tests/test_ip_opposition_shared_workflow.py",
+        "apps/api/tests/test_ip_post_registration.py",
+        "tests/e2e/iplf-041-applicant-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-042-opponent-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -21117,31 +21195,39 @@
         "UJ-34",
         "UJ-38"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-OPP-04",
-        "planned:IPLF-UJ-12-EXC-01",
-        "planned:IPLF-UJ-12-EXC-02",
-        "planned:IPLF-UJ-12-EXC-03",
-        "planned:IPLF-UJ-12-NORMAL",
-        "planned:IPLF-UJ-13-EXC-01",
-        "planned:IPLF-UJ-13-EXC-02",
-        "planned:IPLF-UJ-13-EXC-03",
-        "planned:IPLF-UJ-13-NORMAL",
-        "planned:IPLF-UJ-34-EXC-01",
-        "planned:IPLF-UJ-34-EXC-02",
-        "planned:IPLF-UJ-34-EXC-03",
-        "planned:IPLF-UJ-34-NORMAL",
-        "planned:IPLF-UJ-38-EXC-01",
-        "planned:IPLF-UJ-38-EXC-02",
-        "planned:IPLF-UJ-38-EXC-03",
-        "planned:IPLF-UJ-38-EXC-04",
-        "planned:IPLF-UJ-38-NORMAL"
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260823_0002_ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_applicant.py",
+        "apps/api/src/caseops_api/services/ip_opposition_opponent.py",
+        "apps/api/src/caseops_api/services/ip_opposition_shared.py",
+        "apps/web/components/ip/IpOppositionWorkspace.tsx",
+        "apps/web/components/ip/IpOppositionApplicantWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionOpponentWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionSharedWorkflow.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_opposition_foundation.py",
+        "apps/api/tests/test_ip_opposition_workspace.py",
+        "apps/api/tests/test_ip_opposition_applicant_workflow.py",
+        "apps/api/tests/test_ip_opposition_opponent_workflow.py",
+        "apps/api/tests/test_ip_opposition_shared_workflow.py",
+        "apps/api/tests/test_ip_post_registration.py",
+        "tests/e2e/iplf-041-applicant-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-042-opponent-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -21164,31 +21250,39 @@
         "UJ-34",
         "UJ-38"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-OPP-05",
-        "planned:IPLF-UJ-12-EXC-01",
-        "planned:IPLF-UJ-12-EXC-02",
-        "planned:IPLF-UJ-12-EXC-03",
-        "planned:IPLF-UJ-12-NORMAL",
-        "planned:IPLF-UJ-13-EXC-01",
-        "planned:IPLF-UJ-13-EXC-02",
-        "planned:IPLF-UJ-13-EXC-03",
-        "planned:IPLF-UJ-13-NORMAL",
-        "planned:IPLF-UJ-34-EXC-01",
-        "planned:IPLF-UJ-34-EXC-02",
-        "planned:IPLF-UJ-34-EXC-03",
-        "planned:IPLF-UJ-34-NORMAL",
-        "planned:IPLF-UJ-38-EXC-01",
-        "planned:IPLF-UJ-38-EXC-02",
-        "planned:IPLF-UJ-38-EXC-03",
-        "planned:IPLF-UJ-38-EXC-04",
-        "planned:IPLF-UJ-38-NORMAL"
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260823_0002_ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_applicant.py",
+        "apps/api/src/caseops_api/services/ip_opposition_opponent.py",
+        "apps/api/src/caseops_api/services/ip_opposition_shared.py",
+        "apps/web/components/ip/IpOppositionWorkspace.tsx",
+        "apps/web/components/ip/IpOppositionApplicantWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionOpponentWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionSharedWorkflow.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_opposition_foundation.py",
+        "apps/api/tests/test_ip_opposition_workspace.py",
+        "apps/api/tests/test_ip_opposition_applicant_workflow.py",
+        "apps/api/tests/test_ip_opposition_opponent_workflow.py",
+        "apps/api/tests/test_ip_opposition_shared_workflow.py",
+        "apps/api/tests/test_ip_post_registration.py",
+        "tests/e2e/iplf-041-applicant-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-042-opponent-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -21211,31 +21305,39 @@
         "UJ-34",
         "UJ-38"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-OPP-06",
-        "planned:IPLF-UJ-12-EXC-01",
-        "planned:IPLF-UJ-12-EXC-02",
-        "planned:IPLF-UJ-12-EXC-03",
-        "planned:IPLF-UJ-12-NORMAL",
-        "planned:IPLF-UJ-13-EXC-01",
-        "planned:IPLF-UJ-13-EXC-02",
-        "planned:IPLF-UJ-13-EXC-03",
-        "planned:IPLF-UJ-13-NORMAL",
-        "planned:IPLF-UJ-34-EXC-01",
-        "planned:IPLF-UJ-34-EXC-02",
-        "planned:IPLF-UJ-34-EXC-03",
-        "planned:IPLF-UJ-34-NORMAL",
-        "planned:IPLF-UJ-38-EXC-01",
-        "planned:IPLF-UJ-38-EXC-02",
-        "planned:IPLF-UJ-38-EXC-03",
-        "planned:IPLF-UJ-38-EXC-04",
-        "planned:IPLF-UJ-38-NORMAL"
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260823_0002_ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_applicant.py",
+        "apps/api/src/caseops_api/services/ip_opposition_opponent.py",
+        "apps/api/src/caseops_api/services/ip_opposition_shared.py",
+        "apps/web/components/ip/IpOppositionWorkspace.tsx",
+        "apps/web/components/ip/IpOppositionApplicantWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionOpponentWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionSharedWorkflow.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_opposition_foundation.py",
+        "apps/api/tests/test_ip_opposition_workspace.py",
+        "apps/api/tests/test_ip_opposition_applicant_workflow.py",
+        "apps/api/tests/test_ip_opposition_opponent_workflow.py",
+        "apps/api/tests/test_ip_opposition_shared_workflow.py",
+        "apps/api/tests/test_ip_post_registration.py",
+        "tests/e2e/iplf-041-applicant-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-042-opponent-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -21258,31 +21360,39 @@
         "UJ-34",
         "UJ-38"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-OPP-07",
-        "planned:IPLF-UJ-12-EXC-01",
-        "planned:IPLF-UJ-12-EXC-02",
-        "planned:IPLF-UJ-12-EXC-03",
-        "planned:IPLF-UJ-12-NORMAL",
-        "planned:IPLF-UJ-13-EXC-01",
-        "planned:IPLF-UJ-13-EXC-02",
-        "planned:IPLF-UJ-13-EXC-03",
-        "planned:IPLF-UJ-13-NORMAL",
-        "planned:IPLF-UJ-34-EXC-01",
-        "planned:IPLF-UJ-34-EXC-02",
-        "planned:IPLF-UJ-34-EXC-03",
-        "planned:IPLF-UJ-34-NORMAL",
-        "planned:IPLF-UJ-38-EXC-01",
-        "planned:IPLF-UJ-38-EXC-02",
-        "planned:IPLF-UJ-38-EXC-03",
-        "planned:IPLF-UJ-38-EXC-04",
-        "planned:IPLF-UJ-38-NORMAL"
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260823_0002_ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_applicant.py",
+        "apps/api/src/caseops_api/services/ip_opposition_opponent.py",
+        "apps/api/src/caseops_api/services/ip_opposition_shared.py",
+        "apps/web/components/ip/IpOppositionWorkspace.tsx",
+        "apps/web/components/ip/IpOppositionApplicantWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionOpponentWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionSharedWorkflow.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_opposition_foundation.py",
+        "apps/api/tests/test_ip_opposition_workspace.py",
+        "apps/api/tests/test_ip_opposition_applicant_workflow.py",
+        "apps/api/tests/test_ip_opposition_opponent_workflow.py",
+        "apps/api/tests/test_ip_opposition_shared_workflow.py",
+        "apps/api/tests/test_ip_post_registration.py",
+        "tests/e2e/iplf-041-applicant-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-042-opponent-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -21305,31 +21415,39 @@
         "UJ-34",
         "UJ-38"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-OPP-08",
-        "planned:IPLF-UJ-12-EXC-01",
-        "planned:IPLF-UJ-12-EXC-02",
-        "planned:IPLF-UJ-12-EXC-03",
-        "planned:IPLF-UJ-12-NORMAL",
-        "planned:IPLF-UJ-13-EXC-01",
-        "planned:IPLF-UJ-13-EXC-02",
-        "planned:IPLF-UJ-13-EXC-03",
-        "planned:IPLF-UJ-13-NORMAL",
-        "planned:IPLF-UJ-34-EXC-01",
-        "planned:IPLF-UJ-34-EXC-02",
-        "planned:IPLF-UJ-34-EXC-03",
-        "planned:IPLF-UJ-34-NORMAL",
-        "planned:IPLF-UJ-38-EXC-01",
-        "planned:IPLF-UJ-38-EXC-02",
-        "planned:IPLF-UJ-38-EXC-03",
-        "planned:IPLF-UJ-38-EXC-04",
-        "planned:IPLF-UJ-38-NORMAL"
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260823_0002_ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_applicant.py",
+        "apps/api/src/caseops_api/services/ip_opposition_opponent.py",
+        "apps/api/src/caseops_api/services/ip_opposition_shared.py",
+        "apps/web/components/ip/IpOppositionWorkspace.tsx",
+        "apps/web/components/ip/IpOppositionApplicantWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionOpponentWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionSharedWorkflow.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_opposition_foundation.py",
+        "apps/api/tests/test_ip_opposition_workspace.py",
+        "apps/api/tests/test_ip_opposition_applicant_workflow.py",
+        "apps/api/tests/test_ip_opposition_opponent_workflow.py",
+        "apps/api/tests/test_ip_opposition_shared_workflow.py",
+        "apps/api/tests/test_ip_post_registration.py",
+        "tests/e2e/iplf-041-applicant-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-042-opponent-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -21352,31 +21470,39 @@
         "UJ-34",
         "UJ-38"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-OPP-09",
-        "planned:IPLF-UJ-12-EXC-01",
-        "planned:IPLF-UJ-12-EXC-02",
-        "planned:IPLF-UJ-12-EXC-03",
-        "planned:IPLF-UJ-12-NORMAL",
-        "planned:IPLF-UJ-13-EXC-01",
-        "planned:IPLF-UJ-13-EXC-02",
-        "planned:IPLF-UJ-13-EXC-03",
-        "planned:IPLF-UJ-13-NORMAL",
-        "planned:IPLF-UJ-34-EXC-01",
-        "planned:IPLF-UJ-34-EXC-02",
-        "planned:IPLF-UJ-34-EXC-03",
-        "planned:IPLF-UJ-34-NORMAL",
-        "planned:IPLF-UJ-38-EXC-01",
-        "planned:IPLF-UJ-38-EXC-02",
-        "planned:IPLF-UJ-38-EXC-03",
-        "planned:IPLF-UJ-38-EXC-04",
-        "planned:IPLF-UJ-38-NORMAL"
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260823_0002_ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_applicant.py",
+        "apps/api/src/caseops_api/services/ip_opposition_opponent.py",
+        "apps/api/src/caseops_api/services/ip_opposition_shared.py",
+        "apps/web/components/ip/IpOppositionWorkspace.tsx",
+        "apps/web/components/ip/IpOppositionApplicantWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionOpponentWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionSharedWorkflow.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_opposition_foundation.py",
+        "apps/api/tests/test_ip_opposition_workspace.py",
+        "apps/api/tests/test_ip_opposition_applicant_workflow.py",
+        "apps/api/tests/test_ip_opposition_opponent_workflow.py",
+        "apps/api/tests/test_ip_opposition_shared_workflow.py",
+        "apps/api/tests/test_ip_post_registration.py",
+        "tests/e2e/iplf-041-applicant-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-042-opponent-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -21399,31 +21525,39 @@
         "UJ-34",
         "UJ-38"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-OPP-10",
-        "planned:IPLF-UJ-12-EXC-01",
-        "planned:IPLF-UJ-12-EXC-02",
-        "planned:IPLF-UJ-12-EXC-03",
-        "planned:IPLF-UJ-12-NORMAL",
-        "planned:IPLF-UJ-13-EXC-01",
-        "planned:IPLF-UJ-13-EXC-02",
-        "planned:IPLF-UJ-13-EXC-03",
-        "planned:IPLF-UJ-13-NORMAL",
-        "planned:IPLF-UJ-34-EXC-01",
-        "planned:IPLF-UJ-34-EXC-02",
-        "planned:IPLF-UJ-34-EXC-03",
-        "planned:IPLF-UJ-34-NORMAL",
-        "planned:IPLF-UJ-38-EXC-01",
-        "planned:IPLF-UJ-38-EXC-02",
-        "planned:IPLF-UJ-38-EXC-03",
-        "planned:IPLF-UJ-38-EXC-04",
-        "planned:IPLF-UJ-38-NORMAL"
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260823_0002_ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_applicant.py",
+        "apps/api/src/caseops_api/services/ip_opposition_opponent.py",
+        "apps/api/src/caseops_api/services/ip_opposition_shared.py",
+        "apps/web/components/ip/IpOppositionWorkspace.tsx",
+        "apps/web/components/ip/IpOppositionApplicantWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionOpponentWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionSharedWorkflow.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_opposition_foundation.py",
+        "apps/api/tests/test_ip_opposition_workspace.py",
+        "apps/api/tests/test_ip_opposition_applicant_workflow.py",
+        "apps/api/tests/test_ip_opposition_opponent_workflow.py",
+        "apps/api/tests/test_ip_opposition_shared_workflow.py",
+        "apps/api/tests/test_ip_post_registration.py",
+        "tests/e2e/iplf-041-applicant-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-042-opponent-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -21446,31 +21580,39 @@
         "UJ-34",
         "UJ-38"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-OPP-11",
-        "planned:IPLF-UJ-12-EXC-01",
-        "planned:IPLF-UJ-12-EXC-02",
-        "planned:IPLF-UJ-12-EXC-03",
-        "planned:IPLF-UJ-12-NORMAL",
-        "planned:IPLF-UJ-13-EXC-01",
-        "planned:IPLF-UJ-13-EXC-02",
-        "planned:IPLF-UJ-13-EXC-03",
-        "planned:IPLF-UJ-13-NORMAL",
-        "planned:IPLF-UJ-34-EXC-01",
-        "planned:IPLF-UJ-34-EXC-02",
-        "planned:IPLF-UJ-34-EXC-03",
-        "planned:IPLF-UJ-34-NORMAL",
-        "planned:IPLF-UJ-38-EXC-01",
-        "planned:IPLF-UJ-38-EXC-02",
-        "planned:IPLF-UJ-38-EXC-03",
-        "planned:IPLF-UJ-38-EXC-04",
-        "planned:IPLF-UJ-38-NORMAL"
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260823_0002_ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_applicant.py",
+        "apps/api/src/caseops_api/services/ip_opposition_opponent.py",
+        "apps/api/src/caseops_api/services/ip_opposition_shared.py",
+        "apps/web/components/ip/IpOppositionWorkspace.tsx",
+        "apps/web/components/ip/IpOppositionApplicantWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionOpponentWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionSharedWorkflow.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_opposition_foundation.py",
+        "apps/api/tests/test_ip_opposition_workspace.py",
+        "apps/api/tests/test_ip_opposition_applicant_workflow.py",
+        "apps/api/tests/test_ip_opposition_opponent_workflow.py",
+        "apps/api/tests/test_ip_opposition_shared_workflow.py",
+        "apps/api/tests/test_ip_post_registration.py",
+        "tests/e2e/iplf-041-applicant-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-042-opponent-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -21493,31 +21635,39 @@
         "UJ-34",
         "UJ-38"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-OPP-12",
-        "planned:IPLF-UJ-12-EXC-01",
-        "planned:IPLF-UJ-12-EXC-02",
-        "planned:IPLF-UJ-12-EXC-03",
-        "planned:IPLF-UJ-12-NORMAL",
-        "planned:IPLF-UJ-13-EXC-01",
-        "planned:IPLF-UJ-13-EXC-02",
-        "planned:IPLF-UJ-13-EXC-03",
-        "planned:IPLF-UJ-13-NORMAL",
-        "planned:IPLF-UJ-34-EXC-01",
-        "planned:IPLF-UJ-34-EXC-02",
-        "planned:IPLF-UJ-34-EXC-03",
-        "planned:IPLF-UJ-34-NORMAL",
-        "planned:IPLF-UJ-38-EXC-01",
-        "planned:IPLF-UJ-38-EXC-02",
-        "planned:IPLF-UJ-38-EXC-03",
-        "planned:IPLF-UJ-38-EXC-04",
-        "planned:IPLF-UJ-38-NORMAL"
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260823_0002_ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_applicant.py",
+        "apps/api/src/caseops_api/services/ip_opposition_opponent.py",
+        "apps/api/src/caseops_api/services/ip_opposition_shared.py",
+        "apps/web/components/ip/IpOppositionWorkspace.tsx",
+        "apps/web/components/ip/IpOppositionApplicantWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionOpponentWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionSharedWorkflow.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_opposition_foundation.py",
+        "apps/api/tests/test_ip_opposition_workspace.py",
+        "apps/api/tests/test_ip_opposition_applicant_workflow.py",
+        "apps/api/tests/test_ip_opposition_opponent_workflow.py",
+        "apps/api/tests/test_ip_opposition_shared_workflow.py",
+        "apps/api/tests/test_ip_post_registration.py",
+        "tests/e2e/iplf-041-applicant-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-042-opponent-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -21540,31 +21690,39 @@
         "UJ-34",
         "UJ-38"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-OPP-13",
-        "planned:IPLF-UJ-12-EXC-01",
-        "planned:IPLF-UJ-12-EXC-02",
-        "planned:IPLF-UJ-12-EXC-03",
-        "planned:IPLF-UJ-12-NORMAL",
-        "planned:IPLF-UJ-13-EXC-01",
-        "planned:IPLF-UJ-13-EXC-02",
-        "planned:IPLF-UJ-13-EXC-03",
-        "planned:IPLF-UJ-13-NORMAL",
-        "planned:IPLF-UJ-34-EXC-01",
-        "planned:IPLF-UJ-34-EXC-02",
-        "planned:IPLF-UJ-34-EXC-03",
-        "planned:IPLF-UJ-34-NORMAL",
-        "planned:IPLF-UJ-38-EXC-01",
-        "planned:IPLF-UJ-38-EXC-02",
-        "planned:IPLF-UJ-38-EXC-03",
-        "planned:IPLF-UJ-38-EXC-04",
-        "planned:IPLF-UJ-38-NORMAL"
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260823_0002_ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_applicant.py",
+        "apps/api/src/caseops_api/services/ip_opposition_opponent.py",
+        "apps/api/src/caseops_api/services/ip_opposition_shared.py",
+        "apps/web/components/ip/IpOppositionWorkspace.tsx",
+        "apps/web/components/ip/IpOppositionApplicantWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionOpponentWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionSharedWorkflow.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_opposition_foundation.py",
+        "apps/api/tests/test_ip_opposition_workspace.py",
+        "apps/api/tests/test_ip_opposition_applicant_workflow.py",
+        "apps/api/tests/test_ip_opposition_opponent_workflow.py",
+        "apps/api/tests/test_ip_opposition_shared_workflow.py",
+        "apps/api/tests/test_ip_post_registration.py",
+        "tests/e2e/iplf-041-applicant-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-042-opponent-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -21587,31 +21745,39 @@
         "UJ-34",
         "UJ-38"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-OPP-14",
-        "planned:IPLF-UJ-12-EXC-01",
-        "planned:IPLF-UJ-12-EXC-02",
-        "planned:IPLF-UJ-12-EXC-03",
-        "planned:IPLF-UJ-12-NORMAL",
-        "planned:IPLF-UJ-13-EXC-01",
-        "planned:IPLF-UJ-13-EXC-02",
-        "planned:IPLF-UJ-13-EXC-03",
-        "planned:IPLF-UJ-13-NORMAL",
-        "planned:IPLF-UJ-34-EXC-01",
-        "planned:IPLF-UJ-34-EXC-02",
-        "planned:IPLF-UJ-34-EXC-03",
-        "planned:IPLF-UJ-34-NORMAL",
-        "planned:IPLF-UJ-38-EXC-01",
-        "planned:IPLF-UJ-38-EXC-02",
-        "planned:IPLF-UJ-38-EXC-03",
-        "planned:IPLF-UJ-38-EXC-04",
-        "planned:IPLF-UJ-38-NORMAL"
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260823_0002_ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_applicant.py",
+        "apps/api/src/caseops_api/services/ip_opposition_opponent.py",
+        "apps/api/src/caseops_api/services/ip_opposition_shared.py",
+        "apps/web/components/ip/IpOppositionWorkspace.tsx",
+        "apps/web/components/ip/IpOppositionApplicantWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionOpponentWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionSharedWorkflow.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_opposition_foundation.py",
+        "apps/api/tests/test_ip_opposition_workspace.py",
+        "apps/api/tests/test_ip_opposition_applicant_workflow.py",
+        "apps/api/tests/test_ip_opposition_opponent_workflow.py",
+        "apps/api/tests/test_ip_opposition_shared_workflow.py",
+        "apps/api/tests/test_ip_post_registration.py",
+        "tests/e2e/iplf-041-applicant-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-042-opponent-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -21635,40 +21801,38 @@
         "UJ-38"
       ],
       "implementation_refs": [
-        "apps/api/src/caseops_api/schemas/ip_oppositions.py",
+        "apps/api/alembic/versions/20260823_0002_ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_applicant.py",
+        "apps/api/src/caseops_api/services/ip_opposition_opponent.py",
         "apps/api/src/caseops_api/services/ip_opposition_shared.py",
-        "apps/web/components/ip/IpOppositionSpecializedPaths.tsx",
-        "apps/web/lib/api/endpoints.ts"
+        "apps/web/components/ip/IpOppositionWorkspace.tsx",
+        "apps/web/components/ip/IpOppositionApplicantWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionOpponentWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionSharedWorkflow.tsx"
       ],
       "test_refs": [
-        "planned:IPLF-REQ-IP-OPP-15",
-        "planned:IPLF-UJ-12-EXC-01",
-        "planned:IPLF-UJ-12-EXC-02",
-        "planned:IPLF-UJ-12-EXC-03",
-        "planned:IPLF-UJ-12-NORMAL",
-        "planned:IPLF-UJ-13-EXC-01",
-        "planned:IPLF-UJ-13-EXC-02",
-        "planned:IPLF-UJ-13-EXC-03",
-        "planned:IPLF-UJ-13-NORMAL",
-        "planned:IPLF-UJ-38-EXC-01",
-        "planned:IPLF-UJ-38-EXC-02",
-        "planned:IPLF-UJ-38-EXC-03",
-        "planned:IPLF-UJ-38-EXC-04",
-        "planned:IPLF-UJ-38-NORMAL",
+        "apps/api/tests/test_ip_opposition_foundation.py",
+        "apps/api/tests/test_ip_opposition_workspace.py",
+        "apps/api/tests/test_ip_opposition_applicant_workflow.py",
+        "apps/api/tests/test_ip_opposition_opponent_workflow.py",
         "apps/api/tests/test_ip_opposition_shared_workflow.py",
-        "apps/web/components/ip/IpOppositionSpecializedPaths.test.tsx",
-        "IPLF-UJ-34-NORMAL:apps/api/tests/test_ip_opposition_shared_workflow.py",
-        "IPLF-UJ-34-EXC-01:apps/api/tests/test_ip_opposition_shared_workflow.py",
-        "IPLF-UJ-34-EXC-02:apps/api/tests/test_ip_opposition_shared_workflow.py",
-        "IPLF-UJ-34-EXC-03:apps/api/tests/test_ip_opposition_shared_workflow.py",
+        "apps/api/tests/test_ip_post_registration.py",
+        "tests/e2e/iplf-041-applicant-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-042-opponent-workflow-2026-08-23.spec.ts",
         "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -21691,31 +21855,39 @@
         "UJ-34",
         "UJ-38"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-OPP-16",
-        "planned:IPLF-UJ-12-EXC-01",
-        "planned:IPLF-UJ-12-EXC-02",
-        "planned:IPLF-UJ-12-EXC-03",
-        "planned:IPLF-UJ-12-NORMAL",
-        "planned:IPLF-UJ-13-EXC-01",
-        "planned:IPLF-UJ-13-EXC-02",
-        "planned:IPLF-UJ-13-EXC-03",
-        "planned:IPLF-UJ-13-NORMAL",
-        "planned:IPLF-UJ-34-EXC-01",
-        "planned:IPLF-UJ-34-EXC-02",
-        "planned:IPLF-UJ-34-EXC-03",
-        "planned:IPLF-UJ-34-NORMAL",
-        "planned:IPLF-UJ-38-EXC-01",
-        "planned:IPLF-UJ-38-EXC-02",
-        "planned:IPLF-UJ-38-EXC-03",
-        "planned:IPLF-UJ-38-EXC-04",
-        "planned:IPLF-UJ-38-NORMAL"
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260823_0002_ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_applicant.py",
+        "apps/api/src/caseops_api/services/ip_opposition_opponent.py",
+        "apps/api/src/caseops_api/services/ip_opposition_shared.py",
+        "apps/web/components/ip/IpOppositionWorkspace.tsx",
+        "apps/web/components/ip/IpOppositionApplicantWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionOpponentWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionSharedWorkflow.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_opposition_foundation.py",
+        "apps/api/tests/test_ip_opposition_workspace.py",
+        "apps/api/tests/test_ip_opposition_applicant_workflow.py",
+        "apps/api/tests/test_ip_opposition_opponent_workflow.py",
+        "apps/api/tests/test_ip_opposition_shared_workflow.py",
+        "apps/api/tests/test_ip_post_registration.py",
+        "tests/e2e/iplf-041-applicant-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-042-opponent-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -21738,31 +21910,39 @@
         "UJ-34",
         "UJ-38"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-OPP-17",
-        "planned:IPLF-UJ-12-EXC-01",
-        "planned:IPLF-UJ-12-EXC-02",
-        "planned:IPLF-UJ-12-EXC-03",
-        "planned:IPLF-UJ-12-NORMAL",
-        "planned:IPLF-UJ-13-EXC-01",
-        "planned:IPLF-UJ-13-EXC-02",
-        "planned:IPLF-UJ-13-EXC-03",
-        "planned:IPLF-UJ-13-NORMAL",
-        "planned:IPLF-UJ-34-EXC-01",
-        "planned:IPLF-UJ-34-EXC-02",
-        "planned:IPLF-UJ-34-EXC-03",
-        "planned:IPLF-UJ-34-NORMAL",
-        "planned:IPLF-UJ-38-EXC-01",
-        "planned:IPLF-UJ-38-EXC-02",
-        "planned:IPLF-UJ-38-EXC-03",
-        "planned:IPLF-UJ-38-EXC-04",
-        "planned:IPLF-UJ-38-NORMAL"
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260823_0002_ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_applicant.py",
+        "apps/api/src/caseops_api/services/ip_opposition_opponent.py",
+        "apps/api/src/caseops_api/services/ip_opposition_shared.py",
+        "apps/web/components/ip/IpOppositionWorkspace.tsx",
+        "apps/web/components/ip/IpOppositionApplicantWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionOpponentWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionSharedWorkflow.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_opposition_foundation.py",
+        "apps/api/tests/test_ip_opposition_workspace.py",
+        "apps/api/tests/test_ip_opposition_applicant_workflow.py",
+        "apps/api/tests/test_ip_opposition_opponent_workflow.py",
+        "apps/api/tests/test_ip_opposition_shared_workflow.py",
+        "apps/api/tests/test_ip_post_registration.py",
+        "tests/e2e/iplf-041-applicant-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-042-opponent-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -21785,31 +21965,39 @@
         "UJ-34",
         "UJ-38"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-OPP-18",
-        "planned:IPLF-UJ-12-EXC-01",
-        "planned:IPLF-UJ-12-EXC-02",
-        "planned:IPLF-UJ-12-EXC-03",
-        "planned:IPLF-UJ-12-NORMAL",
-        "planned:IPLF-UJ-13-EXC-01",
-        "planned:IPLF-UJ-13-EXC-02",
-        "planned:IPLF-UJ-13-EXC-03",
-        "planned:IPLF-UJ-13-NORMAL",
-        "planned:IPLF-UJ-34-EXC-01",
-        "planned:IPLF-UJ-34-EXC-02",
-        "planned:IPLF-UJ-34-EXC-03",
-        "planned:IPLF-UJ-34-NORMAL",
-        "planned:IPLF-UJ-38-EXC-01",
-        "planned:IPLF-UJ-38-EXC-02",
-        "planned:IPLF-UJ-38-EXC-03",
-        "planned:IPLF-UJ-38-EXC-04",
-        "planned:IPLF-UJ-38-NORMAL"
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260823_0002_ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_applicant.py",
+        "apps/api/src/caseops_api/services/ip_opposition_opponent.py",
+        "apps/api/src/caseops_api/services/ip_opposition_shared.py",
+        "apps/web/components/ip/IpOppositionWorkspace.tsx",
+        "apps/web/components/ip/IpOppositionApplicantWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionOpponentWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionSharedWorkflow.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_opposition_foundation.py",
+        "apps/api/tests/test_ip_opposition_workspace.py",
+        "apps/api/tests/test_ip_opposition_applicant_workflow.py",
+        "apps/api/tests/test_ip_opposition_opponent_workflow.py",
+        "apps/api/tests/test_ip_opposition_shared_workflow.py",
+        "apps/api/tests/test_ip_post_registration.py",
+        "tests/e2e/iplf-041-applicant-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-042-opponent-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -21832,31 +22020,39 @@
         "UJ-34",
         "UJ-38"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-REQ-IP-OPP-19",
-        "planned:IPLF-UJ-12-EXC-01",
-        "planned:IPLF-UJ-12-EXC-02",
-        "planned:IPLF-UJ-12-EXC-03",
-        "planned:IPLF-UJ-12-NORMAL",
-        "planned:IPLF-UJ-13-EXC-01",
-        "planned:IPLF-UJ-13-EXC-02",
-        "planned:IPLF-UJ-13-EXC-03",
-        "planned:IPLF-UJ-13-NORMAL",
-        "planned:IPLF-UJ-34-EXC-01",
-        "planned:IPLF-UJ-34-EXC-02",
-        "planned:IPLF-UJ-34-EXC-03",
-        "planned:IPLF-UJ-34-NORMAL",
-        "planned:IPLF-UJ-38-EXC-01",
-        "planned:IPLF-UJ-38-EXC-02",
-        "planned:IPLF-UJ-38-EXC-03",
-        "planned:IPLF-UJ-38-EXC-04",
-        "planned:IPLF-UJ-38-NORMAL"
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260823_0002_ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_applicant.py",
+        "apps/api/src/caseops_api/services/ip_opposition_opponent.py",
+        "apps/api/src/caseops_api/services/ip_opposition_shared.py",
+        "apps/web/components/ip/IpOppositionWorkspace.tsx",
+        "apps/web/components/ip/IpOppositionApplicantWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionOpponentWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionSharedWorkflow.tsx"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_opposition_foundation.py",
+        "apps/api/tests/test_ip_opposition_workspace.py",
+        "apps/api/tests/test_ip_opposition_applicant_workflow.py",
+        "apps/api/tests/test_ip_opposition_opponent_workflow.py",
+        "apps/api/tests/test_ip_opposition_shared_workflow.py",
+        "apps/api/tests/test_ip_post_registration.py",
+        "tests/e2e/iplf-041-applicant-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-042-opponent-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
+      ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -21880,40 +22076,38 @@
         "UJ-38"
       ],
       "implementation_refs": [
-        "apps/api/src/caseops_api/schemas/ip_oppositions.py",
+        "apps/api/alembic/versions/20260823_0002_ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_applicant.py",
+        "apps/api/src/caseops_api/services/ip_opposition_opponent.py",
         "apps/api/src/caseops_api/services/ip_opposition_shared.py",
-        "apps/web/components/ip/IpOppositionSpecializedPaths.tsx",
-        "apps/web/lib/api/endpoints.ts"
+        "apps/web/components/ip/IpOppositionWorkspace.tsx",
+        "apps/web/components/ip/IpOppositionApplicantWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionOpponentWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionSharedWorkflow.tsx"
       ],
       "test_refs": [
-        "planned:IPLF-REQ-IP-OPP-20",
-        "planned:IPLF-UJ-12-EXC-01",
-        "planned:IPLF-UJ-12-EXC-02",
-        "planned:IPLF-UJ-12-EXC-03",
-        "planned:IPLF-UJ-12-NORMAL",
-        "planned:IPLF-UJ-13-EXC-01",
-        "planned:IPLF-UJ-13-EXC-02",
-        "planned:IPLF-UJ-13-EXC-03",
-        "planned:IPLF-UJ-13-NORMAL",
-        "planned:IPLF-UJ-38-EXC-01",
-        "planned:IPLF-UJ-38-EXC-02",
-        "planned:IPLF-UJ-38-EXC-03",
-        "planned:IPLF-UJ-38-EXC-04",
-        "planned:IPLF-UJ-38-NORMAL",
+        "apps/api/tests/test_ip_opposition_foundation.py",
+        "apps/api/tests/test_ip_opposition_workspace.py",
+        "apps/api/tests/test_ip_opposition_applicant_workflow.py",
+        "apps/api/tests/test_ip_opposition_opponent_workflow.py",
         "apps/api/tests/test_ip_opposition_shared_workflow.py",
-        "apps/web/components/ip/IpOppositionSpecializedPaths.test.tsx",
-        "IPLF-UJ-34-NORMAL:apps/api/tests/test_ip_opposition_shared_workflow.py",
-        "IPLF-UJ-34-EXC-01:apps/api/tests/test_ip_opposition_shared_workflow.py",
-        "IPLF-UJ-34-EXC-02:apps/api/tests/test_ip_opposition_shared_workflow.py",
-        "IPLF-UJ-34-EXC-03:apps/api/tests/test_ip_opposition_shared_workflow.py",
+        "apps/api/tests/test_ip_post_registration.py",
+        "tests/e2e/iplf-041-applicant-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-042-opponent-workflow-2026-08-23.spec.ts",
         "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -21937,40 +22131,38 @@
         "UJ-38"
       ],
       "implementation_refs": [
-        "apps/api/src/caseops_api/schemas/ip_oppositions.py",
+        "apps/api/alembic/versions/20260823_0002_ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_applicant.py",
+        "apps/api/src/caseops_api/services/ip_opposition_opponent.py",
         "apps/api/src/caseops_api/services/ip_opposition_shared.py",
-        "apps/web/components/ip/IpOppositionSpecializedPaths.tsx",
-        "apps/web/lib/api/endpoints.ts"
+        "apps/web/components/ip/IpOppositionWorkspace.tsx",
+        "apps/web/components/ip/IpOppositionApplicantWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionOpponentWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionSharedWorkflow.tsx"
       ],
       "test_refs": [
-        "planned:IPLF-REQ-IP-OPP-21",
-        "planned:IPLF-UJ-12-EXC-01",
-        "planned:IPLF-UJ-12-EXC-02",
-        "planned:IPLF-UJ-12-EXC-03",
-        "planned:IPLF-UJ-12-NORMAL",
-        "planned:IPLF-UJ-13-EXC-01",
-        "planned:IPLF-UJ-13-EXC-02",
-        "planned:IPLF-UJ-13-EXC-03",
-        "planned:IPLF-UJ-13-NORMAL",
-        "planned:IPLF-UJ-38-EXC-01",
-        "planned:IPLF-UJ-38-EXC-02",
-        "planned:IPLF-UJ-38-EXC-03",
-        "planned:IPLF-UJ-38-EXC-04",
-        "planned:IPLF-UJ-38-NORMAL",
+        "apps/api/tests/test_ip_opposition_foundation.py",
+        "apps/api/tests/test_ip_opposition_workspace.py",
+        "apps/api/tests/test_ip_opposition_applicant_workflow.py",
+        "apps/api/tests/test_ip_opposition_opponent_workflow.py",
         "apps/api/tests/test_ip_opposition_shared_workflow.py",
-        "apps/web/components/ip/IpOppositionSpecializedPaths.test.tsx",
-        "IPLF-UJ-34-NORMAL:apps/api/tests/test_ip_opposition_shared_workflow.py",
-        "IPLF-UJ-34-EXC-01:apps/api/tests/test_ip_opposition_shared_workflow.py",
-        "IPLF-UJ-34-EXC-02:apps/api/tests/test_ip_opposition_shared_workflow.py",
-        "IPLF-UJ-34-EXC-03:apps/api/tests/test_ip_opposition_shared_workflow.py",
+        "apps/api/tests/test_ip_post_registration.py",
+        "tests/e2e/iplf-041-applicant-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-042-opponent-workflow-2026-08-23.spec.ts",
         "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -21994,40 +22186,38 @@
         "UJ-38"
       ],
       "implementation_refs": [
-        "apps/api/src/caseops_api/schemas/ip_oppositions.py",
+        "apps/api/alembic/versions/20260823_0002_ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_applicant.py",
+        "apps/api/src/caseops_api/services/ip_opposition_opponent.py",
         "apps/api/src/caseops_api/services/ip_opposition_shared.py",
-        "apps/web/components/ip/IpOppositionSpecializedPaths.tsx",
-        "apps/web/lib/api/endpoints.ts"
+        "apps/web/components/ip/IpOppositionWorkspace.tsx",
+        "apps/web/components/ip/IpOppositionApplicantWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionOpponentWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionSharedWorkflow.tsx"
       ],
       "test_refs": [
-        "planned:IPLF-REQ-IP-OPP-22",
-        "planned:IPLF-UJ-12-EXC-01",
-        "planned:IPLF-UJ-12-EXC-02",
-        "planned:IPLF-UJ-12-EXC-03",
-        "planned:IPLF-UJ-12-NORMAL",
-        "planned:IPLF-UJ-13-EXC-01",
-        "planned:IPLF-UJ-13-EXC-02",
-        "planned:IPLF-UJ-13-EXC-03",
-        "planned:IPLF-UJ-13-NORMAL",
-        "planned:IPLF-UJ-38-EXC-01",
-        "planned:IPLF-UJ-38-EXC-02",
-        "planned:IPLF-UJ-38-EXC-03",
-        "planned:IPLF-UJ-38-EXC-04",
-        "planned:IPLF-UJ-38-NORMAL",
+        "apps/api/tests/test_ip_opposition_foundation.py",
+        "apps/api/tests/test_ip_opposition_workspace.py",
+        "apps/api/tests/test_ip_opposition_applicant_workflow.py",
+        "apps/api/tests/test_ip_opposition_opponent_workflow.py",
         "apps/api/tests/test_ip_opposition_shared_workflow.py",
-        "apps/web/components/ip/IpOppositionSpecializedPaths.test.tsx",
-        "IPLF-UJ-34-NORMAL:apps/api/tests/test_ip_opposition_shared_workflow.py",
-        "IPLF-UJ-34-EXC-01:apps/api/tests/test_ip_opposition_shared_workflow.py",
-        "IPLF-UJ-34-EXC-02:apps/api/tests/test_ip_opposition_shared_workflow.py",
-        "IPLF-UJ-34-EXC-03:apps/api/tests/test_ip_opposition_shared_workflow.py",
+        "apps/api/tests/test_ip_post_registration.py",
+        "tests/e2e/iplf-041-applicant-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-042-opponent-workflow-2026-08-23.spec.ts",
         "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -22051,40 +22241,38 @@
         "UJ-38"
       ],
       "implementation_refs": [
-        "apps/api/src/caseops_api/schemas/ip_oppositions.py",
+        "apps/api/alembic/versions/20260823_0002_ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_applicant.py",
+        "apps/api/src/caseops_api/services/ip_opposition_opponent.py",
         "apps/api/src/caseops_api/services/ip_opposition_shared.py",
-        "apps/web/components/ip/IpOppositionSpecializedPaths.tsx",
-        "apps/web/lib/api/endpoints.ts"
+        "apps/web/components/ip/IpOppositionWorkspace.tsx",
+        "apps/web/components/ip/IpOppositionApplicantWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionOpponentWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionSharedWorkflow.tsx"
       ],
       "test_refs": [
-        "planned:IPLF-REQ-IP-OPP-23",
-        "planned:IPLF-UJ-12-EXC-01",
-        "planned:IPLF-UJ-12-EXC-02",
-        "planned:IPLF-UJ-12-EXC-03",
-        "planned:IPLF-UJ-12-NORMAL",
-        "planned:IPLF-UJ-13-EXC-01",
-        "planned:IPLF-UJ-13-EXC-02",
-        "planned:IPLF-UJ-13-EXC-03",
-        "planned:IPLF-UJ-13-NORMAL",
-        "planned:IPLF-UJ-38-EXC-01",
-        "planned:IPLF-UJ-38-EXC-02",
-        "planned:IPLF-UJ-38-EXC-03",
-        "planned:IPLF-UJ-38-EXC-04",
-        "planned:IPLF-UJ-38-NORMAL",
+        "apps/api/tests/test_ip_opposition_foundation.py",
+        "apps/api/tests/test_ip_opposition_workspace.py",
+        "apps/api/tests/test_ip_opposition_applicant_workflow.py",
+        "apps/api/tests/test_ip_opposition_opponent_workflow.py",
         "apps/api/tests/test_ip_opposition_shared_workflow.py",
-        "apps/web/components/ip/IpOppositionSpecializedPaths.test.tsx",
-        "IPLF-UJ-34-NORMAL:apps/api/tests/test_ip_opposition_shared_workflow.py",
-        "IPLF-UJ-34-EXC-01:apps/api/tests/test_ip_opposition_shared_workflow.py",
-        "IPLF-UJ-34-EXC-02:apps/api/tests/test_ip_opposition_shared_workflow.py",
-        "IPLF-UJ-34-EXC-03:apps/api/tests/test_ip_opposition_shared_workflow.py",
+        "apps/api/tests/test_ip_post_registration.py",
+        "tests/e2e/iplf-041-applicant-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-042-opponent-workflow-2026-08-23.spec.ts",
         "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -22108,40 +22296,38 @@
         "UJ-38"
       ],
       "implementation_refs": [
-        "apps/api/src/caseops_api/schemas/ip_oppositions.py",
+        "apps/api/alembic/versions/20260823_0002_ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_workspace.py",
+        "apps/api/src/caseops_api/services/ip_opposition_applicant.py",
+        "apps/api/src/caseops_api/services/ip_opposition_opponent.py",
         "apps/api/src/caseops_api/services/ip_opposition_shared.py",
-        "apps/web/components/ip/IpOppositionSpecializedPaths.tsx",
-        "apps/web/lib/api/endpoints.ts"
+        "apps/web/components/ip/IpOppositionWorkspace.tsx",
+        "apps/web/components/ip/IpOppositionApplicantWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionOpponentWorkflow.tsx",
+        "apps/web/components/ip/IpOppositionSharedWorkflow.tsx"
       ],
       "test_refs": [
-        "planned:IPLF-REQ-IP-OPP-24",
-        "planned:IPLF-UJ-12-EXC-01",
-        "planned:IPLF-UJ-12-EXC-02",
-        "planned:IPLF-UJ-12-EXC-03",
-        "planned:IPLF-UJ-12-NORMAL",
-        "planned:IPLF-UJ-13-EXC-01",
-        "planned:IPLF-UJ-13-EXC-02",
-        "planned:IPLF-UJ-13-EXC-03",
-        "planned:IPLF-UJ-13-NORMAL",
-        "planned:IPLF-UJ-38-EXC-01",
-        "planned:IPLF-UJ-38-EXC-02",
-        "planned:IPLF-UJ-38-EXC-03",
-        "planned:IPLF-UJ-38-EXC-04",
-        "planned:IPLF-UJ-38-NORMAL",
+        "apps/api/tests/test_ip_opposition_foundation.py",
+        "apps/api/tests/test_ip_opposition_workspace.py",
+        "apps/api/tests/test_ip_opposition_applicant_workflow.py",
+        "apps/api/tests/test_ip_opposition_opponent_workflow.py",
         "apps/api/tests/test_ip_opposition_shared_workflow.py",
-        "apps/web/components/ip/IpOppositionSpecializedPaths.test.tsx",
-        "IPLF-UJ-34-NORMAL:apps/api/tests/test_ip_opposition_shared_workflow.py",
-        "IPLF-UJ-34-EXC-01:apps/api/tests/test_ip_opposition_shared_workflow.py",
-        "IPLF-UJ-34-EXC-02:apps/api/tests/test_ip_opposition_shared_workflow.py",
-        "IPLF-UJ-34-EXC-03:apps/api/tests/test_ip_opposition_shared_workflow.py",
+        "apps/api/tests/test_ip_post_registration.py",
+        "tests/e2e/iplf-041-applicant-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-042-opponent-workflow-2026-08-23.spec.ts",
         "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md"
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-048B/local-2026-08-24.md",
+        "docs/ip-implementation/evidence/m4/IPLF-049B/local-2026-08-24.md"
       ],
       "blockers": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -41532,14 +41718,21 @@
         "IP-OPP-24"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-12-EXC-01",
-        "planned:IPLF-UJ-12-EXC-02",
-        "planned:IPLF-UJ-12-EXC-03",
-        "planned:IPLF-UJ-12-NORMAL"
+        "IPLF-UJ-12-EXC-01:apps/api/tests/test_ip_opposition_applicant_workflow.py::test_uj12_exc01_pending_opposition_number_is_explicit",
+        "IPLF-UJ-12-EXC-02:apps/api/tests/test_ip_opposition_applicant_workflow.py::test_uj12_exc02_exception_requires_source_evidence_and_approval",
+        "IPLF-UJ-12-EXC-03:apps/api/tests/test_ip_opposition_applicant_workflow.py::test_uj12_normal_runs_confirmed_deadlines_and_applicant_work_product",
+        "IPLF-UJ-12-NORMAL:apps/api/tests/test_ip_opposition_applicant_workflow.py::test_uj12_normal_runs_confirmed_deadlines_and_applicant_work_product",
+        "apps/api/tests/test_ip_opposition_shared_workflow.py",
+        "tests/e2e/iplf-041-applicant-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
       ],
-      "evidence_refs": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -41591,13 +41784,16 @@
         "IPLF-UJ-13-EXC-03:apps/api/tests/test_ip_opposition_opponent_workflow.py::test_iplf_uj_13_exc_03_rejection_opens_task_without_filed_stage",
         "IPLF-UJ-13-NORMAL:apps/api/tests/test_ip_opposition_opponent_workflow.py::test_iplf_uj_13_normal_tracks_notice_rule45_and_rule47",
         "apps/web/components/ip/IpOppositionOpponentWorkflow.test.tsx",
-        "tests/e2e/iplf-042-opponent-workflow-2026-08-23.spec.ts"
+        "tests/e2e/iplf-042-opponent-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md"
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -42362,8 +42558,8 @@
       "evidence_refs": [
         "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-038B",
@@ -47311,11 +47507,16 @@
         "IP-OPP-24"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-12-NORMAL"
+        "IPLF-UJ-12-NORMAL:apps/api/tests/test_ip_opposition_applicant_workflow.py::test_uj12_normal_runs_confirmed_deadlines_and_applicant_work_product",
+        "tests/e2e/iplf-041-applicant-workflow-2026-08-23.spec.ts"
       ],
-      "evidence_refs": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -47357,11 +47558,16 @@
         "IP-OPP-24"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-12-EXC-01"
+        "IPLF-UJ-12-EXC-01:apps/api/tests/test_ip_opposition_applicant_workflow.py::test_uj12_exc01_pending_opposition_number_is_explicit",
+        "tests/e2e/iplf-041-applicant-workflow-2026-08-23.spec.ts"
       ],
-      "evidence_refs": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -47403,11 +47609,17 @@
         "IP-OPP-24"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-12-EXC-02"
+        "IPLF-UJ-12-EXC-02:apps/api/tests/test_ip_opposition_applicant_workflow.py::test_uj12_exc02_exception_requires_source_evidence_and_approval",
+        "tests/e2e/iplf-041-applicant-workflow-2026-08-23.spec.ts",
+        "apps/api/tests/test_ip_opposition_shared_workflow.py"
       ],
-      "evidence_refs": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -47449,11 +47661,17 @@
         "IP-OPP-24"
       ],
       "test_refs": [
-        "planned:IPLF-UJ-12-EXC-03"
+        "IPLF-UJ-12-EXC-03:apps/api/tests/test_ip_opposition_applicant_workflow.py::test_uj12_normal_runs_confirmed_deadlines_and_applicant_work_product",
+        "tests/e2e/iplf-041-applicant-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
       ],
-      "evidence_refs": [],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-041/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md"
+      ],
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -47495,13 +47713,16 @@
       ],
       "test_refs": [
         "IPLF-UJ-13-NORMAL:apps/api/tests/test_ip_opposition_opponent_workflow.py::test_iplf_uj_13_normal_tracks_notice_rule45_and_rule47",
-        "tests/e2e/iplf-042-opponent-workflow-2026-08-23.spec.ts"
+        "tests/e2e/iplf-042-opponent-workflow-2026-08-23.spec.ts",
+        "tests/e2e/iplf-043-opposition-resolution-2026-08-23.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md"
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -47547,10 +47768,12 @@
         "apps/web/components/ip/IpOppositionOpponentWorkflow.test.tsx"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md"
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -47596,10 +47819,12 @@
         "apps/web/components/ip/IpOppositionOpponentWorkflow.test.tsx"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md"
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -47642,13 +47867,16 @@
       ],
       "test_refs": [
         "IPLF-UJ-13-EXC-03:apps/api/tests/test_ip_opposition_opponent_workflow.py::test_iplf_uj_13_exc_03_rejection_opens_task_without_filed_stage",
-        "apps/web/components/ip/IpOppositionOpponentWorkflow.test.tsx"
+        "apps/web/components/ip/IpOppositionOpponentWorkflow.test.tsx",
+        "tests/e2e/iplf-042-opponent-workflow-2026-08-23.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md"
+        "docs/ip-implementation/evidence/m4/IPLF-040B/consolidated-closure-2026-08-30.md",
+        "docs/ip-implementation/evidence/m4/IPLF-042/local-2026-08-23.md",
+        "docs/ip-implementation/evidence/m4/IPLF-043/local-2026-08-23.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-040B",
@@ -50006,8 +50234,8 @@
       "evidence_refs": [
         "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-038B",
@@ -50046,8 +50274,8 @@
       "evidence_refs": [
         "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-038B",
@@ -50086,8 +50314,8 @@
       "evidence_refs": [
         "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-038B",
@@ -50126,8 +50354,8 @@
       "evidence_refs": [
         "docs/ip-implementation/evidence/m5/IPLF-055/local-2026-08-25.md"
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "slice_ids": [
         "IPLF-038B",

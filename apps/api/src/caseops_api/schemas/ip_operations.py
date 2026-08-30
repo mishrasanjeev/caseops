@@ -728,8 +728,23 @@ class IpDocketListResponse(BaseModel):
     has_more: bool = False
 
 
+class IpDocketControlRow(BaseModel):
+    """One visible docket's deadline-control posture."""
+
+    docket_id: str
+    docket_title: str
+    primary_identifier: str | None
+    docket_status: str
+    deadline_coverage_count: int
+    uncovered_deadline: bool
+    open_incident_count: int
+    unprojected_calendar_count: int
+    inactive_coverage_count: int
+
+
 class IpDocketControlReport(BaseModel):
     generated_at: datetime
+    source_cutoff: datetime | None = None
     docket_count: int
     ready_count: int
     uncovered_deadline_count: int
@@ -745,6 +760,8 @@ class IpDocketControlReport(BaseModel):
     #: UJ-59 rule that a control report cannot claim all clear while something
     #: is hidden).
     withheld_cost_item_count: int = 0
+    counts_are_complete: bool = True
+    rows: list[IpDocketControlRow] = Field(default_factory=list)
 
 
 __all__ = [
