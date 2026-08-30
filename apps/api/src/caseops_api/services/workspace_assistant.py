@@ -1446,13 +1446,29 @@ def _serialize_turns(
         context=context,
         sources=citation_sources,
     )
+    from caseops_api.services.private_retrieval import (
+        reauthorize_private_saved_outputs,
+    )
+
+    blocked_saved_turn_ids = reauthorize_private_saved_outputs(
+        session,
+        company_id=context.company.id,
+        assistant_turn_ids={turn.id for turn in turns},
+        accessible_sources={
+            (source_type, source_id, source_version)
+            for (source_type, source_id), source_version in current.items()
+        },
+    )
     records: list[AssistantTurnRecord] = []
     for turn in turns:
         turn_citations = citations_by_turn.get(turn.id, [])
-        changed = turn.role == AssistantTurnRole.ASSISTANT and any(
-            current.get((citation.source_type, citation.source_id))
-            != citation.source_version
-            for citation in turn_citations
+        changed = turn.role == AssistantTurnRole.ASSISTANT and (
+            turn.id in blocked_saved_turn_ids
+            or any(
+                current.get((citation.source_type, citation.source_id))
+                != citation.source_version
+                for citation in turn_citations
+            )
         )
         visible_citations = [] if changed else turn_citations
         content = turn.content_text or ""
@@ -1593,6 +1609,23 @@ def _persist_turn_pair(
                 verified_at=now,
                 created_at=now,
             )
+        )
+    if sources:
+        from caseops_api.services.private_retrieval import register_private_saved_output
+
+        register_private_saved_output(
+            session,
+            company_id=context.company.id,
+            assistant_turn_id=assistant_turn.id,
+            sources=(
+                (
+                    source.source_type,
+                    source.source_id,
+                    source.source_version,
+                    source.sha256,
+                )
+                for source in sources[:MAX_CITATIONS_PER_TURN]
+            ),
         )
     assistant_session.version += 1
     assistant_session.updated_at = now

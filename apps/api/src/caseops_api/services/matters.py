@@ -3205,6 +3205,23 @@ def transition_matter_lifecycle_status(
     matter.lifecycle_version += 1
     session.add(matter)
     session.flush()
+    from caseops_api.services.private_retrieval import (
+        propagate_private_projection_change,
+    )
+
+    propagate_private_projection_change(
+        session,
+        company_id=context.company.id,
+        actor_membership_id=context.membership.id,
+        idempotency_key=(
+            f"matter-lifecycle:{matter.id}:{matter.lifecycle_version}:{target_status}"
+        ),
+        event_type="tombstoned" if disposing else "reindex",
+        target_type="matter",
+        target_id=matter.id,
+        target_version=str(matter.lifecycle_version),
+        reason_code="matter_disposed" if disposing else "matter_reopened_reindex",
+    )
     _append_activity(
         session,
         matter_id=matter.id,

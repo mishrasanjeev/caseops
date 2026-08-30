@@ -20088,6 +20088,406 @@ class IpDocketQueue(Base):
     )
 
 
+# IPLF-066A: tenant-private search projection ownership.  Public authorities
+# remain in their existing corpus tables; none of these rows may contain
+# public-corpus content or be queried without the canonical tenant/ACL fence.
+class PrivateIndexGeneration(Base):
+    __tablename__ = "private_index_generations"
+    __table_args__ = (
+        UniqueConstraint("id", "company_id", name="uq_private_index_generation_id_company"),
+        UniqueConstraint(
+            "company_id",
+            "generation_number",
+            name="uq_private_index_generation_company_number",
+        ),
+        CheckConstraint(
+            "state IN ('building', 'ready', 'active', 'retired', 'failed')",
+            name="ck_private_index_generation_state",
+        ),
+        CheckConstraint(
+            "generation_number > 0 AND access_policy_generation > 0 "
+            "AND tombstone_generation >= 0",
+            name="ck_private_index_generation_versions",
+        ),
+        CheckConstraint(
+            "(state = 'active' AND activated_at IS NOT NULL) OR state <> 'active'",
+            name="ck_private_index_generation_active_timestamp",
+        ),
+        Index(
+            "ix_private_index_generation_company_state",
+            "company_id",
+            "state",
+            "generation_number",
+        ),
+        Index(
+            "uq_private_index_generation_one_active",
+            "company_id",
+            unique=True,
+            postgresql_where=text("state = 'active'"),
+            sqlite_where=text("state = 'active'"),
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
+    )
+    generation_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default="building")
+    access_policy_generation: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    tombstone_generation: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    expected_projection_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    verified_projection_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    verification_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    failure_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PrivateIndexProjection(Base):
+    __tablename__ = "private_index_projections"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["generation_id", "company_id"],
+            ["private_index_generations.id", "private_index_generations.company_id"],
+            name="fk_private_projection_generation_company",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_private_projection_id_company"),
+        UniqueConstraint(
+            "generation_id",
+            "source_type",
+            "source_id",
+            "source_version",
+            "chunk_ordinal",
+            name="uq_private_projection_source_chunk",
+        ),
+        CheckConstraint(
+            "source_type IN ('client', 'matter', 'matter_document', 'ip_docket', "
+            "'ip_document')",
+            name="ck_private_projection_source_type",
+        ),
+        CheckConstraint("chunk_ordinal >= 0", name="ck_private_projection_chunk_ordinal"),
+        CheckConstraint("length(content_sha256) = 64", name="ck_private_projection_content_hash"),
+        CheckConstraint(
+            "confidentiality IN ('internal', 'confidential', 'restricted')",
+            name="ck_private_projection_confidentiality",
+        ),
+        CheckConstraint(
+            "source_state IN ('active', 'approved', 'filed', 'indexed', 'quarantined', "
+            "'retired', 'deleted')",
+            name="ck_private_projection_source_state",
+        ),
+        CheckConstraint(
+            "approval_state IN ('not_required', 'approved', 'rejected', 'withdrawn')",
+            name="ck_private_projection_approval_state",
+        ),
+        CheckConstraint(
+            "access_policy_generation > 0 AND tombstone_generation >= 0",
+            name="ck_private_projection_generations",
+        ),
+        CheckConstraint(
+            "embedding_dimensions IS NULL OR embedding_dimensions > 0",
+            name="ck_private_projection_embedding_dimensions",
+        ),
+        CheckConstraint(
+            "(is_tombstoned = false AND tombstoned_at IS NULL AND tombstone_reason IS NULL) OR "
+            "(is_tombstoned = true AND tombstoned_at IS NOT NULL "
+            "AND tombstone_reason IS NOT NULL AND content_text = '' "
+            "AND embedding_json IS NULL)",
+            name="ck_private_projection_tombstone_shape",
+        ),
+        Index(
+            "ix_private_projection_prefilter",
+            "company_id",
+            "generation_id",
+            "is_tombstoned",
+            "source_type",
+            "source_id",
+        ),
+        Index(
+            "ix_private_projection_generation_policy",
+            "generation_id",
+            "access_policy_generation",
+            "tombstone_generation",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    generation_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    source_version: Mapped[str] = mapped_column(String(120), nullable=False)
+    chunk_ordinal: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    label: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_text: Mapped[str] = mapped_column(Text, nullable=False)
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    confidentiality: Mapped[str] = mapped_column(String(24), nullable=False, default="internal")
+    is_privileged: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+    source_state: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
+    approval_state: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="not_required"
+    )
+    access_policy_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    access_policy_generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    tombstone_generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    embedding_model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    embedding_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    embedding_dimensions: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    embedding_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_tombstoned: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+    tombstoned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    tombstone_reason: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+
+class PrivateIndexProjectionScope(Base):
+    __tablename__ = "private_index_projection_scopes"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["projection_id", "company_id"],
+            ["private_index_projections.id", "private_index_projections.company_id"],
+            name="fk_private_projection_scope_projection_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["client_id", "company_id"],
+            ["clients.id", "clients.company_id"],
+            name="fk_private_projection_scope_client_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["matter_id", "company_id"],
+            ["matters.id", "matters.company_id"],
+            name="fk_private_projection_scope_matter_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["ip_docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_private_projection_scope_docket_company",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint(
+            "projection_id",
+            "scope_type",
+            "scope_id",
+            name="uq_private_projection_scope_target",
+        ),
+        CheckConstraint(
+            "(scope_type = 'client' AND client_id = scope_id AND matter_id IS NULL "
+            "AND ip_docket_id IS NULL) OR "
+            "(scope_type = 'matter' AND matter_id = scope_id AND client_id IS NULL "
+            "AND ip_docket_id IS NULL) OR "
+            "(scope_type = 'ip_docket' AND ip_docket_id = scope_id AND client_id IS NULL "
+            "AND matter_id IS NULL)",
+            name="ck_private_projection_scope_typed_target",
+        ),
+        CheckConstraint(
+            "access_policy_version >= 0",
+            name="ck_private_projection_scope_policy_version",
+        ),
+        Index(
+            "ix_private_projection_scope_company_target",
+            "company_id",
+            "scope_type",
+            "scope_id",
+            "projection_id",
+        ),
+        Index(
+            "ix_fk_private_projection_scope_projection",
+            "projection_id",
+            "company_id",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    projection_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    scope_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    scope_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    client_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    matter_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    ip_docket_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    access_policy_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
+class PrivateProjectionEvent(Base):
+    __tablename__ = "private_projection_events"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["generation_id", "company_id"],
+            ["private_index_generations.id", "private_index_generations.company_id"],
+            name="fk_private_projection_event_generation_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["actor_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_private_projection_event_actor_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "company_id",
+            "idempotency_key",
+            name="uq_private_projection_event_idempotency",
+        ),
+        CheckConstraint(
+            "event_type IN ('source_changed', 'access_changed', 'revoked', "
+            "'tombstoned', 'reindex')",
+            name="ck_private_projection_event_type",
+        ),
+        CheckConstraint(
+            "target_type IN ('tenant', 'client', 'matter', 'matter_document', "
+            "'ip_docket', 'ip_document')",
+            name="ck_private_projection_event_target_type",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'applied', 'failed')",
+            name="ck_private_projection_event_status",
+        ),
+        CheckConstraint(
+            "access_policy_generation > 0 AND tombstone_generation >= 0",
+            name="ck_private_projection_event_generations",
+        ),
+        Index(
+            "ix_private_projection_event_company_status",
+            "company_id",
+            "status",
+            "created_at",
+            "id",
+        ),
+        Index(
+            "ix_private_projection_event_company_target",
+            "company_id",
+            "target_type",
+            "target_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    generation_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    target_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    target_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    target_version: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    access_policy_generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    tombstone_generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    reason_code: Mapped[str] = mapped_column(String(120), nullable=False)
+    actor_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    affected_projection_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    affected_saved_output_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PrivateSavedOutputAccess(Base):
+    __tablename__ = "private_saved_output_access"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["assistant_turn_id", "company_id"],
+            ["assistant_turns.id", "assistant_turns.company_id"],
+            name="fk_private_saved_output_turn_company",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["generation_id", "company_id"],
+            ["private_index_generations.id", "private_index_generations.company_id"],
+            name="fk_private_saved_output_generation_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "assistant_turn_id",
+            "source_type",
+            "source_id",
+            "source_version",
+            name="uq_private_saved_output_source_version",
+        ),
+        CheckConstraint(
+            "state IN ('accessible', 'reauthorization_required', 'locked', 'redacted')",
+            name="ck_private_saved_output_access_state",
+        ),
+        CheckConstraint(
+            "access_policy_generation > 0 AND tombstone_generation >= 0",
+            name="ck_private_saved_output_generations",
+        ),
+        CheckConstraint(
+            "(state = 'accessible' AND locked_at IS NULL AND locked_reason IS NULL) OR "
+            "(state <> 'accessible' AND locked_at IS NOT NULL "
+            "AND locked_reason IS NOT NULL)",
+            name="ck_private_saved_output_lock_shape",
+        ),
+        Index(
+            "ix_private_saved_output_company_turn_state",
+            "company_id",
+            "assistant_turn_id",
+            "state",
+        ),
+        Index(
+            "ix_private_saved_output_company_source",
+            "company_id",
+            "source_type",
+            "source_id",
+            "state",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    assistant_turn_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    generation_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(48), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    source_version: Mapped[str] = mapped_column(String(120), nullable=False)
+    source_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    access_policy_generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    tombstone_generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    state: Mapped[str] = mapped_column(String(32), nullable=False, default="accessible")
+    locked_reason: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_reauthorized_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+
 # IPLF-062A: canonical persistence for permission-scoped workspace assistance.
 # Source records remain in their existing bounded contexts; these tables store
 # only conversation state, explicit scope references, and answer provenance.

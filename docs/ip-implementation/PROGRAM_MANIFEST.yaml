@@ -14,16 +14,16 @@
     "verification_status": "not_run",
     "release_status": "blocked",
     "execution_policy": "codex_owned_single_ordered_queue; implement first and run the automated check and exact-release verification batch at the end",
-    "active_slice": "IPLF-066A",
+    "active_slice": "IPLF-066B",
     "checkpoint": {
-      "recorded_at": "2026-08-30T04:22:46.3545552+05:30",
-      "repository_revision": "9f7c278d50dd3a2cb6a43b09f7a3d5e04647ec9e",
-      "environment": "IPLF-061/062/063/064 exact production releases are verified. IPLF-065 passed complete local API/web verification, an offline eight-surface safety release gate, exact committed production Docker images, fresh PostgreSQL/Valkey migration-first acceptance, normal and 512 MiB index gates, and the complete local browser inventory. Protected authority-metadata and judge-refresh schedulers remain PAUSED.",
-      "completed_scope": "IPLF-061A/061B/062A/062B/063A/063B/064A/064B remain deployment verified. IPLF-065A/065B are implemented, locally verified, and ready for review with a retained tenant-scoped feedback queue, Product Guide and creator-private Workspace Assistant feedback controls, bounded admin review, redacted audits, an eight-surface/eleven-rule safety release gate, responsive browser proof, governance documentation, and truthful law-firm landing-page claims.",
+      "recorded_at": "2026-08-30T12:26:03+05:30",
+      "repository_revision": "6aba51fbd27fca4609bd370d42c53a51d6def725",
+      "environment": "IPLF-061/062/063/064 exact production releases remain verified. IPLF-065A/065B remain implemented and locally verified. IPLF-066A is implemented in an isolated worktree over origin/main 820e34bbf71750d9513ba0efbae6ab614963e916 with SQLite migration/index preflight, 95 focused private-retrieval/ACL/lifecycle/document/Assistant regressions, Ruff, and data-governance validation. Real PostgreSQL, integrated exact-main CI and deployment remain required.",
+      "completed_scope": "IPLF-066A now owns tenant-private generations/projections/typed scopes/idempotent events and content-free saved-output access manifests, SQL ACL/capability/filter prefiltering before bounded rank, hydration reauthorization, identifier-only cache partitioning, synchronous access/source/lifecycle tombstones, and shadow verification/atomic activation without changing public corpus or canonical access/source owners.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-066A",
-      "next_action": "Review and merge the exact IPLF-065 candidate, verify exact-main CI/Security/CodeQL, deploy migration-first, run the dated hosted feedback journey and production release gates, then mark IPLF-065 deployment verified before starting IPLF-066A.",
-      "evidence_ref": "docs/ip-implementation/evidence/m6/IPLF-065B/local-2026-08-30.md"
+      "next_slice": "IPLF-066B",
+      "next_action": "Review and integrate implementation commit 6aba51fbd27fca4609bd370d42c53a51d6def725 over current main, rerun migration-head and real-PostgreSQL/CI gates, then implement IPLF-066B consumers and exact-release proof on this canonical foundation.",
+      "evidence_ref": "docs/ip-implementation/evidence/m6/IPLF-066A/local-2026-08-30.md"
     },
     "work_owner": {
       "owner": "Codex",
@@ -2431,10 +2431,12 @@
         "IPLF-066A",
         "IPLF-066B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
-      "evidence_refs": []
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/m6/IPLF-066A/local-2026-08-30.md"
+      ]
     },
     {
       "id": "IPLF-070",
@@ -15677,7 +15679,7 @@
       "source_kind": "derived",
       "scope_source": "IPLF-066",
       "primary_behavior": "Foundation, ownership, and backend contract",
-      "migration_boundary": "Additive expand/backfill/verify/switch boundary when persistence changes; otherwise explicitly no schema change.",
+      "migration_boundary": "Migration 20260830_0002 additively creates five empty tenant-private projection/security tables and a PostgreSQL live-content trigram index. It performs no content scan, copy, embedding or backfill; downgrade is reversible only while projection, event and saved-output evidence is empty, then fails closed to restore-forward.",
       "release_boundary": "Compatible slices may share one exact integrated candidate, CI matrix, staged rollout, rollback plan, and dated deployed acceptance; this row remains a traceability and activation unit, not a mandatory separate release.",
       "requirement_ids": [],
       "journey_path_ids": [],
@@ -15685,27 +15687,97 @@
         {
           "classification": "NEW",
           "component": "IPLF-066 canonical scope: Private index generations, prefiltered ACL retrieval, hydration reauthorization, cache partitioning, revocation/tombstone propagation and saved-output access.",
-          "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
-          "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
-          "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
+          "canonical_writer": "PrivateIndexGeneration, PrivateIndexProjection, PrivateIndexProjectionScope and PrivateProjectionEvent own tenant-private derived search state; MatterAccessGrant/EthicalWall, Matter/IP lifecycle, IP document policy and AssistantTurn/Citation remain canonical for access, source and copied-answer state.",
+          "compatibility_path": "The foundation is default-unused and additive. Existing public-authority search, Matter/IP access, document, lifecycle and Assistant routes continue through their existing owners; later consumers must call the one private_retrieval service rather than create a second private index or ACL registry.",
+          "retirement_gate": "No private retrieval consumer activates until IPLF-066B proves worker completeness, entitlement/rollout enforcement, PostgreSQL-scale prefilter plans, provider minimization, integrity/lag gates, adversarial browser coverage, rollback and exact deployed acceptance."
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
-      "evidence_metadata": [],
-      "blockers": [],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260830_0002_private_index_foundation.py",
+        "apps/api/src/caseops_api/db/models.py",
+        "apps/api/src/caseops_api/services/private_retrieval.py",
+        "apps/api/src/caseops_api/services/matter_access.py",
+        "apps/api/src/caseops_api/services/matters.py",
+        "apps/api/src/caseops_api/services/ip_lifecycle.py",
+        "apps/api/src/caseops_api/services/ip_document_workflow.py",
+        "apps/api/src/caseops_api/services/workspace_assistant.py",
+        "apps/api/src/caseops_api/services/purge_propagation.py",
+        "docs/ip-implementation/PRIVATE_RETRIEVAL_FOUNDATION.md",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_20260830_private_index_migration.py",
+        "apps/api/tests/test_private_retrieval_foundation.py",
+        "apps/api/tests/test_database_index_health.py",
+        "apps/api/tests/test_datagov09_purge_propagation.py",
+        "apps/api/tests/test_ethical_walls.py",
+        "apps/api/tests/test_matter_lifecycle.py",
+        "apps/api/tests/test_ip_lifecycle_service.py",
+        "apps/api/tests/test_ip_record_access_workflow.py",
+        "apps/api/tests/test_ip_document_workflow.py",
+        "apps/api/tests/test_workspace_assistant_foundation.py",
+        "apps/api/tests/test_workspace_assistant_qa.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/PRIVATE_RETRIEVAL_FOUNDATION.md",
+        "docs/ip-implementation/evidence/m6/IPLF-066A/local-2026-08-30.md"
+      ],
+      "evidence_metadata": [
+        {
+          "ref": "docs/ip-implementation/evidence/m6/IPLF-066A/local-2026-08-30.md",
+          "revision": "6aba51fbd27fca4609bd370d42c53a51d6def725",
+          "environment": "Windows 11 isolated worktree integrated through main c74c5cfba788bb4ed1351a5be8bead525ad40fff; locked uv dependencies; SQLite migration round-trip and API fixtures; two disposable known-credential PostgreSQL 17/pgvector containers; focused API Ruff; governance and manifest generation/validation. Hosted integrated CI and deployment remain required.",
+          "fixtures": "Synthetic same-tenant owner/member/viewer capability change, restricted Matter grant/revoke, forged cross-tenant candidate ID, active and shadow generations, lexical and vector-only queries, typed filters, Matter disposal and controlled reopen, Assistant answer/citation manifest, duplicate revocation event and retained-evidence downgrade refusal; no real client, provider, model, document upload or legal effect.",
+          "assertions": "Distinct public/private ownership; tenant/current-generation/canonical ACL/capability/filter SQL prefilter capped at 200 before ranking; hydration source-version reauthorization; ID-only fully partitioned cache; idempotent immediate tombstone and saved-output lock; shadow verification/atomic activation without resurrection; lifecycle reopen remains reindex-only; additive migration/index/FK coverage and fail-closed downgrade; 104-test PostgreSQL execution; pristine PostgreSQL index-health success.",
+          "result": "passed",
+          "recorded_at": "2026-08-30T12:26:03+05:30"
+        }
+      ],
+      "blockers": [
+        {
+          "id": "IPLF-066A-ACTIVATION-BOUNDARY",
+          "summary": "The foundation is default-unused; IPLF-066B still owns bounded workers, provider minimization, route entitlement/rollout, integrity and lag gates, adversarial browser proof and exact deployed acceptance.",
+          "owner": "Codex IPLF-066B implementation and release automation",
+          "evidence_needed": "Production-scale PostgreSQL ACL-prefilter plans, complete projection/reindex behavior, entitlement and observability regressions, Playwright revocation coverage and exact-release verification.",
+          "safe_fallback": "Keep every private retrieval consumer disabled while the schema, tombstone propagation and saved-output lock remain fail-closed.",
+          "milestone_impact": "Blocks activation and release, not the verified IPLF-066A repository foundation.",
+          "next_independent_slice": "Implement IPLF-066B on the single private_retrieval owner without a manual approval gate."
+        }
+      ],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Merge the integrated candidate, retain the green real-PostgreSQL migration/index-health evidence, and require the exact merged-main CI/Security/CodeQL result before deployment.",
+        "Implement IPLF-066B on this canonical service: bounded projection/reindex workers, provider-minimal embedding batches, route entitlement/rollout gates, safe aggregate integrity/lag controls, private review/report manifests, user revocation journey and adversarial Playwright/exact-release proof.",
+        "Keep all private retrieval consumers fail-closed and default-unused until IPLF-066B and exact deployed acceptance pass."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Migration 20260830_0002 adds five tenant-correlated private index/security tables. It creates no projection rows and performs no existing-content backfill.",
+        "Access, lifecycle and document mutations synchronously apply idempotent projection events in their canonical transaction, neutralizing private text/embeddings and marking saved Assistant outputs without changing the canonical source record owner.",
+        "The process cache stores projection identifiers only and is partitioned by tenant, membership, required capability, active generation, access/tombstone epochs, query hash, typed filters, source types and locale; every hit is reauthorized at hydration."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
-      "verification_status": "not_run",
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/PRIVATE_RETRIEVAL_FOUNDATION.md",
+          "disposition": "created",
+          "owner": "Private retrieval / existing access and source owners",
+          "evidence": "Canonical ownership, schema, SQL prefilter, hydration, cache, projection-event, shadow-generation, saved-output, rollback and deliberate-defer contract"
+        },
+        {
+          "artifact": "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml",
+          "disposition": "updated",
+          "owner": "Data governance registry",
+          "evidence": "Five SQL classes and identifier-only candidate cache registered with content/embedding classifications and purge-plan reachability"
+        },
+        {
+          "artifact": "docs/ip-implementation/evidence/m6/IPLF-066A/local-2026-08-30.md",
+          "disposition": "created",
+          "owner": "Engineering/QA",
+          "evidence": "Exact implementation revision, migration-head preflight, focused security/lifecycle/Assistant regression and remaining release gates"
+        }
+      ],
+      "allocation_review": "2026-08-30 brutal reciprocal/duplicate-owner review against PRD Sections 11.2, 13.26, 23, 25 and UJ-66: IPLF-066A creates only the tenant-private derived projection/event/access-manifest owner. It reuses canonical MatterAccessGrant/EthicalWall, lifecycle, document policy, Assistant provenance and public authority owners; it does not add a second corpus, grant registry, source writer, answer writer, provider path, worker, route, analytics owner, retention/purge executor or manual approval gate. IPLF-066B retains all reciprocal SEARCH-ACL/AI-GUIDE/IP-ACCESS requirements and complete user/release proof.",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
       "release_status": "blocked",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
@@ -15767,9 +15839,9 @@
         {
           "classification": "NEW",
           "component": "IPLF-066 canonical scope: Private index generations, prefiltered ACL retrieval, hydration reauthorization, cache partitioning, revocation/tombstone propagation and saved-output access.",
-          "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
-          "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
-          "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
+          "canonical_writer": "PrivateIndexGeneration, PrivateIndexProjection, PrivateIndexProjectionScope and PrivateProjectionEvent own tenant-private derived search state; MatterAccessGrant/EthicalWall, Matter/IP lifecycle, IP document policy and AssistantTurn/Citation remain canonical for access, source and copied-answer state.",
+          "compatibility_path": "The IPLF-066A foundation is default-unused and additive. IPLF-066B consumers must call the one private_retrieval service and existing canonical access/source owners rather than create a second private index, ACL registry or saved-answer writer.",
+          "retirement_gate": "No private retrieval consumer activates until IPLF-066B proves worker completeness, entitlement/rollout enforcement, PostgreSQL-scale prefilter plans, provider minimization, integrity/lag gates, adversarial browser coverage, rollback and exact deployed acceptance."
         }
       ],
       "dependencies": [

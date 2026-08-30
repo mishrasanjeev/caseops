@@ -2146,6 +2146,23 @@ def transition_ip_docket_lifecycle(
         **direct_work_counts,
         "final_legal_disposition": will_be_terminal,
     }
+    from caseops_api.services.private_retrieval import (
+        propagate_private_projection_change,
+    )
+
+    propagate_private_projection_change(
+        session,
+        company_id=context.company.id,
+        actor_membership_id=context.membership.id,
+        idempotency_key=f"ip-lifecycle:{event.id}",
+        event_type="tombstoned" if will_be_terminal else "reindex",
+        target_type="ip_docket",
+        target_id=docket.id,
+        target_version=str(docket.lifecycle_version),
+        reason_code=(
+            "ip_docket_terminal" if will_be_terminal else "ip_docket_reopened_reindex"
+        ),
+    )
     record_from_context(
         session,
         context,

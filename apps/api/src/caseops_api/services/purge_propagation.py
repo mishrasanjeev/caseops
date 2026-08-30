@@ -57,6 +57,31 @@ _TENANT_SCOPED: tuple[tuple[str, str, str], ...] = (
     ("notification_queue", "notification_delivery_intents", "pending delivery intents"),
     ("exports", "audit_export_jobs", "generated export artifacts and their jobs"),
     ("ai_stores", "model_runs", "recorded model runs and their metadata"),
+    (
+        "private_index_generations",
+        "private_index_generations",
+        "private retrieval generation and security-epoch records",
+    ),
+    (
+        "private_index_projections",
+        "private_index_projections",
+        "private search text, embeddings, source versions and tombstones",
+    ),
+    (
+        "private_index_acl_scopes",
+        "private_index_projection_scopes",
+        "typed client, Matter and IP-docket retrieval scopes",
+    ),
+    (
+        "private_index_events",
+        "private_projection_events",
+        "idempotent access, revocation and tombstone propagation evidence",
+    ),
+    (
+        "private_saved_outputs",
+        "private_saved_output_access",
+        "content-free saved-output source access manifests",
+    ),
     ("analytics", "billing_usage_events", "usage attribution rows"),
 )
 # Reachable only through the owning record, and it is TWO hops, not one: the

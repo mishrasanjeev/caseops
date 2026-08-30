@@ -4,7 +4,7 @@
   "status": "repository_inventory_snapshot_policy_unapproved",
   "policy_status": "pending_named_human_approval",
   "purpose": "Versioned repository inventory for DATA-GOV-01 and DATA-GOV-03. It snapshots SQL tables/columns/indexes and known non-SQL classes so unregistered data-bearing changes fail Definition of Ready.",
-  "completion_boundary": "This inventory does not claim approved retention bounds, legal-hold activation, tenant export, purge, offboarding, provider deletion, backup recovery/restore, residency, or data-governance/recovery milestone completion. The only current disposition behavior is fail-closed Definition-of-Ready validation. This release's tenant-scoped company-user lookup, deadline-coverage guards, standalone-deadline offboarding serialization, and bounded Today IP coverage stream expose existing registered SQL classes only. The Today stream is a read projection over ip_deadline_coverages, ip_docket_records, and matter_deadlines that reuses the existing IP docket access predicate; the web endpoint and generated OpenAPI contract changes add no SQL or non-SQL data class, new storage, or disposition authority. IPLF-057B backfills the required ip_trademark_particular_versions compatibility projection for existing trademark_international_registrations dockets; both tables are already registered, Madrid facts retain their canonical owner, and the bounded restore-forward migration adds no data class, storage boundary, retention authority, or disposition handler. EG-009 narrows what failure paths persist: audit-export, authority-ingestion, court-sync, document-job, document-processing, embedding and legal-update errors now store redacted text instead of raw exception strings. This removes infrastructure detail from already-registered columns; it adds no SQL or non-SQL data class, no new storage, and no disposition authority. The 2026-08-27 recurring-job hardening changes only version-controlled Cloud Run commands, arguments, environment and secret references, runtime identity, Cloud SQL attachment, resources, retries, and timeouts. It invokes already-baked application entrypoints, preserves the existing registered SQL/provider/storage boundaries and paused governance writers, and adds no data class, persistence path, provider transmission, retention authority, or disposition handler. The 2026-08-28 API capacity hardening changes only Cloud Run service-level minimum capacity, exact deployment verification, and bounded reads over existing registered Matter and IP data. It adds no SQL or non-SQL data class, persistence path, provider transmission, retention authority, disposition behavior, or data owner. IPLF-062A adds tenant-scoped assistant sessions, explicit polymorphic scope references, turns, and exact citation provenance under the tenant-restricted legal-content profile. The tenant AI policy supplies a bounded session expiry, but automated destruction remains unauthorized until the hold-aware disposition owner is implemented and approved; downgrade therefore refuses retained assistant evidence. IPLF-063 extends the existing recommendation and Draft records with tenant-bound Matter/IP targets, frozen legal-review context and source provenance, lawyer selection/finalization evidence, redacted terminal state, and an idempotent Draft link under the same tenant-restricted legal-content profile. It adds no alternate research, source, drafting, audit, model-run, billing, retention, hold, export, purge, or provider-deletion owner; downgrade refuses retained intelligent-review or linked Draft evidence. The 2026-08-28 production stabilization stores one bounded, hashed official-provider source text on the existing tracked-case update owner so a billing-unavailable certified PDF can fall back only to complete integrity-verified provider markdown; truncation or hash mismatch fails closed, snapshots retain only a bounded preview, and no alternate source, provider, retention, or disposition owner is introduced. The 2026-08-29 follow-up changes only billing-unavailable response classification for that existing bounded cache, bundles already-authorized Matter and IP document projections into the existing foreign-associate workspace read, and raises service-level warm capacity. It adds no SQL or non-SQL data class, persistence path, provider transmission, retention authority, disposition behavior, or data owner. The 2026-08-29 exact-release correction classifies provider HTTP 402 under the existing rate-limit health state and writes one zero-cost verified-cached terminal operation per exact release, linked to an existing hash-verified provider snapshot and complete tracked-case source update. It makes no provider call when valid stored evidence exists, leaves provider freshness and health unchanged, and adds no data class, persistence boundary, provider transmission, retention authority, disposition behavior, or data owner. The 2026-08-29 legacy-evidence correction repairs at most one missing tracked-case source body from an already hash-verified provider snapshot: it requires an exact update-type, source-key, and source-URL match, complete non-truncated text, empty target text and hash fields, bounded candidate work, and immutable provenance audit. It never overwrites existing source evidence, changes provider health or freshness, calls the provider, or introduces a new data class, storage boundary, retention authority, disposition behavior, or data owner.",
+  "completion_boundary": "This inventory does not claim approved retention bounds, legal-hold activation, tenant export, purge, offboarding, provider deletion, backup recovery/restore, residency, or data-governance/recovery milestone completion. The only current disposition behavior is fail-closed Definition-of-Ready validation. This release's tenant-scoped company-user lookup, deadline-coverage guards, standalone-deadline offboarding serialization, and bounded Today IP coverage stream expose existing registered SQL classes only. The Today stream is a read projection over ip_deadline_coverages, ip_docket_records, and matter_deadlines that reuses the existing IP docket access predicate; the web endpoint and generated OpenAPI contract changes add no SQL or non-SQL data class, new storage, or disposition authority. IPLF-057B backfills the required ip_trademark_particular_versions compatibility projection for existing trademark_international_registrations dockets; both tables are already registered, Madrid facts retain their canonical owner, and the bounded restore-forward migration adds no data class, storage boundary, retention authority, or disposition handler. EG-009 narrows what failure paths persist: audit-export, authority-ingestion, court-sync, document-job, document-processing, embedding and legal-update errors now store redacted text instead of raw exception strings. This removes infrastructure detail from already-registered columns; it adds no SQL or non-SQL data class, no new storage, and no disposition authority. The 2026-08-27 recurring-job hardening changes only version-controlled Cloud Run commands, arguments, environment and secret references, runtime identity, Cloud SQL attachment, resources, retries, and timeouts. It invokes already-baked application entrypoints, preserves the existing registered SQL/provider/storage boundaries and paused governance writers, and adds no data class, persistence path, provider transmission, retention authority, or disposition handler. The 2026-08-28 API capacity hardening changes only Cloud Run service-level minimum capacity, exact deployment verification, and bounded reads over existing registered Matter and IP data. It adds no SQL or non-SQL data class, persistence path, provider transmission, retention authority, disposition behavior, or data owner. IPLF-062A adds tenant-scoped assistant sessions, explicit polymorphic scope references, turns, and exact citation provenance under the tenant-restricted legal-content profile. The tenant AI policy supplies a bounded session expiry, but automated destruction remains unauthorized until the hold-aware disposition owner is implemented and approved; downgrade therefore refuses retained assistant evidence. IPLF-063 extends the existing recommendation and Draft records with tenant-bound Matter/IP targets, frozen legal-review context and source provenance, lawyer selection/finalization evidence, redacted terminal state, and an idempotent Draft link under the same tenant-restricted legal-content profile. It adds no alternate research, source, drafting, audit, model-run, billing, retention, hold, export, purge, or provider-deletion owner; downgrade refuses retained intelligent-review or linked Draft evidence. The 2026-08-28 production stabilization stores one bounded, hashed official-provider source text on the existing tracked-case update owner so a billing-unavailable certified PDF can fall back only to complete integrity-verified provider markdown; truncation or hash mismatch fails closed, snapshots retain only a bounded preview, and no alternate source, provider, retention, or disposition owner is introduced. The 2026-08-29 follow-up changes only billing-unavailable response classification for that existing bounded cache, bundles already-authorized Matter and IP document projections into the existing foreign-associate workspace read, and raises service-level warm capacity. It adds no SQL or non-SQL data class, persistence path, provider transmission, retention authority, disposition behavior, or data owner. The 2026-08-29 exact-release correction classifies provider HTTP 402 under the existing rate-limit health state and writes one zero-cost verified-cached terminal operation per exact release, linked to an existing hash-verified provider snapshot and complete tracked-case source update. It makes no provider call when valid stored evidence exists, leaves provider freshness and health unchanged, and adds no data class, persistence boundary, provider transmission, retention authority, disposition behavior, or data owner. The 2026-08-29 legacy-evidence correction repairs at most one missing tracked-case source body from an already hash-verified provider snapshot: it requires an exact update-type, source-key, and source-URL match, complete non-truncated text, empty target text and hash fields, bounded candidate work, and immutable provenance audit. It never overwrites existing source evidence, changes provider health or freshness, calls the provider, or introduces a new data class, storage boundary, retention authority, disposition behavior, or data owner. IPLF-066A adds tenant-private index generations, private content projections and typed scopes, idempotent revocation/tombstone events, and content-free saved-output access manifests under fail-closed tenant policies. The only non-SQL class is an identifier-only process cache partitioned by tenant, membership and security generations; every cache hit is reauthorized from current SQL state. It does not merge private content into the public corpus, authorize provider transmission, activate retention or purge, or claim the IPLF-066B user workflow and release proof.",
   "requirement_refs": [
     "DATA-GOV-01",
     "DATA-GOV-03"
@@ -138,7 +138,12 @@
     }
   },
   "table_policy_profile_overrides": {
-    "ai_feedback_items": "tenant_operational_record"
+    "ai_feedback_items": "tenant_operational_record",
+    "private_index_generations": "security_identity_control",
+    "private_index_projections": "tenant_restricted_legal_content",
+    "private_index_projection_scopes": "security_identity_control",
+    "private_projection_events": "security_identity_control",
+    "private_saved_output_access": "tenant_restricted_legal_content"
   },
   "column_category_overrides": {
     "ai_feedback_items": {
@@ -178,6 +183,20 @@
     },
     "ip_identifiers": {
       "superseded_by_identifier_id": "tenant_or_access_identifier"
+    },
+    "private_index_projections": {
+      "content_sha256": "lifecycle_or_audit_evidence",
+      "content_text": "privileged_or_raw_content",
+      "embedding_json": "derived_search_or_embedding_data",
+      "label": "privileged_or_raw_content",
+      "source_version": "temporal_or_version_metadata"
+    },
+    "private_projection_events": {
+      "idempotency_key": "lifecycle_or_audit_evidence",
+      "target_version": "temporal_or_version_metadata"
+    },
+    "private_saved_output_access": {
+      "source_version": "temporal_or_version_metadata"
     },
     "recommendations": {
       "prompt_policy_version": "configuration_or_state_metadata",
@@ -236,6 +255,26 @@
       "implementation_refs": [
         "apps/api/src/caseops_api/services/document_storage.py",
         "infra/cloudrun/document-worker-job.yaml"
+      ]
+    },
+    {
+      "legal_policy_basis": "Pending named Records/Privacy/Legal/Security approval; this inventory is not an asserted legal retention basis or policy activation.",
+      "default_retention": "No approved automated retention duration. Do not schedule deletion, expiry, provider deletion, or backup destruction from this registry.",
+      "tenant_configurable": false,
+      "tenant_retention_bounds": "No tenant override is available until an approved versioned policy defines per-tenant bounds and authority.",
+      "disposition": "registry_fail_closed prevents a Definition-of-Ready pass for an unregistered class; it does not perform data I/O.",
+      "hold_behavior": "A future approved hold must block conflicting disposition. This inventory does not activate or execute a hold.",
+      "region_subprocessor": "Pending approved residency, international-transfer, and subprocessor policy; no guarantee is asserted.",
+      "owner": "Codex",
+      "disposition_handler_id": "registry_fail_closed",
+      "status": "inventory_registered_runtime_policy_unapproved",
+      "id": "tenant-private-retrieval-candidate-cache",
+      "kind": "cache",
+      "purpose": "Ephemeral process-local private-retrieval candidate identifiers. Keys are partitioned by tenant, membership, active index generation, access epoch, tombstone epoch, query hash, filters and locale; values contain identifiers only, and every hit is hydrated and reauthorized against current SQL state.",
+      "sensitivity": "confidential_access_identifiers",
+      "source_licence_limits": "Never cache source content, snippets, ranks, grants or authorization decisions; tenant invalidation and hydration reauthorization are mandatory.",
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/private_retrieval.py"
       ]
     },
     {
@@ -23344,6 +23383,471 @@
       }
     },
     {
+      "id": "private_index_generations",
+      "table_name": "private_index_generations",
+      "purpose": "Repository SQL persistence class `private_index_generations`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "security_identity_control",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "access_policy_generation": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "activated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "expected_projection_count": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": true
+        },
+        "failure_code": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(80)",
+          "nullable": true
+        },
+        "generation_number": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "retired_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "state": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(16)",
+          "nullable": false
+        },
+        "tombstone_generation": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "verification_sha256": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(64)",
+          "nullable": true
+        },
+        "verified_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "verified_projection_count": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": true
+        }
+      }
+    },
+    {
+      "id": "private_index_projection_scopes",
+      "table_name": "private_index_projection_scopes",
+      "purpose": "Repository SQL persistence class `private_index_projection_scopes`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "security_identity_control",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "access_policy_version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "client_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "ip_docket_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "matter_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "projection_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "scope_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "scope_type": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(24)",
+          "nullable": false
+        }
+      }
+    },
+    {
+      "id": "private_index_projections",
+      "table_name": "private_index_projections",
+      "purpose": "Repository SQL persistence class `private_index_projections`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "tenant_restricted_legal_content",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "access_policy_generation": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "access_policy_version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "approval_state": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "chunk_ordinal": {
+          "category_id": "derived_search_or_embedding_data",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "confidentiality": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "content_sha256": {
+          "category_id": "lifecycle_or_audit_evidence",
+          "sql_type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "content_text": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "TEXT",
+          "nullable": false
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "embedding_dimensions": {
+          "category_id": "derived_search_or_embedding_data",
+          "sql_type": "INTEGER",
+          "nullable": true
+        },
+        "embedding_json": {
+          "category_id": "derived_search_or_embedding_data",
+          "sql_type": "TEXT",
+          "nullable": true
+        },
+        "embedding_model": {
+          "category_id": "derived_search_or_embedding_data",
+          "sql_type": "VARCHAR(120)",
+          "nullable": true
+        },
+        "embedding_version": {
+          "category_id": "derived_search_or_embedding_data",
+          "sql_type": "VARCHAR(80)",
+          "nullable": true
+        },
+        "generation_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "is_privileged": {
+          "category_id": "domain_attribute",
+          "sql_type": "BOOLEAN",
+          "nullable": false
+        },
+        "is_tombstoned": {
+          "category_id": "domain_attribute",
+          "sql_type": "BOOLEAN",
+          "nullable": false
+        },
+        "label": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "VARCHAR(255)",
+          "nullable": false
+        },
+        "source_id": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(160)",
+          "nullable": false
+        },
+        "source_state": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "source_type": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(32)",
+          "nullable": false
+        },
+        "source_version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "VARCHAR(120)",
+          "nullable": false
+        },
+        "tombstone_generation": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "tombstone_reason": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(120)",
+          "nullable": true
+        },
+        "tombstoned_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        }
+      }
+    },
+    {
+      "id": "private_projection_events",
+      "table_name": "private_projection_events",
+      "purpose": "Repository SQL persistence class `private_projection_events`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "security_identity_control",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "access_policy_generation": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "actor_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "affected_projection_count": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "affected_saved_output_count": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "applied_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "error_code": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(80)",
+          "nullable": true
+        },
+        "event_type": {
+          "category_id": "lifecycle_or_audit_evidence",
+          "sql_type": "VARCHAR(24)",
+          "nullable": false
+        },
+        "generation_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "idempotency_key": {
+          "category_id": "lifecycle_or_audit_evidence",
+          "sql_type": "VARCHAR(120)",
+          "nullable": false
+        },
+        "reason_code": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(120)",
+          "nullable": false
+        },
+        "status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(16)",
+          "nullable": false
+        },
+        "target_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(160)",
+          "nullable": false
+        },
+        "target_type": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(32)",
+          "nullable": false
+        },
+        "target_version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "VARCHAR(120)",
+          "nullable": true
+        },
+        "tombstone_generation": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": false
+        }
+      }
+    },
+    {
+      "id": "private_saved_output_access",
+      "table_name": "private_saved_output_access",
+      "purpose": "Repository SQL persistence class `private_saved_output_access`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "tenant_restricted_legal_content",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "access_policy_generation": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "assistant_turn_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "generation_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "last_reauthorized_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "locked_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "locked_reason": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(120)",
+          "nullable": true
+        },
+        "source_id": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(160)",
+          "nullable": false
+        },
+        "source_sha256": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(64)",
+          "nullable": true
+        },
+        "source_type": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(48)",
+          "nullable": false
+        },
+        "source_version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "VARCHAR(120)",
+          "nullable": false
+        },
+        "state": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(32)",
+          "nullable": false
+        },
+        "tombstone_generation": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        }
+      }
+    },
+    {
       "id": "production_billing_signoff_evidence",
       "table_name": "production_billing_signoff_evidence",
       "purpose": "Repository SQL persistence class `production_billing_signoff_evidence`; its exact column inventory is intentionally versioned below.",
@@ -27299,12 +27803,12 @@
       }
     }
   ],
-  "schema_fingerprint": "7c58fddcd7e51b6277d0975a9e092cd38393706745e2f84c01a7d98c03d19ffe",
+  "schema_fingerprint": "e57f9c3cc4d6a6cdde90decaddd8ed99470b22c44d5a72ee153aba40d17e610b",
   "index_inventory": {
-    "orm_index_count": 1617,
-    "orm_index_fingerprint": "f7caab91e0f44287434f814bc40c922309040a36fdb5355dc73e034764b317b5",
-    "migration_index_count": 670,
-    "migration_index_fingerprint": "446d96c7267ac062a38f53d1a9972981601e12605c01392e813766af945506ba",
+    "orm_index_count": 1633,
+    "orm_index_fingerprint": "5e20b9cb9d85380b94fd086f19277082c61fd7224beb03b8278cff9857003067",
+    "migration_index_count": 687,
+    "migration_index_fingerprint": "856724a814196b986b95a30be2339d1419691361dd6c01d97f1393614c873a43",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."
   }
 }
