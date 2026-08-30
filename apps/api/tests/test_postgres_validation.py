@@ -61,6 +61,7 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import create_engine, inspect, select, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import NullPool
@@ -439,20 +440,34 @@ def test_alembic_upgrade_to_head_runs_cleanly(pg_engine):
     )
 
 
-def test_uj67_exc01_migration_lock_and_table_scan_windows_are_bounded(
+def test_migration_database_timeouts_bound_work_after_start(
     pg_engine,
 ) -> None:
-    """IPLF-UJ-67-EXC-01 — PostgreSQL aborts unsafe migration work in-budget.
+    """PostgreSQL aborts already-started migration work inside its budgets.
 
-    This uses the same connection-argument builder as ``alembic/env.py``.  The
-    smaller test budgets keep CI bounded; production obtains its 5-second lock
-    and 60-second statement budgets from the same validated settings fields.
+    This is defense in depth, not the UJ-67-EXC-01 estimate/preflight refusal.
+    It uses the same connection-argument builder as ``alembic/env.py``. Smaller
+    test budgets keep CI bounded; production supplies separate migration
+    budgets through validated settings fields and the Cloud Run migration job.
     """
 
     from caseops_api.db.connection_safety import migration_connect_args
 
-    url = os.environ["CASEOPS_TEST_POSTGRES_URL"].strip()
-    table_name = f"uj67_lock_probe_{uuid4().hex}"
+    base_url = os.environ["CASEOPS_TEST_POSTGRES_URL"].strip()
+    application_name = f"caseops_migration_timeout_{uuid4().hex}"
+    url = (
+        make_url(base_url)
+        .update_query_dict(
+            {
+                "options": (
+                    f"-c application_name={application_name} "
+                    "-c statement_timeout=1 -c lock_timeout=1"
+                )
+            }
+        )
+        .render_as_string(hide_password=False)
+    )
+    table_name = f"migration_timeout_probe_{uuid4().hex}"
     quoted_table = f'"{table_name}"'
 
     with pg_engine.begin() as setup:
@@ -504,6 +519,7 @@ def test_uj67_exc01_migration_lock_and_table_scan_windows_are_bounded(
             old_transaction = old_revision.begin()
             old_revision.execute(text(f"LOCK TABLE {quoted_table} IN ACCESS SHARE MODE"))
             with lock_engine.connect() as candidate:
+                assert candidate.scalar(text("SHOW application_name")) == application_name
                 assert candidate.scalar(text("SHOW lock_timeout")) == "200ms"
                 started = monotonic()
                 with pytest.raises(DBAPIError) as lock_failure:
@@ -521,6 +537,7 @@ def test_uj67_exc01_migration_lock_and_table_scan_windows_are_bounded(
         # or validation scan.  PostgreSQL cancels it at the statement budget;
         # the connection is usable after rollback and no partial DDL survived.
         with scan_engine.connect() as candidate:
+            assert candidate.scalar(text("SHOW application_name")) == application_name
             assert candidate.scalar(text("SHOW statement_timeout")) == "200ms"
             started = monotonic()
             with pytest.raises(DBAPIError) as scan_failure:

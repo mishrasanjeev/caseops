@@ -27,7 +27,7 @@ spec:
         spec:
           serviceAccountName: "__SERVICE_ACCOUNT__"
           maxRetries: 1
-          timeoutSeconds: 600
+          timeoutSeconds: 1800
           containers:
             - image: "__API_IMAGE__"
               # Use the venv binary directly to bypass `uv run`'s
@@ -47,6 +47,17 @@ spec:
                     secretKeyRef:
                       name: "caseops-database-url"
                       key: "latest"
+                # Dedicated Alembic budgets. Keep these separate from the API
+                # service's interactive database settings and below the
+                # 30-minute production migration task timeout.
+                - name: CASEOPS_MIGRATION_DB_CONNECT_TIMEOUT_SECONDS
+                  value: "10"
+                - name: CASEOPS_MIGRATION_DB_STATEMENT_TIMEOUT_MS
+                  value: "900000"
+                - name: CASEOPS_MIGRATION_DB_LOCK_TIMEOUT_MS
+                  value: "5000"
+                - name: CASEOPS_MIGRATION_DB_IDLE_TRANSACTION_TIMEOUT_MS
+                  value: "60000"
                 # auth_secret is required by Settings validator under
                 # cloud/prod even though alembic doesn't read it.
                 - name: CASEOPS_AUTH_SECRET

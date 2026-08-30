@@ -75,6 +75,15 @@ class Settings(BaseSettings):
     db_statement_timeout_ms: int = Field(default=60_000, ge=1)
     db_lock_timeout_ms: int = Field(default=5_000, ge=1)
     db_idle_transaction_timeout_ms: int = Field(default=60_000, ge=1)
+    # Alembic is a bounded one-shot release job, not an interactive API
+    # request. Keep its limits explicit and independently configurable so an
+    # API tuning change cannot silently shorten or unbound schema work. The
+    # 15-minute statement budget remains inside the production migration
+    # job's 30-minute task timeout, leaving time for rollback and diagnostics.
+    migration_db_connect_timeout_seconds: int = Field(default=10, ge=1, le=60)
+    migration_db_statement_timeout_ms: int = Field(default=900_000, ge=1)
+    migration_db_lock_timeout_ms: int = Field(default=5_000, ge=1)
+    migration_db_idle_transaction_timeout_ms: int = Field(default=60_000, ge=1)
     auth_secret: str = Field(default=PLACEHOLDER_AUTH_SECRET, min_length=32)
     # Dedicated HMAC key for the machine-only readiness ingestion boundary.
     # It is intentionally separate from browser/app JWT signing material.

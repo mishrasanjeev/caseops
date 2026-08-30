@@ -37,16 +37,16 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    # The application engine has always carried these server-side budgets.
-    # Alembic previously did not, so a schema change blocked by a live
-    # transaction could wait for the complete migration-job timeout.  Apply
-    # the same fail-closed limits before the first migration statement.
+    # Alembic previously had no server-side budgets, so a schema change blocked
+    # by a live transaction could wait for the complete migration-job timeout.
+    # Apply the dedicated migration limits before the first statement. They
+    # intentionally do not inherit interactive API runtime tuning.
     connect_args = migration_connect_args(
         settings.database_url,
-        connect_timeout_seconds=settings.db_connect_timeout_seconds,
-        statement_timeout_ms=settings.db_statement_timeout_ms,
-        lock_timeout_ms=settings.db_lock_timeout_ms,
-        idle_transaction_timeout_ms=settings.db_idle_transaction_timeout_ms,
+        connect_timeout_seconds=settings.migration_db_connect_timeout_seconds,
+        statement_timeout_ms=settings.migration_db_statement_timeout_ms,
+        lock_timeout_ms=settings.migration_db_lock_timeout_ms,
+        idle_transaction_timeout_ms=settings.migration_db_idle_transaction_timeout_ms,
     )
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
