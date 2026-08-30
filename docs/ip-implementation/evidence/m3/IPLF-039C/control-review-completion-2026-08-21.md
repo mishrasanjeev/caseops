@@ -62,6 +62,6 @@ The first PostgreSQL invocation used only `CASEOPS_TEST_POSTGRES_URL`; Alembic d
 
 ## Parallel ownership
 
-- Claude remains assigned to `IPLF-028A/IPLF-028B evidence` on `docs/iplf028a-evidence-20260820`.
-- Claude remains assigned to `IPLF-039F` cost-item/billing work on `feat/iplf039f-cost-items-20260820`.
+- Codex owns `IPLF-028A/IPLF-028B` evidence; `docs/iplf028a-evidence-20260820` is retained only as historical branch provenance.
+- Codex owns `IPLF-039F` cost-item/billing work; `feat/iplf039f-cost-items-20260820` is retained only as historical branch provenance.
 - Neither Claude-owned lane was modified by this increment.

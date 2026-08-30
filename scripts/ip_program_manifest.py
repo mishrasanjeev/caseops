@@ -30,6 +30,10 @@ EXPECTED_EXECUTION_POLICY = (
     "codex_owned_single_ordered_queue; implement first and run the "
     "automated check and exact-release verification batch at the end"
 )
+FORBIDDEN_WORK_ASSIGNMENT_PHRASES = (
+    "assigned to claude",
+    "claude remains assigned",
+)
 GENERATED_DERIVED_PHASES = {
     "Foundation, ownership, and backend contract",
     "User workflow, exceptions, and release proof",
@@ -123,6 +127,20 @@ class ManifestError(RuntimeError):
 
 def sha256_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def forbidden_work_assignment_matches(root: Path = CONTROL_ROOT) -> list[str]:
+    """Return active IP evidence lines that assign execution work to Claude."""
+
+    matches: list[str] = []
+    for path in sorted(root.rglob("*.md")):
+        for line_number, line in enumerate(
+            path.read_text(encoding="utf-8").splitlines(), start=1
+        ):
+            folded = line.casefold()
+            if any(phrase in folded for phrase in FORBIDDEN_WORK_ASSIGNMENT_PHRASES):
+                matches.append(f"{path.relative_to(root)}:{line_number}")
+    return matches
 
 
 def normalize_space(value: str) -> str:
@@ -711,6 +729,8 @@ def validate(manifest: dict[str, Any]) -> list[str]:
     program = manifest.get("program", {})
     if program.get("execution_policy") != EXPECTED_EXECUTION_POLICY:
         errors.append("manifest simplified execution_policy is missing or changed")
+    for match in forbidden_work_assignment_matches():
+        errors.append(f"active IP evidence assigns work to Claude: {match}")
     if program.get("prd_sha256") != sha256_text(prd):
         errors.append("manifest PRD hash is stale")
     for collection in ("epics", "slices"):
