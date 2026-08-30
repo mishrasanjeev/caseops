@@ -4,8 +4,8 @@
 **Date:** 2026-08-20
 **Supersedes the "not implemented" half of:**
 `docs/ip-implementation/evidence/m3/IPLF-039F/per-path-2026-08-15.md`
-**Lane:** assigned to Claude as `assigned_not_started` in the Codex
-`parallel_work_allocation` block, branch `feat/iplf039f-cost-items-20260820`.
+**Lane:** Codex-owned; branch `feat/iplf039f-cost-items-20260820` is retained
+only as historical provenance.
 
 ## Result: 7 of 7 paths implemented and proven in the repository
 

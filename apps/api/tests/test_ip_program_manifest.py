@@ -46,6 +46,33 @@ def test_manifest_contains_no_human_approval_control_fields() -> None:
     assert "parallel_work_allocation" not in manifest["program"]
 
 
+def test_active_ip_evidence_cannot_assign_work_to_claude(tmp_path: Path) -> None:
+    evidence = tmp_path / "evidence.md"
+    evidence.write_text("Claude remains assigned to IPLF-039F.\n", encoding="utf-8")
+
+    assert ip_program_manifest.forbidden_work_assignment_matches(tmp_path) == [
+        "evidence.md:1"
+    ]
+    assert ip_program_manifest.forbidden_work_assignment_matches() == []
+
+
+def test_late_domain_execution_uses_machine_gates_not_manual_approval() -> None:
+    manifest = _manifest()
+    epics = {row["id"]: row for row in manifest["epics"]}
+
+    for epic_id in ("IPLF-080", "IPLF-090", "IPLF-091"):
+        title = epics[epic_id]["title"]
+        assert "approval is required" not in title.casefold()
+        assert "machine-enforced" in title
+
+    epics["IPLF-080"]["title"] = "Approval is required before activation."
+    errors = ip_program_manifest.validate(manifest)
+    assert any(
+        "manual approval language is forbidden in execution scope" in error
+        for error in errors
+    )
+
+
 def test_validator_rejects_missing_duplicate_requirement_and_exception_rows() -> None:
     manifest = _manifest()
     manifest["requirements"].append(copy.deepcopy(manifest["requirements"][0]))

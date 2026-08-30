@@ -4,7 +4,7 @@
   "program": {
     "id": "PRD-IPLF-2026-08-01",
     "prd_path": "docs/PRD_IP_LAW_FIRM_PLATFORM_2026-08-01.md",
-    "prd_sha256": "2fb06ddeaaab597b176028e5536fe7b514ae9045750f143c9e2e1710ca2ecbbc",
+    "prd_sha256": "fe71f897e2be733cb799588d90323c64e763227cbdca748e863423a8b720822e",
     "baseline": {
       "requirement_count": 436,
       "family_count": 50,
@@ -2603,7 +2603,7 @@
     },
     {
       "id": "IPLF-080",
-      "title": "Implement the patent family/prosecution/opposition/claim-version/annuity/working/title domain and journeys from a versioned child-PRD draft behind unavailable/intake-only flags; approval is required before authoritative automation or beta/GA activation.",
+      "title": "Implement the patent family/prosecution/opposition/claim-version/annuity/working/title domain and journeys from a versioned child-PRD behind unavailable/intake-only flags; authoritative automation and beta/GA activate only when machine-enforced source-pack, legal-fixture, capability, regression, and exact-release checks pass.",
       "milestone_id": "M7-M10",
       "requirement_ids": [
         "IP-SCOPE-01",
@@ -2637,7 +2637,7 @@
     },
     {
       "id": "IPLF-090",
-      "title": "Implement independent design, copyright, domain, licensing, and enforcement domain slices from versioned child-PRD drafts behind unavailable/intake-only flags; approval is required before activation or supported claims.",
+      "title": "Implement independent design, copyright, domain, licensing, and enforcement domain slices from versioned child-PRDs behind unavailable/intake-only flags; activation and supported claims require machine-enforced source-pack, legal-fixture, capability, regression, and exact-release checks.",
       "milestone_id": "M7-M10",
       "requirement_ids": [
         "COPY-01",
@@ -2673,7 +2673,7 @@
     },
     {
       "id": "IPLF-091",
-      "title": "Implement independent GI, plant-variety, semiconductor-layout, trade-secret, and customs/anti-counterfeiting domain slices from versioned child-PRD drafts behind unavailable/intake-only flags; approval is required before activation or supported claims.",
+      "title": "Implement independent GI, plant-variety, semiconductor-layout, trade-secret, and customs/anti-counterfeiting domain slices from versioned child-PRDs behind unavailable/intake-only flags; activation and supported claims require machine-enforced source-pack, legal-fixture, capability, regression, and exact-release checks.",
       "milestone_id": "M7-M10",
       "requirement_ids": [
         "CUSTOMS-01",
@@ -16458,7 +16458,7 @@
     },
     {
       "id": "IPLF-080A",
-      "title": "Foundation, ownership, and backend contract: Implement the patent family/prosecution/opposition/claim-version/annuity/working/title domain and journeys from a versioned child-PRD draft behind unavailable/intake-only flags; approval is required before authoritative automation or beta/GA activation.",
+      "title": "Foundation, ownership, and backend contract: Implement the patent family/prosecution/opposition/claim-version/annuity/working/title domain and journeys from a versioned child-PRD behind unavailable/intake-only flags; authoritative automation and beta/GA activate only when machine-enforced source-pack, legal-fixture, capability, regression, and exact-release checks pass.",
       "milestone_id": "M7-M10",
       "epic_id": "IPLF-080",
       "source_kind": "derived",
@@ -16471,7 +16471,7 @@
       "ownership": [
         {
           "classification": "EXTEND",
-          "component": "IPLF-080 canonical scope: Implement the patent family/prosecution/opposition/claim-version/annuity/working/title domain and journeys from a versioned child-PRD draft behind unavailable/intake-only flags; approval is required before authoritative automation or beta/GA activation.",
+          "component": "IPLF-080 canonical scope: Implement the patent family/prosecution/opposition/claim-version/annuity/working/title domain and journeys from a versioned child-PRD behind unavailable/intake-only flags; authoritative automation and beta/GA activate only when machine-enforced source-pack, legal-fixture, capability, regression, and exact-release checks pass.",
           "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
           "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
           "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
@@ -16504,7 +16504,7 @@
     },
     {
       "id": "IPLF-080B",
-      "title": "User workflow, exceptions, and release proof: Implement the patent family/prosecution/opposition/claim-version/annuity/working/title domain and journeys from a versioned child-PRD draft behind unavailable/intake-only flags; approval is required before authoritative automation or beta/GA activation.",
+      "title": "User workflow, exceptions, and release proof: Implement the patent family/prosecution/opposition/claim-version/annuity/working/title domain and journeys from a versioned child-PRD behind unavailable/intake-only flags; authoritative automation and beta/GA activate only when machine-enforced source-pack, legal-fixture, capability, regression, and exact-release checks pass.",
       "milestone_id": "M7-M10",
       "epic_id": "IPLF-080",
       "source_kind": "derived",
@@ -16547,7 +16547,7 @@
       "ownership": [
         {
           "classification": "EXTEND",
-          "component": "IPLF-080 canonical scope: Implement the patent family/prosecution/opposition/claim-version/annuity/working/title domain and journeys from a versioned child-PRD draft behind unavailable/intake-only flags; approval is required before authoritative automation or beta/GA activation.",
+          "component": "IPLF-080 canonical scope: Implement the patent family/prosecution/opposition/claim-version/annuity/working/title domain and journeys from a versioned child-PRD behind unavailable/intake-only flags; authoritative automation and beta/GA activate only when machine-enforced source-pack, legal-fixture, capability, regression, and exact-release checks pass.",
           "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
           "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
           "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
@@ -16590,7 +16590,7 @@
     },
     {
       "id": "IPLF-090A",
-      "title": "Foundation, ownership, and backend contract: Implement independent design, copyright, domain, licensing, and enforcement domain slices from versioned child-PRD drafts behind unavailable/intake-only flags; approval is required before activation or supported claims.",
+      "title": "Foundation, ownership, and backend contract: Implement independent design, copyright, domain, licensing, and enforcement domain slices from versioned child-PRDs behind unavailable/intake-only flags; activation and supported claims require machine-enforced source-pack, legal-fixture, capability, regression, and exact-release checks.",
       "milestone_id": "M7-M10",
       "epic_id": "IPLF-090",
       "source_kind": "derived",
@@ -16603,7 +16603,7 @@
       "ownership": [
         {
           "classification": "EXTEND",
-          "component": "IPLF-090 canonical scope: Implement independent design, copyright, domain, licensing, and enforcement domain slices from versioned child-PRD drafts behind unavailable/intake-only flags; approval is required before activation or supported claims.",
+          "component": "IPLF-090 canonical scope: Implement independent design, copyright, domain, licensing, and enforcement domain slices from versioned child-PRDs behind unavailable/intake-only flags; activation and supported claims require machine-enforced source-pack, legal-fixture, capability, regression, and exact-release checks.",
           "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
           "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
           "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
@@ -16636,7 +16636,7 @@
     },
     {
       "id": "IPLF-090B",
-      "title": "User workflow, exceptions, and release proof: Implement independent design, copyright, domain, licensing, and enforcement domain slices from versioned child-PRD drafts behind unavailable/intake-only flags; approval is required before activation or supported claims.",
+      "title": "User workflow, exceptions, and release proof: Implement independent design, copyright, domain, licensing, and enforcement domain slices from versioned child-PRDs behind unavailable/intake-only flags; activation and supported claims require machine-enforced source-pack, legal-fixture, capability, regression, and exact-release checks.",
       "milestone_id": "M7-M10",
       "epic_id": "IPLF-090",
       "source_kind": "derived",
@@ -16683,7 +16683,7 @@
       "ownership": [
         {
           "classification": "EXTEND",
-          "component": "IPLF-090 canonical scope: Implement independent design, copyright, domain, licensing, and enforcement domain slices from versioned child-PRD drafts behind unavailable/intake-only flags; approval is required before activation or supported claims.",
+          "component": "IPLF-090 canonical scope: Implement independent design, copyright, domain, licensing, and enforcement domain slices from versioned child-PRDs behind unavailable/intake-only flags; activation and supported claims require machine-enforced source-pack, legal-fixture, capability, regression, and exact-release checks.",
           "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
           "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
           "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
@@ -16729,7 +16729,7 @@
     },
     {
       "id": "IPLF-091A",
-      "title": "Foundation, ownership, and backend contract: Implement independent GI, plant-variety, semiconductor-layout, trade-secret, and customs/anti-counterfeiting domain slices from versioned child-PRD drafts behind unavailable/intake-only flags; approval is required before activation or supported claims.",
+      "title": "Foundation, ownership, and backend contract: Implement independent GI, plant-variety, semiconductor-layout, trade-secret, and customs/anti-counterfeiting domain slices from versioned child-PRDs behind unavailable/intake-only flags; activation and supported claims require machine-enforced source-pack, legal-fixture, capability, regression, and exact-release checks.",
       "milestone_id": "M7-M10",
       "epic_id": "IPLF-091",
       "source_kind": "derived",
@@ -16742,7 +16742,7 @@
       "ownership": [
         {
           "classification": "EXTEND",
-          "component": "IPLF-091 canonical scope: Implement independent GI, plant-variety, semiconductor-layout, trade-secret, and customs/anti-counterfeiting domain slices from versioned child-PRD drafts behind unavailable/intake-only flags; approval is required before activation or supported claims.",
+          "component": "IPLF-091 canonical scope: Implement independent GI, plant-variety, semiconductor-layout, trade-secret, and customs/anti-counterfeiting domain slices from versioned child-PRDs behind unavailable/intake-only flags; activation and supported claims require machine-enforced source-pack, legal-fixture, capability, regression, and exact-release checks.",
           "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
           "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
           "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
@@ -16775,7 +16775,7 @@
     },
     {
       "id": "IPLF-091B",
-      "title": "User workflow, exceptions, and release proof: Implement independent GI, plant-variety, semiconductor-layout, trade-secret, and customs/anti-counterfeiting domain slices from versioned child-PRD drafts behind unavailable/intake-only flags; approval is required before activation or supported claims.",
+      "title": "User workflow, exceptions, and release proof: Implement independent GI, plant-variety, semiconductor-layout, trade-secret, and customs/anti-counterfeiting domain slices from versioned child-PRDs behind unavailable/intake-only flags; activation and supported claims require machine-enforced source-pack, legal-fixture, capability, regression, and exact-release checks.",
       "milestone_id": "M7-M10",
       "epic_id": "IPLF-091",
       "source_kind": "derived",
@@ -16815,7 +16815,7 @@
       "ownership": [
         {
           "classification": "EXTEND",
-          "component": "IPLF-091 canonical scope: Implement independent GI, plant-variety, semiconductor-layout, trade-secret, and customs/anti-counterfeiting domain slices from versioned child-PRD drafts behind unavailable/intake-only flags; approval is required before activation or supported claims.",
+          "component": "IPLF-091 canonical scope: Implement independent GI, plant-variety, semiconductor-layout, trade-secret, and customs/anti-counterfeiting domain slices from versioned child-PRDs behind unavailable/intake-only flags; activation and supported claims require machine-enforced source-pack, legal-fixture, capability, regression, and exact-release checks.",
           "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
           "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
           "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."

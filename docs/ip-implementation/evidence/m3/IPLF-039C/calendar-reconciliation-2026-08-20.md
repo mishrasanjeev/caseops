@@ -42,6 +42,6 @@ The three skipped API cases are pre-existing environment-dependent tests in the 
 
 ## Parallel ownership
 
-- Claude remains assigned to `IPLF-028A/IPLF-028B evidence` on `docs/iplf028a-evidence-20260820`.
-- Claude remains assigned to `IPLF-039F` IP cost-item/billing work on `feat/iplf039f-cost-items-20260820`; that lane was not modified by this increment.
+- Codex owns `IPLF-028A/IPLF-028B` evidence; `docs/iplf028a-evidence-20260820` is retained only as historical branch provenance.
+- Codex owns `IPLF-039F` IP cost-item/billing work; `feat/iplf039f-cost-items-20260820` is retained only as historical branch provenance and was not modified by this increment.
 
