@@ -20,6 +20,10 @@ These manifests keep the current founder-stage `CaseOps` API and document worker
 - `Cloud SQL for PostgreSQL` is the primary database
 - `GCS` is the document storage backend in cloud
 - `Secret Manager` contains `caseops-ecourtsindia-api-token` before case tracking is enabled in cloud
+- `Secret Manager` contains a dedicated 32+ byte
+  `caseops-machine-readiness-evidence-secret`, distinct from the auth secret;
+  the same value is configured as the GitHub Actions secret
+  `CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET`
 - `Cloud Scheduler` triggers run the document worker frequently, legal polling nightly, and case polling inside its configured afternoon window
 
 ## Required Replacements

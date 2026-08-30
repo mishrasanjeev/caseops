@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 EvidenceStatusLiteral = Literal["pending", "pass", "fail", "blocked", "not_applicable"]
 ReadinessClassificationLiteral = Literal[
@@ -55,6 +55,60 @@ ProductionBillingSignoffCheckLiteral = Literal[
     "tenant_no_leak_checks",
 ]
 
+MachineReadinessEvidenceKind = Literal[
+    "billing_check",
+    "operational_gate",
+    "pine_labs_uat",
+]
+MachineReadinessConclusion = Literal["pass", "fail", "blocked"]
+
+
+class MachineReadinessEvidenceItem(BaseModel):
+    kind: MachineReadinessEvidenceKind
+    subject: str = Field(min_length=3, max_length=120, pattern=r"^[a-z0-9_:-]+$")
+    conclusion: MachineReadinessConclusion
+    evidence_ref: str = Field(min_length=3, max_length=500)
+    target_run_id: str | None = Field(default=None, min_length=3, max_length=80)
+
+    @model_validator(mode="after")
+    def _target_run_only_for_pine(self) -> MachineReadinessEvidenceItem:
+        if self.kind == "pine_labs_uat" and not self.target_run_id:
+            raise ValueError("pine_labs_uat evidence requires target_run_id")
+        if self.kind != "pine_labs_uat" and self.target_run_id is not None:
+            raise ValueError("target_run_id is valid only for pine_labs_uat evidence")
+        return self
+
+
+class MachineReadinessEvidenceWriteRequest(BaseModel):
+    schema_name: Literal["caseops.machine-readiness-write/v1"] = Field(alias="schema")
+    producer: str = Field(min_length=3, max_length=80, pattern=r"^[a-z0-9_./-]+$")
+    release_sha: str = Field(pattern=r"^[0-9a-f]{40}$")
+    run_id: str = Field(
+        min_length=3,
+        max_length=200,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]+$",
+    )
+    items: list[MachineReadinessEvidenceItem] = Field(min_length=1, max_length=64)
+
+    @field_validator("items")
+    @classmethod
+    def _unique_items(
+        cls,
+        items: list[MachineReadinessEvidenceItem],
+    ) -> list[MachineReadinessEvidenceItem]:
+        keys = [(item.kind, item.subject, item.target_run_id) for item in items]
+        if len(keys) != len(set(keys)):
+            raise ValueError("machine readiness evidence items must be unique")
+        return items
+
+
+class MachineReadinessEvidenceWriteResponse(BaseModel):
+    release_sha: str
+    producer: str
+    run_id: str
+    recorded_count: int
+    evidence_digest: str
+
 
 class PineLabsUATScenarioStatus(BaseModel):
     scenario_code: PineLabsUATScenarioLiteral
@@ -76,6 +130,7 @@ class PineLabsUATReadinessResponse(BaseModel):
     scenarios: list[PineLabsUATScenarioStatus]
     complete: bool
     missing_required_scenarios: list[PineLabsUATScenarioLiteral]
+    activation_prerequisites_met: bool
     production_activation_blocked: bool
     activation_blockers: list[str] = Field(default_factory=list)
     latest_decision: dict[str, object] | None = None
@@ -85,19 +140,6 @@ class PineLabsUATRunCreateRequest(BaseModel):
     environment: Literal["mock", "uat"] = "uat"
     provider_mode: str = Field(default="mock", max_length=40)
     notes: str | None = Field(default=None, max_length=4000)
-
-
-class PineLabsUATEvidenceRequest(BaseModel):
-    run_id: str | None = None
-    scenario_code: PineLabsUATScenarioLiteral
-    result_status: EvidenceStatusLiteral
-    provider_order_id: str | None = Field(default=None, max_length=255)
-    provider_payment_id: str | None = Field(default=None, max_length=255)
-    webhook_id: str | None = Field(default=None, max_length=255)
-    webhook_timestamp: datetime | None = None
-    redacted_payload: dict[str, object] | None = None
-    operator_notes: str | None = Field(default=None, max_length=4000)
-    attachment_refs: list[str] = Field(default_factory=list, max_length=20)
 
 
 class PineLabsActivationDecisionRequest(BaseModel):
@@ -123,15 +165,6 @@ class ProductionBillingSignoffResponse(BaseModel):
     checks: list[ProductionBillingSignoffCheckStatus]
     signed_off_at: datetime | None = None
     notes: str | None = None
-
-
-class ProductionBillingSignoffEvidenceRequest(BaseModel):
-    signoff_id: str | None = None
-    check_code: ProductionBillingSignoffCheckLiteral
-    result_status: EvidenceStatusLiteral
-    evidence_ref: str | None = Field(default=None, max_length=500)
-    evidence: dict[str, object] | None = None
-    operator_notes: str | None = Field(default=None, max_length=4000)
 
 
 class PasswordResetReadinessResponse(BaseModel):
@@ -199,18 +232,6 @@ class PlatformOperationalReadinessRecord(BaseModel):
     evidence: dict[str, object] | None = None
     last_evidence_at: datetime | None = None
     owner_label: str | None = None
-
-
-class PlatformOperationalReadinessEvidenceRequest(BaseModel):
-    category: str = Field(min_length=2, max_length=80)
-    gate_code: str = Field(min_length=2, max_length=120)
-    label: str = Field(min_length=2, max_length=255)
-    status: EvidenceStatusLiteral = "pending"
-    readiness_classification: ReadinessClassificationLiteral = "founder-only"
-    blocker_reason: str | None = Field(default=None, max_length=4000)
-    evidence_ref: str | None = Field(default=None, max_length=500)
-    evidence: dict[str, object] | None = None
-    owner_label: str | None = Field(default=None, max_length=160)
 
 
 class PlatformProductionReadinessGate(BaseModel):

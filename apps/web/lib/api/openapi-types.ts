@@ -10475,23 +10475,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/platform-admin/billing-signoff/evidence": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Post Production Billing Signoff Evidence */
-        post: operations["post_production_billing_signoff_evidence_api_platform_admin_billing_signoff_evidence_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/platform-admin/case-tracking/support-matrix": {
         parameters: {
             query?: never;
@@ -11022,23 +11005,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/platform-admin/pine-labs/uat-evidence": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Post Pine Labs Uat Evidence */
-        post: operations["post_pine_labs_uat_evidence_api_platform_admin_pine_labs_uat_evidence_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/platform-admin/pine-labs/uat-readiness": {
         parameters: {
             query?: never;
@@ -11100,8 +11066,7 @@ export interface paths {
         /** Get Platform Operational Readiness Evidence */
         get: operations["get_platform_operational_readiness_evidence_api_platform_admin_production_readiness_evidence_get"];
         put?: never;
-        /** Post Platform Operational Readiness Evidence */
-        post: operations["post_platform_operational_readiness_evidence_api_platform_admin_production_readiness_evidence_post"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -37554,41 +37519,12 @@ export interface components {
             /** Run Id */
             run_id?: string | null;
         };
-        /** PineLabsUATEvidenceRequest */
-        PineLabsUATEvidenceRequest: {
-            /** Attachment Refs */
-            attachment_refs?: string[];
-            /** Operator Notes */
-            operator_notes?: string | null;
-            /** Provider Order Id */
-            provider_order_id?: string | null;
-            /** Provider Payment Id */
-            provider_payment_id?: string | null;
-            /** Redacted Payload */
-            redacted_payload?: {
-                [key: string]: unknown;
-            } | null;
-            /**
-             * Result Status
-             * @enum {string}
-             */
-            result_status: "pending" | "pass" | "fail" | "blocked" | "not_applicable";
-            /** Run Id */
-            run_id?: string | null;
-            /**
-             * Scenario Code
-             * @enum {string}
-             */
-            scenario_code: "plan_payment_success" | "top_up_success" | "failed_payment" | "pending_payment" | "cancelled_expired_payment" | "duplicate_webhook" | "tampered_webhook" | "stale_webhook" | "refund_processed" | "refund_failed" | "subscription_charged" | "subscription_cancelled" | "settlement_report_import";
-            /** Webhook Id */
-            webhook_id?: string | null;
-            /** Webhook Timestamp */
-            webhook_timestamp?: string | null;
-        };
         /** PineLabsUATReadinessResponse */
         PineLabsUATReadinessResponse: {
             /** Activation Blockers */
             activation_blockers?: string[];
+            /** Activation Prerequisites Met */
+            activation_prerequisites_met: boolean;
             /** Complete */
             complete: boolean;
             /** Environment */
@@ -37730,37 +37666,6 @@ export interface components {
              * @default 0
              */
             tds_deducted_minor: number;
-        };
-        /** PlatformOperationalReadinessEvidenceRequest */
-        PlatformOperationalReadinessEvidenceRequest: {
-            /** Blocker Reason */
-            blocker_reason?: string | null;
-            /** Category */
-            category: string;
-            /** Evidence */
-            evidence?: {
-                [key: string]: unknown;
-            } | null;
-            /** Evidence Ref */
-            evidence_ref?: string | null;
-            /** Gate Code */
-            gate_code: string;
-            /** Label */
-            label: string;
-            /** Owner Label */
-            owner_label?: string | null;
-            /**
-             * Readiness Classification
-             * @default founder-only
-             * @enum {string}
-             */
-            readiness_classification: "live" | "review-first" | "provider-gated" | "founder-only" | "disabled until UAT" | "planned";
-            /**
-             * Status
-             * @default pending
-             * @enum {string}
-             */
-            status: "pending" | "pass" | "fail" | "blocked" | "not_applicable";
         };
         /** PlatformOperationalReadinessRecord */
         PlatformOperationalReadinessRecord: {
@@ -39066,29 +38971,6 @@ export interface components {
              * @enum {string}
              */
             result_status: "pending" | "pass" | "fail" | "blocked" | "not_applicable";
-        };
-        /** ProductionBillingSignoffEvidenceRequest */
-        ProductionBillingSignoffEvidenceRequest: {
-            /**
-             * Check Code
-             * @enum {string}
-             */
-            check_code: "platform_admin" | "platform_admin_profit" | "platform_admin_costs" | "platform_admin_integrations" | "platform_admin_provider_events" | "tenant_billing_current_plan" | "invoice_download" | "statement_download" | "credit_ledger_export" | "payment_export" | "spend_export" | "disabled_pine_checkout_behavior" | "tenant_no_leak_checks";
-            /** Evidence */
-            evidence?: {
-                [key: string]: unknown;
-            } | null;
-            /** Evidence Ref */
-            evidence_ref?: string | null;
-            /** Operator Notes */
-            operator_notes?: string | null;
-            /**
-             * Result Status
-             * @enum {string}
-             */
-            result_status: "pending" | "pass" | "fail" | "blocked" | "not_applicable";
-            /** Signoff Id */
-            signoff_id?: string | null;
         };
         /** ProductionBillingSignoffResponse */
         ProductionBillingSignoffResponse: {
@@ -64238,39 +64120,6 @@ export interface operations {
             };
         };
     };
-    post_production_billing_signoff_evidence_api_platform_admin_billing_signoff_evidence_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ProductionBillingSignoffEvidenceRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProductionBillingSignoffResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_platform_case_tracking_support_matrix_api_platform_admin_case_tracking_support_matrix_get: {
         parameters: {
             query?: never;
@@ -65283,39 +65132,6 @@ export interface operations {
             };
         };
     };
-    post_pine_labs_uat_evidence_api_platform_admin_pine_labs_uat_evidence_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PineLabsUATEvidenceRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PineLabsUATReadinessResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_pine_labs_uat_readiness_api_platform_admin_pine_labs_uat_readiness_get: {
         parameters: {
             query?: never;
@@ -65405,39 +65221,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlatformOperationalReadinessRecord"][];
-                };
-            };
-        };
-    };
-    post_platform_operational_readiness_evidence_api_platform_admin_production_readiness_evidence_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PlatformOperationalReadinessEvidenceRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PlatformOperationalReadinessRecord"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -54,9 +54,24 @@ def test_non_placeholder_auth_secret_allowed_in_production(
     assert settings.auth_secret != PLACEHOLDER_AUTH_SECRET
 
 
+def test_machine_readiness_secret_must_be_distinct_from_auth_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    shared = "one-secret-must-not-own-both-trust-boundaries"
+    monkeypatch.setenv("CASEOPS_ENV", "local")
+    monkeypatch.setenv("CASEOPS_AUTH_SECRET", shared)
+    monkeypatch.setenv("CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET", shared)
+
+    with pytest.raises(ValidationError) as exc_info:
+        Settings()
+
+    assert "must be distinct" in str(exc_info.value)
+
+
 @pytest.mark.parametrize("env", ["staging", "production", "prod", "cloud", "gke"])
 def test_auto_migrate_rejected_in_non_local(
-    monkeypatch: pytest.MonkeyPatch, env: str,
+    monkeypatch: pytest.MonkeyPatch,
+    env: str,
 ) -> None:
     """EG-002 (2026-04-23): production / cloud API services MUST NOT
     auto-migrate at startup. The validator rejects the combination
@@ -66,7 +81,8 @@ def test_auto_migrate_rejected_in_non_local(
     """
     monkeypatch.setenv("CASEOPS_ENV", env)
     monkeypatch.setenv(
-        "CASEOPS_AUTH_SECRET", "real-rotated-production-secret-32bytes+",
+        "CASEOPS_AUTH_SECRET",
+        "real-rotated-production-secret-32bytes+",
     )
     monkeypatch.setenv("CASEOPS_AUTO_MIGRATE", "true")
     with pytest.raises(ValidationError) as exc_info:
@@ -80,7 +96,8 @@ def test_auto_migrate_allowed_in_local(monkeypatch: pytest.MonkeyPatch) -> None:
     auto_migrate=True is fine because there's exactly one instance."""
     monkeypatch.setenv("CASEOPS_ENV", "local")
     monkeypatch.setenv(
-        "CASEOPS_AUTH_SECRET", PLACEHOLDER_AUTH_SECRET,
+        "CASEOPS_AUTH_SECRET",
+        PLACEHOLDER_AUTH_SECRET,
     )
     monkeypatch.setenv("CASEOPS_AUTO_MIGRATE", "true")
     settings = Settings()
@@ -93,7 +110,8 @@ def test_auto_migrate_false_allowed_everywhere(
     """The explicit opt-out is always accepted, no matter the env."""
     monkeypatch.setenv("CASEOPS_ENV", "production")
     monkeypatch.setenv(
-        "CASEOPS_AUTH_SECRET", "real-rotated-production-secret-32bytes+",
+        "CASEOPS_AUTH_SECRET",
+        "real-rotated-production-secret-32bytes+",
     )
     monkeypatch.setenv("CASEOPS_AUTO_MIGRATE", "false")
     settings = Settings()
@@ -114,7 +132,7 @@ def test_local_env_auto_augments_dev_cors_origins(
     monkeypatch.setenv("CASEOPS_CORS_ORIGINS", '["http://localhost:3000"]')
     settings = Settings()
     expected_added = {
-        "http://localhost:3000",   # already in env, kept
+        "http://localhost:3000",  # already in env, kept
         "http://localhost:3100",
         "http://localhost:3500",
         "http://127.0.0.1:3000",
@@ -139,9 +157,7 @@ def test_production_env_does_not_augment_cors_origins(
 
 
 @pytest.mark.parametrize("env", ["cloud", "gke", "uat", "qa", "ee-prod"])
-def test_cloud_env_does_not_augment_cors_origins(
-    monkeypatch: pytest.MonkeyPatch, env: str
-) -> None:
+def test_cloud_env_does_not_augment_cors_origins(monkeypatch: pytest.MonkeyPatch, env: str) -> None:
     """The Cloud Run / GKE / unknown env profiles must NOT receive the
     dev-port augment (Codex 2026-04-19 finding #3). A misclassified
     env that auto-allowed http://localhost:* in a deployed environment

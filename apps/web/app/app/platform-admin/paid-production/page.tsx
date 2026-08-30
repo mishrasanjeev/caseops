@@ -3,8 +3,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
-  CheckCircle2,
-  FileCheck2,
   KeyRound,
   Loader2,
   ReceiptText,
@@ -32,10 +30,7 @@ import {
   fetchPlatformSupportMatrix,
   fetchSecretRotationReadiness,
   fetchProductionBillingSignoff,
-  recordSecretRotationEvidence,
   recordPineLabsActivationDecision,
-  recordPineLabsUatEvidence,
-  recordProductionBillingSignoffEvidence,
 } from "@/lib/api/endpoints";
 import type {
   CaseTrackingSupportMatrixAdminResponse,
@@ -146,12 +141,8 @@ function UnifiedProductionGates({
 
 function SecretRotationReadiness({
   readiness,
-  busy,
-  onRecordBlocked,
 }: {
   readiness: SecretRotationEvidenceListResponse | undefined;
-  busy: boolean;
-  onRecordBlocked: () => void;
 }) {
   return (
     <Card>
@@ -213,10 +204,6 @@ function SecretRotationReadiness({
             </tbody>
           </table>
         </div>
-        <Button type="button" variant="outline" disabled={busy} onClick={onRecordBlocked}>
-          <ShieldAlert className="h-4 w-4" aria-hidden />
-          Record blocked placeholder
-        </Button>
       </CardContent>
     </Card>
   );
@@ -276,21 +263,21 @@ function ReadinessSummary({
 function PineEvidenceTable({
   readiness,
   busy,
-  onRecordPass,
   onDecision,
 }: {
   readiness: PineLabsUatReadinessResponse | undefined;
   busy: boolean;
-  onRecordPass: (scenarioCode: string) => void;
   onDecision: (decision: "go" | "no_go") => void;
 }) {
+  const goBlocked = !readiness?.activation_prerequisites_met;
+
   return (
     <Card>
       <CardHeader className="flex-row items-start justify-between gap-4">
         <div>
           <CardTitle as="h2">Pine Labs UAT evidence</CardTitle>
           <CardDescription>
-            Production payment activation remains blocked until required scenarios pass.
+            Scenario results come from exact-release CI and provider probes. This console cannot self-attest a pass.
           </CardDescription>
         </div>
         <ShieldAlert className="h-5 w-5 text-amber-700" aria-hidden />
@@ -322,7 +309,6 @@ function PineEvidenceTable({
                 <th className="py-2 pr-4">Order</th>
                 <th className="py-2 pr-4">Webhook</th>
                 <th className="py-2 pr-4">Observed</th>
-                <th className="py-2 pr-4">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -337,18 +323,6 @@ function PineEvidenceTable({
                   <td className="py-3 pr-4">{scenario.provider_order_id ?? "-"}</td>
                   <td className="py-3 pr-4">{scenario.webhook_id ?? "-"}</td>
                   <td className="py-3 pr-4">{scenario.observed_at ?? "-"}</td>
-                  <td className="py-3 pr-4">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={busy || scenario.result_status === "pass"}
-                      onClick={() => onRecordPass(scenario.scenario_code)}
-                    >
-                      <CheckCircle2 className="h-4 w-4" aria-hidden />
-                      Pass
-                    </Button>
-                  </td>
                 </tr>
               ))}
             </tbody>
@@ -360,7 +334,7 @@ function PineEvidenceTable({
           </Button>
           <Button
             type="button"
-            disabled={busy || readiness?.production_activation_blocked}
+            disabled={busy || goBlocked}
             onClick={() => onDecision("go")}
           >
             Record go
@@ -373,19 +347,15 @@ function PineEvidenceTable({
 
 function BillingSignoffTable({
   signoff,
-  busy,
-  onRecordPass,
 }: {
   signoff: ProductionBillingSignoffResponse | undefined;
-  busy: boolean;
-  onRecordPass: (checkCode: string) => void;
 }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle as="h2">Production billing signoff</CardTitle>
+        <CardTitle as="h2">Machine-verified billing checks</CardTitle>
         <CardDescription>
-          Founder evidence for platform admin, tenant exports, disabled checkout, and no-leak checks.
+          Exact-release CI, probes, and configuration are authoritative. Missing machine evidence fails closed.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -397,7 +367,6 @@ function BillingSignoffTable({
                 <th className="py-2 pr-4">Status</th>
                 <th className="py-2 pr-4">Evidence</th>
                 <th className="py-2 pr-4">Recorded</th>
-                <th className="py-2 pr-4">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -411,18 +380,6 @@ function BillingSignoffTable({
                   </td>
                   <td className="py-3 pr-4">{check.evidence_ref ?? "-"}</td>
                   <td className="py-3 pr-4">{check.recorded_at ?? "-"}</td>
-                  <td className="py-3 pr-4">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={busy || check.result_status === "pass"}
-                      onClick={() => onRecordPass(check.check_code)}
-                    >
-                      <FileCheck2 className="h-4 w-4" aria-hidden />
-                      Pass
-                    </Button>
-                  </td>
                 </tr>
               ))}
             </tbody>
@@ -704,19 +661,6 @@ export default function PaidProductionReadinessPage() {
     enabled: canPlatform,
   });
 
-  const pineEvidenceMutation = useMutation({
-    mutationFn: recordPineLabsUatEvidence,
-    onSuccess: async () => {
-      toast.success("UAT evidence recorded.");
-      await queryClient.invalidateQueries({
-        queryKey: ["platform-admin", "pine-labs", "uat-readiness"],
-      });
-      await queryClient.invalidateQueries({
-        queryKey: ["platform-admin", "production-readiness"],
-      });
-    },
-    onError: (error) => toast.error(apiErrorMessage(error, "Could not record UAT evidence.")),
-  });
   const activationMutation = useMutation({
     mutationFn: recordPineLabsActivationDecision,
     onSuccess: async () => {
@@ -730,34 +674,6 @@ export default function PaidProductionReadinessPage() {
     },
     onError: (error) => toast.error(apiErrorMessage(error, "Could not record decision.")),
   });
-  const signoffMutation = useMutation({
-    mutationFn: recordProductionBillingSignoffEvidence,
-    onSuccess: async () => {
-      toast.success("Billing signoff evidence recorded.");
-      await queryClient.invalidateQueries({
-        queryKey: ["platform-admin", "billing-signoff"],
-      });
-      await queryClient.invalidateQueries({
-        queryKey: ["platform-admin", "production-readiness"],
-      });
-    },
-    onError: (error) => toast.error(apiErrorMessage(error, "Could not record signoff evidence.")),
-  });
-  const secretRotationMutation = useMutation({
-    mutationFn: recordSecretRotationEvidence,
-    onSuccess: async () => {
-      toast.success("Secret rotation blocker recorded.");
-      await queryClient.invalidateQueries({
-        queryKey: ["platform-admin", "secret-rotation-readiness"],
-      });
-      await queryClient.invalidateQueries({
-        queryKey: ["platform-admin", "production-readiness"],
-      });
-    },
-    onError: (error) =>
-      toast.error(apiErrorMessage(error, "Could not record secret rotation evidence.")),
-  });
-
   if (!canPlatform) {
     return (
       <div className="flex flex-col gap-6">
@@ -785,7 +701,7 @@ export default function PaidProductionReadinessPage() {
       <PageHeader
         eyebrow="Founder console"
         title="Paid-production readiness"
-        description="Pine Labs UAT evidence, production billing signoff, margin gates, finance reconciliation, and case tracking cost readiness."
+        description="Machine-derived release, probe, configuration, Pine Labs, margin, finance, and case-tracking readiness."
         actions={
           <div className="flex gap-2">
             <Button href="/app/platform-admin/costs" variant="outline">
@@ -817,32 +733,11 @@ export default function PaidProductionReadinessPage() {
 
       <SecretRotationReadiness
         readiness={secretRotationQuery.data ?? productionReadinessQuery.data?.secret_rotation}
-        busy={secretRotationMutation.isPending}
-        onRecordBlocked={() =>
-          secretRotationMutation.mutate({
-            provider: "historical_connector_secret",
-            affectedApp: "caseops-api",
-            credentialLabel: "external provider credential",
-            status: "blocked",
-            oldCredentialRevoked: false,
-            validationPerformed: false,
-            residualRisk: "Provider/UAT blocked until external rotation evidence is uploaded.",
-            operatorNotes: "No credential value stored.",
-          })
-        }
       />
 
       <PineEvidenceTable
         readiness={pineQuery.data}
-        busy={pineEvidenceMutation.isPending || activationMutation.isPending}
-        onRecordPass={(scenarioCode) =>
-          pineEvidenceMutation.mutate({
-            runId: pineQuery.data?.run_id ?? null,
-            scenarioCode,
-            resultStatus: "pass",
-            operatorNotes: "Founder console evidence update.",
-          })
-        }
+        busy={activationMutation.isPending}
         onDecision={(decision) =>
           activationMutation.mutate({
             runId: pineQuery.data?.run_id ?? null,
@@ -856,19 +751,7 @@ export default function PaidProductionReadinessPage() {
       />
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <BillingSignoffTable
-          signoff={signoffQuery.data}
-          busy={signoffMutation.isPending}
-          onRecordPass={(checkCode) =>
-            signoffMutation.mutate({
-              signoffId: signoffQuery.data?.signoff_id ?? null,
-              checkCode,
-              resultStatus: "pass",
-              evidenceRef: "founder-console",
-              operatorNotes: "Founder console signoff evidence.",
-            })
-          }
-        />
+        <BillingSignoffTable signoff={signoffQuery.data} />
         <PasswordResetReadiness readiness={resetQuery.data} />
       </div>
 

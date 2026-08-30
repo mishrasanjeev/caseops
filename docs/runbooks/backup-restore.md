@@ -22,17 +22,20 @@ applies to both; the prod-only GCP steps are called out explicitly.
 
 ## 2026-06-13 readiness evidence
 
-Backup/restore is now an explicit founder-only production readiness gate. Record
-evidence through:
+Backup/restore is an explicit machine-derived production readiness gate. Inspect
+its current fail-closed state through:
 
 ```text
-POST /api/platform-admin/production-readiness/evidence
+GET /api/platform-admin/production-readiness/evidence
 ```
 
-Use category `backup_restore` and gate code
-`backup_success_and_restore_drill`. Evidence must reference an external artifact
-or ticket; do not paste database dumps, credentials, tenant document contents,
-raw audit exports, or internal cost/profit data.
+The browser/API has no readiness-evidence mutation route. A trusted backup probe
+must eventually write the `caseops.machine-readiness/v1` envelope for category
+`backup_restore` and gate code `backup_success_and_restore_drill` through the
+controlled machine-writer integration. That integration is not implemented yet,
+so the gate must remain blocked. Evidence must reference an external artifact or
+ticket; do not paste database dumps, credentials, tenant document contents, raw
+audit exports, or internal cost/profit data.
 
 Required proof before launch:
 
