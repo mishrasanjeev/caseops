@@ -198,6 +198,16 @@ def _create_correction_table() -> None:
         CORRECTION_TABLE,
         ["company_id", "docket_id"],
     )
+    op.create_index(
+        "ix_ip_cost_corrections_source_scope",
+        CORRECTION_TABLE,
+        ["source_cost_item_id", "company_id", "docket_id"],
+    )
+    op.create_index(
+        "ix_ip_cost_corrections_replacement_scope",
+        CORRECTION_TABLE,
+        ["replacement_cost_item_id", "company_id", "docket_id"],
+    )
     for column in (
         "docket_id",
         "source_cost_item_id",

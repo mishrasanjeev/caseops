@@ -18113,6 +18113,18 @@ class IpCostItemCorrection(Base):
             "company_id",
             "docket_id",
         ),
+        Index(
+            "ix_ip_cost_corrections_source_scope",
+            "source_cost_item_id",
+            "company_id",
+            "docket_id",
+        ),
+        Index(
+            "ix_ip_cost_corrections_replacement_scope",
+            "replacement_cost_item_id",
+            "company_id",
+            "docket_id",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
