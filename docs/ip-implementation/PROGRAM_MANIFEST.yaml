@@ -7112,24 +7112,24 @@
         "apps/api/tests/test_datagov12_tenant_offboarding.py",
         "apps/api/tests/test_datagov15_telemetry_redaction.py",
         "apps/api/tests/test_datagov17_integrity_scan.py",
-        "apps/api/tests/test_res08_kill_switches.py",
-        "planned:IPLF-UJ-28-EXC-01",
-        "planned:IPLF-UJ-28-EXC-02",
-        "planned:IPLF-UJ-28-EXC-03",
-        "planned:IPLF-UJ-28-NORMAL",
-        "planned:IPLF-UJ-65-EXC-01",
-        "planned:IPLF-UJ-65-EXC-02",
-        "planned:IPLF-UJ-65-EXC-03",
-        "planned:IPLF-UJ-65-EXC-04",
-        "planned:IPLF-UJ-65-EXC-05",
-        "planned:IPLF-UJ-65-NORMAL"
+        "apps/api/tests/test_res08_kill_switches.py"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m2/IPLF-028B/route-handoff-2026-08-20.md",
         "docs/ip-implementation/evidence/m2/IPLF-028B/no-migration-audit-2026-08-30.md"
       ],
       "evidence_metadata": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-028B-EFFECTFUL-OPERATIONS",
+          "summary": "Export, purge, offboarding, restore and worker-resume execution paths do not exist. The current routes provide authenticated, tenant-scoped diagnostics and dry-run evidence only; execute remains machine-blocked with a typed 503 response.",
+          "owner": "Platform data-governance and resilience implementation",
+          "evidence_needed": "Executable automated tests for the complete UJ-28 and UJ-65 normal and exception paths, followed by exact-image deployed acceptance evidence.",
+          "safe_fallback": "Keep every data-operation effect unavailable while retaining authenticated diagnostic and dry-run behavior.",
+          "milestone_impact": "Blocks IPLF-028B verification and release completion without creating a manual approval gate.",
+          "next_independent_slice": "Implement the machine-enforced export/purge/offboarding boundary and the isolated restore/cutover boundary under their canonical owners."
+        }
+      ],
       "next_actions": [
         "Keep all data-operation execution fail-closed until a machine-enforced export/purge/offboarding owner implements scoped artifacts, checkpoints, idempotency, hold/licence enforcement and audited expiry without a generic manual approval workflow.",
         "Implement and verify isolated database-plus-object restore, old-worker fencing, tombstone reapplication, exact-image application cutover and no-duplicate-effect resume under IPLF-072B before any UJ-65 or RES release claim.",
