@@ -12,12 +12,18 @@ not draft billing rows. This revision closes four database-level gaps:
   supersession and no replacement for a void;
 * matterless/nonbillable/estimate reconciliation projections are constrained
   to their terminal status with no canonical amount or difference; and
-* new creator/reconciler/correction actors must belong to the cost tenant.
+* new creator/reconciler/correction actors must be active members of the cost
+  tenant at the time the evidence or reconciliation is written.
 
 Existing terminal rows are normalized before the stronger checks are added.
 No invoice, payment, time-entry, or outside-counsel accounting state is added.
 
 DATA-GOVERNANCE-MAP: updated
+
+MIGRATION-LOCK-RISK: acknowledged - the correction indexes are built on the
+new, empty table before application writers can insert correction rows.
+MIGRATION-ROLLBACK: restore-forward - once correction evidence exists this
+migration refuses downgrade so append-only legal evidence cannot be discarded.
 """
 
 from __future__ import annotations
@@ -36,6 +42,7 @@ CORRECTION_TABLE = "ip_cost_item_corrections"
 COST_UPDATE_TRIGGER = "trg_ip_cost_items_evidence_immutable"
 COST_DELETE_TRIGGER = "trg_ip_cost_items_evidence_retained"
 COST_ACTOR_INSERT_TRIGGER = "trg_ip_cost_items_actor_tenant_insert"
+COST_RECONCILER_INSERT_TRIGGER = "trg_ip_cost_items_reconciler_tenant_insert"
 COST_RECONCILER_TRIGGER = "trg_ip_cost_items_reconciler_tenant_update"
 CORRECTION_UPDATE_TRIGGER = "trg_ip_cost_corrections_append_only"
 CORRECTION_DELETE_TRIGGER = "trg_ip_cost_corrections_retained"
@@ -247,21 +254,29 @@ def _create_postgres_guards(bind: sa.Connection) -> None:
                         SELECT 1 FROM company_memberships
                         WHERE id = NEW.created_by_membership_id
                           AND company_id = NEW.company_id
+                          AND is_active = true
                     ) THEN
                         RAISE EXCEPTION
-                            'IP cost creator must belong to the cost tenant';
+                            'IP cost creator must be an active member of the cost tenant';
                     END IF;
                 ELSIF ROW({old_row}) IS DISTINCT FROM ROW({new_row}) THEN
                     RAISE EXCEPTION
                         'IP cost evidence is immutable; append a void or supersession';
                 END IF;
-                IF NEW.reconciled_by_membership_id IS NOT NULL AND NOT EXISTS (
+                IF NEW.reconciled_by_membership_id IS NOT NULL
+                   AND (
+                       TG_OP = 'INSERT'
+                       OR NEW.reconciled_by_membership_id IS DISTINCT FROM
+                          OLD.reconciled_by_membership_id
+                   )
+                   AND NOT EXISTS (
                     SELECT 1 FROM company_memberships
                     WHERE id = NEW.reconciled_by_membership_id
                       AND company_id = NEW.company_id
+                      AND is_active = true
                 ) THEN
                     RAISE EXCEPTION
-                        'IP cost reconciler must belong to the cost tenant';
+                        'IP cost reconciler must be an active member of the cost tenant';
                 END IF;
                 RETURN NEW;
             END;
@@ -311,9 +326,10 @@ def _create_postgres_guards(bind: sa.Connection) -> None:
                     SELECT 1 FROM company_memberships
                     WHERE id = NEW.created_by_membership_id
                       AND company_id = NEW.company_id
+                      AND is_active = true
                 ) THEN
                     RAISE EXCEPTION
-                        'IP cost correction actor must belong to the cost tenant';
+                        'IP cost correction actor must be an active member of the cost tenant';
                 END IF;
                 RETURN NEW;
             END;
@@ -376,21 +392,49 @@ def _create_sqlite_guards(bind: sa.Connection) -> None:
         BEFORE INSERT ON {COST_TABLE}
         FOR EACH ROW WHEN NEW.created_by_membership_id IS NULL OR NOT EXISTS (
             SELECT 1 FROM company_memberships
-            WHERE id = NEW.created_by_membership_id AND company_id = NEW.company_id
+            WHERE id = NEW.created_by_membership_id
+              AND company_id = NEW.company_id
+              AND is_active = 1
         )
         BEGIN
-            SELECT RAISE(ABORT, 'IP cost creator must belong to the cost tenant');
+            SELECT RAISE(
+                ABORT,
+                'IP cost creator must be an active member of the cost tenant'
+            );
+        END
+        """,
+        f"""
+        CREATE TRIGGER {COST_RECONCILER_INSERT_TRIGGER}
+        BEFORE INSERT ON {COST_TABLE}
+        FOR EACH ROW WHEN NEW.reconciled_by_membership_id IS NOT NULL AND NOT EXISTS (
+            SELECT 1 FROM company_memberships
+            WHERE id = NEW.reconciled_by_membership_id
+              AND company_id = NEW.company_id
+              AND is_active = 1
+        )
+        BEGIN
+            SELECT RAISE(
+                ABORT,
+                'IP cost reconciler must be an active member of the cost tenant'
+            );
         END
         """,
         f"""
         CREATE TRIGGER {COST_RECONCILER_TRIGGER}
         BEFORE UPDATE OF reconciled_by_membership_id ON {COST_TABLE}
-        FOR EACH ROW WHEN NEW.reconciled_by_membership_id IS NOT NULL AND NOT EXISTS (
+        FOR EACH ROW WHEN NEW.reconciled_by_membership_id IS NOT NULL
+        AND NEW.reconciled_by_membership_id IS NOT OLD.reconciled_by_membership_id
+        AND NOT EXISTS (
             SELECT 1 FROM company_memberships
-            WHERE id = NEW.reconciled_by_membership_id AND company_id = NEW.company_id
+            WHERE id = NEW.reconciled_by_membership_id
+              AND company_id = NEW.company_id
+              AND is_active = 1
         )
         BEGIN
-            SELECT RAISE(ABORT, 'IP cost reconciler must belong to the cost tenant');
+            SELECT RAISE(
+                ABORT,
+                'IP cost reconciler must be an active member of the cost tenant'
+            );
         END
         """,
         f"""
@@ -417,10 +461,15 @@ def _create_sqlite_guards(bind: sa.Connection) -> None:
         BEFORE INSERT ON {CORRECTION_TABLE}
         FOR EACH ROW WHEN NOT EXISTS (
             SELECT 1 FROM company_memberships
-            WHERE id = NEW.created_by_membership_id AND company_id = NEW.company_id
+            WHERE id = NEW.created_by_membership_id
+              AND company_id = NEW.company_id
+              AND is_active = 1
         )
         BEGIN
-            SELECT RAISE(ABORT, 'IP cost correction actor must belong to the cost tenant');
+            SELECT RAISE(
+                ABORT,
+                'IP cost correction actor must be an active member of the cost tenant'
+            );
         END
         """,
     )
@@ -458,6 +507,7 @@ def _drop_guards(bind: sa.Connection) -> None:
             CORRECTION_DELETE_TRIGGER,
             CORRECTION_UPDATE_TRIGGER,
             COST_RECONCILER_TRIGGER,
+            COST_RECONCILER_INSERT_TRIGGER,
             COST_ACTOR_INSERT_TRIGGER,
             COST_DELETE_TRIGGER,
             COST_UPDATE_TRIGGER,
@@ -467,6 +517,14 @@ def _drop_guards(bind: sa.Connection) -> None:
 
 def downgrade() -> None:
     bind = op.get_bind()
+    has_corrections = bind.scalar(
+        sa.text(f"SELECT EXISTS (SELECT 1 FROM {CORRECTION_TABLE} LIMIT 1)")
+    )
+    if has_corrections:
+        raise RuntimeError(
+            "20260830_0003 cannot be downgraded after IP cost correction evidence "
+            "exists; preserve the append-only rows and restore or roll forward."
+        )
     _drop_guards(bind)
     op.drop_table(CORRECTION_TABLE)
     with op.batch_alter_table(COST_TABLE) as batch:

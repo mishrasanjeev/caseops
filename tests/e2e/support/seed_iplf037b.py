@@ -233,6 +233,7 @@ def main() -> None:
             billable=False,
             cost_nature="estimate",
             evidence_reference=f"registry://fees/{unique}",
+            reconciliation_status="nonbillable",
             created_by_membership_id=membership_id,
         )
         taxonomy = IpDocumentTaxonomyEntry(

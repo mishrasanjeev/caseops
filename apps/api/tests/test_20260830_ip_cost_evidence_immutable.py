@@ -20,6 +20,7 @@ COST_TRIGGERS = {
     "trg_ip_cost_items_evidence_immutable",
     "trg_ip_cost_items_evidence_retained",
     "trg_ip_cost_items_actor_tenant_insert",
+    "trg_ip_cost_items_reconciler_tenant_insert",
     "trg_ip_cost_items_reconciler_tenant_update",
 }
 CORRECTION_TRIGGERS = {
@@ -162,11 +163,27 @@ def test_cost_guards_correction_lineage_and_parent_cascade_are_enforced_on_sqlit
                 )
             )
         with engine.begin() as connection, pytest.raises(
-            DBAPIError, match="creator must belong to the cost tenant"
+            DBAPIError, match="creator must be an active member of the cost tenant"
         ):
             connection.execute(
                 _insert_cost_sql(
                     cost_id="invalid-actor",
+                    actor_id="membership-b",
+                )
+            )
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "UPDATE company_memberships SET is_active = 0 "
+                    "WHERE id = 'membership-b'"
+                )
+            )
+        with engine.begin() as connection, pytest.raises(
+            DBAPIError, match="creator must be an active member of the cost tenant"
+        ):
+            connection.execute(
+                _insert_cost_sql(
+                    cost_id="inactive-actor",
                     actor_id="membership-b",
                 )
             )
@@ -213,7 +230,7 @@ def test_cost_guards_correction_lineage_and_parent_cascade_are_enforced_on_sqlit
             (
                 "UPDATE ip_cost_items SET reconciled_by_membership_id = 'membership-b' "
                 "WHERE id = 'cost-original'",
-                "reconciler must belong to the cost tenant",
+                "reconciler must be an active member of the cost tenant",
             ),
             (
                 "UPDATE ip_cost_item_corrections SET reason = 'rewritten' "
@@ -266,3 +283,87 @@ def test_cost_guards_correction_lineage_and_parent_cascade_are_enforced_on_sqlit
         engine.dispose()
 
     command.upgrade(config, MIGRATION_HEAD)
+
+
+def test_downgrade_refuses_to_discard_append_only_correction_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Restore-forward is mandatory once governed correction rows exist."""
+
+    database_url, config = _configure(tmp_path, monkeypatch)
+    command.upgrade(config, MIGRATION_HEAD)
+    engine = _engine(database_url)
+    try:
+        with engine.begin() as connection:
+            _seed_scope(connection)
+            connection.execute(
+                _insert_cost_sql(cost_id="cost-original", actor_id="membership-a")
+            )
+            connection.execute(
+                _insert_cost_sql(cost_id="cost-replacement", actor_id="membership-a")
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO ip_cost_item_corrections (id, company_id, docket_id, "
+                    "source_cost_item_id, action, replacement_cost_item_id, reason, "
+                    "evidence_reference, created_by_membership_id, created_at) VALUES "
+                    "('correction-a', 'company-a', 'docket-a', 'cost-original', "
+                    "'supersede', 'cost-replacement', 'Registry corrected the fee', "
+                    "'correction:official-register', 'membership-a', CURRENT_TIMESTAMP)"
+                )
+            )
+            connection.execute(
+                text(
+                    "UPDATE company_memberships SET is_active = 0 "
+                    "WHERE id = 'membership-a'"
+                )
+            )
+
+        with engine.begin() as connection, pytest.raises(
+            DBAPIError, match="creator must be an active member of the cost tenant"
+        ):
+            connection.execute(
+                _insert_cost_sql(cost_id="inactive-same-tenant", actor_id="membership-a")
+            )
+        with engine.begin() as connection, pytest.raises(
+            DBAPIError, match="reconciler must be an active member of the cost tenant"
+        ):
+            connection.execute(
+                text(
+                    "UPDATE ip_cost_items SET reconciled_by_membership_id = "
+                    "'membership-a' WHERE id = 'cost-replacement'"
+                )
+            )
+        with engine.begin() as connection, pytest.raises(
+            DBAPIError, match="correction actor must be an active member of the cost tenant"
+        ):
+            connection.execute(
+                text(
+                    "INSERT INTO ip_cost_item_corrections (id, company_id, docket_id, "
+                    "source_cost_item_id, action, replacement_cost_item_id, reason, "
+                    "evidence_reference, created_by_membership_id, created_at) VALUES "
+                    "('correction-inactive', 'company-a', 'docket-a', "
+                    "'cost-replacement', 'void', NULL, 'Inactive actor attempt', "
+                    "'correction:inactive', 'membership-a', CURRENT_TIMESTAMP)"
+                )
+            )
+
+        with pytest.raises(RuntimeError, match="restore or roll forward"):
+            command.downgrade(config, PREVIOUS_HEAD)
+
+        # The failed downgrade preserves the migration version, both immutable
+        # costs, their parent docket, and the correction row. It does not delete
+        # parent evidence as a way to make the destructive downgrade succeed.
+        with engine.connect() as connection:
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
+                MIGRATION_HEAD
+            )
+            assert connection.scalar(text("SELECT count(*) FROM ip_docket_records")) == 1
+            assert connection.scalar(text("SELECT count(*) FROM ip_cost_items")) == 2
+            assert (
+                connection.scalar(text("SELECT count(*) FROM ip_cost_item_corrections"))
+                == 1
+            )
+    finally:
+        engine.dispose()

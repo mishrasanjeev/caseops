@@ -185,8 +185,9 @@ test("IPLF-039F deployed matterless correction is append-only and has no billing
   expect(initialDocket.matter_id, "Fixture docket must not have a billing Matter.").toBeNull();
 
   const expectedMatterIds = fixtureMatterIds();
+  const initialMatterIds = await allMatterIds(page, headers);
   expect(
-    await allMatterIds(page, headers),
+    initialMatterIds,
     "The declared Matter list must be the complete dedicated tenant billing surface.",
   ).toEqual(expectedMatterIds);
   const before = await billingSnapshot(page, headers, expectedMatterIds);
@@ -257,30 +258,36 @@ test("IPLF-039F deployed matterless correction is append-only and has no billing
   await expect(costCard.getByText(`Evidence: ${evidence}`, { exact: true })).toBeVisible();
   await expect(costCard.getByText("Nonbillable", { exact: true })).toBeVisible();
   await costCard.getByRole("button", { name: "Correct or void" }).click();
-  await costCard.getByLabel("Correction action").selectOption("void");
+  await costCard.getByLabel("Correction action").selectOption("supersede");
   await costCard.getByLabel("Correction reason").fill(
-    "Dated deployed acceptance row completed; preserve it only as inactive evidence.",
+    "Dated deployed acceptance supersedes the synthetic amount with corrected evidence.",
   );
   await costCard.getByLabel("Correction evidence reference").fill(
-    `prod-acceptance:void:${nonce}`,
+    `prod-acceptance:supersession:${nonce}`,
   );
+  await costCard.getByLabel("Corrected description").fill(
+    `Corrected synthetic matterless official fee ${nonce}`,
+  );
+  await costCard.getByLabel("Corrected amount (INR)").fill("9012.35");
+  const replacementEvidence = `prod-acceptance:replacement:${nonce}`;
+  await costCard.getByLabel("Replacement evidence reference").fill(replacementEvidence);
   const correctionResponse = page.waitForResponse((response) =>
     response.url().includes(`/cost-items/${created!.id}/corrections`)
     && response.request().method() === "POST",
   );
-  await costCard.getByRole("button", { name: "Void cost evidence" }).click();
+  await costCard.getByRole("button", { name: "Append corrected cost" }).click();
   expect((await correctionResponse).status()).toBe(200);
-  await expect(costCard.getByText(/Voided — excluded from totals/)).toBeVisible();
+  await expect(costCard.getByText(/Superseded — excluded from totals/)).toBeVisible();
   await expect(costCard.getByText(`Evidence: ${evidence}`, { exact: true })).toBeVisible();
 
-  const finalDocket = await json<Docket>(
+  const supersededDocket = await json<Docket>(
     await page.request.get(`${API}/api/ip/dockets/${docketId}`, { headers }),
     200,
-    "read preserved void history",
+    "read preserved supersession history",
   );
-  expect(finalDocket.cost_items.find((cost) => cost.id === created!.id)).toMatchObject({
+  expect(supersededDocket.cost_items.find((cost) => cost.id === created!.id)).toMatchObject({
     evidence_reference: evidence,
-    lineage_status: "voided",
+    lineage_status: "superseded",
     matter_id: null,
     billable: false,
     billing_link_type: null,
@@ -289,5 +296,75 @@ test("IPLF-039F deployed matterless correction is append-only and has no billing
     canonical_amount_minor: null,
     reconciliation_difference_minor: null,
   });
+  const replacement = supersededDocket.cost_items.find(
+    (cost) => cost.evidence_reference === replacementEvidence,
+  );
+  expect(replacement).toMatchObject({
+    matter_id: null,
+    billable: false,
+    billing_link_type: null,
+    billing_link_id: null,
+    reconciliation_status: "nonbillable",
+    canonical_amount_minor: null,
+    reconciliation_difference_minor: null,
+    lineage_status: "active",
+  });
+
+  const replacementReport = await json<Json>(
+    await page.request.post(`${API}/api/ip/dockets/${docketId}/cost-items/reconcile`, {
+      headers,
+      data: {},
+    }),
+    200,
+    "verify supersession excludes its source from totals",
+  );
+  expect(replacementReport.nonbillable_count).toBe(reconciliation.nonbillable_count);
+  expect(replacementReport.superseded_count).toBe(
+    Number(reconciliation.superseded_count) + 1,
+  );
+  expect(
+    (replacementReport.rows as Json[]).find((candidate) => candidate.cost_item_id === created!.id),
+  ).toMatchObject({ lineage_status: "superseded", included_in_totals: false });
+  expect(
+    (replacementReport.rows as Json[]).find(
+      (candidate) => candidate.cost_item_id === replacement!.id,
+    ),
+  ).toMatchObject({
+    status: "nonbillable",
+    lineage_status: "active",
+    included_in_totals: true,
+    canonical_amount_minor: null,
+    difference_minor: null,
+  });
+
+  const replacementCard = page.getByTestId(`ip-cost-item-${replacement!.id}`);
+  await expect(replacementCard).toBeVisible();
+  await replacementCard.getByRole("button", { name: "Correct or void" }).click();
+  await replacementCard.getByLabel("Correction action").selectOption("void");
+  await replacementCard.getByLabel("Correction reason").fill(
+    "Dated deployed acceptance completed; retain the replacement only as inactive history.",
+  );
+  await replacementCard.getByLabel("Correction evidence reference").fill(
+    `prod-acceptance:void:${nonce}`,
+  );
+  const voidResponse = page.waitForResponse((response) =>
+    response.url().includes(`/cost-items/${replacement!.id}/corrections`)
+    && response.request().method() === "POST",
+  );
+  await replacementCard.getByRole("button", { name: "Void cost evidence" }).click();
+  expect((await voidResponse).status()).toBe(200);
+  await expect(replacementCard.getByText(/Voided — excluded from totals/)).toBeVisible();
+
+  const finalDocket = await json<Docket>(
+    await page.request.get(`${API}/api/ip/dockets/${docketId}`, { headers }),
+    200,
+    "read preserved supersession and void history",
+  );
+  expect(finalDocket.cost_items.find((cost) => cost.id === created!.id)?.lineage_status)
+    .toBe("superseded");
+  expect(finalDocket.cost_items.find((cost) => cost.id === replacement!.id)?.lineage_status)
+    .toBe("voided");
+  expect(await allMatterIds(page, headers)).toEqual(initialMatterIds);
+  expect(initialMatterIds).toEqual(expectedMatterIds);
   expect(await billingSnapshot(page, headers, expectedMatterIds)).toEqual(before);
 });

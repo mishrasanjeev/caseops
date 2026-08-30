@@ -9109,6 +9109,11 @@ def test_matterless_ip_cost_evidence_is_immutable_on_postgres(pg_engine):
     with Session(pg_engine) as session:
         company_id = _seed_company(session)
         actor_id = _seed_membership(session, company_id, role="owner")
+        inactive_actor_id = _seed_membership(session, company_id, role="owner")
+        session.execute(
+            text("UPDATE company_memberships SET is_active = false WHERE id = :id"),
+            {"id": inactive_actor_id},
+        )
         other_company_id = _seed_company(session)
         other_actor_id = _seed_membership(session, other_company_id, role="owner")
         session.execute(
@@ -9151,7 +9156,7 @@ def test_matterless_ip_cost_evidence_is_immutable_on_postgres(pg_engine):
         )
         session.commit()
     with Session(pg_engine) as session, pytest.raises(
-        DBAPIError, match="creator must belong to the cost tenant"
+        DBAPIError, match="creator must be an active member of the cost tenant"
     ):
         session.execute(
             insert_cost,
@@ -9163,6 +9168,23 @@ def test_matterless_ip_cost_evidence_is_immutable_on_postgres(pg_engine):
                 "evidence": "receipt:invalid-actor",
                 "status": "nonbillable",
                 "actor": other_actor_id,
+                "now": now,
+            },
+        )
+        session.commit()
+    with Session(pg_engine) as session, pytest.raises(
+        DBAPIError, match="creator must be an active member of the cost tenant"
+    ):
+        session.execute(
+            insert_cost,
+            {
+                "id": str(uuid4()),
+                "company": company_id,
+                "docket": docket_id,
+                "description": "Inactive actor",
+                "evidence": "receipt:inactive-actor",
+                "status": "nonbillable",
+                "actor": inactive_actor_id,
                 "now": now,
             },
         )
@@ -9195,14 +9217,34 @@ def test_matterless_ip_cost_evidence_is_immutable_on_postgres(pg_engine):
             ),
             {"id": cost_id, "actor": actor_id, "now": datetime.now(UTC)},
         )
+        session.commit()
+
+    insert_correction = text(
+        "INSERT INTO ip_cost_item_corrections (id, company_id, docket_id, "
+        "source_cost_item_id, action, replacement_cost_item_id, reason, "
+        "evidence_reference, created_by_membership_id, created_at) VALUES "
+        "(:id, :company, :docket, :source, 'supersede', :replacement, "
+        "'Registry corrected the amount', 'correction:registry', :actor, :now)"
+    )
+    with Session(pg_engine) as session, pytest.raises(
+        DBAPIError, match="correction actor must be an active member of the cost tenant"
+    ):
         session.execute(
-            text(
-                "INSERT INTO ip_cost_item_corrections (id, company_id, docket_id, "
-                "source_cost_item_id, action, replacement_cost_item_id, reason, "
-                "evidence_reference, created_by_membership_id, created_at) VALUES "
-                "(:id, :company, :docket, :source, 'supersede', :replacement, "
-                "'Registry corrected the amount', 'correction:registry', :actor, :now)"
-            ),
+            insert_correction,
+            {
+                "id": str(uuid4()),
+                "company": company_id,
+                "docket": docket_id,
+                "source": cost_id,
+                "replacement": replacement_id,
+                "actor": inactive_actor_id,
+                "now": now,
+            },
+        )
+        session.commit()
+    with Session(pg_engine) as session:
+        session.execute(
+            insert_correction,
             {
                 "id": correction_id,
                 "company": company_id,
@@ -9236,7 +9278,7 @@ def test_matterless_ip_cost_evidence_is_immutable_on_postgres(pg_engine):
         )
         session.commit()
     with Session(pg_engine) as session, pytest.raises(
-        DBAPIError, match="reconciler must belong to the cost tenant"
+        DBAPIError, match="reconciler must be an active member of the cost tenant"
     ):
         session.execute(
             text(
@@ -9244,6 +9286,17 @@ def test_matterless_ip_cost_evidence_is_immutable_on_postgres(pg_engine):
                 "WHERE id = :id"
             ),
             {"id": cost_id, "actor": other_actor_id},
+        )
+        session.commit()
+    with Session(pg_engine) as session, pytest.raises(
+        DBAPIError, match="reconciler must be an active member of the cost tenant"
+    ):
+        session.execute(
+            text(
+                "UPDATE ip_cost_items SET reconciled_by_membership_id = :actor "
+                "WHERE id = :id"
+            ),
+            {"id": cost_id, "actor": inactive_actor_id},
         )
         session.commit()
     with Session(pg_engine) as session, pytest.raises(

@@ -1187,6 +1187,10 @@ describe("IpDocketPage", () => {
     const officialFee = screen.getByTestId("ip-cost-item-cost-1");
     fireEvent.click(within(officialFee).getByRole("button", { name: "Correct or void" }));
     expect(within(officialFee).getByText(/original cost and evidence never change/i)).toBeVisible();
+    expect(within(officialFee).getByText(/rather than copied silently/i)).toBeVisible();
+    fireEvent.change(within(officialFee).getByLabelText("Corrected category"), {
+      target: { value: "disbursement" },
+    });
     fireEvent.change(within(officialFee).getByLabelText("Correction reason"), {
       target: { value: "Registry receipt corrected the transposed amount." },
     });
@@ -1196,6 +1200,16 @@ describe("IpDocketPage", () => {
     fireEvent.change(within(officialFee).getByLabelText("Corrected amount (INR)"), {
       target: { value: "8500.00" },
     });
+    fireEvent.change(within(officialFee).getByLabelText("Corrected currency"), {
+      target: { value: "USD" },
+    });
+    fireEvent.change(within(officialFee).getByLabelText("Corrected cost nature"), {
+      target: { value: "estimate" },
+    });
+    fireEvent.click(within(officialFee).getByLabelText("Corrected rate is confidential"));
+    expect(
+      within(officialFee).getByLabelText("Replacement includes an exchange conversion"),
+    ).toBeVisible();
     fireEvent.change(within(officialFee).getByLabelText("Replacement evidence reference"), {
       target: { value: "receipt:registry-fee-corrected-2026" },
     });
@@ -1208,7 +1222,11 @@ describe("IpDocketPage", () => {
       replacement: expect.objectContaining({
         description: "Official filing fee paid before a billing Matter existed.",
         amountMinor: 850000,
+        category: "disbursement",
+        currency: "USD",
         billable: false,
+        costNature: "estimate",
+        rateConfidential: true,
         billingLinkType: null,
         billingLinkId: null,
         evidenceReference: "receipt:registry-fee-corrected-2026",

@@ -3546,6 +3546,25 @@ function CostCorrectionEditor({
     row.amount_minor === null ? "" : (row.amount_minor / 100).toFixed(2),
   );
   const [replacementEvidence, setReplacementEvidence] = useState(row.evidence_reference);
+  const [category, setCategory] = useState(row.category as "official_fee" | "professional_fee" | "associate_fee" | "disbursement" | "other");
+  const [currency, setCurrency] = useState(row.currency);
+  const [billable, setBillable] = useState(row.billable);
+  const [costNature, setCostNature] = useState<"actual" | "estimate">(row.cost_nature);
+  const [rateConfidential, setRateConfidential] = useState(row.rate_confidential);
+  const [billingLinkType, setBillingLinkType] = useState<"" | "invoice" | "invoice_line_item" | "time_entry">(
+    row.billing_link_type ?? "",
+  );
+  const [billingLinkId, setBillingLinkId] = useState(row.billing_link_id ?? "");
+  const [converted, setConverted] = useState(row.fx_rate !== null);
+  const [fxRate, setFxRate] = useState(row.fx_rate ?? "");
+  const [fxRateSource, setFxRateSource] = useState(row.fx_rate_source ?? "");
+  const [fxConvertedAt, setFxConvertedAt] = useState(row.fx_converted_at?.slice(0, 10) ?? "");
+  const [baseAmount, setBaseAmount] = useState(
+    row.base_amount_minor === null ? "" : (row.base_amount_minor / 100).toFixed(2),
+  );
+  const [baseCurrency, setBaseCurrency] = useState(row.base_currency ?? "INR");
+  const hasBillingOwner = Boolean(docket.matter_id);
+  const canLinkBilling = hasBillingOwner && billable && costNature === "actual";
 
   const correction = useMutation({
     mutationFn: () => correctIpCostItem(docket.id, row.id, {
@@ -3554,21 +3573,23 @@ function CostCorrectionEditor({
       correctionEvidenceReference: correctionEvidence,
       replacement: action === "supersede"
         ? {
-            category: row.category as "official_fee" | "professional_fee" | "associate_fee" | "disbursement" | "other",
+            category,
             description,
             amountMinor: Math.round(Number(amount) * 100),
-            currency: row.currency,
+            currency,
             evidenceReference: replacementEvidence,
-            billingLinkType: row.billing_link_type,
-            billingLinkId: row.billing_link_id,
-            billable: row.billable,
-            costNature: row.cost_nature,
-            rateConfidential: row.rate_confidential,
-            fxRate: row.fx_rate,
-            fxRateSource: row.fx_rate_source,
-            fxConvertedAt: row.fx_converted_at,
-            baseAmountMinor: row.base_amount_minor,
-            baseCurrency: row.base_currency,
+            billingLinkType: canLinkBilling ? billingLinkType || null : null,
+            billingLinkId: canLinkBilling ? billingLinkId || null : null,
+            billable: hasBillingOwner ? billable : false,
+            costNature,
+            rateConfidential,
+            fxRate: converted ? fxRate : null,
+            fxRateSource: converted ? fxRateSource : null,
+            fxConvertedAt: converted && fxConvertedAt
+              ? new Date(fxConvertedAt).toISOString()
+              : null,
+            baseAmountMinor: converted ? Math.round(Number(baseAmount) * 100) : null,
+            baseCurrency: converted ? baseCurrency : null,
           }
         : null,
     }),
@@ -3590,17 +3611,27 @@ function CostCorrectionEditor({
     );
   }
 
+  const conversionIncomplete = converted
+    && (!fxRate || !fxRateSource || !fxConvertedAt || !baseAmount || baseCurrency === currency);
   const invalidReplacement = action === "supersede"
-    && (description.length < 3 || !amount || replacementEvidence.length < 3);
+    && (
+      description.length < 3
+      || !amount
+      || replacementEvidence.length < 3
+      || currency.length !== 3
+      || conversionIncomplete
+      || (canLinkBilling && Boolean(billingLinkType) !== Boolean(billingLinkId))
+    );
   return (
     <form
       className="mt-3 grid min-w-0 gap-2 rounded-md border border-[var(--color-line)] p-3"
       onSubmit={(event) => { event.preventDefault(); correction.mutate(); }}
     >
       <p className="text-xs text-[var(--color-mute)]">
-        The original cost and evidence never change. A supersession appends a new
-        active cost; a void keeps only the historical row. Inactive rows are excluded
-        from reconciliation counts and cost totals.
+        The original cost and evidence never change. A supersession appends a complete,
+        independently editable replacement; every carried value is shown below rather
+        than copied silently. A void keeps only the historical row. Inactive rows are
+        excluded from reconciliation counts and cost totals.
       </p>
       <Field label="Correction action">
         <select
@@ -3620,20 +3651,98 @@ function CostCorrectionEditor({
       </Field>
       {action === "supersede" ? (
         <div className="grid min-w-0 gap-2">
+          <Field label="Corrected category">
+            <select
+              className="h-10 min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
+              value={category}
+              onChange={(event) => setCategory(event.target.value as typeof category)}
+            >
+              <option value="official_fee">Official fee</option>
+              <option value="professional_fee">Professional fee</option>
+              <option value="associate_fee">Associate fee</option>
+              <option value="disbursement">Disbursement</option>
+              <option value="other">Other</option>
+            </select>
+          </Field>
           <Field label="Corrected description">
             <Input value={description} onChange={(event) => setDescription(event.target.value)} />
           </Field>
-          <Field label={`Corrected amount (${row.currency})`}>
+          <Field label={`Corrected amount (${currency})`}>
             <Input type="number" min="0" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} />
+          </Field>
+          <Field label="Corrected currency">
+            <Input value={currency} maxLength={3} onChange={(event) => setCurrency(event.target.value.toUpperCase())} />
           </Field>
           <Field label="Replacement evidence reference">
             <Input value={replacementEvidence} onChange={(event) => setReplacementEvidence(event.target.value)} />
           </Field>
-          {row.base_amount_minor !== null ? (
+          <Field label="Corrected cost nature">
+            <select
+              className="h-10 min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
+              value={costNature}
+              onChange={(event) => setCostNature(event.target.value as typeof costNature)}
+            >
+              <option value="actual">Actual expense incurred</option>
+              <option value="estimate">Provider estimate or quote</option>
+            </select>
+          </Field>
+          {hasBillingOwner ? (
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={billable} onChange={(event) => setBillable(event.target.checked)} />
+              Corrected cost is billable
+            </label>
+          ) : (
             <p className="text-xs text-[var(--color-mute)]">
-              The preserved FX conversion and billing link are carried into the replacement.
-              Void and add a fresh cost instead if those facts are also wrong.
+              This docket has no Matter, so the replacement remains explicitly nonbillable.
             </p>
+          )}
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={rateConfidential} onChange={(event) => setRateConfidential(event.target.checked)} />
+            Corrected rate is confidential
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={converted} onChange={(event) => setConverted(event.target.checked)} />
+            Replacement includes an exchange conversion
+          </label>
+          {converted ? (
+            <div className="grid min-w-0 gap-2 rounded-md border border-[var(--color-line)] p-3">
+              <Field label="Corrected converted amount">
+                <Input type="number" min="0" step="0.01" value={baseAmount} onChange={(event) => setBaseAmount(event.target.value)} />
+              </Field>
+              <Field label="Corrected converted currency">
+                <Input value={baseCurrency} maxLength={3} onChange={(event) => setBaseCurrency(event.target.value.toUpperCase())} />
+              </Field>
+              <Field label="Corrected exchange rate">
+                <Input value={fxRate} onChange={(event) => setFxRate(event.target.value)} />
+              </Field>
+              <Field label="Corrected rate source">
+                <Input value={fxRateSource} onChange={(event) => setFxRateSource(event.target.value)} />
+              </Field>
+              <Field label="Corrected conversion date">
+                <Input type="date" value={fxConvertedAt} onChange={(event) => setFxConvertedAt(event.target.value)} />
+              </Field>
+            </div>
+          ) : null}
+          {canLinkBilling ? (
+            <>
+              <Field label="Corrected Matter billing link type">
+                <select
+                  className="h-10 min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
+                  value={billingLinkType}
+                  onChange={(event) => setBillingLinkType(event.target.value as typeof billingLinkType)}
+                >
+                  <option value="">No billing link</option>
+                  <option value="invoice">Invoice</option>
+                  <option value="invoice_line_item">Invoice line item</option>
+                  <option value="time_entry">Time entry</option>
+                </select>
+              </Field>
+              {billingLinkType ? (
+                <Field label="Corrected Matter billing record ID">
+                  <Input value={billingLinkId} onChange={(event) => setBillingLinkId(event.target.value)} />
+                </Field>
+              ) : null}
+            </>
           ) : null}
         </div>
       ) : null}
