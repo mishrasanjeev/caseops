@@ -3309,7 +3309,9 @@ export const pineLabsUatReadinessResponse = z.object({
   environment: z.string(),
   complete: z.boolean(),
   missing_required_scenarios: z.array(z.string()),
-  activation_prerequisites_met: z.boolean(),
+  // The preceding API revision does not emit this field.  Defaulting to false
+  // keeps a new web revision compatible and fail-closed during a rolling deploy.
+  activation_prerequisites_met: z.boolean().default(false),
   production_activation_blocked: z.boolean(),
   activation_blockers: z.array(z.string()).default([]),
   latest_decision: z.record(z.string(), z.unknown()).nullable(),

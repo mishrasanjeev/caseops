@@ -21,8 +21,8 @@ An operational or billing check passes only when its stored machine envelope:
 Missing, malformed, operator-recorded, or stale-release evidence fails closed.
 The current release does not add a public machine-evidence ingestion endpoint;
 external CI/probe integration remains a prerequisite. Pine Labs live-payment
-activation remains a separate, recent-step-up-protected decision after UAT and
-runtime prerequisites pass.
+activation remains a separate decision after UAT and runtime prerequisites
+pass, and always requires a payment-activation-specific recent MFA step-up.
 
 **Do not:**
 

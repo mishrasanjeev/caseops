@@ -10,6 +10,7 @@ from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     BillingProviderEvent,
     CaseTrackingSupportMatrix,
+    CompanyMembership,
     ConnectorSecretRotationEvidence,
     PineLabsUATScenarioEvidence,
     PlatformAdminMembership,
@@ -68,6 +69,30 @@ def _current_totp(secret: str) -> str:
     return _hotp(secret, int(time.time()) // TOTP_PERIOD_SECONDS)
 
 
+def _seed_platform_step_up(*, purpose: str) -> None:
+    now = datetime.now(UTC)
+    with get_session_factory()() as session:
+        platform_admin = session.scalar(select(PlatformAdminMembership))
+        assert platform_admin is not None
+        membership = session.scalar(
+            select(CompanyMembership).where(
+                CompanyMembership.user_id == platform_admin.user_id,
+            )
+        )
+        assert membership is not None
+        session.add(
+            UserMFAStepUp(
+                user_id=platform_admin.user_id,
+                membership_id=membership.id,
+                purpose=purpose,
+                method="totp",
+                completed_at=now,
+                expires_at=now + timedelta(minutes=5),
+            )
+        )
+        session.commit()
+
+
 def test_pine_labs_uat_activation_blocker_and_billing_signoff(
     client: TestClient,
     monkeypatch,
@@ -83,6 +108,15 @@ def test_pine_labs_uat_activation_blocker_and_billing_signoff(
     assert readiness.status_code == 200, readiness.text
     assert readiness.json()["production_activation_blocked"] is True
 
+    _seed_platform_step_up(purpose="step_up")
+    generic_step_up_rejected = client.post(
+        "/api/platform-admin/pine-labs/production-activation",
+        headers=auth_headers(token),
+        json={"founder_go_no_go": "go", "notes": "Founder smoke go decision."},
+    )
+    assert generic_step_up_rejected.status_code == 403
+
+    _seed_platform_step_up(purpose="payment_activation_change")
     blocked = client.post(
         "/api/platform-admin/pine-labs/production-activation",
         headers=auth_headers(token),
@@ -192,6 +226,40 @@ def test_pine_labs_uat_activation_blocker_and_billing_signoff(
     )
     assert activated.status_code == 200, activated.text
     assert activated.json()["blocked"] is False
+
+    # A new exact-release probe result invalidates the earlier human decision;
+    # the founder must make a fresh action-scoped decision after that evidence.
+    with get_session_factory()() as session:
+        refreshed = session.scalar(
+            select(PineLabsUATScenarioEvidence).where(
+                PineLabsUATScenarioEvidence.run_id == run_id,
+                PineLabsUATScenarioEvidence.scenario_code == scenarios[0],
+            )
+        )
+        assert refreshed is not None
+        refreshed.observed_at = datetime.now(UTC)
+        session.commit()
+    stale_decision = client.get(
+        "/api/platform-admin/pine-labs/uat-readiness",
+        headers=auth_headers(token),
+    )
+    assert stale_decision.status_code == 200, stale_decision.text
+    assert stale_decision.json()["production_activation_blocked"] is True
+    assert any(
+        "predates the current release evidence" in blocker
+        for blocker in stale_decision.json()["activation_blockers"]
+    )
+    refreshed_go = client.post(
+        "/api/platform-admin/pine-labs/production-activation",
+        headers=auth_headers(token),
+        json={
+            "run_id": run_id,
+            "founder_go_no_go": "go",
+            "notes": "Fresh action-scoped go after the latest probe result.",
+        },
+    )
+    assert refreshed_go.status_code == 200, refreshed_go.text
+    assert refreshed_go.json()["blocked"] is False
 
     signoff = client.get("/api/platform-admin/billing-signoff", headers=auth_headers(token))
     assert signoff.status_code == 200, signoff.text
@@ -305,15 +373,18 @@ def test_exact_release_machine_evidence_can_pass_read_only_gates(
         session.add(signoff)
         session.flush()
         for index, check_code in enumerate(PRODUCTION_BILLING_CHECK_CODES):
+            evidence = _machine_evidence(
+                release_sha="c" * 40 if index == 0 else release_sha,
+                subject=check_code,
+            )
+            if index == 1:
+                evidence["run_id"] = "malformed run id with spaces"
             row = ProductionBillingSignoffEvidence(
                 signoff_id=signoff.id,
                 check_code=check_code,
                 result_status="pass",
                 evidence_ref=f"ci://prod-verify/{check_code}",
-                evidence_json=_machine_evidence(
-                    release_sha="c" * 40 if index == 0 else release_sha,
-                    subject=check_code,
-                ),
+                evidence_json=evidence,
                 recorded_by_platform_admin_id=None,
             )
             session.add(row)
@@ -337,7 +408,9 @@ def test_exact_release_machine_evidence_can_pass_read_only_gates(
     stale = client.get("/api/platform-admin/billing-signoff", headers=auth_headers(token))
     assert stale.status_code == 200, stale.text
     assert stale.json()["complete"] is False
-    assert stale.json()["missing_required_checks"] == [PRODUCTION_BILLING_CHECK_CODES[0]]
+    assert stale.json()["missing_required_checks"] == list(
+        PRODUCTION_BILLING_CHECK_CODES[:2]
+    )
 
     with get_session_factory()() as session:
         first = session.scalar(
@@ -350,6 +423,17 @@ def test_exact_release_machine_evidence_can_pass_read_only_gates(
         first.evidence_json = _machine_evidence(
             release_sha=release_sha,
             subject=PRODUCTION_BILLING_CHECK_CODES[0],
+        )
+        second = session.scalar(
+            select(ProductionBillingSignoffEvidence).where(
+                ProductionBillingSignoffEvidence.check_code
+                == PRODUCTION_BILLING_CHECK_CODES[1]
+            )
+        )
+        assert second is not None
+        second.evidence_json = _machine_evidence(
+            release_sha=release_sha,
+            subject=PRODUCTION_BILLING_CHECK_CODES[1],
         )
         session.commit()
 

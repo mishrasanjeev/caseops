@@ -104,7 +104,7 @@ from caseops_api.services.saas_billing import (
     platform_set_overage_policy,
     platform_usage_report,
 )
-from caseops_api.services.security import require_recent_step_up
+from caseops_api.services.security import require_recent_step_up, require_step_up_always
 from caseops_api.services.session_context import SessionContext
 
 router = APIRouter()
@@ -761,11 +761,13 @@ def post_pine_labs_production_activation_decision(
     route_context: PlatformPaymentReconciler,
     session: DbSession,
 ) -> dict[str, object]:
-    require_recent_step_up(
+    # A production-payment decision is action-scoped authority, not a general
+    # console session.  Generic step-up rows and the no-enrolment grace path
+    # must never authorize it.
+    require_step_up_always(
         session,
         context=route_context.context,
         purpose="payment_activation_change",
-        platform_admin=route_context.platform_admin,
     )
     return record_pine_labs_activation_decision(
         session,

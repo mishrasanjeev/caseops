@@ -125,4 +125,27 @@ describe("PaidProductionReadinessPage", () => {
       ).toBe(true);
     });
   });
+
+  it("fails closed against the preceding API revision during a rolling deploy", async () => {
+    const fallback = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("/api/platform-admin/pine-labs/uat-readiness")) {
+        const {
+          activation_prerequisites_met: _newApiOnlyField,
+          ...precedingApiPayload
+        } = pineLabsUatReadiness;
+        return new Response(JSON.stringify(precedingApiPayload), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (!fallback) throw new Error("Missing billing fixture implementation.");
+      return fallback(input, init);
+    });
+
+    renderWithQuery(<PaidProductionReadinessPage />);
+
+    expect(await screen.findByText("Pine Labs UAT evidence")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /record go/i })).toBeDisabled();
+  });
 });

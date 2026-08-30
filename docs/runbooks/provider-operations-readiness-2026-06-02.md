@@ -82,8 +82,12 @@ POST /api/platform-admin/case-tracking/support-matrix
 PATCH /api/platform-admin/case-tracking/support-matrix/{row_id}
 GET /api/platform-admin/production-readiness
 GET /api/platform-admin/production-readiness/evidence
-POST /api/platform-admin/production-readiness/evidence
 ```
+
+The readiness evidence endpoint is read-only. Provider probes do not yet have a
+controlled machine-writer integration, so missing exact-release evidence stays
+blocked; a platform administrator cannot self-attest `pass` or
+`not_applicable`.
 
 ## IPLF-002A health and bounded-replay contract - 2026-08-02
 

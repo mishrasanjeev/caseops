@@ -155,6 +155,7 @@ MACHINE_READINESS_PRODUCERS = frozenset(
     }
 )
 _FULL_RELEASE_SHA = re.compile(r"[0-9a-f]{40}")
+_MACHINE_RUN_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{2,199}")
 
 SECRET_VALUE_MARKERS = (
     "-----BEGIN",
@@ -388,7 +389,7 @@ def _machine_evidence(
         or evidence.get("subject") != subject
         or evidence.get("conclusion") != recorded_status
         or not isinstance(run_id, str)
-        or not run_id.strip()
+        or _MACHINE_RUN_ID.fullmatch(run_id) is None
     ):
         return None
     return evidence
@@ -571,6 +572,14 @@ def pine_labs_uat_readiness(
         run.completed_at = run.completed_at or _now()
         session.add(run)
         session.flush()
+    elif not complete and run.status == "complete":
+        # A release change invalidates the old exact-release envelopes.  Keep
+        # the durable run status aligned with the fail-closed response instead
+        # of leaving a misleading historical `complete` marker behind.
+        run.status = "in_progress"
+        run.completed_at = None
+        session.add(run)
+        session.flush()
     decision = session.scalar(
         select(PineLabsProductionActivationDecision)
         .where(PineLabsProductionActivationDecision.run_id == run.id)
@@ -584,8 +593,33 @@ def pine_labs_uat_readiness(
         activation_blockers.append(
             "Missing required Pine Labs UAT scenarios: " + ", ".join(missing)
         )
+    verified_evidence_times = [
+        row.observed_at
+        for code, _label in PINE_LABS_UAT_SCENARIOS
+        if (row := rows.get(code)) is not None
+        and _machine_evidence(
+            evidence=(row.redacted_payload_json or {}).get("machine_evidence"),
+            recorded_by_platform_admin_id=row.created_by_platform_admin_id,
+            recorded_status=row.result_status,
+            subject=f"pine_labs_uat:{code}",
+        )
+        is not None
+    ]
+    newest_evidence_at = max(verified_evidence_times, default=None)
+    decision_is_current = (
+        decision is not None
+        and (
+            newest_evidence_at is None
+            or decision.decided_at.replace(tzinfo=decision.decided_at.tzinfo or UTC)
+            >= newest_evidence_at.replace(tzinfo=newest_evidence_at.tzinfo or UTC)
+        )
+    )
     if decision is None:
         activation_blockers.append("Founder Pine Labs go/no-go decision is not recorded.")
+    elif not decision_is_current:
+        activation_blockers.append(
+            "Founder Pine Labs go/no-go decision predates the current release evidence."
+        )
     elif decision.blocked or decision.founder_go_no_go != "go":
         activation_blockers.append("Founder Pine Labs decision is no-go or blocked.")
     if pine_env in {"", "disabled", "mock", "test"}:
@@ -642,6 +676,11 @@ def record_pine_labs_activation_decision(
             detail="Pine Labs UAT run not found.",
         )
     readiness = pine_labs_uat_readiness(session, platform_admin=platform_admin)
+    if readiness.run_id != run.id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Pine Labs activation decisions must target the current UAT run.",
+        )
     missing = list(readiness.missing_required_scenarios)
     settings = get_settings()
     pine_env = (settings.pine_labs_env or "").strip().lower()
