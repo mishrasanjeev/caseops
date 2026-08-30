@@ -112,6 +112,9 @@ echo -n "webhook-secret"   | gcloud secrets create caseops-pinelabs-webhook-secr
 
 # JWT signing key (32+ bytes — generate fresh; do NOT reuse local one)
 echo -n "$(openssl rand -base64 48)" | gcloud secrets create caseops-auth-secret --data-file=-
+
+# Machine-only readiness evidence key (32+ bytes; never reuse the JWT key)
+echo -n "$(openssl rand -base64 48)" | gcloud secrets create caseops-machine-readiness-evidence-secret --data-file=-
 ```
 
 ---
@@ -193,6 +196,7 @@ CASEOPS_PUBLIC_APP_URL=https://app.your-domain.example,\
 CASEOPS_CORS_ORIGINS=[\"https://app.your-domain.example\"]" \
   --set-secrets=\
 "CASEOPS_AUTH_SECRET=caseops-auth-secret:latest,\
+CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET=caseops-machine-readiness-evidence-secret:latest,\
 CASEOPS_LLM_API_KEY=caseops-anthropic-api-key:latest,\
 CASEOPS_EMBEDDING_API_KEY=caseops-voyage-api-key:latest"
 ```
