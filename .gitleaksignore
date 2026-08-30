@@ -79,3 +79,14 @@ e18cc266f557aa3b8006311393b2a65e71986db2:docs/ip-implementation/PROGRAM_MANIFEST
 # idempotency key used by the immutable registry-snapshot test. This suppresses
 # only the historical fingerprint; new generic-key findings remain blocking.
 22e7ae7fe04915dccfd45a6352fe8608f710b096:apps/api/tests/test_ip_058a_recordal_foundation.py:generic-api-key:130
+
+# 2026-08-30 IPLF-066B: exact false positives on deterministic matter codes
+# and idempotency keys used only by the private-retrieval adversarial tests.
+# These fingerprint-only suppressions cover the reviewed branch commits; new
+# generic-key findings remain blocking.
+55d2af96e38b1b8eaa1150646c2de69f66df3424:apps/api/tests/test_private_retrieval_workflow.py:generic-api-key:120
+55d2af96e38b1b8eaa1150646c2de69f66df3424:apps/api/tests/test_private_retrieval_workflow.py:generic-api-key:124
+ba2a7d068db8a4aff797f523704c18f7254a812a:apps/api/tests/test_private_retrieval_workflow.py:generic-api-key:679
+ba2a7d068db8a4aff797f523704c18f7254a812a:apps/api/tests/test_private_retrieval_workflow.py:generic-api-key:680
+ba2a7d068db8a4aff797f523704c18f7254a812a:apps/api/tests/test_private_retrieval_workflow.py:generic-api-key:687
+ba2a7d068db8a4aff797f523704c18f7254a812a:apps/api/tests/test_private_retrieval_workflow.py:generic-api-key:698
