@@ -1127,7 +1127,7 @@ describe("IpDocketPage", () => {
             base_amount_minor: null, base_currency: null,
             evidence_reference: "attachment:confidential-fee-agreement-2026",
             billing_link_type: null, billing_link_id: null,
-            reconciliation_status: "estimate" as const,
+            reconciliation_status: "nonbillable" as const,
             canonical_amount_minor: null, reconciliation_difference_minor: null, reconciled_at: null,
             lineage_status: "active" as const, corrects_cost_item_id: null,
             replacement_cost_item_id: null, correction_reason: null,
@@ -1167,8 +1167,16 @@ describe("IpDocketPage", () => {
     expect(screen.queryByText("USD 0.00")).toBeNull();
 
     // Status and nature are words, not colour alone.
-    expect(screen.getByText(/Estimate — not an expense/)).toBeVisible();
-    expect(screen.getByText(/Nonbillable/)).toBeVisible();
+    expect(
+      within(screen.getByTestId("ip-cost-item-cost-2")).getByText(
+        /Nonbillable · Provider estimate/,
+      ),
+    ).toBeVisible();
+    expect(
+      within(screen.getByTestId("ip-cost-item-cost-1")).getByText("Nonbillable", {
+        exact: true,
+      }),
+    ).toBeVisible();
     // The non-confidential cost on the same record is unaffected.
     expect(screen.getByText("INR 9000.00")).toBeVisible();
     expect(screen.getByText(/Evidence: receipt:registry-fee-unbilled-2026/)).toBeVisible();

@@ -349,8 +349,11 @@ test("IPLF-039F shows an estimate as an estimate and withholds a confidential ra
   await expect(ownerCosts).toBeVisible();
   await expect(ownerCosts.getByText("INR 9000.00")).toBeVisible();
   await expect(ownerCosts.getByText("INR 4750.00")).toBeVisible();
-  // UJ-52-EXC-04: a quote is captured, and labelled as not an expense.
-  await expect(ownerCosts.getByText(/Estimate — not an expense/)).toBeVisible();
+  // UJ-52-EXC-04: the row remains a provider estimate, while the absence of a
+  // billing Matter makes its database-owned reconciliation status terminally
+  // nonbillable rather than a misleading ledger state.
+  await expect(ownerCosts.getByText(/Provider estimate/)).toBeVisible();
+  await expect(ownerCosts.getByText("Nonbillable", { exact: true })).toHaveCount(2);
 
   // A partner holds ip:fees_view but not ip:fees_manage.
   const partnerEmail = `partner-${tenant.slug}@example.com`;
