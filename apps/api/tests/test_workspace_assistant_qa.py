@@ -132,6 +132,16 @@ def test_scoped_qa_citations_abstention_proposals_export_and_deletion_boundary(
     assert citation["source_sha256"]
     assert citation["source_url"] == f"/app/matters/{matter['id']}"
     assert citation["verified_at"]
+    opened = client.post(
+        f"/api/workspace-assistant/sessions/{assistant_session['id']}"
+        f"/citations/{citation['id']}/open",
+        headers=headers,
+    )
+    assert opened.status_code == 200, opened.text
+    assert opened.json() == {
+        "citation_id": citation["id"],
+        "source_url": f"/app/matters/{matter['id']}",
+    }
 
     with get_session_factory()() as session:
         tasks_before = int(session.scalar(select(func.count(MatterTask.id))) or 0)
@@ -206,6 +216,13 @@ def test_scoped_qa_citations_abstention_proposals_export_and_deletion_boundary(
         metadata = json.loads(audit.metadata_json or "{}")
         assert len(metadata["question_sha256"]) == 64
         assert "section 21" not in (audit.metadata_json or "")
+        citation_open_audit = session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.action == "workspace_assistant.citation_open_succeeded"
+            )
+        )
+        assert citation_open_audit is not None
+        assert matter["title"] not in (citation_open_audit.metadata_json or "")
 
 
 def test_turn_render_and_export_fail_closed_after_scope_permission_changes(
@@ -245,6 +262,7 @@ def test_turn_render_and_export_fail_closed_after_scope_permission_changes(
     )
     assert answered.status_code == 200, answered.text
     assistant_session = answered.json()["session"]
+    citation_id = answered.json()["assistant_turn"]["citations"][0]["id"]
 
     with get_session_factory()() as session:
         row = session.get(Matter, matter["id"])
@@ -263,6 +281,21 @@ def test_turn_render_and_export_fail_closed_after_scope_permission_changes(
     assert hidden["citations"] == []
     assert "access" in hidden["content"].casefold()
     assert matter["title"] not in hidden["content"]
+    denied_open = client.post(
+        f"/api/workspace-assistant/sessions/{assistant_session['id']}/citations/{citation_id}/open",
+        headers=auth_headers(token),
+    )
+    assert denied_open.status_code == 409
+
+    with get_session_factory()() as session:
+        assert (
+            session.scalar(
+                select(func.count(AuditEvent.id)).where(
+                    AuditEvent.action == "workspace_assistant.citation_open_succeeded"
+                )
+            )
+            == 0
+        )
 
     exported = client.get(
         f"/api/workspace-assistant/sessions/{assistant_session['id']}/export",
@@ -367,9 +400,7 @@ def test_provider_failures_are_audited_without_raw_privileged_content(
     assert response.status_code == 503
     assert response.json()["type"] == "workspace_assistant_unavailable"
     with get_session_factory()() as session:
-        turns = session.scalars(
-            select(AssistantTurn).order_by(AssistantTurn.sequence.asc())
-        ).all()
+        turns = session.scalars(select(AssistantTurn).order_by(AssistantTurn.sequence.asc())).all()
         assert [turn.status for turn in turns] == ["completed", "failed"]
         run = session.scalar(select(ModelRun))
         assert run is not None
@@ -377,9 +408,7 @@ def test_provider_failures_are_audited_without_raw_privileged_content(
         assert run.error == "LLMProviderError"
         assert "upstream secret" not in (run.error or "")
         audit = session.scalar(
-            select(AuditEvent).where(
-                AuditEvent.action == "workspace_assistant.question_failed"
-            )
+            select(AuditEvent).where(AuditEvent.action == "workspace_assistant.question_failed")
         )
         assert audit is not None
         assert "upstream secret" not in (audit.metadata_json or "")
@@ -418,14 +447,10 @@ def test_provider_construction_failure_uses_the_same_safe_audited_boundary(
         assert run.model == "unknown"
         assert run.status == "failed_provider"
         assert run.error == "LLMProviderError"
-        turns = session.scalars(
-            select(AssistantTurn).order_by(AssistantTurn.sequence.asc())
-        ).all()
+        turns = session.scalars(select(AssistantTurn).order_by(AssistantTurn.sequence.asc())).all()
         assert [turn.status for turn in turns] == ["completed", "failed"]
         audit = session.scalar(
-            select(AuditEvent).where(
-                AuditEvent.action == "workspace_assistant.question_failed"
-            )
+            select(AuditEvent).where(AuditEvent.action == "workspace_assistant.question_failed")
         )
         assert audit is not None
         assert "configuration secret" not in (audit.metadata_json or "")

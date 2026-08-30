@@ -38,6 +38,23 @@ export interface paths {
         patch: operations["patch_ai_feedback_api_admin_ai_feedback__feedback_id__patch"];
         trace?: never;
     };
+    "/api/admin/ai-outcomes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read privacy-bounded tenant AI outcome aggregates */
+        get: operations["get_ai_outcomes_api_admin_ai_outcomes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/ai-token-governance": {
         parameters: {
             query?: never;
@@ -12431,6 +12448,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/workspace-assistant/sessions/{session_id}/citations/{citation_id}/open": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reauthorize and resolve one assistant citation target. */
+        post: operations["post_assistant_citation_open_api_workspace_assistant_sessions__session_id__citations__citation_id__open_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workspace-assistant/sessions/{session_id}/export": {
         parameters: {
             query?: never;
@@ -12928,6 +12962,51 @@ export interface components {
             /** Regression Gates Required */
             regression_gates_required: boolean;
         };
+        /** AIOutcomeAnalyticsResponse */
+        AIOutcomeAnalyticsResponse: {
+            /**
+             * Aggregation Scope
+             * @default tenant
+             * @constant
+             */
+            aggregation_scope: "tenant";
+            /**
+             * Employee Scoring
+             * @default false
+             * @constant
+             */
+            employee_scoring: false;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Metrics */
+            metrics: components["schemas"]["AIOutcomeMetric"][];
+            /** Window Days */
+            window_days: number;
+            /**
+             * Window Started At
+             * Format: date-time
+             */
+            window_started_at: string;
+        };
+        /** AIOutcomeMetric */
+        AIOutcomeMetric: {
+            /** Denominator */
+            denominator?: number | null;
+            /** Denominator Definition */
+            denominator_definition?: string | null;
+            /**
+             * Key
+             * @enum {string}
+             */
+            key: "task_completion" | "abstention" | "citation_open_success" | "permission_denial" | "proposed_action_confirmation" | "reported_answer";
+            /** Numerator */
+            numerator: number;
+            /** Rate */
+            rate?: number | null;
+        };
         /** AITokenGovernancePatchRequest */
         AITokenGovernancePatchRequest: {
             /** Firm Quota Tokens */
@@ -13234,6 +13313,13 @@ export interface components {
             assistant_turn: components["schemas"]["AssistantTurnRecord"];
             session: components["schemas"]["AssistantSessionRecord"];
             user_turn: components["schemas"]["AssistantTurnRecord"];
+        };
+        /** AssistantCitationOpenResponse */
+        AssistantCitationOpenResponse: {
+            /** Citation Id */
+            citation_id: string;
+            /** Source Url */
+            source_url: string;
         };
         /** AssistantCitationRecord */
         AssistantCitationRecord: {
@@ -42859,6 +42945,37 @@ export interface operations {
             };
         };
     };
+    get_ai_outcomes_api_admin_ai_outcomes_get: {
+        parameters: {
+            query?: {
+                window_days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIOutcomeAnalyticsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_ai_token_governance_api_admin_ai_token_governance_get: {
         parameters: {
             query?: {
@@ -68228,6 +68345,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AssistantAskResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_assistant_citation_open_api_workspace_assistant_sessions__session_id__citations__citation_id__open_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                citation_id: string;
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantCitationOpenResponse"];
                 };
             };
             /** @description Validation Error */

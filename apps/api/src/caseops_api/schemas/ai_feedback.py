@@ -102,3 +102,27 @@ class AIFeedbackReviewRequest(BaseModel):
         if not isinstance(value, str):
             return value
         return value.strip() or None
+
+
+class AIOutcomeMetric(BaseModel):
+    key: Literal[
+        "task_completion",
+        "abstention",
+        "citation_open_success",
+        "permission_denial",
+        "proposed_action_confirmation",
+        "reported_answer",
+    ]
+    numerator: int
+    denominator: int | None = None
+    rate: float | None = None
+    denominator_definition: str | None = None
+
+
+class AIOutcomeAnalyticsResponse(BaseModel):
+    window_days: int
+    window_started_at: datetime
+    generated_at: datetime
+    aggregation_scope: Literal["tenant"] = "tenant"
+    employee_scoring: Literal[False] = False
+    metrics: list[AIOutcomeMetric]

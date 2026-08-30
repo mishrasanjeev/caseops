@@ -40,6 +40,7 @@ from caseops_api.db.models import (
 )
 from caseops_api.schemas.workspace_assistant import (
     AssistantAskResponse,
+    AssistantCitationOpenResponse,
     AssistantCitationRecord,
     AssistantModelMetadata,
     AssistantProposedAction,
@@ -360,10 +361,7 @@ def _session_or_404(
 
 
 def _scope_inputs(rows: list[AssistantSessionScope]) -> list[AssistantScopeInput]:
-    return [
-        AssistantScopeInput(scope_type=row.scope_type, scope_id=row.scope_id)
-        for row in rows
-    ]
+    return [AssistantScopeInput(scope_type=row.scope_type, scope_id=row.scope_id) for row in rows]
 
 
 def _serialize_session(
@@ -944,11 +942,7 @@ def _sources_for_scopes(
         scopes=inputs,
         strict=False,
     )
-    visible = [
-        scope
-        for scope in scope_rows
-        if (scope.scope_type, scope.scope_id) in resolved
-    ]
+    visible = [scope for scope in scope_rows if (scope.scope_type, scope.scope_id) in resolved]
     grouped: dict[str, set[str]] = defaultdict(set)
     for scope in visible:
         grouped[scope.scope_type].add(scope.scope_id)
@@ -1053,8 +1047,7 @@ def _sources_for_scopes(
             if scope_type == "ip_asset":
                 label = row.title
                 text = (
-                    f"IP asset {row.title}; kind {row.asset_kind}; "
-                    f"jurisdiction {row.jurisdiction}."
+                    f"IP asset {row.title}; kind {row.asset_kind}; jurisdiction {row.jurisdiction}."
                 )
                 view = "overview"
             elif scope_type == "trademark_application":
@@ -1227,34 +1220,20 @@ def _sources_for_scopes(
                 label = existing.label
             elif source_type == "matter":
                 href = f"/app/matters/{source_id}"
-                label = next(
-                    row.label for row in private_rows if row.source_id == source_id
-                )
+                label = next(row.label for row in private_rows if row.source_id == source_id)
             elif source_type == "ip_docket":
                 href = f"/app/ip?docket={source_id}&view=overview"
-                label = next(
-                    row.label for row in private_rows if row.source_id == source_id
-                )
+                label = next(row.label for row in private_rows if row.source_id == source_id)
             elif source_type == "ip_document":
                 href = "/app/ip/documents"
-                label = next(
-                    row.label for row in private_rows if row.source_id == source_id
-                )
+                label = next(row.label for row in private_rows if row.source_id == source_id)
             elif source_type == "matter_document":
                 matter_id = matter_ids_by_attachment.get(source_id)
-                href = (
-                    f"/app/matters/{matter_id}"
-                    if matter_id is not None
-                    else "/app/matters"
-                )
-                label = next(
-                    row.label for row in private_rows if row.source_id == source_id
-                )
+                href = f"/app/matters/{matter_id}" if matter_id is not None else "/app/matters"
+                label = next(row.label for row in private_rows if row.source_id == source_id)
             else:
                 href = "/app/clients"
-                label = next(
-                    row.label for row in private_rows if row.source_id == source_id
-                )
+                label = next(row.label for row in private_rows if row.source_id == source_id)
             candidates[key] = _source(
                 scope_type=source_type,
                 scope_id=source_id,
@@ -1502,19 +1481,13 @@ def _model_target(
     candidates: list[_SourceCandidate],
 ) -> tuple[str | None, str | None, str | None]:
     matter_ids = {
-        candidate.source_id
-        for candidate in candidates
-        if candidate.source_type == "matter"
+        candidate.source_id for candidate in candidates if candidate.source_type == "matter"
     }
     docket_ids = {
-        candidate.source_id
-        for candidate in candidates
-        if candidate.source_type == "ip_docket"
+        candidate.source_id for candidate in candidates if candidate.source_type == "ip_docket"
     }
     proceeding_ids = {
-        candidate.source_id
-        for candidate in candidates
-        if candidate.source_type == "ip_proceeding"
+        candidate.source_id for candidate in candidates if candidate.source_type == "ip_proceeding"
     }
     proceeding_id: str | None = None
     if len(proceeding_ids) == 1:
@@ -1661,8 +1634,7 @@ def _serialize_turns(
         changed = turn.role == AssistantTurnRole.ASSISTANT and (
             turn.id in blocked_saved_turn_ids
             or any(
-                current.get((citation.source_type, citation.source_id))
-                != citation.source_version
+                current.get((citation.source_type, citation.source_id)) != citation.source_version
                 for citation in turn_citations
             )
         )
@@ -1780,9 +1752,7 @@ def _persist_turn_pair(
         retrieval_manifest_json={
             "confidence": confidence,
             "suggested_searches": suggested_searches[:5],
-            "proposed_actions": [
-                action.model_dump(mode="json") for action in proposed_actions[:5]
-            ],
+            "proposed_actions": [action.model_dump(mode="json") for action in proposed_actions[:5]],
         },
         permission_snapshot_json=permission_snapshot,
         created_by_membership_id=context.membership.id,
@@ -2064,9 +2034,7 @@ def ask_workspace_assistant(
         sources=candidates,
     )
     provider_sources_current = [
-        current[candidate.key]
-        for candidate in candidates
-        if candidate.key in current
+        current[candidate.key] for candidate in candidates if candidate.key in current
     ]
     provider_sources_changed = completion is not None and (
         len(provider_sources_current) != len(candidates)
@@ -2083,13 +2051,11 @@ def ask_workspace_assistant(
         cited.append(source)
         if len(cited) >= MAX_CITATIONS_PER_TURN:
             break
-    answered = (
-        parsed.status == "answered"
-        and bool(cited)
-        and not provider_sources_changed
-    )
-    answer = parsed.answer if answered else (
-        "I do not have enough permitted, verified evidence to answer that safely."
+    answered = parsed.status == "answered" and bool(cited) and not provider_sources_changed
+    answer = (
+        parsed.answer
+        if answered
+        else ("I do not have enough permitted, verified evidence to answer that safely.")
     )
     suggested = parsed.suggested_searches if not answered else []
     proposals = _proposed_actions(
@@ -2203,6 +2169,58 @@ def list_assistant_turns(
     )
 
 
+def record_assistant_citation_open(
+    session: Session,
+    *,
+    context: SessionContext,
+    session_id: str,
+    citation_id: str,
+) -> AssistantCitationOpenResponse:
+    """Resolve one citation only after the saved answer is reauthorized."""
+
+    assistant_session = _session_or_404(
+        session,
+        context=context,
+        session_id=session_id,
+    )
+    citation, turn = session.execute(
+        select(AssistantCitation, AssistantTurn)
+        .join(
+            AssistantTurn,
+            (AssistantTurn.id == AssistantCitation.turn_id)
+            & (AssistantTurn.company_id == AssistantCitation.company_id),
+        )
+        .where(
+            AssistantCitation.id == citation_id,
+            AssistantCitation.company_id == context.company.id,
+            AssistantTurn.session_id == assistant_session.id,
+            AssistantTurn.role == AssistantTurnRole.ASSISTANT,
+        )
+    ).one_or_none() or (None, None)
+    if citation is None or turn is None:
+        raise HTTPException(status_code=404, detail="Assistant citation not found.")
+    visible = _serialize_turns(session, context=context, turns=[turn])[0]
+    current = next((item for item in visible.citations if item.id == citation.id), None)
+    if current is None or not current.source_url:
+        raise HTTPException(
+            status_code=409,
+            detail="Citation access or source version changed. Ask again before opening it.",
+        )
+    record_from_context(
+        session,
+        context,
+        action="workspace_assistant.citation_open_succeeded",
+        target_type="assistant_citation",
+        target_id=citation.id,
+        metadata={"source_type": citation.source_type},
+    )
+    session.commit()
+    return AssistantCitationOpenResponse(
+        citation_id=citation.id,
+        source_url=current.source_url,
+    )
+
+
 def export_assistant_session(
     session: Session,
     *,
@@ -2281,6 +2299,7 @@ __all__ = [
     "get_assistant_session",
     "list_assistant_sessions",
     "list_assistant_turns",
+    "record_assistant_citation_open",
     "refuse_assistant_session_deletion",
     "replace_assistant_scopes",
     "search_assistant_scopes",
