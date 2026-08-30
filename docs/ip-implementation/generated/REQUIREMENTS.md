@@ -188,7 +188,7 @@ Generated; do not edit.
 | AI-GUIDE-09 | AI-GUIDE | IPLF-062B | 5 | 2 | implemented | passed | deployment_verified | false |
 | AI-GUIDE-10 | AI-GUIDE | IPLF-065B | 5 | 1 | implemented | passed | blocked | false |
 | AI-GUIDE-11 | AI-GUIDE | IPLF-061B | 7 | 1 | implemented | passed | deployment_verified | true |
-| AI-GUIDE-12 | AI-GUIDE | IPLF-066B | 4 | 0 | in_progress | not_run | blocked | false |
+| AI-GUIDE-12 | AI-GUIDE | IPLF-066B | 6 | 2 | in_progress | not_run | blocked | false |
 | AI-REV-01 | AI-REV | IPLF-063B, IPLF-065B | 4 | 2 | implemented | passed | blocked | false |
 | AI-REV-02 | AI-REV | IPLF-063B, IPLF-065B | 4 | 2 | implemented | passed | blocked | false |
 | AI-REV-03 | AI-REV | IPLF-063B, IPLF-065B | 4 | 2 | implemented | passed | blocked | false |

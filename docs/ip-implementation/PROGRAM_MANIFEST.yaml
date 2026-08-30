@@ -15855,6 +15855,9 @@
         "apps/api/src/caseops_api/scripts/private_projection_integrity.py",
         "apps/api/src/caseops_api/services/private_retrieval.py",
         "apps/api/src/caseops_api/services/private_retrieval_jobs.py",
+        "apps/api/src/caseops_api/services/intelligent_reviews.py",
+        "apps/api/src/caseops_api/services/drafting.py",
+        "apps/api/src/caseops_api/services/ai_feedback.py",
         "apps/api/src/caseops_api/services/portal_ip.py",
         "apps/api/src/caseops_api/services/workspace_assistant.py",
         "apps/web/lib/api/openapi-types.ts",
@@ -15863,6 +15866,8 @@
       "test_refs": [
         "apps/api/tests/test_private_retrieval_foundation.py",
         "apps/api/tests/test_private_retrieval_workflow.py",
+        "apps/api/tests/test_intelligent_reviews.py",
+        "apps/api/tests/test_ai_feedback.py",
         "apps/api/tests/test_portal_ip.py",
         "apps/api/tests/test_postgres_validation.py::test_private_retrieval_prefilters_before_bounded_rank_on_postgres",
         "apps/api/tests/test_workspace_assistant_qa.py",
@@ -15894,20 +15899,29 @@
         },
         {
           "ref": "docs/ip-implementation/evidence/m6/IPLF-066B/local-2026-08-30.md",
-          "revision": "330ad88db6545a3f8ce203d04f600f6aeda2f481",
+          "revision": "dc46780b60b47b0beff65c9ad466617fadd3c976",
           "environment": "Windows 11 isolated worktree on the existing draft PR branch; locked Python dependencies and synthetic SQLite API fixtures. No merge, deployment, production request, real provider call or destructive purge was performed.",
           "fixtures": "Synthetic same-tenant private Matter/provider-deletion event during embedding, stale security-generation writer, colliding event idempotency key, saved Assistant export after revocation and canonical IP portal document restriction; existing forged cross-tenant and provider-batch fixtures remained in the focused run.",
           "assertions": "No database generation locks span provider I/O; exact access/tombstone epochs fence projection writes and verification; event/activation authority is tenant-serialized; stale async work cannot resurrect a tombstoned source; exported copied content is hidden; portal list/open/download reauthorize canonical document policy without N+1 queries.",
           "result": "passed",
           "recorded_at": "2026-08-30T19:25:00+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m6/IPLF-066B/local-2026-08-30.md",
+          "revision": "505828addd4b8f16b3daed3ae610591d883a7f5c",
+          "environment": "Windows 11 isolated worktree on Draft PR 399 after current-main integration; locked Python/Node dependencies and synthetic SQLite API fixtures. No deployment, production request, real provider/model call or destructive purge was performed.",
+          "fixtures": "Synthetic exact private Matter projection and generation epochs, intelligent review and published Draft report, same-tenant revocation, forged second-tenant lookup/analytics records, Assistant citations, canonical completed task, action previews, feedback report and permission-denial audit.",
+          "assertions": "Review and Draft manifests preserve exact private projection/source/hash/generation/ACL/tombstone provenance; reads/lists/DOCX export reauthorize and fail closed after revocation; cross-tenant lookup is 404; citation-open telemetry is written only after current authorization; AI-GUIDE-12 returns six tenant-only aggregates without content, identifiers, employee scoring or invented permission-denial rates.",
+          "result": "passed",
+          "recorded_at": "2026-08-30T22:45:00+05:30"
         }
       ],
       "blockers": [
         {
           "id": "IPLF-066B-RECIPROCAL-SCOPE",
-          "summary": "Workspace Assistant retrieval/export and portal document crossover are locally proven, but private intelligent-review/report saved-output registration, privacy-bounded AI-GUIDE-12 analytics, the IPLF-071 canonical purge/provider executor integration and remaining streaming/autocomplete/count adversarial paths are not implemented and machine-verified.",
+          "summary": "Workspace Assistant, portal, private intelligent-review/report saved-output and privacy-bounded AI-GUIDE-12 paths are locally proven; the IPLF-071 canonical purge/provider executor integration and remaining streaming/autocomplete/count adversarial paths are not implemented and machine-verified.",
           "owner": "Codex IPLF-066B completion",
-          "evidence_needed": "Focused API/browser tests for review/report manifests, safe analytics, revoked-during-stream and autocomplete/count paths, plus IPLF-071 purge/provider receipt-or-exception integration through its canonical owner.",
+          "evidence_needed": "Focused API/browser tests for revoked-during-stream and autocomplete/count paths, plus IPLF-071 purge/provider receipt-or-exception integration through its canonical owner.",
           "safe_fallback": "Keep those private consumers disabled or on their existing non-private path; do not create a second saved-output, analytics, provider or ACL owner.",
           "milestone_impact": "Keeps IPLF-066B and parent IPLF-066 in progress and blocks release activation.",
           "next_independent_slice": "Complete the remaining reciprocal consumer and adversarial paths on this canonical service."
@@ -15923,14 +15937,15 @@
         }
       ],
       "next_actions": [
-        "Review the lifecycle hardening at 330ad88db6545a3f8ce203d04f600f6aeda2f481 without weakening the fail-closed activation boundary.",
-        "Complete private intelligent-review/report manifests, safe AI-GUIDE-12 analytics and remaining revoked-during-stream/autocomplete/count coverage; connect IPLF-071 purge/provider execution only through that existing canonical owner.",
+        "Review the lifecycle hardening at dc46780b60b47b0beff65c9ad466617fadd3c976 and saved-output/analytics implementation at 505828addd4b8f16b3daed3ae610591d883a7f5c without weakening the fail-closed activation boundary.",
+        "Complete remaining revoked-during-stream/autocomplete/count coverage; connect IPLF-071 purge/provider execution only through that existing canonical owner.",
         "Wire the bounded event/rebuild entry point to the canonical durable worker, then run complete PostgreSQL and hosted CI/Security/CodeQL before any feature-off migration-first deployment and dated production acceptance."
       ],
       "data_impact": [
         "No schema change. A bounded one-tenant rebuild can write IPLF-066A shadow-generation projections from currently active/eligible canonical Clients, Matters, indexed Matter attachments, IP dockets and indexed internal non-privileged IP documents; public authority data is excluded.",
         "Provider batches contain at most 32 bounded source-text values from one tenant and omit tenant/record identifiers, labels, ACL/scopes and projection metadata; external provider use remains an explicit fail-closed service decision.",
-        "Bounded event processing mutates only the existing private projection/event/saved-output security records; canonical source, lifecycle, access, document and Assistant owners are unchanged."
+        "Bounded event processing mutates only the existing private projection/event/saved-output security records; canonical source, lifecycle, access, document and Assistant owners are unchanged.",
+        "Intelligent-review and Draft report writers reuse existing JSON manifests for content-free private projection/source/epoch provenance. Citation-open success adds one content-free canonical audit event; AI outcome analytics is read-only over existing tenant rows and creates no analytics table."
       ],
       "documentation_impact": [
         {
@@ -15952,7 +15967,7 @@
           "evidence": "Concrete implementation/test/evidence traceability with truthful in-progress, not-run and release-blocked status"
         }
       ],
-      "allocation_review": "2026-08-30 reciprocal and duplicate-owner review: the locally implemented consumer, worker, integrity, export and portal reauthorization paths extend the single IPLF-066A private_retrieval owner and canonical MatterAccessGrant/EthicalWall, lifecycle, document-policy, portal-publication and Assistant provenance owners. They do not create a second public/private corpus, grant registry, source writer, answer writer, provider path, purge executor, workflow framework or manual approval gate. The slice remains incomplete for review/report manifests, safe analytics, IPLF-071 purge/provider integration, remaining adversarial paths and exact-release proof.",
+      "allocation_review": "2026-08-30 reciprocal and duplicate-owner review: the locally implemented consumer, worker, integrity, export, portal, intelligent-review/Draft manifest and tenant aggregate paths extend the single IPLF-066A private_retrieval owner and canonical MatterAccessGrant/EthicalWall, lifecycle, document-policy, portal-publication, Recommendation/Draft, Assistant, feedback and audit owners. They do not create a second public/private corpus, grant registry, source writer, answer writer, analytics table, provider path, purge executor, workflow framework or manual approval gate. The slice remains incomplete for IPLF-071 purge/provider integration, remaining adversarial paths and exact-release proof.",
       "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked"
@@ -15979,7 +15994,12 @@
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/api/routes/ai_feedback.py",
+        "apps/api/src/caseops_api/api/routes/workspace_assistant.py",
+        "apps/api/src/caseops_api/services/ai_feedback.py",
+        "apps/api/src/caseops_api/services/workspace_assistant.py"
+      ],
       "test_refs": [],
       "evidence_refs": [],
       "evidence_metadata": [],
@@ -24465,14 +24485,24 @@
         "UJ-22",
         "UJ-23"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/api/routes/ai_feedback.py",
+        "apps/api/src/caseops_api/api/routes/workspace_assistant.py",
+        "apps/api/src/caseops_api/services/ai_feedback.py",
+        "apps/api/src/caseops_api/services/workspace_assistant.py"
+      ],
       "test_refs": [
-        "planned:IPLF-REQ-AI-GUIDE-12",
+        "apps/api/tests/test_ai_feedback.py::test_ai_outcome_analytics_are_exact_tenant_aggregates_without_employee_scoring",
+        "apps/api/tests/test_workspace_assistant_qa.py::test_scoped_qa_citations_abstention_proposals_export_and_deletion_boundary",
+        "apps/api/tests/test_workspace_assistant_qa.py::test_turn_render_and_export_fail_closed_after_scope_permission_changes",
         "planned:IPLF-UJ-22-EXC-01",
         "planned:IPLF-UJ-22-EXC-02",
         "planned:IPLF-UJ-22-NORMAL"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/PRIVATE_RETRIEVAL_WORKFLOW.md",
+        "docs/ip-implementation/evidence/m6/IPLF-066B/local-2026-08-30.md"
+      ],
       "blockers": [],
       "implementation_status": "in_progress",
       "verification_status": "not_run",

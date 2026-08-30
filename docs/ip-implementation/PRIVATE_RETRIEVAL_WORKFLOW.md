@@ -90,6 +90,30 @@ and at a 360-pixel viewport. It also proves that malicious instructions inside
 an indexed source are treated as untrusted content by the deterministic local
 provider.
 
+Intelligent review freezes the exact private target projection ID, source
+version/hash, active generation ID, access-policy generation and tombstone
+generation beside its public-authority manifest whenever a private generation
+exists. The worker checks that snapshot before and after provider I/O. Review
+reads, selection/finalization/publication, Draft/report reads and DOCX/PDF/IP
+bundle exports reauthorize the current tenant, target ACL, source version,
+projection and exact security epochs. Publication copies the private entry into
+the canonical `DraftVersion.source_manifest_json`; it cannot silently drop the
+private provenance. A revoked or stale generation hides the review from lists,
+omits the report from Draft lists and rejects direct reads/exports until a new
+review is generated. Tenants without a private generation remain on the
+existing default-off path.
+
+`POST /api/workspace-assistant/sessions/{session_id}/citations/{citation_id}/open`
+records a successful open only after the creator-private session, saved answer,
+citation and current canonical source all reauthorize. The tenant-admin
+`GET /api/admin/ai-outcomes` endpoint derives AI-GUIDE-12 outcomes from existing
+Assistant turns/citations/action previews, canonical tasks, feedback items and
+append-only audit events. It returns only tenant aggregates for task completion,
+abstention, successful citation open, permission denial, proposed-action
+confirmation and reported-answer rate. It exposes no company/member/record IDs,
+content or employee dimension; permission denial is a count with no fabricated
+denominator or rate.
+
 Client-portal reports continue to use a closed client-safe field allowlist and
 never read private projection text. Document publications recheck their
 canonical document, current version, privilege, confidentiality, shareable
@@ -107,13 +131,13 @@ stale/ineligible sources, and unsafe tombstone payload. Any mismatch blocks
 release. The CLI also provides bounded event processing and rebuild operations;
 it is an operational entry point, not a second workflow owner.
 
-The repository-local slice remains incomplete until the unimplemented
-reciprocal scope is added and the exact integrated release is verified. In
-particular, private intelligent-review/report saved-output registration,
-privacy-bounded AI-GUIDE-12 analytics, the IPLF-071 canonical purge/provider
-executor and provider receipt/exception integration, durable production worker
-scheduling, complete hosted CI/Security/CodeQL, deployment, and dated production
-proof remain release blockers. No local result is production evidence.
+The repository-local slice remains incomplete until the remaining reciprocal
+scope and exact integrated release are verified. The IPLF-071 canonical
+purge/provider executor and provider receipt/exception integration,
+revoked-during-stream and autocomplete/count adversarial coverage, durable
+production worker scheduling, complete hosted gates on the latest commit,
+deployment, and dated production proof remain release blockers. No local result
+is production evidence.
 
 ## Rollback
 
