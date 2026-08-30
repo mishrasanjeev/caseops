@@ -188,7 +188,7 @@ export default function ForeignAssociatesPage() {
         ) : null}
       />
 
-      <div className="flex min-w-0 flex-wrap gap-2" aria-label="Instruction queues">
+      <div className="flex min-w-0 flex-wrap gap-2" role="group" aria-label="Instruction queues">
         {([
           ["all", "All"],
           ["outstanding", "Awaiting acknowledgement"],

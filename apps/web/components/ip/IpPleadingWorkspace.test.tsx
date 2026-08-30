@@ -242,6 +242,10 @@ describe("IpPleadingWorkspace", () => {
       </QueryClientProvider>,
     );
 
+    const workspace = screen.getByTestId("ip-pleading-workspace");
+    expect(workspace).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("status", { name: "Loading pleading workspace" })).toBeVisible();
+
     await waitFor(() => expect(getDraftMock).toHaveBeenCalledWith({
       docketId: "docket-1",
       proceedingId: "proceeding-1",
@@ -255,6 +259,7 @@ describe("IpPleadingWorkspace", () => {
     const draftSelect = await screen.findByRole("combobox", {
       name: /^Pleading draft$/,
     });
+    expect(workspace).toHaveAttribute("aria-busy", "false");
     expect(draftSelect).toHaveValue("draft-from-review");
     expect(screen.getAllByLabelText("Pleading draft", { exact: true })).toEqual([
       draftSelect,

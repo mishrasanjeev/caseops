@@ -4,6 +4,7 @@ export default function AppSegmentLoading() {
   return (
     <div
       className="flex flex-col gap-6"
+      role="status"
       aria-busy="true"
       aria-live="polite"
       aria-label="Loading workspace"
