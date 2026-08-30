@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from caseops_api.core.settings import get_settings
 from caseops_api.db import models
 from caseops_api.db.base import Base
+from caseops_api.db.connection_safety import postgres_timeout_options, postgres_url_options
 
 if models.__name__ != "caseops_api.db.models":
     raise RuntimeError("caseops_api.db.models did not import correctly")
@@ -138,20 +139,12 @@ def get_engine(database_url: str | None = None) -> Engine:
                 "keepalives_count": 5,
                 "connect_timeout": settings.db_connect_timeout_seconds,
             }
-            connection_options = []
-            if settings.db_statement_timeout_ms:
-                connection_options.append(
-                    f"-c statement_timeout={settings.db_statement_timeout_ms}"
-                )
-            if settings.db_lock_timeout_ms:
-                connection_options.append(f"-c lock_timeout={settings.db_lock_timeout_ms}")
-            if settings.db_idle_transaction_timeout_ms:
-                connection_options.append(
-                    "-c idle_in_transaction_session_timeout="
-                    f"{settings.db_idle_transaction_timeout_ms}"
-                )
-            if connection_options:
-                connect_args["options"] = " ".join(connection_options)
+            connect_args["options"] = postgres_timeout_options(
+                statement_timeout_ms=settings.db_statement_timeout_ms,
+                lock_timeout_ms=settings.db_lock_timeout_ms,
+                idle_transaction_timeout_ms=settings.db_idle_transaction_timeout_ms,
+                existing_options=postgres_url_options(resolved_url),
+            )
             # pool_pre_ping costs one lightweight SELECT 1 per checkout
             # but turns an already-dead pooled connection into a clean
             # reconnect instead of a crash. pool_recycle caps connection

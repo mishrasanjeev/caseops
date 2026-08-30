@@ -80,9 +80,7 @@ def test_a0_production_acceptance_is_an_isolated_verify_only_gate() -> None:
     # independently after the broad RAM batch. The historical A0 transition
     # gate additionally requires an explicit manual opt-in.
     assert workflow.count(prerequisite_gate) == 4
-    assert (
-        prerequisite_gate + " && inputs.run_historical_a0_gate == true"
-    ) in workflow
+    assert (prerequisite_gate + " && inputs.run_historical_a0_gate == true") in workflow
     assert "CASEOPS_IP_A0_PROD_MODE: verify" in workflow
     assert (
         "npx playwright test --config=playwright.ip-a0-prod.config.ts --reporter=list" in workflow
@@ -195,18 +193,16 @@ def test_renewal_production_acceptance_is_exact_release_and_fail_closed() -> Non
     assert "cleanup refuses non-reserved Matter shapes" in spec
     assert "await disposeMatter(matter)" in spec
     assert "await deactivateSupervisor()" in spec
-    assert "trace: \"off\"" in config
-    assert "screenshot: \"off\"" in config
-    assert "video: \"off\"" in config
+    assert 'trace: "off"' in config
+    assert 'screenshot: "off"' in config
+    assert 'video: "off"' in config
     assert "iplf-037b-renewal-2026-08-22-prod" not in broad_config
 
 
 def test_guard_first_production_acceptance_is_isolated_and_recoverable() -> None:
     root_config = _read_repo_text("playwright.config.ts")
     config = _read_repo_text("playwright.ip-guard-first-prod.config.ts")
-    spec = _read_repo_text(
-        "tests/e2e/iplf-039c-guard-first-2026-08-16-prod.spec.ts"
-    )
+    spec = _read_repo_text("tests/e2e/iplf-039c-guard-first-2026-08-16-prod.spec.ts")
     plan = _read_repo_text(
         "docs/ip-implementation/evidence/m3/IPLF-039C/"
         "guard-first-production-acceptance-plan-2026-08-16.md"
@@ -323,22 +319,21 @@ def test_workstation_docker_gate_is_migration_first_and_exact_release() -> None:
     e2e_env = _read_repo_text("tests/e2e/support/env.ts")
     e2e_helpers = _read_repo_text("tests/e2e/support/helpers.ts")
 
-    assert 'NEXT_PUBLIC_API_BASE_URL: ${CASEOPS_DOCKER_PUBLIC_API_URL' in compose
+    assert "NEXT_PUBLIC_API_BASE_URL: ${CASEOPS_DOCKER_PUBLIC_API_URL" in compose
     assert 'command: ["alembic", "upgrade", "head"]' in compose
     assert compose.count("condition: service_completed_successfully") == 2
     assert compose.count('CASEOPS_AUTO_MIGRATE: "false"') == 3
     assert compose.count("org.opencontainers.image.revision") == 0
     assert "condition: service_healthy" in compose
-    assert '${CASEOPS_DOCKER_VALKEY_PORT:-16379}:6379' in compose
+    assert "${CASEOPS_DOCKER_VALKEY_PORT:-16379}:6379" in compose
 
     assert '$ComposeProject = "caseops-acceptance-$($ReleaseSha.Substring(0, 12))"' in docker_script
     assert (
-        '$PortBlock = [Convert]::ToInt32($ReleaseSha.Substring(0, 6), 16) % 6000'
-        in docker_script
+        "$PortBlock = [Convert]::ToInt32($ReleaseSha.Substring(0, 6), 16) % 6000" in docker_script
     )
     assert "$PortBase = 20000 + ($PortBlock * 5)" in docker_script
     assert 'CASEOPS_DOCKER_PUBLIC_API_URL = "http://127.0.0.1:$TestApiPort"' in docker_script
-    assert 'CASEOPS_E2E_API_PORT = $TestApiPort' in docker_script
+    assert "CASEOPS_E2E_API_PORT = $TestApiPort" in docker_script
     assert (
         '$TestApiProxyScript = Join-Path $RepoRoot "scripts\\docker-acceptance-api-proxy.mjs"'
         in docker_script
@@ -431,6 +426,31 @@ def test_deploy_prod_uses_service_minimums_and_clears_stale_revision_tags() -> N
     assert 'annotations.get("run.googleapis.com/minScale")' in script
     assert "MIGRATION_TASK_TIMEOUT=30m" in script
     assert '--task-timeout "${MIGRATION_TASK_TIMEOUT}"' in script
+
+
+def test_migration_job_binds_and_verifies_dedicated_database_timeouts() -> None:
+    script = _read_repo_text("scripts/deploy-prod.sh")
+    manifest = _read_repo_text("infra/cloudrun/migrate-job.yaml")
+    expected = {
+        "CASEOPS_MIGRATION_DB_CONNECT_TIMEOUT_SECONDS": "10",
+        "CASEOPS_MIGRATION_DB_STATEMENT_TIMEOUT_MS": "900000",
+        "CASEOPS_MIGRATION_DB_LOCK_TIMEOUT_MS": "5000",
+        "CASEOPS_MIGRATION_DB_IDLE_TRANSACTION_TIMEOUT_MS": "60000",
+    }
+
+    assert "timeoutSeconds: 1800" in manifest
+    for name, value in expected.items():
+        assert f'- name: {name}\n                  value: "{value}"' in manifest
+        shell_name = name.removeprefix("CASEOPS_")
+        assert f"{shell_name}={value}" in script
+        assert f"{name}=${{{shell_name}}}" in script
+
+    update_index = script.index("gcloud run jobs update caseops-migrate-job")
+    verify_index = script.index("MIGRATION_JOB_JSON=$(gcloud run jobs describe")
+    execute_index = script.index("gcloud run jobs execute caseops-migrate-job")
+    assert update_index < verify_index < execute_index
+    assert "caseops-migrate-job database timeout drift" in script
+    assert "actual != expected" in script
 
 
 def test_deploy_prod_fences_rule_governance_and_verifies_exact_traffic() -> None:
@@ -829,6 +849,7 @@ def _run_deploy_with_fakes(
     gh_mode: str = "ok",
     index_health_mode: str = "ok",
     qa_execution_drift: bool = False,
+    migration_timeout_drift: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir()
@@ -869,6 +890,8 @@ if [[ "$*" == *"run jobs execute caseops-db-index-health"* && \
   exit 56
 elif [[ "$*" == *"artifacts docker images describe"* ]]; then
   printf '%s\n' 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+elif [[ "$*" == *"run jobs describe caseops-migrate-job"* && "$*" == *"--format=json"* ]]; then
+  printf '%s\n' "${FAKE_MIGRATION_JOB_JSON}"
 elif [[ "$*" == *"run jobs update caseops-ip-qa-bootstrap"* ]]; then
   touch "${FAKE_QA_UPDATED}"
 elif [[ "$*" == *"run jobs describe caseops-ip-qa-bootstrap"* && "$*" == *"--format=json"* ]]; then
@@ -1052,6 +1075,52 @@ exec "${FAKE_REAL_PYTHON}" "$@"
         ],
         separators=(",", ":"),
     )
+    migration_job_json = json.dumps(
+        {
+            "spec": {
+                "template": {
+                    "spec": {
+                        "template": {
+                            "spec": {
+                                "containers": [
+                                    {
+                                        "env": [
+                                            {
+                                                "name": (
+                                                    "CASEOPS_MIGRATION_DB_CONNECT_TIMEOUT_SECONDS"
+                                                ),
+                                                "value": "10",
+                                            },
+                                            {
+                                                "name": (
+                                                    "CASEOPS_MIGRATION_DB_STATEMENT_TIMEOUT_MS"
+                                                ),
+                                                "value": "900000",
+                                            },
+                                            {
+                                                "name": ("CASEOPS_MIGRATION_DB_LOCK_TIMEOUT_MS"),
+                                                "value": (
+                                                    "0" if migration_timeout_drift else "5000"
+                                                ),
+                                            },
+                                            {
+                                                "name": (
+                                                    "CASEOPS_MIGRATION_DB_IDLE_"
+                                                    "TRANSACTION_TIMEOUT_MS"
+                                                ),
+                                                "value": "60000",
+                                            },
+                                        ]
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        separators=(",", ":"),
+    )
     env.update(
         {
             "FAKE_A0_MODE": a0_mode or "",
@@ -1087,6 +1156,7 @@ exec "${FAKE_REAL_PYTHON}" "$@"
             ),
             "FAKE_FINGERPRINT_JOB_JSON": _a0_fingerprint_job_json(immutable_image),
             "FAKE_FINGERPRINT_LOG_JSON": fingerprint_log_json,
+            "FAKE_MIGRATION_JOB_JSON": migration_job_json,
             "FAKE_FINGERPRINT_REST_JSON": json.dumps(
                 {"entries": [{"jsonPayload": json.loads(fingerprint_json)}]},
                 separators=(",", ":"),
@@ -1098,9 +1168,7 @@ exec "${FAKE_REAL_PYTHON}" "$@"
             "FAKE_QA_AFTER_JSON": _a0_qa_job_json(
                 immutable_image,
                 5,
-                execution_count=(
-                    10 if a0_mode == "qa-executed" or qa_execution_drift else 9
-                ),
+                execution_count=(10 if a0_mode == "qa-executed" or qa_execution_drift else 9),
             ),
             "FAKE_QA_BEFORE_JSON": _a0_qa_job_json(
                 "registry.invalid/caseops-api:old",
@@ -1253,6 +1321,19 @@ def test_deploy_prod_accepts_clean_head_and_healthy_api(tmp_path: Path) -> None:
         "gh workflow run prod-verify.yml --repo mishrasanjeev/caseops --ref main "
         "-f expected_release_sha=abcdef1234567890abcdef1234567890abcdef12"
     ) in "\n".join(calls)
+
+
+def test_deploy_prod_refuses_migration_timeout_drift_before_execution(
+    tmp_path: Path,
+) -> None:
+    result = _run_deploy_with_fakes(tmp_path, migration_timeout_drift=True)
+
+    assert result.returncode != 0
+    assert "caseops-migrate-job database timeout drift" in result.stderr
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8")
+    assert "run jobs update caseops-migrate-job" in calls
+    assert "run jobs describe caseops-migrate-job" in calls
+    assert "run jobs execute caseops-migrate-job" not in calls
 
 
 def test_deploy_prod_fails_before_routing_if_qa_repin_executes_the_job(
