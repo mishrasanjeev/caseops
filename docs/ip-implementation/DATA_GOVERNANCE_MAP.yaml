@@ -12161,6 +12161,100 @@
       }
     },
     {
+      "id": "ip_filing_transactions",
+      "table_name": "ip_filing_transactions",
+      "purpose": "Repository SQL persistence class `ip_filing_transactions`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "tenant_restricted_legal_content",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "application_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "attempt_key": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(120)",
+          "nullable": false
+        },
+        "authorized_confirmation": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(500)",
+          "nullable": true
+        },
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "details_json": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "JSON",
+          "nullable": false
+        },
+        "docket_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "evidence_reference": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(500)",
+          "nullable": false
+        },
+        "external_reference": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(255)",
+          "nullable": false
+        },
+        "filing_event_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "idempotency_key": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(120)",
+          "nullable": false
+        },
+        "occurred_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "recorded_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "related_transaction_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "request_fingerprint": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "transaction_kind": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(40)",
+          "nullable": false
+        }
+      }
+    },
+    {
       "id": "ip_foreign_associate_instructions",
       "table_name": "ip_foreign_associate_instructions",
       "purpose": "Repository SQL persistence class `ip_foreign_associate_instructions`; its exact column inventory is intentionally versioned below.",
@@ -27807,12 +27901,12 @@
       }
     }
   ],
-  "schema_fingerprint": "e57f9c3cc4d6a6cdde90decaddd8ed99470b22c44d5a72ee153aba40d17e610b",
+  "schema_fingerprint": "e403458dcf126d3011ab51d5ae823bf5b7ce565ed2a21e45fbd41b353cc4ad59",
   "index_inventory": {
-    "orm_index_count": 1633,
-    "orm_index_fingerprint": "5e20b9cb9d85380b94fd086f19277082c61fd7224beb03b8278cff9857003067",
-    "migration_index_count": 687,
-    "migration_index_fingerprint": "856724a814196b986b95a30be2339d1419691361dd6c01d97f1393614c873a43",
+    "orm_index_count": 1641,
+    "orm_index_fingerprint": "0970bdb6367c30ecc3b24a328a667ae107a843e4b7c33ff86f038dcb9f866c90",
+    "migration_index_count": 695,
+    "migration_index_fingerprint": "512a599b8121f49d7669bd6d8a3ba2b844b7f016cced8b285215f8402bc073ac",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."
   }
 }

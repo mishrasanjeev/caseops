@@ -81,3 +81,9 @@ requirements when using the fallback.
   routing, update the dated specs to select that tab or deep link and rerun the
   complete journey; an old locator timing out on the default tab is test drift,
   not proof that the underlying workflow is absent.
+- A trademark filing is not complete because a submission or payment exists.
+  Persist submission, fee, acknowledgement, defect, resubmission, and
+  acceptance as independently evidenced append-only transactions; only an
+  accepted acknowledgement may invoke the canonical filing event writer and
+  advance the application. Generic phase writes and direct filing events must
+  fail closed.

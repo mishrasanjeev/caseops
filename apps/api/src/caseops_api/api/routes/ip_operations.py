@@ -93,6 +93,13 @@ from caseops_api.schemas.ip_documents import (
     IpDocumentUploadMetadata,
     IpDocumentUploadResponse,
 )
+from caseops_api.schemas.ip_filing import (
+    IpFilingConfirmationTransactionRequest,
+    IpFilingPreparationTransactionRequest,
+    IpFilingTransactionListResponse,
+    IpFilingTransactionMutationResponse,
+    IpFilingTransactionRecord,
+)
 from caseops_api.schemas.ip_imports import (
     IpImportCommitRequest,
     IpImportCommitResponse,
@@ -335,8 +342,10 @@ from caseops_api.services.ip_lifecycle import (
     append_ip_docket_event,
     get_ip_prosecution_workspace,
     list_ip_docket_events,
+    list_ip_filing_transactions,
     preview_ip_docket_event,
     preview_ip_docket_lifecycle,
+    record_ip_filing_transaction,
     transition_ip_docket_lifecycle,
 )
 from caseops_api.services.ip_matter_links import (
@@ -488,6 +497,14 @@ from caseops_api.services.shared_work import (
 router = APIRouter()
 IpViewer = Annotated[SessionContext, Depends(require_capability("ip:read"))]
 IpWriter = Annotated[SessionContext, Depends(require_capability("ip:write"))]
+IpFilingPreparer = Annotated[
+    SessionContext,
+    Depends(require_capability("ip:filing_prepare")),
+]
+IpFilingConfirmer = Annotated[
+    SessionContext,
+    Depends(require_capability("ip:filing_confirm")),
+]
 IpApprover = Annotated[SessionContext, Depends(require_capability("ip:approve"))]
 IpReviewer = Annotated[SessionContext, Depends(require_capability("ip:approve"))]
 IpRuleProposer = Annotated[
@@ -2518,6 +2535,82 @@ async def patch_trademark_application_phase(
             application_id=application_id,
             payload=payload,
         )
+    )
+
+
+def _filing_transaction_response(
+    result: tuple,
+) -> IpFilingTransactionMutationResponse:
+    application, transaction, event, replay = result
+    return IpFilingTransactionMutationResponse(
+        application=TrademarkApplicationResponse.model_validate(application),
+        transaction=IpFilingTransactionRecord.model_validate(transaction),
+        event=(IpDocketEventResponse.model_validate(event) if event is not None else None),
+        idempotent_replay=replay,
+    )
+
+
+@router.post(
+    "/applications/{application_id}/filing-transactions/preparation",
+    response_model=IpFilingTransactionMutationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_ip_filing_preparation_transaction(
+    application_id: str,
+    payload: IpFilingPreparationTransactionRequest,
+    context: IpFilingPreparer,
+    session: DbSession,
+) -> IpFilingTransactionMutationResponse:
+    return _filing_transaction_response(
+        record_ip_filing_transaction(
+            session,
+            context=context,
+            application_id=application_id,
+            payload=payload,
+        )
+    )
+
+
+@router.post(
+    "/applications/{application_id}/filing-transactions/confirmation",
+    response_model=IpFilingTransactionMutationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def post_ip_filing_confirmation_transaction(
+    application_id: str,
+    payload: IpFilingConfirmationTransactionRequest,
+    context: IpFilingConfirmer,
+    session: DbSession,
+) -> IpFilingTransactionMutationResponse:
+    return _filing_transaction_response(
+        record_ip_filing_transaction(
+            session,
+            context=context,
+            application_id=application_id,
+            payload=payload,
+        )
+    )
+
+
+@router.get(
+    "/applications/{application_id}/filing-transactions",
+    response_model=IpFilingTransactionListResponse,
+)
+async def get_ip_filing_transactions(
+    application_id: str,
+    context: IpViewer,
+    session: DbSession,
+) -> IpFilingTransactionListResponse:
+    return IpFilingTransactionListResponse(
+        application_id=application_id,
+        transactions=[
+            IpFilingTransactionRecord.model_validate(row)
+            for row in list_ip_filing_transactions(
+                session,
+                context=context,
+                application_id=application_id,
+            )
+        ],
     )
 
 

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
+from hashlib import sha256
+from uuid import uuid4
 
 from fastapi import HTTPException
 from sqlalchemy import and_, func, or_, select
@@ -20,6 +23,7 @@ from caseops_api.db.models import (
     IpDeadlineIncident,
     IpDocketEvent,
     IpDocketRecord,
+    IpFilingTransaction,
     IpForeignAssociateInstruction,
     IpIdentifier,
     IpProceeding,
@@ -38,6 +42,10 @@ from caseops_api.db.models import (
     TrademarkApplication,
     UserCalendarConnection,
 )
+from caseops_api.schemas.ip_filing import (
+    IpFilingConfirmationTransactionRequest,
+    IpFilingPreparationTransactionRequest,
+)
 from caseops_api.schemas.ip_lifecycle import (
     IpChecklistItem,
     IpDocketEventCreateRequest,
@@ -55,6 +63,7 @@ from caseops_api.services.calendar_projection_safety import (
     calendar_sync_upsert_claim_state,
     materialize_expired_calendar_sync_upsert_claim,
 )
+from caseops_api.services.ip_capability_catalog import assert_ip_feature_available
 from caseops_api.services.ip_records import assert_application_can_enter_filed_phase
 from caseops_api.services.matter_access import (
     assert_ip_docket_access,
@@ -279,9 +288,7 @@ def _assert_reopen_linked_matter_roles(
             user=membership.user,
         )
         can_access_matter = can_access(session, context=member_context, matter=matter)
-        can_access_docket = can_access_ip_docket(
-            session, context=member_context, docket=docket
-        )
+        can_access_docket = can_access_ip_docket(session, context=member_context, docket=docket)
         if not can_access_matter or not can_access_docket:
             raise HTTPException(
                 status_code=409,
@@ -445,8 +452,7 @@ def _same_event_duplicate_identity(
     if payload.event_kind == "post_registration_recordal_transaction":
         return (
             row.payload_json.get("recordal_id") == payload.payload.get("recordal_id")
-            and row.payload_json.get("transaction_kind")
-            == payload.payload.get("transaction_kind")
+            and row.payload_json.get("transaction_kind") == payload.payload.get("transaction_kind")
             and row.payload_json.get("recordal_version_before")
             == payload.payload.get("recordal_version_before")
         )
@@ -454,8 +460,7 @@ def _same_event_duplicate_identity(
         return (
             row.payload_json.get("foreign_associate_instruction_id")
             == payload.payload.get("foreign_associate_instruction_id")
-            and row.payload_json.get("transaction_kind")
-            == payload.payload.get("transaction_kind")
+            and row.payload_json.get("transaction_kind") == payload.payload.get("transaction_kind")
             and row.payload_json.get("row_version_before")
             == payload.payload.get("row_version_before")
         )
@@ -472,11 +477,9 @@ def _same_event_duplicate_identity(
         return True
     if row.payload_json.get("action_identity") == payload.payload.get("action_identity"):
         return True
-    return (
-        payload.event_kind == "madrid_action"
-        and row.payload_json.get("source_reference")
-        == payload.payload.get("source_reference")
-    )
+    return payload.event_kind == "madrid_action" and row.payload_json.get(
+        "source_reference"
+    ) == payload.payload.get("source_reference")
 
 
 def preview_ip_docket_event(
@@ -537,10 +540,7 @@ def preview_ip_docket_event(
         and row.application_id == payload.application_id
         and row.proceeding_id == payload.proceeding_id
         and row.effective_at.date() == payload.effective_at.date()
-        and (
-            payload.proceeding_id is None
-            or row.resulting_stage == payload.resulting_stage
-        )
+        and (payload.proceeding_id is None or row.resulting_stage == payload.resulting_stage)
         and _same_event_duplicate_identity(row, payload)
         and row.candidate_status != "rejected"
         and row.id != payload.supersedes_event_id
@@ -552,14 +552,11 @@ def preview_ip_docket_event(
     if payload.event_kind == "opposition_shared_action":
         duplicate_ids = []
     latest_effective = max((_as_utc(row.effective_at) for row in rows), default=None)
-    backdated = (
-        latest_effective is not None
-        and _as_utc(payload.effective_at) < latest_effective
-    )
+    backdated = latest_effective is not None and _as_utc(payload.effective_at) < latest_effective
     checklist = _event_checklist(payload)
-    unresolved = [
-        row.key for row in checklist if row.required and not row.satisfied
-    ]
+    unresolved = [row.key for row in checklist if row.required and not row.satisfied]
+    if payload.event_kind == "filing":
+        unresolved.append("filing_transaction_required")
     if duplicate_ids and payload.reconciles_event_id is None:
         unresolved.append("duplicate_reconciliation_required")
     if backdated:
@@ -584,6 +581,7 @@ def _append_locked_event(
     docket: IpDocketRecord,
     payload: IpDocketEventCreateRequest,
     resulting_lifecycle_version: int | None = None,
+    authorized_filing_transaction_id: str | None = None,
 ) -> IpDocketEvent:
     if docket.lifecycle_version != payload.expected_lifecycle_version:
         raise HTTPException(status_code=409, detail="IP lifecycle version changed; reload.")
@@ -592,6 +590,22 @@ def _append_locked_event(
             status_code=409,
             detail="Terminal IP records are immutable; use the dedicated reopen transition.",
         )
+    if payload.event_kind == "filing":
+        requested_transaction_id = payload.payload.get("filing_transaction_id")
+        if (
+            authorized_filing_transaction_id is None
+            or requested_transaction_id != authorized_filing_transaction_id
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "ip_filing_transaction_required",
+                    "message": (
+                        "A filing event is created only by an accepted filing "
+                        "transaction; direct filing events are disabled."
+                    ),
+                },
+            )
     _active_membership(
         session,
         company_id=docket.company_id,
@@ -622,10 +636,7 @@ def _append_locked_event(
         and row.application_id == payload.application_id
         and row.proceeding_id == payload.proceeding_id
         and row.effective_at.date() == payload.effective_at.date()
-        and (
-            payload.proceeding_id is None
-            or row.resulting_stage == payload.resulting_stage
-        )
+        and (payload.proceeding_id is None or row.resulting_stage == payload.resulting_stage)
         and _same_event_duplicate_identity(row, payload)
         and row.candidate_status != "rejected"
         and row.id != payload.supersedes_event_id
@@ -640,9 +651,7 @@ def _append_locked_event(
         duplicate_ids
         and payload.reconciles_event_id is None
         and payload.supersedes_event_id is None
-        and not (
-            payload.source == "registry" and payload.candidate_status == "candidate"
-        )
+        and not (payload.source == "registry" and payload.candidate_status == "candidate")
     )
     if unresolved_confirmed_duplicate:
         raise HTTPException(
@@ -656,20 +665,14 @@ def _append_locked_event(
         (_as_utc(row.effective_at) for row in existing_events),
         default=None,
     )
-    backdated = (
-        latest_effective is not None
-        and _as_utc(payload.effective_at) < latest_effective
-    )
+    backdated = latest_effective is not None and _as_utc(payload.effective_at) < latest_effective
     if (
         backdated
-        and "backdated_recalculation_review_required"
-        not in payload.acknowledged_exception_codes
+        and "backdated_recalculation_review_required" not in payload.acknowledged_exception_codes
     ):
         raise HTTPException(
             status_code=409,
-            detail=(
-                "Backdated events require acknowledgement of the recalculation preview."
-            ),
+            detail=("Backdated events require acknowledgement of the recalculation preview."),
         )
     latest_target_effective = max(
         (
@@ -734,6 +737,16 @@ def _append_locked_event(
                 ),
             )
         before_phase = application.filing_phase
+        if (
+            apply_phase
+            and application.filing_phase in {"draft", "pre_filing"}
+            and proposed_phase not in {None, application.filing_phase}
+            and authorized_filing_transaction_id is None
+        ):
+            raise _filing_problem(
+                "ip_filing_transaction_required",
+                "A pre-filing application can advance only through an accepted filing transaction.",
+            )
         if proposed_phase is not None and apply_phase:
             if payload.event_kind == "filing":
                 identifiers = list(
@@ -771,24 +784,16 @@ def _append_locked_event(
                     session,
                     proceeding=proceeding,
                     to_stage=proposed_phase,
-                    transition_kind=str(
-                        payload.payload.get("transition_kind", "normal")
-                    ),
-                    expected_proceeding_version=payload.payload.get(
-                        "expected_proceeding_version"
-                    ),
+                    transition_kind=str(payload.payload.get("transition_kind", "normal")),
+                    expected_proceeding_version=payload.payload.get("expected_proceeding_version"),
                     authority_reference=payload.payload.get("authority_reference"),
                     reason=payload.reason,
                     source_reference=payload.source_reference,
                     evidence_refs=payload.evidence_refs,
                     document_refs=payload.document_refs,
                     outcome=payload.payload.get("outcome"),
-                    outcome_effective_date=payload.payload.get(
-                        "outcome_effective_date"
-                    ),
-                    authorized_confirmation=payload.payload.get(
-                        "authorized_confirmation"
-                    ),
+                    outcome_effective_date=payload.payload.get("outcome_effective_date"),
+                    authorized_confirmation=payload.payload.get("authorized_confirmation"),
                 )
             proceeding.stage = proposed_phase
             proceeding.version += 1
@@ -817,9 +822,7 @@ def _append_locked_event(
         target_phase_is_backdated and proposed_phase is not None
     )
     event_payload["stage_checklist"] = [row.model_dump(mode="json") for row in checklist]
-    event_payload["operational_completion"] = bool(
-        _payload_refs(payload.payload, "task_refs")
-    )
+    event_payload["operational_completion"] = bool(_payload_refs(payload.payload, "task_refs"))
     event_payload["filing_evidence"] = bool(
         payload.event_kind in {"filing", "response"} and payload.document_refs
     )
@@ -828,9 +831,7 @@ def _append_locked_event(
         and payload.event_kind in {"acceptance", "registration"}
         and payload.candidate_status in {"confirmed", "reconciled"}
     )
-    event_payload["final_legal_disposition"] = bool(
-        proposed_phase in TERMINAL_APPLICATION_PHASES
-    )
+    event_payload["final_legal_disposition"] = bool(proposed_phase in TERMINAL_APPLICATION_PHASES)
     row = IpDocketEvent(
         company_id=docket.company_id,
         docket_id=docket.id,
@@ -864,21 +865,13 @@ def _append_locked_event(
     return row
 
 
-def append_ip_docket_event(
+def _record_ip_docket_event_audit(
     session: Session,
     *,
     context: SessionContext,
-    docket_id: str,
-    payload: IpDocketEventCreateRequest,
-    commit: bool = True,
-) -> IpDocketEvent:
-    docket = _authorized_lifecycle_docket(
-        session,
-        context=context,
-        docket_id=docket_id,
-        for_update=True,
-    )
-    row = _append_locked_event(session, context=context, docket=docket, payload=payload)
+    docket: IpDocketRecord,
+    row: IpDocketEvent,
+) -> None:
     record_from_context(
         session,
         context,
@@ -897,10 +890,392 @@ def append_ip_docket_event(
             "reconciles_event_id": row.reconciles_event_id,
         },
     )
+
+
+def append_ip_docket_event(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+    payload: IpDocketEventCreateRequest,
+    commit: bool = True,
+) -> IpDocketEvent:
+    docket = _authorized_lifecycle_docket(
+        session,
+        context=context,
+        docket_id=docket_id,
+        for_update=True,
+    )
+    row = _append_locked_event(session, context=context, docket=docket, payload=payload)
+    _record_ip_docket_event_audit(
+        session,
+        context=context,
+        docket=docket,
+        row=row,
+    )
     if commit:
         session.commit()
         session.refresh(row)
     return row
+
+
+IpFilingTransactionRequest = (
+    IpFilingPreparationTransactionRequest | IpFilingConfirmationTransactionRequest
+)
+
+
+def _filing_problem(code: str, message: str) -> HTTPException:
+    return HTTPException(status_code=409, detail={"code": code, "message": message})
+
+
+def _filing_request_fingerprint(payload: IpFilingTransactionRequest) -> str:
+    encoded = json.dumps(
+        payload.model_dump(mode="json"),
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    return sha256(encoded).hexdigest()
+
+
+def _filing_transaction(
+    session: Session,
+    *,
+    company_id: str,
+    application_id: str,
+    transaction_id: str | None,
+) -> IpFilingTransaction | None:
+    if transaction_id is None:
+        return None
+    row = session.scalar(
+        select(IpFilingTransaction).where(
+            IpFilingTransaction.id == transaction_id,
+            IpFilingTransaction.company_id == company_id,
+            IpFilingTransaction.application_id == application_id,
+        )
+    )
+    if row is None:
+        raise _filing_problem(
+            "ip_filing_related_transaction_invalid",
+            "The related filing transaction is outside this application.",
+        )
+    return row
+
+
+def _validate_filing_transaction_chain(
+    session: Session,
+    *,
+    application: TrademarkApplication,
+    payload: IpFilingTransactionRequest,
+) -> IpFilingTransaction | None:
+    related = _filing_transaction(
+        session,
+        company_id=application.company_id,
+        application_id=application.id,
+        transaction_id=payload.related_transaction_id,
+    )
+    kind = payload.transaction_kind
+    allowed_related_kinds: dict[str, frozenset[str]] = {
+        "fee_paid": frozenset({"submitted", "resubmitted"}),
+        "acknowledgement_received": frozenset({"submitted", "resubmitted"}),
+        "defect_recorded": frozenset({"submitted", "resubmitted", "acknowledgement_received"}),
+        "rejected": frozenset({"submitted", "resubmitted", "acknowledgement_received"}),
+        "resubmitted": frozenset({"defect_recorded", "rejected"}),
+        "accepted": frozenset({"acknowledgement_received"}),
+    }
+    if kind == "submitted":
+        if related is not None:
+            raise _filing_problem(
+                "ip_filing_initial_submission_has_parent",
+                "An initial submission cannot supersede another transaction.",
+            )
+        return None
+    if kind == "fee_paid" and related is None:
+        return None
+    if related is None or related.transaction_kind not in allowed_related_kinds[kind]:
+        raise _filing_problem(
+            "ip_filing_transaction_order_invalid",
+            f"{kind.replace('_', ' ')} does not follow the referenced filing transaction.",
+        )
+    if _as_utc(payload.occurred_at) < _as_utc(related.occurred_at):
+        raise _filing_problem(
+            "ip_filing_transaction_time_invalid",
+            "A filing transaction cannot predate the transaction it references.",
+        )
+    if kind == "resubmitted":
+        if payload.attempt_key == related.attempt_key:
+            raise _filing_problem(
+                "ip_filing_resubmission_attempt_reused",
+                "A corrective resubmission requires a new attempt key.",
+            )
+    elif payload.attempt_key != related.attempt_key:
+        raise _filing_problem(
+            "ip_filing_attempt_mismatch",
+            "Related filing transactions must use the same attempt key.",
+        )
+    return related
+
+
+def record_ip_filing_transaction(
+    session: Session,
+    *,
+    context: SessionContext,
+    application_id: str,
+    payload: IpFilingTransactionRequest,
+) -> tuple[TrademarkApplication, IpFilingTransaction, IpDocketEvent | None, bool]:
+    """Append one filing fact and advance to filed only from accepted evidence."""
+
+    feature_id = (
+        "filing_prepare"
+        if isinstance(payload, IpFilingPreparationTransactionRequest)
+        else "filing_confirm"
+    )
+    assert_ip_feature_available(
+        session,
+        context=context,
+        feature_id=feature_id,
+    )
+    discovered = session.execute(
+        select(TrademarkApplication.docket_id).where(
+            TrademarkApplication.id == application_id,
+            TrademarkApplication.company_id == context.company.id,
+        )
+    ).one_or_none()
+    if discovered is None:
+        raise HTTPException(status_code=404, detail="Trademark application not found.")
+    docket = _authorized_lifecycle_docket(
+        session,
+        context=context,
+        docket_id=discovered.docket_id,
+        for_update=True,
+    )
+    application, _ = _owned_target(
+        session,
+        company_id=docket.company_id,
+        docket_id=docket.id,
+        application_id=application_id,
+        proceeding_id=None,
+        for_update=True,
+    )
+    assert application is not None
+    fingerprint = _filing_request_fingerprint(payload)
+    replay = session.scalar(
+        select(IpFilingTransaction).where(
+            IpFilingTransaction.company_id == docket.company_id,
+            IpFilingTransaction.application_id == application.id,
+            IpFilingTransaction.idempotency_key == payload.idempotency_key,
+        )
+    )
+    if replay is not None:
+        if replay.request_fingerprint != fingerprint:
+            raise _filing_problem(
+                "ip_filing_idempotency_conflict",
+                "The idempotency key was already used for different filing evidence.",
+            )
+        replay_event = (
+            session.get(IpDocketEvent, replay.filing_event_id)
+            if replay.filing_event_id is not None
+            else None
+        )
+        return application, replay, replay_event, True
+    if not docket.is_active:
+        raise _filing_problem(
+            "ip_filing_docket_terminal",
+            "Terminal IP records cannot accept filing transactions.",
+        )
+    if not application.is_active:
+        raise _filing_problem(
+            "ip_filing_application_terminal",
+            "Terminal trademark applications cannot accept filing transactions.",
+        )
+    if application.filing_phase != "pre_filing":
+        raise _filing_problem(
+            "ip_filing_phase_closed",
+            "Filing transactions are accepted only while the application is in pre-filing phase.",
+        )
+    if application.version != payload.expected_application_version:
+        raise _filing_problem(
+            "ip_filing_application_version_changed",
+            "Application version changed; reload before recording filing evidence.",
+        )
+    related = _validate_filing_transaction_chain(
+        session,
+        application=application,
+        payload=payload,
+    )
+    if payload.transaction_kind in {"submitted", "resubmitted"}:
+        duplicate_attempt = session.scalar(
+            select(IpFilingTransaction.id).where(
+                IpFilingTransaction.company_id == docket.company_id,
+                IpFilingTransaction.application_id == application.id,
+                IpFilingTransaction.attempt_key == payload.attempt_key,
+                IpFilingTransaction.transaction_kind.in_(("submitted", "resubmitted")),
+            )
+        )
+        if duplicate_attempt is not None:
+            raise _filing_problem(
+                "ip_filing_attempt_already_submitted",
+                "This filing attempt was already submitted; reuse its idempotency key "
+                "or start a corrective attempt.",
+            )
+    transaction_id = str(uuid4())
+    event: IpDocketEvent | None = None
+    details = dict(payload.details)
+    authorized_confirmation: str | None = None
+    if isinstance(payload, IpFilingConfirmationTransactionRequest):
+        details.update(
+            {
+                "document_refs": payload.document_refs,
+                "form_refs": payload.form_refs,
+                "fee_evidence_refs": payload.fee_evidence_refs,
+                "approval_reference": payload.approval_reference,
+            }
+        )
+    if payload.transaction_kind == "accepted":
+        assert isinstance(payload, IpFilingConfirmationTransactionRequest)
+        assert related is not None
+        if application.filing_phase != "pre_filing":
+            raise _filing_problem(
+                "ip_filing_pre_filing_phase_required",
+                "Acceptance can advance only an application in pre-filing phase.",
+            )
+        unresolved = session.scalar(
+            select(IpFilingTransaction.id).where(
+                IpFilingTransaction.company_id == docket.company_id,
+                IpFilingTransaction.application_id == application.id,
+                IpFilingTransaction.attempt_key == payload.attempt_key,
+                IpFilingTransaction.transaction_kind.in_(("defect_recorded", "rejected")),
+            )
+        )
+        if unresolved is not None:
+            raise _filing_problem(
+                "ip_filing_attempt_has_unresolved_defect",
+                "A defective or rejected attempt must be corrected and acknowledged again.",
+            )
+        accepted_already = session.scalar(
+            select(IpFilingTransaction.id).where(
+                IpFilingTransaction.company_id == docket.company_id,
+                IpFilingTransaction.application_id == application.id,
+                IpFilingTransaction.transaction_kind == "accepted",
+            )
+        )
+        if accepted_already is not None:
+            raise _filing_problem(
+                "ip_filing_acceptance_already_recorded",
+                "This application already has an accepted filing transaction.",
+            )
+        event = _append_locked_event(
+            session,
+            context=context,
+            docket=docket,
+            payload=IpDocketEventCreateRequest(
+                expected_lifecycle_version=payload.expected_lifecycle_version,
+                expected_application_version=payload.expected_application_version,
+                application_id=application.id,
+                event_kind="filing",
+                source="manual",
+                source_reference=payload.external_reference,
+                effective_at=payload.occurred_at,
+                responsible_membership_id=context.membership.id,
+                reason=payload.authorized_confirmation,
+                evidence_refs=[
+                    payload.evidence_reference,
+                    str(payload.approval_reference),
+                ],
+                document_refs=payload.document_refs,
+                candidate_status="confirmed",
+                payload={
+                    "filing_transaction_id": transaction_id,
+                    "attempt_key": payload.attempt_key,
+                    "form_refs": payload.form_refs,
+                    "fee_evidence_refs": payload.fee_evidence_refs,
+                    "approval_refs": [payload.approval_reference],
+                    "origin_external_reference": payload.external_reference,
+                },
+            ),
+            authorized_filing_transaction_id=transaction_id,
+        )
+        _record_ip_docket_event_audit(
+            session,
+            context=context,
+            docket=docket,
+            row=event,
+        )
+        authorized_confirmation = payload.authorized_confirmation
+    row = IpFilingTransaction(
+        id=transaction_id,
+        company_id=docket.company_id,
+        docket_id=docket.id,
+        application_id=application.id,
+        transaction_kind=payload.transaction_kind,
+        attempt_key=payload.attempt_key,
+        idempotency_key=payload.idempotency_key,
+        request_fingerprint=fingerprint,
+        related_transaction_id=(related.id if related is not None else None),
+        filing_event_id=(event.id if event is not None else None),
+        external_reference=payload.external_reference,
+        evidence_reference=payload.evidence_reference,
+        occurred_at=payload.occurred_at,
+        authorized_confirmation=authorized_confirmation,
+        details_json=details,
+        recorded_by_membership_id=context.membership.id,
+    )
+    session.add(row)
+    session.flush()
+    record_from_context(
+        session,
+        context,
+        action="ip_filing.transaction_recorded",
+        target_type="ip_filing_transaction",
+        target_id=row.id,
+        matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
+        metadata={
+            "application_id": application.id,
+            "transaction_kind": row.transaction_kind,
+            "attempt_key": row.attempt_key,
+            "related_transaction_id": row.related_transaction_id,
+            "filing_event_id": row.filing_event_id,
+        },
+    )
+    session.commit()
+    session.refresh(application)
+    session.refresh(row)
+    if event is not None:
+        session.refresh(event)
+    return application, row, event, False
+
+
+def list_ip_filing_transactions(
+    session: Session,
+    *,
+    context: SessionContext,
+    application_id: str,
+) -> list[IpFilingTransaction]:
+    discovered = session.execute(
+        select(TrademarkApplication.docket_id).where(
+            TrademarkApplication.id == application_id,
+            TrademarkApplication.company_id == context.company.id,
+        )
+    ).one_or_none()
+    if discovered is None:
+        raise HTTPException(status_code=404, detail="Trademark application not found.")
+    docket = _authorized_lifecycle_docket(
+        session,
+        context=context,
+        docket_id=discovered.docket_id,
+        for_update=False,
+    )
+    return list(
+        session.scalars(
+            select(IpFilingTransaction)
+            .where(
+                IpFilingTransaction.company_id == docket.company_id,
+                IpFilingTransaction.docket_id == docket.id,
+                IpFilingTransaction.application_id == application_id,
+            )
+            .order_by(IpFilingTransaction.occurred_at, IpFilingTransaction.id)
+        )
+    )
 
 
 def _lifecycle_impacts(
@@ -1137,9 +1512,7 @@ def _remaining_operational_deadline_roles(
                 IpDeadlineCoverage.company_id == docket.company_id,
                 IpDeadlineCoverage.docket_id != docket.id,
                 IpDeadlineCoverage.matter_deadline_id.in_(deadline_ids),
-                IpDeadlineCoverage.coverage_status.notin_(
-                    ("inactive_lifecycle", "completed")
-                ),
+                IpDeadlineCoverage.coverage_status.notin_(("inactive_lifecycle", "completed")),
                 IpDocketRecord.company_id == docket.company_id,
                 IpDocketRecord.is_active.is_(True),
                 IpDocketRecord.archived_by_matter_disposal.is_(False),
@@ -1168,9 +1541,7 @@ def _remaining_operational_deadline_roles(
                 IpRelatedRightObligation.company_id == docket.company_id,
                 IpRelatedRightObligation.docket_id != docket.id,
                 IpRelatedRightObligation.matter_deadline_id.in_(deadline_ids),
-                IpRelatedRightObligation.status.notin_(
-                    ("completed", "cancelled_lifecycle")
-                ),
+                IpRelatedRightObligation.status.notin_(("completed", "cancelled_lifecycle")),
                 IpDocketRecord.company_id == docket.company_id,
                 IpDocketRecord.is_active.is_(True),
                 IpDocketRecord.archived_by_matter_disposal.is_(False),
@@ -1183,9 +1554,7 @@ def _remaining_operational_deadline_roles(
     )
     remaining_reference_ids = set(roles)
     remaining_reference_ids.update(
-        row.matter_deadline_id
-        for row in obligations
-        if row.matter_deadline_id is not None
+        row.matter_deadline_id for row in obligations if row.matter_deadline_id is not None
     )
     return roles, remaining_reference_ids
 
@@ -1241,9 +1610,7 @@ def _neutralize_direct_docket_work_and_projections(
             .where(
                 MatterTask.company_id == docket.company_id,
                 MatterTask.ip_docket_id == docket.id,
-                MatterTask.status.notin_(
-                    (MatterTaskStatus.COMPLETED, MatterTaskStatus.CANCELLED)
-                ),
+                MatterTask.status.notin_((MatterTaskStatus.COMPLETED, MatterTaskStatus.CANCELLED)),
             )
             .order_by(MatterTask.id)
             .with_for_update(of=MatterTask)
@@ -1473,21 +1840,16 @@ def _neutralize_direct_docket_work_and_projections(
             sync.neutralized_at = None
             sync.updated_at = now
             continue
-        if (
-            sync.neutralized_by_ip_lifecycle_event_id is not None
-            and sync.sync_status
-            in (
-                CalendarEventSyncStatus.DELETE_PENDING,
-                CalendarEventSyncStatus.DELETED,
-            )
+        if sync.neutralized_by_ip_lifecycle_event_id is not None and sync.sync_status in (
+            CalendarEventSyncStatus.DELETE_PENDING,
+            CalendarEventSyncStatus.DELETED,
         ):
             # The first lifecycle transition remains the immutable reason this
             # projection was withdrawn; a later controlled reopen must not
             # rewrite that provenance.
             continue
         source_survives = (
-            sync.source_type == "matter_deadline"
-            and sync.source_id in surviving_deadline_ids
+            sync.source_type == "matter_deadline" and sync.source_id in surviving_deadline_ids
         )
         if sync.provider_event_id:
             sync.sync_status = CalendarEventSyncStatus.DELETE_PENDING
@@ -1525,9 +1887,7 @@ def _neutralize_direct_docket_work_and_projections(
             created_syncs += 1
 
     return {
-        "cancelled_foreign_associate_instructions": len(
-            foreign_associate_instructions
-        ),
+        "cancelled_foreign_associate_instructions": len(foreign_associate_instructions),
         "cancelled_shared_tasks": len(tasks),
         "cancelled_shared_hearings": len(hearings),
         "cancelled_hearing_reminders": len(reminders),
@@ -1593,9 +1953,7 @@ def transition_ip_docket_lifecycle(
         )
     impacts = _lifecycle_impacts(session, docket=docket, payload=payload)
     blocker_codes = {row.blocker_code for row in impacts if row.blocker_code}
-    missing_acknowledgements = sorted(
-        blocker_codes - set(payload.acknowledged_exception_codes)
-    )
+    missing_acknowledgements = sorted(blocker_codes - set(payload.acknowledged_exception_codes))
     if missing_acknowledgements:
         raise HTTPException(
             status_code=409,
@@ -1699,9 +2057,7 @@ def transition_ip_docket_lifecycle(
     )
     legal_deadline_ids = {row.id for row in live_legal_deadlines}
     legal_projection_deadline_ids = {
-        row.matter_deadline_id
-        for row in live_legal_deadlines
-        if row.matter_deadline_id is not None
+        row.matter_deadline_id for row in live_legal_deadlines if row.matter_deadline_id is not None
     }
     neutralized_coverages = 0
     neutralized_obligations = 0
@@ -1715,9 +2071,7 @@ def transition_ip_docket_lifecycle(
             select(IpDeadlineCoverage.id, IpDeadlineCoverage.matter_deadline_id).where(
                 IpDeadlineCoverage.company_id == docket.company_id,
                 IpDeadlineCoverage.docket_id == docket.id,
-                IpDeadlineCoverage.coverage_status.notin_(
-                    ("inactive_lifecycle", "completed")
-                ),
+                IpDeadlineCoverage.coverage_status.notin_(("inactive_lifecycle", "completed")),
             )
         ).all()
         obligation_refs = session.execute(
@@ -1727,9 +2081,7 @@ def transition_ip_docket_lifecycle(
             ).where(
                 IpRelatedRightObligation.company_id == docket.company_id,
                 IpRelatedRightObligation.docket_id == docket.id,
-                IpRelatedRightObligation.status.notin_(
-                    ("completed", "cancelled_lifecycle")
-                ),
+                IpRelatedRightObligation.status.notin_(("completed", "cancelled_lifecycle")),
             )
         ).all()
         referenced_deadline_ids = {
@@ -1742,9 +2094,7 @@ def transition_ip_docket_lifecycle(
         directly_owned_deadline = and_(
             MatterDeadline.ip_docket_id == docket.id,
             MatterDeadline.matter_id.is_(None),
-            MatterDeadline.status.in_(
-                (MatterDeadlineStatus.OPEN, MatterDeadlineStatus.MISSED)
-            ),
+            MatterDeadline.status.in_((MatterDeadlineStatus.OPEN, MatterDeadlineStatus.MISSED)),
             MatterDeadline.neutralized_at.is_(None),
         )
         if docket.matter_id is not None:
@@ -1802,9 +2152,7 @@ def transition_ip_docket_lifecycle(
                     IpDeadlineCoverage.company_id == docket.company_id,
                     IpDeadlineCoverage.docket_id.in_(operational_sibling_docket_ids),
                     IpDeadlineCoverage.matter_deadline_id.in_(locked_deadline_ids),
-                    IpDeadlineCoverage.coverage_status.notin_(
-                        ("inactive_lifecycle", "completed")
-                    ),
+                    IpDeadlineCoverage.coverage_status.notin_(("inactive_lifecycle", "completed")),
                 )
             ).all()
             if operational_sibling_docket_ids and locked_deadline_ids
@@ -1818,24 +2166,16 @@ def transition_ip_docket_lifecycle(
                     IpRelatedRightObligation.matter_deadline_id,
                 ).where(
                     IpRelatedRightObligation.company_id == docket.company_id,
-                    IpRelatedRightObligation.docket_id.in_(
-                        operational_sibling_docket_ids
-                    ),
-                    IpRelatedRightObligation.matter_deadline_id.in_(
-                        locked_deadline_ids
-                    ),
-                    IpRelatedRightObligation.status.notin_(
-                        ("completed", "cancelled_lifecycle")
-                    ),
+                    IpRelatedRightObligation.docket_id.in_(operational_sibling_docket_ids),
+                    IpRelatedRightObligation.matter_deadline_id.in_(locked_deadline_ids),
+                    IpRelatedRightObligation.status.notin_(("completed", "cancelled_lifecycle")),
                 )
             ).all()
             if operational_sibling_docket_ids and locked_deadline_ids
             else []
         )
 
-        target_coverage_ids = {
-            row_id for row_id, _deadline_id in coverage_refs
-        }
+        target_coverage_ids = {row_id for row_id, _deadline_id in coverage_refs}
         sibling_coverage_ids = {
             row_id for row_id, _docket_id, _deadline_id in sibling_coverage_refs
         }
@@ -1877,9 +2217,7 @@ def transition_ip_docket_lifecycle(
             coverage.updated_at = datetime.now(UTC)
         neutralized_coverages = len(coverages)
 
-        target_obligation_ids = {
-            row_id for row_id, _deadline_id in obligation_refs
-        }
+        target_obligation_ids = {row_id for row_id, _deadline_id in obligation_refs}
         sibling_obligation_ids = {
             row_id for row_id, _docket_id, _deadline_id in sibling_obligation_refs
         }
@@ -1920,9 +2258,7 @@ def transition_ip_docket_lifecycle(
             obligation.updated_at = datetime.now(UTC)
         neutralized_obligations = len(obligations)
 
-        sibling_deadline_ids = (
-            sibling_coverage_deadline_ids | sibling_obligation_deadline_ids
-        )
+        sibling_deadline_ids = sibling_coverage_deadline_ids | sibling_obligation_deadline_ids
         for deadline in deadlines:
             is_directly_owned = deadline.ip_docket_id == docket.id and deadline.matter_id is None
             if (
@@ -1952,9 +2288,7 @@ def transition_ip_docket_lifecycle(
             ).where(
                 IpDeadlineCoverage.company_id == docket.company_id,
                 IpDeadlineCoverage.docket_id == docket.id,
-                IpDeadlineCoverage.coverage_status.notin_(
-                    ("inactive_lifecycle", "completed")
-                ),
+                IpDeadlineCoverage.coverage_status.notin_(("inactive_lifecycle", "completed")),
             )
         ).all()
         legacy_obligation_refs = session.execute(
@@ -1964,9 +2298,7 @@ def transition_ip_docket_lifecycle(
             ).where(
                 IpRelatedRightObligation.company_id == docket.company_id,
                 IpRelatedRightObligation.docket_id == docket.id,
-                IpRelatedRightObligation.status.notin_(
-                    ("completed", "cancelled_lifecycle")
-                ),
+                IpRelatedRightObligation.status.notin_(("completed", "cancelled_lifecycle")),
             )
         ).all()
         calendar_deadline_ids.update(
@@ -2024,18 +2356,16 @@ def transition_ip_docket_lifecycle(
             else []
         )
         for coverage in legacy_coverages:
-            if (
-                coverage.docket_id == docket.id
-                and coverage.coverage_status not in ("inactive_lifecycle", "completed")
+            if coverage.docket_id == docket.id and coverage.coverage_status not in (
+                "inactive_lifecycle",
+                "completed",
             ):
                 coverage.coverage_status = "inactive_lifecycle"
                 coverage.calendar_projection_status = "inactive_lifecycle"
                 coverage.updated_at = neutralized_at
         neutralized_coverages = len(legacy_coverages)
 
-        legacy_obligation_ids = {
-            row_id for row_id, _deadline_id in legacy_obligation_refs
-        }
+        legacy_obligation_ids = {row_id for row_id, _deadline_id in legacy_obligation_refs}
         legacy_obligations = (
             list(
                 session.scalars(
@@ -2053,9 +2383,9 @@ def transition_ip_docket_lifecycle(
             else []
         )
         for obligation in legacy_obligations:
-            if (
-                obligation.docket_id == docket.id
-                and obligation.status not in ("completed", "cancelled_lifecycle")
+            if obligation.docket_id == docket.id and obligation.status not in (
+                "completed",
+                "cancelled_lifecycle",
             ):
                 obligation.status = "cancelled_lifecycle"
                 obligation.updated_at = neutralized_at
@@ -2070,9 +2400,7 @@ def transition_ip_docket_lifecycle(
             deadline_ids=calendar_deadline_ids,
         )
         for deadline in legacy_deadlines:
-            is_directly_owned = (
-                deadline.ip_docket_id == docket.id and deadline.matter_id is None
-            )
+            is_directly_owned = deadline.ip_docket_id == docket.id and deadline.matter_id is None
             if (
                 deadline.company_id == docket.company_id
                 and (
@@ -2140,9 +2468,7 @@ def transition_ip_docket_lifecycle(
         "neutralized_coverages": neutralized_coverages,
         "neutralized_obligations": neutralized_obligations,
         "cancelled_shared_deadlines": cancelled_deadlines,
-        "neutralized_responsibility_assignments": (
-            neutralized_responsibility_assignments
-        ),
+        "neutralized_responsibility_assignments": (neutralized_responsibility_assignments),
         **direct_work_counts,
         "final_legal_disposition": will_be_terminal,
     }
@@ -2159,9 +2485,7 @@ def transition_ip_docket_lifecycle(
         target_type="ip_docket",
         target_id=docket.id,
         target_version=str(docket.lifecycle_version),
-        reason_code=(
-            "ip_docket_terminal" if will_be_terminal else "ip_docket_reopened_reindex"
-        ),
+        reason_code=("ip_docket_terminal" if will_be_terminal else "ip_docket_reopened_reindex"),
     )
     record_from_context(
         session,
@@ -2181,9 +2505,7 @@ def transition_ip_docket_lifecycle(
             "neutralized_coverages": neutralized_coverages,
             "neutralized_obligations": neutralized_obligations,
             "cancelled_shared_deadlines": cancelled_deadlines,
-            "neutralized_responsibility_assignments": (
-                neutralized_responsibility_assignments
-            ),
+            "neutralized_responsibility_assignments": (neutralized_responsibility_assignments),
             **direct_work_counts,
         },
     )

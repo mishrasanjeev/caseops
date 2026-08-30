@@ -141,9 +141,9 @@ async function seedLinkedIpDocket(api: APIRequestContext, token: string, members
   const application = await api.post(`${apiBaseUrl}/api/ip/dockets/${docketId}/applications`, {
     headers,
     data: {
-      asset_id: assetId, office: "IP India", jurisdiction: "IN", filing_phase: "draft",
+      asset_id: assetId, office: "IP India", jurisdiction: "IN", filing_phase: "filed",
       source_pending_identifier_allocation: false,
-      application_number: { raw_value: unique("TM-E2E"), source: "manual_e2e", effective_from: "2026-08-07", is_primary: true },
+      application_number: { raw_value: unique("TM-E2E"), source: "historical_registry_fixture", effective_from: "2026-08-07", is_primary: true },
     },
   });
   expect(application.status()).toBe(201);
