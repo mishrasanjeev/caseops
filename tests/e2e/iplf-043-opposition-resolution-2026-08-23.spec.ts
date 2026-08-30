@@ -286,7 +286,7 @@ test("IPLF-043 carries a shared hearing through order and linked appeal", async 
   expect(hearingPending.status(), await hearingPending.text()).toBe(200);
 
   await signIn(page, tenant);
-  await page.goto(`/app/ip?docket=${application.docket.id}`);
+  await page.goto(`/app/ip?docket=${application.docket.id}&view=proceedings`);
   const specialized = page.getByTestId("ip-opposition-specialized-paths");
   await expect(specialized).toBeVisible();
   await specialized.getByLabel("Class 9 decision").selectOption("continuing");
