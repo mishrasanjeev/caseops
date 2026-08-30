@@ -128,7 +128,7 @@ Generated; do not edit.
 | IPLF-064B | derived | IPLF-064 | M6 | AI-GUIDE-06 | UJ-23-EXC-03, UJ-23-NORMAL | implemented | passed | deployment_verified |
 | IPLF-065A | derived | IPLF-065 | M6 |  |  | implemented | passed | ready_for_review |
 | IPLF-065B | derived | IPLF-065 | M6 | AI-GUIDE-04, AI-GUIDE-05, AI-GUIDE-07, AI-GUIDE-10, AI-REV-01, AI-REV-02, AI-REV-03, AI-REV-04, AI-REV-05, AI-REV-06, AI-REV-07, AI-REV-08, AI-REV-09, AI-REV-10 | UJ-18-EXC-01, UJ-18-EXC-02, UJ-18-EXC-03, UJ-18-NORMAL, UJ-22-NORMAL, UJ-23-EXC-02, UJ-23-NORMAL | implemented | passed | ready_for_review |
-| IPLF-066A | derived | IPLF-066 | M6 |  |  | implemented | passed | ready_for_review |
+| IPLF-066A | derived | IPLF-066 | M6 |  |  | implemented | passed | blocked |
 | IPLF-066B | derived | IPLF-066 | M6 | AI-GUIDE-04, AI-GUIDE-05, AI-GUIDE-08, AI-GUIDE-12, IP-ACCESS-01, IP-ACCESS-02, IP-ACCESS-03, IP-ACCESS-04, IP-ACCESS-05, IP-ACCESS-06, IP-ACCESS-07, IP-ACCESS-08, SEARCH-ACL-01, SEARCH-ACL-02, SEARCH-ACL-03, SEARCH-ACL-04, SEARCH-ACL-05, SEARCH-ACL-06, SEARCH-ACL-07, SEARCH-ACL-08, SEARCH-ACL-09, SEARCH-ACL-10, SEARCH-ACL-11, SEARCH-ACL-12 | UJ-22-NORMAL, UJ-23-EXC-01, UJ-23-EXC-02, UJ-23-EXC-03, UJ-23-NORMAL, UJ-66-EXC-01, UJ-66-EXC-02, UJ-66-EXC-03, UJ-66-EXC-04, UJ-66-NORMAL | not_started | not_run | blocked |
 | IPLF-070A | derived | IPLF-070 | M7-M10 |  |  | not_started | not_run | blocked |
 | IPLF-070B | derived | IPLF-070 | M7-M10 | COMP-01, COMP-02, COMP-03, COMP-04, COMP-05, COMP-06, COMP-07, COMP-08 |  | not_started | not_run | blocked |
