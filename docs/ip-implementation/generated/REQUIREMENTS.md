@@ -110,30 +110,30 @@ Generated; do not edit.
 | IP-PROS-10 | IP-PROS | IPLF-022B, IPLF-033B | 3 | 1 | implemented | passed | blocked | false |
 | IP-PROS-11 | IP-PROS | IPLF-022B, IPLF-033A | 1 | 2 | implemented | passed | blocked | false |
 | IP-PROS-12 | IP-PROS | IPLF-022B, IPLF-033B | 3 | 1 | implemented | passed | blocked | false |
-| IP-OPP-01 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 18 | 0 | in_progress | not_run | blocked | false |
-| IP-OPP-02 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 18 | 0 | in_progress | not_run | blocked | false |
-| IP-OPP-03 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 18 | 0 | in_progress | not_run | blocked | false |
-| IP-OPP-04 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 18 | 0 | in_progress | not_run | blocked | false |
-| IP-OPP-05 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 18 | 0 | in_progress | not_run | blocked | false |
-| IP-OPP-06 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 18 | 0 | in_progress | not_run | blocked | false |
-| IP-OPP-07 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 18 | 0 | in_progress | not_run | blocked | false |
-| IP-OPP-08 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 18 | 0 | in_progress | not_run | blocked | false |
-| IP-OPP-09 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 18 | 0 | in_progress | not_run | blocked | false |
-| IP-OPP-10 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 18 | 0 | in_progress | not_run | blocked | false |
-| IP-OPP-11 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 18 | 0 | in_progress | not_run | blocked | false |
-| IP-OPP-12 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 18 | 0 | in_progress | not_run | blocked | false |
-| IP-OPP-13 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 18 | 0 | in_progress | not_run | blocked | false |
-| IP-OPP-14 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 18 | 0 | in_progress | not_run | blocked | false |
-| IP-OPP-15 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 21 | 1 | in_progress | not_run | blocked | false |
-| IP-OPP-16 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 18 | 0 | in_progress | not_run | blocked | false |
-| IP-OPP-17 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 18 | 0 | in_progress | not_run | blocked | false |
-| IP-OPP-18 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 18 | 0 | in_progress | not_run | blocked | false |
-| IP-OPP-19 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 18 | 0 | in_progress | not_run | blocked | false |
-| IP-OPP-20 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 21 | 1 | in_progress | not_run | blocked | false |
-| IP-OPP-21 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 21 | 1 | in_progress | not_run | blocked | false |
-| IP-OPP-22 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 21 | 1 | in_progress | not_run | blocked | false |
-| IP-OPP-23 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 21 | 1 | in_progress | not_run | blocked | false |
-| IP-OPP-24 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 21 | 1 | in_progress | not_run | blocked | false |
+| IP-OPP-01 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 9 | 6 | implemented | passed | blocked | false |
+| IP-OPP-02 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 9 | 6 | implemented | passed | blocked | false |
+| IP-OPP-03 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 9 | 6 | implemented | passed | blocked | false |
+| IP-OPP-04 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 9 | 6 | implemented | passed | blocked | false |
+| IP-OPP-05 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 9 | 6 | implemented | passed | blocked | false |
+| IP-OPP-06 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 9 | 6 | implemented | passed | blocked | false |
+| IP-OPP-07 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 9 | 6 | implemented | passed | blocked | false |
+| IP-OPP-08 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 9 | 6 | implemented | passed | blocked | false |
+| IP-OPP-09 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 9 | 6 | implemented | passed | blocked | false |
+| IP-OPP-10 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 9 | 6 | implemented | passed | blocked | false |
+| IP-OPP-11 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 9 | 6 | implemented | passed | blocked | false |
+| IP-OPP-12 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 9 | 6 | implemented | passed | blocked | false |
+| IP-OPP-13 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 9 | 6 | implemented | passed | blocked | false |
+| IP-OPP-14 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 9 | 6 | implemented | passed | blocked | false |
+| IP-OPP-15 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 9 | 6 | implemented | passed | blocked | false |
+| IP-OPP-16 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 9 | 6 | implemented | passed | blocked | false |
+| IP-OPP-17 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 9 | 6 | implemented | passed | blocked | false |
+| IP-OPP-18 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 9 | 6 | implemented | passed | blocked | false |
+| IP-OPP-19 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 9 | 6 | implemented | passed | blocked | false |
+| IP-OPP-20 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 9 | 6 | implemented | passed | blocked | false |
+| IP-OPP-21 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 9 | 6 | implemented | passed | blocked | false |
+| IP-OPP-22 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 9 | 6 | implemented | passed | blocked | false |
+| IP-OPP-23 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 9 | 6 | implemented | passed | blocked | false |
+| IP-OPP-24 | IP-OPP | IPLF-040B, IPLF-041B, IPLF-042B, IPLF-043B, IPLF-048B, IPLF-049B | 9 | 6 | implemented | passed | blocked | false |
 | IP-DL-01 | IP-DL | IPLF-023B, IPLF-034B | 8 | 2 | implemented | passed | blocked | false |
 | IP-DL-02 | IP-DL | IPLF-023B, IPLF-034B | 8 | 2 | implemented | passed | blocked | false |
 | IP-DL-03 | IP-DL | IPLF-023B, IPLF-034B | 8 | 2 | implemented | passed | blocked | false |
