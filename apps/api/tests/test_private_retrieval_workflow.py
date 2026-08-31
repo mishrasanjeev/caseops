@@ -57,6 +57,7 @@ from caseops_api.services.private_retrieval import (
 )
 from caseops_api.services.private_retrieval_jobs import (
     MAX_PRIVATE_PROVIDER_BATCH,
+    MAX_PRIVATE_REBUILD_PROJECTIONS,
     inspect_private_index_integrity,
     list_private_maintenance_companies,
     process_pending_private_projection_events,
@@ -744,6 +745,16 @@ def test_pending_event_worker_exposes_lag_then_tombstones_all_saved_candidates(
         assert after.tombstoned_projection_count >= 1
 
 
+def test_private_rebuild_capacity_covers_observed_production_scale_but_stays_bounded() -> None:
+    # The 2026-09-01 production incident contained 8,411 active matters,
+    # 1,406 indexed attachment chunks, two dockets and one eligible document
+    # chunk. The old 2,000-row ceiling made the automatic repair impossible.
+    observed_production_projection_count = 9_820
+
+    assert MAX_PRIVATE_REBUILD_PROJECTIONS >= observed_production_projection_count * 2
+    assert MAX_PRIVATE_REBUILD_PROJECTIONS == 20_000
+
+
 def test_pending_event_worker_can_release_generation_locks_after_each_event(
     client: TestClient,
     monkeypatch,
@@ -1186,9 +1197,12 @@ def test_source_change_during_unlocked_enumeration_fences_stale_rebuild(
         "_private_projection_inputs",
         change_source_then_enumerate,
     )
-    with get_session_factory()() as session, pytest.raises(
-        PrivateRetrievalInvariantError,
-        match="stale private projection writer",
+    with (
+        get_session_factory()() as session,
+        pytest.raises(
+            PrivateRetrievalInvariantError,
+            match="stale private projection writer",
+        ),
     ):
         rebuild_private_index(session, company_id=company_id, activate=True)
 

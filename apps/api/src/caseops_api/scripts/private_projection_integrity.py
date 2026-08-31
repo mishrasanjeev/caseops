@@ -108,9 +108,7 @@ def _maintain(
                         "applied_event_count": len(applied),
                         "rebuilt": rebuilt,
                         "lag_slo_breached_before_recovery": breached_before_recovery,
-                        "oldest_pending_lag_seconds_before": (
-                            before.oldest_pending_lag_seconds
-                        ),
+                        "oldest_pending_lag_seconds_before": (before.oldest_pending_lag_seconds),
                         "pending_event_count_after": after.pending_event_count,
                         "failed_event_count_after": after.failed_event_count,
                         "blockers_after": list(after.blockers),
@@ -129,6 +127,7 @@ def _maintain(
                     "applied_event_count": 0,
                     "rebuilt": False,
                     "error_code": type(exc).__name__[:80],
+                    "error_detail": str(exc)[:240],
                     "blockers_after": ["tenant_maintenance_error"],
                 }
             )
@@ -232,6 +231,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             "status": "error",
             "release_blocked": True,
             "error_code": type(exc).__name__[:80],
+            "error_detail": str(exc)[:240],
         }
 
     payload.update(

@@ -146,6 +146,7 @@ def test_maintenance_isolates_one_tenant_failure_and_continues(monkeypatch) -> N
             "applied_event_count": 0,
             "rebuilt": False,
             "error_code": "RuntimeError",
+            "error_detail": "deterministic tenant failure",
             "blockers_after": ["tenant_maintenance_error"],
         },
         {

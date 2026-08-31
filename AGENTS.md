@@ -104,3 +104,8 @@ requirements when using the fallback.
   introduced optional production gate must verify its release-owned config is
   present after that checkout and must never execute newer test code against an
   older serving release. Canonical deploy dispatch still requires current main.
+- Private-projection rebuild bounds must be derived from observed production
+  tenant volume, not small fixture assumptions. The 2026-09-01 production
+  baseline was 9,820 eligible projections; keep the 20,000-row cap, 50-row
+  commit batches, tenant isolation, and explicit bounded error detail under
+  regression. Never silently truncate a rebuild or hold parent locks across it.

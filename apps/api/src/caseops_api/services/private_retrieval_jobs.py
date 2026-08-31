@@ -51,7 +51,10 @@ from caseops_api.services.private_retrieval import (
     upsert_private_projection,
 )
 
-MAX_PRIVATE_REBUILD_PROJECTIONS = 2_000
+# Production had 9,820 eligible rows for one tenant on 2026-09-01. Keep the
+# rebuild bounded, but size the bound from observed tenant volume with enough
+# headroom that the automatic repair path can actually finish.
+MAX_PRIVATE_REBUILD_PROJECTIONS = 20_000
 MAX_PRIVATE_PROVIDER_BATCH = 32
 MAX_PRIVATE_WRITE_BATCH = 50
 MAX_PRIVATE_EMBED_TEXT_CHARS = 4_000
@@ -593,7 +596,7 @@ def rebuild_private_index(
     if unresolved_event_count:
         raise PrivateRetrievalInvariantError(
             "Private rebuild requires every projection event to reach a terminal applied state."
-    )
+        )
     active = ensure_active_private_generation(session, company_id=company_id)
     shadow = create_shadow_private_generation(session, company_id=company_id)
     previous_generation_id = str(active.id)
