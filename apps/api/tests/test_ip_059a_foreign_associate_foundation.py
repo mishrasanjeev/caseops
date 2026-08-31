@@ -553,6 +553,60 @@ def test_foreign_associate_contract_separates_delivery_ack_and_evidence(
     assert approved.status_code == 201, approved.text
     assert approved.json()["instruction"]["status"] == "approved"
 
+    active_dispatch_estimate_id = _supersede_cost_item(
+        client,
+        headers=headers,
+        docket_id=docket["id"],
+        source_cost_item_id=corrected_estimate_id,
+        reason="The associate corrected its approved estimate before dispatch.",
+        evidence_reference="correction:associate-estimate-pre-dispatch",
+        replacement={
+            "category": "associate_fee",
+            "description": "Current US filing estimate for dispatch",
+            "amount_minor": 250000,
+            "currency": "USD",
+            "billable": True,
+            "cost_nature": "estimate",
+            "evidence_reference": "Liberty estimate dated 27 August 2026",
+        },
+    )
+    stale_estimate_dispatch = _transaction(
+        client,
+        headers=headers,
+        docket_id=docket["id"],
+        instruction_id=instruction["id"],
+        version=2,
+        membership_id=membership_id,
+        kind="dispatch",
+        extra={"dispatch_communication_id": records["communication_id"]},
+    )
+    assert stale_estimate_dispatch.status_code == 422
+    assert "estimate cost item is missing, inactive" in stale_estimate_dispatch.text
+    current_estimate = _transaction(
+        client,
+        headers=headers,
+        docket_id=docket["id"],
+        instruction_id=instruction["id"],
+        version=2,
+        membership_id=membership_id,
+        kind="approve_fee_change",
+        extra={
+            "replacement_estimate_cost_item_id": active_dispatch_estimate_id,
+            "replacement_estimate_terms": {
+                "tax_type": "sales_tax",
+                "tax_rate_percent": 8.25,
+                "tax_inclusive": False,
+                "tax_evidence_reference": "Current associate tax schedule",
+                "assumptions": ["One class included"],
+            },
+            "evidence_refs": ["Corrected estimate email"],
+        },
+    )
+    assert current_estimate.status_code == 201, current_estimate.text
+    assert current_estimate.json()["instruction"]["estimate_cost_item_id"] == (
+        active_dispatch_estimate_id
+    )
+
     stale = _transaction(
         client,
         headers=headers,
@@ -571,7 +625,7 @@ def test_foreign_associate_contract_separates_delivery_ack_and_evidence(
         headers=headers,
         docket_id=docket["id"],
         instruction_id=instruction["id"],
-        version=2,
+        version=3,
         membership_id=membership_id,
         kind="dispatch",
         extra={"dispatch_communication_id": records["pending_communication_id"]},
@@ -588,7 +642,7 @@ def test_foreign_associate_contract_separates_delivery_ack_and_evidence(
         headers=headers,
         docket_id=docket["id"],
         instruction_id=instruction["id"],
-        version=2,
+        version=3,
         membership_id=membership_id,
         kind="dispatch",
         extra={"dispatch_communication_id": records["pending_communication_id"]},
@@ -601,7 +655,7 @@ def test_foreign_associate_contract_separates_delivery_ack_and_evidence(
         headers=headers,
         docket_id=docket["id"],
         instruction_id=instruction["id"],
-        version=2,
+        version=3,
         membership_id=membership_id,
         kind="dispatch",
         extra={
@@ -616,7 +670,7 @@ def test_foreign_associate_contract_separates_delivery_ack_and_evidence(
         headers=headers,
         docket_id=docket["id"],
         instruction_id=instruction["id"],
-        version=2,
+        version=3,
         membership_id=membership_id,
         kind="dispatch",
         extra={"dispatch_communication_id": records["communication_id"]},
@@ -649,7 +703,7 @@ def test_foreign_associate_contract_separates_delivery_ack_and_evidence(
         headers=headers,
         docket_id=docket["id"],
         instruction_id=instruction["id"],
-        version=3,
+        version=4,
         membership_id=membership_id,
         kind="acknowledge",
         extra={
@@ -665,7 +719,7 @@ def test_foreign_associate_contract_separates_delivery_ack_and_evidence(
         headers=headers,
         docket_id=docket["id"],
         instruction_id=instruction["id"],
-        version=4,
+        version=5,
         membership_id=membership_id,
         kind="approve_fee_change",
         extra={
@@ -691,7 +745,7 @@ def test_foreign_associate_contract_separates_delivery_ack_and_evidence(
         headers=headers,
         docket_id=docket["id"],
         instruction_id=instruction["id"],
-        version=5,
+        version=6,
         membership_id=membership_id,
         kind="report_filing",
         extra={
@@ -714,7 +768,7 @@ def test_foreign_associate_contract_separates_delivery_ack_and_evidence(
         headers=headers,
         docket_id=docket["id"],
         instruction_id=instruction["id"],
-        version=6,
+        version=7,
         membership_id=membership_id,
         kind="verify_filing_evidence",
         extra={"evidence_refs": ["Associate filing report FR-101"]},
@@ -726,7 +780,7 @@ def test_foreign_associate_contract_separates_delivery_ack_and_evidence(
         headers=headers,
         docket_id=docket["id"],
         instruction_id=instruction["id"],
-        version=6,
+        version=7,
         membership_id=membership_id,
         kind="verify_filing_evidence",
         extra={"evidence_refs": ["USPTO TSDR receipt snapshot TS-101"]},
@@ -757,7 +811,7 @@ def test_foreign_associate_contract_separates_delivery_ack_and_evidence(
         headers=headers,
         docket_id=docket["id"],
         instruction_id=instruction["id"],
-        version=7,
+        version=8,
         membership_id=membership_id,
         kind="link_invoice",
         extra={
@@ -795,7 +849,7 @@ def test_foreign_associate_contract_separates_delivery_ack_and_evidence(
         headers=headers,
         docket_id=docket["id"],
         instruction_id=instruction["id"],
-        version=7,
+        version=8,
         membership_id=membership_id,
         kind="link_invoice",
         extra={
@@ -810,7 +864,7 @@ def test_foreign_associate_contract_separates_delivery_ack_and_evidence(
         headers=headers,
         docket_id=docket["id"],
         instruction_id=instruction["id"],
-        version=8,
+        version=9,
         membership_id=membership_id,
         kind="complete",
     )
@@ -825,12 +879,62 @@ def test_foreign_associate_contract_separates_delivery_ack_and_evidence(
         spend.paid_on = datetime.now(UTC).date()
         actual.reconciliation_status = "matched"
         session.commit()
+    active_actual_id = _supersede_cost_item(
+        client,
+        headers=headers,
+        docket_id=docket["id"],
+        source_cost_item_id=records["actual_id"],
+        reason="The linked invoice actual was corrected before completion.",
+        evidence_reference="correction:associate-invoice-pre-completion",
+        replacement={
+            "category": "associate_fee",
+            "description": "Current US filing actual",
+            "amount_minor": 265000,
+            "currency": "USD",
+            "billable": True,
+            "cost_nature": "actual",
+            "evidence_reference": "Liberty corrected invoice INV-101",
+            "billing_link_type": "invoice",
+            "billing_link_id": "client-invoice-101",
+        },
+    )
+    stale_actual_completion = _transaction(
+        client,
+        headers=headers,
+        docket_id=docket["id"],
+        instruction_id=instruction["id"],
+        version=9,
+        membership_id=membership_id,
+        kind="complete",
+    )
+    assert stale_actual_completion.status_code == 422
+    assert "actual cost item is missing, inactive" in stale_actual_completion.text
+    relinked_actual = _transaction(
+        client,
+        headers=headers,
+        docket_id=docket["id"],
+        instruction_id=instruction["id"],
+        version=9,
+        membership_id=membership_id,
+        kind="link_invoice",
+        extra={
+            "actual_cost_item_id": active_actual_id,
+            "spend_record_id": records["spend_id"],
+            "evidence_refs": ["Corrected associate invoice INV-101"],
+        },
+    )
+    assert relinked_actual.status_code == 201, relinked_actual.text
+    with get_session_factory()() as session:
+        active_actual = session.get(IpCostItem, active_actual_id)
+        assert active_actual is not None
+        active_actual.reconciliation_status = "matched"
+        session.commit()
     completed = _transaction(
         client,
         headers=headers,
         docket_id=docket["id"],
         instruction_id=instruction["id"],
-        version=8,
+        version=10,
         membership_id=membership_id,
         kind="complete",
     )
@@ -864,7 +968,7 @@ def test_foreign_associate_contract_separates_delivery_ack_and_evidence(
 
     with get_session_factory()() as session:
         stored = session.get(IpForeignAssociateInstruction, instruction["id"])
-        assert stored is not None and stored.row_version == 9
+        assert stored is not None and stored.row_version == 11
         events = list(
             session.scalars(
                 select(IpDocketEvent).where(
@@ -872,7 +976,7 @@ def test_foreign_associate_contract_separates_delivery_ack_and_evidence(
                 )
             )
         )
-        assert len(events) == 9
+        assert len(events) == 11
         audits = list(
             session.scalars(
                 select(AuditEvent).where(

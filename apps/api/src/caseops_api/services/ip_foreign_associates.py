@@ -848,6 +848,13 @@ def record_ip_foreign_associate_transaction(
         row.approved_by_membership_id = context.membership.id
         row.approved_at = payload.effective_at
     elif payload.transaction_kind == "dispatch":
+        _require_cost_item(
+            session,
+            company_id=context.company.id,
+            docket_id=docket.id,
+            cost_item_id=row.estimate_cost_item_id,
+            nature="estimate",
+        )
         associate = _require_approved_associate(
             session,
             company_id=context.company.id,
