@@ -20,6 +20,12 @@ def _read_repo_text(relative_path: str) -> str:
     return (REPO_ROOT / relative_path).read_text(encoding="utf-8")
 
 
+def test_shell_scripts_are_checked_out_with_lf_line_endings() -> None:
+    attributes = _read_repo_text(".gitattributes").splitlines()
+
+    assert "*.sh text eol=lf" in attributes
+
+
 def test_web_gcloudignore_blocks_local_build_artifacts() -> None:
     """Regression for the 2026-06-26 Windows deploy archive failure.
 
@@ -381,6 +387,11 @@ def test_workstation_docker_gate_is_migration_first_and_exact_release() -> None:
     )
     assert '-ArgumentList @("`"$TestApiProxyScript`"", $TestApiPort, $ApiPort)' in docker_script
     assert "if ($PlaywrightArgs.Count -eq 0)" in docker_script
+    assert 'Get-Content -LiteralPath (Join-Path $RepoRoot ".nvmrc")' in docker_script
+    assert "$ActualNodeVersion -ne $PinnedNodeVersion" in docker_script
+    assert "Activate the pinned runtime before retrying" in docker_script
+    assert "& $NpmPath ci --no-audit --no-fund" in docker_script
+    assert docker_script.count("& $NpxPath playwright test") == 4
     assert "--project=app-chromium --shard=1/2" in docker_script
     assert "--project=app-chromium --shard=2/2" in docker_script
     assert "--project=app-mobile" in docker_script
@@ -409,6 +420,18 @@ def test_workstation_docker_gate_is_migration_first_and_exact_release() -> None:
     assert "--memory-swap 512m" in docker_script
     assert "label=com.docker.compose.network=default" in docker_script
     assert "exceeded its 512 MiB production job ceiling" in docker_script
+    assert "function Get-ComposeServiceState" in docker_script
+    assert "stop --timeout 30 worker" in docker_script
+    assert "start worker" in docker_script
+    assert '$WorkerStateAfterRestart -ne "running"' in docker_script
+    assert '$WorkerStateAfterPlaywright -ne "running"' in docker_script
+    assert docker_script.index("stop --timeout 30 worker") < docker_script.index(
+        "-m postgres"
+    )
+    assert docker_script.index("-m postgres") < docker_script.index("start worker")
+    assert docker_script.index("start worker") < docker_script.index(
+        '$WorkerStateAfterPlaywright = Get-ComposeServiceState'
+    )
 
     assert "globalSetup: undefined" in playwright_config
     assert "webServer: undefined" in playwright_config
@@ -940,6 +963,7 @@ def _run_deploy_with_fakes(
     qa_already_completed: bool = False,
     qa_already_failed: bool = False,
     migration_timeout_drift: bool = False,
+    python_crlf: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir()
@@ -974,6 +998,13 @@ exit 91
         fake_bin / "gcloud",
         """#!/usr/bin/env bash
 set -euo pipefail
+for argument in "$@"; do
+  if [[ "${argument}" == caseops-ip-qa-bootstrap-* && \
+    "${argument}" == *$'\\r'* ]]; then
+    printf 'carriage return reached QA execution name: %q\n' "${argument}" >&2
+    exit 97
+  fi
+done
 printf '%s\n' "$*" >> "${FAKE_GCLOUD_LOG}"
 if [[ "$*" == *"run jobs execute caseops-db-index-health"* && \
   "${FAKE_INDEX_HEALTH_MODE}" == "fail" ]]; then
@@ -1148,6 +1179,13 @@ if [[ "${1:-}" == "scripts/scheduler_inventory.py" || \
   printf '%s\n' "$*" >> "${FAKE_GCLOUD_LOG}"
   exit 0
 fi
+if [[ "${FAKE_PYTHON_CRLF}" == "true" ]]; then
+  set +e
+  "${FAKE_REAL_PYTHON}" "$@" | sed $'s/$/\\r/'
+  python_status=${PIPESTATUS[0]}
+  set -e
+  exit "${python_status}"
+fi
 exec "${FAKE_REAL_PYTHON}" "$@"
 """,
     )
@@ -1315,6 +1353,7 @@ exec "${FAKE_REAL_PYTHON}" "$@"
             "FAKE_QA_OLD_EXECUTION_JSON": _qa_execution_json(job_generation=4),
             "FAKE_QA_UPDATED": _bash_path(tmp_path / "qa-updated"),
             "FAKE_PENDING_EXECUTION_JSON": _a0_pending_execution_json(immutable_image),
+            "FAKE_PYTHON_CRLF": "true" if python_crlf else "false",
             "FAKE_REAL_PYTHON": _bash_path(Path(sys.executable)),
             "FAKE_TAG": expected_tag,
             "FAKE_TRAFFIC_MODE": traffic_mode,
@@ -1485,6 +1524,24 @@ def test_deploy_prod_does_not_repeat_a_successful_current_generation_qa_bootstra
     assert not any("run jobs execute caseops-ip-qa-bootstrap" in call for call in calls)
     assert "no second execution" in result.stdout
     assert any("gh workflow run prod-verify.yml" in call for call in calls)
+
+
+def test_deploy_prod_normalizes_windows_crlf_before_qa_execution_arguments(
+    tmp_path: Path,
+) -> None:
+    result = _run_deploy_with_fakes(tmp_path, "abcdef1", python_crlf=True)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+    assert sum("run jobs execute caseops-ip-qa-bootstrap" in call for call in calls) == 1
+    assert any(
+        "run jobs executions describe caseops-ip-qa-bootstrap-old" in call
+        for call in calls
+    )
+    assert any(
+        "run jobs executions describe caseops-ip-qa-bootstrap-new" in call
+        for call in calls
+    )
 
 
 def test_deploy_prod_refuses_to_retry_a_failed_current_generation_qa_bootstrap(
