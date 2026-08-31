@@ -33,6 +33,7 @@ from caseops_api.db.models import (
     User,
 )
 from caseops_api.db.session import get_engine, get_session_factory
+from caseops_api.schemas.ip_operations import IpDocketCreateRequest
 from caseops_api.services import data_disposition, private_retrieval, private_retrieval_jobs
 from caseops_api.services.data_disposition import (
     DataDispositionInvariantError,
@@ -40,6 +41,7 @@ from caseops_api.services.data_disposition import (
     tenant_target_reference_hash,
 )
 from caseops_api.services.embeddings import EmbeddingResult
+from caseops_api.services.ip_operations import create_ip_docket
 from caseops_api.services.llm_types import LLMCompletion
 from caseops_api.services.matter_access import remove_access_grant
 from caseops_api.services.private_retrieval import (
@@ -232,6 +234,88 @@ def _ask_assistant(
         headers=auth_headers(token),
         json={"expected_version": assistant_session["version"], "question": question},
     )
+
+
+def test_new_matter_and_docket_invalidate_an_existing_private_generation(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    company_id = str(bootstrap["company"]["id"])
+    membership_id = str(bootstrap["membership"]["id"])
+    with get_session_factory()() as session:
+        private_retrieval.ensure_active_private_generation(
+            session,
+            company_id=company_id,
+        )
+        session.commit()
+
+    matter = _matter(client, token, "IPLF-066B-CREATED")
+    with get_session_factory()() as session:
+        docket = create_ip_docket(
+            session,
+            context=_context(company_id, membership_id),
+            payload=IpDocketCreateRequest(
+                title="IPLF 066B newly indexed docket",
+                restricted=False,
+                particulars={
+                    "form_key": "TM-A",
+                    "form_version": "2026.1",
+                    "mark_kind": "word",
+                    "representation": {"text": "IPLF 066B CREATED"},
+                    "classes": [{"class_number": 45, "specification": "Legal services"}],
+                    "parties": [{"role": "applicant", "name": "CaseOps QA"}],
+                    "filing_manifest": [],
+                },
+            ),
+        )
+        docket_id = docket.id
+
+    with get_session_factory()() as session:
+        events = list(
+            session.scalars(
+                select(PrivateProjectionEvent)
+                .where(
+                    PrivateProjectionEvent.company_id == company_id,
+                    PrivateProjectionEvent.target_id.in_((matter["id"], docket_id)),
+                )
+                .order_by(PrivateProjectionEvent.created_at)
+            )
+        )
+        generation = session.scalar(
+            select(PrivateIndexGeneration).where(
+                PrivateIndexGeneration.company_id == company_id,
+                PrivateIndexGeneration.state == "active",
+            )
+        )
+        report = inspect_private_index_integrity(session, company_id=company_id)
+
+    assert [(row.event_type, row.target_type) for row in events] == [
+        ("source_changed", "matter"),
+        ("source_changed", "ip_docket"),
+    ]
+    assert all(row.status == "applied" and row.affected_projection_count == 0 for row in events)
+    assert generation is not None
+    assert generation.verification_sha256 is None
+    assert report.blockers == ("active_generation_manifest_mismatch",)
+
+    with get_session_factory()() as session:
+        summary = rebuild_private_index(session, company_id=company_id, activate=True)
+        session.commit()
+        projected = set(
+            session.execute(
+                select(
+                    PrivateIndexProjection.source_type,
+                    PrivateIndexProjection.source_id,
+                ).where(
+                    PrivateIndexProjection.company_id == company_id,
+                    PrivateIndexProjection.generation_id == summary.generation_id,
+                    PrivateIndexProjection.is_tombstoned.is_(False),
+                )
+            ).all()
+        )
+    assert ("matter", matter["id"]) in projected
+    assert ("ip_docket", docket_id) in projected
 
 
 def test_rebuild_batches_only_one_tenant_and_search_reauthorizes_current_source(

@@ -27,6 +27,8 @@ from caseops_api.db.models import (
     Company,
     CompanyMembership,
     Court,
+    IpDocketRecord,
+    IpProceeding,
     Judge,
     JudgeDecisionIndex,
     Matter,
@@ -35,12 +37,22 @@ from caseops_api.db.models import (
     MembershipRole,
     PrivateIndexGeneration,
     PrivateIndexProjection,
+    TrademarkApplication,
     User,
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.schemas.companies import BootstrapCompanyRequest
+from caseops_api.schemas.ip_operations import ManualTrademarkApplicationCreateRequest
+from caseops_api.schemas.ip_records import IpProceedingCreateRequest
+from caseops_api.schemas.matters import MatterCreateRequest
 from caseops_api.services.identity import register_company_owner
+from caseops_api.services.ip_records import (
+    create_ip_proceeding,
+    create_manual_trademark_application,
+)
+from caseops_api.services.matters import create_matter
 from caseops_api.services.private_retrieval_jobs import rebuild_private_index
+from caseops_api.services.session_context import SessionContext
 
 _ACTIVE_SUBSCRIPTION_STATUSES = {"active", "trialing", "grace", "manual_active"}
 _SOURCE = "ip_production_qa"
@@ -48,6 +60,8 @@ _JUDGE_FIXTURE_VERSION = "iplf-060b-production-qa-v1"
 _JUDGE_FIXTURE_ADAPTER = "caseops-ip-production-qa-judge-authorities-v1"
 _REVIEW_FIXTURE_VERSION = "iplf-063b-production-qa-v1"
 _REVIEW_FIXTURE_ADAPTER = "caseops-ip-production-qa-intelligent-review-v1"
+_REVIEW_MATTER_CODE = "IPLF-063B-REVIEW"
+_REVIEW_DOCKET_TITLE = "IPLF 063B production QA review target"
 _RELEASE_SHA = re.compile(r"^[0-9a-f]{40}$")
 _JUDGE_PILOTS = (
     {
@@ -105,6 +119,11 @@ class IpProductionQaReviewFixtureResult:
     version: str
     authority_count: int
     created_authorities: int
+    matter_id: str
+    docket_id: str
+    application_id: str
+    proceeding_id: str
+    created_targets: int
 
 
 @dataclass(frozen=True)
@@ -409,10 +428,190 @@ def ensure_ip_production_qa_judge_fixture(
     )
 
 
+def _ensure_ip_production_qa_review_targets(
+    session: Session,
+    *,
+    company_id: str,
+    membership_id: str,
+) -> tuple[Matter, IpDocketRecord, TrademarkApplication, IpProceeding, int]:
+    company = session.get(Company, company_id)
+    membership = session.get(CompanyMembership, membership_id)
+    user = session.get(User, membership.user_id) if membership is not None else None
+    if (
+        company is None
+        or membership is None
+        or user is None
+        or membership.company_id != company.id
+        or not membership.is_active
+        or not user.is_active
+        or not company.slug.startswith("caseops-ip-qa")
+    ):
+        raise RuntimeError("Intelligent-review QA targets require the isolated IP QA tenant.")
+    context = SessionContext(company=company, membership=membership, user=user)
+    created_targets = 0
+
+    matter = session.scalar(
+        select(Matter).where(
+            Matter.company_id == company.id,
+            Matter.matter_code == _REVIEW_MATTER_CODE,
+        )
+    )
+    if matter is None:
+        matter_record = create_matter(
+            session,
+            context=context,
+            payload=MatterCreateRequest(
+                matter_code=_REVIEW_MATTER_CODE,
+                title="IPLF 063B production intelligent-review target",
+                practice_area="Intellectual Property",
+                forum_level="tribunal",
+                court_name="Trade Marks Registry Delhi",
+                status="intake",
+                description=(
+                    "Bounded synthetic QA target for exact-release intelligent-review "
+                    "acceptance. No client data."
+                ),
+            ),
+        )
+        matter = session.get(Matter, matter_record.id)
+        assert matter is not None
+        created_targets += 1
+    elif (
+        matter.title != "IPLF 063B production intelligent-review target"
+        or not matter.is_active
+        or matter.status in {"closed", "disposed"}
+    ):
+        raise RuntimeError("Refusing to adopt a colliding intelligent-review QA Matter.")
+
+    docket = session.scalar(
+        select(IpDocketRecord).where(
+            IpDocketRecord.company_id == company.id,
+            IpDocketRecord.title == _REVIEW_DOCKET_TITLE,
+        )
+    )
+    if docket is None:
+        docket_id, _asset, application, _identifier, _duplicates = (
+            create_manual_trademark_application(
+                session,
+                context=context,
+                payload=ManualTrademarkApplicationCreateRequest(
+                    title=_REVIEW_DOCKET_TITLE,
+                    restricted=False,
+                    asset_title="IPLF 063B PROD REVIEW MARK",
+                    jurisdiction="IN",
+                    office="Trade Marks Registry Delhi",
+                    filing_phase="draft",
+                    source_pending_identifier_allocation=False,
+                    application_number={
+                        "raw_value": "TM-063B-PROD-QA",
+                        "source": "iplf-063b production QA",
+                        "effective_from": date(2026, 8, 28),
+                        "is_primary": True,
+                    },
+                    particulars={
+                        "form_key": "TM-A",
+                        "form_version": "2026.1",
+                        "mark_kind": "word",
+                        "representation": {
+                            "text": "IPLF 063B PROD REVIEW MARK",
+                            "evidence_reference": "synthetic-qa:063b:mark",
+                        },
+                        "classes": [{"class_number": 45, "specification": "Legal services"}],
+                        "use_priority": None,
+                        "parties": [
+                            {
+                                "role": "applicant",
+                                "name": "CaseOps Synthetic QA Private Limited",
+                            }
+                        ],
+                        "agent": None,
+                        "filing_manifest": [
+                            {
+                                "key": "representation",
+                                "label": "Mark representation",
+                                "required": True,
+                                "evidence_reference": "synthetic-qa:063b:mark",
+                            }
+                        ],
+                    },
+                ),
+            )
+        )
+        docket = session.get(IpDocketRecord, docket_id)
+        assert docket is not None
+        created_targets += 1
+    else:
+        if (
+            docket.created_by_membership_id != membership.id
+            or docket.record_type != "trademark"
+            or not docket.is_active
+            or docket.restricted
+        ):
+            raise RuntimeError("Refusing to adopt a colliding intelligent-review QA docket.")
+        applications = list(
+            session.scalars(
+                select(TrademarkApplication).where(
+                    TrademarkApplication.company_id == company.id,
+                    TrademarkApplication.docket_id == docket.id,
+                    TrademarkApplication.is_active.is_(True),
+                )
+            )
+        )
+        if len(applications) != 1:
+            raise RuntimeError("The intelligent-review QA docket application is incomplete.")
+        application = applications[0]
+
+    proceedings = list(
+        session.scalars(
+            select(IpProceeding).where(
+                IpProceeding.company_id == company.id,
+                IpProceeding.docket_id == docket.id,
+                IpProceeding.proceeding_kind == "opposition",
+                IpProceeding.side == "opponent",
+            )
+        )
+    )
+    if len(proceedings) > 1:
+        raise RuntimeError("The intelligent-review QA docket has duplicate oppositions.")
+    if proceedings:
+        proceeding = proceedings[0]
+        if proceeding.application_id != application.id or proceeding.stage != "draft":
+            raise RuntimeError("The intelligent-review QA opposition does not match its fixture.")
+    else:
+        proceeding = create_ip_proceeding(
+            session,
+            context=context,
+            docket_id=docket.id,
+            payload=IpProceedingCreateRequest(
+                application_id=application.id,
+                proceeding_kind="opposition",
+                side="opponent",
+                office="Trade Marks Registry Delhi",
+                jurisdiction="IN",
+                stage="draft",
+                origin_kind="registry_event",
+                source_pending_identifier_allocation=True,
+            ),
+        )
+        created_targets += 1
+    return matter, docket, application, proceeding, created_targets
+
+
 def ensure_ip_production_qa_review_fixture(
     session: Session,
+    *,
+    company_id: str,
+    membership_id: str,
 ) -> IpProductionQaReviewFixtureResult:
     """Seed bounded synthetic sources for the recurring UJ-18 canary."""
+
+    matter, docket, application, proceeding, created_targets = (
+        _ensure_ip_production_qa_review_targets(
+            session,
+            company_id=company_id,
+            membership_id=membership_id,
+        )
+    )
 
     fixtures = (
         {
@@ -517,6 +716,11 @@ def ensure_ip_production_qa_review_fixture(
         version=_REVIEW_FIXTURE_VERSION,
         authority_count=len(fixtures),
         created_authorities=created,
+        matter_id=matter.id,
+        docket_id=docket.id,
+        application_id=application.id,
+        proceeding_id=proceeding.id,
+        created_targets=created_targets,
     )
 
 
@@ -526,6 +730,7 @@ def ensure_ip_production_qa_private_retrieval_fixture(
     company_id: str,
     membership_id: str,
     release_sha: str,
+    required_sources: tuple[tuple[str, str], ...] = (),
 ) -> IpProductionQaPrivateRetrievalFixtureResult:
     """Create one immutable-release private retrieval revocation canary."""
 
@@ -630,21 +835,26 @@ def ensure_ip_production_qa_private_retrieval_fixture(
         ):
             raise RuntimeError("Refusing to adopt a colliding private retrieval QA fixture.")
 
-    projection = session.scalar(
-        select(PrivateIndexProjection)
-        .join(
-            PrivateIndexGeneration,
-            PrivateIndexGeneration.id == PrivateIndexProjection.generation_id,
-        )
-        .where(
-            PrivateIndexProjection.company_id == company.id,
-            PrivateIndexProjection.source_type == "matter_document",
-            PrivateIndexProjection.source_id == attachment.id,
-            PrivateIndexProjection.is_tombstoned.is_(False),
-            PrivateIndexGeneration.state == "active",
+    expected_sources = {
+        ("matter_document", attachment.id),
+        *required_sources,
+    }
+    projections = list(
+        session.scalars(
+            select(PrivateIndexProjection)
+            .join(
+                PrivateIndexGeneration,
+                PrivateIndexGeneration.id == PrivateIndexProjection.generation_id,
+            )
+            .where(
+                PrivateIndexProjection.company_id == company.id,
+                PrivateIndexProjection.is_tombstoned.is_(False),
+                PrivateIndexGeneration.state == "active",
+            )
         )
     )
-    if projection is None:
+    available_sources = {(row.source_type, row.source_id) for row in projections}
+    if not expected_sources.issubset(available_sources):
         summary = rebuild_private_index(
             session,
             company_id=company.id,
@@ -652,6 +862,20 @@ def ensure_ip_production_qa_private_retrieval_fixture(
         )
         session.commit()
         generation_id = summary.generation_id
+        rebuilt_sources = set(
+            session.execute(
+                select(
+                    PrivateIndexProjection.source_type,
+                    PrivateIndexProjection.source_id,
+                ).where(
+                    PrivateIndexProjection.company_id == company.id,
+                    PrivateIndexProjection.generation_id == generation_id,
+                    PrivateIndexProjection.is_tombstoned.is_(False),
+                )
+            ).all()
+        )
+        if not expected_sources.issubset(rebuilt_sources):
+            raise RuntimeError("Private retrieval QA rebuild omitted a required fixture.")
         projection = session.scalar(
             select(PrivateIndexProjection).where(
                 PrivateIndexProjection.company_id == company.id,
@@ -664,7 +888,10 @@ def ensure_ip_production_qa_private_retrieval_fixture(
         if projection is None:
             raise RuntimeError("Private retrieval QA rebuild omitted its exact fixture.")
     else:
-        generation_id = projection.generation_id
+        generation_ids = {row.generation_id for row in projections}
+        if len(generation_ids) != 1:
+            raise RuntimeError("Private retrieval QA fixtures span active generations.")
+        generation_id = generation_ids.pop()
 
     return IpProductionQaPrivateRetrievalFixtureResult(
         release_sha=normalized_sha,
@@ -700,12 +927,20 @@ def main() -> None:
             == "true",
         )
         judge_fixture = ensure_ip_production_qa_judge_fixture(session)
-        review_fixture = ensure_ip_production_qa_review_fixture(session)
+        review_fixture = ensure_ip_production_qa_review_fixture(
+            session,
+            company_id=result.company_id,
+            membership_id=result.membership_id,
+        )
         private_retrieval_fixture = ensure_ip_production_qa_private_retrieval_fixture(
             session,
             company_id=result.company_id,
             membership_id=result.membership_id,
             release_sha=_required_env("CASEOPS_QA_RELEASE_SHA"),
+            required_sources=(
+                ("matter", review_fixture.matter_id),
+                ("ip_docket", review_fixture.docket_id),
+            ),
         )
     payload = asdict(result)
     payload["judge_workflow_fixture"] = asdict(judge_fixture)

@@ -103,79 +103,53 @@ test("IPLF-063B production proves the exact UJ-18 release", async ({ page }) => 
   expect(contraryId, "production contrary fixture").toBeTruthy();
   expect(inaccessibleId, "production inaccessible fixture").toBeTruthy();
 
-  const matter = await json(
-    await page.request.post(`${API}/api/matters/`, {
+  const matterList = await json(
+    await page.request.get(`${API}/api/matters/?q=IPLF-063B-REVIEW&limit=100`, {
       headers,
-      data: {
-        matter_code: `IR-PROD-${run}`,
-        title: `Production intelligent review ${run}`,
-        practice_area: "Intellectual Property",
-        forum_level: "tribunal",
-        court_name: "Trade Marks Registry Delhi",
-        status: "intake",
-      },
     }),
     200,
-    "create production review Matter",
+    "find indexed production review Matter",
   );
-  const application = await json(
-    await page.request.post(`${API}/api/ip/trademark-applications/manual`, {
+  const matter = matterList.matters.find(
+    (item: { matter_code: string }) => item.matter_code === "IPLF-063B-REVIEW",
+  );
+  expect(matter, "indexed production review Matter fixture").toBeTruthy();
+  if (!matter) throw new Error("Indexed production review Matter fixture is missing.");
+  const identifiers = await json(
+    await page.request.get(
+      `${API}/api/ip/identifiers/search?q=${encodeURIComponent("TM-063B-PROD-QA")}`,
+      { headers },
+    ),
+    200,
+    "find indexed production review application number",
+  );
+  const identifier = identifiers.find((item: { raw_value: string }) => item.raw_value === "TM-063B-PROD-QA");
+  expect(identifier, "indexed production review application number").toBeTruthy();
+  if (!identifier) throw new Error("Indexed production review application number is missing.");
+  const docket = await json(
+    await page.request.get(`${API}/api/ip/dockets/${identifier.docket_id}`, {
       headers,
-      data: {
-        title: `IPLF 063B PROD MARK ${run}`,
-        restricted: false,
-        asset_title: `IPLF 063B PROD MARK ${run}`,
-        jurisdiction: "IN",
-        office: "Trade Marks Registry Delhi",
-        filing_phase: "draft",
-        source_pending_identifier_allocation: false,
-        application_number: {
-          raw_value: `TM-063B-PROD-${run}`,
-          source: "iplf-063b production QA",
-          effective_from: "2026-08-28",
-          is_primary: true,
-        },
-        particulars: {
-          form_key: "TM-A",
-          form_version: "2026.1",
-          mark_kind: "word",
-          representation: {
-            text: `IPLF 063B PROD MARK ${run}`,
-            evidence_reference: "synthetic-qa:063b:mark",
-          },
-          classes: [{ class_number: 45, specification: "Legal services" }],
-          use_priority: null,
-          parties: [{ role: "applicant", name: "CaseOps Synthetic QA Private Limited" }],
-          agent: null,
-          filing_manifest: [{
-            key: "representation",
-            label: "Mark representation",
-            required: true,
-            evidence_reference: "synthetic-qa:063b:mark",
-          }],
-        },
-      },
     }),
-    201,
-    "create production intelligent-review application",
+    200,
+    "load indexed production review docket",
   );
-  const proceeding = await json(
-    await page.request.post(`${API}/api/ip/dockets/${application.docket.id}/proceedings`, {
+  expect(docket.title).toBe("IPLF 063B production QA review target");
+  const core = await json(
+    await page.request.get(`${API}/api/ip/dockets/${docket.id}/core-records`, {
       headers,
-      data: {
-        application_id: application.application.id,
-        proceeding_kind: "opposition",
-        side: "opponent",
-        office: "Trade Marks Registry Delhi",
-        jurisdiction: "IN",
-        stage: "draft",
-        origin_kind: "registry_event",
-        source_pending_identifier_allocation: true,
-      },
     }),
-    201,
-    "create production intelligent-review opposition",
+    200,
+    "load indexed production review core records",
   );
+  expect(core.applications).toHaveLength(1);
+  const application = core.applications[0];
+  const proceeding = core.proceedings.find(
+    (item: { proceeding_kind: string; side: string }) =>
+      item.proceeding_kind === "opposition" && item.side === "opponent",
+  );
+  expect(proceeding, "indexed production review opposition fixture").toBeTruthy();
+  if (!proceeding) throw new Error("Indexed production review opposition fixture is missing.");
+  expect(proceeding.application_id).toBe(application.id);
   const report = await json(
     await page.request.post(`${API}/api/authorities/research-reports`, {
       headers,
@@ -286,7 +260,7 @@ test("IPLF-063B production proves the exact UJ-18 release", async ({ page }) => 
     await page.request.post(`${API}/api/research/reviews`, {
       headers,
       data: {
-        ip_docket_id: application.docket.id,
+        ip_docket_id: docket.id,
         ip_proceeding_id: proceeding.id,
         source_research_report_id: report.id,
         issue: `Does proved prior use support IP opposition ${run}?`,
@@ -317,10 +291,10 @@ test("IPLF-063B production proves the exact UJ-18 release", async ({ page }) => 
     200,
     "publish production IP intelligent review",
   );
-  expect(ipPublished.review.ip_docket_id).toBe(application.docket.id);
+  expect(ipPublished.review.ip_docket_id).toBe(docket.id);
   expect(ipPublished.review.ip_proceeding_id).toBe(proceeding.id);
   await page.goto(
-    `${WEB}/app/ip?docket=${application.docket.id}&view=proceedings&proceeding=${proceeding.id}&draft=${ipPublished.draft_id}`,
+    `${WEB}/app/ip?docket=${docket.id}&view=proceedings&proceeding=${proceeding.id}&draft=${ipPublished.draft_id}`,
   );
   await expect(page.getByRole("tab", { name: "Proceedings" })).toHaveAttribute(
     "aria-selected",

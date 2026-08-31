@@ -22,6 +22,13 @@ disposition decisions.
 - Alert policy: `CaseOps private projection maintenance failure`
 - Run log prefix: `CASEOPS_PRIVATE_PROJECTION`
 
+Creating a Matter or IP docket in a tenant with an active private generation
+emits an applied `source_changed` event. Because a new source has no projection
+to tombstone, the event invalidates the active generation manifest. The next
+bounded maintenance run must observe `active_generation_manifest_mismatch`,
+rebuild, and project the new source. Do not clear the blocker or weaken saved
+source checks merely to make the new record immediately reviewable.
+
 The scheduler inventory is authoritative. Reconcile or inspect it with the exact
 immutable API image digest; do not deploy or verify a mutable tag.
 

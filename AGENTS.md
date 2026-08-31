@@ -93,3 +93,14 @@ requirements when using the fallback.
   routing, update the dated specs to select that tab or deep link and rerun the
   complete journey; an old locator timing out on the default tab is test drift,
   not proof that the underlying workflow is absent.
+- When a tenant already has an active private generation, creating a Matter or
+  IP docket must emit a source-change event. If no prior projection exists to
+  tombstone, invalidate the active verification manifest so bounded maintenance
+  rebuilds it; otherwise new records remain permanently unavailable to saved
+  source-bounded workflows. Production QA targets must be seeded before the
+  exact-release private rebuild and their projections must be asserted.
+- GitHub evaluates a workflow graph from the triggering branch even after a
+  later checkout switches the workspace to the exact serving release. A newly
+  introduced optional production gate must verify its release-owned config is
+  present after that checkout and must never execute newer test code against an
+  older serving release. Canonical deploy dispatch still requires current main.

@@ -1742,6 +1742,29 @@ def apply_private_projection_event(session: Session, *, event_id: str) -> Privat
         row.tombstone_generation = event.tombstone_generation
         row.updated_at = now
 
+    if event.event_type in {"source_changed", "reindex"} and not affected:
+        # A newly created source has no old projection to tombstone. Explicitly
+        # invalidate the active manifest so bounded maintenance rebuilds the
+        # tenant instead of treating the still internally consistent old
+        # generation as complete forever.
+        active_generation = session.scalar(
+            select(PrivateIndexGeneration)
+            .where(
+                PrivateIndexGeneration.company_id == event.company_id,
+                PrivateIndexGeneration.state == "active",
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if active_generation is None:
+            raise PrivateRetrievalInvariantError(
+                "A source-creation event requires an active private generation."
+            )
+        active_generation.expected_projection_count = None
+        active_generation.verified_projection_count = None
+        active_generation.verification_sha256 = None
+        active_generation.verified_at = None
+
     output_filter = (
         True
         if event.target_type == "tenant"
@@ -1837,6 +1860,46 @@ def propagate_private_projection_change(
         reason_code=reason_code,
     )
     return apply_private_projection_event(session, event_id=event.id)
+
+
+def propagate_private_source_creation(
+    session: Session,
+    *,
+    company_id: str,
+    actor_membership_id: str,
+    idempotency_key: str,
+    target_type: Literal["matter", "ip_docket"],
+    target_id: str,
+    target_version: str,
+    reason_code: str,
+) -> PrivateProjectionEvent | None:
+    """Schedule a rebuild when a tenant already has a private index.
+
+    A tenant that has never activated private retrieval retains the existing
+    default-off path. Once an active generation exists, a newly created source
+    must not remain invisible forever merely because there was no prior
+    projection for the event consumer to tombstone.
+    """
+
+    generation_id = session.scalar(
+        select(PrivateIndexGeneration.id).where(
+            PrivateIndexGeneration.company_id == company_id,
+            PrivateIndexGeneration.state == "active",
+        )
+    )
+    if generation_id is None:
+        return None
+    return propagate_private_projection_change(
+        session,
+        company_id=company_id,
+        actor_membership_id=actor_membership_id,
+        idempotency_key=idempotency_key,
+        event_type="source_changed",
+        target_type=target_type,
+        target_id=target_id,
+        target_version=target_version,
+        reason_code=reason_code,
+    )
 
 
 def register_private_saved_output(
@@ -1958,6 +2021,7 @@ __all__ = [
     "private_retrieval_cache_key",
     "private_saved_source_manifest_is_current",
     "private_source_version",
+    "propagate_private_source_creation",
     "propagate_private_projection_change",
     "reauthorize_private_saved_outputs",
     "register_private_saved_output",

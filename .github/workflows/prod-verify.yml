@@ -238,6 +238,11 @@ jobs:
           elif [[ "$configured" -ne 6 ]]; then
             echo "::error title=Incomplete IPLF-039F configuration::Cost acceptance is fail-closed because only $configured of 6 dedicated test-tenant values are configured."
             exit 1
+          elif [[ ! -f playwright.ip-cost-prod.config.ts ]]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=IPLF-039F serving release predates cost acceptance::The exact serving checkout does not contain the dedicated cost config; the newer workflow control plane will not run unreleased test code against it."
+            echo "### IPLF-039F cost acceptance" >> "$GITHUB_STEP_SUMMARY"
+            echo "Not applicable: the exact serving release predates the release-owned cost acceptance config. Deploy the current main release before certifying IPLF-039F." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi

@@ -1411,7 +1411,7 @@ exec "${FAKE_REAL_PYTHON}" "$@"
         capture_output=True,
         check=False,
         text=True,
-        timeout=30,
+        timeout=90,
     )
 
 
@@ -1474,7 +1474,7 @@ fi
         capture_output=True,
         check=False,
         text=True,
-        timeout=30,
+        timeout=90,
     )
 
 
