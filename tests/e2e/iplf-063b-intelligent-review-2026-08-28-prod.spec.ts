@@ -62,6 +62,29 @@ async function waitForReview(
   throw new Error(`Review ${reviewId} did not reach ${terminal.join("/")}: ${JSON.stringify(body)}`);
 }
 
+async function currentPrivateTarget(
+  page: Page,
+  headers: Record<string, string>,
+  sourceType: "matter" | "ip_docket",
+  query: string,
+  expectedLabel: string,
+) {
+  const response = await json(
+    await page.request.post(`${API}/api/private-retrieval/search`, {
+      headers,
+      data: { query, source_types: [sourceType], limit: 10 },
+    }),
+    200,
+    `find current ${sourceType} review target`,
+  );
+  const target = response.items.find(
+    (item: { source_type: string; source_id: string; label: string }) =>
+      item.source_type === sourceType && item.label === expectedLabel,
+  );
+  expect(target, `The exact current ${sourceType} QA projection is required.`).toBeTruthy();
+  return target as { source_id: string };
+}
+
 test("IPLF-063B production proves the exact UJ-18 release", async ({ page }) => {
   test.setTimeout(420_000);
   page.setDefaultTimeout(30_000);
@@ -102,54 +125,56 @@ test("IPLF-063B production proves the exact UJ-18 release", async ({ page }) => 
   expect(supportingId, "production supporting fixture").toBeTruthy();
   expect(contraryId, "production contrary fixture").toBeTruthy();
   expect(inaccessibleId, "production inaccessible fixture").toBeTruthy();
+  const releaseKey = expectedSha.slice(0, 12).toLowerCase();
+  const matterCode = `IPLF-066B-${releaseKey.toUpperCase()}`;
+  const matterTitle = `IPLF-066B exact-release revocation ${releaseKey}`;
+  const docketTitle = `IPLF-063B exact-release review ${releaseKey}`;
 
-  const matterList = await json(
-    await page.request.get(`${API}/api/matters/?q=IPLF-063B-REVIEW&limit=100`, {
+  // IPLF-066B makes private source capture fail closed. A target created after
+  // the release bootstrap is intentionally not current until the bounded
+  // maintenance path materializes a new verified generation. UJ-18 acceptance
+  // therefore selects existing synthetic projections from the public,
+  // authorization-filtered private search surface instead of racing that
+  // independent maintenance boundary.
+  const matterTarget = await currentPrivateTarget(
+    page,
+    headers,
+    "matter",
+    matterCode,
+    `${matterCode} · ${matterTitle}`,
+  );
+  const docketTarget = await currentPrivateTarget(
+    page,
+    headers,
+    "ip_docket",
+    docketTitle,
+    docketTitle,
+  );
+  const coreRecords = await json(
+    await page.request.get(`${API}/api/ip/dockets/${docketTarget.source_id}/core-records`, {
       headers,
     }),
     200,
-    "find indexed production review Matter",
+    "load exact-release intelligent-review opposition",
   );
-  const matter = matterList.matters.find(
-    (item: { matter_code: string }) => item.matter_code === "IPLF-063B-REVIEW",
+  const proceedings = coreRecords.proceedings.filter(
+    (item: {
+      application_id: string | null;
+      proceeding_kind: string;
+      side: string;
+      stage: string;
+      origin_kind: string;
+      source_pending_identifier_allocation: boolean;
+    }) =>
+      item.application_id === null &&
+      item.proceeding_kind === "opposition" &&
+      item.side === "opponent" &&
+      item.stage === "draft" &&
+      item.origin_kind === "registry_event" &&
+      item.source_pending_identifier_allocation,
   );
-  expect(matter, "indexed production review Matter fixture").toBeTruthy();
-  if (!matter) throw new Error("Indexed production review Matter fixture is missing.");
-  const identifiers = await json(
-    await page.request.get(
-      `${API}/api/ip/identifiers/search?q=${encodeURIComponent("TM-063B-PROD-QA")}`,
-      { headers },
-    ),
-    200,
-    "find indexed production review application number",
-  );
-  const identifier = identifiers.find((item: { raw_value: string }) => item.raw_value === "TM-063B-PROD-QA");
-  expect(identifier, "indexed production review application number").toBeTruthy();
-  if (!identifier) throw new Error("Indexed production review application number is missing.");
-  const docket = await json(
-    await page.request.get(`${API}/api/ip/dockets/${identifier.docket_id}`, {
-      headers,
-    }),
-    200,
-    "load indexed production review docket",
-  );
-  expect(docket.title).toBe("IPLF 063B production QA review target");
-  const core = await json(
-    await page.request.get(`${API}/api/ip/dockets/${docket.id}/core-records`, {
-      headers,
-    }),
-    200,
-    "load indexed production review core records",
-  );
-  expect(core.applications).toHaveLength(1);
-  const application = core.applications[0];
-  const proceeding = core.proceedings.find(
-    (item: { proceeding_kind: string; side: string }) =>
-      item.proceeding_kind === "opposition" && item.side === "opponent",
-  );
-  expect(proceeding, "indexed production review opposition fixture").toBeTruthy();
-  if (!proceeding) throw new Error("Indexed production review opposition fixture is missing.");
-  expect(proceeding.application_id).toBe(application.id);
+  expect(proceedings, "one exact-release intelligent-review opposition").toHaveLength(1);
+  const proceeding = proceedings[0];
   const report = await json(
     await page.request.post(`${API}/api/authorities/research-reports`, {
       headers,
@@ -183,7 +208,7 @@ test("IPLF-063B production proves the exact UJ-18 release", async ({ page }) => 
     await page.request.post(`${API}/api/research/reviews`, {
       headers,
       data: {
-        matter_id: matter.id,
+        matter_id: matterTarget.source_id,
         source_research_report_id: report.id,
         issue: `Does proved prior use support opposition ${run}?`,
         facts: [
@@ -260,7 +285,7 @@ test("IPLF-063B production proves the exact UJ-18 release", async ({ page }) => 
     await page.request.post(`${API}/api/research/reviews`, {
       headers,
       data: {
-        ip_docket_id: docket.id,
+        ip_docket_id: docketTarget.source_id,
         ip_proceeding_id: proceeding.id,
         source_research_report_id: report.id,
         issue: `Does proved prior use support IP opposition ${run}?`,
@@ -291,10 +316,10 @@ test("IPLF-063B production proves the exact UJ-18 release", async ({ page }) => 
     200,
     "publish production IP intelligent review",
   );
-  expect(ipPublished.review.ip_docket_id).toBe(docket.id);
+  expect(ipPublished.review.ip_docket_id).toBe(docketTarget.source_id);
   expect(ipPublished.review.ip_proceeding_id).toBe(proceeding.id);
   await page.goto(
-    `${WEB}/app/ip?docket=${docket.id}&view=proceedings&proceeding=${proceeding.id}&draft=${ipPublished.draft_id}`,
+    `${WEB}/app/ip?docket=${docketTarget.source_id}&view=proceedings&proceeding=${proceeding.id}&draft=${ipPublished.draft_id}`,
   );
   await expect(page.getByRole("tab", { name: "Proceedings" })).toHaveAttribute(
     "aria-selected",
@@ -319,7 +344,7 @@ test("IPLF-063B production proves the exact UJ-18 release", async ({ page }) => 
     await page.request.post(`${API}/api/research/reviews`, {
       headers,
       data: {
-        matter_id: matter.id,
+        matter_id: matterTarget.source_id,
         source_research_report_id: blockedReport.id,
         issue: `Inaccessible-only review ${run}`,
         facts: [],

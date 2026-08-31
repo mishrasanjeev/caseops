@@ -42,15 +42,20 @@ from caseops_api.db.models import (
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.schemas.companies import BootstrapCompanyRequest
-from caseops_api.schemas.ip_operations import ManualTrademarkApplicationCreateRequest
+from caseops_api.schemas.ip_operations import (
+    IpDocketCreateRequest,
+    ManualTrademarkApplicationCreateRequest,
+)
 from caseops_api.schemas.ip_records import IpProceedingCreateRequest
 from caseops_api.schemas.matters import MatterCreateRequest
 from caseops_api.services.identity import register_company_owner
+from caseops_api.services.ip_operations import create_ip_docket, get_ip_docket
 from caseops_api.services.ip_records import (
     create_ip_proceeding,
     create_manual_trademark_application,
 )
 from caseops_api.services.matters import create_matter
+from caseops_api.services.private_retrieval import private_source_version
 from caseops_api.services.private_retrieval_jobs import rebuild_private_index
 from caseops_api.services.session_context import SessionContext
 
@@ -132,6 +137,9 @@ class IpProductionQaPrivateRetrievalFixtureResult:
     matter_id: str
     matter_code: str
     attachment_id: str
+    docket_id: str
+    docket_title: str
+    proceeding_id: str
     generation_id: str
     created_fixture: bool
 
@@ -655,9 +663,7 @@ def ensure_ip_production_qa_review_fixture(
     for fixture in fixtures:
         canonical_key = f"{_REVIEW_FIXTURE_VERSION}:{fixture['key']}"
         document = session.scalar(
-            select(AuthorityDocument).where(
-                AuthorityDocument.canonical_key == canonical_key
-            )
+            select(AuthorityDocument).where(AuthorityDocument.canonical_key == canonical_key)
         )
         if document is not None and document.adapter_name != _REVIEW_FIXTURE_ADAPTER:
             raise RuntimeError("Refusing to adopt a non-QA review fixture collision.")
@@ -746,6 +752,10 @@ def ensure_ip_production_qa_private_retrieval_fixture(
         or not company.slug.startswith("caseops-ip-qa")
     ):
         raise RuntimeError("Private retrieval QA fixture requires the isolated IP QA tenant.")
+    user = session.get(User, membership.user_id)
+    if user is None or not user.is_active or not membership.is_active:
+        raise RuntimeError("Private retrieval QA fixture requires an active IP QA owner.")
+    context = SessionContext(company=company, membership=membership, user=user)
 
     release_key = normalized_sha[:12]
     matter_code = f"IPLF-066B-{release_key.upper()}"
@@ -757,7 +767,13 @@ def ensure_ip_production_qa_private_retrieval_fixture(
     )
     content_bytes = content.encode("utf-8")
     content_hash = hashlib.sha256(content_bytes).hexdigest()
-    storage_key = f"synthetic-qa/iplf-066b/{normalized_sha}"
+    # MatterAttachment.storage_key is globally unique, not tenant-scoped.  A
+    # release-only key made the otherwise tenant-safe bootstrap collide as
+    # soon as a second isolated QA company used the same deployed revision.
+    # Keep the legacy key readable below, but every new fixture owns a
+    # company-qualified key.
+    storage_key = f"synthetic-qa/{company.id}/iplf-066b/{normalized_sha}"
+    legacy_storage_key = f"synthetic-qa/iplf-066b/{normalized_sha}"
 
     matter = session.scalar(
         select(Matter).where(
@@ -821,7 +837,7 @@ def ensure_ip_production_qa_private_retrieval_fixture(
         attachment = session.scalar(
             select(MatterAttachment).where(
                 MatterAttachment.matter_id == matter.id,
-                MatterAttachment.storage_key == storage_key,
+                MatterAttachment.storage_key.in_((storage_key, legacy_storage_key)),
             )
         )
         if (
@@ -835,26 +851,180 @@ def ensure_ip_production_qa_private_retrieval_fixture(
         ):
             raise RuntimeError("Refusing to adopt a colliding private retrieval QA fixture.")
 
-    expected_sources = {
-        ("matter_document", attachment.id),
-        *required_sources,
-    }
-    projections = list(
+    docket_title = f"IPLF-063B exact-release review {release_key}"
+    docket_identifier = f"QA-063B-{release_key.upper()}"
+    docket_evidence_reference = f"synthetic-qa:iplf-063b:{normalized_sha}"
+    docket = session.scalar(
+        select(IpDocketRecord).where(
+            IpDocketRecord.company_id == company.id,
+            IpDocketRecord.primary_identifier == docket_identifier,
+        )
+    )
+    created_docket = docket is None
+    if docket is None:
+        docket_record = create_ip_docket(
+            session,
+            context=context,
+            payload=IpDocketCreateRequest(
+                title=docket_title,
+                primary_identifier=docket_identifier,
+                restricted=False,
+                particulars={
+                    "form_key": "TM-A",
+                    "form_version": "2026.1",
+                    "mark_kind": "word",
+                    "representation": {
+                        "text": f"CASEOPS QA REVIEW {release_key.upper()}",
+                        "evidence_reference": docket_evidence_reference,
+                    },
+                    "classes": [{"class_number": 45, "specification": "Legal services"}],
+                    "use_priority": None,
+                    "parties": [
+                        {
+                            "role": "applicant",
+                            "name": "CaseOps Synthetic QA Private Limited",
+                        }
+                    ],
+                    "agent": None,
+                    "filing_manifest": [
+                        {
+                            "key": "representation",
+                            "label": "Mark representation",
+                            "required": True,
+                            "evidence_reference": docket_evidence_reference,
+                        }
+                    ],
+                },
+            ),
+        )
+        docket = session.get(IpDocketRecord, docket_record.id)
+        assert docket is not None
+
+    docket_record = get_ip_docket(session, context=context, docket_id=docket.id)
+    particulars = docket_record.current_particulars
+    if (
+        docket_record.title != docket_title
+        or docket_record.primary_identifier != docket_identifier
+        or docket_record.record_type != "trademark"
+        or docket_record.matter_id is not None
+        or docket_record.status != "ready"
+        or not docket_record.is_active
+        or docket_record.lifecycle_version != 0
+        or docket_record.successor_docket_id is not None
+        or docket_record.restricted
+        or docket_record.current_version != 1
+        or docket.archived_by_matter_disposal
+        or docket.workflow_definition_id is not None
+        or docket.workflow_version_id is not None
+        or docket.workflow_version_number is not None
+        or docket.created_by_membership_id != membership.id
+        or particulars.version != 1
+        or particulars.form_key != "TM-A"
+        or particulars.form_version != "2026.1"
+        or particulars.mark_kind != "word"
+        or particulars.representation_json.get("evidence_reference") != docket_evidence_reference
+        or particulars.readiness_status != "ready"
+        or particulars.readiness_errors_json
+    ):
+        raise RuntimeError("Refusing to adopt a colliding intelligent-review QA docket.")
+
+    proceedings = list(
         session.scalars(
-            select(PrivateIndexProjection)
-            .join(
-                PrivateIndexGeneration,
-                PrivateIndexGeneration.id == PrivateIndexProjection.generation_id,
-            )
-            .where(
-                PrivateIndexProjection.company_id == company.id,
-                PrivateIndexProjection.is_tombstoned.is_(False),
-                PrivateIndexGeneration.state == "active",
+            select(IpProceeding).where(
+                IpProceeding.company_id == company.id,
+                IpProceeding.docket_id == docket.id,
             )
         )
     )
-    available_sources = {(row.source_type, row.source_id) for row in projections}
-    if not expected_sources.issubset(available_sources):
+    if len(proceedings) > 1:
+        raise RuntimeError("The intelligent-review QA docket has ambiguous proceedings.")
+    proceeding = proceedings[0] if proceedings else None
+    created_proceeding = proceeding is None
+    if proceeding is None:
+        proceeding = IpProceeding(
+            company_id=company.id,
+            docket_id=docket.id,
+            application_id=None,
+            proceeding_kind="opposition",
+            side="opponent",
+            office="Trade Marks Registry Delhi",
+            jurisdiction="IN",
+            stage="draft",
+            origin_kind="registry_event",
+            stage_template_version="opposition-opponent-v1",
+            source_pending_identifier_allocation=True,
+        )
+        session.add(proceeding)
+        session.flush()
+    elif (
+        proceeding.application_id is not None
+        or proceeding.proceeding_kind != "opposition"
+        or proceeding.side != "opponent"
+        or proceeding.office != "Trade Marks Registry Delhi"
+        or proceeding.jurisdiction != "IN"
+        or proceeding.stage != "draft"
+        or proceeding.origin_kind != "registry_event"
+        or proceeding.stage_template_version != "opposition-opponent-v1"
+        or not proceeding.source_pending_identifier_allocation
+    ):
+        raise RuntimeError("Refusing to adopt a colliding intelligent-review QA proceeding.")
+
+    if created_docket or created_proceeding:
+        session.commit()
+    created = created or created_docket or created_proceeding
+
+    expected_sources = [
+        ("matter", matter.id, private_source_version(matter)),
+        ("matter_document", attachment.id, attachment.sha256_hex),
+        ("ip_docket", docket.id, private_source_version(docket)),
+    ]
+    for source_type, source_id in required_sources:
+        if source_type == "matter":
+            source_row = session.get(Matter, source_id)
+        elif source_type == "ip_docket":
+            source_row = session.get(IpDocketRecord, source_id)
+        else:
+            raise RuntimeError(
+                f"Unsupported required private retrieval QA source type: {source_type}."
+            )
+        if source_row is None or source_row.company_id != company.id:
+            raise RuntimeError(
+                "A required private retrieval QA source is missing or belongs to another tenant."
+            )
+        expected_sources.append(
+            (source_type, source_id, private_source_version(source_row))
+        )
+    expected_sources = list(dict.fromkeys(expected_sources))
+
+    def current_projection(
+        source_type: str,
+        source_id: str,
+        source_version: str,
+        generation_id: str,
+    ) -> PrivateIndexProjection | None:
+        return session.scalar(
+            select(PrivateIndexProjection).where(
+                PrivateIndexProjection.company_id == company.id,
+                PrivateIndexProjection.generation_id == generation_id,
+                PrivateIndexProjection.source_type == source_type,
+                PrivateIndexProjection.source_id == source_id,
+                PrivateIndexProjection.source_version == source_version,
+                PrivateIndexProjection.is_tombstoned.is_(False),
+            )
+        )
+
+    active_generation = session.scalar(
+        select(PrivateIndexGeneration).where(
+            PrivateIndexGeneration.company_id == company.id,
+            PrivateIndexGeneration.state == "active",
+        )
+    )
+    current_projections = (
+        []
+        if active_generation is None
+        else [current_projection(*expected, active_generation.id) for expected in expected_sources]
+    )
+    if active_generation is None or any(row is None for row in current_projections):
         summary = rebuild_private_index(
             session,
             company_id=company.id,
@@ -862,42 +1032,24 @@ def ensure_ip_production_qa_private_retrieval_fixture(
         )
         session.commit()
         generation_id = summary.generation_id
-        rebuilt_sources = set(
-            session.execute(
-                select(
-                    PrivateIndexProjection.source_type,
-                    PrivateIndexProjection.source_id,
-                ).where(
-                    PrivateIndexProjection.company_id == company.id,
-                    PrivateIndexProjection.generation_id == generation_id,
-                    PrivateIndexProjection.is_tombstoned.is_(False),
-                )
-            ).all()
-        )
-        if not expected_sources.issubset(rebuilt_sources):
-            raise RuntimeError("Private retrieval QA rebuild omitted a required fixture.")
-        projection = session.scalar(
-            select(PrivateIndexProjection).where(
-                PrivateIndexProjection.company_id == company.id,
-                PrivateIndexProjection.generation_id == generation_id,
-                PrivateIndexProjection.source_type == "matter_document",
-                PrivateIndexProjection.source_id == attachment.id,
-                PrivateIndexProjection.is_tombstoned.is_(False),
+        current_projections = [
+            current_projection(*expected, generation_id) for expected in expected_sources
+        ]
+        if any(row is None for row in current_projections):
+            raise RuntimeError(
+                "Private retrieval QA rebuild omitted an exact-release review target."
             )
-        )
-        if projection is None:
-            raise RuntimeError("Private retrieval QA rebuild omitted its exact fixture.")
     else:
-        generation_ids = {row.generation_id for row in projections}
-        if len(generation_ids) != 1:
-            raise RuntimeError("Private retrieval QA fixtures span active generations.")
-        generation_id = generation_ids.pop()
+        generation_id = active_generation.id
 
     return IpProductionQaPrivateRetrievalFixtureResult(
         release_sha=normalized_sha,
         matter_id=matter.id,
         matter_code=matter_code,
         attachment_id=attachment.id,
+        docket_id=docket.id,
+        docket_title=docket_title,
+        proceeding_id=proceeding.id,
         generation_id=generation_id,
         created_fixture=created,
     )
