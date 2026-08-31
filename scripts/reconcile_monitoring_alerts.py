@@ -52,6 +52,7 @@ def _request_json(
     *,
     token: str,
     payload: Mapping[str, Any] | None = None,
+    allow_not_found: bool = False,
 ) -> dict[str, Any]:
     data = None
     headers = {"Authorization": f"Bearer {token}"}
@@ -63,6 +64,12 @@ def _request_json(
         with urllib.request.urlopen(request, timeout=30) as response:
             body = response.read().decode()
     except (urllib.error.HTTPError, urllib.error.URLError) as exc:
+        if (
+            allow_not_found
+            and isinstance(exc, urllib.error.HTTPError)
+            and exc.code == 404
+        ):
+            return {}
         detail = ""
         if isinstance(exc, urllib.error.HTTPError):
             detail = exc.read().decode(errors="replace")[:1000]
@@ -81,29 +88,36 @@ def metric_filter() -> str:
     )
 
 
-def ensure_log_metric(*, project: str) -> None:
-    exists = (
-        run_gcloud(
-            ["logging", "metrics", "describe", METRIC_NAME, "--project", project],
-            check=False,
-        ).returncode
-        == 0
+def ensure_log_metric(*, project: str, token: str) -> str:
+    collection_url = f"https://logging.googleapis.com/v2/projects/{project}/metrics"
+    metric_url = f"{collection_url}/{urllib.parse.quote(METRIC_NAME, safe='')}"
+    existing = _request_json(
+        "GET",
+        metric_url,
+        token=token,
+        allow_not_found=True,
     )
-    action = "update" if exists else "create"
-    run_gcloud(
-        [
-            "logging",
-            "metrics",
-            action,
-            METRIC_NAME,
-            "--project",
-            project,
-            "--description",
-            "Count fail-closed private projection maintenance runs.",
-            "--log-filter",
-            metric_filter(),
-        ]
-    )
+    payload: dict[str, Any] = {
+        "name": METRIC_NAME,
+        "description": "Count fail-closed private projection maintenance runs.",
+        "filter": metric_filter(),
+        "disabled": False,
+    }
+    if existing:
+        # The descriptor is output-only on create but immutable and required by
+        # some Logging API update paths. Preserve the server-owned value.
+        descriptor = existing.get("metricDescriptor")
+        if isinstance(descriptor, Mapping):
+            payload["metricDescriptor"] = dict(descriptor)
+        result = _request_json("PUT", metric_url, token=token, payload=payload)
+    else:
+        result = _request_json("POST", collection_url, token=token, payload=payload)
+    name = str(result.get("name") or "")
+    if name != METRIC_NAME:
+        raise AlertReconciliationError(
+            "Logging API returned no matching log metric name"
+        )
+    return name
 
 
 def _access_token() -> str:
@@ -209,10 +223,7 @@ def alert_policy_payload(*, channel_name: str) -> dict[str, Any]:
         "combiner": "OR",
         "enabled": True,
         "notificationChannels": [channel_name],
-        "alertStrategy": {
-            "autoClose": "1800s",
-            "notificationRateLimit": {"period": "300s"},
-        },
+        "alertStrategy": {"autoClose": "1800s"},
         "severity": "ERROR",
         "userLabels": {
             "owner": "caseops-production",
@@ -281,14 +292,14 @@ def ensure_alert_policy(
 
 
 def reconcile(*, project: str, notification_email: str) -> dict[str, str]:
-    ensure_log_metric(project=project)
     token = _access_token()
+    metric = ensure_log_metric(project=project, token=token)
     channel = ensure_email_channel(
         project=project, token=token, email=notification_email
     )
     policy = ensure_alert_policy(project=project, token=token, channel_name=channel)
     return {
-        "metric": METRIC_NAME,
+        "metric": metric,
         "notification_channel": channel,
         "alert_policy": policy,
     }
