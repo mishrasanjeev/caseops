@@ -16,6 +16,7 @@ from caseops_api.db.models import (
     MatterTask,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.services.private_retrieval import private_source_version
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_ip_record_workflow import _application, _asset, _docket
 from tests.test_workspace_assistant_qa import _ask, _enable_assistant, _matter, _session
@@ -301,9 +302,7 @@ def test_matter_draft_and_allowlisted_field_update_use_canonical_writers(
     with get_session_factory()() as session:
         current_matter = session.get(Matter, matter["id"])
         assert current_matter is not None
-        assert field_proposal["target_version"].endswith(
-            current_matter.updated_at.isoformat()
-        )
+        assert field_proposal["target_version"] == private_source_version(current_matter)
     forbidden = _preview(
         client,
         token,
