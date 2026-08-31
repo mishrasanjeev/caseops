@@ -126,10 +126,46 @@ $WebPort = ($PortBase + 2).ToString()
 $PostgresPort = ($PortBase + 3).ToString()
 $ValkeyPort = ($PortBase + 4).ToString()
 
-$DirtyContext = ((& git -C $RepoRoot status --porcelain --untracked-files=all -- apps/api apps/web docker-compose.yml package.json package-lock.json .dockerignore .gcloudignore playwright.docker.config.ts scripts/docker-acceptance-api-proxy.mjs scripts/verify-docker.ps1 | Out-String).Trim())
+$DirtyContext = ((& git -C $RepoRoot status --porcelain --untracked-files=all -- apps/api apps/web docker-compose.yml package.json package-lock.json .nvmrc .dockerignore .gcloudignore playwright.docker.config.ts scripts/docker-acceptance-api-proxy.mjs scripts/verify-docker.ps1 | Out-String).Trim())
 if ($DirtyContext -and -not $PreCommit) {
     throw "Docker acceptance requires a committed, clean build context. Commit the candidate first.`n$DirtyContext"
 }
+
+function Get-ComposeServiceState {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Project,
+        [Parameter(Mandatory=$true)]
+        [string]$File,
+        [Parameter(Mandatory=$true)]
+        [string]$Service
+    )
+
+    $ContainerId = ((
+        & docker compose --project-name $Project --file $File ps --all --quiet $Service |
+            Out-String
+    ).Trim())
+    if ($LASTEXITCODE -ne 0 -or $ContainerId -notmatch "^[0-9a-f]+$") {
+        throw "Could not resolve the $Service container in $Project."
+    }
+    $State = ((& docker inspect --format "{{.State.Status}}" $ContainerId | Out-String).Trim())
+    if ($LASTEXITCODE -ne 0 -or -not $State) {
+        throw "Could not inspect the $Service container in $Project."
+    }
+    return $State
+}
+
+$PinnedNodeVersion = ((Get-Content -LiteralPath (Join-Path $RepoRoot ".nvmrc") -Raw).Trim() -replace "^v", "")
+$NodePath = (Get-Command node -ErrorAction Stop).Source
+$ActualNodeVersion = (((& $NodePath --version) | Out-String).Trim() -replace "^v", "")
+if ($ActualNodeVersion -ne $PinnedNodeVersion) {
+    throw (
+        "Docker acceptance requires Node v$PinnedNodeVersion from .nvmrc; " +
+        "found v$ActualNodeVersion at $NodePath. Activate the pinned runtime before retrying."
+    )
+}
+$NpmPath = (Get-Command npm -ErrorAction Stop).Source
+$NpxPath = (Get-Command npx -ErrorAction Stop).Source
 
 $PreviousEnvironment = @{}
 $AcceptanceEnvironment = @{
@@ -184,7 +220,7 @@ try {
         )
     }
     Write-Host "[docker-acceptance] preparing frozen host test dependencies"
-    & npm ci --no-audit --no-fund
+    & $NpmPath ci --no-audit --no-fund
     if ($LASTEXITCODE -ne 0) { throw "Host Node dependency sync failed." }
     & uv sync --project $ApiDir --frozen
     if ($LASTEXITCODE -ne 0) { throw "Host API dependency sync failed." }
@@ -258,6 +294,17 @@ try {
         throw "PostgreSQL index health exceeded its 512 MiB production job ceiling or failed."
     }
 
+    Write-Host "[docker-acceptance] pausing the document worker for migration-state validation"
+    & docker compose --project-name $ComposeProject --file $ComposeFile stop --timeout 30 worker
+    if ($LASTEXITCODE -ne 0) { throw "Could not stop the document worker before PostgreSQL validation." }
+    $WorkerStateBeforePostgres = Get-ComposeServiceState `
+        -Project $ComposeProject `
+        -File $ComposeFile `
+        -Service "worker"
+    if ($WorkerStateBeforePostgres -ne "exited") {
+        throw "Document worker remained $WorkerStateBeforePostgres during migration-state validation."
+    }
+
     Write-Host "[docker-acceptance] running the complete PostgreSQL + pgvector validation suite"
     Push-Location $ApiDir
     try {
@@ -267,9 +314,19 @@ try {
     finally {
         Pop-Location
     }
+    Write-Host "[docker-acceptance] restarting the document worker at the restored schema head"
+    & docker compose --project-name $ComposeProject --file $ComposeFile start worker
+    if ($LASTEXITCODE -ne 0) { throw "Could not restart the document worker after PostgreSQL validation." }
+    Start-Sleep -Seconds 2
+    $WorkerStateAfterRestart = Get-ComposeServiceState `
+        -Project $ComposeProject `
+        -File $ComposeFile `
+        -Service "worker"
+    if ($WorkerStateAfterRestart -ne "running") {
+        throw "Document worker was $WorkerStateAfterRestart after PostgreSQL validation."
+    }
 
     Write-Host "[docker-acceptance] running Playwright against Docker + PostgreSQL"
-    $NodePath = (Get-Command node -ErrorAction Stop).Source
     $TestApiProxyStdout = [IO.Path]::GetTempFileName()
     $TestApiProxyStderr = [IO.Path]::GetTempFileName()
     $TestApiProxyProcess = Start-Process `
@@ -302,21 +359,28 @@ try {
     if ($PlaywrightArgs.Count -eq 0) {
         # Bound each Windows worker's lifetime without retries: every desktop
         # test still runs exactly once, and the mobile project remains whole.
-        & npx playwright test --config playwright.docker.config.ts --reporter=list `
+        & $NpxPath playwright test --config playwright.docker.config.ts --reporter=list `
             --project=app-chromium --shard=1/2
         if ($LASTEXITCODE -ne 0) { throw "Docker Playwright desktop shard 1/2 failed." }
-        & npx playwright test --config playwright.docker.config.ts --reporter=list `
+        & $NpxPath playwright test --config playwright.docker.config.ts --reporter=list `
             --project=app-chromium --shard=2/2
         if ($LASTEXITCODE -ne 0) { throw "Docker Playwright desktop shard 2/2 failed." }
-        & npx playwright test --config playwright.docker.config.ts --reporter=list `
+        & $NpxPath playwright test --config playwright.docker.config.ts --reporter=list `
             --project=app-mobile
         if ($LASTEXITCODE -ne 0) { throw "Docker Playwright mobile project failed." }
     }
     else {
-        & npx playwright test --config playwright.docker.config.ts --reporter=list @PlaywrightArgs
+        & $NpxPath playwright test --config playwright.docker.config.ts --reporter=list @PlaywrightArgs
         if ($LASTEXITCODE -ne 0) { throw "Docker Playwright focused acceptance failed." }
     }
 
+    $WorkerStateAfterPlaywright = Get-ComposeServiceState `
+        -Project $ComposeProject `
+        -File $ComposeFile `
+        -Service "worker"
+    if ($WorkerStateAfterPlaywright -ne "running") {
+        throw "Document worker was $WorkerStateAfterPlaywright after Playwright."
+    }
     $PostTestHealth = Invoke-RestMethod "http://127.0.0.1:$ApiPort/api/health"
     if ($PostTestHealth.status -ne "ok") { throw "API became unhealthy after Playwright." }
     $Succeeded = $true
