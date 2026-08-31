@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -95,6 +96,17 @@ def _projection_payload(matter: Matter, *, text: str) -> PrivateProjectionInput:
         embedding_version="1",
         embedding=(1.0, 0.0, 0.0),
     )
+
+
+def test_private_source_version_normalizes_persisted_utc_timestamps() -> None:
+    timestamp = datetime(2026, 8, 31, 12, 30, 15, 123456)
+    matter = Matter(access_policy_version=7, updated_at=timestamp)
+
+    naive_version = private_source_version(matter)
+    matter.updated_at = timestamp.replace(tzinfo=UTC)
+
+    assert private_source_version(matter) == naive_version
+    assert naive_version == "7:2026-08-31T12:30:15.123456+00:00"
 
 
 def test_acl_prefilter_hydration_revocation_and_cross_tenant_are_fail_closed(

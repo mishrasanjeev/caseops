@@ -223,7 +223,19 @@ def private_retrieval_activation(
 def private_source_version(row: Client | Matter | IpDocketRecord) -> str:
     """Return a version that changes for source edits and ACL changes."""
 
-    updated = row.updated_at.isoformat() if row.updated_at is not None else "missing"
+    updated_at = row.updated_at
+    if updated_at is None:
+        updated = "missing"
+    else:
+        # SQLite drops timezone metadata while PostgreSQL returns an aware UTC
+        # value. Treat a naïve persisted timestamp as UTC so the same source
+        # does not look stale merely because the ORM refreshed it.
+        normalized = (
+            updated_at.replace(tzinfo=UTC)
+            if updated_at.tzinfo is None
+            else updated_at.astimezone(UTC)
+        )
+        updated = normalized.isoformat()
     if isinstance(row, (Matter, IpDocketRecord)):
         return f"{row.access_policy_version}:{updated}"
     return updated
