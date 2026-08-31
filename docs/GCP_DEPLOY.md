@@ -7,6 +7,16 @@
 > For an existing CaseOps production deployment, use `scripts/deploy-prod.sh <full-main-sha>`.
 > It is the release authority for migration-first ordering, immutable images,
 > recurring jobs, service capacity, latest-only traffic, and exact identity.
+> The script refreshes `origin/main` throughout the release and stops when a
+> newer main commit lands, including after image builds and before routing or
+> release-owned QA. Revalidate and deploy that newer canonical revision; do
+> not bypass the staleness gate or certify the older candidate.
+> The scheduled production-verification workflow is evaluated from the current
+> default branch, then checks out the exact API/web serving SHA. Optional gates
+> added after that serving SHA must first prove their release-owned config exists
+> in the checkout; absence is recorded as "serving release predates gate", not
+> executed with the newer control-plane path. A deployment-triggered verifier is
+> valid only when the canonical deploy's final current-main checkpoint passed.
 > The commands below are bootstrap examples for a new project.
 
 ---
