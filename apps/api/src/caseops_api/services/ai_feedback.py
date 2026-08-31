@@ -1,22 +1,28 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import distinct, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
     AIFeedbackItem,
     AIFeedbackStatus,
+    AssistantActionPreview,
+    AssistantCitation,
     AssistantSession,
     AssistantTurn,
     AssistantTurnRole,
+    AuditEvent,
+    MatterTask,
 )
 from caseops_api.schemas.ai_feedback import (
     AIFeedbackReviewRequest,
     AIFeedbackSubmission,
+    AIOutcomeAnalyticsResponse,
+    AIOutcomeMetric,
     ProductGuideFeedbackCreateRequest,
     WorkspaceAssistantFeedbackCreateRequest,
 )
@@ -280,9 +286,7 @@ def list_feedback(
     limit: int,
 ) -> tuple[list[AIFeedbackItem], bool]:
     bounded = max(1, min(limit, 100))
-    statement = select(AIFeedbackItem).where(
-        AIFeedbackItem.company_id == context.company.id
-    )
+    statement = select(AIFeedbackItem).where(AIFeedbackItem.company_id == context.company.id)
     if item_status:
         statement = statement.where(AIFeedbackItem.status == item_status)
     if surface:
@@ -297,6 +301,206 @@ def list_feedback(
         )
     )
     return rows[:bounded], len(rows) > bounded
+
+
+def _metric(
+    key: str,
+    *,
+    numerator: int,
+    denominator: int | None,
+    denominator_definition: str | None,
+) -> AIOutcomeMetric:
+    rate = (
+        round(numerator / denominator, 4) if denominator is not None and denominator > 0 else None
+    )
+    return AIOutcomeMetric(
+        key=key,  # type: ignore[arg-type]
+        numerator=numerator,
+        denominator=denominator,
+        rate=rate,
+        denominator_definition=denominator_definition,
+    )
+
+
+def get_ai_outcome_analytics(
+    session: Session,
+    *,
+    context: SessionContext,
+    window_days: int,
+) -> AIOutcomeAnalyticsResponse:
+    """Return tenant-only product outcomes with no actor or content dimensions."""
+
+    bounded_days = max(1, min(window_days, 90))
+    now = datetime.now(UTC)
+    started = now - timedelta(days=bounded_days)
+    company_id = context.company.id
+
+    assistant_answer_filter = (
+        AssistantTurn.company_id == company_id,
+        AssistantTurn.role == AssistantTurnRole.ASSISTANT,
+        AssistantTurn.status.in_(("completed", "abstained")),
+        AssistantTurn.created_at >= started,
+        AssistantTurn.created_at <= now,
+    )
+    answer_total = int(
+        session.scalar(select(func.count(AssistantTurn.id)).where(*assistant_answer_filter)) or 0
+    )
+    abstained = int(
+        session.scalar(
+            select(func.count(AssistantTurn.id)).where(
+                *assistant_answer_filter,
+                AssistantTurn.status == "abstained",
+            )
+        )
+        or 0
+    )
+    preview_filter = (
+        AssistantActionPreview.company_id == company_id,
+        AssistantActionPreview.created_at >= started,
+        AssistantActionPreview.created_at <= now,
+    )
+    preview_total = int(
+        session.scalar(select(func.count(AssistantActionPreview.id)).where(*preview_filter)) or 0
+    )
+    confirmed = int(
+        session.scalar(
+            select(func.count(AssistantActionPreview.id)).where(
+                *preview_filter,
+                AssistantActionPreview.status == "confirmed",
+            )
+        )
+        or 0
+    )
+    confirmed_tasks = int(
+        session.scalar(
+            select(func.count(AssistantActionPreview.id)).where(
+                *preview_filter,
+                AssistantActionPreview.action_type == "task",
+                AssistantActionPreview.status == "confirmed",
+            )
+        )
+        or 0
+    )
+    completed_tasks = int(
+        session.scalar(
+            select(func.count(AssistantActionPreview.id))
+            .join(
+                MatterTask,
+                (MatterTask.id == AssistantActionPreview.result_id)
+                & (MatterTask.company_id == AssistantActionPreview.company_id),
+            )
+            .where(
+                *preview_filter,
+                AssistantActionPreview.action_type == "task",
+                AssistantActionPreview.status == "confirmed",
+                MatterTask.status == "completed",
+            )
+        )
+        or 0
+    )
+    citation_total = int(
+        session.scalar(
+            select(func.count(AssistantCitation.id)).where(
+                AssistantCitation.company_id == company_id,
+                AssistantCitation.created_at >= started,
+                AssistantCitation.created_at <= now,
+            )
+        )
+        or 0
+    )
+    opened_citations = int(
+        session.scalar(
+            select(func.count(distinct(AuditEvent.target_id)))
+            .join(
+                AssistantCitation,
+                (AssistantCitation.id == AuditEvent.target_id)
+                & (AssistantCitation.company_id == AuditEvent.company_id),
+            )
+            .where(
+                AuditEvent.company_id == company_id,
+                AuditEvent.action == "workspace_assistant.citation_open_succeeded",
+                AuditEvent.created_at >= started,
+                AuditEvent.created_at <= now,
+                AssistantCitation.created_at >= started,
+                AssistantCitation.created_at <= now,
+            )
+        )
+        or 0
+    )
+    permission_denials = int(
+        session.scalar(
+            select(func.count(AuditEvent.id)).where(
+                AuditEvent.company_id == company_id,
+                AuditEvent.action == "workspace_assistant.scope_access_denied",
+                AuditEvent.created_at >= started,
+                AuditEvent.created_at <= now,
+            )
+        )
+        or 0
+    )
+    reported_answers = int(
+        session.scalar(
+            select(func.count(distinct(AIFeedbackItem.target_id)))
+            .join(
+                AssistantTurn,
+                (AssistantTurn.id == AIFeedbackItem.target_id)
+                & (AssistantTurn.company_id == AIFeedbackItem.company_id),
+            )
+            .where(
+                AIFeedbackItem.company_id == company_id,
+                AIFeedbackItem.surface == "workspace_assistant",
+                AIFeedbackItem.target_type == "assistant_turn",
+                AIFeedbackItem.feedback_type == "report",
+                AIFeedbackItem.created_at >= started,
+                AIFeedbackItem.created_at <= now,
+                *assistant_answer_filter,
+            )
+        )
+        or 0
+    )
+    return AIOutcomeAnalyticsResponse(
+        window_days=bounded_days,
+        window_started_at=started,
+        generated_at=now,
+        metrics=[
+            _metric(
+                "task_completion",
+                numerator=completed_tasks,
+                denominator=confirmed_tasks,
+                denominator_definition="confirmed assistant-created tasks",
+            ),
+            _metric(
+                "abstention",
+                numerator=abstained,
+                denominator=answer_total,
+                denominator_definition="completed or abstained assistant answers",
+            ),
+            _metric(
+                "citation_open_success",
+                numerator=opened_citations,
+                denominator=citation_total,
+                denominator_definition="reauthorizable citations created in the window",
+            ),
+            _metric(
+                "permission_denial",
+                numerator=permission_denials,
+                denominator=None,
+                denominator_definition=None,
+            ),
+            _metric(
+                "proposed_action_confirmation",
+                numerator=confirmed,
+                denominator=preview_total,
+                denominator_definition="stored assistant action previews",
+            ),
+            _metric(
+                "reported_answer",
+                numerator=reported_answers,
+                denominator=answer_total,
+                denominator_definition="completed or abstained assistant answers",
+            ),
+        ],
+    )
 
 
 def review_feedback(
@@ -349,6 +553,7 @@ def review_feedback(
 
 __all__ = [
     "list_feedback",
+    "get_ai_outcome_analytics",
     "review_feedback",
     "submit_product_guide_feedback",
     "submit_workspace_assistant_feedback",

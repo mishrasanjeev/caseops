@@ -4,6 +4,7 @@
 param(
     [switch]$KeepRunning,
     [switch]$SkipBuild,
+    [switch]$PreCommit,
     [Parameter(ValueFromRemainingArguments=$true)]
     [string[]]$PlaywrightArgs = @()
 )
@@ -13,19 +14,112 @@ $RepoRoot = (Resolve-Path "$PSScriptRoot\..").Path
 $ComposeFile = Join-Path $RepoRoot "docker-compose.yml"
 $ApiDir = Join-Path $RepoRoot "apps\api"
 $ApiPython = Join-Path $ApiDir ".venv\Scripts\python.exe"
-$ReleaseSha = ((& git -C $RepoRoot rev-parse HEAD | Out-String).Trim())
 $TestApiProxyScript = Join-Path $RepoRoot "scripts\docker-acceptance-api-proxy.mjs"
 $TestApiProxyProcess = $null
 $TestApiProxyStdout = $null
 $TestApiProxyStderr = $null
 
-if ($LASTEXITCODE -ne 0 -or $ReleaseSha -notmatch "^[0-9a-f]{40}$") {
-    throw "Could not resolve the exact candidate SHA."
+function Get-WorkingTreeFingerprint {
+    $Entries = @{}
+    foreach ($Line in @(& git -C $RepoRoot ls-files --stage)) {
+        if ($Line -notmatch "^[0-9]+ ([0-9a-f]{40}) 0`t(.+)$") { continue }
+        $Entries[$Matches[2]] = $Matches[1]
+    }
+    if ($LASTEXITCODE -ne 0) { throw "Could not read the candidate Git index." }
+    $ChangedPaths = @(
+        & git -C $RepoRoot ls-files --modified --others --exclude-standard
+    )
+    if ($LASTEXITCODE -ne 0) { throw "Could not enumerate changed candidate files." }
+    foreach ($RelativePath in ($ChangedPaths | Sort-Object -Unique)) {
+        $AbsolutePath = Join-Path $RepoRoot $RelativePath
+        if (-not (Test-Path -LiteralPath $AbsolutePath -PathType Leaf)) { continue }
+        $BlobHash = ((& git -C $RepoRoot hash-object -- $RelativePath | Out-String).Trim())
+        if ($LASTEXITCODE -ne 0 -or $BlobHash -notmatch "^[0-9a-f]{40}$") {
+            throw "Could not fingerprint $RelativePath."
+        }
+        $Entries[$RelativePath] = $BlobHash
+    }
+    foreach ($RelativePath in @(& git -C $RepoRoot ls-files --deleted)) {
+        $Entries[$RelativePath] = "DELETED"
+    }
+    $Records = foreach ($RelativePath in ($Entries.Keys | Sort-Object)) {
+        "$RelativePath`0$($Entries[$RelativePath])"
+    }
+    $Bytes = [Text.Encoding]::UTF8.GetBytes(($Records -join "`n"))
+    $Hasher = [Security.Cryptography.SHA256]::Create()
+    try {
+        return -join ($Hasher.ComputeHash($Bytes) | ForEach-Object { $_.ToString("x2") })
+    }
+    finally {
+        $Hasher.Dispose()
+    }
+}
+
+function Test-TcpPortBlockAvailable {
+    param(
+        [Parameter(Mandatory=$true)]
+        [int]$BasePort
+    )
+
+    $Listeners = @()
+    try {
+        foreach ($Offset in 0..4) {
+            $Listener = [Net.Sockets.TcpListener]::new(
+                [Net.IPAddress]::Loopback,
+                $BasePort + $Offset
+            )
+            $Listener.ExclusiveAddressUse = $true
+            $Listener.Start()
+            $Listeners += $Listener
+        }
+        return $true
+    }
+    catch [Net.Sockets.SocketException] {
+        # Windows excluded ranges and an existing listener both surface here.
+        return $false
+    }
+    finally {
+        foreach ($Listener in $Listeners) {
+            $Listener.Stop()
+        }
+    }
+}
+
+function Get-AvailablePortBase {
+    param(
+        [Parameter(Mandatory=$true)]
+        [int]$InitialBlock
+    )
+
+    foreach ($ProbeOffset in 0..5999) {
+        $CandidateBlock = ($InitialBlock + $ProbeOffset) % 6000
+        $CandidateBase = 20000 + ($CandidateBlock * 5)
+        if (Test-TcpPortBlockAvailable -BasePort $CandidateBase) {
+            return $CandidateBase
+        }
+    }
+    throw "No available five-port Docker acceptance block exists between 20000 and 49999."
+}
+
+$SourceFingerprint = if ($PreCommit) { Get-WorkingTreeFingerprint } else { $null }
+$ReleaseSha = if ($PreCommit) {
+    # Runtime release endpoints deliberately accept only exact Git-shaped revisions.
+    $SourceFingerprint.Substring(0, 40)
+} else {
+    ((& git -C $RepoRoot rev-parse HEAD | Out-String).Trim())
+}
+if (
+    $LASTEXITCODE -ne 0 `
+    -or $ReleaseSha -notmatch "^[0-9a-f]{40}$" `
+    -or ($PreCommit -and $SourceFingerprint -notmatch "^[0-9a-f]{64}$")
+) {
+    throw "Could not resolve the exact candidate source identity."
 }
 
 $ComposeProject = "caseops-acceptance-$($ReleaseSha.Substring(0, 12))"
 $PortBlock = [Convert]::ToInt32($ReleaseSha.Substring(0, 6), 16) % 6000
-$PortBase = 20000 + ($PortBlock * 5)
+$PreferredPortBase = 20000 + ($PortBlock * 5)
+$PortBase = Get-AvailablePortBase -InitialBlock $PortBlock
 $ApiPort = ($PortBase + 0).ToString()
 $TestApiPort = ($PortBase + 1).ToString()
 $WebPort = ($PortBase + 2).ToString()
@@ -33,7 +127,7 @@ $PostgresPort = ($PortBase + 3).ToString()
 $ValkeyPort = ($PortBase + 4).ToString()
 
 $DirtyContext = ((& git -C $RepoRoot status --porcelain --untracked-files=all -- apps/api apps/web docker-compose.yml package.json package-lock.json .dockerignore .gcloudignore playwright.docker.config.ts scripts/docker-acceptance-api-proxy.mjs scripts/verify-docker.ps1 | Out-String).Trim())
-if ($DirtyContext) {
+if ($DirtyContext -and -not $PreCommit) {
     throw "Docker acceptance requires a committed, clean build context. Commit the candidate first.`n$DirtyContext"
 }
 
@@ -61,6 +155,10 @@ $AcceptanceEnvironment = @{
     CASEOPS_E2E_DATABASE_URL = "postgresql+psycopg://caseops:caseops@127.0.0.1:$PostgresPort/caseops"
     CASEOPS_E2E_DOCKER_PROJECT = $ComposeProject
     CASEOPS_E2E_DOCKER_COMPOSE_FILE = $ComposeFile
+    CASEOPS_TEST_POSTGRES_URL = "postgresql+psycopg://caseops:caseops@127.0.0.1:$PostgresPort/caseops"
+    CASEOPS_DATABASE_URL = "postgresql+psycopg://caseops:caseops@127.0.0.1:$PostgresPort/caseops"
+    CASEOPS_ENV = "ci"
+    CASEOPS_AUTH_SECRET = "docker-postgres-validation-secret-at-least-32-bytes"
     CASEOPS_WEB_BASE_URL = "http://127.0.0.1:$WebPort"
     # Worktrees under OneDrive cannot always accept uv cache hardlinks on Windows.
     UV_LINK_MODE = "copy"
@@ -73,7 +171,18 @@ foreach ($Name in $AcceptanceEnvironment.Keys) {
 
 $Succeeded = $false
 try {
-    Write-Host "[docker-acceptance] exact candidate $ReleaseSha"
+    $IdentityKind = if ($PreCommit) { "pre-commit source fingerprint" } else { "commit" }
+    $CandidateIdentity = if ($PreCommit) { $SourceFingerprint } else { $ReleaseSha }
+    Write-Host "[docker-acceptance] exact $IdentityKind $CandidateIdentity"
+    if ($PreCommit) {
+        Write-Host "[docker-acceptance] derived runtime revision $ReleaseSha"
+    }
+    if ($PortBase -ne $PreferredPortBase) {
+        Write-Host (
+            "[docker-acceptance] preferred port block $PreferredPortBase-$($PreferredPortBase + 4) " +
+            "is reserved or occupied; using $PortBase-$($PortBase + 4)"
+        )
+    }
     Write-Host "[docker-acceptance] preparing frozen host test dependencies"
     & npm ci --no-audit --no-fund
     if ($LASTEXITCODE -ne 0) { throw "Host Node dependency sync failed." }
@@ -149,6 +258,16 @@ try {
         throw "PostgreSQL index health exceeded its 512 MiB production job ceiling or failed."
     }
 
+    Write-Host "[docker-acceptance] running the complete PostgreSQL + pgvector validation suite"
+    Push-Location $ApiDir
+    try {
+        & $ApiPython -m pytest -q -m postgres tests/test_postgres_validation.py
+        if ($LASTEXITCODE -ne 0) { throw "PostgreSQL + pgvector validation failed." }
+    }
+    finally {
+        Pop-Location
+    }
+
     Write-Host "[docker-acceptance] running Playwright against Docker + PostgreSQL"
     $NodePath = (Get-Command node -ErrorAction Stop).Source
     $TestApiProxyStdout = [IO.Path]::GetTempFileName()
@@ -180,8 +299,23 @@ try {
         } else { "" }
         throw "Docker acceptance API proxy did not become ready. $ProxyError"
     }
-    & npx playwright test --config playwright.docker.config.ts --reporter=list @PlaywrightArgs
-    if ($LASTEXITCODE -ne 0) { throw "Docker Playwright acceptance failed." }
+    if ($PlaywrightArgs.Count -eq 0) {
+        # Bound each Windows worker's lifetime without retries: every desktop
+        # test still runs exactly once, and the mobile project remains whole.
+        & npx playwright test --config playwright.docker.config.ts --reporter=list `
+            --project=app-chromium --shard=1/2
+        if ($LASTEXITCODE -ne 0) { throw "Docker Playwright desktop shard 1/2 failed." }
+        & npx playwright test --config playwright.docker.config.ts --reporter=list `
+            --project=app-chromium --shard=2/2
+        if ($LASTEXITCODE -ne 0) { throw "Docker Playwright desktop shard 2/2 failed." }
+        & npx playwright test --config playwright.docker.config.ts --reporter=list `
+            --project=app-mobile
+        if ($LASTEXITCODE -ne 0) { throw "Docker Playwright mobile project failed." }
+    }
+    else {
+        & npx playwright test --config playwright.docker.config.ts --reporter=list @PlaywrightArgs
+        if ($LASTEXITCODE -ne 0) { throw "Docker Playwright focused acceptance failed." }
+    }
 
     $PostTestHealth = Invoke-RestMethod "http://127.0.0.1:$ApiPort/api/health"
     if ($PostTestHealth.status -ne "ok") { throw "API became unhealthy after Playwright." }
@@ -201,7 +335,7 @@ finally {
             Get-Content -LiteralPath $TestApiProxyStderr
         }
     }
-    if ($Succeeded -and -not $KeepRunning) {
+    if (-not $KeepRunning) {
         & docker compose --project-name $ComposeProject --file $ComposeFile down --volumes --remove-orphans
     }
     foreach ($Name in $AcceptanceEnvironment.Keys) {

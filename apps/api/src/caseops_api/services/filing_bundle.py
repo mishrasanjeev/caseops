@@ -93,7 +93,7 @@ def render_filing_bundle(
     selection semantics.
     """
     matter = _load_matter(session, context, matter_id)
-    draft = _load_draft(session, matter, draft_id)
+    draft = _load_draft(session, matter, draft_id, context=context)
     target_id = version_id or draft.current_version_id
     if not target_id or not draft.versions:
         raise HTTPException(

@@ -30,6 +30,7 @@ from caseops_api.services.private_retrieval import (
     mark_private_generation_ready,
     prefilter_private_projection_ids,
     private_retrieval_cache_key,
+    private_source_version,
     propagate_private_projection_change,
     retrieve_private_content,
     upsert_private_projection,
@@ -79,7 +80,7 @@ def _projection_payload(matter: Matter, *, text: str) -> PrivateProjectionInput:
     return PrivateProjectionInput(
         source_type="matter",
         source_id=matter.id,
-        source_version=str(matter.access_policy_version),
+        source_version=private_source_version(matter),
         chunk_ordinal=0,
         label="Restricted trademark strategy",
         content=text,
@@ -131,6 +132,8 @@ def test_acl_prefilter_hydration_revocation_and_cross_tenant_are_fail_closed(
             session,
             company_id=company_id,
             generation_id=generation.id,
+            expected_access_policy_generation=generation.access_policy_generation,
+            expected_tombstone_generation=generation.tombstone_generation,
             payload=_projection_payload(
                 matter_row,
                 text="Confidential trademark opposition strategy and evidence.",
@@ -206,6 +209,8 @@ def test_acl_prefilter_hydration_revocation_and_cross_tenant_are_fail_closed(
             session,
             company_id=company_id,
             generation_id=generation.id,
+            expected_access_policy_generation=generation.access_policy_generation,
+            expected_tombstone_generation=generation.tombstone_generation,
             payload=_projection_payload(
                 matter_row,
                 text="Confidential trademark opposition strategy and evidence.",
@@ -314,17 +319,22 @@ def test_shadow_generation_receives_tombstones_before_atomic_activation(
         assert matter_row is not None
         active = ensure_active_private_generation(session, company_id=company_id)
         shadow = create_shadow_private_generation(session, company_id=company_id)
+        stale_access_generation = shadow.access_policy_generation
+        stale_tombstone_generation = shadow.tombstone_generation
+        event_key = "-".join(("shadow", "revocation", "1"))
         shadow_projection = upsert_private_projection(
             session,
             company_id=company_id,
             generation_id=shadow.id,
+            expected_access_policy_generation=shadow.access_policy_generation,
+            expected_tombstone_generation=shadow.tombstone_generation,
             payload=_projection_payload(matter_row, text="Shadow generation private text."),
         )
         event = propagate_private_projection_change(
             session,
             company_id=company_id,
             actor_membership_id=membership_id,
-            idempotency_key="shadow-revocation-1",
+            idempotency_key=event_key,
             event_type="revoked",
             target_type="matter",
             target_id=matter_row.id,
@@ -335,7 +345,7 @@ def test_shadow_generation_receives_tombstones_before_atomic_activation(
             session,
             company_id=company_id,
             actor_membership_id=membership_id,
-            idempotency_key="shadow-revocation-1",
+            idempotency_key=event_key,
             event_type="revoked",
             target_type="matter",
             target_id=matter_row.id,
@@ -344,6 +354,36 @@ def test_shadow_generation_receives_tombstones_before_atomic_activation(
         )
         assert duplicate.id == event.id
         assert session.get(PrivateIndexProjection, shadow_projection.id).is_tombstoned
+        with pytest.raises(
+            PrivateRetrievalInvariantError,
+            match="stale private projection writer",
+        ):
+            upsert_private_projection(
+                session,
+                company_id=company_id,
+                generation_id=shadow.id,
+                expected_access_policy_generation=stale_access_generation,
+                expected_tombstone_generation=stale_tombstone_generation,
+                payload=_projection_payload(
+                    matter_row,
+                    text="A stale worker must not restore this private text.",
+                ),
+            )
+        with pytest.raises(
+            PrivateRetrievalInvariantError,
+            match="idempotency key cannot identify a different event",
+        ):
+            propagate_private_projection_change(
+                session,
+                company_id=company_id,
+                actor_membership_id=membership_id,
+                idempotency_key=event_key,
+                event_type="tombstoned",
+                target_type="matter",
+                target_id=company_id,
+                target_version=None,
+                reason_code="different_operation",
+            )
         mark_private_generation_ready(
             session,
             company_id=company_id,
@@ -387,6 +427,8 @@ def test_authoritative_matter_disposal_and_reopen_never_resurrect_projection(
             session,
             company_id=company_id,
             generation_id=generation.id,
+            expected_access_policy_generation=generation.access_policy_generation,
+            expected_tombstone_generation=generation.tombstone_generation,
             payload=_projection_payload(
                 matter_row,
                 text="Lifecycle-sensitive private trademark analysis.",

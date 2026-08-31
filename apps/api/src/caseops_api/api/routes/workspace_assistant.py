@@ -11,6 +11,7 @@ from caseops_api.schemas.workspace_assistant import (
     AssistantActionPreviewResponse,
     AssistantAskRequest,
     AssistantAskResponse,
+    AssistantCitationOpenResponse,
     AssistantScopeReplaceRequest,
     AssistantScopeSearchResponse,
     AssistantSessionArchiveRequest,
@@ -33,6 +34,7 @@ from caseops_api.services.workspace_assistant import (
     get_assistant_session,
     list_assistant_sessions,
     list_assistant_turns,
+    record_assistant_citation_open,
     refuse_assistant_session_deletion,
     replace_assistant_scopes,
     search_assistant_scopes,
@@ -235,6 +237,25 @@ def get_assistant_turns(
         session_id=session_id,
         limit=limit,
         offset=offset,
+    )
+
+
+@router.post(
+    "/sessions/{session_id}/citations/{citation_id}/open",
+    response_model=AssistantCitationOpenResponse,
+    summary="Reauthorize and resolve one assistant citation target.",
+)
+def post_assistant_citation_open(
+    session_id: str,
+    citation_id: str,
+    context: AssistantUser,
+    session: DbSession,
+) -> AssistantCitationOpenResponse:
+    return record_assistant_citation_open(
+        session,
+        context=context,
+        session_id=session_id,
+        citation_id=citation_id,
     )
 
 

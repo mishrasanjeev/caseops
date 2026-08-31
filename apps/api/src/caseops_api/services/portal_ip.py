@@ -1016,6 +1016,7 @@ def _publication_record(
     loaded_targets: list[PortalPublicationTargetRecord] | None = None,
     loaded_artifact: ReportArtifact | None = None,
     loaded_version: IpDocumentVersion | None = None,
+    loaded_document: IpDocument | None = None,
     loaded_intent: NotificationDeliveryIntent | None = None,
 ) -> PortalPublicationRecord:
     if publication.portal_user_id != portal_user.id:
@@ -1030,16 +1031,6 @@ def _publication_record(
         publication.status == "scheduled"
         and publication.scheduled_for is not None
         and _aware(publication.scheduled_for) > now
-    )
-    current = bool(targets) and all(target.current for target in targets)
-    access_state = (
-        "revoked"
-        if publication.status == "revoked"
-        else "scheduled"
-        if scheduled
-        else "available"
-        if current
-        else "review_required"
     )
     artifact = (
         loaded_artifact
@@ -1058,6 +1049,43 @@ def _publication_record(
             if publication.document_version_id
             else None
         )
+    )
+    document = (
+        loaded_document
+        if dependencies_loaded
+        else (
+            session.get(IpDocument, version.document_id)
+            if version is not None
+            else None
+        )
+    )
+    # A publication is a projection, not a permanent disclosure grant. Recheck
+    # the canonical document policy/version on every list, open and download so
+    # a later privilege, confidentiality, lifecycle or purge/provider cleanup
+    # cannot leave the old portal copy readable.
+    document_current = bool(
+        publication.document_version_id is None
+        or (
+            version is not None
+            and document is not None
+            and document.company_id == portal_user.company_id
+            and version.company_id == portal_user.company_id
+            and version.document_id == document.id
+            and version.version == document.current_version
+            and not document.is_privileged
+            and document.confidentiality == "internal"
+            and version.state in {"approved", "filed", "served", "accepted"}
+        )
+    )
+    current = bool(targets) and all(target.current for target in targets) and document_current
+    access_state = (
+        "revoked"
+        if publication.status == "revoked"
+        else "scheduled"
+        if scheduled
+        else "available"
+        if current
+        else "review_required"
     )
     intent = (
         loaded_intent
@@ -1141,15 +1169,17 @@ def list_portal_publications(
         )
     }
     version_ids = [row.document_version_id for row in rows if row.document_version_id]
-    versions = {
-        row.id: row
-        for row in session.scalars(
-            select(IpDocumentVersion).where(
-                IpDocumentVersion.company_id == portal_user.company_id,
-                IpDocumentVersion.id.in_(version_ids),
-            )
+    version_document_rows = session.execute(
+        select(IpDocumentVersion, IpDocument)
+        .join(IpDocument, IpDocument.id == IpDocumentVersion.document_id)
+        .where(
+            IpDocumentVersion.company_id == portal_user.company_id,
+            IpDocumentVersion.id.in_(version_ids),
+            IpDocument.company_id == portal_user.company_id,
         )
-    }
+    ).all()
+    versions = {version.id: version for version, _document in version_document_rows}
+    documents = {document.id: document for _version, document in version_document_rows}
     intent_ids = [row.delivery_intent_id for row in rows if row.delivery_intent_id]
     intents = {
         row.id: row
@@ -1170,6 +1200,11 @@ def list_portal_publications(
                 loaded_targets=targets_by_publication[row.id],
                 loaded_artifact=artifacts.get(row.report_artifact_id),
                 loaded_version=versions.get(row.document_version_id),
+                loaded_document=(
+                    documents.get(versions[row.document_version_id].document_id)
+                    if row.document_version_id in versions
+                    else None
+                ),
                 loaded_intent=intents.get(row.delivery_intent_id),
             )
             for row in rows

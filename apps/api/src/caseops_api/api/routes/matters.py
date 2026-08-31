@@ -3314,7 +3314,7 @@ async def get_current_company_matter_draft_filing_checklist(
     from caseops_api.services.drafting import _load_draft, _load_matter
 
     matter = _load_matter(session, context, matter_id)
-    draft = _load_draft(session, matter, draft_id)
+    draft = _load_draft(session, matter, draft_id, context=context)
 
     try:
         checklist = build_filing_checklist(

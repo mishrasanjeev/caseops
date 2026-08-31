@@ -15,7 +15,7 @@ from caseops_api.core.settings import get_settings
 from caseops_api.db.session import clear_engine_cache
 
 PREVIOUS_HEAD = "20260830_0002"
-MIGRATION_HEAD = "20260830_0003"
+MIGRATION_HEAD = "20260831_0002"
 COST_TRIGGERS = {
     "trg_ip_cost_items_evidence_immutable",
     "trg_ip_cost_items_evidence_retained",

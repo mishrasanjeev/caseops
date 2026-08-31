@@ -342,7 +342,7 @@ class TestGateBehaviour:
     def test_iplf039f_empty_table_indexes_and_restore_forward_are_explicit(self) -> None:
         migration = (
             migration_preflight.VERSIONS_DIR
-            / "20260830_0003_ip_cost_evidence_immutable.py"
+            / "20260831_0002_ip_cost_evidence_immutable.py"
         )
         source = migration.read_text(encoding="utf-8")
 

@@ -9481,3 +9481,258 @@ def test_matterless_ip_cost_evidence_is_immutable_on_postgres(pg_engine):
             text("SELECT count(*) FROM ip_cost_item_corrections WHERE docket_id = :id"),
             {"id": docket_id},
         ) == 0
+def test_private_retrieval_prefilters_before_bounded_rank_on_postgres(
+    pg_engine,
+    monkeypatch,
+) -> None:
+    """IPLF-066B keeps production-scale candidate work tenant-bounded."""
+
+    from sqlalchemy import event
+
+    from caseops_api.db.models import (
+        Company,
+        CompanyMembership,
+        Matter,
+        PrivateIndexProjection,
+        PrivateIndexProjectionScope,
+        PrivateProjectionEvent,
+        User,
+    )
+    from caseops_api.services import private_retrieval_jobs
+    from caseops_api.services.private_retrieval import (
+        enqueue_private_projection_event,
+        ensure_active_private_generation,
+        hydrate_private_projection_results,
+        prefilter_private_projection_ids,
+        private_source_version,
+    )
+    from caseops_api.services.private_retrieval_jobs import (
+        process_pending_private_projection_events,
+    )
+    from caseops_api.services.session_context import SessionContext
+
+    company_id = str(uuid4())
+    other_company_id = str(uuid4())
+    user_id = str(uuid4())
+    membership_id = str(uuid4())
+    matter_id = str(uuid4())
+    now = datetime.now(UTC)
+    query_count = 0
+
+    def count_queries(*_args) -> None:
+        nonlocal query_count
+        query_count += 1
+
+    with Session(pg_engine) as session:
+        company = Company(
+            id=company_id,
+            name="PostgreSQL Private Retrieval Firm",
+            slug=f"pg-private-{company_id[:8]}",
+            company_type="law_firm",
+            tenant_key=company_id,
+        )
+        other_company = Company(
+            id=other_company_id,
+            name="PostgreSQL Private Retrieval Other",
+            slug=f"pg-private-other-{other_company_id[:8]}",
+            company_type="law_firm",
+            tenant_key=other_company_id,
+        )
+        user = User(
+            id=user_id,
+            email=f"pg-private-{user_id[:8]}@example.com",
+            full_name="PostgreSQL Private Owner",
+            password_hash="not-used",
+        )
+        session.add_all([company, other_company, user])
+        session.commit()
+        membership = CompanyMembership(
+            id=membership_id,
+            company_id=company_id,
+            user_id=user_id,
+            role="owner",
+        )
+        matter = Matter(
+            id=matter_id,
+            company_id=company_id,
+            title="Bounded private retrieval",
+            matter_code=f"PRIVATE-{matter_id[:8]}",
+            status="active",
+            practice_area="Intellectual Property",
+            forum_level="high_court",
+            is_active=True,
+            updated_at=now,
+        )
+        session.add_all([membership, matter])
+        session.commit()
+        generation = ensure_active_private_generation(session, company_id=company_id)
+        other_generation = ensure_active_private_generation(
+            session,
+            company_id=other_company_id,
+        )
+        version = private_source_version(matter)
+        projections: list[PrivateIndexProjection] = []
+        for ordinal in range(1_200):
+            projection = PrivateIndexProjection(
+                company_id=company_id,
+                generation_id=generation.id,
+                source_type="matter",
+                source_id=matter.id,
+                source_version=version,
+                chunk_ordinal=ordinal,
+                label="Authorized private result",
+                content_text=f"bounded needle authorized private chunk {ordinal}",
+                content_sha256=(f"{ordinal:064x}"[-64:]),
+                confidentiality="internal",
+                is_privileged=False,
+                source_state="active",
+                approval_state="not_required",
+                access_policy_version=matter.access_policy_version,
+                access_policy_generation=generation.access_policy_generation,
+                tombstone_generation=generation.tombstone_generation,
+                embedding_model="postgres-test",
+                embedding_version="1",
+                embedding_dimensions=3,
+                embedding_json="[1.0,0.0,0.0]",
+                is_tombstoned=False,
+                created_at=now,
+                updated_at=now,
+            )
+            projections.append(projection)
+        forged_other = PrivateIndexProjection(
+            company_id=other_company_id,
+            generation_id=other_generation.id,
+            source_type="matter",
+            source_id=str(uuid4()),
+            source_version="1",
+            chunk_ordinal=0,
+            label="Forbidden other tenant",
+            content_text="bounded needle forbidden cross tenant payload",
+            content_sha256="f" * 64,
+            confidentiality="internal",
+            is_privileged=False,
+            source_state="active",
+            approval_state="not_required",
+            access_policy_version=0,
+            access_policy_generation=other_generation.access_policy_generation,
+            tombstone_generation=other_generation.tombstone_generation,
+            is_tombstoned=False,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add_all([*projections, forged_other])
+        session.flush()
+        session.add_all(
+            [
+                PrivateIndexProjectionScope(
+                    company_id=company_id,
+                    projection_id=projection.id,
+                    scope_type="matter",
+                    scope_id=matter.id,
+                    matter_id=matter.id,
+                    access_policy_version=matter.access_policy_version,
+                    created_at=now,
+                )
+                for projection in projections
+            ]
+        )
+        session.commit()
+        context = SessionContext(
+            company=company,
+            membership=membership,
+            user=user,
+        )
+
+        event.listen(pg_engine, "before_cursor_execute", count_queries)
+        try:
+            candidate_ids = prefilter_private_projection_ids(
+                session,
+                context=context,
+                query="bounded needle",
+                limit=10_000,
+            )
+            results = hydrate_private_projection_results(
+                session,
+                context=context,
+                projection_ids=candidate_ids,
+                query="bounded needle",
+                query_embedding=(1.0, 0.0, 0.0),
+                limit=10_000,
+            )
+        finally:
+            event.remove(pg_engine, "before_cursor_execute", count_queries)
+
+        assert len(candidate_ids) == 200
+        assert len(results) == 20
+        assert query_count <= 20
+        assert all(row.source_id == matter.id for row in results)
+        assert all("Forbidden" not in row.label for row in results)
+        assert hydrate_private_projection_results(
+            session,
+            context=context,
+            projection_ids=[forged_other.id],
+            query="bounded needle",
+        ) == ()
+
+        first_event = enqueue_private_projection_event(
+            session,
+            company_id=company_id,
+            actor_membership_id=membership_id,
+            idempotency_key=f"pg-private-savepoint-fail:{matter_id}",
+            event_type="revoked",
+            target_type="matter",
+            target_id=matter_id,
+            target_version=None,
+            reason_code="forced_postgres_failure",
+        )
+        second_event = enqueue_private_projection_event(
+            session,
+            company_id=company_id,
+            actor_membership_id=membership_id,
+            idempotency_key=f"pg-private-savepoint-pass:{matter_id}",
+            event_type="revoked",
+            target_type="matter",
+            target_id=matter_id,
+            target_version=None,
+            reason_code="postgres_revocation",
+        )
+        first_event.created_at = now
+        second_event.created_at = now + timedelta(seconds=1)
+        first_event_id = first_event.id
+        second_event_id = second_event.id
+        session.commit()
+
+        real_apply = private_retrieval_jobs.apply_private_projection_event
+
+        def postgres_failure_then_apply(event_session, *, event_id):
+            if event_id == first_event_id:
+                event_session.execute(text("SELECT 1 / 0"))
+            return real_apply(event_session, event_id=event_id)
+
+        monkeypatch.setattr(
+            private_retrieval_jobs,
+            "apply_private_projection_event",
+            postgres_failure_then_apply,
+        )
+        applied = process_pending_private_projection_events(
+            session,
+            company_id=company_id,
+            max_attempts=1,
+        )
+        session.commit()
+        assert applied == (second_event_id,)
+        failed = session.get(PrivateProjectionEvent, first_event_id)
+        succeeded = session.get(PrivateProjectionEvent, second_event_id)
+        assert failed is not None and failed.status == "failed"
+        assert failed.attempt_count == 1
+        assert failed.next_attempt_at is None
+        assert failed.error_code == "DataError"
+        assert succeeded is not None and succeeded.status == "applied"
+        assert session.scalar(
+            select(PrivateIndexProjection.id).where(
+                PrivateIndexProjection.company_id == company_id,
+                PrivateIndexProjection.source_type == "matter",
+                PrivateIndexProjection.source_id == matter_id,
+                PrivateIndexProjection.is_tombstoned.is_(False),
+            )
+        ) is None

@@ -63,6 +63,40 @@ def test_production_playwright_does_not_retain_authenticated_media(
     assert "only-on-failure" not in config
 
 
+def test_private_retrieval_production_acceptance_is_exact_and_release_owned() -> None:
+    config = _read_repo_text("playwright.prod-ram.config.ts")
+    workflow = _read_repo_text(".github/workflows/prod-verify.yml")
+    deploy = _read_repo_text("scripts/deploy-prod.sh")
+    bootstrap = _read_repo_text(
+        "apps/api/src/caseops_api/scripts/bootstrap_ip_production_qa.py"
+    )
+    spec = _read_repo_text(
+        "tests/e2e/iplf-066b-private-retrieval-2026-08-31-prod.spec.ts"
+    )
+
+    assert config.count("iplf-066b-private-retrieval-2026-08-31-prod") == 2
+    assert "playwright.prod-ram.config.ts" in workflow
+    assert 'required("CASEOPS_EXPECTED_RELEASE_SHA")' in spec
+    assert 'required("CASEOPS_IP_QA_PASSWORD")' in spec
+    assert "`${API}/api/build`" in spec
+    assert "`${WEB}/api/release-identity`" in spec
+    assert spec.count("/api/private-retrieval/search") == 2
+    assert "/lifecycle/status" in spec
+    assert "expected_updated_at: current.updated_at" in spec
+    assert "This answer is hidden because access" in spec
+    assert "spawnSync" not in spec
+    assert "DATABASE_URL" not in spec
+    assert '_required_env("CASEOPS_QA_RELEASE_SHA")' in bootstrap
+    assert "refusing to resurrect" in bootstrap
+    assert "--update-env-vars \"CASEOPS_QA_RELEASE_SHA=${HEAD_SHA}\"" in deploy
+    assert deploy.index("run deploy caseops-web") < deploy.index(
+        "run jobs execute caseops-ip-qa-bootstrap"
+    )
+    assert deploy.index("run jobs execute caseops-ip-qa-bootstrap") < deploy.index(
+        "gh workflow run prod-verify.yml"
+    )
+
+
 def test_a0_production_acceptance_is_an_isolated_verify_only_gate() -> None:
     workflow = _read_repo_text(".github/workflows/prod-verify.yml")
     config = _read_repo_text("playwright.ip-a0-prod.config.ts")
@@ -334,7 +368,14 @@ def test_workstation_docker_gate_is_migration_first_and_exact_release() -> None:
     assert (
         "$PortBlock = [Convert]::ToInt32($ReleaseSha.Substring(0, 6), 16) % 6000" in docker_script
     )
-    assert "$PortBase = 20000 + ($PortBlock * 5)" in docker_script
+    assert "$PreferredPortBase = 20000 + ($PortBlock * 5)" in docker_script
+    assert "function Test-TcpPortBlockAvailable" in docker_script
+    assert "foreach ($Offset in 0..4)" in docker_script
+    assert "$Listener.ExclusiveAddressUse = $true" in docker_script
+    assert "function Get-AvailablePortBase" in docker_script
+    assert "foreach ($ProbeOffset in 0..5999)" in docker_script
+    assert "$PortBase = Get-AvailablePortBase -InitialBlock $PortBlock" in docker_script
+    assert "is reserved or occupied" in docker_script
     assert 'CASEOPS_DOCKER_PUBLIC_API_URL = "http://127.0.0.1:$TestApiPort"' in docker_script
     assert "CASEOPS_E2E_API_PORT = $TestApiPort" in docker_script
     assert (
@@ -342,9 +383,19 @@ def test_workstation_docker_gate_is_migration_first_and_exact_release() -> None:
         in docker_script
     )
     assert '-ArgumentList @("`"$TestApiProxyScript`"", $TestApiPort, $ApiPort)' in docker_script
+    assert "if ($PlaywrightArgs.Count -eq 0)" in docker_script
+    assert "--project=app-chromium --shard=1/2" in docker_script
+    assert "--project=app-chromium --shard=2/2" in docker_script
+    assert "--project=app-mobile" in docker_script
+    assert "Docker Playwright focused acceptance failed" in docker_script
+    assert "--retries" not in docker_script
     assert "git -C $RepoRoot status" in docker_script
     assert "| Out-String).Trim()" in docker_script
+    assert "$SourceFingerprint.Substring(0, 40)" in docker_script
+    assert 'SourceFingerprint -notmatch "^[0-9a-f]{64}$"' in docker_script
+    assert 'Write-Host "[docker-acceptance] derived runtime revision $ReleaseSha"' in docker_script
     assert "down --volumes --remove-orphans" in docker_script
+    assert "if (-not $KeepRunning)" in docker_script
     assert "building API and web production images" in docker_script
     assert "MigrationExitCode" in docker_script
     assert "org.opencontainers.image.revision" in docker_script
@@ -663,7 +714,22 @@ def _a0_qa_job_json(
     generation: int,
     *,
     execution_count: int = 9,
+    release_sha: str | None = None,
+    latest_execution: str = "caseops-ip-qa-bootstrap-old",
 ) -> str:
+    environment = [
+        {
+            "name": "CASEOPS_AUTO_MIGRATE",
+            "value": "false",
+        }
+    ]
+    if release_sha is not None:
+        environment.append(
+            {
+                "name": "CASEOPS_QA_RELEASE_SHA",
+                "value": release_sha,
+            }
+        )
     return json.dumps(
         {
             "metadata": {"generation": generation},
@@ -686,12 +752,7 @@ def _a0_qa_job_json(
                                     {
                                         "args": [],
                                         "command": ["caseops-bootstrap-ip-production-qa"],
-                                        "env": [
-                                            {
-                                                "name": "CASEOPS_AUTO_MIGRATE",
-                                                "value": "false",
-                                            }
-                                        ],
+                                        "env": environment,
                                         "image": image,
                                     }
                                 ],
@@ -708,8 +769,35 @@ def _a0_qa_job_json(
             "status": {
                 "conditions": [{"status": "True", "type": "Ready"}],
                 "executionCount": execution_count,
-                "latestCreatedExecution": {"name": "caseops-ip-qa-bootstrap-old"},
+                "latestCreatedExecution": {"name": latest_execution},
                 "observedGeneration": generation,
+            },
+        },
+        separators=(",", ":"),
+    )
+
+
+def _qa_execution_json(*, job_generation: int, succeeded: bool = True) -> str:
+    return json.dumps(
+        {
+            "metadata": {
+                "labels": {
+                    "run.googleapis.com/job": "caseops-ip-qa-bootstrap",
+                    "run.googleapis.com/jobGeneration": str(job_generation),
+                },
+                "name": (
+                    "caseops-ip-qa-bootstrap-new"
+                    if job_generation == 5
+                    else "caseops-ip-qa-bootstrap-old"
+                ),
+            },
+            "status": {
+                "conditions": [
+                    {
+                        "status": "True" if succeeded else "False",
+                        "type": "Completed",
+                    }
+                ]
             },
         },
         separators=(",", ":"),
@@ -852,6 +940,8 @@ def _run_deploy_with_fakes(
     gh_mode: str = "ok",
     index_health_mode: str = "ok",
     qa_execution_drift: bool = False,
+    qa_already_completed: bool = False,
+    qa_already_failed: bool = False,
     migration_timeout_drift: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     fake_bin = tmp_path / "fake-bin"
@@ -897,12 +987,20 @@ elif [[ "$*" == *"run jobs describe caseops-migrate-job"* && "$*" == *"--format=
   printf '%s\n' "${FAKE_MIGRATION_JOB_JSON}"
 elif [[ "$*" == *"run jobs update caseops-ip-qa-bootstrap"* ]]; then
   touch "${FAKE_QA_UPDATED}"
+elif [[ "$*" == *"run jobs execute caseops-ip-qa-bootstrap"* ]]; then
+  touch "${FAKE_QA_EXECUTED}"
 elif [[ "$*" == *"run jobs describe caseops-ip-qa-bootstrap"* && "$*" == *"--format=json"* ]]; then
-  if [[ -f "${FAKE_QA_UPDATED}" ]]; then
+  if [[ -f "${FAKE_QA_EXECUTED}" ]]; then
+    printf '%s\n' "${FAKE_QA_EXECUTED_JSON}"
+  elif [[ -f "${FAKE_QA_UPDATED}" ]]; then
     printf '%s\n' "${FAKE_QA_AFTER_JSON}"
   else
     printf '%s\n' "${FAKE_QA_BEFORE_JSON}"
   fi
+elif [[ "$*" == *"run jobs executions describe caseops-ip-qa-bootstrap-new"* ]]; then
+  printf '%s\n' "${FAKE_QA_NEW_EXECUTION_JSON}"
+elif [[ "$*" == *"run jobs executions describe caseops-ip-qa-bootstrap-old"* ]]; then
+  printf '%s\n' "${FAKE_QA_OLD_EXECUTION_JSON}"
 elif [[ "$*" == *"run jobs executions list"* ]]; then
   printf '%s\n' "${FAKE_EXECUTIONS_JSON}"
 elif [[ "$*" == *"run jobs describe caseops-ip-rule-governance-fingerprint-a0"* ]]; then
@@ -1048,7 +1146,8 @@ exit 0
         fake_bin / "python",
         """#!/usr/bin/env bash
 set -euo pipefail
-if [[ "${1:-}" == "scripts/scheduler_inventory.py" ]]; then
+if [[ "${1:-}" == "scripts/scheduler_inventory.py" || \
+      "${1:-}" == "scripts/reconcile_monitoring_alerts.py" ]]; then
   printf '%s\n' "$*" >> "${FAKE_GCLOUD_LOG}"
   exit 0
 fi
@@ -1060,6 +1159,7 @@ exec "${FAKE_REAL_PYTHON}" "$@"
         "asia-south1-docker.pkg.dev/perfect-period-305406/"
         "caseops-images/caseops-api@sha256:" + "a" * 64
     )
+    release_sha = "abcdef1234567890abcdef1234567890abcdef12"
     env = os.environ.copy()
     fingerprint_json = _a0_fingerprint_json()
     fingerprint_log_json = json.dumps(
@@ -1171,12 +1271,51 @@ exec "${FAKE_REAL_PYTHON}" "$@"
             "FAKE_QA_AFTER_JSON": _a0_qa_job_json(
                 immutable_image,
                 5,
-                execution_count=(10 if a0_mode == "qa-executed" or qa_execution_drift else 9),
+                execution_count=(
+                    10
+                    if a0_mode == "qa-executed"
+                    or qa_execution_drift
+                    or qa_already_completed
+                    or qa_already_failed
+                    else 9
+                ),
+                release_sha=release_sha,
+                latest_execution=(
+                    "caseops-ip-qa-bootstrap-new"
+                    if qa_already_completed or qa_already_failed
+                    else "caseops-ip-qa-bootstrap-old"
+                ),
             ),
             "FAKE_QA_BEFORE_JSON": _a0_qa_job_json(
-                "registry.invalid/caseops-api:old",
-                4,
+                immutable_image
+                if qa_already_completed or qa_already_failed
+                else "registry.invalid/caseops-api:old",
+                5 if qa_already_completed or qa_already_failed else 4,
+                execution_count=(
+                    10 if qa_already_completed or qa_already_failed else 9
+                ),
+                release_sha=(
+                    release_sha if qa_already_completed or qa_already_failed else None
+                ),
+                latest_execution=(
+                    "caseops-ip-qa-bootstrap-new"
+                    if qa_already_completed or qa_already_failed
+                    else "caseops-ip-qa-bootstrap-old"
+                ),
             ),
+            "FAKE_QA_EXECUTED": _bash_path(tmp_path / "qa-executed"),
+            "FAKE_QA_EXECUTED_JSON": _a0_qa_job_json(
+                immutable_image,
+                5,
+                execution_count=10,
+                release_sha=release_sha,
+                latest_execution="caseops-ip-qa-bootstrap-new",
+            ),
+            "FAKE_QA_NEW_EXECUTION_JSON": _qa_execution_json(
+                job_generation=5,
+                succeeded=not qa_already_failed,
+            ),
+            "FAKE_QA_OLD_EXECUTION_JSON": _qa_execution_json(job_generation=4),
             "FAKE_QA_UPDATED": _bash_path(tmp_path / "qa-updated"),
             "FAKE_PENDING_EXECUTION_JSON": _a0_pending_execution_json(immutable_image),
             "FAKE_REAL_PYTHON": _bash_path(Path(sys.executable)),
@@ -1311,7 +1450,20 @@ def test_deploy_prod_accepts_clean_head_and_healthy_api(tmp_path: Path) -> None:
     assert call_index("run jobs update caseops-ip-qa-bootstrap") < call_index(
         "run deploy caseops-api"
     )
-    assert not any("run jobs execute caseops-ip-qa-bootstrap" in call for call in calls)
+    assert call_index("run deploy caseops-web") < call_index(
+        "run jobs execute caseops-ip-qa-bootstrap"
+    )
+    assert call_index("run jobs execute caseops-ip-qa-bootstrap") < call_index(
+        "gh workflow run prod-verify.yml"
+    )
+    assert sum("run jobs execute caseops-ip-qa-bootstrap" in call for call in calls) == 1
+    assert any(
+        "run jobs update caseops-ip-qa-bootstrap" in call
+        and "--update-env-vars "
+        "CASEOPS_QA_RELEASE_SHA=abcdef1234567890abcdef1234567890abcdef12"
+        in call
+        for call in calls
+    )
     assert any(
         "run deploy caseops-api" in call
         and "--update-secrets "
@@ -1324,6 +1476,30 @@ def test_deploy_prod_accepts_clean_head_and_healthy_api(tmp_path: Path) -> None:
         "gh workflow run prod-verify.yml --repo mishrasanjeev/caseops --ref main "
         "-f expected_release_sha=abcdef1234567890abcdef1234567890abcdef12"
     ) in "\n".join(calls)
+
+
+def test_deploy_prod_does_not_repeat_a_successful_current_generation_qa_bootstrap(
+    tmp_path: Path,
+) -> None:
+    result = _run_deploy_with_fakes(tmp_path, "abcdef1", qa_already_completed=True)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+    assert not any("run jobs execute caseops-ip-qa-bootstrap" in call for call in calls)
+    assert "no second execution" in result.stdout
+    assert any("gh workflow run prod-verify.yml" in call for call in calls)
+
+
+def test_deploy_prod_refuses_to_retry_a_failed_current_generation_qa_bootstrap(
+    tmp_path: Path,
+) -> None:
+    result = _run_deploy_with_fakes(tmp_path, "abcdef1", qa_already_failed=True)
+
+    assert result.returncode != 0
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+    assert not any("run jobs execute caseops-ip-qa-bootstrap" in call for call in calls)
+    assert not any("gh workflow run prod-verify.yml" in call for call in calls)
+    assert "refusing an automatic retry" in result.stdout
 
 
 def test_deploy_prod_refuses_migration_timeout_drift_before_execution(
@@ -1393,6 +1569,9 @@ def test_a0_deploy_captures_final_pre_route_baseline_in_fail_closed_order(
         "scheduler_inventory.py reconcile"
     )
     assert call_index("scheduler_inventory.py reconcile") < call_index(
+        "reconcile_monitoring_alerts.py reconcile"
+    )
+    assert call_index("reconcile_monitoring_alerts.py reconcile") < call_index(
         "run jobs execute caseops-db-index-health"
     )
     assert call_index("run jobs execute caseops-db-index-health") < call_index(

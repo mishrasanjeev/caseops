@@ -38,6 +38,23 @@ export interface paths {
         patch: operations["patch_ai_feedback_api_admin_ai_feedback__feedback_id__patch"];
         trace?: never;
     };
+    "/api/admin/ai-outcomes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read privacy-bounded tenant AI outcome aggregates */
+        get: operations["get_ai_outcomes_api_admin_ai_outcomes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/ai-token-governance": {
         parameters: {
             query?: never;
@@ -11590,6 +11607,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/private-retrieval/autocomplete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Autocomplete from current permitted private labels without snippets. */
+        post: operations["autocomplete_private_retrieval_api_private_retrieval_autocomplete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/private-retrieval/count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Count a bounded set of current permitted private matches. */
+        post: operations["count_private_retrieval_api_private_retrieval_count_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/private-retrieval/integrity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read safe tenant-private projection release aggregates. */
+        get: operations["get_private_retrieval_integrity_api_private_retrieval_integrity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/private-retrieval/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Search current permitted tenant-private projections. */
+        post: operations["search_private_retrieval_api_private_retrieval_search_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/private-retrieval/search/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stream private results with a fresh authorization check per row. */
+        post: operations["stream_private_retrieval_api_private_retrieval_search_stream_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/product-guide/catalog": {
         parameters: {
             query?: never;
@@ -12379,6 +12481,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/workspace-assistant/sessions/{session_id}/citations/{citation_id}/open": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reauthorize and resolve one assistant citation target. */
+        post: operations["post_assistant_citation_open_api_workspace_assistant_sessions__session_id__citations__citation_id__open_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workspace-assistant/sessions/{session_id}/export": {
         parameters: {
             query?: never;
@@ -12876,6 +12995,51 @@ export interface components {
             /** Regression Gates Required */
             regression_gates_required: boolean;
         };
+        /** AIOutcomeAnalyticsResponse */
+        AIOutcomeAnalyticsResponse: {
+            /**
+             * Aggregation Scope
+             * @default tenant
+             * @constant
+             */
+            aggregation_scope: "tenant";
+            /**
+             * Employee Scoring
+             * @default false
+             * @constant
+             */
+            employee_scoring: false;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Metrics */
+            metrics: components["schemas"]["AIOutcomeMetric"][];
+            /** Window Days */
+            window_days: number;
+            /**
+             * Window Started At
+             * Format: date-time
+             */
+            window_started_at: string;
+        };
+        /** AIOutcomeMetric */
+        AIOutcomeMetric: {
+            /** Denominator */
+            denominator?: number | null;
+            /** Denominator Definition */
+            denominator_definition?: string | null;
+            /**
+             * Key
+             * @enum {string}
+             */
+            key: "task_completion" | "abstention" | "citation_open_success" | "permission_denial" | "proposed_action_confirmation" | "reported_answer";
+            /** Numerator */
+            numerator: number;
+            /** Rate */
+            rate?: number | null;
+        };
         /** AITokenGovernancePatchRequest */
         AITokenGovernancePatchRequest: {
             /** Firm Quota Tokens */
@@ -13182,6 +13346,13 @@ export interface components {
             assistant_turn: components["schemas"]["AssistantTurnRecord"];
             session: components["schemas"]["AssistantSessionRecord"];
             user_turn: components["schemas"]["AssistantTurnRecord"];
+        };
+        /** AssistantCitationOpenResponse */
+        AssistantCitationOpenResponse: {
+            /** Citation Id */
+            citation_id: string;
+            /** Source Url */
+            source_url: string;
         };
         /** AssistantCitationRecord */
         AssistantCitationRecord: {
@@ -38803,6 +38974,110 @@ export interface components {
             /** Top Outcome Label */
             top_outcome_label: string | null;
         };
+        /** PrivateRetrievalAutocompleteRecord */
+        PrivateRetrievalAutocompleteRecord: {
+            /** Label */
+            label: string;
+            /** Projection Id */
+            projection_id: string;
+            /** Source Id */
+            source_id: string;
+            /** Source Type */
+            source_type: string;
+            /** Source Version */
+            source_version: string;
+        };
+        /** PrivateRetrievalAutocompleteResponse */
+        PrivateRetrievalAutocompleteResponse: {
+            /** Items */
+            items: components["schemas"]["PrivateRetrievalAutocompleteRecord"][];
+        };
+        /** PrivateRetrievalCountResponse */
+        PrivateRetrievalCountResponse: {
+            /** Count Is Capped */
+            count_is_capped: boolean;
+            /** Count Limit */
+            count_limit: number;
+            /** Visible Match Count */
+            visible_match_count: number;
+        };
+        /** PrivateRetrievalIntegrityResponse */
+        PrivateRetrievalIntegrityResponse: {
+            /** Activation Reason */
+            activation_reason: string;
+            /** Active Generation Id */
+            active_generation_id: string | null;
+            /** Blockers */
+            blockers: string[];
+            /** Failed Event Count */
+            failed_event_count: number;
+            /** Generation Manifest Matches */
+            generation_manifest_matches: boolean;
+            /** Live Projection Count */
+            live_projection_count: number;
+            /** Oldest Pending Lag Seconds */
+            oldest_pending_lag_seconds: number | null;
+            /** Orphan Scope Count */
+            orphan_scope_count: number;
+            /** Pending Event Count */
+            pending_event_count: number;
+            /** Release Blocked */
+            release_blocked: boolean;
+            /** Stale Source Count */
+            stale_source_count: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "ready" | "blocked" | "disabled";
+            /** Tombstoned Projection Count */
+            tombstoned_projection_count: number;
+            /** Unsafe Tombstone Count */
+            unsafe_tombstone_count: number;
+        };
+        /** PrivateRetrievalResultRecord */
+        PrivateRetrievalResultRecord: {
+            /** Content */
+            content: string;
+            /** Label */
+            label: string;
+            /** Projection Id */
+            projection_id: string;
+            /** Score */
+            score: number;
+            /** Source Id */
+            source_id: string;
+            /** Source Type */
+            source_type: string;
+            /** Source Version */
+            source_version: string;
+        };
+        /** PrivateRetrievalSearchRequest */
+        PrivateRetrievalSearchRequest: {
+            /**
+             * Limit
+             * @default 10
+             */
+            limit: number;
+            /**
+             * Locale
+             * @default en-IN
+             */
+            locale: string;
+            /** Query */
+            query: string;
+            /** Scope Ids */
+            scope_ids?: {
+                [key: string]: string[];
+            };
+            /** Source Types */
+            source_types?: ("client" | "matter" | "matter_document" | "ip_docket" | "ip_document")[];
+        };
+        /** PrivateRetrievalSearchResponse */
+        PrivateRetrievalSearchResponse: {
+            /** Items */
+            items: components["schemas"]["PrivateRetrievalResultRecord"][];
+        };
         /** ProceedingIntelligenceResponse */
         ProceedingIntelligenceResponse: {
             /** Disclaimer */
@@ -42684,6 +42959,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AIFeedbackRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ai_outcomes_api_admin_ai_outcomes_get: {
+        parameters: {
+            query?: {
+                window_days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIOutcomeAnalyticsResponse"];
                 };
             };
             /** @description Validation Error */
@@ -66270,6 +66576,158 @@ export interface operations {
             };
         };
     };
+    autocomplete_private_retrieval_api_private_retrieval_autocomplete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrivateRetrievalSearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrivateRetrievalAutocompleteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    count_private_retrieval_api_private_retrieval_count_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrivateRetrievalSearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrivateRetrievalCountResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_private_retrieval_integrity_api_private_retrieval_integrity_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrivateRetrievalIntegrityResponse"];
+                };
+            };
+        };
+    };
+    search_private_retrieval_api_private_retrieval_search_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrivateRetrievalSearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrivateRetrievalSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_private_retrieval_api_private_retrieval_search_stream_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrivateRetrievalSearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Authorized NDJSON records; delivery stops on any security or source change. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-ndjson": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_product_guide_catalog_api_product_guide_catalog_get: {
         parameters: {
             query?: never;
@@ -67950,6 +68408,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AssistantAskResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_assistant_citation_open_api_workspace_assistant_sessions__session_id__citations__citation_id__open_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                citation_id: string;
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantCitationOpenResponse"];
                 };
             };
             /** @description Validation Error */

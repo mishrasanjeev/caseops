@@ -58,6 +58,12 @@ from caseops_api.services.matter_access import (
     visible_matters_filter,
 )
 from caseops_api.services.notification_delivery import redact_provider_error
+from caseops_api.services.private_retrieval import (
+    PRIVATE_SAVED_SOURCE_SCHEMA,
+    PrivateRetrievalInvariantError,
+    capture_private_saved_source_manifest,
+    private_saved_source_manifest_is_current,
+)
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.source_actions import (
     authority_source_verified,
@@ -321,6 +327,18 @@ def enqueue_intelligent_review(
         )
     selected_ids = selected_ids[:MAX_REVIEW_AUTHORITIES]
     now = datetime.now(UTC)
+    target_source = ("matter", matter.id) if matter is not None else ("ip_docket", docket.id)
+    try:
+        private_source_manifest = capture_private_saved_source_manifest(
+            session,
+            context=context,
+            sources=(target_source,),
+        )
+    except PrivateRetrievalInvariantError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail="The private target index is stale. Reindex it before review.",
+        ) from exc
     context_manifest = {
         "schema": "caseops.intelligent-review-context.v1",
         "captured_at": now.isoformat(),
@@ -358,6 +376,7 @@ def enqueue_intelligent_review(
         review_state="queued",
         review_progress=0,
         review_context_json=_canonical_json(context_manifest),
+        source_manifest_json=_canonical_json(private_source_manifest),
         review_selection_json=_canonical_json(
             {"included_authority_ids": selected_ids, "lawyer_notes": None}
         ),
@@ -414,6 +433,15 @@ def _load_review(
         ip_proceeding_id=review.ip_proceeding_id,
         require_operational=False,
     )
+    if not private_saved_source_manifest_is_current(
+        session,
+        context=context,
+        manifest=_json_load(review.source_manifest_json, []),
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Private source access or generation changed. Run a new review.",
+        )
     return review
 
 
@@ -649,11 +677,13 @@ def run_intelligent_review_job(
     SessionFactory = get_session_factory()
     with SessionFactory() as session:
         review = session.scalar(
-            select(Recommendation).where(
+            select(Recommendation)
+            .where(
                 Recommendation.id == review_id,
                 Recommendation.type == "intelligent_review",
                 Recommendation.review_state == "queued",
-            ).with_for_update(skip_locked=True)
+            )
+            .with_for_update(skip_locked=True)
         )
         if review is None:
             return
@@ -680,6 +710,21 @@ def run_intelligent_review_job(
             session.commit()
 
             context_manifest = _json_load(review.review_context_json, {})
+            private_manifest = [
+                item
+                for item in _json_load(review.source_manifest_json, [])
+                if isinstance(item, dict)
+                and item.get("schema") == PRIVATE_SAVED_SOURCE_SCHEMA
+            ]
+            if not private_saved_source_manifest_is_current(
+                session,
+                context=context,
+                manifest=private_manifest,
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail="Private source access or generation changed during review.",
+                )
             selection = _json_load(review.review_selection_json, {})
             authority_ids = [
                 str(item)
@@ -697,7 +742,7 @@ def run_intelligent_review_job(
                 for document, entry in zip(documents, manifest, strict=True)
                 if entry["included_for_generation"]
             ]
-            review.source_manifest_json = _canonical_json(manifest)
+            review.source_manifest_json = _canonical_json(private_manifest + manifest)
             review.review_progress = 35
             session.commit()
             if not available_documents:
@@ -749,6 +794,22 @@ def run_intelligent_review_job(
                 ip_proceeding_id=review.ip_proceeding_id,
                 require_operational=True,
             )
+            if not private_saved_source_manifest_is_current(
+                session,
+                context=context,
+                manifest=private_manifest,
+            ):
+                _mark_terminal_failure(
+                    session,
+                    review_id=review.id,
+                    state="abstained",
+                    code="private_source_changed_during_generation",
+                    detail=(
+                        "Private source access or generation changed while the review ran. "
+                        "Run a new review."
+                    ),
+                )
+                return
             current_report = _load_report(
                 session,
                 company_id=review.company_id,
@@ -950,7 +1011,7 @@ def run_intelligent_review_job(
             review.model_run_id = run.id
             review.rationale = parsed.issue_summary
             review.review_payload_json = _canonical_json(review_payload)
-            review.source_manifest_json = _canonical_json(current_manifest)
+            review.source_manifest_json = _canonical_json(private_manifest + current_manifest)
             review.review_selection_json = _canonical_json(
                 {
                     "included_authority_ids": [
@@ -1045,8 +1106,7 @@ def _completeness(review: Recommendation) -> IntelligentReviewCompletenessRecord
     unsupported = sum(
         not item.get("authority_document_ids")
         or any(
-            str(source_id) not in selected
-            for source_id in item.get("authority_document_ids", [])
+            str(source_id) not in selected for source_id in item.get("authority_document_ids", [])
         )
         for item in assertions
     )
@@ -1226,6 +1286,15 @@ def list_intelligent_reviews(
             statement.order_by(Recommendation.created_at.desc()).limit(max(1, min(limit, 100)))
         )
     )
+    rows = [
+        row
+        for row in rows
+        if private_saved_source_manifest_is_current(
+            session,
+            context=context,
+            manifest=_json_load(row.source_manifest_json, []),
+        )
+    ]
     draft_ids = {
         str(review_id): str(draft_id)
         for review_id, draft_id in session.execute(
@@ -1450,9 +1519,7 @@ def publish_intelligent_review(
         ip_proceeding_id=review.ip_proceeding_id,
         require_operational=True,
     )
-    if review.ip_docket_id and (
-        proceeding is None or proceeding.proceeding_kind != "opposition"
-    ):
+    if review.ip_docket_id and (proceeding is None or proceeding.proceeding_kind != "opposition"):
         raise HTTPException(
             status_code=409,
             detail=(
@@ -1465,7 +1532,11 @@ def publish_intelligent_review(
     source_manifest = [
         item
         for item in _json_load(review.source_manifest_json, [])
-        if isinstance(item, dict) and item.get("authority_document_id") in selected_ids
+        if isinstance(item, dict)
+        and (
+            item.get("schema") == PRIVATE_SAVED_SOURCE_SCHEMA
+            or item.get("authority_document_id") in selected_ids
+        )
     ]
     draft = Draft(
         company_id=review.company_id,

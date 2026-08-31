@@ -52,7 +52,7 @@ release-safe at its integration edges:
 
 ## Durable fix
 
-- Unreleased Alembic revision `20260830_0003` normalizes existing projections,
+- Unreleased Alembic revision `20260831_0002` normalizes existing projections,
   adds `ip_cost_item_corrections`, strengthens CHECK constraints, and installs
   SQLite/PostgreSQL guards. Direct row deletion fails while the parent exists;
   parent deletion remains cascade-safe because the trigger observes that the

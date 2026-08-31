@@ -28,6 +28,14 @@ from caseops_api.services.intelligent_reviews import (
     run_intelligent_review_job,
 )
 from caseops_api.services.llm import LLMCompletion, LLMMessage
+from caseops_api.services.private_retrieval import (
+    PrivateProjectionInput,
+    ProjectionScopeInput,
+    ensure_active_private_generation,
+    private_source_version,
+    propagate_private_projection_change,
+    upsert_private_projection,
+)
 from caseops_api.services.session_context import SessionContext
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_ip_opposition_opponent_workflow import _fixture as opposition_fixture
@@ -118,16 +126,8 @@ def _seed_report(
                 neutral_citation=f"2024 TEST {index + 1}",
                 decision_date=datetime(2024, index + 1, 10, tzinfo=UTC).date(),
                 canonical_key=f"intelligent-review-{digest[:32]}",
-                source_reference=(
-                    None
-                    if inaccessible
-                    else "https://www.sci.gov.in/"
-                ),
-                canonical_url=(
-                    None
-                    if inaccessible
-                    else "https://www.sci.gov.in/"
-                ),
+                source_reference=(None if inaccessible else "https://www.sci.gov.in/"),
+                canonical_url=(None if inaccessible else "https://www.sci.gov.in/"),
                 content_hash=digest,
                 source_version="official-v1",
                 retrieved_at=datetime.now(UTC)
@@ -253,6 +253,40 @@ def _queue(
     return str(response.json()["id"])
 
 
+def _index_review_target(
+    *,
+    company_id: str,
+    matter_id: str,
+) -> None:
+    with get_session_factory()() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        generation = ensure_active_private_generation(session, company_id=company_id)
+        upsert_private_projection(
+            session,
+            company_id=company_id,
+            generation_id=generation.id,
+            expected_access_policy_generation=generation.access_policy_generation,
+            expected_tombstone_generation=generation.tombstone_generation,
+            payload=PrivateProjectionInput(
+                source_type="matter",
+                source_id=matter.id,
+                source_version=private_source_version(matter),
+                chunk_ordinal=0,
+                label=matter.title,
+                content=f"{matter.title}. {matter.description or ''}",
+                scopes=(
+                    ProjectionScopeInput(
+                        scope_type="matter",
+                        scope_id=matter.id,
+                        access_policy_version=matter.access_policy_version,
+                    ),
+                ),
+            ),
+        )
+        session.commit()
+
+
 def test_intelligent_review_releases_request_transaction_before_background_model_call(
     client: TestClient,
     monkeypatch,
@@ -304,9 +338,7 @@ def test_intelligent_review_normal_selection_finalize_and_publish(
         report_id=report_id,
         authority_ids=authority_ids,
     )
-    response = client.get(
-        f"/api/research/reviews/{review_id}", headers=auth_headers(token)
-    )
+    response = client.get(f"/api/research/reviews/{review_id}", headers=auth_headers(token))
     assert response.status_code == 200, response.text
     review = response.json()
     assert provider.called == 1
@@ -354,9 +386,7 @@ def test_intelligent_review_normal_selection_finalize_and_publish(
     )
     assert finalized.status_code == 200, finalized.text
     assert finalized.json()["state"] == "finalized"
-    assert finalized.json()["finalized_by_membership_id"] == str(
-        bootstrap["membership"]["id"]
-    )
+    assert finalized.json()["finalized_by_membership_id"] == str(bootstrap["membership"]["id"])
 
     published = client.post(
         f"/api/research/reviews/{review_id}/publish",
@@ -392,11 +422,104 @@ def test_intelligent_review_normal_selection_finalize_and_publish(
             )
         )
 
-    legacy = client.get(
-        f"/api/matters/{matter_id}/recommendations", headers=auth_headers(token)
-    )
+    legacy = client.get(f"/api/matters/{matter_id}/recommendations", headers=auth_headers(token))
     assert legacy.status_code == 200, legacy.text
     assert legacy.json()["recommendations"] == []
+
+
+def test_private_review_and_published_report_fail_closed_after_generation_change(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    bootstrap, matter_id, report_id, authority_ids, passages = _setup(client)
+    token = str(bootstrap["access_token"])
+    company_id = str(bootstrap["company"]["id"])
+    membership_id = str(bootstrap["membership"]["id"])
+    _index_review_target(company_id=company_id, matter_id=matter_id)
+    monkeypatch.setattr(
+        "caseops_api.services.intelligent_reviews.build_provider",
+        lambda *args, **kwargs: StaticReviewProvider(_review_payload(authority_ids, passages)),
+    )
+
+    review_id = _queue(
+        client,
+        token=token,
+        matter_id=matter_id,
+        report_id=report_id,
+        authority_ids=authority_ids,
+    )
+    finalized = client.post(
+        f"/api/research/reviews/{review_id}/finalize",
+        headers=auth_headers(token),
+        json={"lawyer_notes": "Private source provenance verified."},
+    )
+    assert finalized.status_code == 200, finalized.text
+    published = client.post(
+        f"/api/research/reviews/{review_id}/publish",
+        headers=auth_headers(token),
+        json={"title": "Private-source review report"},
+    )
+    assert published.status_code == 200, published.text
+    draft_id = str(published.json()["draft_id"])
+
+    with get_session_factory()() as session:
+        review = session.get(Recommendation, review_id)
+        version = session.get(DraftVersion, published.json()["draft_version_id"])
+        assert review is not None and version is not None
+        review_manifest = json.loads(review.source_manifest_json or "[]")
+        draft_manifest = json.loads(version.source_manifest_json or "[]")
+        private_entry = next(
+            item for item in review_manifest if item.get("source_type") == "matter"
+        )
+        assert private_entry["source_id"] == matter_id
+        assert len(private_entry["source_sha256"]) == 64
+        assert private_entry in draft_manifest
+
+        event_key = ":".join(("review-revoke", review_id))
+        propagate_private_projection_change(
+            session,
+            company_id=company_id,
+            actor_membership_id=membership_id,
+            idempotency_key=event_key,
+            event_type="access_changed",
+            target_type="matter",
+            target_id=matter_id,
+            target_version=private_entry["source_version"],
+            reason_code="review_access_revoked",
+        )
+        session.commit()
+
+    review_read = client.get(f"/api/research/reviews/{review_id}", headers=auth_headers(token))
+    draft_read = client.get(
+        f"/api/matters/{matter_id}/drafts/{draft_id}", headers=auth_headers(token)
+    )
+    draft_list = client.get(f"/api/matters/{matter_id}/drafts", headers=auth_headers(token))
+    draft_export = client.get(
+        f"/api/matters/{matter_id}/drafts/{draft_id}/export.docx",
+        headers=auth_headers(token),
+    )
+    assert review_read.status_code == 409
+    assert draft_read.status_code == 409
+    assert draft_export.status_code == 409
+    assert draft_list.status_code == 200
+    assert all(item["id"] != draft_id for item in draft_list.json()["drafts"])
+
+    second = client.post(
+        "/api/bootstrap/company",
+        json={
+            "company_name": "Private Review Other LLP",
+            "company_slug": "private-review-other",
+            "company_type": "law_firm",
+            "owner_full_name": "Other Review Owner",
+            "owner_email": "private-review-other@example.in",
+            "owner_password": "OtherReview123!",
+        },
+    ).json()
+    cross_tenant = client.get(
+        f"/api/research/reviews/{review_id}",
+        headers=auth_headers(str(second["access_token"])),
+    )
+    assert cross_tenant.status_code == 404
 
 
 def test_intelligent_review_default_mock_provider_is_source_grounded(
@@ -459,9 +582,7 @@ def test_intelligent_review_abstains_before_provider_for_inaccessible_sources(
         report_id=report_id,
         authority_ids=authority_ids,
     )
-    review = client.get(
-        f"/api/research/reviews/{review_id}", headers=auth_headers(token)
-    ).json()
+    review = client.get(f"/api/research/reviews/{review_id}", headers=auth_headers(token)).json()
     assert review["state"] == "abstained"
     assert review["error_code"] == "insufficient_accessible_sources"
     assert "No selected authority" in review["abstention_reason"]
@@ -501,17 +622,13 @@ def test_intelligent_review_abstains_when_source_cannot_pass_open_policy(
         report_id=report_id,
         authority_ids=authority_ids,
     )
-    review = client.get(
-        f"/api/research/reviews/{review_id}", headers=auth_headers(token)
-    ).json()
+    review = client.get(f"/api/research/reviews/{review_id}", headers=auth_headers(token)).json()
 
     assert review["state"] == "abstained"
     assert review["error_code"] == "insufficient_accessible_sources"
 
 
-def test_intelligent_review_rejects_unverified_passage(
-    client: TestClient, monkeypatch
-) -> None:
+def test_intelligent_review_rejects_unverified_passage(client: TestClient, monkeypatch) -> None:
     bootstrap, matter_id, report_id, authority_ids, passages = _setup(client)
     payload = _review_payload(authority_ids, passages)
     payload["authorities"][0]["passage"] = "Fabricated passage absent from source."
@@ -527,17 +644,13 @@ def test_intelligent_review_rejects_unverified_passage(
         report_id=report_id,
         authority_ids=authority_ids,
     )
-    review = client.get(
-        f"/api/research/reviews/{review_id}", headers=auth_headers(token)
-    ).json()
+    review = client.get(f"/api/research/reviews/{review_id}", headers=auth_headers(token)).json()
     assert review["state"] == "abstained"
     assert review["error_code"] == "unverified_citations"
     assert review["supporting_authorities"] == []
 
 
-def test_intelligent_review_rejects_prohibited_output(
-    client: TestClient, monkeypatch
-) -> None:
+def test_intelligent_review_rejects_prohibited_output(client: TestClient, monkeypatch) -> None:
     bootstrap, matter_id, report_id, authority_ids, passages = _setup(client)
     payload = _review_payload(authority_ids, passages)
     payload["issue_summary"] = "The strategy is guaranteed to succeed."
@@ -553,9 +666,7 @@ def test_intelligent_review_rejects_prohibited_output(
         report_id=report_id,
         authority_ids=authority_ids,
     )
-    review = client.get(
-        f"/api/research/reviews/{review_id}", headers=auth_headers(token)
-    ).json()
+    review = client.get(f"/api/research/reviews/{review_id}", headers=auth_headers(token)).json()
     assert review["state"] == "failed"
     assert review["error_code"] == "prohibited_output:guarantee"
     factory = get_session_factory()
@@ -581,9 +692,7 @@ def test_intelligent_review_preserves_stale_warning_and_prompt_injection_marker(
     )
     monkeypatch.setattr(
         "caseops_api.services.intelligent_reviews.build_provider",
-        lambda *args, **kwargs: StaticReviewProvider(
-            _review_payload(authority_ids, passages)
-        ),
+        lambda *args, **kwargs: StaticReviewProvider(_review_payload(authority_ids, passages)),
     )
     review_id = _queue(
         client,
@@ -592,9 +701,7 @@ def test_intelligent_review_preserves_stale_warning_and_prompt_injection_marker(
         report_id=report_id,
         authority_ids=authority_ids,
     )
-    review = client.get(
-        f"/api/research/reviews/{review_id}", headers=auth_headers(token)
-    ).json()
+    review = client.get(f"/api/research/reviews/{review_id}", headers=auth_headers(token)).json()
     assert review["state"] == "ready", review["error_code"]
     assert "Verify current law" in review["stale_warning"]
     factory = get_session_factory()
@@ -622,9 +729,7 @@ def test_intelligent_review_rechecks_target_after_provider_disposal(
 
     monkeypatch.setattr(
         "caseops_api.services.intelligent_reviews.build_provider",
-        lambda *args, **kwargs: DisposingProvider(
-            _review_payload(authority_ids, passages)
-        ),
+        lambda *args, **kwargs: DisposingProvider(_review_payload(authority_ids, passages)),
     )
     token = str(bootstrap["access_token"])
     review_id = _queue(
@@ -634,9 +739,7 @@ def test_intelligent_review_rechecks_target_after_provider_disposal(
         report_id=report_id,
         authority_ids=authority_ids,
     )
-    review = client.get(
-        f"/api/research/reviews/{review_id}", headers=auth_headers(token)
-    ).json()
+    review = client.get(f"/api/research/reviews/{review_id}", headers=auth_headers(token)).json()
     assert review["state"] == "abstained"
     assert review["output_hash"] is None
 
@@ -763,9 +866,7 @@ def test_intelligent_review_docket_level_publish_fails_without_orphan_draft(
     )
     monkeypatch.setattr(
         "caseops_api.services.intelligent_reviews.build_provider",
-        lambda *args, **kwargs: StaticReviewProvider(
-            _review_payload(authority_ids, passages)
-        ),
+        lambda *args, **kwargs: StaticReviewProvider(_review_payload(authority_ids, passages)),
     )
     queued = client.post(
         "/api/research/reviews",
@@ -779,11 +880,14 @@ def test_intelligent_review_docket_level_publish_fails_without_orphan_draft(
     )
     assert queued.status_code == 202, queued.text
     review_id = str(queued.json()["id"])
-    assert client.post(
-        f"/api/research/reviews/{review_id}/finalize",
-        headers=auth_headers(token),
-        json={},
-    ).status_code == 200
+    assert (
+        client.post(
+            f"/api/research/reviews/{review_id}/finalize",
+            headers=auth_headers(token),
+            json={},
+        ).status_code
+        == 200
+    )
     blocked = client.post(
         f"/api/research/reviews/{review_id}/publish",
         headers=auth_headers(token),
@@ -791,9 +895,10 @@ def test_intelligent_review_docket_level_publish_fails_without_orphan_draft(
     )
     assert blocked.status_code == 409, blocked.text
     with get_session_factory()() as session:
-        assert session.scalar(
-            select(Draft.id).where(Draft.source_recommendation_id == review_id)
-        ) is None
+        assert (
+            session.scalar(select(Draft.id).where(Draft.source_recommendation_id == review_id))
+            is None
+        )
 
 
 def test_intelligent_review_list_query_count_is_constant_at_page_size(

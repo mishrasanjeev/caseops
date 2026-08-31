@@ -298,6 +298,12 @@ def test_matter_draft_and_allowlisted_field_update_use_canonical_writers(
         "field_update",
     )
     assistant_session = field_body["session"]
+    with get_session_factory()() as session:
+        current_matter = session.get(Matter, matter["id"])
+        assert current_matter is not None
+        assert field_proposal["target_version"].endswith(
+            current_matter.updated_at.isoformat()
+        )
     forbidden = _preview(
         client,
         token,
