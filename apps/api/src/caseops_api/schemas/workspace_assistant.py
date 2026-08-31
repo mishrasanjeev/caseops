@@ -133,6 +133,11 @@ class AssistantCitationRecord(BaseModel):
     verified_at: datetime | None
 
 
+class AssistantCitationOpenResponse(BaseModel):
+    citation_id: str
+    source_url: str
+
+
 class AssistantModelMetadata(BaseModel):
     run_id: str
     provider: str

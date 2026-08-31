@@ -100,7 +100,7 @@ def compare_versions_in_db(
         )
 
     matter = _load_matter(session, context, matter_id)
-    draft = _load_draft(session, matter, draft_id)
+    draft = _load_draft(session, matter, draft_id, context=context)
 
     by_revision: dict[int, DraftVersion] = {v.revision: v for v in draft.versions}
     prev_version = by_revision.get(prev_revision)

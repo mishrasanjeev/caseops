@@ -359,6 +359,29 @@ def test_document_publication_allows_only_granted_approved_nonprivileged_version
     assert visible.status_code == 200, visible.text
     assert visible.json()["document_id"] == document_ids[0][0]
 
+    # Portal publication is a derived projection, not a permanent disclosure
+    # grant. A later canonical privilege/purge-style invalidation must remove
+    # document metadata and download access without relying on a portal worker.
+    with get_session_factory()() as session:
+        document = session.get(IpDocument, document_ids[0][0])
+        assert document is not None
+        document.is_privileged = True
+        session.commit()
+    hidden = client.get(f"/api/portal/publications/{shared.json()['id']}")
+    assert hidden.status_code == 200, hidden.text
+    assert hidden.json()["access_state"] == "review_required"
+    assert hidden.json()["document_id"] is None
+    assert hidden.json()["document_filename"] is None
+    download = client.get(f"/api/portal/publications/{shared.json()['id']}/document")
+    assert download.status_code == 404, download.text
+    listed = client.get("/api/portal/publications")
+    assert listed.status_code == 200, listed.text
+    listed_publication = next(
+        row for row in listed.json()["publications"] if row["id"] == shared.json()["id"]
+    )
+    assert listed_publication["access_state"] == "review_required"
+    assert listed_publication["document_id"] is None
+
     with get_session_factory()() as session:
         intents = list(
             session.scalars(

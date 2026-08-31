@@ -341,7 +341,11 @@ def test_workstation_docker_gate_is_migration_first_and_exact_release() -> None:
     assert '-ArgumentList @("`"$TestApiProxyScript`"", $TestApiPort, $ApiPort)' in docker_script
     assert "git -C $RepoRoot status" in docker_script
     assert "| Out-String).Trim()" in docker_script
+    assert "$SourceFingerprint.Substring(0, 40)" in docker_script
+    assert 'SourceFingerprint -notmatch "^[0-9a-f]{64}$"' in docker_script
+    assert 'Write-Host "[docker-acceptance] derived runtime revision $ReleaseSha"' in docker_script
     assert "down --volumes --remove-orphans" in docker_script
+    assert "if (-not $KeepRunning)" in docker_script
     assert "building API and web production images" in docker_script
     assert "MigrationExitCode" in docker_script
     assert "org.opencontainers.image.revision" in docker_script
@@ -1045,7 +1049,8 @@ exit 0
         fake_bin / "python",
         """#!/usr/bin/env bash
 set -euo pipefail
-if [[ "${1:-}" == "scripts/scheduler_inventory.py" ]]; then
+if [[ "${1:-}" == "scripts/scheduler_inventory.py" || \
+      "${1:-}" == "scripts/reconcile_monitoring_alerts.py" ]]; then
   printf '%s\n' "$*" >> "${FAKE_GCLOUD_LOG}"
   exit 0
 fi
@@ -1390,6 +1395,9 @@ def test_a0_deploy_captures_final_pre_route_baseline_in_fail_closed_order(
         "scheduler_inventory.py reconcile"
     )
     assert call_index("scheduler_inventory.py reconcile") < call_index(
+        "reconcile_monitoring_alerts.py reconcile"
+    )
+    assert call_index("reconcile_monitoring_alerts.py reconcile") < call_index(
         "run jobs execute caseops-db-index-health"
     )
     assert call_index("run jobs execute caseops-db-index-health") < call_index(

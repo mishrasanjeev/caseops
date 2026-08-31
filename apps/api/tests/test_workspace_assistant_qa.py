@@ -14,6 +14,7 @@ from caseops_api.db.models import (
     IpDocumentTaxonomyEntry,
     IpDocumentVersion,
     Matter,
+    MatterAttachment,
     MatterTask,
     ModelRun,
 )
@@ -132,6 +133,16 @@ def test_scoped_qa_citations_abstention_proposals_export_and_deletion_boundary(
     assert citation["source_sha256"]
     assert citation["source_url"] == f"/app/matters/{matter['id']}"
     assert citation["verified_at"]
+    opened = client.post(
+        f"/api/workspace-assistant/sessions/{assistant_session['id']}"
+        f"/citations/{citation['id']}/open",
+        headers=headers,
+    )
+    assert opened.status_code == 200, opened.text
+    assert opened.json() == {
+        "citation_id": citation["id"],
+        "source_url": f"/app/matters/{matter['id']}",
+    }
 
     with get_session_factory()() as session:
         tasks_before = int(session.scalar(select(func.count(MatterTask.id))) or 0)
@@ -206,6 +217,13 @@ def test_scoped_qa_citations_abstention_proposals_export_and_deletion_boundary(
         metadata = json.loads(audit.metadata_json or "{}")
         assert len(metadata["question_sha256"]) == 64
         assert "section 21" not in (audit.metadata_json or "")
+        citation_open_audit = session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.action == "workspace_assistant.citation_open_succeeded"
+            )
+        )
+        assert citation_open_audit is not None
+        assert matter["title"] not in (citation_open_audit.metadata_json or "")
 
 
 def test_turn_render_and_export_fail_closed_after_scope_permission_changes(
@@ -245,6 +263,7 @@ def test_turn_render_and_export_fail_closed_after_scope_permission_changes(
     )
     assert answered.status_code == 200, answered.text
     assistant_session = answered.json()["session"]
+    citation_id = answered.json()["assistant_turn"]["citations"][0]["id"]
 
     with get_session_factory()() as session:
         row = session.get(Matter, matter["id"])
@@ -263,6 +282,21 @@ def test_turn_render_and_export_fail_closed_after_scope_permission_changes(
     assert hidden["citations"] == []
     assert "access" in hidden["content"].casefold()
     assert matter["title"] not in hidden["content"]
+    denied_open = client.post(
+        f"/api/workspace-assistant/sessions/{assistant_session['id']}/citations/{citation_id}/open",
+        headers=auth_headers(token),
+    )
+    assert denied_open.status_code == 409
+
+    with get_session_factory()() as session:
+        assert (
+            session.scalar(
+                select(func.count(AuditEvent.id)).where(
+                    AuditEvent.action == "workspace_assistant.citation_open_succeeded"
+                )
+            )
+            == 0
+        )
 
     exported = client.get(
         f"/api/workspace-assistant/sessions/{assistant_session['id']}/export",
@@ -367,9 +401,7 @@ def test_provider_failures_are_audited_without_raw_privileged_content(
     assert response.status_code == 503
     assert response.json()["type"] == "workspace_assistant_unavailable"
     with get_session_factory()() as session:
-        turns = session.scalars(
-            select(AssistantTurn).order_by(AssistantTurn.sequence.asc())
-        ).all()
+        turns = session.scalars(select(AssistantTurn).order_by(AssistantTurn.sequence.asc())).all()
         assert [turn.status for turn in turns] == ["completed", "failed"]
         run = session.scalar(select(ModelRun))
         assert run is not None
@@ -377,9 +409,7 @@ def test_provider_failures_are_audited_without_raw_privileged_content(
         assert run.error == "LLMProviderError"
         assert "upstream secret" not in (run.error or "")
         audit = session.scalar(
-            select(AuditEvent).where(
-                AuditEvent.action == "workspace_assistant.question_failed"
-            )
+            select(AuditEvent).where(AuditEvent.action == "workspace_assistant.question_failed")
         )
         assert audit is not None
         assert "upstream secret" not in (audit.metadata_json or "")
@@ -418,14 +448,10 @@ def test_provider_construction_failure_uses_the_same_safe_audited_boundary(
         assert run.model == "unknown"
         assert run.status == "failed_provider"
         assert run.error == "LLMProviderError"
-        turns = session.scalars(
-            select(AssistantTurn).order_by(AssistantTurn.sequence.asc())
-        ).all()
+        turns = session.scalars(select(AssistantTurn).order_by(AssistantTurn.sequence.asc())).all()
         assert [turn.status for turn in turns] == ["completed", "failed"]
         audit = session.scalar(
-            select(AuditEvent).where(
-                AuditEvent.action == "workspace_assistant.question_failed"
-            )
+            select(AuditEvent).where(AuditEvent.action == "workspace_assistant.question_failed")
         )
         assert audit is not None
         assert "configuration secret" not in (audit.metadata_json or "")
@@ -480,6 +506,18 @@ def test_scope_search_document_policy_work_is_bounded_without_n_plus_one(
                 )
 
         add_documents(0, 1)
+        # Scope existence and AI-content eligibility are separate boundaries:
+        # this record is visible enough to be selected as a saved session
+        # scope, but it must not leak its title through AI autocomplete until
+        # a current indexed version passes the document policy.
+        session.add(
+            IpDocument(
+                company_id=company_id,
+                taxonomy_entry_id=taxonomy.id,
+                title="Assistant batch pending private evidence",
+                created_by_membership_id=membership_id,
+            )
+        )
         session.commit()
 
     def measured_search() -> tuple[int, dict]:
@@ -504,6 +542,10 @@ def test_scope_search_document_policy_work_is_bounded_without_n_plus_one(
 
     one_document_queries, first = measured_search()
     assert len([item for item in first["items"] if item["scope_type"] == "ip_document"]) == 1
+    assert all(
+        item["label"] != "Assistant batch pending private evidence"
+        for item in first["items"]
+    )
 
     with get_session_factory()() as session:
         taxonomy = session.scalar(
@@ -546,3 +588,48 @@ def test_scope_search_document_policy_work_is_bounded_without_n_plus_one(
     assert len([item for item in many["items"] if item["scope_type"] == "ip_document"]) == 5
     assert many_document_queries <= one_document_queries + 1
     assert many_document_queries <= 20
+
+
+def test_scope_search_uses_canonical_attachment_digest_version(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    membership_id = str(bootstrap["membership"]["id"])
+    _enable_assistant(client, token)
+    matter = _matter(client, token, "-".join(("AI", "062B", "ATTACHMENT")))
+    digest = "b" * 64
+
+    with get_session_factory()() as session:
+        attachment = MatterAttachment(
+            matter_id=matter["id"],
+            uploaded_by_membership_id=membership_id,
+            original_filename="canonical attachment evidence.txt",
+            storage_key="assistant/canonical-attachment-evidence",
+            content_type="text/plain",
+            size_bytes=32,
+            sha256_hex=digest,
+            processing_status="indexed",
+            extracted_char_count=32,
+            extracted_text="Canonical attachment evidence.",
+        )
+        session.add(attachment)
+        session.commit()
+        attachment_id = attachment.id
+
+    response = client.get(
+        "/api/workspace-assistant/scope-options",
+        headers=auth_headers(token),
+        params={"q": "canonical attachment", "limit": 12},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["items"] == [
+        {
+            "scope_type": "matter_document",
+            "scope_id": attachment_id,
+            "label": "canonical attachment evidence.txt",
+            "secondary_text": "Matter document · indexed",
+            "href": f"/app/matters/{matter['id']}",
+            "resource_version": digest,
+        }
+    ]

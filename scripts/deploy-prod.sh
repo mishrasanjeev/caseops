@@ -47,6 +47,7 @@ MIGRATION_DB_CONNECT_TIMEOUT_SECONDS=10
 MIGRATION_DB_STATEMENT_TIMEOUT_MS=900000
 MIGRATION_DB_LOCK_TIMEOUT_MS=5000
 MIGRATION_DB_IDLE_TRANSACTION_TIMEOUT_MS=60000
+ALERT_NOTIFICATION_EMAIL="${CASEOPS_ALERT_NOTIFICATION_EMAIL:-mishra.sanjeev@gmail.com}"
 # 2026-06-08 incident: a blocking request pinned the single Uvicorn
 # event loop and Cloud Run kept routing unrelated API calls to that
 # same instance until each hit the 300s service timeout. Keep
@@ -269,6 +270,13 @@ python scripts/scheduler_inventory.py reconcile \
   --project "${PROJECT}" \
   --region "${REGION}" \
   --image "${API_IMMUTABLE_IMAGE}"
+
+# Private projection failures have a zero-error-budget security impact at
+# hydration and a five-minute removal SLO in the derived index. Reconcile the
+# log metric, real notification channel and alert policy before routing traffic.
+python scripts/reconcile_monitoring_alerts.py reconcile \
+  --project "${PROJECT}" \
+  --notification-email "${ALERT_NOTIFICATION_EMAIL}"
 
 # Index coverage is a release invariant. Execute the just-reconciled job from
 # the immutable candidate image and abort before routing traffic on any schema,

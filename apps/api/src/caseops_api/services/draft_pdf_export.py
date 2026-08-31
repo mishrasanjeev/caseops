@@ -14,6 +14,7 @@ Court rules sources are pinned in
 ``services.court_format_profiles``; this module is a thin renderer
 over those profiles.
 """
+
 from __future__ import annotations
 
 import io
@@ -49,7 +50,7 @@ def render_version_pdf(
     when ``version_id`` is not supplied.
     """
     matter = _load_matter(session, context, matter_id)
-    draft = _load_draft(session, matter, draft_id)
+    draft = _load_draft(session, matter, draft_id, context=context)
     target_id = version_id or draft.current_version_id
     if not target_id or not draft.versions:
         raise HTTPException(
@@ -116,9 +117,12 @@ def render_version_pdf(
         review_required=draft.review_required,
     )
 
-    safe_title = "".join(
-        ch if ch.isalnum() or ch in ("-", "_") else "-" for ch in draft.title
-    ).strip("-")[:60] or "draft"
+    safe_title = (
+        "".join(ch if ch.isalnum() or ch in ("-", "_") else "-" for ch in draft.title).strip("-")[
+            :60
+        ]
+        or "draft"
+    )
     filename = f"{safe_title}-r{version.revision}-{profile.key}.pdf"
     return (
         pdf_bytes,
@@ -154,26 +158,23 @@ def render_pdf_bytes(
         def header(self) -> None:  # noqa: D401 — fpdf2 hook
             on_first_page = self.page_no() == 1
             has_header_text = bool(profile.court_header_text)
-            if (
-                on_first_page
-                and profile.show_court_header_first_page
-                and has_header_text
-            ):
+            if on_first_page and profile.show_court_header_first_page and has_header_text:
                 self.set_font(
                     profile.body_font,
                     size=profile.heading_font_size_pt,
                     style="B",
                 )
                 self.cell(
-                    0, 8,
+                    0,
+                    8,
                     _ascii_safe(profile.court_header_text),
-                    new_x="LMARGIN", new_y="NEXT", align="C",
+                    new_x="LMARGIN",
+                    new_y="NEXT",
+                    align="C",
                 )
                 self.ln(2)
             elif (
-                not on_first_page
-                and profile.show_court_header_subsequent_pages
-                and has_header_text
+                not on_first_page and profile.show_court_header_subsequent_pages and has_header_text
             ):
                 self.set_font(
                     profile.body_font,
@@ -181,9 +182,12 @@ def render_pdf_bytes(
                     style="I",
                 )
                 self.cell(
-                    0, 5,
+                    0,
+                    5,
                     _ascii_safe(profile.court_header_text),
-                    new_x="LMARGIN", new_y="NEXT", align="C",
+                    new_x="LMARGIN",
+                    new_y="NEXT",
+                    align="C",
                 )
                 self.ln(1)
 
@@ -192,11 +196,13 @@ def render_pdf_bytes(
             self.set_font(profile.body_font, size=profile.body_font_size_pt - 2, style="I")
             text = _ascii_safe(
                 profile.page_number_format.format(
-                    n=self.page_no(), total="{nb}",
+                    n=self.page_no(),
+                    total="{nb}",
                 )
             )
             align = {"left": "L", "center": "C", "right": "R"}.get(
-                profile.page_number_position, "R",
+                profile.page_number_position,
+                "R",
             )
             self.cell(0, 8, text, new_x="LMARGIN", new_y="NEXT", align=align)
 
@@ -213,9 +219,12 @@ def render_pdf_bytes(
     # Title block
     pdf.set_font(profile.body_font, size=profile.title_font_size_pt, style="B")
     pdf.multi_cell(
-        0, 8,
+        0,
+        8,
         _ascii_safe(title),
-        new_x="LMARGIN", new_y="NEXT", align="C",
+        new_x="LMARGIN",
+        new_y="NEXT",
+        align="C",
     )
     pdf.ln(1)
 
@@ -226,20 +235,24 @@ def render_pdf_bytes(
         f"Type: {draft_type}  ·  Revision {revision}  ·  Status: {status_label}"
     )
     pdf.multi_cell(
-        0, 5,
+        0,
+        5,
         _ascii_safe(meta_line),
-        new_x="LMARGIN", new_y="NEXT", align="C",
+        new_x="LMARGIN",
+        new_y="NEXT",
+        align="C",
     )
     pdf.ln(3)
 
     if review_required:
         pdf.set_font(profile.body_font, size=profile.body_font_size_pt - 1, style="I")
         pdf.multi_cell(
-            0, 5,
-            _ascii_safe(
-                "REVIEW REQUIRED — this draft has not been approved by a partner."
-            ),
-            new_x="LMARGIN", new_y="NEXT", align="C",
+            0,
+            5,
+            _ascii_safe("REVIEW REQUIRED — this draft has not been approved by a partner."),
+            new_x="LMARGIN",
+            new_y="NEXT",
+            align="C",
         )
         pdf.ln(2)
 
@@ -253,9 +266,11 @@ def render_pdf_bytes(
         # Soft line breaks become real newlines inside a multi_cell
         # call. fpdf2 handles wrapping at margin width.
         pdf.multi_cell(
-            0, profile.body_line_height_mm,
+            0,
+            profile.body_line_height_mm,
             _ascii_safe(block),
-            new_x="LMARGIN", new_y="NEXT",
+            new_x="LMARGIN",
+            new_y="NEXT",
         )
         pdf.ln(2)
 
@@ -266,9 +281,11 @@ def render_pdf_bytes(
         pdf.set_font(profile.body_font, size=profile.body_font_size_pt)
         for c in citations:
             pdf.multi_cell(
-                0, profile.body_line_height_mm,
+                0,
+                profile.body_line_height_mm,
                 _ascii_safe(f"- {c}"),
-                new_x="LMARGIN", new_y="NEXT",
+                new_x="LMARGIN",
+                new_y="NEXT",
             )
 
     out = io.BytesIO()
@@ -288,18 +305,18 @@ def _ascii_safe(text: str) -> str:
     if not text:
         return ""
     table = {
-        "–": "-",   # en dash
+        "–": "-",  # en dash
         "—": "--",  # em dash
-        "‘": "'",   # left single quote
-        "’": "'",   # right single quote
-        "“": '"',   # left double quote
-        "”": '"',   # right double quote
-        "…": "...", # ellipsis
-        " ": " ",   # non-breaking space
-        "·": "-",   # middle dot — ASCII fallback
-        "•": "*",   # bullet
+        "‘": "'",  # left single quote
+        "’": "'",  # right single quote
+        "“": '"',  # left double quote
+        "”": '"',  # right double quote
+        "…": "...",  # ellipsis
+        " ": " ",  # non-breaking space
+        "·": "-",  # middle dot — ASCII fallback
+        "•": "*",  # bullet
         "→": "->",  # right arrow
-        "₹": "INR ", # rupee sign
+        "₹": "INR ",  # rupee sign
     }
     out = text.translate({ord(k): v for k, v in table.items()})
     try:

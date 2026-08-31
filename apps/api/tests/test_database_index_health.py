@@ -1,14 +1,24 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 import sqlalchemy as sa
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 
 from caseops_api.db.index_coverage import database_foreign_key_gaps
 from caseops_api.scripts import check_database_indexes
 
 
 def test_required_schema_revision_is_derived_from_the_alembic_graph() -> None:
-    assert check_database_indexes._required_schema_revision() == "20260830_0002"
+    project_root = Path(__file__).resolve().parents[1]
+    config = Config(str(project_root / "alembic.ini"))
+    config.set_main_option("script_location", str(project_root / "alembic"))
+    expected_head = ScriptDirectory.from_config(config).get_current_head()
+
+    assert expected_head is not None
+    assert check_database_indexes._required_schema_revision() == expected_head
 
 
 def test_health_report_rejects_a_database_behind_the_source_head(

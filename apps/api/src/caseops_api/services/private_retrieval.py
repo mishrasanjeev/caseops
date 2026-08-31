@@ -14,7 +14,7 @@ import math
 import re
 import threading
 from collections import OrderedDict
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Literal
@@ -22,6 +22,7 @@ from typing import Literal
 from sqlalchemy import and_, delete, exists, func, not_, or_, select
 from sqlalchemy.orm import Session
 
+from caseops_api.core.settings import Settings, get_settings
 from caseops_api.db.models import (
     AssistantTurn,
     Client,
@@ -38,26 +39,31 @@ from caseops_api.db.models import (
     PrivateSavedOutputAccess,
     User,
 )
-from caseops_api.services.capabilities import membership_has_capability
+from caseops_api.services.capabilities import (
+    membership_has_capability,
+    resolve_membership_capabilities,
+)
+from caseops_api.services.ip_capability_catalog import (
+    IPFeatureDecision,
+    evaluate_ip_feature,
+)
 from caseops_api.services.ip_document_workflow import get_ip_document_policies
 from caseops_api.services.matter_access import (
     visible_ip_dockets_filter,
     visible_matters_filter,
 )
 from caseops_api.services.session_context import SessionContext
+from caseops_api.services.tenant_ai_policy import resolve_tenant_policy
 
-PrivateSourceType = Literal[
-    "client", "matter", "matter_document", "ip_docket", "ip_document"
-]
+PrivateSourceType = Literal["client", "matter", "matter_document", "ip_docket", "ip_document"]
 PrivateScopeType = Literal["client", "matter", "ip_docket"]
-PrivateEventType = Literal[
-    "source_changed", "access_changed", "revoked", "tombstoned", "reindex"
-]
+PrivateEventType = Literal["source_changed", "access_changed", "revoked", "tombstoned", "reindex"]
 
 MAX_PREFILTER_CANDIDATES = 200
 MAX_PRIVATE_RESULTS = 20
 MAX_QUERY_TERMS = 8
 PRIVATE_PROJECTION_EVENT_KEY_MAX_LENGTH = 120
+PRIVATE_SAVED_SOURCE_SCHEMA = "caseops.private-saved-output-source.v1"
 _CACHE_TTL = timedelta(seconds=30)
 _CACHE_MAX_ENTRIES = 256
 _CACHE_LOCK = threading.Lock()
@@ -111,9 +117,7 @@ class PrivateProjectionInput:
     source_state: Literal[
         "active", "approved", "filed", "indexed", "quarantined", "retired", "deleted"
     ] = "active"
-    approval_state: Literal[
-        "not_required", "approved", "rejected", "withdrawn"
-    ] = "not_required"
+    approval_state: Literal["not_required", "approved", "rejected", "withdrawn"] = "not_required"
     embedding_model: str | None = None
     embedding_version: str | None = None
     embedding: tuple[float, ...] | None = None
@@ -130,6 +134,101 @@ class HydratedPrivateResult:
     score: float
 
 
+@dataclass(frozen=True, slots=True)
+class PrivateAutocompleteSuggestion:
+    """Content-free private suggestion released only after final reauthorization."""
+
+    projection_id: str
+    source_type: str
+    source_id: str
+    source_version: str
+    label: str
+
+
+@dataclass(frozen=True, slots=True)
+class PrivateRetrievalFence:
+    """Exact identity and security epochs captured before asynchronous work."""
+
+    company_id: str
+    membership_id: str
+    user_id: str
+    generation_id: str
+    access_policy_generation: int
+    tombstone_generation: int
+    required_capability: str
+    activation_required: bool
+
+
+@dataclass(frozen=True, slots=True)
+class PrivateRetrievalActivation:
+    """Current server-owned activation decision for a private consumer."""
+
+    available: bool
+    reason: str
+    feature: IPFeatureDecision
+
+
+def private_retrieval_activation(
+    session: Session,
+    *,
+    context: SessionContext,
+    settings: Settings | None = None,
+) -> PrivateRetrievalActivation:
+    """Re-evaluate auth, entitlement, rollout and tenant AI policy.
+
+    A frontend flag or a context captured at login is never sufficient to
+    activate private retrieval. ``workspace_core`` is the existing canonical
+    IP entitlement/rollout owner; the tenant AI policy remains the independent
+    consent boundary for sending workspace content to an assistant.
+    """
+
+    current = _refreshed_context(
+        session,
+        context=context,
+        required_capability="ai:generate",
+    )
+    capabilities = (
+        resolve_membership_capabilities(session, current.membership)
+        if current is not None
+        else set()
+    )
+    from caseops_api.services.saas_billing import current_entitlements_for_company
+
+    feature = evaluate_ip_feature(
+        "workspace_core",
+        granted_capabilities=capabilities,
+        entitlements=current_entitlements_for_company(session, context.company.id),
+        settings=settings or get_settings(),
+    )
+    if current is None:
+        return PrivateRetrievalActivation(
+            available=False,
+            reason="missing_capability",
+            feature=feature,
+        )
+    policy = resolve_tenant_policy(session, company_id=context.company.id)
+    if not policy.workspace_assistant_enabled:
+        return PrivateRetrievalActivation(
+            available=False,
+            reason="tenant_ai_policy_disabled",
+            feature=feature,
+        )
+    return PrivateRetrievalActivation(
+        available=feature.available,
+        reason=feature.reason,
+        feature=feature,
+    )
+
+
+def private_source_version(row: Client | Matter | IpDocketRecord) -> str:
+    """Return a version that changes for source edits and ACL changes."""
+
+    updated = row.updated_at.isoformat() if row.updated_at is not None else "missing"
+    if isinstance(row, (Matter, IpDocketRecord)):
+        return f"{row.access_policy_version}:{updated}"
+    return updated
+
+
 def _active_generation_statement(company_id: str):
     return select(PrivateIndexGeneration).where(
         PrivateIndexGeneration.company_id == company_id,
@@ -137,12 +236,30 @@ def _active_generation_statement(company_id: str):
     )
 
 
+def _lock_private_company(session: Session, *, company_id: str) -> Company:
+    """Serialize generation/event authority changes on one stable tenant row."""
+
+    company = session.scalar(
+        select(Company)
+        .where(Company.id == company_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if company is None:
+        raise PrivateRetrievalInvariantError("Private index company does not exist.")
+    return company
+
+
 def ensure_active_private_generation(
     session: Session, *, company_id: str
 ) -> PrivateIndexGeneration:
     """Return the one active generation, creating an empty bootstrap safely."""
 
-    rows = list(session.scalars(_active_generation_statement(company_id)).all())
+    rows = list(
+        session.scalars(
+            _active_generation_statement(company_id).execution_options(populate_existing=True)
+        ).all()
+    )
     if len(rows) > 1:
         raise PrivateRetrievalInvariantError("More than one private index generation is active.")
     if rows:
@@ -155,7 +272,9 @@ def ensure_active_private_generation(
     )
     if company is None:
         raise PrivateRetrievalInvariantError("Private index company does not exist.")
-    row = session.scalar(_active_generation_statement(company_id))
+    row = session.scalar(
+        _active_generation_statement(company_id).execution_options(populate_existing=True)
+    )
     if row is not None:
         return row
     now = datetime.now(UTC)
@@ -180,12 +299,14 @@ def ensure_active_private_generation(
 def create_shadow_private_generation(
     session: Session, *, company_id: str
 ) -> PrivateIndexGeneration:
+    _lock_private_company(session, company_id=company_id)
     current = ensure_active_private_generation(session, company_id=company_id)
     generations = list(
         session.scalars(
             select(PrivateIndexGeneration)
             .where(PrivateIndexGeneration.company_id == company_id)
             .with_for_update()
+            .execution_options(populate_existing=True)
         ).all()
     )
     if any(row.state in {"building", "ready"} for row in generations):
@@ -209,6 +330,8 @@ def mark_private_generation_ready(
     company_id: str,
     generation_id: str,
     expected_projection_count: int,
+    expected_access_policy_generation: int | None = None,
+    expected_tombstone_generation: int | None = None,
 ) -> PrivateIndexGeneration:
     row = session.scalar(
         select(PrivateIndexGeneration)
@@ -217,9 +340,20 @@ def mark_private_generation_ready(
             PrivateIndexGeneration.company_id == company_id,
         )
         .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if row is None or row.state != "building":
         raise PrivateRetrievalInvariantError("Only a building private generation can be verified.")
+    if (
+        expected_access_policy_generation is not None
+        and row.access_policy_generation != expected_access_policy_generation
+    ) or (
+        expected_tombstone_generation is not None
+        and row.tombstone_generation != expected_tombstone_generation
+    ):
+        raise PrivateRetrievalInvariantError(
+            "A stale private rebuild cannot verify after an access or tombstone change."
+        )
     count = int(
         session.scalar(
             select(func.count(PrivateIndexProjection.id)).where(
@@ -263,11 +397,13 @@ def activate_private_generation(
     generation_id: str,
     expected_active_generation_id: str,
 ) -> PrivateIndexGeneration:
+    _lock_private_company(session, company_id=company_id)
     generations = list(
         session.scalars(
             select(PrivateIndexGeneration)
             .where(PrivateIndexGeneration.company_id == company_id)
             .with_for_update()
+            .execution_options(populate_existing=True)
         ).all()
     )
     current = next((row for row in generations if row.state == "active"), None)
@@ -284,10 +420,12 @@ def activate_private_generation(
             "A stale private generation cannot bypass access or tombstone changes."
         )
     pending = session.scalar(
-        select(PrivateProjectionEvent.id).where(
+        select(PrivateProjectionEvent.id)
+        .where(
             PrivateProjectionEvent.company_id == company_id,
             PrivateProjectionEvent.status != "applied",
-        ).limit(1)
+        )
+        .limit(1)
     )
     if pending is not None:
         raise PrivateRetrievalInvariantError(
@@ -327,9 +465,7 @@ def _assert_projection_input(payload: PrivateProjectionInput) -> None:
         raise PrivateRetrievalInvariantError("The private projection source is not active.")
     if payload.approval_state not in {"not_required", "approved"}:
         raise PrivateRetrievalInvariantError("The private projection source is not approved.")
-    if len({(scope.scope_type, scope.scope_id) for scope in payload.scopes}) != len(
-        payload.scopes
-    ):
+    if len({(scope.scope_type, scope.scope_id) for scope in payload.scopes}) != len(payload.scopes):
         raise PrivateRetrievalInvariantError("Private projection scopes must be unique.")
 
 
@@ -339,8 +475,10 @@ def upsert_private_projection(
     company_id: str,
     generation_id: str,
     payload: PrivateProjectionInput,
+    expected_access_policy_generation: int,
+    expected_tombstone_generation: int,
 ) -> PrivateIndexProjection:
-    """Write one chunk into a building or active tenant-private generation."""
+    """Write one chunk only under the security epochs that produced its payload."""
 
     _assert_projection_input(payload)
     generation = session.scalar(
@@ -351,9 +489,17 @@ def upsert_private_projection(
             PrivateIndexGeneration.state.in_(("building", "active")),
         )
         .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if generation is None:
         raise PrivateRetrievalInvariantError("Private generation is not writable.")
+    if (
+        generation.access_policy_generation != expected_access_policy_generation
+        or generation.tombstone_generation != expected_tombstone_generation
+    ):
+        raise PrivateRetrievalInvariantError(
+            "A stale private projection writer cannot cross an access or tombstone change."
+        )
     row = session.scalar(
         select(PrivateIndexProjection).where(
             PrivateIndexProjection.generation_id == generation_id,
@@ -439,9 +585,7 @@ def _refreshed_context(
     company = session.scalar(
         select(Company).where(Company.id == context.company.id, Company.is_active.is_(True))
     )
-    user = session.scalar(
-        select(User).where(User.id == context.user.id, User.is_active.is_(True))
-    )
+    user = session.scalar(select(User).where(User.id == context.user.id, User.is_active.is_(True)))
     if (
         membership is None
         or company is None
@@ -456,6 +600,94 @@ def _refreshed_context(
         user=user,
         token_issued_at=context.token_issued_at,
     )
+
+
+def capture_private_retrieval_fence(
+    session: Session,
+    *,
+    context: SessionContext,
+    required_capability: str = "ai:generate",
+    require_activation: bool = False,
+) -> PrivateRetrievalFence | None:
+    """Capture the exact active generation and actor boundary for later delivery."""
+
+    current = _refreshed_context(
+        session,
+        context=context,
+        required_capability=required_capability,
+    )
+    if current is None:
+        return None
+    generation = session.scalar(_active_generation_statement(current.company.id))
+    if generation is None:
+        return None
+    return PrivateRetrievalFence(
+        company_id=current.company.id,
+        membership_id=current.membership.id,
+        user_id=current.user.id,
+        generation_id=generation.id,
+        access_policy_generation=generation.access_policy_generation,
+        tombstone_generation=generation.tombstone_generation,
+        required_capability=required_capability,
+        activation_required=require_activation,
+    )
+
+
+def _private_delivery_context(
+    session: Session,
+    *,
+    fence: PrivateRetrievalFence,
+) -> tuple[SessionContext, PrivateIndexGeneration] | None:
+    """Reopen an asynchronous delivery only at its exact current security epochs."""
+
+    actor = session.execute(
+        select(Company, CompanyMembership, User)
+        .join(
+            CompanyMembership,
+            and_(
+                CompanyMembership.company_id == Company.id,
+                CompanyMembership.id == fence.membership_id,
+                CompanyMembership.user_id == fence.user_id,
+                CompanyMembership.is_active.is_(True),
+            ),
+        )
+        .join(
+            User,
+            and_(
+                User.id == CompanyMembership.user_id,
+                User.id == fence.user_id,
+                User.is_active.is_(True),
+            ),
+        )
+        .where(
+            Company.id == fence.company_id,
+            Company.is_active.is_(True),
+        )
+    ).one_or_none()
+    if actor is None:
+        return None
+    company, membership, user = actor
+    if not membership_has_capability(session, membership, fence.required_capability):
+        return None
+    generation = session.scalar(
+        _active_generation_statement(fence.company_id).where(
+            PrivateIndexGeneration.id == fence.generation_id,
+            PrivateIndexGeneration.access_policy_generation == fence.access_policy_generation,
+            PrivateIndexGeneration.tombstone_generation == fence.tombstone_generation,
+        )
+    )
+    if generation is None:
+        return None
+    current = SessionContext(
+        company=company,
+        membership=membership,
+        user=user,
+    )
+    if fence.activation_required:
+        activation = private_retrieval_activation(session, context=current)
+        if not activation.available:
+            return None
+    return current, generation
 
 
 def _authorized_projection_ids_statement(
@@ -586,6 +818,8 @@ def prefilter_private_projection_ids(
         "document_id",
         "source_id",
         "source_version",
+        "scope_ids",
+        "source_refs",
     }
     unknown_filters = set(normalized_filters) - supported_filters
     if unknown_filters:
@@ -605,13 +839,89 @@ def prefilter_private_projection_ids(
             exists(
                 select(PrivateIndexProjectionScope.id).where(
                     PrivateIndexProjectionScope.company_id == context.company.id,
-                    PrivateIndexProjectionScope.projection_id
-                    == PrivateIndexProjection.id,
+                    PrivateIndexProjectionScope.projection_id == PrivateIndexProjection.id,
                     PrivateIndexProjectionScope.scope_type == scope_type,
                     PrivateIndexProjectionScope.scope_id == value,
                 )
             )
         )
+    selection_predicates = []
+    requested_scopes = normalized_filters.get("scope_ids")
+    if requested_scopes is not None:
+        if not isinstance(requested_scopes, dict) or not requested_scopes:
+            raise PrivateRetrievalInvariantError(
+                "Private retrieval scope_ids must be a non-empty mapping."
+            )
+        scope_predicates = []
+        for scope_type, raw_ids in sorted(requested_scopes.items()):
+            if scope_type not in {"client", "matter", "ip_docket"}:
+                raise PrivateRetrievalInvariantError(
+                    f"Unsupported private retrieval scope type: {scope_type!r}"
+                )
+            if not isinstance(raw_ids, (list, tuple, set)):
+                raise PrivateRetrievalInvariantError(
+                    "Private retrieval scoped identifiers must be a bounded collection."
+                )
+            scope_ids = tuple(
+                sorted(
+                    {value.strip() for value in raw_ids if isinstance(value, str) and value.strip()}
+                )
+            )
+            if not scope_ids or len(scope_ids) > 24 or len(scope_ids) != len(raw_ids):
+                raise PrivateRetrievalInvariantError(
+                    "Private retrieval accepts 1 to 24 unique non-empty scope identifiers."
+                )
+            scope_predicates.append(
+                exists(
+                    select(PrivateIndexProjectionScope.id).where(
+                        PrivateIndexProjectionScope.company_id == context.company.id,
+                        PrivateIndexProjectionScope.projection_id == PrivateIndexProjection.id,
+                        PrivateIndexProjectionScope.scope_type == scope_type,
+                        PrivateIndexProjectionScope.scope_id.in_(scope_ids),
+                    )
+                )
+            )
+        selection_predicates.extend(scope_predicates)
+    requested_sources = normalized_filters.get("source_refs")
+    if requested_sources is not None:
+        if not isinstance(requested_sources, dict) or not requested_sources:
+            raise PrivateRetrievalInvariantError(
+                "Private retrieval source_refs must be a non-empty mapping."
+            )
+        source_predicates = []
+        for source_type, raw_ids in sorted(requested_sources.items()):
+            if source_type not in {
+                "client",
+                "matter",
+                "matter_document",
+                "ip_docket",
+                "ip_document",
+            }:
+                raise PrivateRetrievalInvariantError(
+                    f"Unsupported private retrieval source type: {source_type!r}"
+                )
+            if not isinstance(raw_ids, (list, tuple, set)):
+                raise PrivateRetrievalInvariantError(
+                    "Private retrieval source identifiers must be a bounded collection."
+                )
+            source_ids = tuple(
+                sorted(
+                    {value.strip() for value in raw_ids if isinstance(value, str) and value.strip()}
+                )
+            )
+            if not source_ids or len(source_ids) > 24 or len(source_ids) != len(raw_ids):
+                raise PrivateRetrievalInvariantError(
+                    "Private retrieval accepts 1 to 24 unique non-empty source identifiers."
+                )
+            source_predicates.append(
+                and_(
+                    PrivateIndexProjection.source_type == source_type,
+                    PrivateIndexProjection.source_id.in_(source_ids),
+                )
+            )
+        selection_predicates.extend(source_predicates)
+    if selection_predicates:
+        statement = statement.where(or_(*selection_predicates))
     document_id = normalized_filters.get("document_id")
     if document_id is not None:
         if not isinstance(document_id, str) or not document_id.strip():
@@ -635,6 +945,10 @@ def prefilter_private_projection_ids(
             )
         statement = statement.where(column == value)
     terms = _query_terms(query)
+    if require_lexical_match and not terms:
+        # A punctuation-only or one-character query must not degrade into a
+        # newest-row listing of otherwise private content.
+        return ()
     if terms and require_lexical_match:
         lowered = func.lower(PrivateIndexProjection.content_text)
         statement = statement.where(or_(*(lowered.contains(term) for term in terms)))
@@ -680,7 +994,7 @@ def _source_versions_still_current(
                 Client.is_active.is_(True),
             )
         ).all():
-            expected = str(row.updated_at.isoformat() if row.updated_at else "1")
+            expected = private_source_version(row)
             allowed.update(
                 item.id
                 for item in projections
@@ -704,7 +1018,7 @@ def _source_versions_still_current(
                 for item in projections
                 if item.source_type == "matter"
                 and item.source_id == row.id
-                and item.source_version == str(row.access_policy_version)
+                and item.source_version == private_source_version(row)
             )
 
     attachment_ids = grouped.get("matter_document", set())
@@ -715,6 +1029,7 @@ def _source_versions_still_current(
             .where(
                 Matter.company_id == context.company.id,
                 Matter.is_active.is_(True),
+                MatterAttachment.processing_status == "indexed",
                 MatterAttachment.id.in_(attachment_ids),
                 visible_matters_filter(session, context=context),
             )
@@ -742,7 +1057,7 @@ def _source_versions_still_current(
                 for item in projections
                 if item.source_type == "ip_docket"
                 and item.source_id == row.id
-                and item.source_version == str(row.access_policy_version)
+                and item.source_version == private_source_version(row)
             )
 
     document_ids = grouped.get("ip_document", set())
@@ -771,6 +1086,47 @@ def _source_versions_still_current(
     return allowed
 
 
+def _current_authorized_projection_rows(
+    session: Session,
+    *,
+    context: SessionContext,
+    generation: PrivateIndexGeneration,
+    projection_ids: Iterable[str],
+) -> tuple[PrivateIndexProjection, ...]:
+    ids = tuple(dict.fromkeys(projection_ids))[:MAX_PREFILTER_CANDIDATES]
+    if not ids:
+        return ()
+    authorized_ids = set(
+        session.scalars(
+            _authorized_projection_ids_statement(
+                session,
+                context=context,
+                generation=generation,
+            ).where(PrivateIndexProjection.id.in_(ids))
+        ).all()
+    )
+    if not authorized_ids:
+        return ()
+    rows = list(
+        session.scalars(
+            select(PrivateIndexProjection).where(
+                PrivateIndexProjection.company_id == context.company.id,
+                PrivateIndexProjection.generation_id == generation.id,
+                PrivateIndexProjection.id.in_(authorized_ids),
+            )
+        ).all()
+    )
+    current_source_ids = _source_versions_still_current(
+        session,
+        context=context,
+        projections=rows,
+    )
+    by_id = {
+        row.id: row for row in rows if row.id in authorized_ids and row.id in current_source_ids
+    }
+    return tuple(by_id[row_id] for row_id in ids if row_id in by_id)
+
+
 def hydrate_private_projection_results(
     session: Session,
     *,
@@ -796,36 +1152,15 @@ def hydrate_private_projection_results(
     generation = session.scalar(_active_generation_statement(context.company.id))
     if generation is None:
         return ()
-    authorized_ids = set(
-        session.scalars(
-            _authorized_projection_ids_statement(
-                session,
-                context=current_context,
-                generation=generation,
-            ).where(PrivateIndexProjection.id.in_(ids))
-        ).all()
-    )
-    if not authorized_ids:
-        return ()
-    rows = list(
-        session.scalars(
-            select(PrivateIndexProjection).where(
-                PrivateIndexProjection.company_id == context.company.id,
-                PrivateIndexProjection.generation_id == generation.id,
-                PrivateIndexProjection.id.in_(authorized_ids),
-            )
-        ).all()
-    )
-    current_source_ids = _source_versions_still_current(
+    rows = _current_authorized_projection_rows(
         session,
         context=current_context,
-        projections=rows,
+        generation=generation,
+        projection_ids=ids,
     )
     terms = _query_terms(query)
     ranked: list[tuple[float, PrivateIndexProjection]] = []
     for row in rows:
-        if row.id not in current_source_ids:
-            continue
         lowered = row.content_text.casefold()
         lexical = sum(lowered.count(term) for term in terms) / max(1, len(terms))
         vector = 0.0
@@ -903,17 +1238,23 @@ def retrieve_private_content(
     locale: str = "en-IN",
     query_embedding: Sequence[float] | None = None,
     required_capability: str = "ai:generate",
+    require_activation: bool = False,
     limit: int = MAX_PRIVATE_RESULTS,
 ) -> tuple[HydratedPrivateResult, ...]:
-    generation = session.scalar(_active_generation_statement(context.company.id))
-    if generation is None:
+    fence = capture_private_retrieval_fence(
+        session,
+        context=context,
+        required_capability=required_capability,
+        require_activation=require_activation,
+    )
+    if fence is None:
         return ()
     key = private_retrieval_cache_key(
         company_id=context.company.id,
         membership_id=context.membership.id,
-        generation_id=generation.id,
-        access_policy_generation=generation.access_policy_generation,
-        tombstone_generation=generation.tombstone_generation,
+        generation_id=fence.generation_id,
+        access_policy_generation=fence.access_policy_generation,
+        tombstone_generation=fence.tombstone_generation,
         query=query,
         source_types=set(source_types or ()),
         filters=filters,
@@ -947,15 +1288,346 @@ def retrieve_private_content(
                 _CANDIDATE_CACHE.popitem(last=False)
     # Cached IDs are never returned directly.  This reauthorization is the
     # security boundary that makes a stale cache harmless after revocation.
-    return hydrate_private_projection_results(
+    return _private_results_for_delivery(
         session,
-        context=context,
+        fence=fence,
         projection_ids=candidate_ids,
         query=query,
         query_embedding=query_embedding,
-        required_capability=required_capability,
         limit=limit,
     )
+
+
+def _private_results_for_delivery(
+    session: Session,
+    *,
+    fence: PrivateRetrievalFence,
+    projection_ids: Iterable[str],
+    query: str,
+    query_embedding: Sequence[float] | None = None,
+    limit: int = MAX_PRIVATE_RESULTS,
+) -> tuple[HydratedPrivateResult, ...]:
+    """Reauthorize exact epochs and sources immediately before serialization."""
+
+    ids = tuple(dict.fromkeys(projection_ids))[:MAX_PREFILTER_CANDIDATES]
+    delivery = _private_delivery_context(session, fence=fence)
+    if delivery is None or not ids:
+        return ()
+    context, generation = delivery
+    rows = _current_authorized_projection_rows(
+        session,
+        context=context,
+        generation=generation,
+        projection_ids=ids,
+    )
+    # This function is called only at the final serialization boundary. Stream
+    # callers open a fresh session for each row, so this one bounded query set
+    # is both the last authorization decision and resistant to N+1 work.
+    terms = _query_terms(query)
+    ranked: list[tuple[float, PrivateIndexProjection]] = []
+    for row in rows:
+        lowered = row.content_text.casefold()
+        lexical = sum(lowered.count(term) for term in terms) / max(1, len(terms))
+        vector = 0.0
+        if query_embedding is not None and row.embedding_json:
+            try:
+                embedding = tuple(float(value) for value in json.loads(row.embedding_json))
+            except (TypeError, ValueError, json.JSONDecodeError):
+                embedding = ()
+            vector = _cosine_similarity(tuple(query_embedding), embedding)
+        ranked.append((lexical + vector, row))
+    ranked.sort(key=lambda item: (-item[0], item[1].id))
+    bounded = max(1, min(limit, MAX_PRIVATE_RESULTS))
+    return tuple(
+        HydratedPrivateResult(
+            projection_id=row.id,
+            source_type=row.source_type,
+            source_id=row.source_id,
+            source_version=row.source_version,
+            label=row.label,
+            content=row.content_text,
+            score=score,
+        )
+        for score, row in ranked[:bounded]
+    )
+
+
+def autocomplete_private_content(
+    session: Session,
+    *,
+    context: SessionContext,
+    query: str,
+    source_types: set[PrivateSourceType] | None = None,
+    filters: dict[str, object] | None = None,
+    required_capability: str = "ai:generate",
+    limit: int = 12,
+) -> tuple[PrivateAutocompleteSuggestion, ...]:
+    """Return authorized labels only; private content never enters the response."""
+
+    fence = capture_private_retrieval_fence(
+        session,
+        context=context,
+        required_capability=required_capability,
+        require_activation=True,
+    )
+    if fence is None:
+        return ()
+    candidate_ids = prefilter_private_projection_ids(
+        session,
+        context=context,
+        query=query,
+        source_types=source_types,
+        filters=filters,
+        required_capability=required_capability,
+        limit=min(limit, MAX_PRIVATE_RESULTS),
+    )
+    rows = _private_results_for_delivery(
+        session,
+        fence=fence,
+        projection_ids=candidate_ids,
+        query=query,
+        limit=limit,
+    )
+    return tuple(
+        PrivateAutocompleteSuggestion(
+            projection_id=row.projection_id,
+            source_type=row.source_type,
+            source_id=row.source_id,
+            source_version=row.source_version,
+            label=row.label,
+        )
+        for row in rows
+    )
+
+
+def count_private_content(
+    session: Session,
+    *,
+    context: SessionContext,
+    query: str,
+    source_types: set[PrivateSourceType] | None = None,
+    filters: dict[str, object] | None = None,
+    required_capability: str = "ai:generate",
+) -> int:
+    """Count only bounded, current rows reauthorized at count delivery time."""
+
+    fence = capture_private_retrieval_fence(
+        session,
+        context=context,
+        required_capability=required_capability,
+        require_activation=True,
+    )
+    if fence is None:
+        return 0
+    candidate_ids = prefilter_private_projection_ids(
+        session,
+        context=context,
+        query=query,
+        source_types=source_types,
+        filters=filters,
+        required_capability=required_capability,
+        limit=MAX_PREFILTER_CANDIDATES,
+    )
+    delivery = _private_delivery_context(session, fence=fence)
+    if delivery is None:
+        return 0
+    current_context, generation = delivery
+    rows = _current_authorized_projection_rows(
+        session,
+        context=current_context,
+        generation=generation,
+        projection_ids=candidate_ids,
+    )
+    return len(rows)
+
+
+def stream_private_content(
+    *,
+    fence: PrivateRetrievalFence,
+    projection_ids: Iterable[str],
+    query: str,
+    session_factory: Callable[[], Session],
+    limit: int = MAX_PRIVATE_RESULTS,
+) -> Iterator[HydratedPrivateResult]:
+    """Stream rows with a fresh security/source check before every emission."""
+
+    candidate_ids = tuple(dict.fromkeys(projection_ids))[:MAX_PREFILTER_CANDIDATES]
+    if not candidate_ids:
+        return
+    with session_factory() as ordering_session:
+        ordered = _private_results_for_delivery(
+            ordering_session,
+            fence=fence,
+            projection_ids=candidate_ids,
+            query=query,
+            limit=limit,
+        )
+        ordered_ids = tuple(row.projection_id for row in ordered)
+    for projection_id in ordered_ids:
+        with session_factory() as delivery_session:
+            delivered = _private_results_for_delivery(
+                delivery_session,
+                fence=fence,
+                projection_ids=(projection_id,),
+                query=query,
+                limit=1,
+            )
+        if len(delivered) != 1:
+            # Do not skip and continue: absence may mean a mid-stream revoke.
+            # Termination exposes neither which row changed nor any later text.
+            return
+        yield delivered[0]
+
+
+def capture_private_saved_source_manifest(
+    session: Session,
+    *,
+    context: SessionContext,
+    sources: Iterable[tuple[str, str]],
+) -> tuple[dict[str, object], ...]:
+    """Freeze exact private projection/ACL epochs for a saved output.
+
+    Tenants without an active private generation remain on the existing
+    default-off path. Once a generation exists, a saved output may not claim a
+    private source unless every requested source has a current, authorized
+    projection in that exact generation.
+    """
+
+    requested = tuple(dict.fromkeys(sources))
+    if not requested:
+        return ()
+    if any(
+        source_type not in {"client", "matter", "matter_document", "ip_docket", "ip_document"}
+        or not source_id
+        for source_type, source_id in requested
+    ):
+        raise PrivateRetrievalInvariantError("Saved-output private sources are invalid.")
+    generation = session.scalar(_active_generation_statement(context.company.id))
+    if generation is None:
+        return ()
+    requested_predicate = or_(
+        *(
+            and_(
+                PrivateIndexProjection.source_type == source_type,
+                PrivateIndexProjection.source_id == source_id,
+            )
+            for source_type, source_id in requested
+        )
+    )
+    rows = list(
+        session.scalars(
+            select(PrivateIndexProjection).where(
+                PrivateIndexProjection.company_id == context.company.id,
+                PrivateIndexProjection.generation_id == generation.id,
+                requested_predicate,
+            )
+        ).all()
+    )
+    authorized_ids = set(
+        session.scalars(
+            _authorized_projection_ids_statement(
+                session,
+                context=context,
+                generation=generation,
+            ).where(requested_predicate)
+        ).all()
+    )
+    current_ids = _source_versions_still_current(
+        session,
+        context=context,
+        projections=rows,
+    )
+    current_rows = [row for row in rows if row.id in authorized_ids and row.id in current_ids]
+    available = {(row.source_type, row.source_id) for row in current_rows}
+    if available != set(requested):
+        raise PrivateRetrievalInvariantError(
+            "A current authorized private projection is required before saving output."
+        )
+    return tuple(
+        {
+            "schema": PRIVATE_SAVED_SOURCE_SCHEMA,
+            "generation_id": generation.id,
+            "access_policy_generation": generation.access_policy_generation,
+            "tombstone_generation": generation.tombstone_generation,
+            "projection_id": row.id,
+            "source_type": row.source_type,
+            "source_id": row.source_id,
+            "source_version": row.source_version,
+            "source_sha256": row.content_sha256,
+        }
+        for row in sorted(current_rows, key=lambda item: item.id)
+    )
+
+
+def private_saved_source_manifest_is_current(
+    session: Session,
+    *,
+    context: SessionContext,
+    manifest: Iterable[object],
+) -> bool:
+    """Reauthorize a saved-output manifest without exposing failed entries."""
+
+    entries = [
+        item
+        for item in manifest
+        if isinstance(item, dict) and item.get("schema") == PRIVATE_SAVED_SOURCE_SCHEMA
+    ]
+    if not entries:
+        return True
+    generation = session.scalar(_active_generation_statement(context.company.id))
+    if generation is None:
+        return False
+    if any(
+        item.get("generation_id") != generation.id
+        or item.get("access_policy_generation") != generation.access_policy_generation
+        or item.get("tombstone_generation") != generation.tombstone_generation
+        for item in entries
+    ):
+        return False
+    projection_ids = {
+        str(item.get("projection_id")) for item in entries if item.get("projection_id")
+    }
+    if len(projection_ids) != len(entries):
+        return False
+    rows = list(
+        session.scalars(
+            select(PrivateIndexProjection).where(
+                PrivateIndexProjection.company_id == context.company.id,
+                PrivateIndexProjection.generation_id == generation.id,
+                PrivateIndexProjection.id.in_(projection_ids),
+            )
+        ).all()
+    )
+    if len(rows) != len(entries):
+        return False
+    authorized_ids = set(
+        session.scalars(
+            _authorized_projection_ids_statement(
+                session,
+                context=context,
+                generation=generation,
+            ).where(PrivateIndexProjection.id.in_(projection_ids))
+        ).all()
+    )
+    current_ids = _source_versions_still_current(
+        session,
+        context=context,
+        projections=rows,
+    )
+    by_id = {row.id: row for row in rows}
+    for item in entries:
+        row = by_id.get(str(item["projection_id"]))
+        if (
+            row is None
+            or row.id not in authorized_ids
+            or row.id not in current_ids
+            or item.get("source_type") != row.source_type
+            or item.get("source_id") != row.source_id
+            or item.get("source_version") != row.source_version
+            or item.get("source_sha256") != row.content_sha256
+        ):
+            return False
+    return True
 
 
 def enqueue_private_projection_event(
@@ -971,6 +1643,7 @@ def enqueue_private_projection_event(
     reason_code: str,
 ) -> PrivateProjectionEvent:
     canonical_key = build_private_projection_event_key(idempotency_key)
+    _lock_private_company(session, company_id=company_id)
     existing = session.scalar(
         select(PrivateProjectionEvent).where(
             PrivateProjectionEvent.company_id == company_id,
@@ -978,8 +1651,25 @@ def enqueue_private_projection_event(
         )
     )
     if existing is not None:
+        if (
+            existing.event_type != event_type
+            or existing.target_type != target_type
+            or existing.target_id != target_id
+            or existing.target_version != target_version
+            or existing.reason_code != reason_code[:120]
+            or existing.actor_membership_id != actor_membership_id
+        ):
+            raise PrivateRetrievalInvariantError(
+                "A private projection idempotency key cannot identify a different event."
+            )
         return existing
-    generation = ensure_active_private_generation(session, company_id=company_id)
+    generation = session.scalar(
+        _active_generation_statement(company_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if generation is None:
+        generation = ensure_active_private_generation(session, company_id=company_id)
     if event_type == "access_changed":
         generation.access_policy_generation += 1
     else:
@@ -1029,9 +1719,7 @@ def _affected_projection_statement(event: PrivateProjectionEvent):
     )
 
 
-def apply_private_projection_event(
-    session: Session, *, event_id: str
-) -> PrivateProjectionEvent:
+def apply_private_projection_event(session: Session, *, event_id: str) -> PrivateProjectionEvent:
     event = session.scalar(
         select(PrivateProjectionEvent)
         .where(PrivateProjectionEvent.id == event_id)
@@ -1080,9 +1768,7 @@ def apply_private_projection_event(
             )
         ).all()
     )
-    output_state = (
-        "reauthorization_required" if event.event_type == "access_changed" else "locked"
-    )
+    output_state = "reauthorization_required" if event.event_type == "access_changed" else "locked"
     for row in outputs:
         row.state = output_state
         row.locked_reason = event.reason_code
@@ -1121,6 +1807,7 @@ def apply_private_projection_event(
     event.status = "applied"
     event.applied_at = now
     event.error_code = None
+    event.next_attempt_at = None
     session.flush()
     invalidate_private_retrieval_cache(company_id=event.company_id)
     return event
@@ -1169,16 +1856,21 @@ def register_private_saved_output(
         raise PrivateRetrievalInvariantError("Saved assistant output does not exist.")
     generation = ensure_active_private_generation(session, company_id=company_id)
     now = datetime.now(UTC)
-    rows: list[PrivateSavedOutputAccess] = []
-    for source_type, source_id, source_version, source_sha256 in sources:
-        row = session.scalar(
+    source_rows = tuple(sources)
+    existing_rows = list(
+        session.scalars(
             select(PrivateSavedOutputAccess).where(
+                PrivateSavedOutputAccess.company_id == company_id,
                 PrivateSavedOutputAccess.assistant_turn_id == assistant_turn_id,
-                PrivateSavedOutputAccess.source_type == source_type,
-                PrivateSavedOutputAccess.source_id == source_id,
-                PrivateSavedOutputAccess.source_version == source_version,
             )
-        )
+        ).all()
+    )
+    existing_by_key = {
+        (row.source_type, row.source_id, row.source_version): row for row in existing_rows
+    }
+    rows: list[PrivateSavedOutputAccess] = []
+    for source_type, source_id, source_version, source_sha256 in source_rows:
+        row = existing_by_key.get((source_type, source_id, source_version))
         if row is None:
             row = PrivateSavedOutputAccess(
                 company_id=company_id,
@@ -1241,22 +1933,35 @@ def reauthorize_private_saved_outputs(
 
 __all__ = [
     "HydratedPrivateResult",
+    "MAX_PREFILTER_CANDIDATES",
     "PRIVATE_PROJECTION_EVENT_KEY_MAX_LENGTH",
+    "PRIVATE_SAVED_SOURCE_SCHEMA",
+    "PrivateAutocompleteSuggestion",
     "PrivateProjectionInput",
+    "PrivateRetrievalActivation",
+    "PrivateRetrievalFence",
     "PrivateRetrievalInvariantError",
     "ProjectionScopeInput",
     "activate_private_generation",
     "apply_private_projection_event",
+    "autocomplete_private_content",
     "build_private_projection_event_key",
+    "capture_private_retrieval_fence",
+    "capture_private_saved_source_manifest",
+    "count_private_content",
     "create_shadow_private_generation",
     "ensure_active_private_generation",
     "hydrate_private_projection_results",
     "mark_private_generation_ready",
     "prefilter_private_projection_ids",
+    "private_retrieval_activation",
     "private_retrieval_cache_key",
+    "private_saved_source_manifest_is_current",
+    "private_source_version",
     "propagate_private_projection_change",
     "reauthorize_private_saved_outputs",
     "register_private_saved_output",
     "retrieve_private_content",
+    "stream_private_content",
     "upsert_private_projection",
 ]

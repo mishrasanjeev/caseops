@@ -105,11 +105,53 @@ def validate_inventory(payload: object) -> list[str]:
             errors.append(f"{label}.bootstrap is required")
         else:
             errors.extend(_validate_bootstrap(bootstrap, label=label))
+        retry = job.get("retry")
+        if retry is not None:
+            errors.extend(_validate_retry(retry, label=label))
     legacy = payload.get("legacy_schedulers_to_pause", [])
-    if not isinstance(legacy, list) or any(not isinstance(value, str) for value in legacy):
+    if not isinstance(legacy, list) or any(
+        not isinstance(value, str) for value in legacy
+    ):
         errors.append("legacy_schedulers_to_pause must be a list of strings")
     elif seen_schedulers.intersection(legacy):
         errors.append("a canonical scheduler cannot also be marked legacy")
+    return errors
+
+
+def _validate_retry(retry: object, *, label: str) -> list[str]:
+    if not isinstance(retry, dict):
+        return [f"{label}.retry must be an object"]
+    required = {
+        "max_retry_attempts",
+        "max_retry_duration_seconds",
+        "min_backoff_seconds",
+        "max_backoff_seconds",
+        "max_doublings",
+    }
+    missing = sorted(required - retry.keys())
+    if missing:
+        return [f"{label}.retry missing fields: {', '.join(missing)}"]
+    errors: list[str] = []
+    for field in required:
+        value = retry[field]
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            errors.append(f"{label}.retry.{field} must be a non-negative integer")
+    if errors:
+        return errors
+    if retry["max_retry_attempts"] > 5:
+        errors.append(f"{label}.retry.max_retry_attempts must be at most 5")
+    if retry["max_doublings"] > 16:
+        errors.append(f"{label}.retry.max_doublings must be at most 16")
+    if retry["min_backoff_seconds"] < 1:
+        errors.append(f"{label}.retry.min_backoff_seconds must be at least 1")
+    if retry["max_backoff_seconds"] < retry["min_backoff_seconds"]:
+        errors.append(
+            f"{label}.retry.max_backoff_seconds must be at least min_backoff_seconds"
+        )
+    if retry["max_retry_duration_seconds"] < retry["max_backoff_seconds"]:
+        errors.append(
+            f"{label}.retry.max_retry_duration_seconds must be at least max_backoff_seconds"
+        )
     return errors
 
 
@@ -182,7 +224,11 @@ def _validate_bootstrap(bootstrap: object, *, label: str) -> list[str]:
         if not isinstance(value, str) or not value.strip():
             errors.append(f"{label}.bootstrap.{field} must be a non-empty string")
     retries = bootstrap["max_retries"]
-    if isinstance(retries, bool) or not isinstance(retries, int) or not 0 <= retries <= 10:
+    if (
+        isinstance(retries, bool)
+        or not isinstance(retries, int)
+        or not 0 <= retries <= 10
+    ):
         errors.append(
             f"{label}.bootstrap.max_retries must be an integer between 0 and 10"
         )
@@ -302,9 +348,7 @@ def _bootstrap_arguments(
         ",".join(bootstrap["command"]),
         _gcloud_args_flag(bootstrap["args"]),
         "--set-env-vars",
-        ",".join(
-            f"{key}={value}" for key, value in bootstrap["environment"].items()
-        ),
+        ",".join(f"{key}={value}" for key, value in bootstrap["environment"].items()),
         "--set-secrets",
         ",".join(f"{key}={value}" for key, value in bootstrap["secrets"].items()),
         "--service-account",
@@ -330,7 +374,9 @@ def _gcloud_args_flag(values: list[str]) -> str:
     return "--args=" + ",".join(values)
 
 
-def reconcile(inventory: dict[str, Any], *, project: str, region: str, image: str) -> None:
+def reconcile(
+    inventory: dict[str, Any], *, project: str, region: str, image: str
+) -> None:
     if project != inventory["production_project"]:
         raise InventoryError(
             f"project {project!r} does not match inventory production_project"
@@ -398,34 +444,49 @@ def reconcile(inventory: dict[str, Any], *, project: str, region: str, image: st
             if scheduler_exists(scheduler, project=project, location=location)
             else "create"
         )
-        run_gcloud(
-            [
-                "scheduler",
-                "jobs",
-                action,
-                "http",
-                scheduler,
-                "--location",
-                location,
-                "--project",
-                project,
-                "--schedule",
-                job["schedule"],
-                "--time-zone",
-                job["time_zone"],
-                "--uri",
-                scheduler_uri(project, region, run_job),
-                "--http-method",
-                "POST",
-                "--message-body",
-                "{}",
-                "--oauth-service-account-email",
-                invoker,
-                "--oauth-token-scope",
-                scope,
-                "--quiet",
-            ]
-        )
+        scheduler_arguments = [
+            "scheduler",
+            "jobs",
+            action,
+            "http",
+            scheduler,
+            "--location",
+            location,
+            "--project",
+            project,
+            "--schedule",
+            job["schedule"],
+            "--time-zone",
+            job["time_zone"],
+            "--uri",
+            scheduler_uri(project, region, run_job),
+            "--http-method",
+            "POST",
+            "--message-body",
+            "{}",
+            "--oauth-service-account-email",
+            invoker,
+            "--oauth-token-scope",
+            scope,
+            "--quiet",
+        ]
+        retry = job.get("retry")
+        if retry is not None:
+            scheduler_arguments.extend(
+                [
+                    "--max-retry-attempts",
+                    str(retry["max_retry_attempts"]),
+                    "--max-retry-duration",
+                    f"{retry['max_retry_duration_seconds']}s",
+                    "--min-backoff",
+                    f"{retry['min_backoff_seconds']}s",
+                    "--max-backoff",
+                    f"{retry['max_backoff_seconds']}s",
+                    "--max-doublings",
+                    str(retry["max_doublings"]),
+                ]
+            )
+        run_gcloud(scheduler_arguments)
         scheduler_after_update = run_gcloud(
             [
                 "scheduler",
@@ -441,9 +502,7 @@ def reconcile(inventory: dict[str, Any], *, project: str, region: str, image: st
             expect_json=True,
         )
         if scheduler_after_update.get("state") != job["desired_state"]:
-            state_action = (
-                "pause" if job["desired_state"] == "PAUSED" else "resume"
-            )
+            state_action = "pause" if job["desired_state"] == "PAUSED" else "resume"
             run_gcloud(
                 [
                     "scheduler",
@@ -589,6 +648,21 @@ def inspect_live(
         expected_timeout = job["task_timeout_seconds"]
         if expected_timeout is not None:
             checks["task_timeout"] = actual_timeout == expected_timeout
+        retry = job.get("retry")
+        if retry is not None:
+            actual_retry = scheduler.get("retryConfig") or {}
+            checks["retry_config"] = all(
+                (
+                    actual_retry.get("retryCount") == retry["max_retry_attempts"],
+                    _duration_seconds(actual_retry.get("maxRetryDuration"))
+                    == retry["max_retry_duration_seconds"],
+                    _duration_seconds(actual_retry.get("minBackoffDuration"))
+                    == retry["min_backoff_seconds"],
+                    _duration_seconds(actual_retry.get("maxBackoffDuration"))
+                    == retry["max_backoff_seconds"],
+                    actual_retry.get("maxDoublings") == retry["max_doublings"],
+                )
+            )
         bootstrap = job.get("bootstrap")
         if bootstrap is not None:
             actual_environment: dict[str, str] = {}
@@ -617,8 +691,7 @@ def inspect_live(
                     container.get("args", []) == bootstrap["args"],
                     actual_environment == bootstrap["environment"],
                     actual_secrets == bootstrap["secrets"],
-                    run_spec.get("serviceAccountName")
-                    == bootstrap["service_account"],
+                    run_spec.get("serviceAccountName") == bootstrap["service_account"],
                     annotations.get("run.googleapis.com/cloudsql-instances")
                     == bootstrap["cloud_sql_instances"],
                     str(resources.get("cpu", "")) == bootstrap["cpu"],
@@ -652,9 +725,7 @@ def inspect_live(
                 {
                     "last_attempt": last_attempt,
                     "scheduler_delivery": (
-                        (
-                            "pass" if not scheduler_status.get("code") else "fail"
-                        )
+                        ("pass" if not scheduler_status.get("code") else "fail")
                         if scheduler_attempt_required
                         else "not_required_paused"
                     ),

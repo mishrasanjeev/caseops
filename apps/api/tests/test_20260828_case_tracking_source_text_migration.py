@@ -6,6 +6,7 @@ from types import ModuleType
 
 import pytest
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, inspect, text
 
 from alembic import command
@@ -15,7 +16,6 @@ from caseops_api.scripts.check_database_indexes import build_index_health_report
 
 PREVIOUS_HEAD = "20260828_0001"
 MIGRATION_HEAD = "20260828_0002"
-CURRENT_HEAD = "20260830_0002"
 
 
 def _config() -> Config:
@@ -23,6 +23,12 @@ def _config() -> Config:
     config = Config(str(project_root / "alembic.ini"))
     config.set_main_option("script_location", str(project_root / "alembic"))
     return config
+
+
+def _current_head(config: Config) -> str:
+    current_head = ScriptDirectory.from_config(config).get_current_head()
+    assert current_head is not None
+    return current_head
 
 
 def _module() -> ModuleType:
@@ -49,6 +55,7 @@ def test_case_tracking_source_text_migration_round_trip_and_index_health(
     get_settings.cache_clear()
     clear_engine_cache()
     config = _config()
+    current_head = _current_head(config)
 
     command.upgrade(config, PREVIOUS_HEAD)
     command.upgrade(config, MIGRATION_HEAD)
@@ -76,14 +83,14 @@ def test_case_tracking_source_text_migration_round_trip_and_index_health(
     finally:
         engine.dispose()
 
-    command.upgrade(config, CURRENT_HEAD)
+    command.upgrade(config, current_head)
     engine = create_engine(database_url, future=True)
     try:
         with engine.connect() as connection:
             health = build_index_health_report(connection)
             assert health["status"] == "ok", health
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-                CURRENT_HEAD
+                current_head
             )
     finally:
         engine.dispose()
@@ -99,7 +106,7 @@ def test_case_tracking_source_text_migration_round_trip_and_index_health(
     finally:
         engine.dispose()
 
-    command.upgrade(config, CURRENT_HEAD)
+    command.upgrade(config, current_head)
 
 
 def test_case_tracking_source_text_downgrade_refuses_retained_evidence(

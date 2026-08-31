@@ -9,7 +9,7 @@ from urllib.parse import quote_plus
 
 from fastapi import HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from caseops_api.core.problem_details import ProblemHTTPException
@@ -22,6 +22,8 @@ from caseops_api.db.models import (
     AssistantTurnRole,
     AssistantTurnStatus,
     Client,
+    Company,
+    CompanyMembership,
     IpAsset,
     IpDocketRecord,
     IpDocument,
@@ -31,11 +33,14 @@ from caseops_api.db.models import (
     Matter,
     MatterAttachment,
     ModelRun,
+    PrivateSavedOutputAccess,
     TenantAIPolicy,
     TrademarkApplication,
+    User,
 )
 from caseops_api.schemas.workspace_assistant import (
     AssistantAskResponse,
+    AssistantCitationOpenResponse,
     AssistantCitationRecord,
     AssistantModelMetadata,
     AssistantProposedAction,
@@ -51,6 +56,7 @@ from caseops_api.schemas.workspace_assistant import (
     AssistantTurnRecord,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.capabilities import membership_has_capability
 from caseops_api.services.ip_document_workflow import (
     get_accessible_ip_document_ids,
     get_ip_document_policies,
@@ -98,6 +104,8 @@ class _SourceCandidate:
     label: str
     text: str
     href: str
+    private_retrieved: bool = False
+    private_projection_ids: tuple[str, ...] = ()
 
     @property
     def key(self) -> str:
@@ -117,6 +125,60 @@ def _assistant_policy_or_403(session: Session, *, context: SessionContext) -> Re
             detail="Ask this Workspace is disabled by workspace AI policy.",
         )
     return policy
+
+
+def _current_assistant_context(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> SessionContext | None:
+    """Reload one exact active actor boundary for final delivery."""
+
+    actor = session.execute(
+        select(Company, CompanyMembership, User)
+        .join(
+            CompanyMembership,
+            and_(
+                CompanyMembership.company_id == Company.id,
+                CompanyMembership.id == context.membership.id,
+                CompanyMembership.user_id == context.user.id,
+                CompanyMembership.is_active.is_(True),
+            ),
+        )
+        .join(
+            User,
+            and_(
+                User.id == CompanyMembership.user_id,
+                User.id == context.user.id,
+                User.is_active.is_(True),
+            ),
+        )
+        .where(
+            Company.id == context.company.id,
+            Company.is_active.is_(True),
+        )
+    ).one_or_none()
+    if actor is None:
+        return None
+    company, membership, user = actor
+    if not membership_has_capability(session, membership, "ai:generate"):
+        return None
+    return SessionContext(
+        company=company,
+        membership=membership,
+        user=user,
+        token_issued_at=context.token_issued_at,
+    )
+
+
+def _assistant_capability_is_current(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> bool:
+    """Recheck the actor boundary after any provider wait."""
+
+    return _current_assistant_context(session, context=context) is not None
 
 
 def _scope_access_denied(
@@ -142,6 +204,16 @@ def _scope_access_denied(
 
 
 def _resource_version(row: object) -> str | None:
+    if isinstance(row, (Client, Matter, IpDocketRecord)):
+        from caseops_api.services.private_retrieval import private_source_version
+
+        return private_source_version(row)
+    if isinstance(row, MatterAttachment):
+        # Attachment content identity is its immutable digest. Using the
+        # generic updated_at fallback here made autocomplete compare an
+        # incidental row timestamp with the sha256 returned by the canonical
+        # ACL resolver, silently hiding every authorized Matter document.
+        return row.sha256_hex
     for attribute in ("current_version",):
         value = getattr(row, attribute, None)
         if value is not None:
@@ -173,6 +245,7 @@ def _resolve_scope_versions(
     context: SessionContext,
     scopes: list[AssistantScopeInput],
     strict: bool,
+    require_ip_document_ai_retrieval: bool = False,
 ) -> dict[tuple[str, str], str | None]:
     """Resolve scope references in bounded batches and apply current ACLs.
 
@@ -199,7 +272,11 @@ def _resolve_scope_versions(
     client_ids = grouped.get("client", set())
     if client_ids:
         rows = session.scalars(
-            select(Client).where(Client.company_id == company_id, Client.id.in_(client_ids))
+            select(Client).where(
+                Client.company_id == company_id,
+                Client.id.in_(client_ids),
+                Client.is_active.is_(True),
+            )
         ).all()
         resolved.update({("client", row.id): _resource_version(row) for row in rows})
 
@@ -218,6 +295,7 @@ def _resolve_scope_versions(
             select(Matter).where(
                 Matter.company_id == company_id,
                 Matter.id.in_(matter_ids),
+                Matter.is_active.is_(True),
                 visible_matters_filter(session, context=context),
             )
         ).all()
@@ -253,6 +331,8 @@ def _resolve_scope_versions(
             select(IpDocketRecord).where(
                 IpDocketRecord.company_id == company_id,
                 IpDocketRecord.id.in_(docket_ids),
+                IpDocketRecord.is_active.is_(True),
+                IpDocketRecord.archived_by_matter_disposal.is_(False),
                 visible_ip_dockets_filter(session, context=context),
             )
         ).all()
@@ -273,11 +353,29 @@ def _resolve_scope_versions(
                 IpDocument.id.in_(ip_document_ids),
             )
         ).all()
-        accessible_ids = get_accessible_ip_document_ids(
-            session,
-            context=context,
-            document_ids={document.id for document in documents},
-        )
+        document_ids = {document.id for document in documents}
+        if require_ip_document_ai_retrieval:
+            policies = get_ip_document_policies(
+                session,
+                context=context,
+                document_ids=document_ids,
+            )
+            accessible_ids = {
+                document_id
+                for document_id, policy in policies.items()
+                if policy.ai_retrieval_allowed
+            }
+        else:
+            # A document can be a valid, authorized conversation scope before
+            # extraction/indexing completes. Content retrieval has a separate,
+            # stricter delivery-time policy gate; conflating the two would make
+            # a current ACL look like a missing record and break saved scope
+            # selection for otherwise visible documents.
+            accessible_ids = get_accessible_ip_document_ids(
+                session,
+                context=context,
+                document_ids=document_ids,
+            )
         for document in documents:
             if document.id in accessible_ids:
                 resolved[("ip_document", document.id)] = str(document.current_version)
@@ -314,10 +412,7 @@ def _session_or_404(
 
 
 def _scope_inputs(rows: list[AssistantSessionScope]) -> list[AssistantScopeInput]:
-    return [
-        AssistantScopeInput(scope_type=row.scope_type, scope_id=row.scope_id)
-        for row in rows
-    ]
+    return [AssistantScopeInput(scope_type=row.scope_type, scope_id=row.scope_id) for row in rows]
 
 
 def _serialize_session(
@@ -632,7 +727,6 @@ def search_assistant_scopes(
     query: str,
     limit: int,
 ) -> AssistantScopeSearchResponse:
-    _assistant_policy_or_403(session, context=context)
     bounded_limit = min(limit, MAX_SCOPE_SEARCH_RESULTS)
     per_type_limit = min(5, bounded_limit)
     pattern = _like_pattern(query.strip())
@@ -653,7 +747,11 @@ def search_assistant_scopes(
 
     clients = session.scalars(
         select(Client)
-        .where(Client.company_id == company_id, Client.name.ilike(pattern, escape="\\"))
+        .where(
+            Client.company_id == company_id,
+            Client.is_active.is_(True),
+            Client.name.ilike(pattern, escape="\\"),
+        )
         .order_by(Client.name.asc(), Client.id.asc())
         .limit(per_type_limit)
     ).all()
@@ -672,6 +770,7 @@ def search_assistant_scopes(
         select(Matter)
         .where(
             Matter.company_id == company_id,
+            Matter.is_active.is_(True),
             visible_matters_filter(session, context=context),
             or_(
                 Matter.title.ilike(pattern, escape="\\"),
@@ -697,6 +796,8 @@ def search_assistant_scopes(
         select(IpDocketRecord)
         .where(
             IpDocketRecord.company_id == company_id,
+            IpDocketRecord.is_active.is_(True),
+            IpDocketRecord.archived_by_matter_disposal.is_(False),
             visible_ip_dockets_filter(session, context=context),
             or_(
                 IpDocketRecord.title.ilike(pattern, escape="\\"),
@@ -831,17 +932,7 @@ def search_assistant_scopes(
         .order_by(IpDocument.updated_at.desc(), IpDocument.id.desc())
         .limit(per_type_limit)
     ).all()
-    document_policies = get_ip_document_policies(
-        session,
-        context=context,
-        document_ids={row.id for row in documents},
-    )
     for row in documents:
-        policy = document_policies.get(row.id)
-        if policy is None:
-            continue
-        if not policy.ai_retrieval_allowed:
-            continue
         option = _option(
             scope_type="ip_document",
             scope_id=row.id,
@@ -852,11 +943,30 @@ def search_assistant_scopes(
         )
         options[(option.scope_type, option.scope_id)] = option
 
-    ordered = list(options.values())
-    truncated = len(ordered) > bounded_limit
+    ordered = list(options.values())[: bounded_limit + 1]
+    current_context = _current_assistant_context(session, context=context)
+    if current_context is None:
+        return AssistantScopeSearchResponse(query=query, items=[], truncated=False)
+    _assistant_policy_or_403(session, context=current_context)
+    resolved = _resolve_scope_versions(
+        session,
+        context=current_context,
+        scopes=[
+            AssistantScopeInput(scope_type=option.scope_type, scope_id=option.scope_id)
+            for option in ordered
+        ],
+        strict=False,
+        require_ip_document_ai_retrieval=True,
+    )
+    current = [
+        option
+        for option in ordered
+        if resolved.get((option.scope_type, option.scope_id)) == option.resource_version
+    ]
+    truncated = len(current) > bounded_limit
     return AssistantScopeSearchResponse(
         query=query,
-        items=ordered[:bounded_limit],
+        items=current[:bounded_limit],
         truncated=truncated,
     )
 
@@ -869,6 +979,8 @@ def _source(
     label: str,
     text: str,
     href: str,
+    private_retrieved: bool = False,
+    private_projection_ids: tuple[str, ...] = (),
 ) -> _SourceCandidate:
     return _SourceCandidate(
         source_type=scope_type,
@@ -877,6 +989,8 @@ def _source(
         label=label[:255],
         text=" ".join(text.split())[:MAX_SOURCE_TEXT_CHARS],
         href=href,
+        private_retrieved=private_retrieved,
+        private_projection_ids=private_projection_ids,
     )
 
 
@@ -894,11 +1008,7 @@ def _sources_for_scopes(
         scopes=inputs,
         strict=False,
     )
-    visible = [
-        scope
-        for scope in scope_rows
-        if (scope.scope_type, scope.scope_id) in resolved
-    ]
+    visible = [scope for scope in scope_rows if (scope.scope_type, scope.scope_id) in resolved]
     grouped: dict[str, set[str]] = defaultdict(set)
     for scope in visible:
         grouped[scope.scope_type].add(scope.scope_id)
@@ -1003,8 +1113,7 @@ def _sources_for_scopes(
             if scope_type == "ip_asset":
                 label = row.title
                 text = (
-                    f"IP asset {row.title}; kind {row.asset_kind}; "
-                    f"jurisdiction {row.jurisdiction}."
+                    f"IP asset {row.title}; kind {row.asset_kind}; jurisdiction {row.jurisdiction}."
                 )
                 view = "overview"
             elif scope_type == "trademark_application":
@@ -1088,6 +1197,119 @@ def _sources_for_scopes(
                 href="/app/ip/documents",
             )
             candidates[candidate.key] = candidate
+
+    # IPLF-066B: when the independent tenant entitlement, rollout switch,
+    # capability and AI policy are all current, private content retrieval goes
+    # through the one canonical service. Direct record metadata above remains
+    # the legacy/default-off path; indexed document text from this point is
+    # always SQL-prefiltered and hydration-reauthorized by private_retrieval.
+    from caseops_api.services.private_retrieval import (
+        private_retrieval_activation,
+        retrieve_private_content,
+    )
+
+    activation = private_retrieval_activation(session, context=context)
+    # Indexed document text is private retrieval content. It must never use
+    # the legacy direct-extraction path when entitlement, rollout, capability,
+    # or policy activation is absent.
+    for key in tuple(candidates):
+        if candidates[key].source_type in {"matter_document", "ip_document"}:
+            candidates.pop(key)
+    if activation.available:
+        # Once the private index is active for the tenant, document bytes may
+        # not fall back to the legacy direct-extracted-text path. An absent,
+        # lagging or tombstoned projection must therefore produce abstention.
+        tenant_scope = bool(grouped.get("tenant"))
+        filters: dict[str, object] = {}
+        if not tenant_scope:
+            scope_ids = {
+                scope_type: sorted(grouped[scope_type])
+                for scope_type in ("client", "matter", "ip_docket")
+                if grouped.get(scope_type)
+            }
+            source_refs = {
+                source_type: sorted(grouped[source_type])
+                for source_type in ("matter_document", "ip_document")
+                if grouped.get(source_type)
+            }
+            if scope_ids:
+                filters["scope_ids"] = scope_ids
+            if source_refs:
+                filters["source_refs"] = source_refs
+        private_rows = (
+            retrieve_private_content(
+                session,
+                context=context,
+                query=question,
+                filters=filters,
+                limit=MAX_RETRIEVAL_SOURCES,
+            )
+            if tenant_scope or filters
+            else ()
+        )
+        private_by_source: dict[str, list[str]] = defaultdict(list)
+        private_projection_ids: dict[str, list[str]] = defaultdict(list)
+        private_metadata: dict[str, tuple[str, str, str]] = {}
+        for row in private_rows:
+            key = f"{row.source_type}:{row.source_id}"
+            private_by_source[key].append(row.content)
+            private_projection_ids[key].append(row.projection_id)
+            private_metadata[key] = (
+                row.source_type,
+                row.source_id,
+                row.source_version,
+            )
+        matter_document_ids = {
+            source_id
+            for source_type, source_id, _source_version in private_metadata.values()
+            if source_type == "matter_document"
+        }
+        matter_ids_by_attachment = (
+            dict(
+                session.execute(
+                    select(MatterAttachment.id, MatterAttachment.matter_id)
+                    .join(Matter, Matter.id == MatterAttachment.matter_id)
+                    .where(
+                        Matter.company_id == context.company.id,
+                        MatterAttachment.id.in_(matter_document_ids),
+                    )
+                ).all()
+            )
+            if matter_document_ids
+            else {}
+        )
+        for key, chunks in private_by_source.items():
+            existing = candidates.get(key)
+            source_type, source_id, source_version = private_metadata[key]
+            if existing is not None:
+                href = existing.href
+                label = existing.label
+            elif source_type == "matter":
+                href = f"/app/matters/{source_id}"
+                label = next(row.label for row in private_rows if row.source_id == source_id)
+            elif source_type == "ip_docket":
+                href = f"/app/ip?docket={source_id}&view=overview"
+                label = next(row.label for row in private_rows if row.source_id == source_id)
+            elif source_type == "ip_document":
+                href = "/app/ip/documents"
+                label = next(row.label for row in private_rows if row.source_id == source_id)
+            elif source_type == "matter_document":
+                matter_id = matter_ids_by_attachment.get(source_id)
+                href = f"/app/matters/{matter_id}" if matter_id is not None else "/app/matters"
+                label = next(row.label for row in private_rows if row.source_id == source_id)
+            else:
+                href = "/app/clients"
+                label = next(row.label for row in private_rows if row.source_id == source_id)
+            candidates[key] = _source(
+                scope_type=source_type,
+                scope_id=source_id,
+                version=source_version,
+                label=label,
+                text=" ".join(chunks),
+                href=href,
+                private_retrieved=True,
+                private_projection_ids=tuple(private_projection_ids[key]),
+            )
 
     return list(candidates.values())[:MAX_RETRIEVAL_SOURCES]
 
@@ -1278,6 +1500,7 @@ def _resolved_source_versions(
     *,
     context: SessionContext,
     sources: list[_SourceCandidate],
+    require_ip_document_ai_retrieval: bool = False,
 ) -> dict[tuple[str, str], str | None]:
     unique = {
         (source.source_type, source.source_id): AssistantScopeInput(
@@ -1295,6 +1518,7 @@ def _resolved_source_versions(
                 context=context,
                 scopes=inputs[offset : offset + MAX_SESSION_SCOPES],
                 strict=False,
+                require_ip_document_ai_retrieval=require_ip_document_ai_retrieval,
             )
         )
     return resolved
@@ -1310,6 +1534,7 @@ def _current_sources(
         session,
         context=context,
         sources=sources,
+        require_ip_document_ai_retrieval=True,
     )
     return {
         source.key: source
@@ -1325,19 +1550,13 @@ def _model_target(
     candidates: list[_SourceCandidate],
 ) -> tuple[str | None, str | None, str | None]:
     matter_ids = {
-        candidate.source_id
-        for candidate in candidates
-        if candidate.source_type == "matter"
+        candidate.source_id for candidate in candidates if candidate.source_type == "matter"
     }
     docket_ids = {
-        candidate.source_id
-        for candidate in candidates
-        if candidate.source_type == "ip_docket"
+        candidate.source_id for candidate in candidates if candidate.source_type == "ip_docket"
     }
     proceeding_ids = {
-        candidate.source_id
-        for candidate in candidates
-        if candidate.source_type == "ip_proceeding"
+        candidate.source_id for candidate in candidates if candidate.source_type == "ip_proceeding"
     }
     proceeding_id: str | None = None
     if len(proceeding_ids) == 1:
@@ -1441,10 +1660,30 @@ def _serialize_turns(
         )
         for citation in citations
     ]
+    saved_output_rows = list(
+        session.scalars(
+            select(PrivateSavedOutputAccess).where(
+                PrivateSavedOutputAccess.company_id == context.company.id,
+                PrivateSavedOutputAccess.assistant_turn_id.in_(turn_ids),
+            )
+        ).all()
+    )
+    saved_output_sources = [
+        _SourceCandidate(
+            source_type=row.source_type,
+            source_id=row.source_id,
+            source_version=row.source_version,
+            label="",
+            text="",
+            href="",
+        )
+        for row in saved_output_rows
+    ]
     current = _resolved_source_versions(
         session,
         context=context,
-        sources=citation_sources,
+        sources=[*citation_sources, *saved_output_sources],
+        require_ip_document_ai_retrieval=True,
     )
     from caseops_api.services.private_retrieval import (
         reauthorize_private_saved_outputs,
@@ -1465,8 +1704,7 @@ def _serialize_turns(
         changed = turn.role == AssistantTurnRole.ASSISTANT and (
             turn.id in blocked_saved_turn_ids
             or any(
-                current.get((citation.source_type, citation.source_id))
-                != citation.source_version
+                current.get((citation.source_type, citation.source_id)) != citation.source_version
                 for citation in turn_citations
             )
         )
@@ -1543,9 +1781,11 @@ def _persist_turn_pair(
     suggested_searches: list[str],
     proposed_actions: list[AssistantProposedAction],
     model_run: ModelRun | None,
+    access_sources: list[_SourceCandidate] | None = None,
 ) -> tuple[AssistantTurn, AssistantTurn]:
     sequence = _next_turn_sequence(session, assistant_session=assistant_session)
     now = datetime.now(UTC)
+    manifested_sources = access_sources if access_sources is not None else sources
     permission_snapshot = {
         "policy_version": assistant_session.policy_version,
         "sources": [
@@ -1554,7 +1794,7 @@ def _persist_turn_pair(
                 "source_id": source.source_id,
                 "source_version": source.source_version,
             }
-            for source in sources
+            for source in manifested_sources
         ],
     }
     user_turn = AssistantTurn(
@@ -1582,9 +1822,7 @@ def _persist_turn_pair(
         retrieval_manifest_json={
             "confidence": confidence,
             "suggested_searches": suggested_searches[:5],
-            "proposed_actions": [
-                action.model_dump(mode="json") for action in proposed_actions[:5]
-            ],
+            "proposed_actions": [action.model_dump(mode="json") for action in proposed_actions[:5]],
         },
         permission_snapshot_json=permission_snapshot,
         created_by_membership_id=context.membership.id,
@@ -1610,7 +1848,7 @@ def _persist_turn_pair(
                 created_at=now,
             )
         )
-    if sources:
+    if manifested_sources:
         from caseops_api.services.private_retrieval import register_private_saved_output
 
         register_private_saved_output(
@@ -1624,7 +1862,7 @@ def _persist_turn_pair(
                     source.source_version,
                     source.sha256,
                 )
-                for source in sources[:MAX_CITATIONS_PER_TURN]
+                for source in manifested_sources[:MAX_RETRIEVAL_SOURCES]
             ),
         )
     assistant_session.version += 1
@@ -1773,6 +2011,60 @@ def ask_workspace_assistant(
                 detail="The workspace assistant could not complete this question. Try again.",
             ) from exc
 
+    if completion is not None and not _assistant_capability_is_current(
+        session,
+        context=context,
+    ):
+        session.rollback()
+        raise ProblemHTTPException(
+            status_code=409,
+            problem_type="assistant_access_changed",
+            detail="Workspace Assistant access changed while the question was running.",
+        )
+    private_candidates = [row for row in candidates if row.private_retrieved]
+    if completion is not None and private_candidates:
+        from caseops_api.services.private_retrieval import (
+            hydrate_private_projection_results,
+            private_retrieval_activation,
+        )
+
+        activation = private_retrieval_activation(session, context=context)
+        if not activation.available:
+            session.rollback()
+            raise ProblemHTTPException(
+                status_code=409,
+                problem_type="assistant_private_retrieval_changed",
+                detail=(
+                    "Private retrieval access changed while the question was running. "
+                    "Review the scope and try again."
+                ),
+            )
+        expected_projection_ids = {
+            projection_id
+            for candidate in private_candidates
+            for projection_id in candidate.private_projection_ids
+        }
+        hydrated_projection_ids = {
+            row.projection_id
+            for row in hydrate_private_projection_results(
+                session,
+                context=context,
+                projection_ids=expected_projection_ids,
+                query=question,
+                limit=MAX_RETRIEVAL_SOURCES,
+            )
+        }
+        if hydrated_projection_ids != expected_projection_ids:
+            session.rollback()
+            raise ProblemHTTPException(
+                status_code=409,
+                problem_type="assistant_private_sources_changed",
+                detail=(
+                    "One or more private sources changed while the question was running. "
+                    "Review the scope and try again."
+                ),
+            )
+
     locked_policy = _locked_assistant_policy(session, context=context)
     locked = _session_or_404(
         session,
@@ -1811,6 +2103,12 @@ def ask_workspace_assistant(
         context=context,
         sources=candidates,
     )
+    provider_sources_current = [
+        current[candidate.key] for candidate in candidates if candidate.key in current
+    ]
+    provider_sources_changed = completion is not None and (
+        len(provider_sources_current) != len(candidates)
+    )
     cited: list[_SourceCandidate] = []
     seen_source_ids: set[str] = set()
     for source_id in parsed.used_source_ids:
@@ -1823,9 +2121,11 @@ def ask_workspace_assistant(
         cited.append(source)
         if len(cited) >= MAX_CITATIONS_PER_TURN:
             break
-    answered = parsed.status == "answered" and bool(cited)
-    answer = parsed.answer if answered else (
-        "I do not have enough permitted, verified evidence to answer that safely."
+    answered = parsed.status == "answered" and bool(cited) and not provider_sources_changed
+    answer = (
+        parsed.answer
+        if answered
+        else ("I do not have enough permitted, verified evidence to answer that safely.")
     )
     suggested = parsed.suggested_searches if not answered else []
     proposals = _proposed_actions(
@@ -1868,7 +2168,8 @@ def ask_workspace_assistant(
         answer=answer,
         answer_status="completed" if answered else "abstained",
         confidence=parsed.confidence if answered else "insufficient",
-        sources=cited,
+        sources=cited if answered else [],
+        access_sources=provider_sources_current if answered else [],
         suggested_searches=suggested,
         proposed_actions=proposals,
         model_run=model_run,
@@ -1935,6 +2236,58 @@ def list_assistant_turns(
         limit=bounded_limit,
         offset=offset,
         has_more=has_more,
+    )
+
+
+def record_assistant_citation_open(
+    session: Session,
+    *,
+    context: SessionContext,
+    session_id: str,
+    citation_id: str,
+) -> AssistantCitationOpenResponse:
+    """Resolve one citation only after the saved answer is reauthorized."""
+
+    assistant_session = _session_or_404(
+        session,
+        context=context,
+        session_id=session_id,
+    )
+    citation, turn = session.execute(
+        select(AssistantCitation, AssistantTurn)
+        .join(
+            AssistantTurn,
+            (AssistantTurn.id == AssistantCitation.turn_id)
+            & (AssistantTurn.company_id == AssistantCitation.company_id),
+        )
+        .where(
+            AssistantCitation.id == citation_id,
+            AssistantCitation.company_id == context.company.id,
+            AssistantTurn.session_id == assistant_session.id,
+            AssistantTurn.role == AssistantTurnRole.ASSISTANT,
+        )
+    ).one_or_none() or (None, None)
+    if citation is None or turn is None:
+        raise HTTPException(status_code=404, detail="Assistant citation not found.")
+    visible = _serialize_turns(session, context=context, turns=[turn])[0]
+    current = next((item for item in visible.citations if item.id == citation.id), None)
+    if current is None or not current.source_url:
+        raise HTTPException(
+            status_code=409,
+            detail="Citation access or source version changed. Ask again before opening it.",
+        )
+    record_from_context(
+        session,
+        context,
+        action="workspace_assistant.citation_open_succeeded",
+        target_type="assistant_citation",
+        target_id=citation.id,
+        metadata={"source_type": citation.source_type},
+    )
+    session.commit()
+    return AssistantCitationOpenResponse(
+        citation_id=citation.id,
+        source_url=current.source_url,
     )
 
 
@@ -2016,6 +2369,7 @@ __all__ = [
     "get_assistant_session",
     "list_assistant_sessions",
     "list_assistant_turns",
+    "record_assistant_citation_open",
     "refuse_assistant_session_deletion",
     "replace_assistant_scopes",
     "search_assistant_scopes",

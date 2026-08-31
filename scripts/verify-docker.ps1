@@ -4,6 +4,7 @@
 param(
     [switch]$KeepRunning,
     [switch]$SkipBuild,
+    [switch]$PreCommit,
     [Parameter(ValueFromRemainingArguments=$true)]
     [string[]]$PlaywrightArgs = @()
 )
@@ -13,14 +14,60 @@ $RepoRoot = (Resolve-Path "$PSScriptRoot\..").Path
 $ComposeFile = Join-Path $RepoRoot "docker-compose.yml"
 $ApiDir = Join-Path $RepoRoot "apps\api"
 $ApiPython = Join-Path $ApiDir ".venv\Scripts\python.exe"
-$ReleaseSha = ((& git -C $RepoRoot rev-parse HEAD | Out-String).Trim())
 $TestApiProxyScript = Join-Path $RepoRoot "scripts\docker-acceptance-api-proxy.mjs"
 $TestApiProxyProcess = $null
 $TestApiProxyStdout = $null
 $TestApiProxyStderr = $null
 
-if ($LASTEXITCODE -ne 0 -or $ReleaseSha -notmatch "^[0-9a-f]{40}$") {
-    throw "Could not resolve the exact candidate SHA."
+function Get-WorkingTreeFingerprint {
+    $Entries = @{}
+    foreach ($Line in @(& git -C $RepoRoot ls-files --stage)) {
+        if ($Line -notmatch "^[0-9]+ ([0-9a-f]{40}) 0`t(.+)$") { continue }
+        $Entries[$Matches[2]] = $Matches[1]
+    }
+    if ($LASTEXITCODE -ne 0) { throw "Could not read the candidate Git index." }
+    $ChangedPaths = @(
+        & git -C $RepoRoot ls-files --modified --others --exclude-standard
+    )
+    if ($LASTEXITCODE -ne 0) { throw "Could not enumerate changed candidate files." }
+    foreach ($RelativePath in ($ChangedPaths | Sort-Object -Unique)) {
+        $AbsolutePath = Join-Path $RepoRoot $RelativePath
+        if (-not (Test-Path -LiteralPath $AbsolutePath -PathType Leaf)) { continue }
+        $BlobHash = ((& git -C $RepoRoot hash-object -- $RelativePath | Out-String).Trim())
+        if ($LASTEXITCODE -ne 0 -or $BlobHash -notmatch "^[0-9a-f]{40}$") {
+            throw "Could not fingerprint $RelativePath."
+        }
+        $Entries[$RelativePath] = $BlobHash
+    }
+    foreach ($RelativePath in @(& git -C $RepoRoot ls-files --deleted)) {
+        $Entries[$RelativePath] = "DELETED"
+    }
+    $Records = foreach ($RelativePath in ($Entries.Keys | Sort-Object)) {
+        "$RelativePath`0$($Entries[$RelativePath])"
+    }
+    $Bytes = [Text.Encoding]::UTF8.GetBytes(($Records -join "`n"))
+    $Hasher = [Security.Cryptography.SHA256]::Create()
+    try {
+        return -join ($Hasher.ComputeHash($Bytes) | ForEach-Object { $_.ToString("x2") })
+    }
+    finally {
+        $Hasher.Dispose()
+    }
+}
+
+$SourceFingerprint = if ($PreCommit) { Get-WorkingTreeFingerprint } else { $null }
+$ReleaseSha = if ($PreCommit) {
+    # Runtime release endpoints deliberately accept only exact Git-shaped revisions.
+    $SourceFingerprint.Substring(0, 40)
+} else {
+    ((& git -C $RepoRoot rev-parse HEAD | Out-String).Trim())
+}
+if (
+    $LASTEXITCODE -ne 0 `
+    -or $ReleaseSha -notmatch "^[0-9a-f]{40}$" `
+    -or ($PreCommit -and $SourceFingerprint -notmatch "^[0-9a-f]{64}$")
+) {
+    throw "Could not resolve the exact candidate source identity."
 }
 
 $ComposeProject = "caseops-acceptance-$($ReleaseSha.Substring(0, 12))"
@@ -33,7 +80,7 @@ $PostgresPort = ($PortBase + 3).ToString()
 $ValkeyPort = ($PortBase + 4).ToString()
 
 $DirtyContext = ((& git -C $RepoRoot status --porcelain --untracked-files=all -- apps/api apps/web docker-compose.yml package.json package-lock.json .dockerignore .gcloudignore playwright.docker.config.ts scripts/docker-acceptance-api-proxy.mjs scripts/verify-docker.ps1 | Out-String).Trim())
-if ($DirtyContext) {
+if ($DirtyContext -and -not $PreCommit) {
     throw "Docker acceptance requires a committed, clean build context. Commit the candidate first.`n$DirtyContext"
 }
 
@@ -61,6 +108,10 @@ $AcceptanceEnvironment = @{
     CASEOPS_E2E_DATABASE_URL = "postgresql+psycopg://caseops:caseops@127.0.0.1:$PostgresPort/caseops"
     CASEOPS_E2E_DOCKER_PROJECT = $ComposeProject
     CASEOPS_E2E_DOCKER_COMPOSE_FILE = $ComposeFile
+    CASEOPS_TEST_POSTGRES_URL = "postgresql+psycopg://caseops:caseops@127.0.0.1:$PostgresPort/caseops"
+    CASEOPS_DATABASE_URL = "postgresql+psycopg://caseops:caseops@127.0.0.1:$PostgresPort/caseops"
+    CASEOPS_ENV = "ci"
+    CASEOPS_AUTH_SECRET = "docker-postgres-validation-secret-at-least-32-bytes"
     CASEOPS_WEB_BASE_URL = "http://127.0.0.1:$WebPort"
     # Worktrees under OneDrive cannot always accept uv cache hardlinks on Windows.
     UV_LINK_MODE = "copy"
@@ -73,7 +124,12 @@ foreach ($Name in $AcceptanceEnvironment.Keys) {
 
 $Succeeded = $false
 try {
-    Write-Host "[docker-acceptance] exact candidate $ReleaseSha"
+    $IdentityKind = if ($PreCommit) { "pre-commit source fingerprint" } else { "commit" }
+    $CandidateIdentity = if ($PreCommit) { $SourceFingerprint } else { $ReleaseSha }
+    Write-Host "[docker-acceptance] exact $IdentityKind $CandidateIdentity"
+    if ($PreCommit) {
+        Write-Host "[docker-acceptance] derived runtime revision $ReleaseSha"
+    }
     Write-Host "[docker-acceptance] preparing frozen host test dependencies"
     & npm ci --no-audit --no-fund
     if ($LASTEXITCODE -ne 0) { throw "Host Node dependency sync failed." }
@@ -149,6 +205,16 @@ try {
         throw "PostgreSQL index health exceeded its 512 MiB production job ceiling or failed."
     }
 
+    Write-Host "[docker-acceptance] running the complete PostgreSQL + pgvector validation suite"
+    Push-Location $ApiDir
+    try {
+        & $ApiPython -m pytest -q -m postgres tests/test_postgres_validation.py
+        if ($LASTEXITCODE -ne 0) { throw "PostgreSQL + pgvector validation failed." }
+    }
+    finally {
+        Pop-Location
+    }
+
     Write-Host "[docker-acceptance] running Playwright against Docker + PostgreSQL"
     $NodePath = (Get-Command node -ErrorAction Stop).Source
     $TestApiProxyStdout = [IO.Path]::GetTempFileName()
@@ -201,7 +267,7 @@ finally {
             Get-Content -LiteralPath $TestApiProxyStderr
         }
     }
-    if ($Succeeded -and -not $KeepRunning) {
+    if (-not $KeepRunning) {
         & docker compose --project-name $ComposeProject --file $ComposeFile down --volumes --remove-orphans
     }
     foreach ($Name in $AcceptanceEnvironment.Keys) {

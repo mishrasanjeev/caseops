@@ -4,8 +4,8 @@
   "status": "repository_inventory_snapshot_policy_unapproved",
   "policy_status": "pending_named_human_approval",
   "purpose": "Versioned repository inventory for DATA-GOV-01 and DATA-GOV-03. It snapshots SQL tables/columns/indexes and known non-SQL classes so unregistered data-bearing changes fail Definition of Ready.",
-  "completion_boundary": "This inventory does not claim approved retention bounds, legal-hold activation, tenant export, purge, offboarding, provider deletion, backup recovery/restore, residency, or data-governance/recovery milestone completion. The only current disposition behavior is fail-closed Definition-of-Ready validation. This release's tenant-scoped company-user lookup, deadline-coverage guards, standalone-deadline offboarding serialization, and bounded Today IP coverage stream expose existing registered SQL classes only. The Today stream is a read projection over ip_deadline_coverages, ip_docket_records, and matter_deadlines that reuses the existing IP docket access predicate; the web endpoint and generated OpenAPI contract changes add no SQL or non-SQL data class, new storage, or disposition authority. IPLF-057B backfills the required ip_trademark_particular_versions compatibility projection for existing trademark_international_registrations dockets; both tables are already registered, Madrid facts retain their canonical owner, and the bounded restore-forward migration adds no data class, storage boundary, retention authority, or disposition handler. EG-009 narrows what failure paths persist: audit-export, authority-ingestion, court-sync, document-job, document-processing, embedding and legal-update errors now store redacted text instead of raw exception strings. This removes infrastructure detail from already-registered columns; it adds no SQL or non-SQL data class, no new storage, and no disposition authority. The 2026-08-27 recurring-job hardening changes only version-controlled Cloud Run commands, arguments, environment and secret references, runtime identity, Cloud SQL attachment, resources, retries, and timeouts. It invokes already-baked application entrypoints, preserves the existing registered SQL/provider/storage boundaries and paused governance writers, and adds no data class, persistence path, provider transmission, retention authority, or disposition handler. The 2026-08-28 API capacity hardening changes only Cloud Run service-level minimum capacity, exact deployment verification, and bounded reads over existing registered Matter and IP data. It adds no SQL or non-SQL data class, persistence path, provider transmission, retention authority, disposition behavior, or data owner. IPLF-062A adds tenant-scoped assistant sessions, explicit polymorphic scope references, turns, and exact citation provenance under the tenant-restricted legal-content profile. The tenant AI policy supplies a bounded session expiry, but automated destruction remains unauthorized until the hold-aware disposition owner is implemented and approved; downgrade therefore refuses retained assistant evidence. IPLF-063 extends the existing recommendation and Draft records with tenant-bound Matter/IP targets, frozen legal-review context and source provenance, lawyer selection/finalization evidence, redacted terminal state, and an idempotent Draft link under the same tenant-restricted legal-content profile. It adds no alternate research, source, drafting, audit, model-run, billing, retention, hold, export, purge, or provider-deletion owner; downgrade refuses retained intelligent-review or linked Draft evidence. The 2026-08-28 production stabilization stores one bounded, hashed official-provider source text on the existing tracked-case update owner so a billing-unavailable certified PDF can fall back only to complete integrity-verified provider markdown; truncation or hash mismatch fails closed, snapshots retain only a bounded preview, and no alternate source, provider, retention, or disposition owner is introduced. The 2026-08-29 follow-up changes only billing-unavailable response classification for that existing bounded cache, bundles already-authorized Matter and IP document projections into the existing foreign-associate workspace read, and raises service-level warm capacity. It adds no SQL or non-SQL data class, persistence path, provider transmission, retention authority, disposition behavior, or data owner. The 2026-08-29 exact-release correction classifies provider HTTP 402 under the existing rate-limit health state and writes one zero-cost verified-cached terminal operation per exact release, linked to an existing hash-verified provider snapshot and complete tracked-case source update. It makes no provider call when valid stored evidence exists, leaves provider freshness and health unchanged, and adds no data class, persistence boundary, provider transmission, retention authority, disposition behavior, or data owner. The 2026-08-29 legacy-evidence correction repairs at most one missing tracked-case source body from an already hash-verified provider snapshot: it requires an exact update-type, source-key, and source-URL match, complete non-truncated text, empty target text and hash fields, bounded candidate work, and immutable provenance audit. It never overwrites existing source evidence, changes provider health or freshness, calls the provider, or introduces a new data class, storage boundary, retention authority, disposition behavior, or data owner. IPLF-066A adds tenant-private index generations, private content projections and typed scopes, idempotent revocation/tombstone events, and content-free saved-output access manifests under fail-closed tenant policies. The only non-SQL class is an identifier-only process cache partitioned by tenant, membership and security generations; every cache hit is reauthorized from current SQL state. It does not merge private content into the public corpus, authorize provider transmission, activate retention or purge, or claim the IPLF-066B user workflow and release proof.",
-  "current_change_note": "The 2026-08-31 migration timeout containment adds only dedicated PostgreSQL connection budgets and Cloud Run migration-job configuration/read-back checks over already-registered SQL classes. It adds no data class, table, column, index, persistence path, provider transmission, retention authority, disposition behavior, secret exposure, legal effect, or human approval authority; UJ-67-EXC-01 estimate/preflight refusal remains planned.",
+  "completion_boundary": "This inventory does not claim approved platform-wide retention bounds, legal-hold activation, tenant export, general purge/offboarding, backup recovery/restore, residency, or data-governance/recovery milestone completion. Most classes remain protected only by fail-closed Definition-of-Ready validation. IPLF-066A adds tenant-private index generations, private content projections and typed scopes, idempotent revocation/tombstone events, and content-free saved-output access manifests under fail-closed tenant policies. IPLF-066B adds one narrow IPLF-071-owned adapter for `private_index_projections`: it accepts only a separately approved execute row matching its immutable dry-run manifest, rechecks current active retention policy and legal-hold state under lock, tombstones and blanks private projection content, records a local receipt, and records an explicit provider deletion-delay exception when no per-request deletion receipt exists. The general data-governance API remains non-executable, the original IPLF-028A six-class admission boundary is unchanged, and no other SQL, object, backup, provider, export, restore, client-scope, or full-tenant disposition is authorized or claimed.",
+  "current_change_note": "IPLF-066B adds durable private-event retry metadata, tenant-leading due and global maintenance indexes, a content-minimized disposition checkpoint class, bounded five-minute maintenance scheduling, fail-closed lag alerting, and the narrow private-index disposition adapter described in the completion boundary. The adapter cannot authorize itself and does not expose a new execution route; IPLF-071 remains incomplete outside this private-index subsystem.",
   "requirement_refs": [
     "DATA-GOV-01",
     "DATA-GOV-03"
@@ -16,6 +16,12 @@
       "status": "implemented_definition_of_ready_guard_no_data_operation",
       "implementation_ref": "scripts/ip_data_governance_map.py",
       "behavior": "Rejects an unregistered table, column, index snapshot, migration, or declared provider/storage/telemetry boundary from passing CI. It performs no retention, hold, export, purge, offboarding, restore, backup, or provider I/O."
+    },
+    {
+      "id": "private_retrieval_disposition",
+      "status": "implemented_private_index_subsystem_requires_preapproved_operation",
+      "implementation_ref": "apps/api/src/caseops_api/services/data_disposition.py",
+      "behavior": "For `private_index_projections` only, requires a separately approved execute operation and exact dry-run manifest, revalidates active retention-policy and legal-hold state, applies the canonical tenant tombstone event, verifies blank content and absent embeddings, and records a local receipt plus either provider receipt evidence or an explicit deletion-delay exception. It performs no generic tenant, client, object, backup, export, restore, or provider-account deletion."
     }
   ],
   "policy_profiles": {
@@ -144,7 +150,11 @@
     "private_index_projections": "tenant_restricted_legal_content",
     "private_index_projection_scopes": "security_identity_control",
     "private_projection_events": "security_identity_control",
-    "private_saved_output_access": "tenant_restricted_legal_content"
+    "private_saved_output_access": "tenant_restricted_legal_content",
+    "tenant_data_disposition_checkpoints": "security_identity_control"
+  },
+  "table_disposition_handler_overrides": {
+    "private_index_projections": "private_retrieval_disposition"
   },
   "column_category_overrides": {
     "ai_feedback_items": {
@@ -193,7 +203,10 @@
       "source_version": "temporal_or_version_metadata"
     },
     "private_projection_events": {
+      "attempt_count": "configuration_or_state_metadata",
       "idempotency_key": "lifecycle_or_audit_evidence",
+      "last_attempt_at": "temporal_or_version_metadata",
+      "next_attempt_at": "temporal_or_version_metadata",
       "target_version": "temporal_or_version_metadata"
     },
     "private_saved_output_access": {
@@ -206,6 +219,17 @@
       "review_selection_json": "privileged_or_raw_content",
       "source_manifest_json": "privileged_or_raw_content",
       "source_research_report_id": "tenant_or_access_identifier"
+    },
+    "tenant_data_disposition_checkpoints": {
+      "attempt_count": "configuration_or_state_metadata",
+      "evidence_json": "lifecycle_or_audit_evidence",
+      "evidence_sha256": "lifecycle_or_audit_evidence",
+      "exception_code": "configuration_or_state_metadata",
+      "outcome_type": "configuration_or_state_metadata",
+      "provider_name": "external_or_provider_identifier",
+      "status": "configuration_or_state_metadata",
+      "subsystem": "configuration_or_state_metadata",
+      "target_reference_hash": "lifecycle_or_audit_evidence"
     }
   },
   "change_controls": {
@@ -419,7 +443,7 @@
       "status": "inventory_registered_runtime_policy_unapproved",
       "id": "llm-and-embedding-provider-held-content",
       "kind": "provider_held_object",
-      "purpose": "Configured or optional LLM, embedding, and prompt-cache provider request/response content and derived vectors, including bounded authority-metadata extraction and its one-document provider canary. Provider-returned citations are surfaced and persisted only through the citation verification predicate in services/citations.py; EH-SGR-07 (2026-08-16) changed that predicate's meaning, so a persisted verified-citation count recorded before that date is not comparable with one recorded after, and neither has yet been re-baselined against production data. DATA-GOV-15 (2026-08-18): services/llm.py no longer writes raw completion text to logs on decode or schema failure. It previously logged a 1000/1500 character prefix, justified on the grounds that max_tokens bounds the length; length was not the concern, since the completion is draft legal text about client matters. The failure is now reported as response shape (length, delimiters, fence, brace balance), which still separates prose-instead-of-JSON from truncation. On 2026-08-29, recommendation generation began using its configured recommendation-specific output-token ceiling instead of the lower global default; this changes the maximum provider response size for that purpose but does not approve provider retention, training, residency, or deletion behavior. Provider retention and training settings remain pending approval.",
+      "purpose": "Configured or optional LLM, embedding, and prompt-cache provider request/response content and derived vectors, including bounded authority-metadata extraction and its one-document provider canary. Provider-returned citations are surfaced and persisted only through the citation verification predicate in services/citations.py; EH-SGR-07 (2026-08-16) changed that predicate's meaning, so a persisted verified-citation count recorded before that date is not comparable with one recorded after, and neither has yet been re-baselined against production data. DATA-GOV-15 (2026-08-18): services/llm.py no longer writes raw completion text to logs on decode or schema failure. It previously logged a 1000/1500 character prefix, justified on the grounds that max_tokens bounds the length; length was not the concern, since the completion is draft legal text about client matters. The failure is now reported as response shape (length, delimiters, fence, brace balance), which still separates prose-instead-of-JSON from truncation. On 2026-08-29, recommendation generation began using its configured recommendation-specific output-token ceiling instead of the lower global default; this changes the maximum provider response size for that purpose but does not approve provider retention, training, residency, or deletion behavior. IPLF-066B (2026-08-30) makes the deterministic Workspace Assistant provider strip source-borne instructions before producing its test-only preview, so local safety evidence exercises the same untrusted-source boundary without changing provider retention or transmission policy. Provider retention and training settings remain pending approval.",
       "sensitivity": "privileged_or_confidential",
       "source_licence_limits": "Provider training, retention, residency, deletion, and permitted-use settings require approved provider and tenant policy before content transmission.",
       "implementation_refs": [
@@ -23529,7 +23553,7 @@
       "table_name": "private_index_projections",
       "purpose": "Repository SQL persistence class `private_index_projections`; its exact column inventory is intentionally versioned below.",
       "policy_profile_id": "tenant_restricted_legal_content",
-      "disposition_handler_id": "registry_fail_closed",
+      "disposition_handler_id": "private_retrieval_disposition",
       "columns": {
         "access_policy_generation": {
           "category_id": "configuration_or_state_metadata",
@@ -23695,6 +23719,11 @@
           "sql_type": "DATETIME",
           "nullable": true
         },
+        "attempt_count": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
         "company_id": {
           "category_id": "tenant_or_access_identifier",
           "sql_type": "VARCHAR(36)",
@@ -23729,6 +23758,16 @@
           "category_id": "lifecycle_or_audit_evidence",
           "sql_type": "VARCHAR(120)",
           "nullable": false
+        },
+        "last_attempt_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "next_attempt_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
         },
         "reason_code": {
           "category_id": "domain_attribute",
@@ -25485,6 +25524,115 @@
           "category_id": "domain_attribute",
           "sql_type": "VARCHAR(20)",
           "nullable": true
+        },
+        "updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        }
+      }
+    },
+    {
+      "id": "tenant_data_disposition_checkpoints",
+      "table_name": "tenant_data_disposition_checkpoints",
+      "purpose": "Repository SQL persistence class `tenant_data_disposition_checkpoints`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "security_identity_control",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "attempt_count": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "completed_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "evidence_json": {
+          "category_id": "lifecycle_or_audit_evidence",
+          "sql_type": "JSON",
+          "nullable": true
+        },
+        "evidence_sha256": {
+          "category_id": "lifecycle_or_audit_evidence",
+          "sql_type": "VARCHAR(64)",
+          "nullable": true
+        },
+        "exception_code": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(120)",
+          "nullable": true
+        },
+        "expected_resolution_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "next_attempt_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "operation_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "outcome_type": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(40)",
+          "nullable": true
+        },
+        "private_event_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "provider_name": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(80)",
+          "nullable": true
+        },
+        "provider_receipt_ref": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(255)",
+          "nullable": true
+        },
+        "status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(16)",
+          "nullable": false
+        },
+        "subsystem": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(80)",
+          "nullable": false
+        },
+        "target_reference_hash": {
+          "category_id": "lifecycle_or_audit_evidence",
+          "sql_type": "VARCHAR(64)",
+          "nullable": false
+        },
+        "target_type": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(80)",
+          "nullable": false
         },
         "updated_at": {
           "category_id": "temporal_or_version_metadata",
@@ -27807,12 +27955,12 @@
       }
     }
   ],
-  "schema_fingerprint": "e57f9c3cc4d6a6cdde90decaddd8ed99470b22c44d5a72ee153aba40d17e610b",
+  "schema_fingerprint": "43326c5c7e07db25e1c7831cf9d0fa67ff5bb8d4d47f4d9850f578ed076a9995",
   "index_inventory": {
-    "orm_index_count": 1633,
-    "orm_index_fingerprint": "5e20b9cb9d85380b94fd086f19277082c61fd7224beb03b8278cff9857003067",
-    "migration_index_count": 687,
-    "migration_index_fingerprint": "856724a814196b986b95a30be2339d1419691361dd6c01d97f1393614c873a43",
+    "orm_index_count": 1639,
+    "orm_index_fingerprint": "be1d526799b0571122fc196e2240b5fc99e03da735390cddcee9374f5cab268a",
+    "migration_index_count": 693,
+    "migration_index_fingerprint": "b1181f9a26ce61c97f7b352477ce65e96cc7d5001013e4923567640ad5328cdc",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."
   }
 }

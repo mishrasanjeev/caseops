@@ -17,10 +17,12 @@ from caseops_api.schemas.ai_feedback import (
     AIFeedbackReviewRequest,
     AIFeedbackStatus,
     AIFeedbackSurface,
+    AIOutcomeAnalyticsResponse,
     ProductGuideFeedbackCreateRequest,
     WorkspaceAssistantFeedbackCreateRequest,
 )
 from caseops_api.services.ai_feedback import (
+    get_ai_outcome_analytics,
     list_feedback,
     review_feedback,
     submit_product_guide_feedback,
@@ -70,6 +72,23 @@ async def post_workspace_assistant_feedback(
 ) -> AIFeedbackRecord:
     return AIFeedbackRecord.model_validate(
         submit_workspace_assistant_feedback(session, context=context, payload=payload)
+    )
+
+
+@admin_router.get(
+    "/ai-outcomes",
+    response_model=AIOutcomeAnalyticsResponse,
+    summary="Read privacy-bounded tenant AI outcome aggregates",
+)
+async def get_ai_outcomes(
+    context: FeedbackAdmin,
+    session: DbSession,
+    window_days: Annotated[int, Query(ge=1, le=90)] = 30,
+) -> AIOutcomeAnalyticsResponse:
+    return get_ai_outcome_analytics(
+        session,
+        context=context,
+        window_days=window_days,
     )
 
 

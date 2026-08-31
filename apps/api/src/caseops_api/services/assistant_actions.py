@@ -400,7 +400,11 @@ def _preview_material(
         validated = MatterUpdateRequest.model_validate(
             {
                 action_input.field_name: action_input.field_value,
-                "expected_updated_at": target.target_version,
+                # The assistant proposal carries the stronger composite private
+                # source version (ACL plus row version) for its stale-target
+                # check. The canonical Matter writer accepts the row's native
+                # optimistic-concurrency timestamp.
+                "expected_updated_at": matter.updated_at.isoformat(),
             }
         )
         canonical = validated.model_dump(mode="json", exclude_unset=True)

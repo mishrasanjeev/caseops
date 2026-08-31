@@ -97,6 +97,9 @@ from caseops_api.services.llm import (
 from caseops_api.services.llm_http import provider_failure_http_exception
 from caseops_api.services.matter_access import assert_access, assert_ip_docket_access
 from caseops_api.services.matter_operational_guard import require_operational_matter
+from caseops_api.services.private_retrieval import (
+    private_saved_source_manifest_is_current,
+)
 from caseops_api.services.session_context import SessionContext
 
 logger = logging.getLogger(__name__)
@@ -162,7 +165,12 @@ def _load_matter(session: Session, context: SessionContext, matter_id: str) -> M
 
 
 def _load_draft(
-    session: Session, matter: Matter, draft_id: str, *, include_children: bool = True
+    session: Session,
+    matter: Matter,
+    draft_id: str,
+    *,
+    context: SessionContext,
+    include_children: bool = True,
 ) -> Draft:
     query = select(Draft).where(Draft.id == draft_id, Draft.matter_id == matter.id)
     if include_children:
@@ -173,7 +181,33 @@ def _load_draft(
     draft = session.scalar(query)
     if draft is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Draft not found.")
+    _assert_private_draft_sources_current(session, context=context, draft=draft)
     return draft
+
+
+def _assert_private_draft_sources_current(
+    session: Session,
+    *,
+    context: SessionContext,
+    draft: Draft,
+) -> None:
+    for version in draft.versions:
+        try:
+            manifest = json.loads(version.source_manifest_json or "[]")
+        except json.JSONDecodeError:
+            manifest = []
+        if not isinstance(manifest, list) or not private_saved_source_manifest_is_current(
+            session,
+            context=context,
+            manifest=manifest,
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Private source access or generation changed. "
+                    "Regenerate the report before reading or exporting it."
+                ),
+            )
 
 
 def create_draft(
@@ -247,7 +281,7 @@ def list_drafts(
     matter_id: str,
 ) -> list[Draft]:
     matter = _load_matter(session, context, matter_id)
-    return list(
+    rows = list(
         session.scalars(
             select(Draft)
             .where(Draft.matter_id == matter.id)
@@ -255,6 +289,18 @@ def list_drafts(
             .order_by(Draft.updated_at.desc(), Draft.id.desc())
         )
     )
+    return [
+        draft
+        for draft in rows
+        if all(
+            private_saved_source_manifest_is_current(
+                session,
+                context=context,
+                manifest=_load_manifest(version.source_manifest_json, []),
+            )
+            for version in draft.versions
+        )
+    ]
 
 
 def get_draft(
@@ -265,7 +311,7 @@ def get_draft(
     draft_id: str,
 ) -> Draft:
     matter = _load_matter(session, context, matter_id)
-    return _load_draft(session, matter, draft_id)
+    return _load_draft(session, matter, draft_id, context=context)
 
 
 def _load_ip_docket_and_proceeding(
@@ -309,6 +355,7 @@ def _load_ip_draft(
     docket: IpDocketRecord,
     proceeding: IpProceeding,
     draft_id: str,
+    context: SessionContext,
 ) -> Draft:
     draft = session.scalar(
         select(Draft)
@@ -323,6 +370,7 @@ def _load_ip_draft(
     )
     if draft is None:
         raise HTTPException(status_code=404, detail="Trademark pleading draft not found.")
+    _assert_private_draft_sources_current(session, context=context, draft=draft)
     return draft
 
 
@@ -425,7 +473,7 @@ def list_ip_drafts(
         docket_id=docket_id,
         proceeding_id=proceeding_id,
     )
-    return list(
+    rows = list(
         session.scalars(
             select(Draft)
             .where(
@@ -437,6 +485,18 @@ def list_ip_drafts(
             .order_by(Draft.updated_at.desc(), Draft.id.desc())
         )
     )
+    return [
+        draft
+        for draft in rows
+        if all(
+            private_saved_source_manifest_is_current(
+                session,
+                context=context,
+                manifest=_load_manifest(version.source_manifest_json, []),
+            )
+            for version in draft.versions
+        )
+    ]
 
 
 def get_ip_draft(
@@ -453,7 +513,13 @@ def get_ip_draft(
         docket_id=docket_id,
         proceeding_id=proceeding_id,
     )
-    return _load_ip_draft(session, docket=docket, proceeding=proceeding, draft_id=draft_id)
+    return _load_ip_draft(
+        session,
+        docket=docket,
+        proceeding=proceeding,
+        draft_id=draft_id,
+        context=context,
+    )
 
 
 _STATUTE_GUIDANCE = (
@@ -1289,7 +1355,9 @@ def generate_ip_draft_version(
         proceeding_id=proceeding_id,
         require_active=True,
     )
-    draft = _load_ip_draft(session, docket=docket, proceeding=proceeding, draft_id=draft_id)
+    draft = _load_ip_draft(
+        session, docket=docket, proceeding=proceeding, draft_id=draft_id, context=context
+    )
     if draft.status == DraftStatus.FINALIZED:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -1432,7 +1500,7 @@ def generate_draft_version(
         matter=matter,
         operation="generate a draft version",
     )
-    draft = _load_draft(session, matter, draft_id)
+    draft = _load_draft(session, matter, draft_id, context=context)
 
     if draft.status == DraftStatus.FINALIZED:
         raise HTTPException(
@@ -1702,7 +1770,7 @@ def edit_draft_version(
         matter=matter,
         operation="edit a draft version",
     )
-    draft = _load_draft(session, matter, draft_id)
+    draft = _load_draft(session, matter, draft_id, context=context)
     return _edit_loaded_draft_version(
         session,
         context=context,
@@ -1730,7 +1798,9 @@ def edit_ip_draft_version(
         proceeding_id=proceeding_id,
         require_active=True,
     )
-    draft = _load_ip_draft(session, docket=docket, proceeding=proceeding, draft_id=draft_id)
+    draft = _load_ip_draft(
+        session, docket=docket, proceeding=proceeding, draft_id=draft_id, context=context
+    )
     return _edit_loaded_draft_version(
         session,
         context=context,
@@ -1893,7 +1963,7 @@ def transition_draft(
         matter=matter,
         operation="transition a draft",
     )
-    draft = _load_draft(session, matter, draft_id)
+    draft = _load_draft(session, matter, draft_id, context=context)
     return _transition_loaded_draft(
         session,
         context=context,
@@ -1923,7 +1993,9 @@ def transition_ip_draft(
         proceeding_id=proceeding_id,
         require_active=True,
     )
-    draft = _load_ip_draft(session, docket=docket, proceeding=proceeding, draft_id=draft_id)
+    draft = _load_ip_draft(
+        session, docket=docket, proceeding=proceeding, draft_id=draft_id, context=context
+    )
     return _transition_loaded_draft(
         session,
         context=context,
@@ -2060,7 +2132,9 @@ def validate_ip_draft(
         docket_id=docket_id,
         proceeding_id=proceeding_id,
     )
-    draft = _load_ip_draft(session, docket=docket, proceeding=proceeding, draft_id=draft_id)
+    draft = _load_ip_draft(
+        session, docket=docket, proceeding=proceeding, draft_id=draft_id, context=context
+    )
     target_id = version_id or draft.current_version_id
     if not target_id:
         raise HTTPException(
@@ -2094,7 +2168,9 @@ def compare_ip_draft_versions(
         docket_id=docket_id,
         proceeding_id=proceeding_id,
     )
-    draft = _load_ip_draft(session, docket=docket, proceeding=proceeding, draft_id=draft_id)
+    draft = _load_ip_draft(
+        session, docket=docket, proceeding=proceeding, draft_id=draft_id, context=context
+    )
     by_revision = {row.revision: row for row in draft.versions}
     previous = by_revision.get(prev_revision)
     next_version = by_revision.get(next_revision)
@@ -2128,7 +2204,9 @@ def transition_ip_draft_lifecycle(
         proceeding_id=proceeding_id,
         require_active=True,
     )
-    draft = _load_ip_draft(session, docket=docket, proceeding=proceeding, draft_id=draft_id)
+    draft = _load_ip_draft(
+        session, docket=docket, proceeding=proceeding, draft_id=draft_id, context=context
+    )
     current = _assert_current_version(draft)
     if action == DraftReviewAction.FILE:
         if draft.status != DraftStatus.FINALIZED:
@@ -2204,7 +2282,7 @@ def render_version_docx(
     """Return (docx_bytes, suggested_filename). Falls back to the
     draft's current version when version_id is not supplied."""
     matter = _load_matter(session, context, matter_id)
-    draft = _load_draft(session, matter, draft_id)
+    draft = _load_draft(session, matter, draft_id, context=context)
     return _render_loaded_version_docx(
         draft=draft,
         target_label=f"Matter: {matter.title} ({matter.matter_code})",
@@ -2227,7 +2305,9 @@ def render_ip_version_docx(
         docket_id=docket_id,
         proceeding_id=proceeding_id,
     )
-    draft = _load_ip_draft(session, docket=docket, proceeding=proceeding, draft_id=draft_id)
+    draft = _load_ip_draft(
+        session, docket=docket, proceeding=proceeding, draft_id=draft_id, context=context
+    )
     return _render_loaded_version_docx(
         draft=draft,
         target_label=(
