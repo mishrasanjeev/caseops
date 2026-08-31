@@ -113,3 +113,12 @@ requirements when using the fallback.
   terminal fixture. Bootstrap a new release-scoped iteration, preserve every
   disposed predecessor, discover the one active iteration through public
   server-owned identifiers, and prove both idempotence and terminal immutability.
+- Private-index rebuilds must not retain source-row foreign-key locks across an
+  unbounded tenant transaction. Commit unreadable shadow projections in bounded
+  batches, fence every batch with the captured security epochs, remove partial
+  rows when a shadow fails, and prove on PostgreSQL that ordinary IP writers
+  remain below the lock-timeout budget while projection scopes are inserted.
+- An HTTP 200 from an LLM provider is not evidence of valid structured output.
+  Use the provider's native strict schema path when available, preserve the
+  existing validation boundary for every provider, and test malformed/refusal
+  behavior so legal reviews cannot fail later on truncated free-form JSON.

@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import event, select
+from sqlalchemy import event, func, select
 from sqlalchemy.exc import IntegrityError
 
 from caseops_api.core.settings import get_settings
@@ -58,6 +58,7 @@ from caseops_api.services.private_retrieval import (
 from caseops_api.services.private_retrieval_jobs import (
     MAX_PRIVATE_PROVIDER_BATCH,
     MAX_PRIVATE_REBUILD_PROJECTIONS,
+    MAX_PRIVATE_WRITE_BATCH,
     inspect_private_index_integrity,
     list_private_maintenance_companies,
     process_pending_private_projection_events,
@@ -90,6 +91,64 @@ class _SpyEmbeddingProvider:
             model=self.model,
             dimensions=self.dimensions,
         )
+
+
+def test_rebuild_removes_committed_batches_when_security_epoch_changes(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    company_id = str(bootstrap["company"]["id"])
+    for index in range(MAX_PRIVATE_WRITE_BATCH + 1):
+        _matter(client, token, f"IPLF-066B-STALE-BATCH-{index:02d}")
+
+    real_upsert = private_retrieval_jobs.upsert_private_projection
+    upsert_count = 0
+
+    def _upsert_after_epoch_change(*args: object, **kwargs: object) -> object:
+        nonlocal upsert_count
+        upsert_count += 1
+        if upsert_count == MAX_PRIVATE_WRITE_BATCH + 1:
+            generation_id = str(kwargs["generation_id"])
+            with get_session_factory()() as concurrent_session:
+                shadow = concurrent_session.get(PrivateIndexGeneration, generation_id)
+                assert shadow is not None
+                shadow.access_policy_generation += 1
+                concurrent_session.commit()
+        return real_upsert(*args, **kwargs)
+
+    monkeypatch.setattr(
+        private_retrieval_jobs,
+        "upsert_private_projection",
+        _upsert_after_epoch_change,
+    )
+    with get_session_factory()() as session:
+        with pytest.raises(PrivateRetrievalInvariantError):
+            rebuild_private_index(session, company_id=company_id)
+
+    with get_session_factory()() as session:
+        failed_shadow = session.scalar(
+            select(PrivateIndexGeneration)
+            .where(
+                PrivateIndexGeneration.company_id == company_id,
+                PrivateIndexGeneration.state == "failed",
+            )
+            .order_by(PrivateIndexGeneration.created_at.desc())
+        )
+        assert failed_shadow is not None
+        retained_projection_count = int(
+            session.scalar(
+                select(func.count(PrivateIndexProjection.id)).where(
+                    PrivateIndexProjection.generation_id == failed_shadow.id,
+                    PrivateIndexProjection.company_id == company_id,
+                )
+            )
+            or 0
+        )
+
+    assert upsert_count == MAX_PRIVATE_WRITE_BATCH + 1
+    assert retained_projection_count == 0
 
 
 def _context(company_id: str, membership_id: str) -> SessionContext:

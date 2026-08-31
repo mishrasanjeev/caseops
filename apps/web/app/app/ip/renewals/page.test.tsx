@@ -157,7 +157,7 @@ describe("IpRenewalsPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Trademark renewals" })).toBeInTheDocument();
     expect((await screen.findAllByText("ASTER device mark")).length).toBeGreaterThan(0);
-    expect(screen.getByText("Trade Marks Act and applicable rules")).toBeInTheDocument();
+    expect(await screen.findByText("Trade Marks Act and applicable rules")).toBeInTheDocument();
     expect(screen.getByText("registry-rules-2026-v1")).toBeInTheDocument();
     expect(screen.getByText(/Renewal official fee quote/)).toBeInTheDocument();
     expect(screen.getByText("Reconciliation: unlinked")).toBeInTheDocument();

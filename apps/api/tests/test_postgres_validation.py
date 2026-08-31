@@ -9738,6 +9738,123 @@ def test_private_retrieval_prefilters_before_bounded_rank_on_postgres(
         ) is None
 
 
+def test_ip_writer_does_not_wait_on_private_projection_scope_fk_locks(pg_engine) -> None:
+    """Private rebuild scope inserts must not stall ordinary IP mutations."""
+
+    from caseops_api.db.models import (
+        PrivateIndexGeneration,
+        PrivateIndexProjection,
+        PrivateIndexProjectionScope,
+    )
+    from caseops_api.services.ip_operations import (
+        _lock_ip_dockets_in_stable_order,
+        _lock_ip_writer_context,
+    )
+
+    with Session(pg_engine) as setup:
+        fixture = _seed_ip_coverage_lifecycle_fixture(setup)
+        now = datetime.now(UTC)
+        generation = PrivateIndexGeneration(
+            company_id=fixture["company_id"],
+            generation_number=1,
+            state="active",
+            access_policy_generation=1,
+            tombstone_generation=0,
+            expected_projection_count=2,
+            verified_projection_count=2,
+            verification_sha256="0" * 64,
+            verified_at=now,
+            activated_at=now,
+        )
+        setup.add(generation)
+        setup.flush()
+        matter_projection = PrivateIndexProjection(
+            company_id=fixture["company_id"],
+            generation_id=generation.id,
+            source_type="matter",
+            source_id=fixture["matter_id"],
+            source_version="1",
+            chunk_ordinal=0,
+            label="Matter projection",
+            content_text="Private matter projection",
+            content_sha256="1" * 64,
+            confidentiality="internal",
+            is_privileged=False,
+            source_state="active",
+            approval_state="not_required",
+            access_policy_version=0,
+            access_policy_generation=1,
+            tombstone_generation=0,
+        )
+        docket_projection = PrivateIndexProjection(
+            company_id=fixture["company_id"],
+            generation_id=generation.id,
+            source_type="ip_docket",
+            source_id=fixture["docket_id"],
+            source_version="1",
+            chunk_ordinal=0,
+            label="Docket projection",
+            content_text="Private docket projection",
+            content_sha256="2" * 64,
+            confidentiality="internal",
+            is_privileged=False,
+            source_state="active",
+            approval_state="not_required",
+            access_policy_version=0,
+            access_policy_generation=1,
+            tombstone_generation=0,
+        )
+        setup.add_all((matter_projection, docket_projection))
+        setup.commit()
+        matter_projection_id = matter_projection.id
+        docket_projection_id = docket_projection.id
+
+    with Session(pg_engine) as rebuild_writer:
+        rebuild_writer.add_all(
+            (
+                PrivateIndexProjectionScope(
+                    company_id=fixture["company_id"],
+                    projection_id=matter_projection_id,
+                    scope_type="matter",
+                    scope_id=fixture["matter_id"],
+                    matter_id=fixture["matter_id"],
+                    access_policy_version=0,
+                ),
+                PrivateIndexProjectionScope(
+                    company_id=fixture["company_id"],
+                    projection_id=docket_projection_id,
+                    scope_type="ip_docket",
+                    scope_id=fixture["docket_id"],
+                    ip_docket_id=fixture["docket_id"],
+                    access_policy_version=0,
+                ),
+            )
+        )
+        rebuild_writer.flush()
+        try:
+            with Session(pg_engine) as workflow_writer:
+                workflow_writer.execute(text("SET LOCAL lock_timeout = '250ms'"))
+                context = _ip_race_context(
+                    workflow_writer,
+                    company_id=fixture["company_id"],
+                    membership_id=fixture["owner_id"],
+                )
+                context = _lock_ip_writer_context(
+                    workflow_writer,
+                    context=context,
+                    required_capability="ip:write",
+                )
+                locked = _lock_ip_dockets_in_stable_order(
+                    workflow_writer,
+                    context=context,
+                    docket_ids={fixture["docket_id"]},
+                    required_capability="ip:write",
+                )
+                assert set(locked) == {fixture["docket_id"]}
+                workflow_writer.rollback()
+        finally:
+            rebuild_writer.rollback()
+
 def test_private_rebuild_releases_interactive_parent_locks_on_postgres(
     pg_engine,
     monkeypatch,

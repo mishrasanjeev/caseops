@@ -343,6 +343,9 @@ def _lock_ip_dockets_in_stable_order(
     inverse relationships could otherwise acquire their Matter and docket
     locks in opposite orders. The actor must already be fenced; then every
     Matter parent is locked by id before every docket child is locked by id.
+    PostgreSQL uses ``FOR NO KEY UPDATE`` here: it preserves writer/lifecycle
+    serialization while remaining compatible with the ``KEY SHARE`` locks
+    taken when private-index scope rows validate their source FKs.
     """
 
     require_locked_membership_capability(
@@ -375,7 +378,7 @@ def _lock_ip_dockets_in_stable_order(
                     Matter.id.in_(matter_ids),
                 )
                 .order_by(Matter.id)
-                .with_for_update(of=Matter)
+                .with_for_update(of=Matter, key_share=True)
                 .execution_options(populate_existing=True)
             ).all()
         )
@@ -394,7 +397,7 @@ def _lock_ip_dockets_in_stable_order(
                 IpDocketRecord.id.in_(requested_ids),
             )
             .order_by(IpDocketRecord.id)
-            .with_for_update(of=IpDocketRecord)
+            .with_for_update(of=IpDocketRecord, key_share=True)
             .execution_options(populate_existing=True)
         ).all()
     )
