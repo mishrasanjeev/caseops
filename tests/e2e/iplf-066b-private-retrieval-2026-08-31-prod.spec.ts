@@ -149,9 +149,7 @@ test("IPLF-066B production revokes private answers, citations and retrieval", as
   test.setTimeout(300_000);
   const expectedSha = required("CASEOPS_EXPECTED_RELEASE_SHA");
   const releaseKey = expectedSha.slice(0, 12);
-  const matterCode = `IPLF-066B-${releaseKey.toUpperCase()}`;
-  const filename = `iplf-066b-${releaseKey}-private-evidence.txt`;
-  const evidenceToken = `Aurora-${releaseKey}`;
+  const matterCodePrefix = `IPLF-066B-${releaseKey.toUpperCase()}`;
   const [apiIdentity, webIdentity] = await Promise.all([
     page.request.get(`${API}/api/build`),
     page.request.get(`${WEB}/api/release-identity`),
@@ -174,7 +172,7 @@ test("IPLF-066B production revokes private answers, citations and retrieval", as
 
   const mattersResponse = await page.request.get(`${API}/api/matters/`, {
     headers,
-    params: { q: matterCode, status: "active", limit: 10 },
+    params: { q: matterCodePrefix, status: "active", limit: 10 },
   });
   await expectStatus(
     mattersResponse,
@@ -183,9 +181,18 @@ test("IPLF-066B production revokes private answers, citations and retrieval", as
   );
   const matching = (
     (await mattersResponse.json()).matters as MatterRecord[]
-  ).filter((matter) => matter.matter_code === matterCode);
+  ).filter(
+    (matter) =>
+      matter.matter_code === matterCodePrefix ||
+      matter.matter_code.startsWith(`${matterCodePrefix}-R`),
+  );
   expect(matching).toHaveLength(1);
   const matter = matching[0];
+  const fixtureKey = matter.matter_code
+    .slice("IPLF-066B-".length)
+    .toLowerCase();
+  const filename = `iplf-066b-${fixtureKey}-private-evidence.txt`;
+  const evidenceToken = `Aurora-${fixtureKey}`;
 
   const originalPolicyResponse = await page.request.get(
     `${API}/api/admin/tenant-ai-policy`,

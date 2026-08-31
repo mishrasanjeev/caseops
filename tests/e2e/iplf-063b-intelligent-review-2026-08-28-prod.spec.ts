@@ -114,7 +114,7 @@ async function currentPrivateTarget(
   headers: Record<string, string>,
   sourceType: "matter" | "ip_docket",
   query: string,
-  expectedLabel: string,
+  expectedLabelPrefix: string,
 ) {
   const response = await json(
     await page.request.post(`${API}/api/private-retrieval/search`, {
@@ -126,7 +126,8 @@ async function currentPrivateTarget(
   );
   const target = response.items.find(
     (item: { source_type: string; source_id: string; label: string }) =>
-      item.source_type === sourceType && item.label === expectedLabel,
+      item.source_type === sourceType &&
+      item.label.startsWith(expectedLabelPrefix),
   );
   expect(
     target,
@@ -184,8 +185,7 @@ test("IPLF-063B production proves the exact UJ-18 release", async ({
   expect(contraryId, "production contrary fixture").toBeTruthy();
   expect(inaccessibleId, "production inaccessible fixture").toBeTruthy();
   const releaseKey = expectedSha.slice(0, 12).toLowerCase();
-  const matterCode = `IPLF-066B-${releaseKey.toUpperCase()}`;
-  const matterTitle = `IPLF-066B exact-release revocation ${releaseKey}`;
+  const matterCodePrefix = `IPLF-066B-${releaseKey.toUpperCase()}`;
   const docketTitle = `IPLF-063B exact-release review ${releaseKey}`;
 
   // IPLF-066B makes private source capture fail closed. A target created after
@@ -198,8 +198,8 @@ test("IPLF-063B production proves the exact UJ-18 release", async ({
     page,
     headers,
     "matter",
-    matterCode,
-    `${matterCode} · ${matterTitle}`,
+    matterCodePrefix,
+    `${matterCodePrefix}`,
   );
   const docketTarget = await currentPrivateTarget(
     page,

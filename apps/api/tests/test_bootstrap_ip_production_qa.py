@@ -111,9 +111,7 @@ def test_bootstrap_ip_production_qa_judge_fixture_is_bounded_and_idempotent(
         created = ensure_ip_production_qa_judge_fixture(session)
         repeated = ensure_ip_production_qa_judge_fixture(session)
 
-        judges = list(
-            session.scalars(select(Judge).where(Judge.source_name == "ip_production_qa"))
-        )
+        judges = list(session.scalars(select(Judge).where(Judge.source_name == "ip_production_qa")))
         authorities = list(
             session.scalars(
                 select(AuthorityDocument).where(
@@ -125,8 +123,7 @@ def test_bootstrap_ip_production_qa_judge_fixture_is_bounded_and_idempotent(
         mappings = list(
             session.scalars(
                 select(JudgeDecisionIndex).where(
-                    JudgeDecisionIndex.resolver_version
-                    == "iplf-060b-production-qa-v1"
+                    JudgeDecisionIndex.resolver_version == "iplf-060b-production-qa-v1"
                 )
             )
         )
@@ -144,8 +141,7 @@ def test_bootstrap_ip_production_qa_judge_fixture_is_bounded_and_idempotent(
     assert all(item.is_analytics_eligible is False for item in mappings)
     assert all(item.mapping_status == "curator_confirmed" for item in mappings)
     assert all(
-        authority_source_verified(item.source, item.source_reference)
-        for item in authorities
+        authority_source_verified(item.source, item.source_reference) for item in authorities
     )
 
 
@@ -177,8 +173,7 @@ def test_bootstrap_ip_production_qa_judge_fixture_refuses_non_qa_collision(
             select(func.count())
             .select_from(AuthorityDocument)
             .where(
-                AuthorityDocument.adapter_name
-                == "caseops-ip-production-qa-judge-authorities-v1"
+                AuthorityDocument.adapter_name == "caseops-ip-production-qa-judge-authorities-v1"
             )
         )
         assert fixture_authorities == 0
@@ -469,10 +464,10 @@ def test_bootstrap_private_retrieval_fixture_is_tenant_scoped_for_one_release(
     assert second_attachment is not None
     assert first_attachment.storage_key != second_attachment.storage_key
     assert first_attachment.storage_key == (
-        f"synthetic-qa/{first.company_id}/iplf-066b/{release_sha}"
+        f"synthetic-qa/{first.company_id}/iplf-066b/{release_sha}/1"
     )
     assert second_attachment.storage_key == (
-        f"synthetic-qa/{second.company_id}/iplf-066b/{release_sha}"
+        f"synthetic-qa/{second.company_id}/iplf-066b/{release_sha}/1"
     )
     assert first_docket is not None and second_docket is not None
     assert first_docket.id != second_docket.id
@@ -484,7 +479,7 @@ def test_bootstrap_private_retrieval_fixture_is_tenant_scoped_for_one_release(
     assert first_proceeding.id != second_proceeding.id
 
 
-def test_bootstrap_private_retrieval_fixture_refuses_terminal_resurrection(
+def test_bootstrap_private_retrieval_fixture_creates_a_new_terminal_safe_iteration(
     client,
 ) -> None:
     del client
@@ -509,14 +504,28 @@ def test_bootstrap_private_retrieval_fixture_refuses_terminal_resurrection(
         matter.is_active = False
         session.commit()
 
-        try:
-            ensure_ip_production_qa_private_retrieval_fixture(
-                session,
-                company_id=tenant.company_id,
-                membership_id=tenant.membership_id,
-                release_sha="b" * 40,
-            )
-        except RuntimeError as exc:
-            assert "refusing to resurrect" in str(exc)
-        else:
-            raise AssertionError("A terminal private retrieval QA fixture was resurrected")
+        replacement = ensure_ip_production_qa_private_retrieval_fixture(
+            session,
+            company_id=tenant.company_id,
+            membership_id=tenant.membership_id,
+            release_sha="b" * 40,
+        )
+        repeated = ensure_ip_production_qa_private_retrieval_fixture(
+            session,
+            company_id=tenant.company_id,
+            membership_id=tenant.membership_id,
+            release_sha="b" * 40,
+        )
+        original = session.get(Matter, fixture.matter_id)
+        current = session.get(Matter, replacement.matter_id)
+
+    assert original is not None
+    assert original.status == "disposed"
+    assert original.is_active is False
+    assert replacement.created_fixture is True
+    assert replacement.matter_id != fixture.matter_id
+    assert replacement.matter_code == "IPLF-066B-BBBBBBBBBBBB-R2"
+    assert current is not None and current.status == "active" and current.is_active is True
+    assert repeated.created_fixture is False
+    assert repeated.matter_id == replacement.matter_id
+    assert repeated.attachment_id == replacement.attachment_id
