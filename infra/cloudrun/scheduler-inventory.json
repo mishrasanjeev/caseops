@@ -132,6 +132,45 @@
       }
     },
     {
+      "scheduler_name": "caseops-private-projection-maintenance-cadence",
+      "run_job_name": "caseops-private-projection-maintenance",
+      "schedule": "*/5 * * * *",
+      "time_zone": "Asia/Kolkata",
+      "desired_state": "ENABLED",
+      "task_timeout_seconds": 300,
+      "image_policy": "release_digest",
+      "canary_policy": "manual_safe",
+      "retry": {
+        "max_retry_attempts": 5,
+        "max_retry_duration_seconds": 900,
+        "min_backoff_seconds": 10,
+        "max_backoff_seconds": 300,
+        "max_doublings": 5
+      },
+      "bootstrap": {
+        "command": ["caseops-private-projection-maintenance"],
+        "args": [
+          "--mode=maintain",
+          "--max-companies=50",
+          "--max-rebuilds=5",
+          "--event-lag-slo-seconds=300"
+        ],
+        "environment": {
+          "CASEOPS_ENV": "cloud",
+          "CASEOPS_AUTO_MIGRATE": "false"
+        },
+        "secrets": {
+          "CASEOPS_DATABASE_URL": "caseops-database-url:latest",
+          "CASEOPS_AUTH_SECRET": "caseops-auth-secret:latest"
+        },
+        "service_account": "caseops-runtime@perfect-period-305406.iam.gserviceaccount.com",
+        "cloud_sql_instances": "perfect-period-305406:asia-south1:caseops-db",
+        "cpu": "1",
+        "memory": "1Gi",
+        "max_retries": 3
+      }
+    },
+    {
       "scheduler_name": "caseops-extract-authority-metadata-daily",
       "run_job_name": "caseops-extract-authority-metadata",
       "schedule": "30 0 * * *",

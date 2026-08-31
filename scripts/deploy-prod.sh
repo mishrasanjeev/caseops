@@ -43,6 +43,11 @@ WEB_GCLOUDIGNORE_FILE=.gcloudignore
 WEB_GCLOUDIGNORE_PATH=.gcloudignore
 WEB_CLOUD_BUILD_CONFIG=apps/web/cloudbuild.yaml
 MIGRATION_TASK_TIMEOUT=30m
+MIGRATION_DB_CONNECT_TIMEOUT_SECONDS=10
+MIGRATION_DB_STATEMENT_TIMEOUT_MS=900000
+MIGRATION_DB_LOCK_TIMEOUT_MS=5000
+MIGRATION_DB_IDLE_TRANSACTION_TIMEOUT_MS=60000
+ALERT_NOTIFICATION_EMAIL="${CASEOPS_ALERT_NOTIFICATION_EMAIL:-mishra.sanjeev@gmail.com}"
 # 2026-06-08 incident: a blocking request pinned the single Uvicorn
 # event loop and Cloud Run kept routing unrelated API calls to that
 # same instance until each hit the 300s service timeout. Keep
@@ -195,7 +200,62 @@ echo "--- 2/6 migrate-job (alembic upgrade head) ---"
 gcloud run jobs update caseops-migrate-job \
   --image "${API_IMMUTABLE_IMAGE}" \
   --task-timeout "${MIGRATION_TASK_TIMEOUT}" \
+  --update-env-vars "CASEOPS_MIGRATION_DB_CONNECT_TIMEOUT_SECONDS=${MIGRATION_DB_CONNECT_TIMEOUT_SECONDS},CASEOPS_MIGRATION_DB_STATEMENT_TIMEOUT_MS=${MIGRATION_DB_STATEMENT_TIMEOUT_MS},CASEOPS_MIGRATION_DB_LOCK_TIMEOUT_MS=${MIGRATION_DB_LOCK_TIMEOUT_MS},CASEOPS_MIGRATION_DB_IDLE_TRANSACTION_TIMEOUT_MS=${MIGRATION_DB_IDLE_TRANSACTION_TIMEOUT_MS}" \
   --region "${REGION}" --project "${PROJECT}" --quiet
+MIGRATION_JOB_JSON=$(gcloud run jobs describe caseops-migrate-job \
+  --region "${REGION}" --project "${PROJECT}" --format=json)
+export MIGRATION_JOB_JSON
+export MIGRATION_DB_CONNECT_TIMEOUT_SECONDS MIGRATION_DB_STATEMENT_TIMEOUT_MS
+export MIGRATION_DB_LOCK_TIMEOUT_MS MIGRATION_DB_IDLE_TRANSACTION_TIMEOUT_MS
+python - <<'PY'
+import json
+import os
+
+expected = {
+    "CASEOPS_MIGRATION_DB_CONNECT_TIMEOUT_SECONDS": os.environ[
+        "MIGRATION_DB_CONNECT_TIMEOUT_SECONDS"
+    ],
+    "CASEOPS_MIGRATION_DB_STATEMENT_TIMEOUT_MS": os.environ[
+        "MIGRATION_DB_STATEMENT_TIMEOUT_MS"
+    ],
+    "CASEOPS_MIGRATION_DB_LOCK_TIMEOUT_MS": os.environ[
+        "MIGRATION_DB_LOCK_TIMEOUT_MS"
+    ],
+    "CASEOPS_MIGRATION_DB_IDLE_TRANSACTION_TIMEOUT_MS": os.environ[
+        "MIGRATION_DB_IDLE_TRANSACTION_TIMEOUT_MS"
+    ],
+}
+
+
+def container_envs(node):
+    if isinstance(node, dict):
+        containers = node.get("containers")
+        if isinstance(containers, list):
+            for container in containers:
+                if isinstance(container, dict):
+                    yield container.get("env", [])
+        for value in node.values():
+            yield from container_envs(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from container_envs(value)
+
+
+payload = json.loads(os.environ["MIGRATION_JOB_JSON"])
+actual = {}
+for entries in container_envs(payload):
+    for entry in entries:
+        if isinstance(entry, dict) and entry.get("name") in expected:
+            actual[entry["name"]] = str(entry.get("value", ""))
+
+if actual != expected:
+    raise SystemExit(
+        "caseops-migrate-job database timeout drift: "
+        f"expected={expected!r} actual={actual!r}"
+    )
+print("  migrate-job database timeout contract verified.")
+PY
+unset MIGRATION_JOB_JSON
 gcloud run jobs execute caseops-migrate-job \
   --region "${REGION}" --project "${PROJECT}" --wait --quiet
 echo "  migrate-job completed."
@@ -210,6 +270,13 @@ python scripts/scheduler_inventory.py reconcile \
   --project "${PROJECT}" \
   --region "${REGION}" \
   --image "${API_IMMUTABLE_IMAGE}"
+
+# Private projection failures have a zero-error-budget security impact at
+# hydration and a five-minute removal SLO in the derived index. Reconcile the
+# log metric, real notification channel and alert policy before routing traffic.
+python scripts/reconcile_monitoring_alerts.py reconcile \
+  --project "${PROJECT}" \
+  --notification-email "${ALERT_NOTIFICATION_EMAIL}"
 
 # Index coverage is a release invariant. Execute the just-reconciled job from
 # the immutable candidate image and abort before routing traffic on any schema,

@@ -672,8 +672,7 @@ def _private_delivery_context(
     generation = session.scalar(
         _active_generation_statement(fence.company_id).where(
             PrivateIndexGeneration.id == fence.generation_id,
-            PrivateIndexGeneration.access_policy_generation
-            == fence.access_policy_generation,
+            PrivateIndexGeneration.access_policy_generation == fence.access_policy_generation,
             PrivateIndexGeneration.tombstone_generation == fence.tombstone_generation,
         )
     )
@@ -1123,9 +1122,7 @@ def _current_authorized_projection_rows(
         projections=rows,
     )
     by_id = {
-        row.id: row
-        for row in rows
-        if row.id in authorized_ids and row.id in current_source_ids
+        row.id: row for row in rows if row.id in authorized_ids and row.id in current_source_ids
     }
     return tuple(by_id[row_id] for row_id in ids if row_id in by_id)
 
@@ -1810,6 +1807,7 @@ def apply_private_projection_event(session: Session, *, event_id: str) -> Privat
     event.status = "applied"
     event.applied_at = now
     event.error_code = None
+    event.next_attempt_at = None
     session.flush()
     invalidate_private_retrieval_cache(company_id=event.company_id)
     return event

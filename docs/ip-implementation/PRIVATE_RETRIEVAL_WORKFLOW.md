@@ -92,9 +92,19 @@ refresh locked generation state before making their decision.
 Rebuild writes a shadow generation, verifies its live projection count and
 ordered content-hash manifest, and may atomically activate it against the
 expected current generation. Generation activation retains the IPLF-066A
-epoch and unresolved-event fences. Projection events are claimed in bounded,
-tenant-specific, skip-locked batches; stored failures contain a safe exception
-class code rather than raw source/provider error text.
+epoch and unresolved-event fences. A rebuild cannot start while a pending or
+failed event exists. It honors the latest applied revocation/tombstone ledger,
+including a tenant-wide disposition tombstone, so retained canonical source or
+backup state cannot resurrect private content. Unchanged source hashes reuse
+the active generation's locally stored embedding instead of retransmitting the
+same text to a provider.
+
+Projection events are claimed in bounded, tenant-specific, skip-locked batches.
+Each event has at most three attempts with 30-second then 60-second application
+backoff. A failed attempt rolls back inside its savepoint without discarding
+other events in the batch; terminal failures retain only the safe exception
+class code. The maintenance selector uses indexed event/generation state, caps
+each run at 50 tenants and reports truncation rather than scanning silently.
 
 ## Revocation, saved output, and user behavior
 
@@ -144,21 +154,44 @@ publication is reduced to `review_required` with no document metadata after a
 canonical source restriction. A tombstone event blanks private text and
 embeddings and locks copied Assistant output before a stale worker can write.
 
+## Approved private-index disposition
+
+The IPLF-071-owned `data_disposition` adapter is deliberately limited to
+`private_index_projections`. It is not an execution route and cannot approve an
+operation. Its caller must present a separately approved execute row that
+exactly matches the immutable completed dry-run manifest and the server-derived
+tenant target hash.
+
+Under the execute-row lock, the adapter rechecks the current active retention
+policy for a retention purge, resolves current legal-hold scope again, and
+rejects held, blocked, ambiguous or invented targets. It emits the canonical
+tenant tombstone event, verifies every projection is tombstoned with blank text
+and no embedding, then stores content-minimized terminal evidence. Local index
+cleanup receives a durable receipt. An external embedding provider without a
+per-request deletion endpoint receives an explicit
+`provider_deletion_contract_delay` exception and optional expected-resolution
+date; absence of a provider receipt never means deletion. Terminal checkpoint
+rows cannot exist without the private event, evidence payload/hash, attempt and
+completion timestamp. Rebuild continues to honor that event after reload.
+
 ## Integrity and release boundary
 
 `GET /api/private-retrieval/integrity` and the company-scoped command-line
 operation return tenant-safe aggregates for active-generation manifest match,
 live/tombstoned projections, pending/failed event lag, orphan or stale scopes,
 stale/ineligible sources, and unsafe tombstone payload. Any mismatch blocks
-release. The CLI also provides bounded event processing and rebuild operations;
-it is an operational entry point, not a second workflow owner.
+release. `caseops-private-projection-maintenance` runs the bounded maintain mode
+every five minutes. It processes due events, performs only approved bounded
+shadow repairs, and fails the run if lag exceeded 300 seconds even when the same
+run recovers it. Cloud Scheduler delivery has bounded retry/backoff, and a
+log-based alert routes every structured `ERROR` run to the production alert
+channel with correlation ID and runbook context.
 
-The repository-local slice remains incomplete until the remaining reciprocal
-scope and exact integrated release are verified. The IPLF-071 canonical
-purge/provider executor and provider receipt/exception integration, durable
-production worker scheduling, complete hosted gates on the latest commit,
-deployment, and dated production proof remain release blockers. No local result
-is production evidence.
+The reciprocal purge/provider and durable-worker implementation is complete in
+the repository. Exact integrated CI/Security/CodeQL, merge to `main`,
+migration-first deployment, scheduler/alert inspection, immutable revision
+identity and dated production browser acceptance remain release blockers. No
+local result is production evidence.
 
 ## Rollback
 
@@ -167,4 +200,6 @@ generation and retained event/saved-output evidence, repair or replay bounded
 events, rebuild a new shadow, verify the integrity aggregates, and activate
 only with the expected-generation token. After evidence exists, restore-forward
 is required; deleting the private tables or re-enabling the legacy document
-fallback is not an acceptable rollback.
+fallback is not an acceptable rollback. The exact pause, triage, recovery,
+provider-exception and alert-close procedure is in
+`docs/runbooks/private-projection-maintenance.md`.

@@ -134,7 +134,9 @@ RISKY_MANIFEST_PATTERN = re.compile(
 def risky_source_match(path: str, source: str) -> bool:
     """Detect a provider/storage/telemetry boundary in a changed file."""
     pattern = (
-        RISKY_SOURCE_PATTERN if path.endswith(_CODE_SUFFIXES) else RISKY_MANIFEST_PATTERN
+        RISKY_SOURCE_PATTERN
+        if path.endswith(_CODE_SUFFIXES)
+        else RISKY_MANIFEST_PATTERN
     )
     return bool(pattern.search(source))
 
@@ -426,17 +428,20 @@ def _table_profile(table_name: str, columns: Mapping[str, object]) -> str:
         )
     ):
         return "billing_provider_evidence"
-    if any(
-        token in normalized
-        for token in (
-            "statute",
-            "authority",
-            "judge",
-            "court",
-            "forum",
-            "legal_update_source",
+    if (
+        any(
+            token in normalized
+            for token in (
+                "statute",
+                "authority",
+                "judge",
+                "court",
+                "forum",
+                "legal_update_source",
+            )
         )
-    ) and "company_id" not in columns:
+        and "company_id" not in columns
+    ):
         return "public_or_licensed_legal_reference"
     if any(
         token in normalized
@@ -512,18 +517,33 @@ def _column_category(column_name: str) -> str:
         for token in ("provider", "external", "webhook", "source", "oauth")
     ):
         return "external_or_provider_identifier"
-    if any(
-        token in value
-        for token in ("company_id", "membership", "user_id", "client_id", "portal_user")
-    ) or value == "id" or value.endswith("_id"):
+    if (
+        any(
+            token in value
+            for token in (
+                "company_id",
+                "membership",
+                "user_id",
+                "client_id",
+                "portal_user",
+            )
+        )
+        or value == "id"
+        or value.endswith("_id")
+    ):
         return "tenant_or_access_identifier"
     if any(
         token in value
         for token in ("audit", "event", "lifecycle", "immutable", "hash", "checksum")
     ):
         return "lifecycle_or_audit_evidence"
-    if value.endswith("_at") or value.endswith("_on") or any(
-        token in value for token in ("date", "version", "expires", "created", "updated")
+    if (
+        value.endswith("_at")
+        or value.endswith("_on")
+        or any(
+            token in value
+            for token in ("date", "version", "expires", "created", "updated")
+        )
     ):
         return "temporal_or_version_metadata"
     if any(
@@ -812,6 +832,7 @@ def _skeleton() -> dict[str, Any]:
         "policy_profiles": _policy_profiles(),
         "column_categories": _column_categories(),
         "table_policy_profile_overrides": {},
+        "table_disposition_handler_overrides": {},
         "column_category_overrides": {},
         "change_controls": {
             "migration_marker": MIGRATION_MARKER,
@@ -841,13 +862,18 @@ def _table_rows(
     schema: Mapping[str, Mapping[str, Mapping[str, object]]],
     *,
     table_overrides: Mapping[str, object],
+    disposition_overrides: Mapping[str, object],
     column_overrides: Mapping[str, object],
 ) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     for table_name, columns in sorted(schema.items()):
-        profile = str(table_overrides.get(table_name) or _table_profile(table_name, columns))
+        profile = str(
+            table_overrides.get(table_name) or _table_profile(table_name, columns)
+        )
         raw_column_overrides = column_overrides.get(table_name, {})
-        overrides = raw_column_overrides if isinstance(raw_column_overrides, Mapping) else {}
+        overrides = (
+            raw_column_overrides if isinstance(raw_column_overrides, Mapping) else {}
+        )
         rendered_columns: dict[str, dict[str, object]] = {}
         for column_name, details in sorted(columns.items()):
             category = str(overrides.get(column_name) or _column_category(column_name))
@@ -865,7 +891,9 @@ def _table_rows(
                     "inventory is intentionally versioned below."
                 ),
                 "policy_profile_id": profile,
-                "disposition_handler_id": DEFAULT_HANDLER_ID,
+                "disposition_handler_id": str(
+                    disposition_overrides.get(table_name) or DEFAULT_HANDLER_ID
+                ),
                 "columns": rendered_columns,
             }
         )
@@ -892,15 +920,19 @@ def generate() -> dict[str, Any]:
     orm_indexes = current_orm_indexes()
     migration_indexes = _migration_index_names()
     table_overrides = data.get("table_policy_profile_overrides", {})
+    disposition_overrides = data.get("table_disposition_handler_overrides", {})
     column_overrides = data.get("column_category_overrides", {})
     if not isinstance(table_overrides, Mapping):
         raise ValueError("table_policy_profile_overrides must be an object")
     if not isinstance(column_overrides, Mapping):
         raise ValueError("column_category_overrides must be an object")
+    if not isinstance(disposition_overrides, Mapping):
+        raise ValueError("table_disposition_handler_overrides must be an object")
 
     data["sql_tables"] = _table_rows(
         schema,
         table_overrides=table_overrides,
+        disposition_overrides=disposition_overrides,
         column_overrides=column_overrides,
     )
     data["schema_fingerprint"] = _fingerprint(
@@ -961,16 +993,22 @@ def validate(
     if data.get("slice_id") != "IPLF-028C":
         errors.append("data-governance map must remain bounded to IPLF-028C")
     if data.get("status") != MAP_STATUS:
-        errors.append("data-governance map must preserve the policy-unapproved inventory status")
+        errors.append(
+            "data-governance map must preserve the policy-unapproved inventory status"
+        )
     if data.get("policy_status") != "pending_named_human_approval":
         errors.append("data-governance map must preserve pending human policy approval")
     completion_boundary = str(data.get("completion_boundary", "")).lower()
     for term in ("does not claim", "export", "purge", "restore", "residency"):
         if term not in completion_boundary:
-            errors.append("data-governance map must state its explicit incomplete boundary")
+            errors.append(
+                "data-governance map must state its explicit incomplete boundary"
+            )
             break
     if data.get("requirement_refs") != ["DATA-GOV-01", "DATA-GOV-03"]:
-        errors.append("data-governance map must retain the DATA-GOV-01 and DATA-GOV-03 scope")
+        errors.append(
+            "data-governance map must retain the DATA-GOV-01 and DATA-GOV-03 scope"
+        )
 
     profiles = data.get("policy_profiles")
     if not isinstance(profiles, Mapping) or not profiles:
@@ -987,7 +1025,9 @@ def validate(
             if not _required_string(profile.get(field)):
                 errors.append(f"policy-profile/{profile_id}: {field} must be explicit")
         if not isinstance(profile.get("tenant_configurable"), bool):
-            errors.append(f"policy-profile/{profile_id}: tenant_configurable must be boolean")
+            errors.append(
+                f"policy-profile/{profile_id}: tenant_configurable must be boolean"
+            )
 
     categories = data.get("column_categories")
     if not isinstance(categories, Mapping) or not categories:
@@ -999,7 +1039,9 @@ def validate(
             continue
         for field in ("sensitivity", "handling"):
             if not _required_string(category.get(field)):
-                errors.append(f"column-category/{category_id}: {field} must be explicit")
+                errors.append(
+                    f"column-category/{category_id}: {field} must be explicit"
+                )
 
     handlers = data.get("disposition_handlers")
     if not isinstance(handlers, list):
@@ -1012,12 +1054,19 @@ def validate(
     if handler is None:
         errors.append("data-governance map must include registry_fail_closed handler")
     else:
-        if handler.get("status") != "implemented_definition_of_ready_guard_no_data_operation":
-            errors.append("registry_fail_closed handler must not overclaim runtime execution")
+        if (
+            handler.get("status")
+            != "implemented_definition_of_ready_guard_no_data_operation"
+        ):
+            errors.append(
+                "registry_fail_closed handler must not overclaim runtime execution"
+            )
         if handler.get("implementation_ref") != "scripts/ip_data_governance_map.py":
             errors.append("registry_fail_closed handler must reference this validator")
         if not _required_string(handler.get("behavior")):
-            errors.append("registry_fail_closed handler must describe fail-closed behavior")
+            errors.append(
+                "registry_fail_closed handler must describe fail-closed behavior"
+            )
 
     controls = data.get("change_controls")
     if not isinstance(controls, Mapping):
@@ -1026,7 +1075,9 @@ def validate(
         errors.append("data-governance map must preserve the required migration marker")
 
     actual_schema = sql_schema if sql_schema is not None else current_sql_schema()
-    actual_orm_indexes = orm_indexes if orm_indexes is not None else current_orm_indexes()
+    actual_orm_indexes = (
+        orm_indexes if orm_indexes is not None else current_orm_indexes()
+    )
     actual_migration_indexes = (
         migration_indexes if migration_indexes is not None else _migration_index_names()
     )
@@ -1062,7 +1113,9 @@ def validate(
             errors.append(f"sql-table/{table_name}: purpose must be explicit")
         profile_id = str(row.get("policy_profile_id", ""))
         if profile_id not in profiles:
-            errors.append(f"sql-table/{table_name}: unknown policy_profile_id {profile_id!r}")
+            errors.append(
+                f"sql-table/{table_name}: unknown policy_profile_id {profile_id!r}"
+            )
         if row.get("disposition_handler_id") not in handler_by_id:
             errors.append(f"sql-table/{table_name}: unknown disposition handler")
         columns = row.get("columns")
@@ -1079,7 +1132,9 @@ def validate(
         for column_name, expected in expected_columns.items():
             column = columns.get(column_name)
             if not isinstance(column, Mapping):
-                errors.append(f"sql-table/{table_name}/column/{column_name}: missing mapping")
+                errors.append(
+                    f"sql-table/{table_name}/column/{column_name}: missing mapping"
+                )
                 continue
             category_id = str(column.get("category_id", ""))
             if category_id not in categories:
@@ -1103,19 +1158,40 @@ def validate(
     else:
         for table_name, profile_id in table_overrides.items():
             if table_name not in actual_schema:
-                errors.append(f"table profile override references unknown table {table_name}")
+                errors.append(
+                    f"table profile override references unknown table {table_name}"
+                )
             if profile_id not in profiles:
-                errors.append(f"table profile override uses unknown profile {profile_id!r}")
+                errors.append(
+                    f"table profile override uses unknown profile {profile_id!r}"
+                )
+    disposition_overrides = data.get("table_disposition_handler_overrides", {})
+    if not isinstance(disposition_overrides, Mapping):
+        errors.append("table_disposition_handler_overrides must be an object")
+    else:
+        for table_name, handler_id in disposition_overrides.items():
+            if table_name not in actual_schema:
+                errors.append(
+                    f"table disposition override references unknown table {table_name}"
+                )
+            if handler_id not in handler_by_id:
+                errors.append(
+                    f"table disposition override uses unknown handler {handler_id!r}"
+                )
     column_overrides = data.get("column_category_overrides", {})
     if not isinstance(column_overrides, Mapping):
         errors.append("column_category_overrides must be an object")
     else:
         for table_name, overrides in column_overrides.items():
             if table_name not in actual_schema:
-                errors.append(f"column category override references unknown table {table_name}")
+                errors.append(
+                    f"column category override references unknown table {table_name}"
+                )
                 continue
             if not isinstance(overrides, Mapping):
-                errors.append(f"column category override for {table_name} must be an object")
+                errors.append(
+                    f"column category override for {table_name} must be an object"
+                )
                 continue
             for column_name, category_id in overrides.items():
                 if column_name not in actual_schema[table_name]:
@@ -1134,7 +1210,9 @@ def validate(
         )
     )
     if data.get("schema_fingerprint") != expected_schema_fingerprint:
-        errors.append("SQL schema/index fingerprint drift requires `generate` and review")
+        errors.append(
+            "SQL schema/index fingerprint drift requires `generate` and review"
+        )
     index_inventory = data.get("index_inventory")
     if not isinstance(index_inventory, Mapping):
         errors.append("data-governance map must define index_inventory")
@@ -1169,7 +1247,10 @@ def validate(
         missing = sorted(REQUIRED_NON_SQL_FIELDS - set(row))
         if missing:
             errors.append(f"non-SQL/{class_id}: missing fields {missing}")
-        for field in REQUIRED_NON_SQL_FIELDS - {"tenant_configurable", "implementation_refs"}:
+        for field in REQUIRED_NON_SQL_FIELDS - {
+            "tenant_configurable",
+            "implementation_refs",
+        }:
             if field in {"id", "kind", "disposition_handler_id", "status"}:
                 continue
             if not _required_string(row.get(field)):
@@ -1181,7 +1262,9 @@ def validate(
         if row.get("disposition_handler_id") not in handler_by_id:
             errors.append(f"non-SQL/{class_id}: unknown disposition handler")
         if row.get("status") != "inventory_registered_runtime_policy_unapproved":
-            errors.append(f"non-SQL/{class_id}: must not overclaim runtime policy approval")
+            errors.append(
+                f"non-SQL/{class_id}: must not overclaim runtime policy approval"
+            )
         refs = row.get("implementation_refs")
         if not isinstance(refs, list) or not refs:
             errors.append(f"non-SQL/{class_id}: implementation_refs must be non-empty")
@@ -1276,7 +1359,9 @@ def render(data: dict[str, Any] | None = None) -> Path:
         data = _load(MAP_PATH)
     errors = validate(data, check_generated_view=False)
     if errors:
-        raise ValueError("cannot render invalid data-governance map: " + "; ".join(errors))
+        raise ValueError(
+            "cannot render invalid data-governance map: " + "; ".join(errors)
+        )
     GENERATED_VIEW_PATH.parent.mkdir(parents=True, exist_ok=True)
     GENERATED_VIEW_PATH.write_bytes(_render_markdown(data).encode("utf-8"))
     return GENERATED_VIEW_PATH
@@ -1314,7 +1399,9 @@ def change_gate_errors(
     for path in migration_paths:
         source = source_by_path.get(path, "")
         if MIGRATION_MARKER not in source:
-            errors.append(f"migration {path} is missing required marker: {MIGRATION_MARKER}")
+            errors.append(
+                f"migration {path} is missing required marker: {MIGRATION_MARKER}"
+            )
     return errors
 
 
@@ -1349,7 +1436,9 @@ def check_change(base: str | None = None) -> list[str]:
     try:
         diff = _git_output("diff", "--name-only", f"{selected_base}...HEAD")
     except subprocess.CalledProcessError as exc:
-        return [f"cannot determine change set from {selected_base}: {exc.output.strip()}"]
+        return [
+            f"cannot determine change set from {selected_base}: {exc.output.strip()}"
+        ]
     changed_paths = [line for line in diff.splitlines() if line.strip()]
     source_by_path: dict[str, str] = {}
     for path in changed_paths:

@@ -20,13 +20,32 @@ def test_committed_data_governance_map_covers_current_repository_inventory() -> 
     assert ip_data_governance_map.validate(_map()) == []
 
 
+def test_private_projection_is_the_only_runtime_disposition_override() -> None:
+    data = _map()
+    assert data["table_disposition_handler_overrides"] == {
+        "private_index_projections": "private_retrieval_disposition"
+    }
+    private_projection = next(
+        row for row in data["sql_tables"] if row["table_name"] == "private_index_projections"
+    )
+    checkpoint = next(
+        row
+        for row in data["sql_tables"]
+        if row["table_name"] == "tenant_data_disposition_checkpoints"
+    )
+    assert private_projection["disposition_handler_id"] == ("private_retrieval_disposition")
+    assert checkpoint["disposition_handler_id"] == "registry_fail_closed"
+
+    data["table_disposition_handler_overrides"]["private_index_projections"] = "invented_handler"
+    errors = ip_data_governance_map.validate(data, check_generated_view=False)
+    assert any("unknown handler" in error for error in errors)
+
+
 def test_map_rejects_missing_or_unregistered_sql_table_and_column() -> None:
     data = _map()
     removed = data["sql_tables"].pop()
     schema = ip_data_governance_map.current_sql_schema()
-    schema["unregistered_data_store"] = {
-        "new_payload": {"sql_type": "TEXT", "nullable": True}
-    }
+    schema["unregistered_data_store"] = {"new_payload": {"sql_type": "TEXT", "nullable": True}}
 
     errors = ip_data_governance_map.validate(data, sql_schema=schema)
 
@@ -62,8 +81,7 @@ def test_map_rejects_stale_view_after_non_projected_semantic_change(
     errors = ip_data_governance_map.validate(data)
 
     assert any(
-        "stale or independently edited generated data-governance map" in error
-        for error in errors
+        "stale or independently edited generated data-governance map" in error for error in errors
     )
 
 
@@ -76,9 +94,7 @@ def test_map_rejects_a_missing_generated_view(tmp_path: Path, monkeypatch) -> No
     assert any("missing generated data-governance map" in error for error in errors)
 
 
-def test_map_rejects_crlf_bytes_for_the_lf_projection(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_map_rejects_crlf_bytes_for_the_lf_projection(tmp_path: Path, monkeypatch) -> None:
     target = tmp_path / "DATA_GOVERNANCE_MAP.md"
     expected = ip_data_governance_map._render_markdown(_map()).encode("utf-8")
     target.write_bytes(expected.replace(b"\n", b"\r\n"))
@@ -87,8 +103,7 @@ def test_map_rejects_crlf_bytes_for_the_lf_projection(
     errors = ip_data_governance_map.validate(_map())
 
     assert any(
-        "stale or independently edited generated data-governance map" in error
-        for error in errors
+        "stale or independently edited generated data-governance map" in error for error in errors
     )
 
 
@@ -101,9 +116,7 @@ def test_render_repairs_a_stale_view_without_recursive_validation(
     monkeypatch.setattr(ip_data_governance_map, "GENERATED_VIEW_PATH", target)
 
     assert ip_data_governance_map.render(data) == target
-    assert target.read_bytes() == ip_data_governance_map._render_markdown(data).encode(
-        "utf-8"
-    )
+    assert target.read_bytes() == ip_data_governance_map._render_markdown(data).encode("utf-8")
     assert ip_data_governance_map.validate(data) == []
 
 
@@ -129,9 +142,7 @@ def test_change_gate_requires_map_update_for_new_provider_or_storage_boundary() 
     path = "apps/api/src/caseops_api/services/new_provider.py"
     source = "from google.cloud import storage\nclient = storage.Client()\n"
 
-    errors = ip_data_governance_map.change_gate_errors(
-        [path], source_by_path={path: source}
-    )
+    errors = ip_data_governance_map.change_gate_errors([path], source_by_path={path: source})
     assert any("DATA_GOVERNANCE_MAP.yaml update" in error for error in errors)
 
     assert (
@@ -161,9 +172,7 @@ def test_change_gate_requires_map_update_for_a_boundary_in_a_deploy_manifest() -
         "              value: redis\n"
     )
 
-    errors = ip_data_governance_map.change_gate_errors(
-        [path], source_by_path={path: source}
-    )
+    errors = ip_data_governance_map.change_gate_errors([path], source_by_path={path: source})
     assert any("DATA_GOVERNANCE_MAP.yaml update" in error for error in errors)
 
     assert (
@@ -182,9 +191,7 @@ def test_change_gate_matches_a_scoped_npm_provider_package() -> None:
     path = "apps/web/lib/telemetry/otel.ts"
     source = 'import { trace } from "@opentelemetry/api";\n'
 
-    errors = ip_data_governance_map.change_gate_errors(
-        [path], source_by_path={path: source}
-    )
+    errors = ip_data_governance_map.change_gate_errors([path], source_by_path={path: source})
     assert any("DATA_GOVERNANCE_MAP.yaml update" in error for error in errors)
 
 
@@ -200,10 +207,7 @@ def test_change_gate_still_ignores_provider_words_in_prose_inside_source_files()
         "    return []\n"
     )
 
-    assert (
-        ip_data_governance_map.change_gate_errors([path], source_by_path={path: source})
-        == []
-    )
+    assert ip_data_governance_map.change_gate_errors([path], source_by_path={path: source}) == []
 
 
 def test_change_gate_ignores_provider_words_in_program_documentation() -> None:

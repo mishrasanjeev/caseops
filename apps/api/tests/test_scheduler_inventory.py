@@ -20,12 +20,13 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
     inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
 
     assert scheduler_inventory.validate_inventory(inventory) == []
-    assert len(inventory["jobs"]) == 8
+    assert len(inventory["jobs"]) == 9
     assert {job["run_job_name"] for job in inventory["jobs"]} == {
         "caseops-legal-update-sync",
         "caseops-case-tracking-poll",
         "caseops-activity-report",
         "caseops-reminders-job",
+        "caseops-private-projection-maintenance",
         "caseops-extract-authority-metadata",
         "caseops-db-index-health",
         "caseops-ip-journal-watch",
@@ -39,25 +40,35 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
     assert authority_job["desired_state"] == "PAUSED"
     assert authority_job["task_timeout_seconds"] == 43_200
     watch_job = next(
-        job
-        for job in inventory["jobs"]
-        if job["run_job_name"] == "caseops-ip-journal-watch"
+        job for job in inventory["jobs"] if job["run_job_name"] == "caseops-ip-journal-watch"
     )
     assert watch_job["bootstrap"]["command"] == ["caseops-ip-journal-watch"]
     assert watch_job["bootstrap"]["args"] == []
     index_job = next(
-        job
-        for job in inventory["jobs"]
-        if job["run_job_name"] == "caseops-db-index-health"
+        job for job in inventory["jobs"] if job["run_job_name"] == "caseops-db-index-health"
     )
     assert index_job["task_timeout_seconds"] == 600
     assert index_job["bootstrap"]["command"] == ["caseops-db-index-health"]
     assert index_job["bootstrap"]["args"] == []
     assert index_job["bootstrap"]["max_retries"] == 0
-    mapping_job = next(
+    private_job = next(
         job
         for job in inventory["jobs"]
-        if job["run_job_name"] == "caseops-judge-mapping-refresh"
+        if job["run_job_name"] == "caseops-private-projection-maintenance"
+    )
+    assert private_job["schedule"] == "*/5 * * * *"
+    assert private_job["task_timeout_seconds"] == 300
+    assert private_job["bootstrap"]["command"] == ["caseops-private-projection-maintenance"]
+    assert private_job["bootstrap"]["max_retries"] == 3
+    assert private_job["retry"] == {
+        "max_retry_attempts": 5,
+        "max_retry_duration_seconds": 900,
+        "min_backoff_seconds": 10,
+        "max_backoff_seconds": 300,
+        "max_doublings": 5,
+    }
+    mapping_job = next(
+        job for job in inventory["jobs"] if job["run_job_name"] == "caseops-judge-mapping-refresh"
     )
     assert mapping_job["schedule"] == "15 1 * * *"
     assert mapping_job["time_zone"] == "Asia/Kolkata"
@@ -65,23 +76,18 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
     assert mapping_job["task_timeout_seconds"] == 3_600
     assert mapping_job["image_policy"] == "release_digest"
     assert mapping_job["canary_policy"] == "manual_safe"
-    assert mapping_job["bootstrap"]["command"] == [
-        "caseops-refresh-bench-analysis-layers"
-    ]
+    assert mapping_job["bootstrap"]["command"] == ["caseops-refresh-bench-analysis-layers"]
     assert mapping_job["bootstrap"]["args"] == []
     assert all(job.get("bootstrap") for job in inventory["jobs"])
     assert all(
-        job["bootstrap"]["command"][0].casefold() not in {"uv", "uvx"}
-        for job in inventory["jobs"]
+        job["bootstrap"]["command"][0].casefold() not in {"uv", "uvx"} for job in inventory["jobs"]
     )
     assert all(
         job["desired_state"] == "ENABLED"
         for job in inventory["jobs"]
         if job not in (authority_job, mapping_job)
     )
-    assert inventory["legacy_schedulers_to_pause"] == [
-        "caseops-case-tracking-poll-midnight"
-    ]
+    assert inventory["legacy_schedulers_to_pause"] == ["caseops-case-tracking-poll-midnight"]
 
 
 def test_inventory_rejects_duplicate_owners_and_mutable_image_policy() -> None:
@@ -130,6 +136,23 @@ def test_inventory_rejects_runtime_dependency_resolution_and_missing_contract() 
     assert any("bootstrap is required" in error for error in errors)
 
 
+def test_inventory_rejects_invalid_scheduler_retry_contract() -> None:
+    inventory = json.loads(INVENTORY_PATH.read_text(encoding="utf-8"))
+    private_job = next(
+        job
+        for job in inventory["jobs"]
+        if job["run_job_name"] == "caseops-private-projection-maintenance"
+    )
+    private_job["retry"]["max_retry_attempts"] = 6
+    private_job["retry"]["min_backoff_seconds"] = 301
+    private_job["retry"]["max_backoff_seconds"] = 300
+
+    errors = scheduler_inventory.validate_inventory(inventory)
+
+    assert any("max_retry_attempts must be at most 5" in error for error in errors)
+    assert any("max_backoff_seconds must be at least" in error for error in errors)
+
+
 def test_reconcile_converges_inventory_owned_timeout_and_scheduler_state(
     monkeypatch,
 ) -> None:
@@ -151,17 +174,13 @@ def test_reconcile_converges_inventory_owned_timeout_and_scheduler_state(
             assert expect_json
             return {
                 "state": (
-                    "ENABLED"
-                    if arguments[3] == authority_job["scheduler_name"]
-                    else "PAUSED"
+                    "ENABLED" if arguments[3] == authority_job["scheduler_name"] else "PAUSED"
                 )
             }
         return ""
 
     monkeypatch.setattr(scheduler_inventory, "run_gcloud", fake_gcloud)
-    monkeypatch.setattr(
-        scheduler_inventory, "run_job_exists", lambda *_args, **_kwargs: True
-    )
+    monkeypatch.setattr(scheduler_inventory, "run_job_exists", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(scheduler_inventory, "scheduler_exists", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(
         scheduler_inventory,
@@ -180,14 +199,11 @@ def test_reconcile_converges_inventory_owned_timeout_and_scheduler_state(
     authority_update = next(
         call for call in update_calls if call[3] == "caseops-extract-authority-metadata"
     )
-    enabled_update = next(
-        call for call in update_calls if call[3] == enabled_job["run_job_name"]
-    )
+    enabled_update = next(call for call in update_calls if call[3] == enabled_job["run_job_name"])
     assert authority_update[-2:] == ["--task-timeout", "43200s"]
     assert enabled_update[enabled_update.index("--task-timeout") + 1] == "1800s"
     assert (
-        "--args=-m,caseops_api.scripts.extract_authority_metadata,"
-        "--concurrency,8"
+        "--args=-m,caseops_api.scripts.extract_authority_metadata,--concurrency,8"
     ) in authority_update
     assert "--args" not in authority_update
     assert [
@@ -202,6 +218,59 @@ def test_reconcile_converges_inventory_owned_timeout_and_scheduler_state(
         "resume",
         enabled_job["scheduler_name"],
     ] == next(call[:4] for call in calls if call[:3] == ["scheduler", "jobs", "resume"])
+
+
+def test_reconcile_converges_private_scheduler_retry_contract(monkeypatch) -> None:
+    inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
+    private_job = next(
+        job
+        for job in inventory["jobs"]
+        if job["run_job_name"] == "caseops-private-projection-maintenance"
+    )
+    inventory["jobs"] = [private_job]
+    inventory["legacy_schedulers_to_pause"] = []
+    expected_image = "registry.example/caseops-api@sha256:" + "a" * 64
+    calls: list[list[str]] = []
+
+    def fake_gcloud(arguments: list[str], *, expect_json: bool = False):
+        calls.append(arguments)
+        if arguments[:3] == ["scheduler", "jobs", "describe"]:
+            assert expect_json
+            return {"state": "ENABLED"}
+        return ""
+
+    monkeypatch.setattr(scheduler_inventory, "run_gcloud", fake_gcloud)
+    monkeypatch.setattr(scheduler_inventory, "run_job_exists", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(scheduler_inventory, "scheduler_exists", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        scheduler_inventory,
+        "inspect_live",
+        lambda *_args, **_kwargs: ([], {"result": "pass"}),
+    )
+
+    scheduler_inventory.reconcile(
+        inventory,
+        project=inventory["production_project"],
+        region=inventory["location"],
+        image=expected_image,
+    )
+
+    update = next(
+        call
+        for call in calls
+        if call[:4]
+        == [
+            "scheduler",
+            "jobs",
+            "update",
+            "http",
+        ]
+    )
+    assert update[update.index("--max-retry-attempts") + 1] == "5"
+    assert update[update.index("--max-retry-duration") + 1] == "900s"
+    assert update[update.index("--min-backoff") + 1] == "10s"
+    assert update[update.index("--max-backoff") + 1] == "300s"
+    assert update[update.index("--max-doublings") + 1] == "5"
 
 
 @pytest.mark.parametrize(
@@ -221,9 +290,7 @@ def test_reconcile_transitions_scheduler_state_only_on_mismatch(
 ) -> None:
     inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
     job = next(
-        candidate
-        for candidate in inventory["jobs"]
-        if candidate["desired_state"] == desired_state
+        candidate for candidate in inventory["jobs"] if candidate["desired_state"] == desired_state
     )
     inventory["jobs"] = [job]
     inventory["legacy_schedulers_to_pause"] = []
@@ -237,9 +304,7 @@ def test_reconcile_transitions_scheduler_state_only_on_mismatch(
         return ""
 
     monkeypatch.setattr(scheduler_inventory, "run_gcloud", fake_gcloud)
-    monkeypatch.setattr(
-        scheduler_inventory, "run_job_exists", lambda *_args, **_kwargs: True
-    )
+    monkeypatch.setattr(scheduler_inventory, "run_job_exists", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(
         scheduler_inventory,
         "scheduler_exists",
@@ -290,9 +355,7 @@ def test_reconcile_requires_an_immutable_release_image() -> None:
 def test_reconcile_bootstraps_a_missing_declared_run_job(monkeypatch) -> None:
     inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
     watch_job = next(
-        job
-        for job in inventory["jobs"]
-        if job["run_job_name"] == "caseops-ip-journal-watch"
+        job for job in inventory["jobs"] if job["run_job_name"] == "caseops-ip-journal-watch"
     )
     inventory["jobs"] = [watch_job]
     inventory["legacy_schedulers_to_pause"] = []
@@ -307,9 +370,7 @@ def test_reconcile_bootstraps_a_missing_declared_run_job(monkeypatch) -> None:
         return ""
 
     monkeypatch.setattr(scheduler_inventory, "run_gcloud", fake_gcloud)
-    monkeypatch.setattr(
-        scheduler_inventory, "run_job_exists", lambda *_args, **_kwargs: False
-    )
+    monkeypatch.setattr(scheduler_inventory, "run_job_exists", lambda *_args, **_kwargs: False)
     monkeypatch.setattr(
         scheduler_inventory,
         "scheduler_exists",
@@ -335,17 +396,16 @@ def test_reconcile_bootstraps_a_missing_declared_run_job(monkeypatch) -> None:
     assert "--args=" in create
     assert create[create.index("--task-timeout") + 1] == "900s"
     assert create[create.index("--max-retries") + 1] == "1"
-    assert "CASEOPS_DATABASE_URL=caseops-database-url:latest" in create[
-        create.index("--set-secrets") + 1
-    ]
+    assert (
+        "CASEOPS_DATABASE_URL=caseops-database-url:latest"
+        in create[create.index("--set-secrets") + 1]
+    )
 
 
 def test_reconcile_converges_an_existing_bootstrap_contract(monkeypatch) -> None:
     inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
     watch_job = next(
-        job
-        for job in inventory["jobs"]
-        if job["run_job_name"] == "caseops-ip-journal-watch"
+        job for job in inventory["jobs"] if job["run_job_name"] == "caseops-ip-journal-watch"
     )
     inventory["jobs"] = [watch_job]
     inventory["legacy_schedulers_to_pause"] = []
@@ -359,12 +419,8 @@ def test_reconcile_converges_an_existing_bootstrap_contract(monkeypatch) -> None
         return ""
 
     monkeypatch.setattr(scheduler_inventory, "run_gcloud", fake_gcloud)
-    monkeypatch.setattr(
-        scheduler_inventory, "run_job_exists", lambda *_args, **_kwargs: True
-    )
-    monkeypatch.setattr(
-        scheduler_inventory, "scheduler_exists", lambda *_args, **_kwargs: True
-    )
+    monkeypatch.setattr(scheduler_inventory, "run_job_exists", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(scheduler_inventory, "scheduler_exists", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(
         scheduler_inventory,
         "inspect_live",
@@ -388,9 +444,7 @@ def test_reconcile_converges_an_existing_bootstrap_contract(monkeypatch) -> None
 def test_bootstrap_arguments_bind_leading_dash_values_to_gcloud_args_flag() -> None:
     inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
     reminders_job = next(
-        job
-        for job in inventory["jobs"]
-        if job["run_job_name"] == "caseops-reminders-job"
+        job for job in inventory["jobs"] if job["run_job_name"] == "caseops-reminders-job"
     )
 
     arguments = scheduler_inventory._bootstrap_arguments(
@@ -418,9 +472,7 @@ def test_reconcile_fails_closed_when_a_missing_job_has_no_bootstrap(monkeypatch)
         "run_gcloud",
         lambda arguments, **_kwargs: calls.append(arguments) or "",
     )
-    monkeypatch.setattr(
-        scheduler_inventory, "run_job_exists", lambda *_args, **_kwargs: False
-    )
+    monkeypatch.setattr(scheduler_inventory, "run_job_exists", lambda *_args, **_kwargs: False)
 
     with pytest.raises(scheduler_inventory.InventoryError, match="bootstrap contract"):
         scheduler_inventory.reconcile(
@@ -471,20 +523,14 @@ def test_existence_probe_distinguishes_not_found_from_control_plane_failure(
         "run",
         lambda *_args, **_kwargs: _Completed(),
     )
-    assert not scheduler_inventory.run_job_exists(
-        "missing", project="project", region="region"
-    )
+    assert not scheduler_inventory.run_job_exists("missing", project="project", region="region")
 
     _Completed.stderr = "Cannot find job [missing]."
-    assert not scheduler_inventory.run_job_exists(
-        "missing", project="project", region="region"
-    )
+    assert not scheduler_inventory.run_job_exists("missing", project="project", region="region")
 
     _Completed.stderr = "PERMISSION_DENIED: caller is not authorized"
     with pytest.raises(scheduler_inventory.InventoryError, match="PERMISSION_DENIED"):
-        scheduler_inventory.scheduler_exists(
-            "unknown", project="project", location="region"
-        )
+        scheduler_inventory.scheduler_exists("unknown", project="project", location="region")
 
 
 def test_live_inspection_detects_identity_and_image_drift(monkeypatch) -> None:
@@ -536,12 +582,66 @@ def test_live_inspection_detects_identity_and_image_drift(monkeypatch) -> None:
     assert summary["result"] == "fail"
 
 
+def test_live_inspection_detects_private_scheduler_retry_drift(monkeypatch) -> None:
+    inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
+    private_job = next(
+        job
+        for job in inventory["jobs"]
+        if job["run_job_name"] == "caseops-private-projection-maintenance"
+    )
+    inventory["jobs"] = [private_job]
+    expected_image = "registry.example/caseops-api@sha256:" + "d" * 64
+
+    def fake_gcloud(arguments: list[str], *, expect_json: bool = False):
+        assert expect_json
+        if arguments[:3] == ["scheduler", "jobs", "describe"]:
+            return {
+                "state": private_job["desired_state"],
+                "schedule": private_job["schedule"],
+                "timeZone": private_job["time_zone"],
+                "retryConfig": {"retryCount": 0},
+                "httpTarget": {
+                    "uri": scheduler_inventory.scheduler_uri(
+                        inventory["production_project"],
+                        inventory["location"],
+                        private_job["run_job_name"],
+                    ),
+                    "oauthToken": {"serviceAccountEmail": inventory["invoker_service_account"]},
+                },
+            }
+        if arguments[:3] == ["run", "jobs", "describe"]:
+            return {
+                "spec": {
+                    "template": {
+                        "spec": {"template": {"spec": {"containers": [{"image": expected_image}]}}}
+                    }
+                }
+            }
+        return {
+            "bindings": [
+                {
+                    "role": "roles/run.invoker",
+                    "members": [f"serviceAccount:{inventory['invoker_service_account']}"],
+                }
+            ]
+        }
+
+    monkeypatch.setattr(scheduler_inventory, "run_gcloud", fake_gcloud)
+    errors, summary = scheduler_inventory.inspect_live(
+        inventory,
+        project=inventory["production_project"],
+        region=inventory["location"],
+        expected_image=expected_image,
+    )
+
+    assert f"{private_job['scheduler_name']}: retry_config drift" in errors
+    assert summary["jobs"][0]["configuration"] == "fail"
+
+
 def test_live_inspection_detects_bootstrap_contract_drift(monkeypatch) -> None:
     inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
     watch_job = next(
-        job
-        for job in inventory["jobs"]
-        if job["run_job_name"] == "caseops-ip-journal-watch"
+        job for job in inventory["jobs"] if job["run_job_name"] == "caseops-ip-journal-watch"
     )
     inventory["jobs"] = [watch_job]
     expected_image = "registry.example/caseops-api@sha256:" + "f" * 64
@@ -559,9 +659,7 @@ def test_live_inspection_detects_bootstrap_contract_drift(monkeypatch) -> None:
                         inventory["location"],
                         watch_job["run_job_name"],
                     ),
-                    "oauthToken": {
-                        "serviceAccountEmail": inventory["invoker_service_account"]
-                    },
+                    "oauthToken": {"serviceAccountEmail": inventory["invoker_service_account"]},
                 },
             }
         if arguments[:3] == ["run", "jobs", "describe"]:
@@ -601,9 +699,7 @@ def test_live_inspection_detects_bootstrap_contract_drift(monkeypatch) -> None:
                                                             }
                                                         },
                                                     }
-                                                    for key, value in bootstrap[
-                                                        "secrets"
-                                                    ].items()
+                                                    for key, value in bootstrap["secrets"].items()
                                                 ],
                                             ],
                                             "resources": {
@@ -614,9 +710,7 @@ def test_live_inspection_detects_bootstrap_contract_drift(monkeypatch) -> None:
                                             },
                                         }
                                     ],
-                                    "serviceAccountName": bootstrap[
-                                        "service_account"
-                                    ],
+                                    "serviceAccountName": bootstrap["service_account"],
                                     "maxRetries": bootstrap["max_retries"],
                                     "timeoutSeconds": "900s",
                                 }
@@ -629,9 +723,7 @@ def test_live_inspection_detects_bootstrap_contract_drift(monkeypatch) -> None:
             "bindings": [
                 {
                     "role": "roles/run.invoker",
-                    "members": [
-                        f"serviceAccount:{inventory['invoker_service_account']}"
-                    ],
+                    "members": [f"serviceAccount:{inventory['invoker_service_account']}"],
                 }
             ]
         }
@@ -671,9 +763,7 @@ def test_live_inspection_detects_authority_state_and_timeout_drift(monkeypatch) 
                         inventory["location"],
                         authority_job["run_job_name"],
                     ),
-                    "oauthToken": {
-                        "serviceAccountEmail": inventory["invoker_service_account"]
-                    },
+                    "oauthToken": {"serviceAccountEmail": inventory["invoker_service_account"]},
                 },
             }
         if arguments[:3] == ["run", "jobs", "describe"]:
@@ -695,9 +785,7 @@ def test_live_inspection_detects_authority_state_and_timeout_drift(monkeypatch) 
             "bindings": [
                 {
                     "role": "roles/run.invoker",
-                    "members": [
-                        f"serviceAccount:{inventory['invoker_service_account']}"
-                    ],
+                    "members": [f"serviceAccount:{inventory['invoker_service_account']}"],
                 }
             ]
         }
@@ -770,9 +858,7 @@ def test_attempt_audit_requires_delivery_but_reports_workload_failure(monkeypatc
                         inventory["location"],
                         "caseops-legal-update-sync",
                     ),
-                    "oauthToken": {
-                        "serviceAccountEmail": inventory["invoker_service_account"]
-                    },
+                    "oauthToken": {"serviceAccountEmail": inventory["invoker_service_account"]},
                 },
             }
         if arguments[:4] == ["run", "jobs", "executions", "list"]:
@@ -789,11 +875,7 @@ def test_attempt_audit_requires_delivery_but_reports_workload_failure(monkeypatc
             return {
                 "spec": {
                     "template": {
-                        "spec": {
-                            "template": {
-                                "spec": {"containers": [{"image": expected_image}]}
-                            }
-                        }
+                        "spec": {"template": {"spec": {"containers": [{"image": expected_image}]}}}
                     }
                 }
             }
@@ -801,9 +883,7 @@ def test_attempt_audit_requires_delivery_but_reports_workload_failure(monkeypatc
             "bindings": [
                 {
                     "role": "roles/run.invoker",
-                    "members": [
-                        f"serviceAccount:{inventory['invoker_service_account']}"
-                    ],
+                    "members": [f"serviceAccount:{inventory['invoker_service_account']}"],
                 }
             ]
         }
@@ -847,9 +927,7 @@ def test_attempt_audit_does_not_require_delivery_for_paused_scheduler(monkeypatc
                         inventory["location"],
                         authority_job["run_job_name"],
                     ),
-                    "oauthToken": {
-                        "serviceAccountEmail": inventory["invoker_service_account"]
-                    },
+                    "oauthToken": {"serviceAccountEmail": inventory["invoker_service_account"]},
                 },
             }
         if arguments[:4] == ["run", "jobs", "executions", "list"]:
@@ -899,9 +977,7 @@ def test_attempt_audit_does_not_require_delivery_for_paused_scheduler(monkeypatc
                                                             }
                                                         },
                                                     }
-                                                    for key, value in bootstrap[
-                                                        "secrets"
-                                                    ].items()
+                                                    for key, value in bootstrap["secrets"].items()
                                                 ],
                                             ],
                                             "resources": {
@@ -917,7 +993,7 @@ def test_attempt_audit_does_not_require_delivery_for_paused_scheduler(monkeypatc
                                     "timeoutSeconds": "43200",
                                 }
                             }
-                        }
+                        },
                     }
                 }
             }
@@ -925,9 +1001,7 @@ def test_attempt_audit_does_not_require_delivery_for_paused_scheduler(monkeypatc
             "bindings": [
                 {
                     "role": "roles/run.invoker",
-                    "members": [
-                        f"serviceAccount:{inventory['invoker_service_account']}"
-                    ],
+                    "members": [f"serviceAccount:{inventory['invoker_service_account']}"],
                 }
             ]
         }

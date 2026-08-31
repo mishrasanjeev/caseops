@@ -27,6 +27,7 @@ These tests pin:
 - the engine cache key includes pool settings so an env change
   between calls produces a fresh engine without ``clear_engine_cache``
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -181,6 +182,32 @@ def test_postgres_engine_passes_finite_database_deadlines(
 
     assert captured["connect_args"]["connect_timeout"] == 7
     assert captured["connect_args"]["options"] == (
+        "-c statement_timeout=60000 -c lock_timeout=5000 "
+        "-c idle_in_transaction_session_timeout=60000"
+    )
+
+
+def test_postgres_engine_preserves_url_options_before_enforced_deadlines(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "CASEOPS_DATABASE_URL",
+        (
+            "postgresql+psycopg://x:y@h:5432/d"
+            "?options=-c+search_path=tenant_schema+-c+lock_timeout=0"
+        ),
+    )
+    captured: dict = {}
+
+    def _fake_create_engine(url, *, connect_args=None, **kwargs):
+        captured["connect_args"] = connect_args
+        return _FakeEngine()
+
+    with patch("caseops_api.db.session.create_engine", _fake_create_engine):
+        get_engine()
+
+    assert captured["connect_args"]["options"] == (
+        "-c search_path=tenant_schema -c lock_timeout=0 "
         "-c statement_timeout=60000 -c lock_timeout=5000 "
         "-c idle_in_transaction_session_timeout=60000"
     )
@@ -499,6 +526,9 @@ def test_settings_pool_size_rejects_zero_or_negative(
         "CASEOPS_DB_STATEMENT_TIMEOUT_MS",
         "CASEOPS_DB_LOCK_TIMEOUT_MS",
         "CASEOPS_DB_IDLE_TRANSACTION_TIMEOUT_MS",
+        "CASEOPS_MIGRATION_DB_STATEMENT_TIMEOUT_MS",
+        "CASEOPS_MIGRATION_DB_LOCK_TIMEOUT_MS",
+        "CASEOPS_MIGRATION_DB_IDLE_TRANSACTION_TIMEOUT_MS",
     ),
 )
 def test_database_safety_timeouts_cannot_be_disabled(

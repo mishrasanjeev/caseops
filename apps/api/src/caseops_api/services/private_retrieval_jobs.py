@@ -7,12 +7,14 @@ payloads.  Public authorities are intentionally absent from this module.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections import defaultdict
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.orm import Session
@@ -53,6 +55,10 @@ MAX_PRIVATE_REBUILD_PROJECTIONS = 2_000
 MAX_PRIVATE_PROVIDER_BATCH = 32
 MAX_PRIVATE_EMBED_TEXT_CHARS = 4_000
 MAX_PENDING_EVENTS_PER_RUN = 100
+MAX_PRIVATE_MAINTENANCE_COMPANIES = 50
+MAX_PRIVATE_EVENT_ATTEMPTS = 3
+DEFAULT_PRIVATE_EVENT_RETRY_BACKOFF_SECONDS = 30
+DEFAULT_PRIVATE_EVENT_LAG_SLO_SECONDS = 300
 DEFAULT_PRIVATE_PROVIDER_DEADLINE_SECONDS = 30.0
 LOW_OCR_QUALITY_THRESHOLD = 0.65
 
@@ -87,6 +93,39 @@ class PrivateIntegrityReport:
     @property
     def release_blocked(self) -> bool:
         return bool(self.blockers)
+
+
+@dataclass(frozen=True, slots=True)
+class PrivateMaintenanceCandidates:
+    company_ids: tuple[str, ...]
+    truncated: bool
+
+
+def list_private_maintenance_companies(
+    session: Session,
+    *,
+    limit: int = MAX_PRIVATE_MAINTENANCE_COMPANIES,
+) -> PrivateMaintenanceCandidates:
+    """Select a bounded tenant set from indexed private operational state."""
+
+    bounded = max(1, min(limit, MAX_PRIVATE_MAINTENANCE_COMPANIES))
+    event_companies = select(PrivateProjectionEvent.company_id.label("company_id")).where(
+        PrivateProjectionEvent.status.in_(("pending", "failed"))
+    )
+    generation_companies = select(PrivateIndexGeneration.company_id.label("company_id")).where(
+        PrivateIndexGeneration.state.in_(("building", "ready", "active", "failed"))
+    )
+    candidates = event_companies.union(generation_companies).subquery()
+    rows = tuple(
+        str(value)
+        for value in session.scalars(
+            select(candidates.c.company_id).order_by(candidates.c.company_id).limit(bounded + 1)
+        ).all()
+    )
+    return PrivateMaintenanceCandidates(
+        company_ids=rows[:bounded],
+        truncated=len(rows) > bounded,
+    )
 
 
 def _bounded_append(
@@ -305,10 +344,7 @@ def _private_projection_inputs(
             )
         ).all()
         targets.update(
-            {
-                (target_type, str(target_id)): str(docket_id)
-                for target_id, docket_id in rows
-            }
+            {(target_type, str(target_id)): str(docket_id) for target_id, docket_id in rows}
         )
     docket_ids = set(targets.values())
     docket_versions = {
@@ -323,9 +359,7 @@ def _private_projection_inputs(
     }
     for document, version in document_rows:
         linked = links_by_document.get(document.id, [])
-        linked_dockets = {
-            targets.get((link.target_type, link.target_id)) for link in linked
-        }
+        linked_dockets = {targets.get((link.target_type, link.target_id)) for link in linked}
         if not linked or None in linked_dockets or not linked_dockets:
             continue
         if not set(linked_dockets).issubset(docket_versions):
@@ -340,9 +374,7 @@ def _private_projection_inputs(
             if docket_id is not None
         )
         extracted = " ".join((version.extracted_text or "").split())
-        for ordinal, offset in enumerate(
-            range(0, len(extracted), MAX_PRIVATE_EMBED_TEXT_CHARS)
-        ):
+        for ordinal, offset in enumerate(range(0, len(extracted), MAX_PRIVATE_EMBED_TEXT_CHARS)):
             text = extracted[offset : offset + MAX_PRIVATE_EMBED_TEXT_CHARS]
             if not text:
                 continue
@@ -360,7 +392,119 @@ def _private_projection_inputs(
                 ),
                 limit=bounded,
             )
-    return payloads
+    latest_events = (
+        select(
+            PrivateProjectionEvent.target_type.label("target_type"),
+            PrivateProjectionEvent.target_id.label("target_id"),
+            PrivateProjectionEvent.event_type.label("event_type"),
+            func.row_number()
+            .over(
+                partition_by=(
+                    PrivateProjectionEvent.target_type,
+                    PrivateProjectionEvent.target_id,
+                ),
+                order_by=(
+                    PrivateProjectionEvent.created_at.desc(),
+                    PrivateProjectionEvent.id.desc(),
+                ),
+            )
+            .label("event_rank"),
+        )
+        .where(
+            PrivateProjectionEvent.company_id == company_id,
+            PrivateProjectionEvent.status == "applied",
+        )
+        .subquery()
+    )
+    tombstone_rows = session.execute(
+        select(latest_events.c.target_type, latest_events.c.target_id)
+        .where(
+            latest_events.c.event_rank == 1,
+            latest_events.c.event_type.in_(("revoked", "tombstoned")),
+        )
+        .order_by(latest_events.c.target_type, latest_events.c.target_id)
+        .limit(bounded + 1)
+    ).all()
+    if len(tombstone_rows) > bounded:
+        raise PrivateRetrievalInvariantError(
+            "Private tombstone ledger exceeds the bounded rebuild limit."
+        )
+    tombstones = {(str(kind), str(target_id)) for kind, target_id in tombstone_rows}
+    if ("tenant", company_id) in tombstones:
+        return []
+    return [
+        payload
+        for payload in payloads
+        if (payload.source_type, payload.source_id) not in tombstones
+        and not any((scope.scope_type, scope.scope_id) in tombstones for scope in payload.scopes)
+    ]
+
+
+def _reuse_current_embeddings(
+    session: Session,
+    *,
+    company_id: str,
+    generation_id: str,
+    payloads: Sequence[PrivateProjectionInput],
+    limit: int,
+) -> list[PrivateProjectionInput]:
+    rows = session.scalars(
+        select(PrivateIndexProjection)
+        .where(
+            PrivateIndexProjection.company_id == company_id,
+            PrivateIndexProjection.generation_id == generation_id,
+            PrivateIndexProjection.is_tombstoned.is_(False),
+            PrivateIndexProjection.embedding_json.is_not(None),
+        )
+        .order_by(PrivateIndexProjection.id)
+        .limit(limit + 1)
+    ).all()
+    if len(rows) > limit:
+        raise PrivateRetrievalInvariantError(
+            "Private embedding reuse exceeds the bounded rebuild limit."
+        )
+    reusable = {
+        (
+            row.source_type,
+            row.source_id,
+            row.source_version,
+            row.chunk_ordinal,
+            row.content_sha256,
+        ): row
+        for row in rows
+    }
+    reused: list[PrivateProjectionInput] = []
+    for payload in payloads:
+        content_hash = hashlib.sha256(payload.content.encode()).hexdigest()
+        row = reusable.get(
+            (
+                payload.source_type,
+                payload.source_id,
+                payload.source_version,
+                payload.chunk_ordinal,
+                content_hash,
+            )
+        )
+        if row is None or row.embedding_json is None:
+            reused.append(payload)
+            continue
+        try:
+            vector = tuple(float(value) for value in json.loads(row.embedding_json))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            reused.append(payload)
+            continue
+        if not vector or row.embedding_dimensions != len(vector):
+            reused.append(payload)
+            continue
+        reused.append(
+            replace(
+                payload,
+                embedding=vector,
+                embedding_model=row.embedding_model,
+                embedding_version=row.embedding_version,
+            )
+        )
+    return reused
 
 
 def _embed_private_payloads(
@@ -434,12 +578,32 @@ def rebuild_private_index(
         raise PrivateRetrievalInvariantError(
             "Private rebuild requires a clean worker session before its provider boundary."
         )
+    unresolved_event_count = int(
+        session.scalar(
+            select(func.count(PrivateProjectionEvent.id)).where(
+                PrivateProjectionEvent.company_id == company_id,
+                PrivateProjectionEvent.status.in_(("pending", "failed")),
+            )
+        )
+        or 0
+    )
+    if unresolved_event_count:
+        raise PrivateRetrievalInvariantError(
+            "Private rebuild requires every projection event to reach a terminal applied state."
+        )
     active = ensure_active_private_generation(session, company_id=company_id)
     shadow = create_shadow_private_generation(session, company_id=company_id)
     payloads = _private_projection_inputs(
         session,
         company_id=company_id,
         limit=projection_limit,
+    )
+    payloads = _reuse_current_embeddings(
+        session,
+        company_id=company_id,
+        generation_id=active.id,
+        payloads=payloads,
+        limit=max(1, min(projection_limit, MAX_PRIVATE_REBUILD_PROJECTIONS)),
     )
     previous_generation_id = str(active.id)
     shadow_generation_id = str(shadow.id)
@@ -516,16 +680,26 @@ def process_pending_private_projection_events(
     *,
     company_id: str,
     limit: int = MAX_PENDING_EVENTS_PER_RUN,
+    max_attempts: int = MAX_PRIVATE_EVENT_ATTEMPTS,
+    retry_backoff_seconds: int = DEFAULT_PRIVATE_EVENT_RETRY_BACKOFF_SECONDS,
+    now: datetime | None = None,
 ) -> tuple[str, ...]:
-    """Claim and apply a bounded tenant event batch with no raw-error storage."""
+    """Claim and apply a bounded tenant event batch with durable retry state."""
 
     bounded = max(1, min(limit, MAX_PENDING_EVENTS_PER_RUN))
+    bounded_attempts = max(1, min(max_attempts, 10))
+    bounded_backoff = max(1, min(retry_backoff_seconds, 3_600))
+    current = now or datetime.now(UTC)
     event_ids = tuple(
         session.scalars(
             select(PrivateProjectionEvent.id)
             .where(
                 PrivateProjectionEvent.company_id == company_id,
                 PrivateProjectionEvent.status == "pending",
+                or_(
+                    PrivateProjectionEvent.next_attempt_at.is_(None),
+                    PrivateProjectionEvent.next_attempt_at <= current,
+                ),
             )
             .order_by(PrivateProjectionEvent.created_at, PrivateProjectionEvent.id)
             .limit(bounded)
@@ -541,10 +715,26 @@ def process_pending_private_projection_events(
             event = session.get(PrivateProjectionEvent, event_id)
             if event is not None:
                 with session.begin_nested():
-                    event.status = "failed"
+                    event.attempt_count = int(event.attempt_count or 0) + 1
+                    event.last_attempt_at = current
                     event.error_code = type(exc).__name__[:80]
+                    if event.attempt_count >= bounded_attempts:
+                        event.status = "failed"
+                        event.next_attempt_at = None
+                    else:
+                        event.status = "pending"
+                        event.next_attempt_at = current + timedelta(
+                            seconds=bounded_backoff * (2 ** (event.attempt_count - 1))
+                        )
                     session.flush()
             continue
+        event = session.get(PrivateProjectionEvent, event_id)
+        if event is not None:
+            event.attempt_count = int(event.attempt_count or 0) + 1
+            event.last_attempt_at = current
+            event.next_attempt_at = None
+            event.error_code = None
+            session.flush()
         applied.append(event_id)
     return tuple(applied)
 
@@ -554,6 +744,7 @@ def inspect_private_index_integrity(
     *,
     company_id: str,
     now: datetime | None = None,
+    event_lag_slo_seconds: int = DEFAULT_PRIVATE_EVENT_LAG_SLO_SECONDS,
 ) -> PrivateIntegrityReport:
     """Return safe aggregate integrity state; never return source identifiers."""
 
@@ -609,21 +800,34 @@ def inspect_private_index_integrity(
             and generation.verification_sha256 == digest
         )
 
-    pending_rows = session.execute(
-        select(PrivateProjectionEvent.status, PrivateProjectionEvent.created_at).where(
+    pending_count = int(
+        session.scalar(
+            select(func.count(PrivateProjectionEvent.id)).where(
+                PrivateProjectionEvent.company_id == company_id,
+                PrivateProjectionEvent.status == "pending",
+            )
+        )
+        or 0
+    )
+    failed_count = int(
+        session.scalar(
+            select(func.count(PrivateProjectionEvent.id)).where(
+                PrivateProjectionEvent.company_id == company_id,
+                PrivateProjectionEvent.status == "failed",
+            )
+        )
+        or 0
+    )
+    oldest = session.scalar(
+        select(func.min(PrivateProjectionEvent.created_at)).where(
             PrivateProjectionEvent.company_id == company_id,
-            PrivateProjectionEvent.status.in_(("pending", "failed")),
+            PrivateProjectionEvent.status == "pending",
         )
-    ).all()
-    pending = [created_at for status, created_at in pending_rows if status == "pending"]
-    failed_count = sum(1 for status, _created_at in pending_rows if status == "failed")
+    )
     oldest_lag = None
-    if pending:
-        oldest = min(
-            value.replace(tzinfo=UTC) if value.tzinfo is None else value
-            for value in pending
-        )
-        oldest_lag = max(0, int((current - oldest).total_seconds()))
+    if oldest is not None:
+        normalized_oldest = oldest.replace(tzinfo=UTC) if oldest.tzinfo is None else oldest
+        oldest_lag = max(0, int((current - normalized_oldest).total_seconds()))
 
     orphan_scope_count = int(
         session.scalar(
@@ -631,10 +835,8 @@ def inspect_private_index_integrity(
             .join(
                 PrivateIndexProjection,
                 and_(
-                    PrivateIndexProjection.id
-                    == PrivateIndexProjectionScope.projection_id,
-                    PrivateIndexProjection.company_id
-                    == PrivateIndexProjectionScope.company_id,
+                    PrivateIndexProjection.id == PrivateIndexProjectionScope.projection_id,
+                    PrivateIndexProjection.company_id == PrivateIndexProjectionScope.company_id,
                 ),
             )
             .where(
@@ -669,8 +871,7 @@ def inspect_private_index_integrity(
                         ~exists(
                             select(IpDocketRecord.id).where(
                                 IpDocketRecord.company_id == company_id,
-                                IpDocketRecord.id
-                                == PrivateIndexProjectionScope.ip_docket_id,
+                                IpDocketRecord.id == PrivateIndexProjectionScope.ip_docket_id,
                                 IpDocketRecord.is_active.is_(True),
                                 IpDocketRecord.access_policy_version
                                 == PrivateIndexProjectionScope.access_policy_version,
@@ -691,8 +892,7 @@ def inspect_private_index_integrity(
                 ~exists(
                     select(PrivateIndexProjectionScope.id).where(
                         PrivateIndexProjectionScope.company_id == company_id,
-                        PrivateIndexProjectionScope.projection_id
-                        == PrivateIndexProjection.id,
+                        PrivateIndexProjectionScope.projection_id == PrivateIndexProjection.id,
                     )
                 ),
             )
@@ -796,8 +996,10 @@ def inspect_private_index_integrity(
         blockers.append("missing_active_generation")
     elif not manifest_matches:
         blockers.append("active_generation_manifest_mismatch")
-    if pending:
+    if pending_count:
         blockers.append("pending_projection_events")
+    if oldest_lag is not None and oldest_lag > max(1, event_lag_slo_seconds):
+        blockers.append("projection_event_lag_slo_exceeded")
     if failed_count:
         blockers.append("failed_projection_events")
     if orphan_scope_count:
@@ -815,7 +1017,7 @@ def inspect_private_index_integrity(
         active_generation_id=generation.id if generation is not None else None,
         live_projection_count=live_count,
         tombstoned_projection_count=tombstoned_count,
-        pending_event_count=len(pending),
+        pending_event_count=pending_count,
         failed_event_count=failed_count,
         oldest_pending_lag_seconds=oldest_lag,
         orphan_scope_count=orphan_scope_count,
@@ -827,13 +1029,18 @@ def inspect_private_index_integrity(
 
 
 __all__ = [
+    "DEFAULT_PRIVATE_EVENT_LAG_SLO_SECONDS",
+    "DEFAULT_PRIVATE_EVENT_RETRY_BACKOFF_SECONDS",
     "DEFAULT_PRIVATE_PROVIDER_DEADLINE_SECONDS",
+    "MAX_PRIVATE_EVENT_ATTEMPTS",
     "MAX_PENDING_EVENTS_PER_RUN",
     "MAX_PRIVATE_PROVIDER_BATCH",
+    "MAX_PRIVATE_MAINTENANCE_COMPANIES",
     "MAX_PRIVATE_REBUILD_PROJECTIONS",
     "PrivateIntegrityReport",
     "PrivateRebuildSummary",
     "inspect_private_index_integrity",
+    "list_private_maintenance_companies",
     "process_pending_private_projection_events",
     "rebuild_private_index",
 ]

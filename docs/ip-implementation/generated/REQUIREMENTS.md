@@ -180,25 +180,25 @@ Generated; do not edit.
 | AI-GUIDE-01 | AI-GUIDE | IPLF-061B | 7 | 1 | implemented | passed | deployment_verified | true |
 | AI-GUIDE-02 | AI-GUIDE | IPLF-062B | 6 | 1 | implemented | passed | deployment_verified | true |
 | AI-GUIDE-03 | AI-GUIDE | IPLF-062B | 6 | 1 | implemented | passed | deployment_verified | true |
-| AI-GUIDE-04 | AI-GUIDE | IPLF-062B, IPLF-065B, IPLF-066B | 7 | 1 | in_progress | not_run | blocked | false |
-| AI-GUIDE-05 | AI-GUIDE | IPLF-062B, IPLF-065B, IPLF-066B | 6 | 1 | in_progress | not_run | blocked | false |
+| AI-GUIDE-04 | AI-GUIDE | IPLF-062B, IPLF-065B, IPLF-066B | 10 | 2 | implemented | passed | blocked | false |
+| AI-GUIDE-05 | AI-GUIDE | IPLF-062B, IPLF-065B, IPLF-066B | 9 | 2 | implemented | passed | blocked | false |
 | AI-GUIDE-06 | AI-GUIDE | IPLF-062B, IPLF-064B | 7 | 3 | implemented | passed | deployment_verified | true |
-| AI-GUIDE-07 | AI-GUIDE | IPLF-061B, IPLF-062B, IPLF-065B | 8 | 2 | implemented | passed | blocked | false |
-| AI-GUIDE-08 | AI-GUIDE | IPLF-061B, IPLF-062B, IPLF-066B | 9 | 2 | in_progress | not_run | blocked | false |
+| AI-GUIDE-07 | AI-GUIDE | IPLF-061B, IPLF-062B, IPLF-065B | 8 | 3 | implemented | passed | deployment_verified | true |
+| AI-GUIDE-08 | AI-GUIDE | IPLF-061B, IPLF-062B, IPLF-066B | 12 | 3 | implemented | passed | blocked | false |
 | AI-GUIDE-09 | AI-GUIDE | IPLF-062B | 5 | 2 | implemented | passed | deployment_verified | false |
-| AI-GUIDE-10 | AI-GUIDE | IPLF-065B | 5 | 1 | implemented | passed | blocked | false |
+| AI-GUIDE-10 | AI-GUIDE | IPLF-065B | 5 | 2 | implemented | passed | deployment_verified | true |
 | AI-GUIDE-11 | AI-GUIDE | IPLF-061B | 7 | 1 | implemented | passed | deployment_verified | true |
-| AI-GUIDE-12 | AI-GUIDE | IPLF-066B | 6 | 2 | in_progress | not_run | blocked | false |
-| AI-REV-01 | AI-REV | IPLF-063B, IPLF-065B | 4 | 2 | implemented | passed | blocked | false |
-| AI-REV-02 | AI-REV | IPLF-063B, IPLF-065B | 4 | 2 | implemented | passed | blocked | false |
-| AI-REV-03 | AI-REV | IPLF-063B, IPLF-065B | 4 | 2 | implemented | passed | blocked | false |
-| AI-REV-04 | AI-REV | IPLF-063B, IPLF-065B | 4 | 2 | implemented | passed | blocked | false |
-| AI-REV-05 | AI-REV | IPLF-063B, IPLF-065B | 4 | 2 | implemented | passed | blocked | false |
-| AI-REV-06 | AI-REV | IPLF-063B, IPLF-065B | 4 | 2 | implemented | passed | blocked | false |
-| AI-REV-07 | AI-REV | IPLF-063B, IPLF-065B | 4 | 2 | implemented | passed | blocked | false |
-| AI-REV-08 | AI-REV | IPLF-063B, IPLF-065B | 4 | 2 | implemented | passed | blocked | false |
-| AI-REV-09 | AI-REV | IPLF-063B, IPLF-065B | 4 | 2 | implemented | passed | blocked | false |
-| AI-REV-10 | AI-REV | IPLF-063B, IPLF-065B | 4 | 2 | implemented | passed | blocked | false |
+| AI-GUIDE-12 | AI-GUIDE | IPLF-066B | 7 | 3 | implemented | passed | blocked | false |
+| AI-REV-01 | AI-REV | IPLF-063B, IPLF-065B | 4 | 3 | implemented | passed | deployment_verified | true |
+| AI-REV-02 | AI-REV | IPLF-063B, IPLF-065B | 4 | 3 | implemented | passed | deployment_verified | true |
+| AI-REV-03 | AI-REV | IPLF-063B, IPLF-065B | 4 | 3 | implemented | passed | deployment_verified | true |
+| AI-REV-04 | AI-REV | IPLF-063B, IPLF-065B | 4 | 3 | implemented | passed | deployment_verified | true |
+| AI-REV-05 | AI-REV | IPLF-063B, IPLF-065B | 4 | 3 | implemented | passed | deployment_verified | true |
+| AI-REV-06 | AI-REV | IPLF-063B, IPLF-065B | 4 | 3 | implemented | passed | deployment_verified | true |
+| AI-REV-07 | AI-REV | IPLF-063B, IPLF-065B | 4 | 3 | implemented | passed | deployment_verified | true |
+| AI-REV-08 | AI-REV | IPLF-063B, IPLF-065B | 4 | 3 | implemented | passed | deployment_verified | true |
+| AI-REV-09 | AI-REV | IPLF-063B, IPLF-065B | 4 | 3 | implemented | passed | deployment_verified | true |
+| AI-REV-10 | AI-REV | IPLF-063B, IPLF-065B | 4 | 3 | implemented | passed | deployment_verified | true |
 | IP-DRAFT-01 | IP-DRAFT | IPLF-045B, IPLF-046B, IPLF-047B | 6 | 2 | implemented | passed | deployment_verified | true |
 | IP-DRAFT-02 | IP-DRAFT | IPLF-045B, IPLF-046B, IPLF-047B | 6 | 2 | implemented | passed | deployment_verified | true |
 | IP-DRAFT-03 | IP-DRAFT | IPLF-045B, IPLF-046B, IPLF-047B | 6 | 2 | implemented | passed | deployment_verified | true |
@@ -402,18 +402,18 @@ Generated; do not edit.
 | RES-12 | RES | IPLF-028B, IPLF-072B | 11 | 0 | in_progress | not_run | blocked | false |
 | RES-13 | RES | IPLF-028B, IPLF-072B | 11 | 0 | in_progress | not_run | blocked | false |
 | RES-14 | RES | IPLF-028B, IPLF-072B | 11 | 0 | in_progress | not_run | blocked | false |
-| SEARCH-ACL-01 | SEARCH-ACL | IPLF-026B, IPLF-066B | 15 | 0 | in_progress | not_run | blocked | false |
-| SEARCH-ACL-02 | SEARCH-ACL | IPLF-026B, IPLF-066B | 15 | 0 | in_progress | not_run | blocked | false |
-| SEARCH-ACL-03 | SEARCH-ACL | IPLF-026B, IPLF-066B | 15 | 0 | in_progress | not_run | blocked | false |
-| SEARCH-ACL-04 | SEARCH-ACL | IPLF-026B, IPLF-066B | 15 | 0 | in_progress | not_run | blocked | false |
-| SEARCH-ACL-05 | SEARCH-ACL | IPLF-026B, IPLF-066B | 15 | 0 | in_progress | not_run | blocked | false |
-| SEARCH-ACL-06 | SEARCH-ACL | IPLF-026B, IPLF-066B | 15 | 0 | in_progress | not_run | blocked | false |
-| SEARCH-ACL-07 | SEARCH-ACL | IPLF-026B, IPLF-066B | 15 | 0 | in_progress | not_run | blocked | false |
-| SEARCH-ACL-08 | SEARCH-ACL | IPLF-026B, IPLF-066B | 15 | 0 | in_progress | not_run | blocked | false |
-| SEARCH-ACL-09 | SEARCH-ACL | IPLF-026B, IPLF-066B | 15 | 0 | in_progress | not_run | blocked | false |
-| SEARCH-ACL-10 | SEARCH-ACL | IPLF-026B, IPLF-066B | 15 | 0 | in_progress | not_run | blocked | false |
-| SEARCH-ACL-11 | SEARCH-ACL | IPLF-026B, IPLF-066B | 15 | 0 | in_progress | not_run | blocked | false |
-| SEARCH-ACL-12 | SEARCH-ACL | IPLF-026B, IPLF-066B | 15 | 0 | in_progress | not_run | blocked | false |
+| SEARCH-ACL-01 | SEARCH-ACL | IPLF-026B, IPLF-066B | 4 | 1 | implemented | passed | blocked | false |
+| SEARCH-ACL-02 | SEARCH-ACL | IPLF-026B, IPLF-066B | 4 | 1 | implemented | passed | blocked | false |
+| SEARCH-ACL-03 | SEARCH-ACL | IPLF-026B, IPLF-066B | 4 | 1 | implemented | passed | blocked | false |
+| SEARCH-ACL-04 | SEARCH-ACL | IPLF-026B, IPLF-066B | 4 | 1 | implemented | passed | blocked | false |
+| SEARCH-ACL-05 | SEARCH-ACL | IPLF-026B, IPLF-066B | 4 | 1 | implemented | passed | blocked | false |
+| SEARCH-ACL-06 | SEARCH-ACL | IPLF-026B, IPLF-066B | 4 | 1 | implemented | passed | blocked | false |
+| SEARCH-ACL-07 | SEARCH-ACL | IPLF-026B, IPLF-066B | 4 | 1 | implemented | passed | blocked | false |
+| SEARCH-ACL-08 | SEARCH-ACL | IPLF-026B, IPLF-066B | 4 | 1 | implemented | passed | blocked | false |
+| SEARCH-ACL-09 | SEARCH-ACL | IPLF-026B, IPLF-066B | 4 | 1 | implemented | passed | blocked | false |
+| SEARCH-ACL-10 | SEARCH-ACL | IPLF-026B, IPLF-066B | 4 | 1 | implemented | passed | blocked | false |
+| SEARCH-ACL-11 | SEARCH-ACL | IPLF-026B, IPLF-066B | 4 | 1 | implemented | passed | blocked | false |
+| SEARCH-ACL-12 | SEARCH-ACL | IPLF-026B, IPLF-066B | 4 | 1 | implemented | passed | blocked | false |
 | ARCH-OPS-01 | ARCH-OPS | IPLF-019B, IPLF-027B, IPLF-029B | 15 | 1 | in_progress | not_run | blocked | false |
 | ARCH-OPS-02 | ARCH-OPS | IPLF-019B, IPLF-027B, IPLF-029B | 15 | 1 | in_progress | not_run | blocked | false |
 | ARCH-OPS-03 | ARCH-OPS | IPLF-019B, IPLF-027B, IPLF-029B | 15 | 1 | in_progress | not_run | blocked | false |
