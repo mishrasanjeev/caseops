@@ -47,6 +47,7 @@ from caseops_api.services.llm import (
     LLMMessage,
     LLMProvider,
     LLMProviderError,
+    LLMResponseFormatError,
     build_provider,
     generate_structured,
     max_tokens_for_purpose,
@@ -668,6 +669,58 @@ def _mark_terminal_failure(
     session.commit()
 
 
+def _generate_review_response(
+    provider: LLMProvider,
+    *,
+    session: Session,
+    messages: list[LLMMessage],
+    context: LLMCallContext,
+) -> tuple[_LLMReview, LLMCompletion, list[LLMMessage]]:
+    """Generate a schema-valid review with one bounded format retry.
+
+    A malformed HTTP-200 response is a response-quality failure, not provider
+    unavailability.  OpenAI uses its native strict Pydantic contract through
+    ``generate_structured``; other providers retain the provider-neutral JSON
+    validator.  Either path receives one clean retry that never echoes the
+    rejected model text or any client content into logs.
+    """
+
+    retry_instruction = (
+        "The previous response failed JSON or schema validation. Retry once. "
+        "Return only one complete JSON object matching the requested schema; "
+        "include every required authority field and no prose or code fence."
+    )
+    attempt_messages = messages
+    for attempt in range(2):
+        try:
+            parsed, completion = generate_structured(
+                provider,
+                session=session,
+                schema=_LLMReview,
+                messages=attempt_messages,
+                context=context,
+                temperature=0.1,
+                max_tokens=max_tokens_for_purpose(PURPOSE_RECOMMENDATIONS),
+                release_session_before_provider=True,
+            )
+            return parsed, completion, attempt_messages
+        except LLMResponseFormatError:
+            if attempt == 1:
+                raise
+            logger.warning(
+                "intelligent review received a malformed structured response; "
+                "retrying once with the same provider"
+            )
+            attempt_messages = [
+                *messages[:-1],
+                LLMMessage(
+                    role=messages[-1].role,
+                    content=f"{messages[-1].content}\n\nFORMAT_RETRY:\n{retry_instruction}",
+                ),
+            ]
+    raise AssertionError("bounded structured-response retry did not terminate")
+
+
 def run_intelligent_review_job(
     review_id: str,
     *,
@@ -762,12 +815,10 @@ def run_intelligent_review_job(
                 context_manifest=dict(context_manifest),
                 documents=available_documents,
             )
-            prompt_hash = _prompt_hash(messages)
             active_provider = provider or build_provider(purpose=PURPOSE_RECOMMENDATIONS)
-            parsed, completion = generate_structured(
+            parsed, completion, generation_messages = _generate_review_response(
                 active_provider,
                 session=session,
-                schema=_LLMReview,
                 messages=messages,
                 context=LLMCallContext(
                     tenant_id=review.company_id,
@@ -775,10 +826,8 @@ def run_intelligent_review_job(
                     actor_membership_id=review.created_by_membership_id,
                     purpose="recommendation:intelligent_review",
                 ),
-                temperature=0.1,
-                max_tokens=max_tokens_for_purpose(PURPOSE_RECOMMENDATIONS),
-                release_session_before_provider=True,
             )
+            prompt_hash = _prompt_hash(generation_messages)
 
             review = session.scalar(
                 select(Recommendation).where(Recommendation.id == review_id).with_for_update()
@@ -1058,6 +1107,22 @@ def run_intelligent_review_job(
                 state="abstained",
                 code=f"policy_or_source:{exc.status_code}",
                 detail=str(exc.detail),
+            )
+        except LLMResponseFormatError as exc:
+            session.rollback()
+            logger.warning(
+                "intelligent review provider returned malformed structured output: %s",
+                redact_provider_error(exc),
+            )
+            _mark_terminal_failure(
+                session,
+                review_id=review_id,
+                state="failed",
+                code="malformed_model_response",
+                detail=(
+                    "The AI provider responded, but its structured review was invalid "
+                    "after one retry. No generated analysis was saved."
+                ),
             )
         except LLMProviderError as exc:
             session.rollback()

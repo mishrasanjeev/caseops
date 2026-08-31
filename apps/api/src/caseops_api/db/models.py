@@ -4003,7 +4003,7 @@ class InAppNotification(Base):
     )
     event_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     source_type: Mapped[str] = mapped_column(String(40), nullable=False)
-    source_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(120), nullable=False)
     matter_id: Mapped[str | None] = mapped_column(
         ForeignKey("matters.id", ondelete="CASCADE"),
         nullable=True,

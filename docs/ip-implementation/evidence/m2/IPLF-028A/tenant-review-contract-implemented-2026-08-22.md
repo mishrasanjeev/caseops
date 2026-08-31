@@ -6,6 +6,14 @@
 **Follows:** `tenant-review-contract-2026-08-20.md`, which established by
 inspection that the artefact was missing rather than merely unproven.
 
+**Superseded 2026-08-24:** commit
+`10e77aa8ae3577c27105e77583457f54d02d5fb6` removed these review routes,
+the `data_operations:review` capability, and their UI because the dry-run
+record cannot execute. The current contract ends at an immutable,
+server-scoped diagnostic manifest: the former review routes return HTTP 404
+and execute remains machine-blocked with typed HTTP 503. The material below is
+historical evidence, not an active control.
+
 ## What this closes
 
 The 2026-08-20 audit found that `request_execution`, `reject_execution` and

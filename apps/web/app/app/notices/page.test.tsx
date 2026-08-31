@@ -279,6 +279,120 @@ describe("centralized notice management", () => {
     expect(toastSuccessMock).toHaveBeenCalledWith("Notice created.");
   });
 
+  it("keeps a committed sent notice visible across tabs while reconciliation is slow", async () => {
+    const created = notice({
+      id: "committed-sent-notice",
+      direction: "sent",
+      subject: "Committed sent production notice",
+      received_on: null,
+      sent_on: "2026-08-02",
+      matter_links: [
+        { matter_id: "matter-1", matter_code: "MAT-001", matter_title: "Alpha v State" },
+        { matter_id: "matter-2", matter_code: "MAT-002", matter_title: "Beta v Board" },
+      ],
+      filename: null,
+      has_file: false,
+      created_at: "2026-08-02T09:00:00Z",
+      updated_at: "2026-08-02T09:00:00Z",
+    });
+    const uploaded = notice({
+      ...created,
+      filename: "sent-notice.pdf",
+      has_file: true,
+      content_type: "application/pdf",
+      size_bytes: 12,
+      updated_at: "2026-08-02T09:01:00Z",
+    });
+    createNoticeMock.mockResolvedValue(created);
+    uploadNoticeFileMock.mockResolvedValue(uploaded);
+    render(withClient(<NoticesPage />));
+
+    await screen.findByText("No received notices");
+    fireEvent.click(screen.getByRole("button", { name: "New notice" }));
+    const dialog = await screen.findByTestId("create-notice-dialog");
+    fireEvent.change(within(dialog).getByLabelText("Direction"), {
+      target: { value: "sent" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Subject"), {
+      target: { value: uploaded.subject },
+    });
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: /MAT-001/ }));
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: /MAT-002/ }));
+    const file = new File(["notice bytes"], "sent-notice.pdf", {
+      type: "application/pdf",
+    });
+    fireEvent.change(within(dialog).getByLabelText("Notice document (optional)"), {
+      target: { files: [file] },
+    });
+
+    const listCallsBeforeCreate = listNoticesMock.mock.calls.length;
+    listNoticesMock.mockImplementation(() => new Promise(() => undefined));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create notice" }));
+
+    await waitFor(() => expect(uploadNoticeFileMock).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.queryByTestId("create-notice-dialog")).not.toBeInTheDocument(),
+    );
+    expect(listNoticesMock).toHaveBeenCalledTimes(listCallsBeforeCreate);
+
+    fireEvent.click(screen.getByTestId("notices-sent-tab"));
+    const sentRow = await screen.findByTestId(`notice-row-${uploaded.id}`);
+    expect(sentRow).toHaveTextContent(uploaded.subject);
+    expect(sentRow).toHaveTextContent("MAT-001");
+    expect(sentRow).toHaveTextContent("MAT-002");
+    expect(
+      within(sentRow).getByRole("button", { name: "Download sent-notice.pdf" }),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(listNoticesMock).toHaveBeenCalledTimes(listCallsBeforeCreate + 1),
+    );
+  });
+
+  it("keeps a file-less committed notice actionable when its upload fails", async () => {
+    const created = notice({
+      id: "upload-failed-notice",
+      subject: "Committed notice with failed upload",
+      filename: null,
+      has_file: false,
+      created_at: "2026-08-02T10:00:00Z",
+      updated_at: "2026-08-02T10:00:00Z",
+    });
+    createNoticeMock.mockResolvedValue(created);
+    uploadNoticeFileMock.mockRejectedValue(new Error("scanner unavailable"));
+    render(withClient(<NoticesPage />));
+
+    await screen.findByText("No received notices");
+    fireEvent.click(screen.getByRole("button", { name: "New notice" }));
+    const dialog = await screen.findByTestId("create-notice-dialog");
+    fireEvent.change(within(dialog).getByLabelText("Subject"), {
+      target: { value: created.subject },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Notice document (optional)"), {
+      target: {
+        files: [
+          new File(["notice bytes"], "failed-upload.pdf", {
+            type: "application/pdf",
+          }),
+        ],
+      },
+    });
+
+    listNoticesMock.mockImplementation(() => new Promise(() => undefined));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create notice" }));
+
+    const row = await screen.findByTestId(`notice-row-${created.id}`);
+    expect(row).toHaveTextContent(created.subject);
+    expect(
+      within(row).getByRole("button", {
+        name: `Attach document for ${created.subject}`,
+      }),
+    ).toBeInTheDocument();
+    expect(within(row).queryByRole("button", { name: /Download/i })).toBeNull();
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      expect.stringContaining("Notice saved, but its document was not attached"),
+    );
+  });
+
   it("creates a sent notice linked to multiple matters with an optional owner", async () => {
     render(withClient(<NoticesPage />));
 
@@ -790,17 +904,20 @@ describe("centralized notice management", () => {
     });
 
     await waitFor(() =>
-      expect(listNoticesMock).toHaveBeenCalledWith({
-        limit: 100,
-        cursor: null,
-        direction: "received",
-        query: "deep server",
-        status: "Awaiting tribunal review",
-        matter_id: "matter-1",
-        owner_membership_id: "owner-2",
-        due_from: "2026-07-01",
-        due_to: "2026-07-31",
-      }),
+      expect(listNoticesMock).toHaveBeenCalledWith(
+        {
+          limit: 100,
+          cursor: null,
+          direction: "received",
+          query: "deep server",
+          status: "Awaiting tribunal review",
+          matter_id: "matter-1",
+          owner_membership_id: "owner-2",
+          due_from: "2026-07-01",
+          due_to: "2026-07-31",
+        },
+        expect.objectContaining({ signal: expect.anything() }),
+      ),
     );
     expect(await screen.findByText("Deep server match")).toBeInTheDocument();
     expect(screen.queryByText("Unfiltered first-page row")).not.toBeInTheDocument();
@@ -866,6 +983,7 @@ describe("centralized notice management", () => {
         cursor: "notice-page-2",
         direction: "received",
       }),
+      expect.objectContaining({ signal: expect.anything() }),
     );
 
     // Changing a server filter creates a new query key: the old first and
@@ -877,16 +995,19 @@ describe("centralized notice management", () => {
     expect(await screen.findByText("Server-only match")).toBeInTheDocument();
     expect(screen.queryByText("First page notice")).not.toBeInTheDocument();
     expect(screen.queryByText("Later page notice")).not.toBeInTheDocument();
-    expect(listNoticesMock).toHaveBeenCalledWith({
-      limit: 100,
-      cursor: null,
-      direction: "received",
-      query: "server-only match",
-      status: undefined,
-      matter_id: undefined,
-      owner_membership_id: undefined,
-      due_from: undefined,
-      due_to: undefined,
-    });
+    expect(listNoticesMock).toHaveBeenCalledWith(
+      {
+        limit: 100,
+        cursor: null,
+        direction: "received",
+        query: "server-only match",
+        status: undefined,
+        matter_id: undefined,
+        owner_membership_id: undefined,
+        due_from: undefined,
+        due_to: undefined,
+      },
+      expect.objectContaining({ signal: expect.anything() }),
+    );
   });
 });

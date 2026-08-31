@@ -16,14 +16,14 @@
     "execution_policy": "codex_owned_single_ordered_queue; implement first and run the automated check and exact-release verification batch at the end",
     "active_slice": "IPLF-070A",
     "checkpoint": {
-      "recorded_at": "2026-08-31T07:27:27+05:30",
-      "repository_revision": "3c1324e31659e8f2cbbf7f8c18c374f236b7566a729b0b1f43020b5fced568f7",
-      "environment": "IPLF-061/062/063/064/065 exact production releases remain verified at main 6ace3780553c025bcc71fddd5e8af716863aa8a9. IPLF-066A/066B are implemented and locally verified after current-main integration: fresh isolated Docker/PostgreSQL migration and complete index health, 172/174 browser passes with two intentional provider/deployed-only skips, 3,774 API passes with 135 environment/provider skips, 800/800 web tests, production web build, Ruff, governance and AI-safety gates. Hosted CI, merge and deployment remain required.",
-      "completed_scope": "IPLF-066 now owns one tenant-private projection/event/access-manifest boundary with bounded provider-minimal rebuilds, SQL ACL prefiltering, hydration/delivery reauthorization, identifier-only cache partitioning, synchronous tombstones, saved-output/intelligent-review/portal revocation, privacy-bounded outcomes, durable maintenance retries/lag alerts and a narrowly delegated approved private-index disposition adapter. It does not duplicate public corpus, canonical access/source/retention/legal-hold owners or claim the remaining IPLF-071 export/object/backup/offboarding scope.",
+      "recorded_at": "2026-09-01T01:30:57+05:30",
+      "repository_revision": "cc491c644c2c360ec7cb29c71e18d8532c132f59",
+      "environment": "Production serves exact main cc491c644c2c360ec7cb29c71e18d8532c132f59 through API revision caseops-api-00399-8xj and web revision caseops-web-00377-bsn; fixture bootstrap execution caseops-ip-qa-bootstrap-8lhwt completed before verification. In GitHub Actions run 33431768233, exact-release identity, the IPLF-039F fixture preflight and the isolated Run IPLF-039F cost acceptance step passed. The workflow concluded failure because the broader RAM batch had unrelated database-lock, Notice-visibility and intelligent-review structured-response failures; those failures are not credited as green.",
+      "completed_scope": "IPLF-066 owns the bounded tenant-private projection/event/access-manifest boundary recorded in its evidence. IPLF-039F is now deployment-verified at the exact production release: matterless nonbillable capture, append-only correction lineage, active-replacement billing exclusion and complete-Matter preservation passed its isolated dated production acceptance. Of 144 implementation slices, 25 remain repository-incomplete.",
       "program_state": "PROGRAM INCOMPLETE",
       "next_slice": "IPLF-070A",
-      "next_action": "Create the integrated commit only after this green local gate, rerun exact-commit Docker acceptance, require PR and post-main CI/Security/CodeQL, then deploy migration-first and capture immutable-image production scheduler, alert, index-health and dated browser evidence.",
-      "evidence_ref": "docs/ip-implementation/evidence/m6/IPLF-066B/local-2026-08-31.md"
+      "next_action": "Codex continues the dependency-ready IPLF-070A repository work and runs the integrated automated check and exact-release verification batch at the end.",
+      "evidence_ref": "docs/ip-implementation/evidence/m3/IPLF-039F/cost-finalization-2026-08-30.md"
     },
     "work_owner": {
       "owner": "Codex",
@@ -6985,15 +6985,16 @@
         "docs/ip-implementation/evidence/m2/IPLF-028B/route-handoff-2026-08-20.md",
         "docs/ip-implementation/evidence/m2/IPLF-028A/tenant-review-contract-2026-08-20.md",
         "docs/ip-implementation/evidence/m2/IPLF-028A/tenant-review-contract-implemented-2026-08-22.md",
-        "docs/ip-implementation/RETENTION_SCHEDULE_BASELINE_2026-08-22.md"
+        "docs/ip-implementation/RETENTION_SCHEDULE_BASELINE_2026-08-22.md",
+        "docs/BUG_ANALYSIS_AND_PERMANENT_LEARNINGS_2026-08-24.md"
       ],
       "evidence_metadata": [],
       "blockers": [
         {
           "id": "IPLF-028A-POLICY-AND-HOLD-AUTHORIZATION",
-          "summary": "Two of the four named artefacts now exist and two do not. IMPLEMENTED: the legal-hold activation/release workflow (DATA-GOV-05), and the step-up/four-eyes decision for data-operation execution (PR #267). MECHANISM ONLY: the retention schedule has a propose/approve/activate/retire lifecycle under four eyes and step-up (PR #273), but no schedule CONTENT has been approved - which classes are kept, for how long, on what legal basis is a legal decision, and while none exists a retention purge cannot be authorized at all. CLOSED 2026-08-22: the tenant-facing review contract now exists. Three routes expose the previously unrouted approval service - review/request, review/reject and review/approve - gated on a new data_operations:review capability mapped to owner+admin rather than on the owner-only audit:export the read routes use, because a four-eyes control reachable only by owners is unsatisfiable for a single-owner tenant. Approving authorises an execution in status planned and performs none: execute still refuses with a typed 503 and the approve response carries executed:false. Six route tests plus the role-guard sweep; the capability choice was falsified by flipping the route back to audit:export and watching two tests fail. NOT closed by this: no UI screen yet, so the workflow is reachable by an integration and not by a lawyer in a browser; and no deployed acceptance. STILL OPEN and not closeable by code: no retention schedule CONTENT has been approved - which classes are kept, for how long, on what legal basis is a legal decision, and while none exists a retention purge cannot be authorized at all. Evidence: docs/ip-implementation/evidence/m2/IPLF-028A/policy-authorization-2026-08-20.md, docs/ip-implementation/evidence/m2/IPLF-028A/tenant-review-contract-2026-08-20.md and docs/ip-implementation/evidence/m2/IPLF-028A/tenant-review-contract-implemented-2026-08-22.md. | RETENTION CONTENT 2026-08-22: the owner instructed engineering to assume suitable values rather than wait, so an assumed baseline now exists for all six admitted data classes with per-class reasoning and the statute a practitioner must confirm. It is labelled assumed_baseline, not approved: no version is activated and approve_execution still refuses a retention purge citing no active version. The blocker narrows rather than closes - the content question is answered well enough to build on but not authoritatively, and it is no longer a reason to stop. Evidence: docs/ip-implementation/RETENTION_SCHEDULE_BASELINE_2026-08-22.md.",
-          "owner": "Codex for implementation/evidence; the authorized legal/privacy owner only for the retention-policy legal authority",
-          "evidence_needed": "An immutable policy version with recorded legal authority, machine-enforced dual-control and step-up controls, explicit jurisdiction/tenant exceptions, and executable user-workflow tests.",
+          "summary": "CURRENT CONTRACT 2026-08-24: request/reject/approve routes, the data_operations:review capability and the review UI were removed because a dry-run manifest is permanently non-executable. The server derives tenant scope, registered class, target hash and candidate count; former review routes return HTTP 404 and execution remains machine-blocked with typed HTTP 503. The 20-22 August review-contract documents are historical evidence only. Future effectful retention execution remains unavailable until an active policy version with recorded legal authority and machine-enforced scope, hold, licence, idempotency and recovery prerequisites exists. The assumed retention baseline is not active authority and does not block current dry-run implementation or release.",
+          "owner": "Codex for all implementation, verification and release evidence; effectful retention stays unavailable until its machine-verifiable prerequisites exist",
+          "evidence_needed": "For any future effectful executor: an immutable active policy version with recorded legal authority, explicit jurisdiction and tenant exceptions, and machine-enforced scope, hold, licence, idempotency, recovery and exact-release tests. No review route or manual checkpoint is required for the non-executable diagnostic record.",
           "safe_fallback": "Keep execution impossible in the schema and service; preserve only opaque dry-run evidence and typed 503 execute rejection.",
           "milestone_impact": "Blocks only activation of retention-driven destructive execution. It does not block the legal-hold lifecycle, implementation, verification, dry-run behavior, or a fail-closed release.",
           "next_independent_slice": "Codex completes and exact-release tests every fail-closed path; do not infer legal authority for destructive retention effects from schema presence or synthetic tests."
@@ -7005,22 +7006,22 @@
           "evidence_needed": "A dated automated rehearsal on sanitized production-shaped database/object/image/schema fixtures, with measured application readiness, RPO/RTO, tenant-export verification, worker fencing, tombstone reapplication and unrelated-endpoint responsiveness.",
           "safe_fallback": "Keep recovery claims blocked. Do not treat an isolated SQLite migration test or a historical skipped-test note as backup, object-store, restore, export, or resilience evidence.",
           "milestone_impact": "Blocks the RES-13 recovery claim until the automated sanitized rehearsal passes; no additional checkpoint exists.",
-          "next_independent_slice": "Codex builds and runs the sanitized rehearsal through the canonical automation; a customer-data execution, if ever necessary, uses its separate immutable destructive-operation authorization."
+          "next_independent_slice": "Codex builds and runs the sanitized rehearsal through the canonical automation; a customer-data execution, if ever necessary, remains behind a separate immutable machine-authorization boundary."
         },
         {
           "id": "IPLF-028A-DATA-CLASS-COVERAGE",
           "summary": "All six admitted data classes are governance metadata - holds, hold items, retention policies, retention versions, data operations and operation items. None is client data. So no retention schedule over the admitted set can authorise purging a matter file, a document, a communication or a billing record, whatever periods it names: those classes are not registered, and an unregistered class cannot be purged. Drafting the schedule surfaced this; it was previously hidden behind the assumption that approved content was the last step before a working purge workflow.",
-          "owner": "Codex for the data-class registry; Records/Privacy supplies only the legally authoritative retention terms",
+          "owner": "Codex for the data-class registry, machine controls, tests and release evidence; any legally authoritative retention terms are recorded inputs rather than an implementation gate",
           "evidence_needed": "Machine-validated registration of every client-data class the operation can reach, each bound to versioned retention terms and legal authority, before any export/purge/offboarding workflow can affect a real tenant.",
           "safe_fallback": "Unregistered classes stay unpurgeable, which is the fail-closed direction: the gap costs capability, never data.",
-          "milestone_impact": "Bounds what IPLF-028A can deliver. The lifecycle, four eyes, step-up, review contract and UI are all complete and correct over a set that contains no client data.",
-          "next_independent_slice": "Codex registers client-data classes through the machine-validated data-class process; do not widen the runtime allowlist directly."
+          "milestone_impact": "Bounds what IPLF-028A can deliver. Server-derived catalog and tenant scope, immutable dry-run evidence, refusal tiers, the typed HTTP 503 execution boundary and the diagnostic UI are complete over a set that contains no client data; no review or approval route exists.",
+          "next_independent_slice": "Codex registers client-data classes through the machine-validated data-class process and proves the effect path's machine authorization boundary; do not widen the runtime allowlist directly."
         }
       ],
       "next_actions": [
         "Keep the new records-governance tables unseeded and all repository implementation fail-closed; complete dry-run routes, workers, schedulers, adapters, tests, and deployment wiring now, but do not activate effectful execute mode.",
         "DONE 2026-08-19: the six-class dry-run constant is replaced by a compiled runtime projection of the reviewed IPLF-028A/IPLF-027A registries, rendered by scripts/ip_data_class_projection.py and gated in CI by its validate verb. What changed is provenance, versioning and failure behaviour: the projection carries fingerprints of the artifacts and the ORM schema it was rendered from, refuses the whole request when it is missing or no longer describes the build, and distinguishes an inventoried-but-unreviewed table from an unknown id. What did NOT change is which classes are admitted - still exactly the six reviewed ones. The remaining 260 inventoried tables are now a published count in the data_class_review_coverage integrity check rather than an absence.",
-        "Design, build, test, and deploy real-command contracts behind default-off, dry-run, effectless controls; Codex closes policy schema, hold, step-up, four-eyes, and user-workflow evidence. Require the exact legal/privacy authority only immediately before a non-anonymized retention-driven effect.",
+        "Design, build, test, and deploy future effect commands behind default-off, machine-enforced controls; Codex owns the policy schema, hold, scope, licence, idempotency, recovery, user workflow and exact-release evidence. Keep all effects unavailable until the recorded authority and machine prerequisites exist.",
         "After exact integrated-candidate CI and machine preflight, Codex runs the required sanitized database-plus-object cutover restore and tenant-export dry run and records the automated evidence."
       ],
       "data_impact": [
@@ -9922,34 +9923,21 @@
         "docs/ip-implementation/evidence/m3/IPLF-039F/unimplemented-paths-closed-2026-08-20.md",
         "docs/ip-implementation/evidence/m3/IPLF-039F/cost-finalization-2026-08-30.md"
       ],
-      "blockers": [
-        {
-          "id": "IPLF-039F-EXACT-DEPLOYED-ACCEPTANCE",
-          "state": "active",
-          "summary": "The dated deployed acceptance path now exists but has not run against an exact deployed revision in the dedicated production fixture tenant.",
-          "owner": "Codex release workflow",
-          "evidence_needed": "Deploy the integrated main revision, verify its public release identity, and pass the fail-closed IPLF-039F production Playwright path in the dedicated test tenant without local database or shell access.",
-          "safe_fallback": "Keep the slice release-blocked and retain all matterless costs as nonbillable immutable evidence; do not infer deployed acceptance from repository or local Docker proof.",
-          "milestone_impact": "Blocks only IPLF-039F deployment-verified closure; repository implementation and local verification can proceed independently.",
-          "next_independent_slice": "Continue the next dependency-ready IP repository slice while exact deployed acceptance remains pending."
-        }
-      ],
-      "next_actions": [
-        "Integrate the 2026-08-30 append-only correction/nonbilling-effect closure, run full exact-candidate CI, deploy the integrated main revision, and run the fail-closed dated production Playwright configuration before release closure."
-      ],
+      "blockers": [],
+      "next_actions": [],
       "data_impact": [
         "Adds tenant-scoped ip_cost_item_corrections as append-only void/supersession lineage, strengthens ip_cost_items database constraints, requires active same-tenant actors at write time, and refuses destructive downgrade after correction evidence exists."
       ],
       "documentation_impact": [
-        "Updates the IPLF-039F evidence record and generated data-governance inventory for the correction lineage class."
+        "Updates the IPLF-039F evidence record and generated data-governance inventory for the correction lineage class, including the isolated exact-release production acceptance and the failed overall workflow boundary."
       ],
-      "implementation_status": "in_progress",
-      "verification_status": "not_run",
-      "release_status": "blocked",
+      "implementation_status": "implemented",
+      "verification_status": "passed",
+      "release_status": "deployment_verified",
       "source_kind": "prd_explicit",
       "scope_source": "IPLF-039F",
       "primary_behavior": "Add `ip_cost_items` and immutable evidence/billing links; keep time/invoice/payment/spend in existing Matter owners and prove one amount/accounting owner across reports and exports.",
-      "migration_boundary": "Unreleased revision 20260831_0002 follows private-disposition revision 20260831_0001, normalizes existing projections, adds append-only ip_cost_item_corrections and dialect-specific immutable/cascade-safe/active-same-tenant actor guards, creates correction indexes on the new empty table before writers, and refuses downgrade once correction evidence exists; hostile direct writes and restore-forward refusal are verified on SQLite and PostgreSQL before deployment.",
+      "migration_boundary": "Deployed revision 20260831_0002 follows private-disposition revision 20260831_0001, normalizes existing projections, adds append-only ip_cost_item_corrections and dialect-specific immutable/cascade-safe/active-same-tenant actor guards, creates correction indexes on the new empty table before writers, and refuses downgrade once correction evidence exists; hostile direct writes and restore-forward refusal were verified on SQLite and PostgreSQL before deployment.",
       "release_boundary": "Compatible-train exact-candidate CI and dated deployed acceptance for activated/supported scope; capability-disabled fail-closed scope may share the train.",
       "evidence_metadata": [
         {
@@ -9960,9 +9948,18 @@
           "assertions": "slice-specific API, persistence, permission, UI, and deployed behavior assertions",
           "result": "passed",
           "recorded_at": "2026-08-02T06:25:00+05:30"
+        },
+        {
+          "ref": "docs/ip-implementation/evidence/m3/IPLF-039F/cost-finalization-2026-08-30.md",
+          "revision": "cc491c644c2c360ec7cb29c71e18d8532c132f59",
+          "environment": "Production API revision caseops-api-00399-8xj and web revision caseops-web-00377-bsn after bootstrap execution caseops-ip-qa-bootstrap-8lhwt. GitHub Actions run 33431768233 verified exact identity and passed the isolated IPLF-039F cost acceptance; the overall workflow failed because of unrelated database-lock, Notice-visibility and intelligent-review structured-response failures.",
+          "fixtures": "Dedicated IPLF-039F production tenant, matterless IP docket and complete declared Matter set",
+          "assertions": "Public exact-release identity; matterless nonbillable capture; append-only supersession and void; exactly one active replacement; source and correction history retained; complete Matter billing enumeration unchanged",
+          "result": "passed",
+          "recorded_at": "2026-09-01T01:30:57+05:30"
         }
       ],
-      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written. | IPLF-039F 2026-08-20: the four unwritten per-path tests now exist and pass, and the path they described is implemented rather than contradicted. add_ip_cost_item no longer refuses every cost on a docket with no Matter; an exchange conversion preserves the original amount beside the rate, source and conversion time; a provider estimate is a distinct cost nature that cannot reconcile against the ledger; and a confidential rate is withheld from readers without ip:fees_manage. Each rule is enforced by a CHECK constraint as well as by the request model. verification_status stays not_run and release_status stays blocked: this is repository proof, not deployed acceptance. | IPLF-039F 2026-08-30 finalization: the remaining matterless-cost closure is enforced beyond route validation. PostgreSQL and SQLite freeze immutable source facts, enforce terminal matterless/nonbillable projections and tenant-correlated actors, and reject direct deletion while preserving parent-docket cascade. Erroneous evidence is corrected only by an append-only void/supersession record with an optional full replacement; reconciliation, control totals, renewals, foreign-associate spend, Madrid actions and recordals exclude inactive sources. Local Docker and public deployed Playwright paths are separate: the production path has no local shell/database access and fails closed without an exact release plus dedicated tenant/docket/complete-Matter fixture contract. Exact deployed acceptance is still absent, so status remains in_progress / not_run / blocked."
+      "allocation_review": "PRD-explicit slice preserved and reviewed during Phase 0 reconciliation. | Evidence-defect audit 2026-08-14: this slice claimed passed/deployment_verified while citing unwritten planned: tests for the journey paths it owns. Verification is reset to not_run and release to blocked until those per-path tests exist. The implementation and its production deployment evidence are unchanged; what is corrected is the claim that the owned paths were verified by tests that were never written. | IPLF-039F 2026-08-20: the four unwritten per-path tests now exist and pass, and the path they described is implemented rather than contradicted. add_ip_cost_item no longer refuses every cost on a docket with no Matter; an exchange conversion preserves the original amount beside the rate, source and conversion time; a provider estimate is a distinct cost nature that cannot reconcile against the ledger; and a confidential rate is withheld from readers without ip:fees_manage. Each rule is enforced by a CHECK constraint as well as by the request model. verification_status stays not_run and release_status stays blocked: this is repository proof, not deployed acceptance. | IPLF-039F 2026-08-30 finalization: the remaining matterless-cost closure is enforced beyond route validation. PostgreSQL and SQLite freeze immutable source facts, enforce terminal matterless/nonbillable projections and tenant-correlated actors, and reject direct deletion while preserving parent-docket cascade. Erroneous evidence is corrected only by an append-only void/supersession record with an optional full replacement; reconciliation, control totals, renewals, foreign-associate spend, Madrid actions and recordals exclude inactive sources. Local Docker and public deployed Playwright paths are separate: the production path has no local shell/database access and fails closed without an exact release plus dedicated tenant/docket/complete-Matter fixture contract. | IPLF-039F 2026-09-01 production closure: exact main cc491c644c2c360ec7cb29c71e18d8532c132f59 served through API caseops-api-00399-8xj and web caseops-web-00377-bsn after bootstrap caseops-ip-qa-bootstrap-8lhwt. GitHub Actions run 33431768233 verified exact identity and fixtures, then its isolated Run IPLF-039F cost acceptance step passed. The workflow concluded failure because its broader RAM batch had unrelated database-lock, Notice-visibility and intelligent-review structured-response failures; those are not counted as green. The isolated fail-closed acceptance closes this slice as implemented / passed / deployment_verified."
     },
     {
       "id": "IPLF-039G",

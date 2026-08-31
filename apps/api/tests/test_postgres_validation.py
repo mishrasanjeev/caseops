@@ -9736,3 +9736,124 @@ def test_private_retrieval_prefilters_before_bounded_rank_on_postgres(
                 PrivateIndexProjection.is_tombstoned.is_(False),
             )
         ) is None
+
+
+def test_private_rebuild_releases_interactive_parent_locks_on_postgres(
+    pg_engine,
+    monkeypatch,
+) -> None:
+    """A rebuild cannot hold Company/Matter locks across its bulk phases.
+
+    Production request failures were caused by the scheduled rebuild retaining
+    tenant and scope-parent locks while it enumerated and wrote a whole corpus.
+    SQLite cannot reproduce PostgreSQL's FK/row-lock conflicts, so this test
+    exercises both transaction boundaries against pgvector/PostgreSQL.
+    """
+
+    from caseops_api.db.models import Company, Matter
+    from caseops_api.services import private_retrieval_jobs
+
+    company_id = str(uuid4())
+    initial_matter_ids = (str(uuid4()), str(uuid4()))
+    inserted_matter_id = str(uuid4())
+    now = datetime.now(UTC)
+
+    with Session(pg_engine) as session:
+        session.add(
+            Company(
+                id=company_id,
+                name="PostgreSQL Bounded Rebuild Firm",
+                slug=f"pg-bounded-rebuild-{company_id[:8]}",
+                company_type="law_firm",
+                tenant_key=company_id,
+            )
+        )
+        session.add_all(
+            [
+                Matter(
+                    id=matter_id,
+                    company_id=company_id,
+                    title=f"Bounded rebuild matter {ordinal}",
+                    matter_code=f"PG-REBUILD-{matter_id[:8]}",
+                    status="active",
+                    practice_area="Intellectual Property",
+                    forum_level="high_court",
+                    is_active=True,
+                    updated_at=now,
+                )
+                for ordinal, matter_id in enumerate(initial_matter_ids, start=1)
+            ]
+        )
+        session.commit()
+
+    real_inputs = private_retrieval_jobs._private_projection_inputs
+    inserted_during_enumeration = False
+
+    def insert_matter_then_enumerate(session, **kwargs):
+        nonlocal inserted_during_enumeration
+        with Session(pg_engine) as concurrent:
+            concurrent.execute(text("SET LOCAL lock_timeout = '300ms'"))
+            concurrent.add(
+                Matter(
+                    id=inserted_matter_id,
+                    company_id=company_id,
+                    title="Interactive matter created during rebuild",
+                    matter_code=f"PG-REBUILD-{inserted_matter_id[:8]}",
+                    status="active",
+                    practice_area="Intellectual Property",
+                    forum_level="high_court",
+                    is_active=True,
+                    updated_at=now,
+                )
+            )
+            concurrent.commit()
+        inserted_during_enumeration = True
+        return real_inputs(session, **kwargs)
+
+    monkeypatch.setattr(
+        private_retrieval_jobs,
+        "_private_projection_inputs",
+        insert_matter_then_enumerate,
+    )
+
+    real_upsert = private_retrieval_jobs.upsert_private_projection
+    write_count = 0
+    parent_lock_acquired_between_batches = False
+    first_scope_parent_id: str | None = None
+
+    def lock_parent_then_upsert(session, **kwargs):
+        nonlocal write_count, parent_lock_acquired_between_batches, first_scope_parent_id
+        write_count += 1
+        payload = kwargs["payload"]
+        if write_count == 1:
+            first_scope_parent_id = payload.scopes[0].scope_id
+        if write_count == 2:
+            assert first_scope_parent_id is not None
+            with Session(pg_engine) as concurrent:
+                concurrent.execute(text("SET LOCAL lock_timeout = '300ms'"))
+                concurrent.execute(
+                    text("SELECT id FROM matters WHERE id = :id FOR UPDATE"),
+                    {"id": first_scope_parent_id},
+                )
+                concurrent.commit()
+            parent_lock_acquired_between_batches = True
+        return real_upsert(session, **kwargs)
+
+    monkeypatch.setattr(
+        private_retrieval_jobs,
+        "upsert_private_projection",
+        lock_parent_then_upsert,
+    )
+
+    with Session(pg_engine) as session:
+        summary = private_retrieval_jobs.rebuild_private_index(
+            session,
+            company_id=company_id,
+            write_batch_size=1,
+            activate=True,
+        )
+        session.commit()
+
+    assert inserted_during_enumeration is True
+    assert parent_lock_acquired_between_batches is True
+    assert summary.projection_count == 3

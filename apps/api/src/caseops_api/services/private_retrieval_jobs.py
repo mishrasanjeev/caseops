@@ -53,6 +53,7 @@ from caseops_api.services.private_retrieval import (
 
 MAX_PRIVATE_REBUILD_PROJECTIONS = 2_000
 MAX_PRIVATE_PROVIDER_BATCH = 32
+MAX_PRIVATE_WRITE_BATCH = 50
 MAX_PRIVATE_EMBED_TEXT_CHARS = 4_000
 MAX_PENDING_EVENTS_PER_RUN = 100
 MAX_PRIVATE_MAINTENANCE_COMPANIES = 50
@@ -563,15 +564,17 @@ def rebuild_private_index(
     allow_external_provider: bool = False,
     provider_deadline_seconds: float = DEFAULT_PRIVATE_PROVIDER_DEADLINE_SECONDS,
     projection_limit: int = MAX_PRIVATE_REBUILD_PROJECTIONS,
+    write_batch_size: int = MAX_PRIVATE_WRITE_BATCH,
     activate: bool = False,
 ) -> PrivateRebuildSummary:
     """Build and verify one tenant shadow without stale-worker resurrection.
 
-    Source enumeration and shadow creation are committed before any provider
-    call.  The provider therefore runs without tenant/generation row locks.
-    Every later write presents the exact access/tombstone epochs captured with
-    that source snapshot; an event landing during provider I/O makes the job
-    stale and the shadow is failed rather than populated or activated.
+    Shadow creation is committed before source enumeration or any provider
+    call. The worker therefore never scans a tenant corpus while retaining the
+    company/generation authority locks. Every later write presents the exact
+    access/tombstone epochs captured with the shadow; an event landing during
+    enumeration or provider I/O makes the job stale and the shadow is failed
+    rather than populated or activated.
     """
 
     if session.new or session.dirty or session.deleted:
@@ -590,31 +593,38 @@ def rebuild_private_index(
     if unresolved_event_count:
         raise PrivateRetrievalInvariantError(
             "Private rebuild requires every projection event to reach a terminal applied state."
-        )
+    )
     active = ensure_active_private_generation(session, company_id=company_id)
     shadow = create_shadow_private_generation(session, company_id=company_id)
-    payloads = _private_projection_inputs(
-        session,
-        company_id=company_id,
-        limit=projection_limit,
-    )
-    payloads = _reuse_current_embeddings(
-        session,
-        company_id=company_id,
-        generation_id=active.id,
-        payloads=payloads,
-        limit=max(1, min(projection_limit, MAX_PRIVATE_REBUILD_PROJECTIONS)),
-    )
     previous_generation_id = str(active.id)
     shadow_generation_id = str(shadow.id)
     expected_access_policy_generation = int(shadow.access_policy_generation)
     expected_tombstone_generation = int(shadow.tombstone_generation)
-    # A provider callback must be able to commit a revocation while this job is
-    # waiting. The job owns this transaction boundary and publishes only an
-    # empty, non-readable building generation before releasing its locks.
+    # Creating the shadow serializes on the Company row. Release that stable
+    # tenant lock before corpus enumeration, which can be production-sized.
+    # Source/access changes advance one of the captured epochs and update the
+    # building shadow, so later writes still reject a stale enumeration.
     session.commit()
+    payloads: list[PrivateProjectionInput] = []
     provider_batches = 0
     try:
+        payloads = _private_projection_inputs(
+            session,
+            company_id=company_id,
+            limit=projection_limit,
+        )
+        payloads = _reuse_current_embeddings(
+            session,
+            company_id=company_id,
+            generation_id=previous_generation_id,
+            payloads=payloads,
+            limit=max(1, min(projection_limit, MAX_PRIVATE_REBUILD_PROJECTIONS)),
+        )
+        # A provider callback must be able to commit a revocation while this
+        # job is waiting. Release the read-only enumeration transaction as
+        # well; the published shadow remains empty and non-readable until
+        # bounded writes.
+        session.commit()
         if provider is not None and payloads:
             payloads, provider_batches = _embed_private_payloads(
                 payloads,
@@ -622,15 +632,21 @@ def rebuild_private_index(
                 allow_external_provider=allow_external_provider,
                 provider_deadline_seconds=provider_deadline_seconds,
             )
-        for payload in payloads:
-            upsert_private_projection(
-                session,
-                company_id=company_id,
-                generation_id=shadow_generation_id,
-                payload=payload,
-                expected_access_policy_generation=expected_access_policy_generation,
-                expected_tombstone_generation=expected_tombstone_generation,
-            )
+        bounded_write_batch = max(1, min(write_batch_size, MAX_PRIVATE_WRITE_BATCH))
+        for offset in range(0, len(payloads), bounded_write_batch):
+            for payload in payloads[offset : offset + bounded_write_batch]:
+                upsert_private_projection(
+                    session,
+                    company_id=company_id,
+                    generation_id=shadow_generation_id,
+                    payload=payload,
+                    expected_access_policy_generation=expected_access_policy_generation,
+                    expected_tombstone_generation=expected_tombstone_generation,
+                )
+            # The shadow is unreadable while building. Commit each bounded
+            # batch so generation and scope-parent locks cannot accumulate
+            # across a production-sized corpus.
+            session.commit()
         mark_private_generation_ready(
             session,
             company_id=company_id,
@@ -683,15 +699,23 @@ def process_pending_private_projection_events(
     max_attempts: int = MAX_PRIVATE_EVENT_ATTEMPTS,
     retry_backoff_seconds: int = DEFAULT_PRIVATE_EVENT_RETRY_BACKOFF_SECONDS,
     now: datetime | None = None,
+    commit_after_each_event: bool = False,
 ) -> tuple[str, ...]:
-    """Claim and apply a bounded tenant event batch with durable retry state."""
+    """Claim and apply a bounded tenant event batch with durable retry state.
+
+    ``commit_after_each_event`` is reserved for a dedicated worker session. It
+    prevents one maintenance run from retaining the active-generation lock
+    across the whole batch and starving unrelated interactive writes. Request
+    paths keep the default caller-owned transaction boundary.
+    """
 
     bounded = max(1, min(limit, MAX_PENDING_EVENTS_PER_RUN))
     bounded_attempts = max(1, min(max_attempts, 10))
     bounded_backoff = max(1, min(retry_backoff_seconds, 3_600))
     current = now or datetime.now(UTC)
-    event_ids = tuple(
-        session.scalars(
+    applied: list[str] = []
+    for _offset in range(bounded):
+        event_id = session.scalar(
             select(PrivateProjectionEvent.id)
             .where(
                 PrivateProjectionEvent.company_id == company_id,
@@ -702,12 +726,11 @@ def process_pending_private_projection_events(
                 ),
             )
             .order_by(PrivateProjectionEvent.created_at, PrivateProjectionEvent.id)
-            .limit(bounded)
+            .limit(1)
             .with_for_update(skip_locked=True)
-        ).all()
-    )
-    applied: list[str] = []
-    for event_id in event_ids:
+        )
+        if event_id is None:
+            break
         try:
             with session.begin_nested():
                 apply_private_projection_event(session, event_id=event_id)
@@ -727,15 +750,17 @@ def process_pending_private_projection_events(
                             seconds=bounded_backoff * (2 ** (event.attempt_count - 1))
                         )
                     session.flush()
-            continue
-        event = session.get(PrivateProjectionEvent, event_id)
-        if event is not None:
-            event.attempt_count = int(event.attempt_count or 0) + 1
-            event.last_attempt_at = current
-            event.next_attempt_at = None
-            event.error_code = None
-            session.flush()
-        applied.append(event_id)
+        else:
+            event = session.get(PrivateProjectionEvent, event_id)
+            if event is not None:
+                event.attempt_count = int(event.attempt_count or 0) + 1
+                event.last_attempt_at = current
+                event.next_attempt_at = None
+                event.error_code = None
+                session.flush()
+            applied.append(event_id)
+        if commit_after_each_event:
+            session.commit()
     return tuple(applied)
 
 
@@ -1035,6 +1060,7 @@ __all__ = [
     "MAX_PRIVATE_EVENT_ATTEMPTS",
     "MAX_PENDING_EVENTS_PER_RUN",
     "MAX_PRIVATE_PROVIDER_BATCH",
+    "MAX_PRIVATE_WRITE_BATCH",
     "MAX_PRIVATE_MAINTENANCE_COMPANIES",
     "MAX_PRIVATE_REBUILD_PROJECTIONS",
     "PrivateIntegrityReport",

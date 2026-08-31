@@ -128,7 +128,7 @@
         "cloud_sql_instances": "perfect-period-305406:asia-south1:caseops-db",
         "cpu": "1",
         "memory": "512Mi",
-        "max_retries": 2
+        "max_retries": 0
       }
     },
     {
@@ -167,7 +167,7 @@
         "cloud_sql_instances": "perfect-period-305406:asia-south1:caseops-db",
         "cpu": "1",
         "memory": "1Gi",
-        "max_retries": 3
+        "max_retries": 0
       }
     },
     {

@@ -145,6 +145,7 @@ export type UpdateNoticeInput = UpdateNoticeFields & {
 
 export async function listNotices(
   params: NoticeListParams = {},
+  options: { signal?: AbortSignal } = {},
 ): Promise<NoticeListResponse> {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -152,9 +153,10 @@ export async function listNotices(
       query.set(key, String(value));
     }
   }
-  return apiRequest<NoticeListResponse>(
-    `/api/notices/${query.size > 0 ? `?${query.toString()}` : ""}`,
-  );
+  const path = `/api/notices/${query.size > 0 ? `?${query.toString()}` : ""}`;
+  return options.signal
+    ? apiRequest<NoticeListResponse>(path, { signal: options.signal })
+    : apiRequest<NoticeListResponse>(path);
 }
 
 export async function listNoticeOwners(): Promise<NoticeOwnerOption[]> {

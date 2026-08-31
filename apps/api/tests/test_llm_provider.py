@@ -226,6 +226,119 @@ def _install_fake_openai(monkeypatch: pytest.MonkeyPatch, captured: dict) -> Non
     monkeypatch.setitem(_sys.modules, "openai", fake_module)
 
 
+def _install_fake_openai_structured(
+    monkeypatch: pytest.MonkeyPatch,
+    captured: dict,
+    *,
+    include_parsed: bool = True,
+) -> None:
+    class _FakeCompletions:
+        def create(self, **_kwargs):
+            raise AssertionError("structured generation must use the native parse contract")
+
+        def parse(self, **kwargs):
+            captured.update(kwargs)
+            captured["method"] = "parse"
+            response_format = kwargs["response_format"]
+            parsed = (
+                response_format(
+                    title="Native structured response",
+                    options=[
+                        {
+                            "label": "Option A",
+                            "confidence": "high",
+                            "supporting_citations": ["2024 TEST 1"],
+                        }
+                    ],
+                    confidence="high",
+                )
+                if include_parsed
+                else None
+            )
+
+            class _Message:
+                content = "provider text is deliberately not trusted here"
+                refusal = None
+
+                def __init__(self) -> None:
+                    self.parsed = parsed
+
+            class _Choice:
+                message = _Message()
+
+            class _Resp:
+                choices = [_Choice()]
+                usage = type("U", (), {"prompt_tokens": 3, "completion_tokens": 5})()
+
+            return _Resp()
+
+    class _FakeChat:
+        completions = _FakeCompletions()
+
+    class _FakeClient:
+        def __init__(self, *_args, **_kwargs) -> None:
+            self.chat = _FakeChat()
+
+    class _FakeLengthFinishReasonError(Exception):
+        pass
+
+    class _FakeContentFilterFinishReasonError(Exception):
+        pass
+
+    fake_module = type(
+        "FakeOpenAIModule",
+        (),
+        {
+            "OpenAI": _FakeClient,
+            "LengthFinishReasonError": _FakeLengthFinishReasonError,
+            "ContentFilterFinishReasonError": _FakeContentFilterFinishReasonError,
+        },
+    )
+    import sys as _sys
+
+    monkeypatch.setitem(_sys.modules, "openai", fake_module)
+
+
+def test_openai_generate_structured_uses_native_pydantic_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from caseops_api.services.llm import OpenAIProvider
+
+    captured: dict = {}
+    _install_fake_openai_structured(monkeypatch, captured)
+    provider = OpenAIProvider(model="gpt-5.1", api_key="k")
+
+    validated, completion = generate_structured(
+        provider,
+        schema=_Structured,
+        messages=_prompt(structured=True),
+        context=LLMCallContext(purpose="unit-test"),
+    )
+
+    assert captured["method"] == "parse"
+    assert captured["response_format"] is _Structured
+    assert validated.title == "Native structured response"
+    assert json.loads(completion.text)["options"][0]["label"] == "Option A"
+
+
+def test_openai_generate_structured_rejects_http_200_without_parsed_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from caseops_api.services.llm import OpenAIProvider
+
+    captured: dict = {}
+    _install_fake_openai_structured(monkeypatch, captured, include_parsed=False)
+    provider = OpenAIProvider(model="gpt-5.1", api_key="k")
+
+    with pytest.raises(LLMResponseFormatError, match="contained no parsed value"):
+        generate_structured(
+            provider,
+            schema=_Structured,
+            messages=_prompt(structured=True),
+            context=LLMCallContext(purpose="unit-test"),
+        )
+
+
 def test_openai_provider_floors_reasoning_model_max_completion_tokens(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

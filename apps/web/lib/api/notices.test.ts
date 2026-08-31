@@ -45,6 +45,20 @@ describe("notices API client", () => {
     );
   });
 
+  it("forwards cancellation to a notice register request", async () => {
+    const controller = new AbortController();
+
+    await listNotices(
+      { direction: "sent", limit: 100 },
+      { signal: controller.signal },
+    );
+
+    expect(apiRequestMock).toHaveBeenCalledWith(
+      "/api/notices/?direction=sent&limit=100",
+      { signal: controller.signal },
+    );
+  });
+
   it("uses JSON POST and PATCH without routing through matter attachments", async () => {
     const createInput = {
       direction: "sent" as const,

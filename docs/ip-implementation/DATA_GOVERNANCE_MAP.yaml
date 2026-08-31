@@ -9871,7 +9871,7 @@
         },
         "source_id": {
           "category_id": "external_or_provider_identifier",
-          "sql_type": "VARCHAR(36)",
+          "sql_type": "VARCHAR(120)",
           "nullable": false
         },
         "source_type": {
@@ -28027,7 +28027,7 @@
       }
     }
   ],
-  "schema_fingerprint": "b2cf7def7b1335c3e8a4c476a4e416120b7ded044d3a1b6ff9a2f0454610d361",
+  "schema_fingerprint": "46346d1c8024fcdc6ad011b2dd0f14f974cf01b91ff46b6040d70c15f6c8b7e2",
   "index_inventory": {
     "orm_index_count": 1646,
     "orm_index_fingerprint": "80c22783460246296dd168c1ec28f4c1f14cbe1a9a8c15ad87d375944ff31866",

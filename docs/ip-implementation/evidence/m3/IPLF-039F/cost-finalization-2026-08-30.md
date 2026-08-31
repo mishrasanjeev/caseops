@@ -2,9 +2,14 @@
 
 **Date:** 2026-08-30
 
+**Production closure:** 2026-09-01
+
 **Scope:** the remaining repository gap recorded in `PROGRAM_MANIFEST.yaml`
 
-**Release claim:** repository implementation only; exact deployed acceptance is not claimed
+**Release claim:** `implemented / passed / deployment_verified` at exact source
+revision `cc491c644c2c360ec7cb29c71e18d8532c132f59`, served by API revision
+`caseops-api-00399-8xj` and web revision `caseops-web-00377-bsn` after fixture
+bootstrap execution `caseops-ip-qa-bootstrap-8lhwt`
 
 ## Brutal gap analysis
 
@@ -110,16 +115,24 @@ evidence across their create and transition boundaries.
 
 | Surface | Command | Result |
 |---|---|---|
-| API + SQLite focused | migration, active-lineage, renewal, workflow, deployment and preflight contracts | **118 passed after final integration review** |
+| API + SQLite focused | migration, active-lineage, renewal, workflow, deployment and preflight contracts | **119 passed after final integration review** |
 | API lint/compile | targeted Ruff and Python compileall over the correction slice | **passed** |
 | IP UI | `npm run test --workspace @caseops/web -- app/app/ip/page.test.tsx` | **28 passed** |
 | Web + Playwright types | web typecheck plus isolated/broad Playwright test listing | **passed; dedicated spec is one test and broad RAM lists none** |
-| PostgreSQL + local Docker Playwright | fresh exact candidate | **pending** |
-| Deployed dated Playwright | `playwright.ip-cost-prod.config.ts` | **not run; exact deployed candidate/fixtures required** |
+| PostgreSQL + local Docker Playwright | fresh exact candidate | **109 PostgreSQL/pgvector tests passed; desktop shards each passed 84 with one intentional skip; mobile 4 passed; clean teardown** |
+| Hosted exact-candidate gates | API shards, web, PostgreSQL, Security, CodeQL and application Playwright | **passed; application Playwright completed in 11m22s** |
+| Deployed dated Playwright | `playwright.ip-cost-prod.config.ts` in production workflow [33431768233](https://github.com/mishrasanjeev/caseops/actions/runs/33431768233) | **isolated `Run IPLF-039F cost acceptance` step passed in 12 seconds after exact-release identity and fixture preflight passed** |
 
-The exact final-commit Docker/PostgreSQL Playwright result is intentionally not
-self-asserted inside this source-controlled document: it is run only after the
-candidate is committed and is recorded in the Draft PR/test evidence. Hosted
-CI, integration into `main`, deployment, exact production identity, and dated
-production Playwright remain required before `verification_status` or
-`release_status` can move from `not_run / blocked`.
+## Truthful workflow boundary
+
+The production workflow completed with an overall **failure** conclusion. Its
+broader RAM batch reported unrelated database-lock timeouts, a Notice-visibility
+failure, and an intelligent-review malformed structured-response failure. This
+document does not credit that workflow as green.
+
+IPLF-039F is closed only because the workflow first verified the exact release
+identity and fixtures and then ran the cost acceptance as a separately named,
+fail-closed step. That isolated step passed from `2026-08-31T20:00:45Z` through
+`20:00:57Z`; its [job record](https://github.com/mishrasanjeev/caseops/actions/runs/33431768233/job/99618571502)
+is the production evidence. The unrelated failures remain open under their own
+owners and are not hidden by this slice's `deployment_verified` status.

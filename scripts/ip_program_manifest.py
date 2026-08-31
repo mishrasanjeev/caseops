@@ -528,6 +528,9 @@ def render_views(manifest: dict[str, Any]) -> dict[Path, str]:
     slices = manifest["slices"]
     gates = manifest.get("gates", [])
     active = [row for row in slices if row["id"] == program.get("active_slice")]
+    remaining_implementation = sum(
+        row.get("implementation_status") != "implemented" for row in slices
+    )
 
     summary = (
         "# IP implementation summary\n\n"
@@ -537,6 +540,7 @@ def render_views(manifest: dict[str, Any]) -> dict[Path, str]:
         f"- Journeys: {len(journeys)} with {len(paths)} atomic normal/exception paths\n"
         f"- Implementation slices: {len(slices)} ({sum(row.get('source_kind') == 'prd_explicit' for row in slices)} PRD-explicit; "
         f"{sum(row.get('source_kind') == 'derived' for row in slices)} derived decompositions)\n"
+        f"- Repository implementation remaining: {remaining_implementation}\n"
         f"- Coverage: {sum(bool(row.get('slice_ids')) for row in requirements)}/{len(requirements)} requirements; "
         f"{sum(bool(row.get('slice_ids')) for row in paths)}/{len(paths)} atomic paths\n"
         f"- Open/failed gates: {sum(not compute_verified(row) for row in gates)}/{len(gates)}\n"

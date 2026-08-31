@@ -20,7 +20,7 @@ import hashlib
 import json
 import logging
 import time
-from typing import Any
+from typing import Any, NoReturn
 
 from pydantic import BaseModel, ValidationError
 
@@ -708,6 +708,7 @@ class OpenAIProvider:
             timeout=timeout_seconds,
             max_retries=max_retries,
         )
+        self._openai = openai
         self.model = model
 
     def _model_rejects_temperature(self) -> bool:
@@ -739,6 +740,58 @@ class OpenAIProvider:
             return self._REASONING_MIN_COMPLETION_TOKENS
         return requested
 
+    def _request_kwargs(
+        self,
+        messages: list[LLMMessage],
+        *,
+        temperature: float,
+        max_tokens: int,
+    ) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {
+            "model": self.model,
+            "messages": [
+                {"role": message.role, "content": message.content}
+                for message in messages
+            ],
+            "max_completion_tokens": self._effective_max_completion_tokens(max_tokens),
+        }
+        if not self._model_rejects_temperature():
+            kwargs["temperature"] = temperature
+        if self._is_reasoning_model():
+            kwargs["reasoning_effort"] = "low"
+        return kwargs
+
+    def _completion_from_response(
+        self,
+        response: Any,
+        *,
+        started: float,
+        text_override: str | None = None,
+    ) -> LLMCompletion:
+        choice = response.choices[0] if getattr(response, "choices", None) else None
+        text = ""
+        if choice is not None and getattr(choice, "message", None) is not None:
+            text = getattr(choice.message, "content", "") or ""
+        if text_override is not None:
+            text = text_override
+        usage = getattr(response, "usage", None)
+        return LLMCompletion(
+            text=text,
+            provider=self.name,
+            model=self.model,
+            prompt_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
+            completion_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
+            latency_ms=max(1, int((time.perf_counter() - started) * 1000)),
+            raw=response,
+        )
+
+    def _raise_call_error(self, exc: Exception) -> NoReturn:
+        if _is_quota_exhausted(exc):
+            raise LLMQuotaExhaustedError(
+                f"OpenAI quota exhausted: {exc}",
+            ) from exc
+        raise LLMProviderError(f"OpenAI call failed: {exc}") from exc
+
     def generate(
         self,
         messages: list[LLMMessage],
@@ -746,16 +799,11 @@ class OpenAIProvider:
         temperature: float = 0.2,
         max_tokens: int = 1024,
     ) -> LLMCompletion:
-        oai_messages = [
-            {"role": m.role, "content": m.content} for m in messages
-        ]
-        kwargs: dict[str, Any] = {
-            "model": self.model,
-            "messages": oai_messages,
-            "max_completion_tokens": self._effective_max_completion_tokens(max_tokens),
-        }
-        if not self._model_rejects_temperature():
-            kwargs["temperature"] = temperature
+        kwargs = self._request_kwargs(
+            messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
         # gpt-5.x reasoning models add significant latency at the default
         # ``reasoning_effort`` ("medium" → 30-90s of thinking even for
         # short structured-output tasks). CaseOps recommendations / drafts
@@ -765,31 +813,73 @@ class OpenAIProvider:
         # per-purpose Cloud Run budget. 2026-04-30: surfaced when the
         # stress-matter probe (BUG-024 grounding) hit a 110s client
         # timeout post-deploy.
-        if (self.model or "").lower().startswith(("gpt-5", "o1", "o3")):
-            kwargs["reasoning_effort"] = "low"
         started = time.perf_counter()
         try:
             response = self._client.chat.completions.create(**kwargs)
         except Exception as exc:
-            if _is_quota_exhausted(exc):
-                raise LLMQuotaExhaustedError(
-                    f"OpenAI quota exhausted: {exc}",
-                ) from exc
-            raise LLMProviderError(f"OpenAI call failed: {exc}") from exc
-        elapsed_ms = max(1, int((time.perf_counter() - started) * 1000))
+            self._raise_call_error(exc)
+        return self._completion_from_response(response, started=started)
+
+    def generate_structured[T: BaseModel](
+        self,
+        messages: list[LLMMessage],
+        *,
+        schema: type[T],
+        temperature: float = 0.2,
+        max_tokens: int = 1024,
+    ) -> LLMCompletion:
+        """Use OpenAI's strict Pydantic response contract.
+
+        A successful HTTP response is not sufficient evidence that the model
+        produced usable JSON.  ``chat.completions.parse`` asks the provider to
+        enforce the supplied schema and returns a parsed Pydantic value.  We
+        serialize that validated value for the provider-neutral validation and
+        audit path below, so prose or truncated JSON can never masquerade as a
+        provider outage.
+        """
+
+        kwargs = self._request_kwargs(
+            messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        started = time.perf_counter()
+        try:
+            response = self._client.chat.completions.parse(
+                **kwargs,
+                response_format=schema,
+            )
+        except (
+            self._openai.LengthFinishReasonError,
+            self._openai.ContentFilterFinishReasonError,
+            json.JSONDecodeError,
+            ValidationError,
+        ) as exc:
+            raise LLMResponseFormatError(
+                f"OpenAI:{self.model} did not complete the required structured response."
+            ) from exc
+        except Exception as exc:
+            self._raise_call_error(exc)
+
         choice = response.choices[0] if getattr(response, "choices", None) else None
-        text = ""
-        if choice is not None and getattr(choice, "message", None) is not None:
-            text = getattr(choice.message, "content", "") or ""
-        usage = getattr(response, "usage", None)
-        return LLMCompletion(
-            text=text,
-            provider=self.name,
-            model=self.model,
-            prompt_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
-            completion_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
-            latency_ms=elapsed_ms,
-            raw=response,
+        message = getattr(choice, "message", None)
+        parsed = getattr(message, "parsed", None)
+        if parsed is None:
+            refusal = bool(getattr(message, "refusal", None))
+            detail = "refused" if refusal else "contained no parsed value"
+            raise LLMResponseFormatError(
+                f"OpenAI:{self.model} structured response {detail}."
+            )
+        try:
+            validated = schema.model_validate(parsed)
+        except ValidationError as exc:
+            raise LLMResponseFormatError(
+                f"OpenAI:{self.model} returned a parsed value outside the required schema."
+            ) from exc
+        return self._completion_from_response(
+            response,
+            started=started,
+            text_override=validated.model_dump_json(),
         )
 
 
@@ -1064,10 +1154,10 @@ def generate_structured[T: BaseModel](
 ) -> tuple[T, LLMCompletion]:
     """Run the provider and validate its output as ``schema``.
 
-    The caller is expected to instruct the model to output JSON that matches
-    ``schema`` — we only parse and validate. A ``LLMResponseFormatError`` is
-    raised if validation fails; the caller is responsible for fallback
-    behaviour (retry, refuse, ask for clarification).
+    Providers with a native structured-response contract receive ``schema``
+    directly; other providers are expected to follow the caller's JSON prompt.
+    Both paths are validated here. A ``LLMResponseFormatError`` is raised if
+    validation fails; the caller owns bounded fallback behaviour.
 
     When a ``session`` is passed and ``context.tenant_id`` is set, the call is
     gated by ``TenantAIPolicy``: if the model is not on the tenant's
@@ -1139,11 +1229,20 @@ def generate_structured[T: BaseModel](
             # PostgreSQL it needlessly pins an MVCC snapshot. A blocked quota
             # call raises above and retains its independently committed audit.
             session.rollback()
-    completion = provider.generate(
-        messages=messages,
-        temperature=temperature,
-        max_tokens=max_tokens,
-    )
+    native_generate = getattr(provider, "generate_structured", None)
+    if callable(native_generate):
+        completion = native_generate(
+            messages=messages,
+            schema=schema,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+    else:
+        completion = provider.generate(
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
     if on_model_run is not None:
         try:
             on_model_run(completion, context, messages)
