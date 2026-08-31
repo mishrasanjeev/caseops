@@ -33,6 +33,7 @@ const {
   updateIpSharedHearingMock,
   createManualTrademarkApplicationMock,
   correctIpIdentifierMock,
+  correctIpCostItemMock,
   fetchIpAccessPanelMock,
   listCompanyUsersMock,
   listTeamsMock,
@@ -75,6 +76,7 @@ const {
   updateIpSharedHearingMock: vi.fn(),
   createManualTrademarkApplicationMock: vi.fn(),
   correctIpIdentifierMock: vi.fn(),
+  correctIpCostItemMock: vi.fn(),
   fetchIpAccessPanelMock: vi.fn(),
   listCompanyUsersMock: vi.fn(),
   listTeamsMock: vi.fn(),
@@ -142,6 +144,7 @@ vi.mock("@/lib/api/endpoints", () => ({
   syncHearingToGoogleCalendar: vi.fn(),
   addIpTitleInterest: vi.fn(),
   addIpCostItem: vi.fn(),
+  correctIpCostItem: correctIpCostItemMock,
   discoverIpEvidence: vi.fn(),
   reviewIpEvidenceCandidate: vi.fn(),
   bulkReassignIpCoverage: vi.fn(),
@@ -314,6 +317,7 @@ describe("IpDocketPage", () => {
     updateIpSharedHearingMock.mockReset();
     createManualTrademarkApplicationMock.mockReset();
     correctIpIdentifierMock.mockReset();
+    correctIpCostItemMock.mockReset();
     fetchIpAccessPanelMock.mockReset();
     listCompanyUsersMock.mockReset();
     listTeamsMock.mockReset();
@@ -332,6 +336,7 @@ describe("IpDocketPage", () => {
     updateTrademarkApplicationPhaseMock.mockReset();
     fetchIpCoverageTransfersAwaitingMeMock.mockResolvedValue({ transfers: [] });
     decideIpCoverageTransferMock.mockResolvedValue({});
+    correctIpCostItemMock.mockResolvedValue({});
     enableIpWorkspaceMock.mockReset();
     runIpWorkspaceTestMock.mockReset();
     saveIpWorkspaceConfigurationMock.mockReset();
@@ -1109,6 +1114,9 @@ describe("IpDocketPage", () => {
             billing_link_type: null, billing_link_id: null,
             reconciliation_status: "nonbillable" as const,
             canonical_amount_minor: null, reconciliation_difference_minor: null, reconciled_at: null,
+            lineage_status: "active" as const, corrects_cost_item_id: null,
+            replacement_cost_item_id: null, correction_reason: null,
+            correction_evidence_reference: null,
           },
           {
             id: "cost-2", matter_id: null, category: "associate_fee",
@@ -1119,8 +1127,11 @@ describe("IpDocketPage", () => {
             base_amount_minor: null, base_currency: null,
             evidence_reference: "attachment:confidential-fee-agreement-2026",
             billing_link_type: null, billing_link_id: null,
-            reconciliation_status: "estimate" as const,
+            reconciliation_status: "nonbillable" as const,
             canonical_amount_minor: null, reconciliation_difference_minor: null, reconciled_at: null,
+            lineage_status: "active" as const, corrects_cost_item_id: null,
+            replacement_cost_item_id: null, correction_reason: null,
+            correction_evidence_reference: null,
           },
         ],
       }],
@@ -1137,6 +1148,17 @@ describe("IpDocketPage", () => {
     expect(
       screen.getByText(/captured as\s+nonbillable evidence/i),
     ).toBeVisible();
+    expect(
+      screen.getByText(/cannot create an invoice, invoice line, payment\s+attempt, or collection/i),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Verify nonbillable evidence" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Reconcile with Matter billing" }),
+    ).toBeNull();
+    expect(screen.queryByLabelText("Matter billing link type")).toBeNull();
+    expect(screen.queryByLabelText("Matter billing record ID")).toBeNull();
 
     // A withheld rate reads as withheld. Rendering 0.00 would be undetectable.
     expect(
@@ -1145,10 +1167,71 @@ describe("IpDocketPage", () => {
     expect(screen.queryByText("USD 0.00")).toBeNull();
 
     // Status and nature are words, not colour alone.
-    expect(screen.getByText(/Estimate — not an expense/)).toBeVisible();
-    expect(screen.getByText(/Nonbillable/)).toBeVisible();
+    expect(
+      within(screen.getByTestId("ip-cost-item-cost-2")).getByText(
+        /Nonbillable · Provider estimate/,
+      ),
+    ).toBeVisible();
+    expect(
+      within(screen.getByTestId("ip-cost-item-cost-1")).getByText("Nonbillable", {
+        exact: true,
+      }),
+    ).toBeVisible();
     // The non-confidential cost on the same record is unaffected.
     expect(screen.getByText("INR 9000.00")).toBeVisible();
+    expect(screen.getByText(/Evidence: receipt:registry-fee-unbilled-2026/)).toBeVisible();
+
+    // Corrections are a real append-only action, not an instruction to edit a
+    // supposedly immutable row elsewhere. The full replacement is sent with
+    // the source identity and independent correction evidence.
+    const officialFee = screen.getByTestId("ip-cost-item-cost-1");
+    fireEvent.click(within(officialFee).getByRole("button", { name: "Correct or void" }));
+    expect(within(officialFee).getByText(/original cost and evidence never change/i)).toBeVisible();
+    expect(within(officialFee).getByText(/rather than copied silently/i)).toBeVisible();
+    fireEvent.change(within(officialFee).getByLabelText("Corrected category"), {
+      target: { value: "disbursement" },
+    });
+    fireEvent.change(within(officialFee).getByLabelText("Correction reason"), {
+      target: { value: "Registry receipt corrected the transposed amount." },
+    });
+    fireEvent.change(within(officialFee).getByLabelText("Correction evidence reference"), {
+      target: { value: "registry-correction:2026-08-30" },
+    });
+    fireEvent.change(within(officialFee).getByLabelText("Corrected amount (INR)"), {
+      target: { value: "8500.00" },
+    });
+    fireEvent.change(within(officialFee).getByLabelText("Corrected currency"), {
+      target: { value: "USD" },
+    });
+    fireEvent.change(within(officialFee).getByLabelText("Corrected cost nature"), {
+      target: { value: "estimate" },
+    });
+    fireEvent.click(within(officialFee).getByLabelText("Corrected rate is confidential"));
+    expect(
+      within(officialFee).getByLabelText("Replacement includes an exchange conversion"),
+    ).toBeVisible();
+    fireEvent.change(within(officialFee).getByLabelText("Replacement evidence reference"), {
+      target: { value: "receipt:registry-fee-corrected-2026" },
+    });
+    fireEvent.click(within(officialFee).getByRole("button", { name: "Append corrected cost" }));
+    await waitFor(() => expect(correctIpCostItemMock).toHaveBeenCalledTimes(1));
+    expect(correctIpCostItemMock).toHaveBeenCalledWith("ip-1", "cost-1", {
+      action: "supersede",
+      reason: "Registry receipt corrected the transposed amount.",
+      correctionEvidenceReference: "registry-correction:2026-08-30",
+      replacement: expect.objectContaining({
+        description: "Official filing fee paid before a billing Matter existed.",
+        amountMinor: 850000,
+        category: "disbursement",
+        currency: "USD",
+        billable: false,
+        costNature: "estimate",
+        rateConfidential: true,
+        billingLinkType: null,
+        billingLinkId: null,
+        evidenceReference: "receipt:registry-fee-corrected-2026",
+      }),
+    });
   });
 
   it("surfaces deadline exceptions and keeps every confirmation control visible on mobile", async () => {

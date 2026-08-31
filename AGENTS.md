@@ -76,6 +76,13 @@ requirements when using the fallback.
   events. Do not infer an automatic resurrection from an explicit, audited
   `Disposed -> Intake` transition, and do not weaken lifecycle protections to
   make a UI symptom disappear.
+- A cost reference is not permanently valid merely because it was active when
+  first linked or approved. Every workflow transition that depends on an
+  estimate, fee, actual, invoice, or other cost evidence must re-resolve the
+  stored reference under the current tenant and docket, require the active
+  lineage row, and fail closed after void or supersession until an explicit
+  replacement is selected. Retained historical events must keep their original
+  immutable references.
 - Dated Playwright journeys must enter the current user-visible work area
   before asserting a nested workflow. When a page adds tabs or durable view
   routing, update the dated specs to select that tab or deep link and rerun the

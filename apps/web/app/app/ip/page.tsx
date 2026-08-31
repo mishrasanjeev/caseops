@@ -47,6 +47,7 @@ import {
   createIpDeadlineIncident,
   createManualTrademarkApplication,
   createIpSharedHearing,
+  correctIpCostItem,
   correctIpIdentifier,
   decideIpCoverageTransfer,
   decideIpDeadlineIncidentNotification,
@@ -3527,6 +3528,240 @@ function CostAmount({ row }: { row: IpDocket["cost_items"][number] }) {
   );
 }
 
+function CostCorrectionEditor({
+  docket,
+  row,
+  onChanged,
+}: {
+  docket: IpDocket;
+  row: IpDocket["cost_items"][number];
+  onChanged: () => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [action, setAction] = useState<"void" | "supersede">("supersede");
+  const [reason, setReason] = useState("");
+  const [correctionEvidence, setCorrectionEvidence] = useState("");
+  const [description, setDescription] = useState(row.description);
+  const [amount, setAmount] = useState(
+    row.amount_minor === null ? "" : (row.amount_minor / 100).toFixed(2),
+  );
+  const [replacementEvidence, setReplacementEvidence] = useState(row.evidence_reference);
+  const [category, setCategory] = useState(row.category as "official_fee" | "professional_fee" | "associate_fee" | "disbursement" | "other");
+  const [currency, setCurrency] = useState(row.currency);
+  const [billable, setBillable] = useState(row.billable);
+  const [costNature, setCostNature] = useState<"actual" | "estimate">(row.cost_nature);
+  const [rateConfidential, setRateConfidential] = useState(row.rate_confidential);
+  const [billingLinkType, setBillingLinkType] = useState<"" | "invoice" | "invoice_line_item" | "time_entry">(
+    row.billing_link_type ?? "",
+  );
+  const [billingLinkId, setBillingLinkId] = useState(row.billing_link_id ?? "");
+  const [converted, setConverted] = useState(row.fx_rate !== null);
+  const [fxRate, setFxRate] = useState(row.fx_rate ?? "");
+  const [fxRateSource, setFxRateSource] = useState(row.fx_rate_source ?? "");
+  const [fxConvertedAt, setFxConvertedAt] = useState(row.fx_converted_at?.slice(0, 10) ?? "");
+  const [baseAmount, setBaseAmount] = useState(
+    row.base_amount_minor === null ? "" : (row.base_amount_minor / 100).toFixed(2),
+  );
+  const [baseCurrency, setBaseCurrency] = useState(row.base_currency ?? "INR");
+  const hasBillingOwner = Boolean(docket.matter_id);
+  const canLinkBilling = hasBillingOwner && billable && costNature === "actual";
+
+  const correction = useMutation({
+    mutationFn: () => correctIpCostItem(docket.id, row.id, {
+      action,
+      reason,
+      correctionEvidenceReference: correctionEvidence,
+      replacement: action === "supersede"
+        ? {
+            category,
+            description,
+            amountMinor: Math.round(Number(amount) * 100),
+            currency,
+            evidenceReference: replacementEvidence,
+            billingLinkType: canLinkBilling ? billingLinkType || null : null,
+            billingLinkId: canLinkBilling ? billingLinkId || null : null,
+            billable: hasBillingOwner ? billable : false,
+            costNature,
+            rateConfidential,
+            fxRate: converted ? fxRate : null,
+            fxRateSource: converted ? fxRateSource : null,
+            fxConvertedAt: converted && fxConvertedAt
+              ? new Date(fxConvertedAt).toISOString()
+              : null,
+            baseAmountMinor: converted ? Math.round(Number(baseAmount) * 100) : null,
+            baseCurrency: converted ? baseCurrency : null,
+          }
+        : null,
+    }),
+    onSuccess: async () => {
+      toast.success(action === "void"
+        ? "Cost evidence voided; the original history is retained."
+        : "Replacement cost evidence appended; the original is retained as superseded.");
+      setOpen(false);
+      await onChanged();
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, "Could not correct cost evidence.")),
+  });
+
+  if (!open) {
+    return (
+      <Button size="sm" type="button" variant="secondary" onClick={() => setOpen(true)}>
+        Correct or void
+      </Button>
+    );
+  }
+
+  const conversionIncomplete = converted
+    && (!fxRate || !fxRateSource || !fxConvertedAt || !baseAmount || baseCurrency === currency);
+  const invalidReplacement = action === "supersede"
+    && (
+      description.length < 3
+      || !amount
+      || replacementEvidence.length < 3
+      || currency.length !== 3
+      || conversionIncomplete
+      || (canLinkBilling && Boolean(billingLinkType) !== Boolean(billingLinkId))
+    );
+  return (
+    <form
+      className="mt-3 grid min-w-0 gap-2 rounded-md border border-[var(--color-line)] p-3"
+      onSubmit={(event) => { event.preventDefault(); correction.mutate(); }}
+    >
+      <p className="text-xs text-[var(--color-mute)]">
+        The original cost and evidence never change. A supersession appends a complete,
+        independently editable replacement; every carried value is shown below rather
+        than copied silently. A void keeps only the historical row. Inactive rows are
+        excluded from reconciliation counts and cost totals.
+      </p>
+      <Field label="Correction action">
+        <select
+          className="h-10 min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
+          value={action}
+          onChange={(event) => setAction(event.target.value as typeof action)}
+        >
+          <option value="supersede">Supersede with corrected evidence</option>
+          <option value="void">Void without replacement</option>
+        </select>
+      </Field>
+      <Field label="Correction reason">
+        <Textarea value={reason} onChange={(event) => setReason(event.target.value)} />
+      </Field>
+      <Field label="Correction evidence reference">
+        <Input value={correctionEvidence} onChange={(event) => setCorrectionEvidence(event.target.value)} />
+      </Field>
+      {action === "supersede" ? (
+        <div className="grid min-w-0 gap-2">
+          <Field label="Corrected category">
+            <select
+              className="h-10 min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
+              value={category}
+              onChange={(event) => setCategory(event.target.value as typeof category)}
+            >
+              <option value="official_fee">Official fee</option>
+              <option value="professional_fee">Professional fee</option>
+              <option value="associate_fee">Associate fee</option>
+              <option value="disbursement">Disbursement</option>
+              <option value="other">Other</option>
+            </select>
+          </Field>
+          <Field label="Corrected description">
+            <Input value={description} onChange={(event) => setDescription(event.target.value)} />
+          </Field>
+          <Field label={`Corrected amount (${currency})`}>
+            <Input type="number" min="0" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} />
+          </Field>
+          <Field label="Corrected currency">
+            <Input value={currency} maxLength={3} onChange={(event) => setCurrency(event.target.value.toUpperCase())} />
+          </Field>
+          <Field label="Replacement evidence reference">
+            <Input value={replacementEvidence} onChange={(event) => setReplacementEvidence(event.target.value)} />
+          </Field>
+          <Field label="Corrected cost nature">
+            <select
+              className="h-10 min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
+              value={costNature}
+              onChange={(event) => setCostNature(event.target.value as typeof costNature)}
+            >
+              <option value="actual">Actual expense incurred</option>
+              <option value="estimate">Provider estimate or quote</option>
+            </select>
+          </Field>
+          {hasBillingOwner ? (
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={billable} onChange={(event) => setBillable(event.target.checked)} />
+              Corrected cost is billable
+            </label>
+          ) : (
+            <p className="text-xs text-[var(--color-mute)]">
+              This docket has no Matter, so the replacement remains explicitly nonbillable.
+            </p>
+          )}
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={rateConfidential} onChange={(event) => setRateConfidential(event.target.checked)} />
+            Corrected rate is confidential
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={converted} onChange={(event) => setConverted(event.target.checked)} />
+            Replacement includes an exchange conversion
+          </label>
+          {converted ? (
+            <div className="grid min-w-0 gap-2 rounded-md border border-[var(--color-line)] p-3">
+              <Field label="Corrected converted amount">
+                <Input type="number" min="0" step="0.01" value={baseAmount} onChange={(event) => setBaseAmount(event.target.value)} />
+              </Field>
+              <Field label="Corrected converted currency">
+                <Input value={baseCurrency} maxLength={3} onChange={(event) => setBaseCurrency(event.target.value.toUpperCase())} />
+              </Field>
+              <Field label="Corrected exchange rate">
+                <Input value={fxRate} onChange={(event) => setFxRate(event.target.value)} />
+              </Field>
+              <Field label="Corrected rate source">
+                <Input value={fxRateSource} onChange={(event) => setFxRateSource(event.target.value)} />
+              </Field>
+              <Field label="Corrected conversion date">
+                <Input type="date" value={fxConvertedAt} onChange={(event) => setFxConvertedAt(event.target.value)} />
+              </Field>
+            </div>
+          ) : null}
+          {canLinkBilling ? (
+            <>
+              <Field label="Corrected Matter billing link type">
+                <select
+                  className="h-10 min-w-0 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
+                  value={billingLinkType}
+                  onChange={(event) => setBillingLinkType(event.target.value as typeof billingLinkType)}
+                >
+                  <option value="">No billing link</option>
+                  <option value="invoice">Invoice</option>
+                  <option value="invoice_line_item">Invoice line item</option>
+                  <option value="time_entry">Time entry</option>
+                </select>
+              </Field>
+              {billingLinkType ? (
+                <Field label="Corrected Matter billing record ID">
+                  <Input value={billingLinkId} onChange={(event) => setBillingLinkId(event.target.value)} />
+                </Field>
+              ) : null}
+            </>
+          ) : null}
+        </div>
+      ) : null}
+      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
+        <Button
+          size="sm"
+          type="submit"
+          disabled={reason.length < 3 || correctionEvidence.length < 3 || invalidReplacement || correction.isPending}
+        >
+          {action === "void" ? "Void cost evidence" : "Append corrected cost"}
+        </Button>
+        <Button size="sm" type="button" variant="secondary" onClick={() => setOpen(false)}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: boolean; onChanged: () => Promise<void> }) {
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
@@ -3583,7 +3818,9 @@ function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: b
   const reconcile = useMutation({
     mutationFn: () => reconcileIpCosts(docket.id),
     onSuccess: async (report) => {
-      toast.success(`Reconciled: ${report.matched_count} matched, ${report.mismatch_count} mismatched.`);
+      toast.success(hasBillingOwner
+        ? `Reconciled: ${report.matched_count} matched, ${report.mismatch_count} mismatched.`
+        : `Verified: ${report.nonbillable_count} nonbillable cost item(s); no billing effect.`);
       await onChanged();
     },
     onError: (error) => toast.error(apiErrorMessage(error, "Could not reconcile IP costs.")),
@@ -3596,14 +3833,34 @@ function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: b
       <CardHeader><CardTitle as="h3">IP cost evidence</CardTitle></CardHeader>
       <CardContent className="flex min-w-0 flex-col gap-3">
         {docket.cost_items.map((row) => (
-          <div key={row.id} className="min-w-0 rounded-md border border-[var(--color-line)] p-3 text-sm">
+          <div
+            key={row.id}
+            className="min-w-0 rounded-md border border-[var(--color-line)] p-3 text-sm"
+            data-testid={`ip-cost-item-${row.id}`}
+          >
             <strong className="break-words">{row.description}</strong>{" "}
             <CostAmount row={row} />
             <div className="mt-1 text-xs text-[var(--color-mute)]">
               {COST_STATUS_LABEL[row.reconciliation_status] ?? row.reconciliation_status}
               {row.cost_nature === "estimate" ? " · Provider estimate" : null}
               {row.rate_confidential ? " · Confidential rate" : null}
+              {row.lineage_status === "voided" ? " · Voided — excluded from totals" : null}
+              {row.lineage_status === "superseded" ? " · Superseded — excluded from totals" : null}
+              {row.corrects_cost_item_id ? ` · Corrects ${row.corrects_cost_item_id}` : null}
             </div>
+            <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
+              Evidence: {row.evidence_reference}
+            </div>
+            {row.correction_reason ? (
+              <div className="mt-1 break-words text-xs text-[var(--color-mute)]">
+                Correction: {row.correction_reason} · Evidence: {row.correction_evidence_reference}
+              </div>
+            ) : null}
+            {enabled && row.lineage_status === "active" ? (
+              <div className="mt-2">
+                <CostCorrectionEditor docket={docket} row={row} onChanged={onChanged} />
+              </div>
+            ) : null}
           </div>
         ))}
         {enabled ? (
@@ -3612,7 +3869,9 @@ function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: b
               <p className="text-xs text-[var(--color-mute)]">
                 This record has no Matter billing owner, so the cost is captured as
                 nonbillable evidence. Link the record to a Matter to bill it; Matter
-                billing remains the only accounting owner either way.
+                billing remains the only accounting owner either way. Capture and
+                status verification cannot create an invoice, invoice line, payment
+                attempt, or collection.
               </p>
             ) : null}
             <Field label="Description"><Input value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
@@ -3670,7 +3929,9 @@ function CostCard({ docket, enabled, onChanged }: { docket: IpDocket; enabled: b
               <Button size="sm" className="w-full sm:w-auto" type="submit" disabled={description.length < 3 || !amount || evidence.length < 3 || (canLinkBilling && Boolean(billingLinkType) !== Boolean(billingLinkId)) || conversionIncomplete || mutation.isPending}>
                 {hasBillingOwner ? "Add cost evidence" : "Add nonbillable cost evidence"}
               </Button>
-              <Button size="sm" className="w-full sm:w-auto" type="button" variant="secondary" onClick={() => reconcile.mutate()} disabled={reconcile.isPending}>Reconcile with Matter billing</Button>
+              <Button size="sm" className="w-full sm:w-auto" type="button" variant="secondary" onClick={() => reconcile.mutate()} disabled={reconcile.isPending}>
+                {hasBillingOwner ? "Reconcile with Matter billing" : "Verify nonbillable evidence"}
+              </Button>
             </div>
           </form>
         ) : null}

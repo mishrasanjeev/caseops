@@ -45,6 +45,7 @@ from caseops_api.schemas.ip_foreign_associates import (
 )
 from caseops_api.schemas.ip_lifecycle import IpDocketEventCreateRequest, IpDocketEventResponse
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.ip_cost_lineage import active_ip_cost_predicate
 from caseops_api.services.ip_document_workflow import list_ip_documents
 from caseops_api.services.ip_lifecycle import append_ip_docket_event
 from caseops_api.services.ip_operations import (
@@ -351,12 +352,15 @@ def _require_cost_item(
             IpCostItem.company_id == company_id,
             IpCostItem.docket_id == docket_id,
             IpCostItem.cost_nature == nature,
+            active_ip_cost_predicate(),
         )
     )
     if row is None:
         raise HTTPException(
             status_code=422,
-            detail=f"Linked {nature} cost item is missing or belongs to another docket.",
+            detail=(
+                f"Linked {nature} cost item is missing, inactive, or belongs to another docket."
+            ),
         )
     return row
 
@@ -844,6 +848,13 @@ def record_ip_foreign_associate_transaction(
         row.approved_by_membership_id = context.membership.id
         row.approved_at = payload.effective_at
     elif payload.transaction_kind == "dispatch":
+        _require_cost_item(
+            session,
+            company_id=context.company.id,
+            docket_id=docket.id,
+            cost_item_id=row.estimate_cost_item_id,
+            nature="estimate",
+        )
         associate = _require_approved_associate(
             session,
             company_id=context.company.id,

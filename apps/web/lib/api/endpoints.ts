@@ -8916,6 +8916,11 @@ export type IpDocket = {
     canonical_amount_minor: number | null;
     reconciliation_difference_minor: number | null;
     reconciled_at: string | null;
+    lineage_status: "active" | "voided" | "superseded";
+    corrects_cost_item_id: string | null;
+    replacement_cost_item_id: string | null;
+    correction_reason: string | null;
+    correction_evidence_reference: string | null;
   }>;
   created_at: string;
   updated_at: string;
@@ -10121,6 +10126,9 @@ export type IpCostReconciliationReport = {
       | "unlinked"
       | "estimate"
       | "nonbillable";
+    lineage_status: "active" | "voided" | "superseded";
+    included_in_totals: boolean;
+    replacement_cost_item_id: string | null;
   }>;
   matched_count: number;
   mismatch_count: number;
@@ -10128,6 +10136,8 @@ export type IpCostReconciliationReport = {
   unlinked_count: number;
   estimate_count: number;
   nonbillable_count: number;
+  voided_count: number;
+  superseded_count: number;
   checksum_sha256: string;
 };
 
@@ -13781,6 +13791,49 @@ export async function addIpCostItem(
       base_currency: input.baseCurrency ?? null,
     },
   });
+}
+
+export async function correctIpCostItem(
+  docketId: string,
+  costItemId: string,
+  input: {
+    action: "void" | "supersede";
+    reason: string;
+    correctionEvidenceReference: string;
+    replacement?: Parameters<typeof addIpCostItem>[1] | null;
+  },
+): Promise<IpDocket> {
+  const replacement = input.replacement;
+  return apiRequest(
+    `/api/ip/dockets/${encodeURIComponent(docketId)}/cost-items/${encodeURIComponent(costItemId)}/corrections`,
+    {
+      method: "POST",
+      body: {
+        action: input.action,
+        reason: input.reason,
+        evidence_reference: input.correctionEvidenceReference,
+        replacement: replacement
+          ? {
+              category: replacement.category,
+              description: replacement.description,
+              amount_minor: replacement.amountMinor,
+              currency: replacement.currency ?? "INR",
+              evidence_reference: replacement.evidenceReference,
+              billing_link_type: replacement.billingLinkType ?? null,
+              billing_link_id: replacement.billingLinkId ?? null,
+              billable: replacement.billable ?? true,
+              cost_nature: replacement.costNature ?? "actual",
+              rate_confidential: replacement.rateConfidential ?? false,
+              fx_rate: replacement.fxRate ?? null,
+              fx_rate_source: replacement.fxRateSource ?? null,
+              fx_converted_at: replacement.fxConvertedAt ?? null,
+              base_amount_minor: replacement.baseAmountMinor ?? null,
+              base_currency: replacement.baseCurrency ?? null,
+            }
+          : null,
+      },
+    },
+  );
 }
 
 export async function discoverIpEvidence(docketId: string): Promise<{

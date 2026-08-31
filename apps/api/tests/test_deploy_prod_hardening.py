@@ -54,6 +54,7 @@ def test_web_gcloudignore_blocks_local_build_artifacts() -> None:
         "playwright.prod-ram.config.ts",
         "playwright.notice-prod.config.ts",
         "playwright.ip-a0-prod.config.ts",
+        "playwright.ip-cost-prod.config.ts",
         "playwright.ip-guard-first-prod.config.ts",
     ],
 )
@@ -119,8 +120,10 @@ def test_a0_production_acceptance_is_an_isolated_verify_only_gate() -> None:
     # Renewal preflight, renewal acceptance, and Notice remain visible
     # independently after the broad RAM batch. The historical A0 transition
     # gate additionally requires an explicit manual opt-in.
-    assert workflow.count(prerequisite_gate) == 4
-    assert (prerequisite_gate + " && inputs.run_historical_a0_gate == true") in workflow
+    assert workflow.count(prerequisite_gate) == 6
+    assert (
+        prerequisite_gate + " && inputs.run_historical_a0_gate == true"
+    ) in workflow
     assert "CASEOPS_IP_A0_PROD_MODE: verify" in workflow
     assert (
         "npx playwright test --config=playwright.ip-a0-prod.config.ts --reporter=list" in workflow

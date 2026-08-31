@@ -5022,6 +5022,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/dockets/{docket_id}/cost-items/{cost_item_id}/corrections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Ip Cost Item Correction */
+        post: operations["post_ip_cost_item_correction_api_ip_dockets__docket_id__cost_items__cost_item_id__corrections_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/dockets/{docket_id}/cost-items/reconcile": {
         parameters: {
             query?: never;
@@ -23048,6 +23065,19 @@ export interface components {
             /** Received At */
             received_at?: string | null;
         };
+        /** IpCostItemCorrectionRequest */
+        IpCostItemCorrectionRequest: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "void" | "supersede";
+            /** Evidence Reference */
+            evidence_reference: string;
+            /** Reason */
+            reason: string;
+            replacement?: components["schemas"]["IpCostItemCreateRequest"] | null;
+        };
         /** IpCostItemCreateRequest */
         IpCostItemCreateRequest: {
             /** Amount Minor */
@@ -23120,6 +23150,12 @@ export interface components {
             canonical_amount_minor: number | null;
             /** Category */
             category: string;
+            /** Correction Evidence Reference */
+            correction_evidence_reference?: string | null;
+            /** Correction Reason */
+            correction_reason?: string | null;
+            /** Corrects Cost Item Id */
+            corrects_cost_item_id?: string | null;
             /** Cost Nature */
             cost_nature: string;
             /**
@@ -23141,6 +23177,12 @@ export interface components {
             fx_rate_source?: string | null;
             /** Id */
             id: string;
+            /**
+             * Lineage Status
+             * @default active
+             * @enum {string}
+             */
+            lineage_status: "active" | "voided" | "superseded";
             /** Matter Id */
             matter_id: string | null;
             /** Rate Confidential */
@@ -23151,6 +23193,8 @@ export interface components {
             reconciliation_difference_minor: number | null;
             /** Reconciliation Status */
             reconciliation_status: string;
+            /** Replacement Cost Item Id */
+            replacement_cost_item_id?: string | null;
         };
         /** IpCostReconciliationReport */
         IpCostReconciliationReport: {
@@ -23187,8 +23231,18 @@ export interface components {
             nonbillable_count: number;
             /** Rows */
             rows: components["schemas"]["IpCostReconciliationRow"][];
+            /**
+             * Superseded Count
+             * @default 0
+             */
+            superseded_count: number;
             /** Unlinked Count */
             unlinked_count: number;
+            /**
+             * Voided Count
+             * @default 0
+             */
+            voided_count: number;
         };
         /** IpCostReconciliationRow */
         IpCostReconciliationRow: {
@@ -23210,6 +23264,19 @@ export interface components {
             difference_minor: number | null;
             /** Evidence Amount Minor */
             evidence_amount_minor: number;
+            /**
+             * Included In Totals
+             * @default true
+             */
+            included_in_totals: boolean;
+            /**
+             * Lineage Status
+             * @default active
+             * @enum {string}
+             */
+            lineage_status: "active" | "voided" | "superseded";
+            /** Replacement Cost Item Id */
+            replacement_cost_item_id?: string | null;
             /**
              * Status
              * @enum {string}
@@ -52751,6 +52818,42 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["IpCostItemCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDocketRecordResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_ip_cost_item_correction_api_ip_dockets__docket_id__cost_items__cost_item_id__corrections_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cost_item_id: string;
+                docket_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IpCostItemCorrectionRequest"];
             };
         };
         responses: {

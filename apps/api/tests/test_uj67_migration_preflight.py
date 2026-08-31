@@ -338,3 +338,17 @@ class TestGateBehaviour:
         # to record but a deploy that cannot run - and the committed graph is
         # single-headed, so this stays green.
         assert migration_preflight.main(["validate"]) == 0
+
+    def test_iplf039f_empty_table_indexes_and_restore_forward_are_explicit(self) -> None:
+        migration = (
+            migration_preflight.VERSIONS_DIR
+            / "20260831_0002_ip_cost_evidence_immutable.py"
+        )
+        source = migration.read_text(encoding="utf-8")
+
+        assert migration_preflight.LOCK_RISK_MARKER in source
+        assert "new, empty table before application writers" in source
+        assert migration_preflight.ROLLBACK_MARKER in source
+        assert "cannot be downgraded after IP cost correction evidence " in source
+        assert '"exists; preserve the append-only rows and restore or roll forward."' in source
+        assert migration_preflight.analyze(migration) == []

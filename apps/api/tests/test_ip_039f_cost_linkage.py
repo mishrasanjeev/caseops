@@ -44,10 +44,14 @@ from caseops_api.db.models import (
     AuditEvent,
     CompanyMembership,
     IpCostItem,
+    IpCostItemCorrection,
     MatterInvoice,
+    MatterInvoiceLineItem,
+    MatterInvoicePaymentAttempt,
     MembershipRole,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.services.ip_cost_lineage import active_ip_cost_predicate
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_clients import _mk_matter
 from tests.test_ip_record_workflow import _particulars
@@ -179,6 +183,56 @@ def _docket(client, headers, docket_id):
     return response.json()
 
 
+def _billing_effect_snapshot(company_id: str) -> tuple[int, int, int, int, int]:
+    """Counts and monetary state owned by Matter billing/payment services."""
+
+    with get_session_factory()() as session:
+        invoice_count = int(
+            session.scalar(
+                select(func.count()).select_from(MatterInvoice).where(
+                    MatterInvoice.company_id == company_id
+                )
+            )
+            or 0
+        )
+        line_count = int(
+            session.scalar(
+                select(func.count())
+                .select_from(MatterInvoiceLineItem)
+                .join(MatterInvoice, MatterInvoice.id == MatterInvoiceLineItem.invoice_id)
+                .where(MatterInvoice.company_id == company_id)
+            )
+            or 0
+        )
+        payment_count = int(
+            session.scalar(
+                select(func.count()).select_from(MatterInvoicePaymentAttempt).where(
+                    MatterInvoicePaymentAttempt.company_id == company_id
+                )
+            )
+            or 0
+        )
+        invoice_total = int(
+            session.scalar(
+                select(func.coalesce(func.sum(MatterInvoice.total_amount_minor), 0)).where(
+                    MatterInvoice.company_id == company_id
+                )
+            )
+            or 0
+        )
+        amount_received = int(
+            session.scalar(
+                select(
+                    func.coalesce(
+                        func.sum(MatterInvoicePaymentAttempt.amount_received_minor), 0
+                    )
+                ).where(MatterInvoicePaymentAttempt.company_id == company_id)
+            )
+            or 0
+        )
+    return invoice_count, line_count, payment_count, invoice_total, amount_received
+
+
 def test_uj52_exc01_nonbillable_capture_survives_a_docket_with_no_matter(
     client: TestClient,
 ) -> None:
@@ -191,6 +245,7 @@ def test_uj52_exc01_nonbillable_capture_survives_a_docket_with_no_matter(
     """
 
     headers, docket = _setup_without_matter(client)
+    before_billing = _billing_effect_snapshot(docket["company_id"])
 
     # A *billable* cost is still refused, and the refusal says what to do
     # instead rather than simply closing the door.
@@ -237,6 +292,155 @@ def test_uj52_exc01_nonbillable_capture_survives_a_docket_with_no_matter(
     # Matter billing is still the only accounting owner; this created no second
     # ledger for unbilled costs to live in.
     assert report["accounting_owner"] == "matter_billing"
+
+    # Repeat the read-only reconciliation to prove idempotence.  Neither cost
+    # capture nor reconciliation may create an invoice, an invoice line, a
+    # payment attempt, or change either billing/collection amount.
+    second_report = _reconcile(client, headers, docket["id"]).json()
+    assert second_report["nonbillable_count"] == 1
+    assert second_report["checksum_sha256"] == report["checksum_sha256"]
+    assert _billing_effect_snapshot(docket["company_id"]) == before_billing
+
+    # The public API has no rewrite or delete path for retained cost evidence.
+    for method in ("PATCH", "PUT", "DELETE"):
+        response = client.request(
+            method,
+            f"/api/ip/dockets/{docket['id']}/cost-items",
+            headers=headers,
+            json={"amount_minor": 1},
+        )
+        assert response.status_code == 405, response.text
+
+    # Even a writer bypassing the service cannot repurpose this row after a
+    # Matter is later created.  The database freezes the original amount,
+    # evidence reference and nonbillable/matterless identity.
+    with get_session_factory()() as session:
+        stored = session.get(IpCostItem, cost["id"])
+        assert stored is not None
+        stored.amount_minor = 1
+        with pytest.raises(IntegrityError, match="IP cost evidence is immutable"):
+            session.commit()
+
+    persisted = _docket(client, headers, docket["id"])["cost_items"][0]
+    assert persisted["matter_id"] is None
+    assert persisted["billable"] is False
+    assert persisted["amount_minor"] == 900000
+    assert persisted["evidence_reference"] == "receipt:registry-fee-unbilled-2026"
+
+
+def test_cost_correction_and_void_are_append_only_and_never_double_count(
+    client: TestClient,
+) -> None:
+    """A correction preserves both histories and only the active fact counts."""
+
+    headers, docket = _setup_without_matter(client)
+    before_billing = _billing_effect_snapshot(docket["company_id"])
+    created = _cost(
+        client,
+        headers,
+        docket["id"],
+        billable=False,
+        description="Official filing fee with the wrong receipt amount.",
+        amount_minor=900000,
+        evidence_reference="receipt:incorrect-registry-fee",
+    )
+    assert created.status_code == 200, created.text
+    original = created.json()["cost_items"][0]
+
+    superseded = client.post(
+        f"/api/ip/dockets/{docket['id']}/cost-items/{original['id']}/corrections",
+        headers=headers,
+        json={
+            "action": "supersede",
+            "reason": "Registry confirmation shows the receipt amount was transcribed wrongly.",
+            "evidence_reference": "correction:registry-confirmation-2026",
+            "replacement": {
+                "category": "official_fee",
+                "description": "Corrected official filing fee.",
+                "amount_minor": 850000,
+                "currency": "INR",
+                "evidence_reference": "receipt:correct-registry-fee",
+                "billable": False,
+                "cost_nature": "actual",
+            },
+        },
+    )
+    assert superseded.status_code == 200, superseded.text
+    by_id = {row["id"]: row for row in superseded.json()["cost_items"]}
+    old = by_id[original["id"]]
+    assert old["lineage_status"] == "superseded"
+    assert old["amount_minor"] == 900000
+    assert old["evidence_reference"] == "receipt:incorrect-registry-fee"
+    assert old["replacement_cost_item_id"] is not None
+    replacement = by_id[old["replacement_cost_item_id"]]
+    assert replacement["lineage_status"] == "active"
+    assert replacement["corrects_cost_item_id"] == original["id"]
+    assert replacement["amount_minor"] == 850000
+    assert replacement["evidence_reference"] == "receipt:correct-registry-fee"
+    with get_session_factory()() as session:
+        active_ids = set(
+            session.scalars(
+                select(IpCostItem.id).where(
+                    IpCostItem.docket_id == docket["id"],
+                    active_ip_cost_predicate(),
+                )
+            )
+        )
+    assert active_ids == {replacement["id"]}
+
+    report = _reconcile(client, headers, docket["id"]).json()
+    assert report["nonbillable_count"] == 1
+    assert report["superseded_count"] == 1
+    assert report["voided_count"] == 0
+    assert len(report["rows"]) == 2, "both immutable histories remain reportable"
+    included = [row for row in report["rows"] if row["included_in_totals"]]
+    assert [row["cost_item_id"] for row in included] == [replacement["id"]]
+
+    duplicate = client.post(
+        f"/api/ip/dockets/{docket['id']}/cost-items/{original['id']}/corrections",
+        headers=headers,
+        json={
+            "action": "void",
+            "reason": "A second outgoing correction must be rejected.",
+            "evidence_reference": "correction:duplicate-attempt",
+        },
+    )
+    assert duplicate.status_code == 409, duplicate.text
+
+    with get_session_factory()() as session:
+        correction = session.scalar(
+            select(IpCostItemCorrection).where(
+                IpCostItemCorrection.source_cost_item_id == original["id"]
+            )
+        )
+        assert correction is not None
+        correction.reason = "rewritten"
+        with pytest.raises(IntegrityError, match="append-only"):
+            session.commit()
+
+    voided = client.post(
+        f"/api/ip/dockets/{docket['id']}/cost-items/{replacement['id']}/corrections",
+        headers=headers,
+        json={
+            "action": "void",
+            "reason": "The registry refunded this fee; retain it as void history.",
+            "evidence_reference": "correction:registry-refund-2026",
+        },
+    )
+    assert voided.status_code == 200, voided.text
+    final_by_id = {row["id"]: row for row in voided.json()["cost_items"]}
+    assert final_by_id[original["id"]]["lineage_status"] == "superseded"
+    assert final_by_id[replacement["id"]]["lineage_status"] == "voided"
+
+    final_report = _reconcile(client, headers, docket["id"]).json()
+    assert final_report["nonbillable_count"] == 0
+    assert final_report["superseded_count"] == 1
+    assert final_report["voided_count"] == 1
+    assert not any(row["included_in_totals"] for row in final_report["rows"])
+    control = client.get("/api/ip/reports/docket-control", headers=headers)
+    assert control.status_code == 200, control.text
+    assert control.json()["total_cost_minor_by_currency"] == {}
+    assert _billing_effect_snapshot(docket["company_id"]) == before_billing
 
 
 def test_uj52_exc02_conversion_preserves_original_amount_rate_source_and_time(
@@ -691,6 +895,14 @@ def test_uj52_cost_invariants_hold_at_the_database_not_only_in_the_request_model
 
     headers, docket, matter = _setup(client)
     company_id = docket["company_id"]
+    with get_session_factory()() as session:
+        creator_membership_id = session.scalar(
+            select(CompanyMembership.id).where(
+                CompanyMembership.company_id == company_id,
+                CompanyMembership.is_active.is_(True),
+            )
+        )
+    assert creator_membership_id is not None
 
     def _insert(**overrides: object) -> None:
         row: dict[str, object] = {
@@ -703,6 +915,7 @@ def test_uj52_cost_invariants_hold_at_the_database_not_only_in_the_request_model
             "amount_minor": 900000,
             "currency": "INR",
             "evidence_reference": "receipt:direct-write",
+            "created_by_membership_id": creator_membership_id,
         }
         row.update(overrides)
         with get_session_factory()() as session:

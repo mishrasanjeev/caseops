@@ -30,7 +30,7 @@ def test_prod_verification_runs_notice_suite_after_ram_failure() -> None:
 def test_prod_verification_preserves_each_suite_failure_artifact() -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / "prod-verify.yml").read_text(encoding="utf-8")
 
-    for output_directory in ("ram", "ip-a0", "ip-renewal", "notice"):
+    for output_directory in ("ram", "ip-a0", "ip-renewal", "ip-cost", "notice"):
         assert f"--output=test-results/{output_directory}" in workflow
     upload_step = workflow.split("- name: Upload Playwright report on failure", 1)[1]
     assert "test-results/" in upload_step
@@ -49,6 +49,39 @@ def test_historical_a0_acceptance_is_opt_in_not_a_recurring_release_gate() -> No
     assert "type: boolean" in trigger_block
     assert "inputs.run_historical_a0_gate == true" in a0_step
     assert "CASEOPS_IP_A0_PROD_MODE: verify" in a0_step
+
+
+def test_ip_cost_acceptance_is_isolated_and_partially_configured_runs_fail_closed() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "prod-verify.yml").read_text(
+        encoding="utf-8"
+    )
+    broad = (REPO_ROOT / "playwright.prod-ram.config.ts").read_text(encoding="utf-8")
+    release = (REPO_ROOT / ".github" / "workflows" / "release-verify.yml").read_text(
+        encoding="utf-8"
+    )
+    dedicated = (REPO_ROOT / "playwright.ip-cost-prod.config.ts").read_text(
+        encoding="utf-8"
+    )
+
+    assert "iplf-039f-cost-items-2026-08-30-prod" not in broad
+    assert "playwright.ip-cost-prod.config.ts" not in release
+    assert "iplf-039f-cost-items-2026-08-30-prod\\.spec\\.ts" in dedicated
+    assert "Check IPLF-039F cost acceptance configuration" in workflow
+    assert "Run IPLF-039F cost acceptance" in workflow
+    for fixture_name in (
+        "CASEOPS_IP_COST_PROD_TEST_TENANT_ACK",
+        "CASEOPS_IP_COST_PROD_BILLING_MATTER_IDS_JSON",
+        "CASEOPS_IP_COST_PROD_COMPANY_SLUG",
+        "CASEOPS_IP_COST_PROD_EMAIL",
+        "CASEOPS_IP_COST_PROD_PASSWORD",
+        "CASEOPS_IP_COST_PROD_DOCKET_ID",
+    ):
+        assert workflow.count(fixture_name) >= 3
+    assert 'if [[ "$configured" -eq 0 ]]' in workflow
+    assert 'elif [[ "$configured" -ne 6 ]]' in workflow
+    assert "generic scheduled production verification continues independently" in workflow
+    assert "steps.ip-cost-prerequisites.outputs.configured == 'true'" in workflow
+    assert "--config=playwright.ip-cost-prod.config.ts" in workflow
 
 
 def test_exact_release_dispatch_records_only_the_claim_proven_by_the_suite() -> None:

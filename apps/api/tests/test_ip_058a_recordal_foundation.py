@@ -220,6 +220,71 @@ def _transaction(
     )
 
 
+def _nonbillable_cost(
+    client: TestClient,
+    *,
+    headers: dict[str, str],
+    docket_id: str,
+    evidence_reference: str,
+) -> dict:
+    response = client.post(
+        f"/api/ip/dockets/{docket_id}/cost-items",
+        headers=headers,
+        json={
+            "category": "official_fee",
+            "description": "Official recordal fee retained as immutable evidence.",
+            "amount_minor": 900000,
+            "currency": "INR",
+            "evidence_reference": evidence_reference,
+            "billable": False,
+        },
+    )
+    assert response.status_code == 200, response.text
+    return next(
+        row
+        for row in response.json()["cost_items"]
+        if row["evidence_reference"] == evidence_reference
+    )
+
+
+def _correct_cost(
+    client: TestClient,
+    *,
+    headers: dict[str, str],
+    docket_id: str,
+    cost_item_id: str,
+    action: str,
+    replacement_evidence_reference: str | None = None,
+) -> dict | None:
+    correction = {
+        "action": action,
+        "reason": "Registry evidence changed; retain the prior fee as history.",
+        "evidence_reference": f"correction:{action}:{cost_item_id}",
+    }
+    if replacement_evidence_reference is not None:
+        correction["replacement"] = {
+            "category": "official_fee",
+            "description": "Replacement official recordal fee evidence.",
+            "amount_minor": 925000,
+            "currency": "INR",
+            "evidence_reference": replacement_evidence_reference,
+            "billable": False,
+        }
+    response = client.post(
+        f"/api/ip/dockets/{docket_id}/cost-items/{cost_item_id}/corrections",
+        headers=headers,
+        json=correction,
+    )
+    assert response.status_code == 200, response.text
+    if replacement_evidence_reference is None:
+        return None
+    return next(
+        row
+        for row in response.json()["cost_items"]
+        if row["evidence_reference"] == replacement_evidence_reference
+    )
+
+
 def test_assignment_recordal_projects_pending_then_registry_recorded_title(
     client: TestClient,
 ) -> None:
@@ -494,6 +559,185 @@ def test_assignment_recordal_projects_pending_then_registry_recorded_title(
             "ip_recordal.created",
             "ip_recordal.transaction_recorded",
         }
+
+
+def test_recordal_cost_refs_require_active_lineage_without_rewriting_history(
+    client: TestClient,
+) -> None:
+    """Retired fees are never reusable, while recorded evidence remains immutable."""
+
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    company_id = str(bootstrap["company"]["id"])
+    membership_id = str(bootstrap["membership"]["id"])
+    docket = _docket(client, headers, "RECORDAL COST LINEAGE")
+    document_id = _supporting_document(
+        client,
+        headers=headers,
+        company_id=company_id,
+        membership_id=membership_id,
+        docket_id=docket["id"],
+    )
+
+    superseded_source = _nonbillable_cost(
+        client,
+        headers=headers,
+        docket_id=docket["id"],
+        evidence_reference="registry:recordal-fee-v1",
+    )
+    active_replacement = _correct_cost(
+        client,
+        headers=headers,
+        docket_id=docket["id"],
+        cost_item_id=superseded_source["id"],
+        action="supersede",
+        replacement_evidence_reference="registry:recordal-fee-v2",
+    )
+    assert active_replacement is not None
+    voided_source = _nonbillable_cost(
+        client,
+        headers=headers,
+        docket_id=docket["id"],
+        evidence_reference="registry:void-recordal-fee",
+    )
+    _correct_cost(
+        client,
+        headers=headers,
+        docket_id=docket["id"],
+        cost_item_id=voided_source["id"],
+        action="void",
+    )
+
+    base_payload = _create_assignment_payload(
+        docket_id=docket["id"],
+        lifecycle_version=_lifecycle_version(client, headers, docket["id"]),
+        membership_id=membership_id,
+        document_id=document_id,
+    )
+    for retired_cost in (superseded_source, voided_source):
+        rejected = client.post(
+            "/api/ip/recordals",
+            headers=headers,
+            json=base_payload | {"fee_cost_item_refs": [retired_cost["id"]]},
+        )
+        assert rejected.status_code == 422, rejected.text
+        assert (
+            rejected.json()["detail"]
+            == "Recordal cost references must be active and belong to the selected docket."
+        )
+
+    created = client.post(
+        "/api/ip/recordals",
+        headers=headers,
+        json=base_payload | {"fee_cost_item_refs": [active_replacement["id"]]},
+    )
+    assert created.status_code == 201, created.text
+    recordal = created.json()
+    assert recordal["fee_cost_item_refs_json"] == [active_replacement["id"]]
+
+    reviewed = _transaction(
+        client,
+        headers=headers,
+        docket_id=docket["id"],
+        recordal_id=recordal["id"],
+        recordal_version=1,
+        membership_id=membership_id,
+        transaction_kind="review_approved",
+        document_id=document_id,
+        extra={"cost_item_refs": [active_replacement["id"]]},
+    )
+    assert reviewed.status_code == 201, reviewed.text
+    assert reviewed.json()["event"]["payload_json"]["cost_item_refs"] == [
+        active_replacement["id"]
+    ]
+
+    next_active_replacement = _correct_cost(
+        client,
+        headers=headers,
+        docket_id=docket["id"],
+        cost_item_id=active_replacement["id"],
+        action="supersede",
+        replacement_evidence_reference="registry:recordal-fee-v3",
+    )
+    assert next_active_replacement is not None
+
+    for retired_cost in (active_replacement, voided_source):
+        rejected = _transaction(
+            client,
+            headers=headers,
+            docket_id=docket["id"],
+            recordal_id=recordal["id"],
+            recordal_version=2,
+            membership_id=membership_id,
+            transaction_kind="filed",
+            document_id=document_id,
+            extra={"cost_item_refs": [retired_cost["id"]]},
+        )
+        assert rejected.status_code == 422, rejected.text
+        assert (
+            rejected.json()["detail"]
+            == "Recordal cost references must be active and belong to the selected docket."
+        )
+
+    filed = _transaction(
+        client,
+        headers=headers,
+        docket_id=docket["id"],
+        recordal_id=recordal["id"],
+        recordal_version=2,
+        membership_id=membership_id,
+        transaction_kind="filed",
+        document_id=document_id,
+        extra={"cost_item_refs": [next_active_replacement["id"]]},
+    )
+    assert filed.status_code == 201, filed.text
+    assert filed.json()["event"]["payload_json"]["cost_item_refs"] == [
+        next_active_replacement["id"]
+    ]
+
+    workspace = client.get(
+        f"/api/ip/recordals/{recordal['id']}/workspace",
+        headers=headers,
+    )
+    assert workspace.status_code == 200, workspace.text
+    aggregate = workspace.json()
+    assert aggregate["recordal"]["fee_cost_item_refs_json"] == [
+        active_replacement["id"]
+    ]
+    recorded_cost_refs = [
+        event["payload_json"]["cost_item_refs"]
+        for event in aggregate["transactions"]
+        if event["payload_json"]["transaction_kind"] != "created"
+    ]
+    assert recorded_cost_refs == [
+        [active_replacement["id"]],
+        [next_active_replacement["id"]],
+    ]
+    assert len(aggregate["transactions"]) == 3
+
+    costs_by_id = {
+        row["id"]: row for row in aggregate["docket"]["cost_items"]
+    }
+    assert costs_by_id[superseded_source["id"]]["lineage_status"] == "superseded"
+    assert (
+        costs_by_id[superseded_source["id"]]["evidence_reference"]
+        == "registry:recordal-fee-v1"
+    )
+    assert costs_by_id[active_replacement["id"]]["lineage_status"] == "superseded"
+    assert (
+        costs_by_id[active_replacement["id"]]["evidence_reference"]
+        == "registry:recordal-fee-v2"
+    )
+    assert costs_by_id[next_active_replacement["id"]]["lineage_status"] == "active"
+    assert (
+        costs_by_id[next_active_replacement["id"]]["evidence_reference"]
+        == "registry:recordal-fee-v3"
+    )
+    assert costs_by_id[voided_source["id"]]["lineage_status"] == "voided"
+    assert (
+        costs_by_id[voided_source["id"]]["evidence_reference"]
+        == "registry:void-recordal-fee"
+    )
 
 
 def test_recordal_withdrawal_rejection_and_tenant_boundaries(client: TestClient) -> None:

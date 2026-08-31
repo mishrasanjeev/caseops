@@ -619,6 +619,21 @@ class IpCostItemCreateRequest(BaseModel):
         return self
 
 
+class IpCostItemCorrectionRequest(BaseModel):
+    action: Literal["void", "supersede"]
+    reason: str = Field(min_length=3, max_length=1000)
+    evidence_reference: str = Field(min_length=3, max_length=500)
+    replacement: IpCostItemCreateRequest | None = None
+
+    @model_validator(mode="after")
+    def replacement_matches_action(self) -> IpCostItemCorrectionRequest:
+        if self.action == "void" and self.replacement is not None:
+            raise ValueError("A void preserves the source cost without a replacement.")
+        if self.action == "supersede" and self.replacement is None:
+            raise ValueError("A supersession requires the complete replacement cost evidence.")
+        return self
+
+
 class IpCostItemRecord(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -647,6 +662,11 @@ class IpCostItemRecord(BaseModel):
     canonical_amount_minor: int | None
     reconciliation_difference_minor: int | None
     reconciled_at: datetime | None
+    lineage_status: Literal["active", "voided", "superseded"] = "active"
+    corrects_cost_item_id: str | None = None
+    replacement_cost_item_id: str | None = None
+    correction_reason: str | None = None
+    correction_evidence_reference: str | None = None
     created_at: datetime
 
 
@@ -667,6 +687,9 @@ class IpCostReconciliationRow(BaseModel):
     #: ``estimate`` and ``nonbillable`` are terminal, not stages: neither can
     #: become ``matched``, because neither belongs in the client ledger.
     status: Literal["matched", "mismatch", "missing", "unlinked", "estimate", "nonbillable"]
+    lineage_status: Literal["active", "voided", "superseded"] = "active"
+    included_in_totals: bool = True
+    replacement_cost_item_id: str | None = None
 
 
 class IpCostReconciliationReport(BaseModel):
@@ -680,6 +703,8 @@ class IpCostReconciliationReport(BaseModel):
     unlinked_count: int
     estimate_count: int = 0
     nonbillable_count: int = 0
+    voided_count: int = 0
+    superseded_count: int = 0
     checksum_sha256: str
 
 

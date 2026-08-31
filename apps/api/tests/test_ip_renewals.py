@@ -17,6 +17,7 @@ from caseops_api.db.models import (
     IpResponsibilityAssignment,
     IpRuleSet,
     IpRuleVersion,
+    IpTrademarkParticularVersion,
     LegalWorkingCalendar,
     LegalWorkingCalendarVersion,
     NotificationDeliveryIntent,
@@ -99,6 +100,23 @@ def _seed_renewal_fixture(client: TestClient) -> tuple[dict, dict[str, str], dic
         )
         session.add(docket)
         session.flush()
+        session.add(
+            IpTrademarkParticularVersion(
+                company_id=company_id,
+                docket_id=docket.id,
+                version=1,
+                form_key="renewal_fixture",
+                form_version="1",
+                mark_kind="word",
+                representation_json={"text": "ASTER"},
+                classes_json=[9, 42],
+                parties_json=[],
+                filing_manifest_json=[],
+                readiness_status="draft",
+                readiness_errors_json=[],
+                created_by_membership_id=membership_id,
+            )
+        )
         registration = IpDocketEvent(
             company_id=company_id,
             docket_id=docket.id,
@@ -248,6 +266,7 @@ def _seed_renewal_fixture(client: TestClient) -> tuple[dict, dict[str, str], dic
             billable=False,
             cost_nature="estimate",
             evidence_reference="registry://fees/renewal-v1",
+            reconciliation_status="nonbillable",
             created_by_membership_id=membership_id,
         )
         taxonomy = IpDocumentTaxonomyEntry(
@@ -669,7 +688,7 @@ def test_renewal_portfolio_reminders_and_instruction_cancellation(
         "evidence_reference": "registry://fees/renewal-v1",
         "billing_link_type": None,
         "billing_link_id": None,
-        "reconciliation_status": "unlinked",
+            "reconciliation_status": "nonbillable",
         "reconciled_at": None,
     }
 
@@ -784,3 +803,135 @@ def test_renewal_portfolio_projects_grace_and_overdue_without_silent_writes(
     assert overdue_item["reporting_state"] == "overdue"
     assert overdue_item["calendar_phase"] == "overdue"
     assert overdue_item["action_required"] == "resolve_overdue_term"
+
+
+def test_renewal_fee_reference_follows_supersession_and_requires_explicit_post_void_fee(
+    client: TestClient,
+) -> None:
+    """Every transition revalidates fee lineage, even when the field is omitted."""
+
+    _, headers, ids = _seed_renewal_fixture(client)
+    _confirm_sources(ids)
+    base = f"/api/ip/dockets/{ids['docket']}/renewal-terms"
+    created_response = client.post(
+        base,
+        headers=headers,
+        json={
+            "registration_event_id": ids["registration"],
+            "renewal_deadline_id": ids["renewal"],
+            "grace_deadline_id": ids["grace"],
+            "fee_cost_item_id": ids["fee"],
+        },
+    )
+    assert created_response.status_code == 201, created_response.text
+    term = created_response.json()
+
+    correction_response = client.post(
+        f"/api/ip/dockets/{ids['docket']}/cost-items/{ids['fee']}/corrections",
+        headers=headers,
+        json={
+            "action": "supersede",
+            "reason": "Registry replaced the quoted renewal fee.",
+            "evidence_reference": "registry://fees/renewal-correction-v2",
+            "replacement": {
+                "category": "official_fee",
+                "description": "Corrected renewal official fee quote",
+                "amount_minor": 925000,
+                "currency": "INR",
+                "billable": False,
+                "cost_nature": "estimate",
+                "rate_confidential": False,
+                "evidence_reference": "registry://fees/renewal-v2",
+            },
+        },
+    )
+    assert correction_response.status_code == 200, correction_response.text
+    replacement = next(
+        row
+        for row in correction_response.json()["cost_items"]
+        if row["corrects_cost_item_id"] == ids["fee"]
+    )
+
+    # Portfolio rendering never presents the retired source as current fee
+    # evidence before the next versioned renewal transition resolves lineage.
+    portfolio = client.get("/api/ip/renewals/portfolio", headers=headers)
+    assert portfolio.status_code == 200, portfolio.text
+    assert portfolio.json()["items"][0]["fee"] is None
+
+    followed = client.post(
+        f"{base}/{term['id']}/transition",
+        headers=headers,
+        json={
+            "expected_state": term["state"],
+            "expected_version": term["version"],
+            "expected_updated_at": term["updated_at"],
+            "target_state": "filing_in_progress",
+            "reason": "Provider filing was initiated against corrected fee evidence.",
+            "filing_initiated_reference": "provider://attempt/fee-lineage",
+        },
+    )
+    assert followed.status_code == 200, followed.text
+    term = followed.json()
+    assert term["fee_cost_item_id"] == replacement["id"]
+
+    voided = client.post(
+        f"/api/ip/dockets/{ids['docket']}/cost-items/{replacement['id']}/corrections",
+        headers=headers,
+        json={
+            "action": "void",
+            "reason": "The registry withdrew the corrected quote.",
+            "evidence_reference": "registry://fees/renewal-v2-withdrawal",
+        },
+    )
+    assert voided.status_code == 200, voided.text
+
+    blocked = client.post(
+        f"{base}/{term['id']}/transition",
+        headers=headers,
+        json={
+            "expected_state": term["state"],
+            "expected_version": term["version"],
+            "expected_updated_at": term["updated_at"],
+            "target_state": "filed",
+            "reason": "Attempted filing without replacing voided fee evidence.",
+            "filing_event_id": ids["filing"],
+        },
+    )
+    assert blocked.status_code == 409, blocked.text
+    assert blocked.json()["code"] == "ip_renewal_fee_voided"
+
+    docket_response = client.post(
+        f"/api/ip/dockets/{ids['docket']}/cost-items",
+        headers=headers,
+        json={
+            "category": "official_fee",
+            "description": "New renewal fee after withdrawn quote",
+            "amount_minor": 930000,
+            "currency": "INR",
+            "billable": False,
+            "cost_nature": "estimate",
+            "rate_confidential": False,
+            "evidence_reference": "registry://fees/renewal-v3",
+        },
+    )
+    assert docket_response.status_code == 200, docket_response.text
+    new_fee = next(
+        row
+        for row in docket_response.json()["cost_items"]
+        if row["evidence_reference"] == "registry://fees/renewal-v3"
+    )
+    resumed = client.post(
+        f"{base}/{term['id']}/transition",
+        headers=headers,
+        json={
+            "expected_state": term["state"],
+            "expected_version": term["version"],
+            "expected_updated_at": term["updated_at"],
+            "target_state": "filed",
+            "reason": "Registry filing linked to newly issued active fee evidence.",
+            "fee_cost_item_id": new_fee["id"],
+            "filing_event_id": ids["filing"],
+        },
+    )
+    assert resumed.status_code == 200, resumed.text
+    assert resumed.json()["fee_cost_item_id"] == new_fee["id"]

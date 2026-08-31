@@ -646,6 +646,175 @@ def test_madrid_impact_agent_and_fee_actions_reuse_canonical_owners(
     assert "fee_or_cost_missing" not in workspace["data_quality_gaps"]
 
 
+def test_madrid_fee_actions_follow_active_cost_lineage_and_preserve_history(
+    client: TestClient,
+) -> None:
+    """Madrid accepts only the active cost fact without erasing prior evidence."""
+
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    membership_id = str(bootstrap["membership"]["id"])
+    basic_docket = _docket(client, headers, "NOVA MADRID BASIC")
+    asset = _asset(client, headers, basic_docket["id"], "NOVA")
+    application = _application(client, headers, basic_docket["id"], asset["id"])
+    registration_response = client.post(
+        "/api/ip/international-registrations",
+        headers=headers,
+        json=_registration_payload(
+            basic_application_id=application["id"],
+            ir_number="1888059",
+        ),
+    )
+    assert registration_response.status_code == 201, registration_response.text
+    registration = registration_response.json()
+    designation_response = client.post(
+        "/api/ip/international-registrations",
+        headers=headers,
+        json=_designation_payload(
+            parent_registration_id=registration["id"],
+            member_code="IN",
+            national_status="notified",
+        ),
+    )
+    assert designation_response.status_code == 201, designation_response.text
+    designation = designation_response.json()
+    workspace_url = f"/api/ip/international-registrations/{designation['id']}/workspace"
+    action_url = f"/api/ip/international-registrations/{designation['id']}/actions"
+    correction_url = (
+        f"/api/ip/dockets/{designation['docket_id']}/cost-items/{{cost_item_id}}/corrections"
+    )
+
+    empty_workspace = client.get(workspace_url, headers=headers)
+    assert empty_workspace.status_code == 200, empty_workspace.text
+    assert empty_workspace.json()["costs"] == []
+    assert "fee_or_cost_missing" in empty_workspace.json()["data_quality_gaps"]
+
+    original_response = client.post(
+        f"/api/ip/dockets/{designation['docket_id']}/cost-items",
+        headers=headers,
+        json={
+            "category": "official_fee",
+            "description": "India Madrid designation response fee",
+            "amount_minor": 900000,
+            "currency": "INR",
+            "evidence_reference": "receipt:IN:1888059:incorrect",
+            "billable": False,
+            "cost_nature": "actual",
+        },
+    )
+    assert original_response.status_code == 200, original_response.text
+    original = original_response.json()["cost_items"][0]
+
+    superseded_response = client.post(
+        correction_url.format(cost_item_id=original["id"]),
+        headers=headers,
+        json={
+            "action": "supersede",
+            "reason": "The receipt amount was transcribed incorrectly.",
+            "evidence_reference": "correction:IN:1888059:v2",
+            "replacement": {
+                "category": "official_fee",
+                "description": "Corrected India Madrid designation response fee",
+                "amount_minor": 850000,
+                "currency": "INR",
+                "evidence_reference": "receipt:IN:1888059:corrected",
+                "billable": False,
+                "cost_nature": "actual",
+            },
+        },
+    )
+    assert superseded_response.status_code == 200, superseded_response.text
+    superseded_costs = {row["id"]: row for row in superseded_response.json()["cost_items"]}
+    historical = superseded_costs[original["id"]]
+    assert historical["lineage_status"] == "superseded"
+    assert historical["amount_minor"] == 900000
+    assert historical["evidence_reference"] == "receipt:IN:1888059:incorrect"
+    replacement = superseded_costs[historical["replacement_cost_item_id"]]
+    assert replacement["lineage_status"] == "active"
+    assert replacement["corrects_cost_item_id"] == original["id"]
+
+    retired_reference = client.post(
+        action_url,
+        headers=headers,
+        json=_action_payload(
+            membership_id=membership_id,
+            expected_version=1,
+            action_kind="fee_recorded",
+            authority="internal",
+            source_reference="receipt:IN:1888059:incorrect",
+            cost_item_refs=[original["id"]],
+        ),
+    )
+    assert retired_reference.status_code == 422, retired_reference.text
+    assert retired_reference.json()["detail"] == (
+        "Madrid cost references must be active and belong to this designation docket."
+    )
+
+    active_reference = client.post(
+        action_url,
+        headers=headers,
+        json=_action_payload(
+            membership_id=membership_id,
+            expected_version=1,
+            action_kind="fee_recorded",
+            authority="internal",
+            source_reference="receipt:IN:1888059:corrected",
+            cost_item_refs=[replacement["id"]],
+        ),
+    )
+    assert active_reference.status_code == 201, active_reference.text
+    assert active_reference.json()["record"]["version"] == 2
+    assert active_reference.json()["event"]["payload_json"]["cost_item_refs"] == [replacement["id"]]
+
+    active_workspace = client.get(workspace_url, headers=headers)
+    assert active_workspace.status_code == 200, active_workspace.text
+    active_workspace_body = active_workspace.json()
+    assert {row["id"] for row in active_workspace_body["costs"]} == {
+        original["id"],
+        replacement["id"],
+    }
+    assert "fee_or_cost_missing" not in active_workspace_body["data_quality_gaps"]
+
+    voided_response = client.post(
+        correction_url.format(cost_item_id=replacement["id"]),
+        headers=headers,
+        json={
+            "action": "void",
+            "reason": "The registry refunded the corrected designation fee.",
+            "evidence_reference": "correction:IN:1888059:refund",
+        },
+    )
+    assert voided_response.status_code == 200, voided_response.text
+
+    voided_reference = client.post(
+        action_url,
+        headers=headers,
+        json=_action_payload(
+            membership_id=membership_id,
+            expected_version=2,
+            action_kind="fee_recorded",
+            authority="internal",
+            source_reference="correction:IN:1888059:refund",
+            cost_item_refs=[replacement["id"]],
+        ),
+    )
+    assert voided_reference.status_code == 422, voided_reference.text
+    assert voided_reference.json()["detail"] == (
+        "Madrid cost references must be active and belong to this designation docket."
+    )
+
+    final_workspace = client.get(workspace_url, headers=headers)
+    assert final_workspace.status_code == 200, final_workspace.text
+    final_body = final_workspace.json()
+    final_costs = {row["id"]: row for row in final_body["costs"]}
+    assert set(final_costs) == {original["id"], replacement["id"]}
+    assert final_costs[original["id"]]["lineage_status"] == "superseded"
+    assert final_costs[replacement["id"]]["lineage_status"] == "voided"
+    assert "fee_or_cost_missing" in final_body["data_quality_gaps"]
+    assert "record_madrid_fee_or_cost" in final_body["next_required_actions"]
+    assert final_body["record"]["version"] == 2
+
+
 def test_madrid_action_contract_keeps_authority_and_reconciliation_distinct() -> None:
     base = _action_payload(
         membership_id="membership-1",

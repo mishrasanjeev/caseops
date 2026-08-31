@@ -9233,6 +9233,254 @@ def test_ip_document_link_projection_event_key_is_bounded_on_postgres(
         get_settings.cache_clear()
 
 
+def test_matterless_ip_cost_evidence_is_immutable_on_postgres(pg_engine):
+    """IPLF-039F: PostgreSQL owns integrity, lineage, actors and disposition."""
+
+    docket_id = str(uuid4())
+    cost_id = str(uuid4())
+    replacement_id = str(uuid4())
+    correction_id = str(uuid4())
+    now = datetime.now(UTC)
+
+    with Session(pg_engine) as session:
+        company_id = _seed_company(session)
+        actor_id = _seed_membership(session, company_id, role="owner")
+        inactive_actor_id = _seed_membership(session, company_id, role="owner")
+        session.execute(
+            text("UPDATE company_memberships SET is_active = false WHERE id = :id"),
+            {"id": inactive_actor_id},
+        )
+        other_company_id = _seed_company(session)
+        other_actor_id = _seed_membership(session, other_company_id, role="owner")
+        session.execute(
+            text(
+                "INSERT INTO ip_docket_records ("
+                "id, company_id, record_type, title, status, is_active, "
+                "lifecycle_version, restricted, access_policy_version, "
+                "current_version, created_at, updated_at"
+                ") VALUES ("
+                ":id, :company, 'trademark', 'PostgreSQL matterless cost', "
+                "'draft', true, 0, false, 0, 1, :now, :now)"
+            ),
+            {"id": docket_id, "company": company_id, "now": now},
+        )
+        session.commit()
+
+    insert_cost = text(
+        "INSERT INTO ip_cost_items (id, company_id, docket_id, matter_id, category, "
+        "description, amount_minor, currency, billable, cost_nature, rate_confidential, "
+        "evidence_reference, reconciliation_status, created_by_membership_id, created_at) "
+        "VALUES (:id, :company, :docket, NULL, 'official_fee', :description, 900000, "
+        "'INR', false, 'actual', false, :evidence, :status, :actor, :now)"
+    )
+
+    # Hostile direct writers fail before a matterless row can claim it is
+    # unlinked or attribute provenance to another tenant.
+    with Session(pg_engine) as session, pytest.raises(DBAPIError):
+        session.execute(
+            insert_cost,
+            {
+                "id": str(uuid4()),
+                "company": company_id,
+                "docket": docket_id,
+                "description": "Invalid status",
+                "evidence": "receipt:invalid-status",
+                "status": "unlinked",
+                "actor": actor_id,
+                "now": now,
+            },
+        )
+        session.commit()
+    with Session(pg_engine) as session, pytest.raises(
+        DBAPIError, match="creator must be an active member of the cost tenant"
+    ):
+        session.execute(
+            insert_cost,
+            {
+                "id": str(uuid4()),
+                "company": company_id,
+                "docket": docket_id,
+                "description": "Invalid actor",
+                "evidence": "receipt:invalid-actor",
+                "status": "nonbillable",
+                "actor": other_actor_id,
+                "now": now,
+            },
+        )
+        session.commit()
+    with Session(pg_engine) as session, pytest.raises(
+        DBAPIError, match="creator must be an active member of the cost tenant"
+    ):
+        session.execute(
+            insert_cost,
+            {
+                "id": str(uuid4()),
+                "company": company_id,
+                "docket": docket_id,
+                "description": "Inactive actor",
+                "evidence": "receipt:inactive-actor",
+                "status": "nonbillable",
+                "actor": inactive_actor_id,
+                "now": now,
+            },
+        )
+        session.commit()
+
+    with Session(pg_engine) as session:
+        for inserted_id, description, evidence in (
+            (cost_id, "Original official filing fee", "receipt:original"),
+            (replacement_id, "Corrected official filing fee", "receipt:replacement"),
+        ):
+            session.execute(
+                insert_cost,
+                {
+                    "id": inserted_id,
+                    "company": company_id,
+                    "docket": docket_id,
+                    "description": description,
+                    "evidence": evidence,
+                    "status": "nonbillable",
+                    "actor": actor_id,
+                    "now": now,
+                },
+            )
+        session.execute(
+            text(
+                "UPDATE ip_cost_items SET reconciliation_status = 'nonbillable', "
+                "canonical_amount_minor = NULL, reconciliation_difference_minor = NULL, "
+                "reconciled_at = :now, reconciled_by_membership_id = :actor "
+                "WHERE id = :id"
+            ),
+            {"id": cost_id, "actor": actor_id, "now": datetime.now(UTC)},
+        )
+        session.commit()
+
+    insert_correction = text(
+        "INSERT INTO ip_cost_item_corrections (id, company_id, docket_id, "
+        "source_cost_item_id, action, replacement_cost_item_id, reason, "
+        "evidence_reference, created_by_membership_id, created_at) VALUES "
+        "(:id, :company, :docket, :source, 'supersede', :replacement, "
+        "'Registry corrected the amount', 'correction:registry', :actor, :now)"
+    )
+    with Session(pg_engine) as session, pytest.raises(
+        DBAPIError, match="correction actor must be an active member of the cost tenant"
+    ):
+        session.execute(
+            insert_correction,
+            {
+                "id": str(uuid4()),
+                "company": company_id,
+                "docket": docket_id,
+                "source": cost_id,
+                "replacement": replacement_id,
+                "actor": inactive_actor_id,
+                "now": now,
+            },
+        )
+        session.commit()
+    with Session(pg_engine) as session:
+        session.execute(
+            insert_correction,
+            {
+                "id": correction_id,
+                "company": company_id,
+                "docket": docket_id,
+                "source": cost_id,
+                "replacement": replacement_id,
+                "actor": actor_id,
+                "now": now,
+            },
+        )
+        session.commit()
+
+    for statement in (
+        "UPDATE ip_cost_items SET amount_minor = 1 WHERE id = :id",
+        "UPDATE ip_cost_items SET billable = true WHERE id = :id",
+        "UPDATE ip_cost_items SET evidence_reference = 'rewritten' WHERE id = :id",
+    ):
+        with Session(pg_engine) as session, pytest.raises(
+            DBAPIError, match="IP cost evidence is immutable"
+        ):
+            session.execute(text(statement), {"id": cost_id})
+            session.commit()
+
+    with Session(pg_engine) as session, pytest.raises(DBAPIError):
+        session.execute(
+            text(
+                "UPDATE ip_cost_items SET reconciliation_status = 'matched', "
+                "canonical_amount_minor = 900000 WHERE id = :id"
+            ),
+            {"id": cost_id},
+        )
+        session.commit()
+    with Session(pg_engine) as session, pytest.raises(
+        DBAPIError, match="reconciler must be an active member of the cost tenant"
+    ):
+        session.execute(
+            text(
+                "UPDATE ip_cost_items SET reconciled_by_membership_id = :actor "
+                "WHERE id = :id"
+            ),
+            {"id": cost_id, "actor": other_actor_id},
+        )
+        session.commit()
+    with Session(pg_engine) as session, pytest.raises(
+        DBAPIError, match="reconciler must be an active member of the cost tenant"
+    ):
+        session.execute(
+            text(
+                "UPDATE ip_cost_items SET reconciled_by_membership_id = :actor "
+                "WHERE id = :id"
+            ),
+            {"id": cost_id, "actor": inactive_actor_id},
+        )
+        session.commit()
+    with Session(pg_engine) as session, pytest.raises(
+        DBAPIError, match="corrections are append-only"
+    ):
+        session.execute(
+            text(
+                "UPDATE ip_cost_item_corrections SET reason = 'rewritten' "
+                "WHERE source_cost_item_id = :id"
+            ),
+            {"id": cost_id},
+        )
+        session.commit()
+    with Session(pg_engine) as session, pytest.raises(
+        DBAPIError, match="IP cost evidence is retained"
+    ):
+        session.execute(text("DELETE FROM ip_cost_items WHERE id = :id"), {"id": cost_id})
+        session.commit()
+    with Session(pg_engine) as session, pytest.raises(
+        DBAPIError, match="IP cost corrections are retained"
+    ):
+        session.execute(
+            text("DELETE FROM ip_cost_item_corrections WHERE id = :id"),
+            {"id": correction_id},
+        )
+        session.commit()
+
+    # Parent-owned disposition remains possible: the BEFORE DELETE guard sees
+    # that the docket is already being removed by its declared CASCADE.
+    with Session(pg_engine) as session:
+        # A regression in the cascade-safe trigger must fail promptly instead
+        # of leaving a validation worker waiting indefinitely on a lock.
+        session.execute(text("SET LOCAL lock_timeout = '5s'"))
+        session.execute(text("SET LOCAL statement_timeout = '10s'"))
+        session.execute(
+            text("DELETE FROM ip_docket_records WHERE id = :id"),
+            {"id": docket_id},
+        )
+        session.commit()
+    with Session(pg_engine) as session:
+        assert session.scalar(
+            text("SELECT count(*) FROM ip_cost_items WHERE docket_id = :id"),
+            {"id": docket_id},
+        ) == 0
+        assert session.scalar(
+            text("SELECT count(*) FROM ip_cost_item_corrections WHERE docket_id = :id"),
+            {"id": docket_id},
+        ) == 0
 def test_private_retrieval_prefilters_before_bounded_rank_on_postgres(
     pg_engine,
     monkeypatch,

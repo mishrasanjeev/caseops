@@ -14,6 +14,7 @@ from caseops_api.db.models import (
     CompanyMembership,
     IpClientInstruction,
     IpCostItem,
+    IpCostItemCorrection,
     IpDeadline,
     IpDocketEvent,
     IpDocketRecord,
@@ -45,6 +46,7 @@ from caseops_api.schemas.ip_renewals import (
     IpRenewalWorkflowRecord,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.ip_cost_lineage import active_ip_cost_predicate
 from caseops_api.services.matter_access import visible_ip_dockets_filter
 from caseops_api.services.notification_delivery import (
     cancel_pending_notification_intents,
@@ -201,11 +203,126 @@ def _cost_item(
             IpCostItem.id == cost_item_id,
             IpCostItem.company_id == context.company.id,
             IpCostItem.docket_id == docket_id,
+            active_ip_cost_predicate(),
         )
     )
     if row is None:
-        raise HTTPException(status_code=404, detail="IP renewal fee cost item not found.")
+        raise HTTPException(
+            status_code=404,
+            detail="Active IP renewal fee cost item not found.",
+        )
     return row
+
+
+def _resolve_transition_fee(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+    current_cost_item_id: str | None,
+    proposed_cost_item_id: str | None,
+) -> IpCostItem | None:
+    """Resolve a renewal fee without reviving retired cost evidence.
+
+    Active references remain immutable. A supersession advances to the active
+    replacement through the append-only lineage, including when the caller
+    omits the fee field. A void has no canonical replacement, so a later
+    transition must explicitly name a new active fee; that workflow reference
+    change is versioned and audited by the renewal transition itself.
+    """
+
+    if current_cost_item_id is None:
+        if proposed_cost_item_id is None:
+            return None
+        return _cost_item(
+            session,
+            context=context,
+            docket_id=docket_id,
+            cost_item_id=proposed_cost_item_id,
+        )
+
+    current = session.scalar(
+        select(IpCostItem).where(
+            IpCostItem.id == current_cost_item_id,
+            IpCostItem.company_id == context.company.id,
+            IpCostItem.docket_id == docket_id,
+        )
+    )
+    if current is None:
+        raise HTTPException(status_code=404, detail="IP renewal fee cost item not found.")
+
+    lineage_ids = {current.id}
+    corrected = False
+    for _depth in range(100):
+        correction = session.scalar(
+            select(IpCostItemCorrection).where(
+                IpCostItemCorrection.company_id == context.company.id,
+                IpCostItemCorrection.docket_id == docket_id,
+                IpCostItemCorrection.source_cost_item_id == current.id,
+            )
+        )
+        if correction is None:
+            break
+        corrected = True
+        if correction.action == "void":
+            if proposed_cost_item_id is None or proposed_cost_item_id in lineage_ids:
+                raise _conflict(
+                    "ip_renewal_fee_voided",
+                    "The recorded renewal fee was voided; explicitly select a new "
+                    "active fee before continuing this renewal.",
+                )
+            return _cost_item(
+                session,
+                context=context,
+                docket_id=docket_id,
+                cost_item_id=proposed_cost_item_id,
+            )
+        replacement_id = correction.replacement_cost_item_id
+        if replacement_id is None or replacement_id in lineage_ids:
+            raise _conflict(
+                "ip_renewal_fee_lineage_invalid",
+                "The renewal fee correction lineage has no safe active replacement.",
+            )
+        lineage_ids.add(replacement_id)
+        replacement = session.scalar(
+            select(IpCostItem).where(
+                IpCostItem.id == replacement_id,
+                IpCostItem.company_id == context.company.id,
+                IpCostItem.docket_id == docket_id,
+            )
+        )
+        if replacement is None:
+            raise _conflict(
+                "ip_renewal_fee_lineage_invalid",
+                "The renewal fee correction replacement is outside this docket.",
+            )
+        current = replacement
+    else:
+        raise _conflict(
+            "ip_renewal_fee_lineage_invalid",
+            "The renewal fee correction lineage is too deep to resolve safely.",
+        )
+
+    if proposed_cost_item_id is not None and proposed_cost_item_id not in lineage_ids:
+        code = (
+            "ip_renewal_fee_replacement_mismatch"
+            if corrected
+            else "ip_renewal_evidence_immutable"
+        )
+        message = (
+            "Select the active replacement recorded by the fee correction lineage."
+            if corrected
+            else "Recorded fee evidence cannot be replaced unless it has first been voided."
+        )
+        raise _conflict(code, message)
+    # Applying the shared predicate here is deliberate even after traversing
+    # lineage: it closes a race or malformed fork instead of returning history.
+    return _cost_item(
+        session,
+        context=context,
+        docket_id=docket_id,
+        cost_item_id=current.id,
+    )
 
 
 def _document(
@@ -531,6 +648,7 @@ def list_renewal_portfolio(
                 select(IpCostItem).where(
                     IpCostItem.company_id == context.company.id,
                     IpCostItem.id.in_(sorted(cost_ids)),
+                    active_ip_cost_predicate(),
                 )
             ).all()
         )
@@ -1219,10 +1337,13 @@ def transition_renewal_term(
                 "ip_renewal_instruction_required",
                 "An accepted renew instruction is required before marking the term instructed.",
             )
-    _assert_reference_unchanged(
-        current=term.fee_cost_item_id,
-        proposed=payload.fee_cost_item_id,
-        label="fee",
+    previous_fee_cost_item_id = term.fee_cost_item_id
+    resolved_fee = _resolve_transition_fee(
+        session,
+        context=context,
+        docket_id=docket.id,
+        current_cost_item_id=term.fee_cost_item_id,
+        proposed_cost_item_id=payload.fee_cost_item_id,
     )
     _assert_reference_unchanged(
         current=term.filing_event_id,
@@ -1244,13 +1365,6 @@ def transition_renewal_term(
         proposed=payload.next_term_deadline_id,
         label="next-term deadline",
     )
-    if payload.fee_cost_item_id:
-        _cost_item(
-            session,
-            context=context,
-            docket_id=docket.id,
-            cost_item_id=payload.fee_cost_item_id,
-        )
     if payload.filing_event_id:
         _event(
             session,
@@ -1296,8 +1410,8 @@ def transition_renewal_term(
     term.version += 1
     term.updated_by_membership_id = context.membership.id
     term.updated_at = now
-    if payload.fee_cost_item_id is not None:
-        term.fee_cost_item_id = payload.fee_cost_item_id
+    if resolved_fee is not None:
+        term.fee_cost_item_id = resolved_fee.id
     if payload.filing_initiated_reference is not None:
         term.filing_initiated_reference = payload.filing_initiated_reference.strip()
     if payload.filing_event_id is not None:
@@ -1330,6 +1444,8 @@ def transition_renewal_term(
             "from_state": payload.expected_state,
             "to_state": payload.target_state,
             "reason": payload.reason.strip(),
+            "previous_fee_cost_item_id": previous_fee_cost_item_id,
+            "fee_cost_item_id": term.fee_cost_item_id,
             "filing_event_id": term.filing_event_id,
             "acceptance_event_id": term.acceptance_event_id,
             "certificate_document_id": term.certificate_document_id,

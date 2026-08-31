@@ -34,6 +34,7 @@ from caseops_api.schemas.ip_lifecycle import (
     IpDocketEventResponse,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.ip_cost_lineage import active_ip_cost_predicate
 from caseops_api.services.ip_deadline_workflow import deadline_workspace
 from caseops_api.services.ip_document_workflow import list_linked_ip_documents
 from caseops_api.services.ip_lifecycle import append_ip_docket_event, list_ip_docket_events
@@ -417,11 +418,21 @@ def _validate_owned_refs(
             status_code=422,
             detail="Madrid deadline references must belong to this designation docket.",
         )
-    missing_costs = missing_ids(IpCostItem, payload.cost_item_refs)
+    active_costs = set(
+        session.scalars(
+            select(IpCostItem.id).where(
+                IpCostItem.company_id == company_id,
+                IpCostItem.docket_id == docket_id,
+                IpCostItem.id.in_(set(payload.cost_item_refs)),
+                active_ip_cost_predicate(),
+            )
+        )
+    )
+    missing_costs = set(payload.cost_item_refs) - active_costs
     if missing_costs:
         raise HTTPException(
             status_code=422,
-            detail="Madrid cost references must belong to this designation docket.",
+            detail="Madrid cost references must be active and belong to this designation docket.",
         )
     if payload.document_refs:
         event_ids = select(IpDocketEvent.id).where(
@@ -795,7 +806,7 @@ def international_workspace(
         gaps.append("deadline_missing")
     if not linked_documents:
         gaps.append("document_missing")
-    if not docket.cost_items:
+    if not any(cost.lineage_status == "active" for cost in docket.cost_items):
         gaps.append("fee_or_cost_missing")
     if unresolved:
         gaps.append("source_reconciliation_pending")

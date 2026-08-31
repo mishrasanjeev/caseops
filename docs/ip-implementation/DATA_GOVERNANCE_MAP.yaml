@@ -5,7 +5,7 @@
   "policy_status": "pending_named_human_approval",
   "purpose": "Versioned repository inventory for DATA-GOV-01 and DATA-GOV-03. It snapshots SQL tables/columns/indexes and known non-SQL classes so unregistered data-bearing changes fail Definition of Ready.",
   "completion_boundary": "This inventory does not claim approved platform-wide retention bounds, legal-hold activation, tenant export, general purge/offboarding, backup recovery/restore, residency, or data-governance/recovery milestone completion. Most classes remain protected only by fail-closed Definition-of-Ready validation. IPLF-066A adds tenant-private index generations, private content projections and typed scopes, idempotent revocation/tombstone events, and content-free saved-output access manifests under fail-closed tenant policies. IPLF-066B adds one narrow IPLF-071-owned adapter for `private_index_projections`: it accepts only a separately approved execute row matching its immutable dry-run manifest, rechecks current active retention policy and legal-hold state under lock, tombstones and blanks private projection content, records a local receipt, and records an explicit provider deletion-delay exception when no per-request deletion receipt exists. The general data-governance API remains non-executable, the original IPLF-028A six-class admission boundary is unchanged, and no other SQL, object, backup, provider, export, restore, client-scope, or full-tenant disposition is authorized or claimed.",
-  "current_change_note": "IPLF-066B adds durable private-event retry metadata, tenant-leading due and global maintenance indexes, a content-minimized disposition checkpoint class, bounded five-minute maintenance scheduling, fail-closed lag alerting, and the narrow private-index disposition adapter described in the completion boundary. The adapter cannot authorize itself and does not expose a new execution route; IPLF-071 remains incomplete outside this private-index subsystem.",
+  "current_change_note": "IPLF-066B adds durable private-event retry metadata, tenant-leading due and global maintenance indexes, a content-minimized disposition checkpoint class, bounded five-minute maintenance scheduling, fail-closed lag alerting, and the narrow private-index disposition adapter described in the completion boundary. The adapter cannot authorize itself and does not expose a new execution route; IPLF-071 remains incomplete outside this private-index subsystem. IPLF-027B adds dedicated PostgreSQL migration connection budgets and Cloud Run migration-job configuration/read-back checks over already-registered SQL classes; UJ-67-EXC-01 estimate/preflight refusal remains planned. IPLF-039F strengthens database invariants on the registered ip_cost_items class and adds tenant-scoped append-only ip_cost_item_corrections evidence with active same-tenant actor enforcement, terminal nonbillable projections, parent-owned cascade disposition, and restore-forward downgrade refusal. These changes add no alternate accounting owner, provider transmission, storage boundary, retention duration, or disposition authority.",
   "requirement_refs": [
     "DATA-GOV-01",
     "DATA-GOV-03"
@@ -146,6 +146,7 @@
   },
   "table_policy_profile_overrides": {
     "ai_feedback_items": "tenant_operational_record",
+    "ip_cost_item_corrections": "tenant_restricted_legal_content",
     "private_index_generations": "security_identity_control",
     "private_index_projections": "tenant_restricted_legal_content",
     "private_index_projection_scopes": "security_identity_control",
@@ -188,12 +189,24 @@
       "source_ip_document_id": "tenant_or_access_identifier",
       "source_ip_document_version_id": "tenant_or_access_identifier"
     },
+    "ip_cost_item_corrections": {
+      "action": "lifecycle_or_audit_evidence",
+      "created_by_membership_id": "tenant_or_access_identifier",
+      "docket_id": "tenant_or_access_identifier",
+      "evidence_reference": "privileged_or_raw_content",
+      "reason": "privileged_or_raw_content",
+      "replacement_cost_item_id": "tenant_or_access_identifier",
+      "source_cost_item_id": "tenant_or_access_identifier"
+    },
     "ip_docket_control_reviews": {
       "manifest_sha256": "lifecycle_or_audit_evidence",
       "report_snapshot_json": "lifecycle_or_audit_evidence"
     },
     "ip_identifiers": {
       "superseded_by_identifier_id": "tenant_or_access_identifier"
+    },
+    "ip_cost_items": {
+      "evidence_reference": "lifecycle_or_audit_evidence"
     },
     "private_index_projections": {
       "content_sha256": "lifecycle_or_audit_evidence",
@@ -10462,6 +10475,65 @@
       }
     },
     {
+      "id": "ip_cost_item_corrections",
+      "table_name": "ip_cost_item_corrections",
+      "purpose": "Repository SQL persistence class `ip_cost_item_corrections`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "tenant_restricted_legal_content",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "action": {
+          "category_id": "lifecycle_or_audit_evidence",
+          "sql_type": "VARCHAR(16)",
+          "nullable": false
+        },
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "created_by_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "docket_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "evidence_reference": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "VARCHAR(500)",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "reason": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "VARCHAR(1000)",
+          "nullable": false
+        },
+        "replacement_cost_item_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "source_cost_item_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        }
+      }
+    },
+    {
       "id": "ip_cost_items",
       "table_name": "ip_cost_items",
       "purpose": "Repository SQL persistence class `ip_cost_items`; its exact column inventory is intentionally versioned below.",
@@ -10544,7 +10616,7 @@
           "nullable": false
         },
         "evidence_reference": {
-          "category_id": "domain_attribute",
+          "category_id": "lifecycle_or_audit_evidence",
           "sql_type": "VARCHAR(500)",
           "nullable": false
         },
@@ -27955,12 +28027,12 @@
       }
     }
   ],
-  "schema_fingerprint": "43326c5c7e07db25e1c7831cf9d0fa67ff5bb8d4d47f4d9850f578ed076a9995",
+  "schema_fingerprint": "b2cf7def7b1335c3e8a4c476a4e416120b7ded044d3a1b6ff9a2f0454610d361",
   "index_inventory": {
-    "orm_index_count": 1639,
-    "orm_index_fingerprint": "be1d526799b0571122fc196e2240b5fc99e03da735390cddcee9374f5cab268a",
-    "migration_index_count": 693,
-    "migration_index_fingerprint": "b1181f9a26ce61c97f7b352477ce65e96cc7d5001013e4923567640ad5328cdc",
+    "orm_index_count": 1646,
+    "orm_index_fingerprint": "80c22783460246296dd168c1ec28f4c1f14cbe1a9a8c15ad87d375944ff31866",
+    "migration_index_count": 696,
+    "migration_index_fingerprint": "d40795e69a2eed6975724171654b872867251ce2c9a8b26dcebf2c9f91d8fe9d",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."
   }
 }
