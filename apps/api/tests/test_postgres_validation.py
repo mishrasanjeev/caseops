@@ -9469,12 +9469,15 @@ def test_private_retrieval_prefilters_before_bounded_rank_on_postgres(
         applied = process_pending_private_projection_events(
             session,
             company_id=company_id,
+            max_attempts=1,
         )
         session.commit()
         assert applied == (second_event_id,)
         failed = session.get(PrivateProjectionEvent, first_event_id)
         succeeded = session.get(PrivateProjectionEvent, second_event_id)
         assert failed is not None and failed.status == "failed"
+        assert failed.attempt_count == 1
+        assert failed.next_attempt_at is None
         assert failed.error_code == "DataError"
         assert succeeded is not None and succeeded.status == "applied"
         assert session.scalar(

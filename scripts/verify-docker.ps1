@@ -108,6 +108,10 @@ $AcceptanceEnvironment = @{
     CASEOPS_E2E_DATABASE_URL = "postgresql+psycopg://caseops:caseops@127.0.0.1:$PostgresPort/caseops"
     CASEOPS_E2E_DOCKER_PROJECT = $ComposeProject
     CASEOPS_E2E_DOCKER_COMPOSE_FILE = $ComposeFile
+    CASEOPS_TEST_POSTGRES_URL = "postgresql+psycopg://caseops:caseops@127.0.0.1:$PostgresPort/caseops"
+    CASEOPS_DATABASE_URL = "postgresql+psycopg://caseops:caseops@127.0.0.1:$PostgresPort/caseops"
+    CASEOPS_ENV = "ci"
+    CASEOPS_AUTH_SECRET = "docker-postgres-validation-secret-at-least-32-bytes"
     CASEOPS_WEB_BASE_URL = "http://127.0.0.1:$WebPort"
     # Worktrees under OneDrive cannot always accept uv cache hardlinks on Windows.
     UV_LINK_MODE = "copy"
@@ -199,6 +203,16 @@ try {
         caseops-db-index-health
     if ($LASTEXITCODE -ne 0) {
         throw "PostgreSQL index health exceeded its 512 MiB production job ceiling or failed."
+    }
+
+    Write-Host "[docker-acceptance] running the complete PostgreSQL + pgvector validation suite"
+    Push-Location $ApiDir
+    try {
+        & $ApiPython -m pytest -q -m postgres tests/test_postgres_validation.py
+        if ($LASTEXITCODE -ne 0) { throw "PostgreSQL + pgvector validation failed." }
+    }
+    finally {
+        Pop-Location
     }
 
     Write-Host "[docker-acceptance] running Playwright against Docker + PostgreSQL"
