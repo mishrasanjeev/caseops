@@ -62,6 +62,29 @@ async function waitForReview(
   throw new Error(`Review ${reviewId} did not reach ${terminal.join("/")}: ${JSON.stringify(body)}`);
 }
 
+async function currentPrivateTarget(
+  page: Page,
+  headers: Record<string, string>,
+  sourceType: "matter" | "ip_docket",
+  query: string,
+  expectedLabel: string,
+) {
+  const response = await json(
+    await page.request.post(`${API}/api/private-retrieval/search`, {
+      headers,
+      data: { query, source_types: [sourceType], limit: 10 },
+    }),
+    200,
+    `find current ${sourceType} review target`,
+  );
+  const target = response.items.find(
+    (item: { source_type: string; source_id: string; label: string }) =>
+      item.source_type === sourceType && item.label === expectedLabel,
+  );
+  expect(target, `The exact current ${sourceType} QA projection is required.`).toBeTruthy();
+  return target as { source_id: string };
+}
+
 test("IPLF-063B production proves the exact UJ-18 release", async ({ page }) => {
   test.setTimeout(420_000);
   page.setDefaultTimeout(30_000);
@@ -102,80 +125,56 @@ test("IPLF-063B production proves the exact UJ-18 release", async ({ page }) => 
   expect(supportingId, "production supporting fixture").toBeTruthy();
   expect(contraryId, "production contrary fixture").toBeTruthy();
   expect(inaccessibleId, "production inaccessible fixture").toBeTruthy();
+  const releaseKey = expectedSha.slice(0, 12).toLowerCase();
+  const matterCode = `IPLF-066B-${releaseKey.toUpperCase()}`;
+  const matterTitle = `IPLF-066B exact-release revocation ${releaseKey}`;
+  const docketTitle = `IPLF-063B exact-release review ${releaseKey}`;
 
-  const matter = await json(
-    await page.request.post(`${API}/api/matters/`, {
+  // IPLF-066B makes private source capture fail closed. A target created after
+  // the release bootstrap is intentionally not current until the bounded
+  // maintenance path materializes a new verified generation. UJ-18 acceptance
+  // therefore selects existing synthetic projections from the public,
+  // authorization-filtered private search surface instead of racing that
+  // independent maintenance boundary.
+  const matterTarget = await currentPrivateTarget(
+    page,
+    headers,
+    "matter",
+    matterCode,
+    `${matterCode} · ${matterTitle}`,
+  );
+  const docketTarget = await currentPrivateTarget(
+    page,
+    headers,
+    "ip_docket",
+    docketTitle,
+    docketTitle,
+  );
+  const coreRecords = await json(
+    await page.request.get(`${API}/api/ip/dockets/${docketTarget.source_id}/core-records`, {
       headers,
-      data: {
-        matter_code: `IR-PROD-${run}`,
-        title: `Production intelligent review ${run}`,
-        practice_area: "Intellectual Property",
-        forum_level: "tribunal",
-        court_name: "Trade Marks Registry Delhi",
-        status: "intake",
-      },
     }),
     200,
-    "create production review Matter",
+    "load exact-release intelligent-review opposition",
   );
-  const application = await json(
-    await page.request.post(`${API}/api/ip/trademark-applications/manual`, {
-      headers,
-      data: {
-        title: `IPLF 063B PROD MARK ${run}`,
-        restricted: false,
-        asset_title: `IPLF 063B PROD MARK ${run}`,
-        jurisdiction: "IN",
-        office: "Trade Marks Registry Delhi",
-        filing_phase: "draft",
-        source_pending_identifier_allocation: false,
-        application_number: {
-          raw_value: `TM-063B-PROD-${run}`,
-          source: "iplf-063b production QA",
-          effective_from: "2026-08-28",
-          is_primary: true,
-        },
-        particulars: {
-          form_key: "TM-A",
-          form_version: "2026.1",
-          mark_kind: "word",
-          representation: {
-            text: `IPLF 063B PROD MARK ${run}`,
-            evidence_reference: "synthetic-qa:063b:mark",
-          },
-          classes: [{ class_number: 45, specification: "Legal services" }],
-          use_priority: null,
-          parties: [{ role: "applicant", name: "CaseOps Synthetic QA Private Limited" }],
-          agent: null,
-          filing_manifest: [{
-            key: "representation",
-            label: "Mark representation",
-            required: true,
-            evidence_reference: "synthetic-qa:063b:mark",
-          }],
-        },
-      },
-    }),
-    201,
-    "create production intelligent-review application",
+  const proceedings = coreRecords.proceedings.filter(
+    (item: {
+      application_id: string | null;
+      proceeding_kind: string;
+      side: string;
+      stage: string;
+      origin_kind: string;
+      source_pending_identifier_allocation: boolean;
+    }) =>
+      item.application_id === null &&
+      item.proceeding_kind === "opposition" &&
+      item.side === "opponent" &&
+      item.stage === "draft" &&
+      item.origin_kind === "registry_event" &&
+      item.source_pending_identifier_allocation,
   );
-  const proceeding = await json(
-    await page.request.post(`${API}/api/ip/dockets/${application.docket.id}/proceedings`, {
-      headers,
-      data: {
-        application_id: application.application.id,
-        proceeding_kind: "opposition",
-        side: "opponent",
-        office: "Trade Marks Registry Delhi",
-        jurisdiction: "IN",
-        stage: "draft",
-        origin_kind: "registry_event",
-        source_pending_identifier_allocation: true,
-      },
-    }),
-    201,
-    "create production intelligent-review opposition",
-  );
+  expect(proceedings, "one exact-release intelligent-review opposition").toHaveLength(1);
+  const proceeding = proceedings[0];
   const report = await json(
     await page.request.post(`${API}/api/authorities/research-reports`, {
       headers,
@@ -209,7 +208,7 @@ test("IPLF-063B production proves the exact UJ-18 release", async ({ page }) => 
     await page.request.post(`${API}/api/research/reviews`, {
       headers,
       data: {
-        matter_id: matter.id,
+        matter_id: matterTarget.source_id,
         source_research_report_id: report.id,
         issue: `Does proved prior use support opposition ${run}?`,
         facts: [
@@ -286,7 +285,7 @@ test("IPLF-063B production proves the exact UJ-18 release", async ({ page }) => 
     await page.request.post(`${API}/api/research/reviews`, {
       headers,
       data: {
-        ip_docket_id: application.docket.id,
+        ip_docket_id: docketTarget.source_id,
         ip_proceeding_id: proceeding.id,
         source_research_report_id: report.id,
         issue: `Does proved prior use support IP opposition ${run}?`,
@@ -317,10 +316,10 @@ test("IPLF-063B production proves the exact UJ-18 release", async ({ page }) => 
     200,
     "publish production IP intelligent review",
   );
-  expect(ipPublished.review.ip_docket_id).toBe(application.docket.id);
+  expect(ipPublished.review.ip_docket_id).toBe(docketTarget.source_id);
   expect(ipPublished.review.ip_proceeding_id).toBe(proceeding.id);
   await page.goto(
-    `${WEB}/app/ip?docket=${application.docket.id}&view=proceedings&proceeding=${proceeding.id}&draft=${ipPublished.draft_id}`,
+    `${WEB}/app/ip?docket=${docketTarget.source_id}&view=proceedings&proceeding=${proceeding.id}&draft=${ipPublished.draft_id}`,
   );
   await expect(page.getByRole("tab", { name: "Proceedings" })).toHaveAttribute(
     "aria-selected",
@@ -345,7 +344,7 @@ test("IPLF-063B production proves the exact UJ-18 release", async ({ page }) => 
     await page.request.post(`${API}/api/research/reviews`, {
       headers,
       data: {
-        matter_id: matter.id,
+        matter_id: matterTarget.source_id,
         source_research_report_id: blockedReport.id,
         issue: `Inaccessible-only review ${run}`,
         facts: [],

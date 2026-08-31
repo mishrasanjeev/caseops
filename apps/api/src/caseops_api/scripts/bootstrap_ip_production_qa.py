@@ -27,6 +27,8 @@ from caseops_api.db.models import (
     Company,
     CompanyMembership,
     Court,
+    IpDocketRecord,
+    IpProceeding,
     Judge,
     JudgeDecisionIndex,
     Matter,
@@ -113,6 +115,9 @@ class IpProductionQaPrivateRetrievalFixtureResult:
     matter_id: str
     matter_code: str
     attachment_id: str
+    docket_id: str
+    docket_title: str
+    proceeding_id: str
     generation_id: str
     created_fixture: bool
 
@@ -552,7 +557,13 @@ def ensure_ip_production_qa_private_retrieval_fixture(
     )
     content_bytes = content.encode("utf-8")
     content_hash = hashlib.sha256(content_bytes).hexdigest()
-    storage_key = f"synthetic-qa/iplf-066b/{normalized_sha}"
+    # MatterAttachment.storage_key is globally unique, not tenant-scoped.  A
+    # release-only key made the otherwise tenant-safe bootstrap collide as
+    # soon as a second isolated QA company used the same deployed revision.
+    # Keep the legacy key readable below, but every new fixture owns a
+    # company-qualified key.
+    storage_key = f"synthetic-qa/{company.id}/iplf-066b/{normalized_sha}"
+    legacy_storage_key = f"synthetic-qa/iplf-066b/{normalized_sha}"
 
     matter = session.scalar(
         select(Matter).where(
@@ -616,7 +627,7 @@ def ensure_ip_production_qa_private_retrieval_fixture(
         attachment = session.scalar(
             select(MatterAttachment).where(
                 MatterAttachment.matter_id == matter.id,
-                MatterAttachment.storage_key == storage_key,
+                MatterAttachment.storage_key.in_((storage_key, legacy_storage_key)),
             )
         )
         if (
@@ -629,6 +640,83 @@ def ensure_ip_production_qa_private_retrieval_fixture(
             or attachment.processing_status != "indexed"
         ):
             raise RuntimeError("Refusing to adopt a colliding private retrieval QA fixture.")
+
+    docket_title = f"IPLF-063B exact-release review {release_key}"
+    docket_identifier = f"QA-063B-{release_key.upper()}"
+    docket = session.scalar(
+        select(IpDocketRecord).where(
+            IpDocketRecord.company_id == company.id,
+            IpDocketRecord.primary_identifier == docket_identifier,
+        )
+    )
+    created_docket = docket is None
+    if docket is None:
+        docket = IpDocketRecord(
+            company_id=company.id,
+            record_type="trademark",
+            title=docket_title,
+            primary_identifier=docket_identifier,
+            status="draft",
+            is_active=True,
+            restricted=False,
+            created_by_membership_id=membership.id,
+        )
+        session.add(docket)
+        session.flush()
+    elif (
+        docket.title != docket_title
+        or docket.record_type != "trademark"
+        or docket.status != "draft"
+        or not docket.is_active
+        or docket.restricted
+        or docket.created_by_membership_id != membership.id
+    ):
+        raise RuntimeError("Refusing to adopt a colliding intelligent-review QA docket.")
+
+    proceedings = list(
+        session.scalars(
+            select(IpProceeding).where(
+                IpProceeding.company_id == company.id,
+                IpProceeding.docket_id == docket.id,
+            )
+        )
+    )
+    if len(proceedings) > 1:
+        raise RuntimeError("The intelligent-review QA docket has ambiguous proceedings.")
+    proceeding = proceedings[0] if proceedings else None
+    created_proceeding = proceeding is None
+    if proceeding is None:
+        proceeding = IpProceeding(
+            company_id=company.id,
+            docket_id=docket.id,
+            application_id=None,
+            proceeding_kind="opposition",
+            side="opponent",
+            office="Trade Marks Registry Delhi",
+            jurisdiction="IN",
+            stage="draft",
+            origin_kind="registry_event",
+            stage_template_version="opposition-opponent-v1",
+            source_pending_identifier_allocation=True,
+        )
+        session.add(proceeding)
+        session.flush()
+    elif (
+        proceeding.application_id is not None
+        or proceeding.proceeding_kind != "opposition"
+        or proceeding.side != "opponent"
+        or proceeding.office != "Trade Marks Registry Delhi"
+        or proceeding.jurisdiction != "IN"
+        or proceeding.stage != "draft"
+        or proceeding.origin_kind != "registry_event"
+        or proceeding.stage_template_version != "opposition-opponent-v1"
+        or not proceeding.source_pending_identifier_allocation
+    ):
+        raise RuntimeError("Refusing to adopt a colliding intelligent-review QA proceeding.")
+
+    if created_docket or created_proceeding:
+        session.commit()
+    created = created or created_docket or created_proceeding
 
     projection = session.scalar(
         select(PrivateIndexProjection)
@@ -671,6 +759,9 @@ def ensure_ip_production_qa_private_retrieval_fixture(
         matter_id=matter.id,
         matter_code=matter_code,
         attachment_id=attachment.id,
+        docket_id=docket.id,
+        docket_title=docket_title,
+        proceeding_id=proceeding.id,
         generation_id=generation_id,
         created_fixture=created,
     )

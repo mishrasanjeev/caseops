@@ -8,6 +8,8 @@ from caseops_api.db.models import (
     Company,
     CompanyMembership,
     Court,
+    IpDocketRecord,
+    IpProceeding,
     Judge,
     JudgeDecisionIndex,
     Matter,
@@ -253,6 +255,10 @@ def test_bootstrap_private_retrieval_fixture_is_release_scoped_and_idempotent(
             membership_id=tenant.membership_id,
             release_sha=release_sha,
         )
+        legacy_attachment = session.get(MatterAttachment, created.attachment_id)
+        assert legacy_attachment is not None
+        legacy_attachment.storage_key = f"synthetic-qa/iplf-066b/{release_sha}"
+        session.commit()
         repeated = ensure_ip_production_qa_private_retrieval_fixture(
             session,
             company_id=tenant.company_id,
@@ -270,6 +276,8 @@ def test_bootstrap_private_retrieval_fixture_is_release_scoped_and_idempotent(
             )
         )
         generation = session.get(PrivateIndexGeneration, created.generation_id)
+        docket = session.get(IpDocketRecord, created.docket_id)
+        proceeding = session.get(IpProceeding, created.proceeding_id)
         projections = list(
             session.scalars(
                 select(PrivateIndexProjection).where(
@@ -287,12 +295,74 @@ def test_bootstrap_private_retrieval_fixture_is_release_scoped_and_idempotent(
     assert repeated.attachment_id == created.attachment_id
     assert repeated.generation_id == created.generation_id
     assert created.matter_code == "IPLF-066B-AAAAAAAAAAAA"
+    assert created.docket_title == "IPLF-063B exact-release review aaaaaaaaaaaa"
     assert matter is not None and matter.status == "active" and matter.is_active is True
     assert attachment is not None and attachment.processing_status == "indexed"
+    assert docket is not None and docket.primary_identifier == "QA-063B-AAAAAAAAAAAA"
+    assert proceeding is not None and proceeding.docket_id == docket.id
+    assert proceeding.proceeding_kind == "opposition"
+    assert proceeding.side == "opponent"
     assert "Aurora-aaaaaaaaaaaa" in (attachment.extracted_text or "")
     assert len(chunks) == 1
     assert generation is not None and generation.state == "active"
     assert len(projections) == 1
+    assert repeated.docket_id == created.docket_id
+    assert repeated.proceeding_id == created.proceeding_id
+
+
+def test_bootstrap_private_retrieval_fixture_is_tenant_scoped_for_one_release(
+    client,
+) -> None:
+    del client
+    release_sha = "c" * 40
+    with get_session_factory()() as session:
+        first = ensure_ip_production_qa(
+            session,
+            company_name="CaseOps IP QA Private Retrieval First",
+            company_slug="caseops-ip-qa-private-first",
+            owner_full_name="CaseOps IP QA Bot",
+            owner_email="ip-qa-private-first@caseops.ai",
+            owner_password="ProductionQa2026!Safe",
+        )
+        second = ensure_ip_production_qa(
+            session,
+            company_name="CaseOps IP QA Private Retrieval Second",
+            company_slug="caseops-ip-qa-private-second",
+            owner_full_name="CaseOps IP QA Bot",
+            owner_email="ip-qa-private-second@caseops.ai",
+            owner_password="ProductionQa2026!Safe",
+        )
+
+        first_fixture = ensure_ip_production_qa_private_retrieval_fixture(
+            session,
+            company_id=first.company_id,
+            membership_id=first.membership_id,
+            release_sha=release_sha,
+        )
+        second_fixture = ensure_ip_production_qa_private_retrieval_fixture(
+            session,
+            company_id=second.company_id,
+            membership_id=second.membership_id,
+            release_sha=release_sha,
+        )
+        first_attachment = session.get(MatterAttachment, first_fixture.attachment_id)
+        second_attachment = session.get(MatterAttachment, second_fixture.attachment_id)
+        first_docket = session.get(IpDocketRecord, first_fixture.docket_id)
+        second_docket = session.get(IpDocketRecord, second_fixture.docket_id)
+
+    assert first_attachment is not None
+    assert second_attachment is not None
+    assert first_attachment.storage_key != second_attachment.storage_key
+    assert first_attachment.storage_key == (
+        f"synthetic-qa/{first.company_id}/iplf-066b/{release_sha}"
+    )
+    assert second_attachment.storage_key == (
+        f"synthetic-qa/{second.company_id}/iplf-066b/{release_sha}"
+    )
+    assert first_docket is not None and second_docket is not None
+    assert first_docket.id != second_docket.id
+    assert first_docket.company_id == first.company_id
+    assert second_docket.company_id == second.company_id
 
 
 def test_bootstrap_private_retrieval_fixture_refuses_terminal_resurrection(
