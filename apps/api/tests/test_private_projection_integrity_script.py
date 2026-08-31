@@ -146,7 +146,10 @@ def test_maintenance_isolates_one_tenant_failure_and_continues(monkeypatch) -> N
             "applied_event_count": 0,
             "rebuilt": False,
             "error_code": "RuntimeError",
-            "error_detail": "deterministic tenant failure",
+            "error_detail": (
+                "Unexpected private projection maintenance failure; "
+                "inspect correlated service logs."
+            ),
             "blockers_after": ["tenant_maintenance_error"],
         },
         {
@@ -160,3 +163,21 @@ def test_maintenance_isolates_one_tenant_failure_and_continues(monkeypatch) -> N
             "blockers_after": [],
         },
     ]
+
+
+def test_maintenance_error_detail_redacts_unknown_exception_text() -> None:
+    secret = "matter-secret-identifier"
+
+    detail = private_projection_integrity._safe_error_detail(RuntimeError(secret))
+
+    assert secret not in detail
+
+
+def test_maintenance_error_detail_preserves_known_safe_capacity_message() -> None:
+    safe_detail = private_projection_integrity.PRIVATE_REBUILD_LIMIT_DETAIL
+
+    detail = private_projection_integrity._safe_error_detail(
+        private_projection_integrity.PrivateRetrievalInvariantError(safe_detail)
+    )
+
+    assert detail == safe_detail

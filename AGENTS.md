@@ -107,7 +107,7 @@ requirements when using the fallback.
 - Private-projection rebuild bounds must be derived from observed production
   tenant volume, not small fixture assumptions. The 2026-09-01 production
   baseline was 9,820 eligible projections; keep the 20,000-row cap, 50-row
-  commit batches, tenant isolation, and explicit bounded error detail under
+  commit batches, tenant isolation, and sanitized bounded error detail under
   regression. Never silently truncate a rebuild or hold parent locks across it.
 - A destructive production canary must be rerunnable without resurrecting its
   terminal fixture. Bootstrap a new release-scoped iteration, preserve every

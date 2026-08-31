@@ -65,6 +65,10 @@ DEFAULT_PRIVATE_EVENT_RETRY_BACKOFF_SECONDS = 30
 DEFAULT_PRIVATE_EVENT_LAG_SLO_SECONDS = 300
 DEFAULT_PRIVATE_PROVIDER_DEADLINE_SECONDS = 30.0
 LOW_OCR_QUALITY_THRESHOLD = 0.65
+PRIVATE_REBUILD_LIMIT_DETAIL = (
+    "Private rebuild exceeded its bounded projection limit; leave the "
+    "last verified generation active and resume through a larger offline plan."
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,10 +143,7 @@ def _bounded_append(
     limit: int,
 ) -> None:
     if len(payloads) >= limit:
-        raise PrivateRetrievalInvariantError(
-            "Private rebuild exceeded its bounded projection limit; leave the "
-            "last verified generation active and resume through a larger offline plan."
-        )
+        raise PrivateRetrievalInvariantError(PRIVATE_REBUILD_LIMIT_DETAIL)
     payloads.append(payload)
 
 
@@ -1078,6 +1079,7 @@ __all__ = [
     "MAX_PRIVATE_WRITE_BATCH",
     "MAX_PRIVATE_MAINTENANCE_COMPANIES",
     "MAX_PRIVATE_REBUILD_PROJECTIONS",
+    "PRIVATE_REBUILD_LIMIT_DETAIL",
     "PrivateIntegrityReport",
     "PrivateRebuildSummary",
     "inspect_private_index_integrity",

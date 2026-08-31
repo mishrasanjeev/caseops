@@ -8,14 +8,27 @@ from uuid import uuid4
 
 from caseops_api.db.session import get_session_factory
 from caseops_api.services.embeddings import build_provider
+from caseops_api.services.private_retrieval import PrivateRetrievalInvariantError
 from caseops_api.services.private_retrieval_jobs import (
     DEFAULT_PRIVATE_EVENT_LAG_SLO_SECONDS,
     MAX_PRIVATE_MAINTENANCE_COMPANIES,
+    PRIVATE_REBUILD_LIMIT_DETAIL,
     inspect_private_index_integrity,
     list_private_maintenance_companies,
     process_pending_private_projection_events,
     rebuild_private_index,
 )
+
+_REDACTED_ERROR_DETAIL = (
+    "Unexpected private projection maintenance failure; inspect correlated service logs."
+)
+
+
+def _safe_error_detail(exc: BaseException) -> str:
+    detail = str(exc).strip()
+    if isinstance(exc, PrivateRetrievalInvariantError) and detail == PRIVATE_REBUILD_LIMIT_DETAIL:
+        return detail
+    return _REDACTED_ERROR_DETAIL
 
 
 def _integrity_payload(report) -> dict[str, object]:
@@ -127,7 +140,7 @@ def _maintain(
                     "applied_event_count": 0,
                     "rebuilt": False,
                     "error_code": type(exc).__name__[:80],
-                    "error_detail": str(exc)[:240],
+                    "error_detail": _safe_error_detail(exc),
                     "blockers_after": ["tenant_maintenance_error"],
                 }
             )
@@ -231,7 +244,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             "status": "error",
             "release_blocked": True,
             "error_code": type(exc).__name__[:80],
-            "error_detail": str(exc)[:240],
+            "error_detail": _safe_error_detail(exc),
         }
 
     payload.update(
