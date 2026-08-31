@@ -51,6 +51,10 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
     assert index_job["bootstrap"]["command"] == ["caseops-db-index-health"]
     assert index_job["bootstrap"]["args"] == []
     assert index_job["bootstrap"]["max_retries"] == 0
+    reminders_job = next(
+        job for job in inventory["jobs"] if job["run_job_name"] == "caseops-reminders-job"
+    )
+    assert reminders_job["bootstrap"]["max_retries"] == 0
     private_job = next(
         job
         for job in inventory["jobs"]
@@ -59,7 +63,7 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
     assert private_job["schedule"] == "*/5 * * * *"
     assert private_job["task_timeout_seconds"] == 300
     assert private_job["bootstrap"]["command"] == ["caseops-private-projection-maintenance"]
-    assert private_job["bootstrap"]["max_retries"] == 3
+    assert private_job["bootstrap"]["max_retries"] == 0
     assert private_job["retry"] == {
         "max_retry_attempts": 5,
         "max_retry_duration_seconds": 900,

@@ -27,7 +27,7 @@ from caseops_api.services.intelligent_reviews import (
     list_intelligent_reviews,
     run_intelligent_review_job,
 )
-from caseops_api.services.llm import LLMCompletion, LLMMessage
+from caseops_api.services.llm import LLMCompletion, LLMMessage, LLMProviderError
 from caseops_api.services.private_retrieval import (
     PrivateProjectionInput,
     ProjectionScopeInput,
@@ -65,6 +65,32 @@ class StaticReviewProvider:
 class NeverCalledProvider(StaticReviewProvider):
     def generate(self, messages: list[LLMMessage], **kwargs) -> LLMCompletion:
         raise AssertionError("Provider must not run without an accessible source.")
+
+
+class MalformedReviewProvider(StaticReviewProvider):
+    def __init__(self, payload: dict, *, recover: bool) -> None:
+        super().__init__(payload)
+        self.recover = recover
+
+    def generate(self, messages: list[LLMMessage], **kwargs) -> LLMCompletion:
+        if self.called == 0 or not self.recover:
+            self.called += 1
+            return LLMCompletion(
+                text="This HTTP-200 response is prose, not structured JSON.",
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=50,
+                completion_tokens=12,
+                latency_ms=9,
+            )
+        return super().generate(messages, **kwargs)
+
+
+class UnavailableReviewProvider(StaticReviewProvider):
+    def generate(self, messages: list[LLMMessage], **kwargs) -> LLMCompletion:
+        del messages, kwargs
+        self.called += 1
+        raise LLMProviderError("upstream connection unavailable")
 
 
 def _create_matter(client: TestClient, token: str, *, code: str = "IR-001") -> str:
@@ -351,6 +377,7 @@ def test_intelligent_review_normal_selection_finalize_and_publish(
     run_intelligent_review_job(review_id, provider=provider)
     assert provider.called == 1
 
+
     remove_contrary = client.patch(
         f"/api/research/reviews/{review_id}/authorities",
         headers=auth_headers(token),
@@ -425,6 +452,95 @@ def test_intelligent_review_normal_selection_finalize_and_publish(
     legacy = client.get(f"/api/matters/{matter_id}/recommendations", headers=auth_headers(token))
     assert legacy.status_code == 200, legacy.text
     assert legacy.json()["recommendations"] == []
+
+
+def test_intelligent_review_recovers_once_from_malformed_http_200(
+    client: TestClient, monkeypatch
+) -> None:
+    bootstrap, matter_id, report_id, authority_ids, passages = _setup(client)
+    provider = MalformedReviewProvider(
+        _review_payload(authority_ids, passages),
+        recover=True,
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.intelligent_reviews.build_provider",
+        lambda *args, **kwargs: provider,
+    )
+
+    review_id = _queue(
+        client,
+        token=str(bootstrap["access_token"]),
+        matter_id=matter_id,
+        report_id=report_id,
+        authority_ids=authority_ids,
+    )
+    review = client.get(
+        f"/api/research/reviews/{review_id}",
+        headers=auth_headers(str(bootstrap["access_token"])),
+    ).json()
+
+    assert provider.called == 2
+    assert review["state"] == "ready", review["error_code"]
+    assert review["error_code"] is None
+
+
+def test_intelligent_review_labels_repeated_malformed_http_200_separately(
+    client: TestClient, monkeypatch
+) -> None:
+    bootstrap, matter_id, report_id, authority_ids, passages = _setup(client)
+    provider = MalformedReviewProvider(
+        _review_payload(authority_ids, passages),
+        recover=False,
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.intelligent_reviews.build_provider",
+        lambda *args, **kwargs: provider,
+    )
+
+    review_id = _queue(
+        client,
+        token=str(bootstrap["access_token"]),
+        matter_id=matter_id,
+        report_id=report_id,
+        authority_ids=authority_ids,
+    )
+    review = client.get(
+        f"/api/research/reviews/{review_id}",
+        headers=auth_headers(str(bootstrap["access_token"])),
+    ).json()
+
+    assert provider.called == 2
+    assert review["state"] == "failed"
+    assert review["error_code"] == "malformed_model_response"
+    assert review["error_code"] != "provider_unavailable"
+    assert review["supporting_authorities"] == []
+
+
+def test_intelligent_review_keeps_transport_failure_provider_unavailable(
+    client: TestClient, monkeypatch
+) -> None:
+    bootstrap, matter_id, report_id, authority_ids, passages = _setup(client)
+    provider = UnavailableReviewProvider(_review_payload(authority_ids, passages))
+    monkeypatch.setattr(
+        "caseops_api.services.intelligent_reviews.build_provider",
+        lambda *args, **kwargs: provider,
+    )
+
+    review_id = _queue(
+        client,
+        token=str(bootstrap["access_token"]),
+        matter_id=matter_id,
+        report_id=report_id,
+        authority_ids=authority_ids,
+    )
+    review = client.get(
+        f"/api/research/reviews/{review_id}",
+        headers=auth_headers(str(bootstrap["access_token"])),
+    ).json()
+
+    assert provider.called == 1
+    assert review["state"] == "failed"
+    assert review["error_code"] == "provider_unavailable"
 
 
 def test_private_review_and_published_report_fail_closed_after_generation_change(

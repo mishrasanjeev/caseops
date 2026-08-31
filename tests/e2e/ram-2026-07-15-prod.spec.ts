@@ -664,9 +664,39 @@ test.describe.serial("Ram 2026-07-15 deployed workbook fixes", () => {
       await sentUploadResponse.text(),
     ).toBe(200);
 
+    await expect(dialog).toBeHidden({ timeout: 30_000 });
+    const sentRegisterPromise = page.waitForResponse(
+      (response) => {
+        const url = new URL(response.url());
+        return (
+          url.pathname === "/api/notices/" &&
+          response.request().method() === "GET" &&
+          url.searchParams.get("limit") === "100" &&
+          url.searchParams.get("direction") === "sent" &&
+          !url.searchParams.has("query") &&
+          !url.searchParams.has("status") &&
+          !url.searchParams.has("matter_id") &&
+          !url.searchParams.has("owner_membership_id")
+        );
+      },
+      { timeout: 45_000 },
+    );
     await page.getByTestId("notices-sent-tab").click();
     const sentRow = page.getByTestId(`notice-row-${sentNotice.id}`);
-    await expect(sentRow).toContainText(sentSubject);
+    // The authoritative create/upload response must make the committed row
+    // visible without waiting for a production-shaped register refresh.
+    await expect(sentRow).toContainText(sentSubject, { timeout: 5_000 });
+    const sentRegisterResponse = await sentRegisterPromise;
+    expect(
+      sentRegisterResponse.status(),
+      await sentRegisterResponse.text(),
+    ).toBe(200);
+    const sentRegister = (await sentRegisterResponse.json()) as {
+      notices: NoticeRecord[];
+    };
+    expect(sentRegister.notices.map((notice) => notice.id)).toContain(
+      sentNotice.id,
+    );
     await expect(sentRow).toContainText(lifecycleMatter.matter_code);
     await expect(sentRow).toContainText(linkedMatter.matter_code);
     const downloadButton = sentRow.getByRole("button", { name: /Download/i });

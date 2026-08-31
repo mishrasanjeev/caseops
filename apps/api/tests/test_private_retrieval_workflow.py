@@ -744,6 +744,73 @@ def test_pending_event_worker_exposes_lag_then_tombstones_all_saved_candidates(
         assert after.tombstoned_projection_count >= 1
 
 
+def test_pending_event_worker_can_release_generation_locks_after_each_event(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    company_id = str(bootstrap["company"]["id"])
+    membership_id = str(bootstrap["membership"]["id"])
+    first_matter = _matter(client, token, "PRIVATE-WORKER-1")
+    second_matter = _matter(client, token, "PRIVATE-WORKER-2")
+
+    with get_session_factory()() as session:
+        rebuild_private_index(session, company_id=company_id, activate=True)
+        first_event = enqueue_private_projection_event(
+            session,
+            company_id=company_id,
+            actor_membership_id=membership_id,
+            idempotency_key="iplf-066b-bounded-worker-1",
+            event_type="revoked",
+            target_type="matter",
+            target_id=str(first_matter["id"]),
+            target_version=None,
+            reason_code="access_revoked",
+        )
+        second_event = enqueue_private_projection_event(
+            session,
+            company_id=company_id,
+            actor_membership_id=membership_id,
+            idempotency_key="iplf-066b-bounded-worker-2",
+            event_type="revoked",
+            target_type="matter",
+            target_id=str(second_matter["id"]),
+            target_version=None,
+            reason_code="access_revoked",
+        )
+        first_event.created_at = datetime.now(UTC) - timedelta(seconds=2)
+        second_event.created_at = datetime.now(UTC) - timedelta(seconds=1)
+        event_ids = (str(first_event.id), str(second_event.id))
+        session.commit()
+
+    with get_session_factory()() as session:
+        real_commit = session.commit
+        committed_states: list[tuple[str, ...]] = []
+
+        def commit_and_capture() -> None:
+            real_commit()
+            committed_states.append(
+                tuple(
+                    session.scalars(
+                        select(PrivateProjectionEvent.status)
+                        .where(PrivateProjectionEvent.id.in_(event_ids))
+                        .order_by(PrivateProjectionEvent.created_at)
+                    ).all()
+                )
+            )
+
+        monkeypatch.setattr(session, "commit", commit_and_capture)
+        applied = process_pending_private_projection_events(
+            session,
+            company_id=company_id,
+            commit_after_each_event=True,
+        )
+
+    assert applied == event_ids
+    assert committed_states == [("applied", "pending"), ("applied", "applied")]
+
+
 def test_activation_rechecks_role_entitlement_rollout_and_tenant_policy(
     client: TestClient,
     monkeypatch,
@@ -1016,6 +1083,126 @@ def test_provider_deletion_during_rebuild_fences_stale_projection_writer(
             )
             == ()
         )
+
+
+def test_rebuild_releases_company_lock_before_source_enumeration(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    company_id = str(bootstrap["company"]["id"])
+    _matter(client, token, "PRIVATE-LOCK-1")
+    real_inputs = private_retrieval_jobs._private_projection_inputs
+    transaction_states: list[bool] = []
+
+    def inspect_transaction(session, **kwargs):
+        transaction_states.append(session.in_transaction())
+        return real_inputs(session, **kwargs)
+
+    monkeypatch.setattr(
+        private_retrieval_jobs,
+        "_private_projection_inputs",
+        inspect_transaction,
+    )
+    with get_session_factory()() as session:
+        rebuild_private_index(session, company_id=company_id, activate=True)
+        session.commit()
+
+    assert transaction_states == [False]
+
+
+def test_rebuild_commits_each_bounded_projection_batch(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    company_id = str(bootstrap["company"]["id"])
+    _matter(client, token, "IPLF-066B-WRITE-BATCH-1")
+    _matter(client, token, "IPLF-066B-WRITE-BATCH-2")
+    real_upsert = private_retrieval_jobs.upsert_private_projection
+    transaction_states: list[bool] = []
+
+    def inspect_transaction(session, **kwargs):
+        transaction_states.append(session.in_transaction())
+        return real_upsert(session, **kwargs)
+
+    monkeypatch.setattr(
+        private_retrieval_jobs,
+        "upsert_private_projection",
+        inspect_transaction,
+    )
+    with get_session_factory()() as session:
+        summary = rebuild_private_index(
+            session,
+            company_id=company_id,
+            write_batch_size=1,
+            activate=True,
+        )
+        session.commit()
+
+    assert summary.projection_count >= 2
+    assert transaction_states == [False] * summary.projection_count
+
+
+def test_source_change_during_unlocked_enumeration_fences_stale_rebuild(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    company_id = str(bootstrap["company"]["id"])
+    membership_id = str(bootstrap["membership"]["id"])
+    matter = _matter(client, token, "PRIVATE-SOURCE-1")
+    with get_session_factory()() as session:
+        rebuild_private_index(session, company_id=company_id, activate=True)
+        session.commit()
+
+    real_inputs = private_retrieval_jobs._private_projection_inputs
+    changed = False
+
+    def change_source_then_enumerate(session, **kwargs):
+        nonlocal changed
+        if not changed:
+            changed = True
+            with get_session_factory()() as concurrent:
+                propagate_private_projection_change(
+                    concurrent,
+                    company_id=company_id,
+                    actor_membership_id=membership_id,
+                    idempotency_key="iplf-066b-source-change-during-enumeration",
+                    event_type="source_changed",
+                    target_type="matter",
+                    target_id=str(matter["id"]),
+                    target_version=None,
+                    reason_code="source_changed_during_rebuild",
+                )
+                concurrent.commit()
+        return real_inputs(session, **kwargs)
+
+    monkeypatch.setattr(
+        private_retrieval_jobs,
+        "_private_projection_inputs",
+        change_source_then_enumerate,
+    )
+    with get_session_factory()() as session, pytest.raises(
+        PrivateRetrievalInvariantError,
+        match="stale private projection writer",
+    ):
+        rebuild_private_index(session, company_id=company_id, activate=True)
+
+    assert changed is True
+    with get_session_factory()() as session:
+        failed_shadow = session.scalar(
+            select(PrivateIndexGeneration)
+            .where(PrivateIndexGeneration.company_id == company_id)
+            .order_by(PrivateIndexGeneration.generation_number.desc())
+            .limit(1)
+        )
+        assert failed_shadow is not None
+        assert failed_shadow.state == "failed"
+        assert failed_shadow.failure_code == "PrivateRetrievalInvariantError"
 
 
 @pytest.mark.parametrize(

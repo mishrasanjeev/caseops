@@ -672,17 +672,19 @@ export default function NoticesPage() {
   const noticesQuery = useInfiniteQuery({
     queryKey: ["notices", "register", registerParams],
     initialPageParam: null as string | null,
-    queryFn: ({ pageParam }) =>
-      listNotices({ ...registerParams, cursor: pageParam }),
+    queryFn: ({ pageParam, signal }) =>
+      listNotices({ ...registerParams, cursor: pageParam }, { signal }),
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
   });
   const receivedTotalQuery = useQuery({
     queryKey: ["notices", "direction-total", "received"],
-    queryFn: () => listNotices({ limit: 1, direction: "received" }),
+    queryFn: ({ signal }) =>
+      listNotices({ limit: 1, direction: "received" }, { signal }),
   });
   const sentTotalQuery = useQuery({
     queryKey: ["notices", "direction-total", "sent"],
-    queryFn: () => listNotices({ limit: 1, direction: "sent" }),
+    queryFn: ({ signal }) =>
+      listNotices({ limit: 1, direction: "sent" }, { signal }),
   });
   const mattersQuery = useQuery({
     queryKey: ["matters", "notice-options", deferredMatterSearch],
@@ -710,10 +712,11 @@ export default function NoticesPage() {
     },
     onSuccess: ({ notice, fileError }) => {
       // The create response is already the server-authoritative record. Put it
-      // into an unfiltered active register immediately so a slow production
-      // count/list refresh cannot leave the dialog stuck on "Saving..." or
-      // hide a successfully committed notice. The background invalidation
-      // still reconciles ordering, access policy, totals, and every filter.
+      // into its unfiltered direction register immediately so a slow
+      // production reconciliation cannot hide a successfully committed sent
+      // notice merely because it was created while the Received tab was
+      // active. Cached registers are marked stale below without fanning out
+      // active refetches across the concurrency-one API.
       const unfilteredRegister =
         !registerParams.query &&
         !registerParams.status &&
@@ -721,9 +724,13 @@ export default function NoticesPage() {
         !registerParams.owner_membership_id &&
         !registerParams.due_from &&
         !registerParams.due_to;
-      if (unfilteredRegister && notice.direction === registerParams.direction) {
+      if (unfilteredRegister) {
+        const targetRegisterParams = {
+          ...registerParams,
+          direction: notice.direction,
+        };
         queryClient.setQueryData<InfiniteData<NoticeListResponse>>(
-          ["notices", "register", registerParams],
+          ["notices", "register", targetRegisterParams],
           (current) => {
             if (!current) {
               return {
@@ -731,22 +738,53 @@ export default function NoticesPage() {
                 pageParams: [null],
               };
             }
-            if (current.pages.some((page) => page.notices.some((row) => row.id === notice.id))) {
-              return current;
-            }
+            const alreadyPresent = current.pages.some((page) =>
+              page.notices.some((row) => row.id === notice.id),
+            );
             return {
               ...current,
               pages: current.pages.map((page, index) => ({
                 ...page,
-                notices: index === 0 ? [notice, ...page.notices] : page.notices,
-                total: page.total + 1,
+                notices: alreadyPresent
+                  ? page.notices.map((row) =>
+                      row.id === notice.id ? notice : row,
+                    )
+                  : index === 0
+                    ? [notice, ...page.notices]
+                    : page.notices,
+                total: page.total + (alreadyPresent ? 0 : 1),
               })),
             };
           },
         );
       }
+      queryClient.setQueryData<NoticeListResponse>(
+        ["notices", "direction-total", notice.direction],
+        (current) => current
+          ? {
+              ...current,
+              notices: [notice],
+              total:
+                current.total +
+                (current.notices.some((row) => row.id === notice.id) ? 0 : 1),
+            }
+          : current,
+      );
       setCreateOpen(false);
-      void queryClient.invalidateQueries({ queryKey: ["notices"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["notices", "register"],
+        // An unfiltered register already contains the authoritative response.
+        // A filtered active register is the one case where the client cannot
+        // know whether the new record matches, so reconcile that single query.
+        refetchType:
+          !unfilteredRegister && notice.direction === registerParams.direction
+            ? "active"
+            : "none",
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["notices", "matter"],
+        refetchType: "none",
+      });
       if (fileError) toast.error(`Notice saved, but its document was not attached. ${apiErrorMessage(fileError, "Use Attach document on the saved notice to retry.")}`);
       else toast.success("Notice created.");
     },
@@ -856,6 +894,32 @@ export default function NoticesPage() {
   const hasFilters = Object.entries(filters).some(([key, value]) =>
     key === "matterId" || key === "ownerId" ? value !== "all" : Boolean(value),
   );
+
+  useEffect(() => {
+    // Direction-total reads are intentionally independent so both tab labels
+    // work before either register has been opened. Once an unfiltered register
+    // finishes reconciling, make its server-authoritative total win over any
+    // optimistic increment without issuing another supporting request.
+    const firstPage = noticesQuery.data?.pages[0];
+    if (hasFilters || noticesQuery.isFetching || !firstPage) return;
+    queryClient.setQueryData<NoticeListResponse>(
+      ["notices", "direction-total", activeDirection],
+      (current) => {
+        const firstNotice = firstPage.notices[0];
+        if (
+          current?.total === firstPage.total &&
+          current.notices[0]?.id === firstNotice?.id
+        ) {
+          return current;
+        }
+        return {
+          notices: firstNotice ? [firstNotice] : [],
+          total: firstPage.total,
+          next_cursor: null,
+        };
+      },
+    );
+  }, [activeDirection, hasFilters, noticesQuery.data, noticesQuery.isFetching, queryClient]);
 
   const download = async (notice: NoticeRecord) => {
     setDownloadingId(notice.id);

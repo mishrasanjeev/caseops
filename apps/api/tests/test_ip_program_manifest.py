@@ -20,6 +20,27 @@ def test_committed_ip_program_manifest_is_structurally_valid() -> None:
     assert ip_program_manifest.validate(_manifest()) == []
 
 
+def test_summary_derives_remaining_repository_implementation_count() -> None:
+    manifest = _manifest()
+    remaining = sum(
+        row.get("implementation_status") != "implemented"
+        for row in manifest["slices"]
+    )
+    summary_path = ip_program_manifest.GENERATED_ROOT / "SUMMARY.md"
+    summary = ip_program_manifest.render_views(manifest)[summary_path]
+
+    assert remaining == 25
+    assert f"- Repository implementation remaining: {remaining}" in summary
+    cost_slice = next(
+        row for row in manifest["slices"] if row["id"] == "IPLF-039F"
+    )
+    assert (
+        cost_slice["implementation_status"],
+        cost_slice["verification_status"],
+        cost_slice["release_status"],
+    ) == ("implemented", "passed", "deployment_verified")
+
+
 def test_empty_milestone_needs_no_manual_gate() -> None:
     assert ip_program_manifest.aggregate_status([]) == {
         "implementation_status": "implemented",

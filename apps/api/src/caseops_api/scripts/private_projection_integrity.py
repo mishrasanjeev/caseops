@@ -59,57 +59,77 @@ def _maintain(
         "stale_or_ineligible_sources",
     }
     for company_id in candidates.company_ids:
-        with session_factory() as session:
-            before = inspect_private_index_integrity(
-                session,
-                company_id=company_id,
-                event_lag_slo_seconds=event_lag_slo_seconds,
-            )
-            breached_before_recovery = (
-                before.oldest_pending_lag_seconds is not None
-                and before.oldest_pending_lag_seconds > event_lag_slo_seconds
-            )
-            applied = process_pending_private_projection_events(
-                session,
-                company_id=company_id,
-            )
-            session.commit()
-            after = inspect_private_index_integrity(
-                session,
-                company_id=company_id,
-                event_lag_slo_seconds=event_lag_slo_seconds,
-            )
-            rebuilt = False
-            if (
-                after.blockers
-                and set(after.blockers) <= repairable_blockers
-                and rebuild_count < max_rebuilds
-            ):
-                rebuild_private_index(
+        try:
+            with session_factory() as session:
+                before = inspect_private_index_integrity(
                     session,
                     company_id=company_id,
-                    activate=True,
+                    event_lag_slo_seconds=event_lag_slo_seconds,
+                )
+                breached_before_recovery = (
+                    before.oldest_pending_lag_seconds is not None
+                    and before.oldest_pending_lag_seconds > event_lag_slo_seconds
+                )
+                applied = process_pending_private_projection_events(
+                    session,
+                    company_id=company_id,
+                    commit_after_each_event=True,
                 )
                 session.commit()
-                rebuild_count += 1
-                rebuilt = True
                 after = inspect_private_index_integrity(
                     session,
                     company_id=company_id,
                     event_lag_slo_seconds=event_lag_slo_seconds,
                 )
-            tenant_blocked = breached_before_recovery or after.release_blocked
-            blocked = blocked or tenant_blocked
+                rebuilt = False
+                if (
+                    after.blockers
+                    and set(after.blockers) <= repairable_blockers
+                    and rebuild_count < max_rebuilds
+                ):
+                    rebuild_private_index(
+                        session,
+                        company_id=company_id,
+                        activate=True,
+                    )
+                    session.commit()
+                    rebuild_count += 1
+                    rebuilt = True
+                    after = inspect_private_index_integrity(
+                        session,
+                        company_id=company_id,
+                        event_lag_slo_seconds=event_lag_slo_seconds,
+                    )
+                tenant_blocked = breached_before_recovery or after.release_blocked
+                blocked = blocked or tenant_blocked
+                companies.append(
+                    {
+                        "company_id": company_id,
+                        "applied_event_count": len(applied),
+                        "rebuilt": rebuilt,
+                        "lag_slo_breached_before_recovery": breached_before_recovery,
+                        "oldest_pending_lag_seconds_before": (
+                            before.oldest_pending_lag_seconds
+                        ),
+                        "pending_event_count_after": after.pending_event_count,
+                        "failed_event_count_after": after.failed_event_count,
+                        "blockers_after": list(after.blockers),
+                    }
+                )
+        except Exception as exc:
+            # One corrupt or oversized tenant must not prevent unrelated
+            # tenants from draining events. The job remains failed/alertable,
+            # but deterministic Cloud Run task retries are disabled by the
+            # scheduler inventory so this cannot become a lock-amplifying
+            # retry storm.
+            blocked = True
             companies.append(
                 {
                     "company_id": company_id,
-                    "applied_event_count": len(applied),
-                    "rebuilt": rebuilt,
-                    "lag_slo_breached_before_recovery": breached_before_recovery,
-                    "oldest_pending_lag_seconds_before": (before.oldest_pending_lag_seconds),
-                    "pending_event_count_after": after.pending_event_count,
-                    "failed_event_count_after": after.failed_event_count,
-                    "blockers_after": list(after.blockers),
+                    "applied_event_count": 0,
+                    "rebuilt": False,
+                    "error_code": type(exc).__name__[:80],
+                    "blockers_after": ["tenant_maintenance_error"],
                 }
             )
     return {
@@ -171,6 +191,7 @@ def main(argv: Iterable[str] | None = None) -> int:
                     applied = process_pending_private_projection_events(
                         session,
                         company_id=args.company_id,
+                        commit_after_each_event=True,
                     )
                     session.commit()
                     payload = {
