@@ -50,6 +50,13 @@ release-safe at its integration edges:
    hidden source values, and the production spec exercised only void rather than
    supersession, replacement, and double-count prevention.
 
+A final cross-workflow review found one additional real defect: a foreign-
+associate estimate was validated when approved but not revalidated at dispatch.
+Superseding the approved estimate therefore left a stale reference able to
+advance the instruction. Madrid and recordal already failed closed, but lacked
+regressions proving active replacement acceptance and immutable historical
+evidence across their create and transition boundaries.
+
 ## Durable fix
 
 - Unreleased Alembic revision `20260831_0002` normalizes existing projections,
@@ -78,6 +85,13 @@ release-safe at its integration edges:
   rendering excludes retired fees, while every transition resolves a valid
   supersession to its active successor or requires an explicit new active fee
   after a void; that reference change is renewal-versioned and audited.
+- Foreign-associate dispatch now re-resolves the stored approved estimate with
+  the shared active-cost predicate. A superseded estimate blocks dispatch until
+  `approve_fee_change` selects its active replacement; completion likewise
+  rejects a retired linked actual until the current actual is explicitly
+  relinked and reconciled. Madrid and recordal regressions prove the same
+  fail-closed rule while preserving every historical reference and evidence
+  string.
 - PostgreSQL and SQLite require creator, reconciler, and correction actors to be
   active members of the same tenant when the write occurs. Later deactivation
   does not erase or invalidate the retained historical provenance.
@@ -96,7 +110,7 @@ release-safe at its integration edges:
 
 | Surface | Command | Result |
 |---|---|---|
-| API + SQLite focused | migration, renewal lineage, workflow and preflight contracts | **78 passed after the second-review edits** |
+| API + SQLite focused | migration, active-lineage, renewal, workflow, deployment and preflight contracts | **118 passed after final integration review** |
 | API lint/compile | targeted Ruff and Python compileall over the correction slice | **passed** |
 | IP UI | `npm run test --workspace @caseops/web -- app/app/ip/page.test.tsx` | **28 passed** |
 | Web + Playwright types | web typecheck plus isolated/broad Playwright test listing | **passed; dedicated spec is one test and broad RAM lists none** |
