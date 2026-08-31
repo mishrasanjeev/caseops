@@ -135,6 +135,33 @@ if [[ "$#" -eq 1 ]]; then
   fi
 fi
 
+assert_current_main() {
+  local phase="$1"
+  local origin_main_sha
+
+  if ! git fetch --quiet origin main; then
+    echo "ERROR: could not refresh origin/main at ${phase}; refusing production mutation."
+    exit 1
+  fi
+  if ! origin_main_sha=$(git rev-parse --verify refs/remotes/origin/main 2>/dev/null); then
+    echo "ERROR: origin/main cannot be resolved at ${phase}; refusing production mutation."
+    exit 1
+  fi
+  if [[ "${origin_main_sha}" != "${HEAD_SHA}" ]]; then
+    echo "ERROR: main advanced during release at ${phase}."
+    echo "  candidate=${HEAD_SHA}"
+    echo "  origin/main=${origin_main_sha}"
+    echo "Revalidate and deploy the new canonical main revision instead."
+    exit 1
+  fi
+  echo "  canonical main verified at ${phase}: ${origin_main_sha}"
+}
+
+# A long release can otherwise route an obsolete commit after another PR lands
+# on main. Refresh the remote ref before the first cloud call, then repeat at
+# every mutation/activation boundary below.
+assert_current_main "release preflight"
+
 DIRTY_BUILD_CONTEXT=$(git status --porcelain --untracked-files=all -- \
   "${API_SOURCE_DIR}" "apps/web" package.json package-lock.json \
   .dockerignore .gcloudignore)
@@ -181,6 +208,10 @@ WEB_BUILD_PID=$!
 wait "${API_BUILD_PID}" || { echo "API build FAILED"; exit 1; }
 wait "${WEB_BUILD_PID}" || { echo "Web build FAILED"; exit 1; }
 echo "  api + web images built."
+
+# Cloud Build is the longest release phase. A newer main commit that landed
+# while images were building must stop before migration or job mutation.
+assert_current_main "post-build pre-migration gate"
 
 # Resolve the API tag while it is known to exist and pin every long-lived job
 # to the digest. Artifact Registry cleanup may delete tags; digest references
@@ -468,6 +499,10 @@ if [[ "${A0_CAPTURE_RULE_GOVERNANCE_BASELINE}" == "true" ]]; then
   trap - EXIT
 fi
 
+# Migration, job reconciliation, alert/index checks and QA repinning can also
+# take several minutes. Recheck immediately before creating a serving revision.
+assert_current_main "final pre-route gate"
+
 # Step 3 — deploy API. CASEOPS_AUTO_MIGRATE=false stays in the service
 # env from the manifest, so the new pods will NOT try to migrate again.
 echo "--- 4/6 deploy caseops-api ---"
@@ -671,6 +706,11 @@ if [[ "${CLAMAV_PROBE_DELAY}" != "0" || "${CLAMAV_PROBE_PERIOD}" != "2" ]]; then
   exit 1
 fi
 echo "  EG-003 clamav sidecar present with immediate two-second startup probing."
+
+# If main advanced during the two service deployments, keep the healthy exact
+# revision serving but withhold release-owned mutations and certification. The
+# next canonical-main release will supersede it.
+assert_current_main "post-route pre-certification gate"
 
 # The release-specific production canary is a synthetic QA mutation and may run
 # only after migration, exact traffic, public health, and sidecar checks pass.

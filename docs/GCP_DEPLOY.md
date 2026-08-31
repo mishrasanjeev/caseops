@@ -7,6 +7,10 @@
 > For an existing CaseOps production deployment, use `scripts/deploy-prod.sh <full-main-sha>`.
 > It is the release authority for migration-first ordering, immutable images,
 > recurring jobs, service capacity, latest-only traffic, and exact identity.
+> The script refreshes `origin/main` throughout the release and stops when a
+> newer main commit lands, including after image builds and before routing or
+> release-owned QA. Revalidate and deploy that newer canonical revision; do
+> not bypass the staleness gate or certify the older candidate.
 > The commands below are bootstrap examples for a new project.
 
 ---

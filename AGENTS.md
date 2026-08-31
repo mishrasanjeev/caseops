@@ -33,6 +33,11 @@ requirements when using the fallback.
   onto `main`, push `main` when remote publication is in scope, and verify
   that local `main` and `origin/main` resolve to the released commit. Do not
   leave completed fixes only on an agent branch.
+- A production release must keep proving that its candidate is the current
+  `origin/main` across long-running builds and mutation boundaries. Refresh
+  the remote ref before cloud work, after image builds, immediately before
+  routing, and before release-owned QA/certification; fail closed when main
+  advances and revalidate the new canonical revision.
 - Performance acceptance must bound total work, not merely raise timeouts:
   cap candidates and child rows, prevent N+1 loading, batch provider calls,
   give interactive provider calls a deadline, and test production-scale query

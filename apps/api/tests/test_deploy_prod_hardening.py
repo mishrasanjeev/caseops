@@ -967,6 +967,7 @@ def _run_deploy_with_fakes(
     qa_already_failed: bool = False,
     migration_timeout_drift: bool = False,
     python_crlf: bool = False,
+    main_drift_after_fetches: int | None = None,
 ) -> subprocess.CompletedProcess[str]:
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir()
@@ -976,6 +977,15 @@ def _run_deploy_with_fakes(
         fake_bin / "git",
         """#!/usr/bin/env bash
 set -euo pipefail
+if [[ "$1" == "fetch" ]]; then
+  fetch_count=0
+  if [[ -f "${FAKE_GIT_FETCH_COUNT}" ]]; then
+    fetch_count=$(cat "${FAKE_GIT_FETCH_COUNT}")
+  fi
+  fetch_count=$((fetch_count + 1))
+  printf '%s\n' "${fetch_count}" > "${FAKE_GIT_FETCH_COUNT}"
+  exit 0
+fi
 if [[ "$1" == "status" ]]; then
   if [[ -n "${FAKE_GIT_STATUS:-}" ]]; then
     printf '%s\n' "${FAKE_GIT_STATUS}"
@@ -988,6 +998,19 @@ if [[ "$1" == "rev-parse" && "$*" == *"--short=7"* ]]; then
 fi
 if [[ "$1" == "rev-parse" && "$*" == *"1111111"* ]]; then
   printf '%s\n' "1111111111111111111111111111111111111111"
+  exit 0
+fi
+if [[ "$1" == "rev-parse" && "$*" == *"refs/remotes/origin/main"* ]]; then
+  fetch_count=0
+  if [[ -f "${FAKE_GIT_FETCH_COUNT}" ]]; then
+    fetch_count=$(cat "${FAKE_GIT_FETCH_COUNT}")
+  fi
+  if [[ "${FAKE_MAIN_DRIFT_AFTER_FETCHES}" -gt 0 && \
+    "${fetch_count}" -ge "${FAKE_MAIN_DRIFT_AFTER_FETCHES}" ]]; then
+    printf '%s\n' "dddddddddddddddddddddddddddddddddddddddd"
+  else
+    printf '%s\n' "abcdef1234567890abcdef1234567890abcdef12"
+  fi
   exit 0
 fi
 if [[ "$1" == "rev-parse" ]]; then
@@ -1303,7 +1326,9 @@ exec "${FAKE_REAL_PYTHON}" "$@"
                 separators=(",", ":"),
             ),
             "FAKE_GCLOUD_LOG": _bash_path(gcloud_log),
+            "FAKE_GIT_FETCH_COUNT": _bash_path(tmp_path / "git-fetch-count"),
             "FAKE_GIT_STATUS": git_status,
+            "FAKE_MAIN_DRIFT_AFTER_FETCHES": str(main_drift_after_fetches or 0),
             "FAKE_GH_MODE": gh_mode,
             "FAKE_INDEX_HEALTH_MODE": index_health_mode,
             "FAKE_QA_AFTER_JSON": _a0_qa_job_json(
@@ -1515,6 +1540,59 @@ def test_deploy_prod_accepts_clean_head_and_healthy_api(tmp_path: Path) -> None:
         "gh workflow run prod-verify.yml --repo mishrasanjeev/caseops --ref main "
         "-f expected_release_sha=abcdef1234567890abcdef1234567890abcdef12"
     ) in "\n".join(calls)
+
+
+@pytest.mark.parametrize(
+    ("drift_after_fetches", "required_call", "forbidden_call", "phase"),
+    [
+        (1, None, None, "release preflight"),
+        (
+            2,
+            "builds submit",
+            "run jobs update caseops-migrate-job",
+            "post-build pre-migration gate",
+        ),
+        (
+            3,
+            "run jobs update caseops-ip-qa-bootstrap",
+            "run deploy caseops-api",
+            "final pre-route gate",
+        ),
+        (
+            4,
+            "run deploy caseops-web",
+            "run jobs execute caseops-ip-qa-bootstrap",
+            "post-route pre-certification gate",
+        ),
+    ],
+)
+def test_deploy_prod_fails_closed_when_main_advances_during_release(
+    tmp_path: Path,
+    drift_after_fetches: int,
+    required_call: str | None,
+    forbidden_call: str | None,
+    phase: str,
+) -> None:
+    result = _run_deploy_with_fakes(
+        tmp_path,
+        "abcdef1",
+        main_drift_after_fetches=drift_after_fetches,
+    )
+
+    assert result.returncode != 0
+    assert f"main advanced during release at {phase}" in result.stdout
+    assert "dddddddddddddddddddddddddddddddddddddddd" in result.stdout
+    calls = (
+        (tmp_path / "gcloud.log").read_text(encoding="utf-8")
+        if (tmp_path / "gcloud.log").exists()
+        else ""
+    )
+    if required_call is not None:
+        assert required_call in calls
+    if forbidden_call is not None:
+        assert forbidden_call not in calls
+    assert "gh workflow run prod-verify.yml" not in calls
+    assert "=== deploy-prod.sh — DONE" not in result.stdout
 
 
 def test_deploy_prod_does_not_repeat_a_successful_current_generation_qa_bootstrap(
