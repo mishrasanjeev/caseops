@@ -10,12 +10,18 @@ from caseops_api.db.models import (
     Court,
     Judge,
     JudgeDecisionIndex,
+    Matter,
+    MatterAttachment,
+    MatterAttachmentChunk,
+    PrivateIndexGeneration,
+    PrivateIndexProjection,
     User,
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.scripts.bootstrap_ip_production_qa import (
     ensure_ip_production_qa,
     ensure_ip_production_qa_judge_fixture,
+    ensure_ip_production_qa_private_retrieval_fixture,
     ensure_ip_production_qa_review_fixture,
 )
 from caseops_api.services.source_actions import authority_source_verified
@@ -225,3 +231,103 @@ def test_bootstrap_ip_production_qa_review_fixture_refuses_non_qa_collision(
             assert "non-QA review fixture collision" in str(exc)
         else:
             raise AssertionError("A non-QA review fixture collision was adopted")
+
+
+def test_bootstrap_private_retrieval_fixture_is_release_scoped_and_idempotent(
+    client,
+) -> None:
+    del client
+    release_sha = "a" * 40
+    with get_session_factory()() as session:
+        tenant = ensure_ip_production_qa(
+            session,
+            company_name="CaseOps IP QA Private Retrieval",
+            company_slug="caseops-ip-qa-private-retrieval",
+            owner_full_name="CaseOps IP QA Bot",
+            owner_email="ip-qa-private-retrieval@caseops.ai",
+            owner_password="ProductionQa2026!Safe",
+        )
+        created = ensure_ip_production_qa_private_retrieval_fixture(
+            session,
+            company_id=tenant.company_id,
+            membership_id=tenant.membership_id,
+            release_sha=release_sha,
+        )
+        repeated = ensure_ip_production_qa_private_retrieval_fixture(
+            session,
+            company_id=tenant.company_id,
+            membership_id=tenant.membership_id,
+            release_sha=release_sha,
+        )
+
+        matter = session.get(Matter, created.matter_id)
+        attachment = session.get(MatterAttachment, created.attachment_id)
+        chunks = list(
+            session.scalars(
+                select(MatterAttachmentChunk).where(
+                    MatterAttachmentChunk.attachment_id == created.attachment_id
+                )
+            )
+        )
+        generation = session.get(PrivateIndexGeneration, created.generation_id)
+        projections = list(
+            session.scalars(
+                select(PrivateIndexProjection).where(
+                    PrivateIndexProjection.company_id == tenant.company_id,
+                    PrivateIndexProjection.generation_id == created.generation_id,
+                    PrivateIndexProjection.source_id == created.attachment_id,
+                    PrivateIndexProjection.is_tombstoned.is_(False),
+                )
+            )
+        )
+
+    assert created.created_fixture is True
+    assert repeated.created_fixture is False
+    assert repeated.matter_id == created.matter_id
+    assert repeated.attachment_id == created.attachment_id
+    assert repeated.generation_id == created.generation_id
+    assert created.matter_code == "IPLF-066B-AAAAAAAAAAAA"
+    assert matter is not None and matter.status == "active" and matter.is_active is True
+    assert attachment is not None and attachment.processing_status == "indexed"
+    assert "Aurora-aaaaaaaaaaaa" in (attachment.extracted_text or "")
+    assert len(chunks) == 1
+    assert generation is not None and generation.state == "active"
+    assert len(projections) == 1
+
+
+def test_bootstrap_private_retrieval_fixture_refuses_terminal_resurrection(
+    client,
+) -> None:
+    del client
+    with get_session_factory()() as session:
+        tenant = ensure_ip_production_qa(
+            session,
+            company_name="CaseOps IP QA Private Retrieval Terminal",
+            company_slug="caseops-ip-qa-private-retrieval-terminal",
+            owner_full_name="CaseOps IP QA Bot",
+            owner_email="ip-qa-private-terminal@caseops.ai",
+            owner_password="ProductionQa2026!Safe",
+        )
+        fixture = ensure_ip_production_qa_private_retrieval_fixture(
+            session,
+            company_id=tenant.company_id,
+            membership_id=tenant.membership_id,
+            release_sha="b" * 40,
+        )
+        matter = session.get(Matter, fixture.matter_id)
+        assert matter is not None
+        matter.status = "disposed"
+        matter.is_active = False
+        session.commit()
+
+        try:
+            ensure_ip_production_qa_private_retrieval_fixture(
+                session,
+                company_id=tenant.company_id,
+                membership_id=tenant.membership_id,
+                release_sha="b" * 40,
+            )
+        except RuntimeError as exc:
+            assert "refusing to resurrect" in str(exc)
+        else:
+            raise AssertionError("A terminal private retrieval QA fixture was resurrected")

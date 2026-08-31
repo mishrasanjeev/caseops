@@ -187,11 +187,23 @@ run recovers it. Cloud Scheduler delivery has bounded retry/backoff, and a
 log-based alert routes every structured `ERROR` run to the production alert
 channel with correlation ID and runbook context.
 
+The production verifier owns a SHA-scoped synthetic Matter/document fixture in
+the isolated `caseops-ip-qa` tenant. The migration-first deploy repins that job
+without execution before traffic, proves exact latest-only API/web identity and
+health, then executes the current Cloud Run Job generation once. A successful
+same-generation deploy retry skips execution; a failed execution remains failed
+closed and cannot be retried automatically. The hosted browser verifies the
+exact API/web SHA, finds that fixture through the public API and UI, answers
+from its private projection, disposes the Matter through the canonical
+lifecycle endpoint, then proves the saved answer/citation and direct private
+search are revoked after reload. The bootstrap refuses to resurrect a terminal
+same-release fixture.
+
 The reciprocal purge/provider and durable-worker implementation is complete in
-the repository. Exact integrated CI/Security/CodeQL, merge to `main`,
+the repository. Exact corrective CI/Security/CodeQL, merge to `main`,
 migration-first deployment, scheduler/alert inspection, immutable revision
-identity and dated production browser acceptance remain release blockers. No
-local result is production evidence.
+identity and the production browser result remain release blockers. No local
+result is production evidence.
 
 ## Rollback
 
