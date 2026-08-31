@@ -79,6 +79,9 @@ def test_ip_cost_acceptance_is_isolated_and_partially_configured_runs_fail_close
         assert workflow.count(fixture_name) >= 3
     assert 'if [[ "$configured" -eq 0 ]]' in workflow
     assert 'elif [[ "$configured" -ne 6 ]]' in workflow
+    assert "elif [[ ! -f playwright.ip-cost-prod.config.ts ]]" in workflow
+    assert "newer workflow control plane will not run unreleased test code" in workflow
+    assert "Deploy the current main release before certifying IPLF-039F" in workflow
     assert "generic scheduled production verification continues independently" in workflow
     assert "steps.ip-cost-prerequisites.outputs.configured == 'true'" in workflow
     assert "--config=playwright.ip-cost-prod.config.ts" in workflow

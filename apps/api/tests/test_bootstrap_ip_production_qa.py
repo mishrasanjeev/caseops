@@ -17,6 +17,7 @@ from caseops_api.db.models import (
     MatterAttachmentChunk,
     PrivateIndexGeneration,
     PrivateIndexProjection,
+    TrademarkApplication,
     User,
 )
 from caseops_api.db.session import get_session_factory
@@ -188,8 +189,29 @@ def test_bootstrap_ip_production_qa_review_fixture_is_bounded_and_idempotent(
 ) -> None:
     del client
     with get_session_factory()() as session:
-        created = ensure_ip_production_qa_review_fixture(session)
-        repeated = ensure_ip_production_qa_review_fixture(session)
+        tenant = ensure_ip_production_qa(
+            session,
+            company_name="CaseOps IP QA Intelligent Review",
+            company_slug="caseops-ip-qa-intelligent-review",
+            owner_full_name="CaseOps IP QA Bot",
+            owner_email="ip-qa-review@caseops.ai",
+            owner_password="ProductionQa2026!Safe",
+        )
+        fixture_args = {
+            "company_id": tenant.company_id,
+            "membership_id": tenant.membership_id,
+        }
+        created = ensure_ip_production_qa_review_fixture(session, **fixture_args)
+        repeated = ensure_ip_production_qa_review_fixture(session, **fixture_args)
+        private_fixture = ensure_ip_production_qa_private_retrieval_fixture(
+            session,
+            **fixture_args,
+            release_sha="c" * 40,
+            required_sources=(
+                ("matter", created.matter_id),
+                ("ip_docket", created.docket_id),
+            ),
+        )
         authorities = list(
             session.scalars(
                 select(AuthorityDocument).where(
@@ -198,10 +220,36 @@ def test_bootstrap_ip_production_qa_review_fixture_is_bounded_and_idempotent(
                 )
             )
         )
+        matter = session.get(Matter, created.matter_id)
+        docket = session.get(IpDocketRecord, created.docket_id)
+        application = session.get(TrademarkApplication, created.application_id)
+        proceeding = session.get(IpProceeding, created.proceeding_id)
+        projected_targets = set(
+            session.execute(
+                select(
+                    PrivateIndexProjection.source_type,
+                    PrivateIndexProjection.source_id,
+                ).where(
+                    PrivateIndexProjection.company_id == tenant.company_id,
+                    PrivateIndexProjection.generation_id == private_fixture.generation_id,
+                    PrivateIndexProjection.is_tombstoned.is_(False),
+                )
+            ).all()
+        )
 
     assert created.authority_count == 3
     assert created.created_authorities == 3
     assert repeated.created_authorities == 0
+    assert created.created_targets == 3
+    assert repeated.created_targets == 0
+    assert repeated.matter_id == created.matter_id
+    assert repeated.docket_id == created.docket_id
+    assert matter is not None and matter.matter_code == "IPLF-063B-REVIEW"
+    assert docket is not None and docket.title == "IPLF 063B production QA review target"
+    assert application is not None and application.docket_id == docket.id
+    assert proceeding is not None and proceeding.application_id == application.id
+    assert ("matter", created.matter_id) in projected_targets
+    assert ("ip_docket", created.docket_id) in projected_targets
     assert len(authorities) == 3
     assert sum(item.source_access_state == "available" for item in authorities) == 2
     assert sum(item.source_access_state == "unavailable" for item in authorities) == 1
@@ -214,6 +262,14 @@ def test_bootstrap_ip_production_qa_review_fixture_refuses_non_qa_collision(
 ) -> None:
     del client
     with get_session_factory()() as session:
+        tenant = ensure_ip_production_qa(
+            session,
+            company_name="CaseOps IP QA Review Collision",
+            company_slug="caseops-ip-qa-review-collision",
+            owner_full_name="CaseOps IP QA Bot",
+            owner_email="ip-qa-review-collision@caseops.ai",
+            owner_password="ProductionQa2026!Safe",
+        )
         session.add(
             AuthorityDocument(
                 source="official",
@@ -231,7 +287,11 @@ def test_bootstrap_ip_production_qa_review_fixture_refuses_non_qa_collision(
         session.commit()
 
         try:
-            ensure_ip_production_qa_review_fixture(session)
+            ensure_ip_production_qa_review_fixture(
+                session,
+                company_id=tenant.company_id,
+                membership_id=tenant.membership_id,
+            )
         except RuntimeError as exc:
             assert "non-QA review fixture collision" in str(exc)
         else:

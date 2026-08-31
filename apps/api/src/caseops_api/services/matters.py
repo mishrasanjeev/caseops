@@ -2107,6 +2107,21 @@ def create_matter(
             "case_tracking_auto_link": case_tracking_auto_link.metadata(),
         },
     )
+    from caseops_api.services.private_retrieval import (
+        private_source_version,
+        propagate_private_source_creation,
+    )
+
+    propagate_private_source_creation(
+        session,
+        company_id=context.company.id,
+        actor_membership_id=context.membership.id,
+        idempotency_key=f"matter-created:{matter.id}",
+        target_type="matter",
+        target_id=matter.id,
+        target_version=private_source_version(matter),
+        reason_code="matter_created",
+    )
     if commit:
         session.commit()
         session.refresh(matter)
