@@ -15906,9 +15906,12 @@
         "apps/api/src/caseops_api/services/ai_feedback.py",
         "apps/api/src/caseops_api/services/portal_ip.py",
         "apps/api/src/caseops_api/services/workspace_assistant.py",
+        "apps/api/src/caseops_api/scripts/bootstrap_ip_production_qa.py",
         "apps/web/lib/api/openapi-types.ts",
         "apps/api/alembic/versions/20260831_0001_private_disposition_operations.py",
         "infra/cloudrun/scheduler-inventory.json",
+        "playwright.prod-ram.config.ts",
+        "scripts/deploy-prod.sh",
         "scripts/reconcile_monitoring_alerts.py",
         "scripts/scheduler_inventory.py",
         "docs/ip-implementation/PRIVATE_RETRIEVAL_WORKFLOW.md",
@@ -15920,12 +15923,15 @@
         "apps/api/tests/test_20260831_private_disposition_migration.py",
         "apps/api/tests/test_intelligent_reviews.py",
         "apps/api/tests/test_ai_feedback.py",
+        "apps/api/tests/test_bootstrap_ip_production_qa.py",
+        "apps/api/tests/test_deploy_prod_hardening.py",
         "apps/api/tests/test_portal_ip.py",
         "apps/api/tests/test_reconcile_monitoring_alerts.py",
         "apps/api/tests/test_scheduler_inventory.py",
         "apps/api/tests/test_postgres_validation.py::test_private_retrieval_prefilters_before_bounded_rank_on_postgres",
         "apps/api/tests/test_workspace_assistant_qa.py",
-        "tests/e2e/iplf-066b-private-retrieval-2026-08-30.spec.ts"
+        "tests/e2e/iplf-066b-private-retrieval-2026-08-30.spec.ts",
+        "tests/e2e/iplf-066b-private-retrieval-2026-08-31-prod.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/PRIVATE_RETRIEVAL_WORKFLOW.md",
@@ -15973,17 +15979,17 @@
       "blockers": [
         {
           "id": "IPLF-066B-EXACT-RELEASE",
-          "summary": "Implementation and complete local Docker/API/web/browser/governance verification passed; exact-commit Docker, hosted CI/Security/CodeQL, merge, post-main gates, production deployment and dated immutable-image verification have not run.",
+          "summary": "PR 399 merged the implementation after exact Docker and complete hosted gates. A pre-deploy audit then found the IPLF-066B dated browser journey absent from the production verifier; deployment was held and the SHA-scoped fixture, exact-once bootstrap and production browser correction now require fresh exact Docker, hosted, merge and release proof.",
           "owner": "Codex release automation",
           "evidence_needed": "Exact committed Docker result, complete PR and post-main hosted gates, migration-first latest-only deployment, immutable revision identity, scheduler/alert/index inspection and dated production browser acceptance.",
           "safe_fallback": "Keep rollout disabled and preserve the last verified generation, event ledger, saved-output locks and fail-closed hydration.",
           "milestone_impact": "Blocks release and production activation without invalidating completed implementation and local verification.",
-          "next_independent_slice": "Run the exact integrated release workflow and preserve the protected scheduler pauses."
+          "next_independent_slice": "Validate and merge the production-verifier correction, then run the exact release workflow while preserving the protected scheduler pauses."
         }
       ],
       "next_actions": [
         "Commit only after the green local gate, rerun exact-commit isolated Docker acceptance, and require complete PR CI/Security/CodeQL before merge.",
-        "Require post-main hosted gates, deploy migration-first with latest-only traffic, inspect the exact maintenance scheduler and alert, then pass dated immutable-image production acceptance before activation."
+        "Require corrective post-main hosted gates, deploy migration-first with latest-only traffic, execute the SHA-scoped QA bootstrap exactly once after synchronous release gates, inspect the exact maintenance scheduler and alert, then pass dated immutable-image production acceptance before activation."
       ],
       "data_impact": [
         "Migration 20260831_0001 adds bounded retry/attempt fields and due/global indexes to private projection events, a state-leading generation maintenance index, and content-minimized tenant disposition checkpoints. It performs no content backfill and refuses evidence-destructive downgrade.",

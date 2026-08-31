@@ -288,14 +288,20 @@ echo "  database index health completed."
 
 # This manually invokable release fixture is not part of recurring inventory.
 # Every release pins it to the immutable candidate without execution before
-# traffic moves; the post-deploy production workflow executes it exactly once.
+# traffic moves. After exact traffic and health pass, this script executes the
+# resulting job generation once so the hosted browser gate can consume the
+# SHA-scoped synthetic fixtures.
 echo "--- production QA bootstrap immutable repin (no execution) ---"
   A0_QA_JOB_BEFORE=""
   A0_QA_JOB_AFTER=""
+  A0_QA_JOB_POST=""
+  A0_QA_EXECUTION=""
   A0_BASELINE_TEMP=""
   cleanup_a0_control_files() {
     [[ -z "${A0_QA_JOB_BEFORE}" ]] || rm -f -- "${A0_QA_JOB_BEFORE}"
     [[ -z "${A0_QA_JOB_AFTER}" ]] || rm -f -- "${A0_QA_JOB_AFTER}"
+    [[ -z "${A0_QA_JOB_POST}" ]] || rm -f -- "${A0_QA_JOB_POST}"
+    [[ -z "${A0_QA_EXECUTION}" ]] || rm -f -- "${A0_QA_EXECUTION}"
     [[ -z "${A0_BASELINE_TEMP}" ]] || rm -f -- "${A0_BASELINE_TEMP}"
   }
   trap cleanup_a0_control_files EXIT
@@ -307,6 +313,7 @@ echo "--- production QA bootstrap immutable repin (no execution) ---"
     --format=json > "${A0_QA_JOB_BEFORE}"
   gcloud run jobs update caseops-ip-qa-bootstrap \
     --image "${API_IMMUTABLE_IMAGE}" \
+    --update-env-vars "CASEOPS_QA_RELEASE_SHA=${HEAD_SHA}" \
     --region "${REGION}" \
     --project "${PROJECT}" \
     --quiet
@@ -316,12 +323,12 @@ echo "--- production QA bootstrap immutable repin (no execution) ---"
     --format=json > "${A0_QA_JOB_AFTER}"
   if ! python - "${A0_QA_JOB_BEFORE}" "${A0_QA_JOB_AFTER}" \
     "${API_IMMUTABLE_IMAGE}" "caseops-runtime@${PROJECT}.iam.gserviceaccount.com" \
-    "${PROJECT}:${REGION}:caseops-db" <<'PY'
+    "${PROJECT}:${REGION}:caseops-db" "${HEAD_SHA}" <<'PY'
 import json
 from copy import deepcopy
 import sys
 
-before_path, after_path, image, service_account, cloud_sql = sys.argv[1:]
+before_path, after_path, image, service_account, cloud_sql, release_sha = sys.argv[1:]
 before = json.load(open(before_path, encoding="utf-8"))
 after = json.load(open(after_path, encoding="utf-8"))
 metadata = after.get("metadata", {})
@@ -352,9 +359,12 @@ if before_container.get("args") != container.get("args"):
     errors.append("args_changed")
 if container.get("args") not in (None, []):
     errors.append("args")
-env = {item.get("name"): item.get("value") for item in container.get("env", [])}
-if env.get("CASEOPS_AUTO_MIGRATE") != "false":
+env_rows = container.get("env", [])
+env = {item.get("name"): item for item in env_rows}
+if env.get("CASEOPS_AUTO_MIGRATE", {}).get("value") != "false":
     errors.append("auto_migrate")
+if env.get("CASEOPS_QA_RELEASE_SHA", {}).get("value") != release_sha:
+    errors.append("release_sha")
 if task_spec.get("serviceAccountName") != service_account:
     errors.append("service_account")
 if annotations.get("run.googleapis.com/cloudsql-instances") != cloud_sql:
@@ -374,10 +384,26 @@ for field in ("maxRetries", "timeoutSeconds"):
     if before_task_spec.get(field) != task_spec.get(field):
         errors.append(f"{field}_changed")
 normalized_before_task_spec = deepcopy(before_task_spec)
-normalized_containers = normalized_before_task_spec.get("containers", [])
-if normalized_containers:
-    normalized_containers[0]["image"] = image
-if normalized_before_task_spec != task_spec:
+normalized_after_task_spec = deepcopy(task_spec)
+before_containers = normalized_before_task_spec.get("containers", [])
+after_containers = normalized_after_task_spec.get("containers", [])
+if before_containers and after_containers:
+    before_container_normalized = before_containers[0]
+    after_container_normalized = after_containers[0]
+    before_env = {
+        item.get("name"): item for item in before_container_normalized.pop("env", [])
+    }
+    after_env = {
+        item.get("name"): item for item in after_container_normalized.pop("env", [])
+    }
+    before_env["CASEOPS_QA_RELEASE_SHA"] = {
+        "name": "CASEOPS_QA_RELEASE_SHA",
+        "value": release_sha,
+    }
+    if before_env != after_env:
+        errors.append("environment_changed")
+    before_container_normalized["image"] = image
+if normalized_before_task_spec != normalized_after_task_spec:
     errors.append("all_container_configuration_changed")
 for annotation in (
     "run.googleapis.com/cloudsql-instances",
@@ -645,6 +671,145 @@ if [[ "${CLAMAV_PROBE_DELAY}" != "0" || "${CLAMAV_PROBE_PERIOD}" != "2" ]]; then
   exit 1
 fi
 echo "  EG-003 clamav sidecar present with immediate two-second startup probing."
+
+# The release-specific production canary is a synthetic QA mutation and may run
+# only after migration, exact traffic, public health, and sidecar checks pass.
+# A completed execution on the current job generation is authoritative: a
+# deploy retry skips it, while a failed execution remains failed closed instead
+# of silently producing a second attempt for the same release.
+echo "--- production QA bootstrap exact-generation execution ---"
+A0_QA_JOB_POST=$(mktemp)
+gcloud run jobs describe caseops-ip-qa-bootstrap \
+  --region "${REGION}" \
+  --project "${PROJECT}" \
+  --format=json > "${A0_QA_JOB_POST}"
+read -r QA_JOB_GENERATION QA_EXECUTION_COUNT QA_LATEST_EXECUTION < <(
+  python - "${A0_QA_JOB_POST}" <<'PY'
+import json
+import sys
+
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+metadata = payload.get("metadata", {})
+status = payload.get("status", {})
+print(
+    metadata.get("generation", ""),
+    status.get("executionCount", 0),
+    status.get("latestCreatedExecution", {}).get("name", "-"),
+)
+PY
+)
+if [[ ! "${QA_JOB_GENERATION}" =~ ^[0-9]+$ ]] || \
+   [[ ! "${QA_EXECUTION_COUNT}" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: caseops-ip-qa-bootstrap generation/execution count is invalid."
+  exit 1
+fi
+
+QA_EXECUTE_REQUIRED=true
+if [[ "${QA_LATEST_EXECUTION}" != "-" ]]; then
+  A0_QA_EXECUTION=$(mktemp)
+  gcloud run jobs executions describe "${QA_LATEST_EXECUTION}" \
+    --region "${REGION}" \
+    --project "${PROJECT}" \
+    --format=json > "${A0_QA_EXECUTION}"
+  QA_LATEST_JOB_GENERATION=$(python - "${A0_QA_EXECUTION}" <<'PY'
+import json
+import sys
+
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+print(payload.get("metadata", {}).get("labels", {}).get("run.googleapis.com/jobGeneration", ""))
+PY
+)
+  if [[ "${QA_LATEST_JOB_GENERATION}" == "${QA_JOB_GENERATION}" ]]; then
+    if ! python - "${A0_QA_EXECUTION}" <<'PY'
+import json
+import sys
+
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+completed = next(
+    (
+        row
+        for row in payload.get("status", {}).get("conditions", [])
+        if row.get("type") == "Completed"
+    ),
+    None,
+)
+if completed is None or str(completed.get("status")).lower() != "true":
+    raise SystemExit(1)
+PY
+    then
+      echo "ERROR: current-generation QA bootstrap already ran without success; refusing an automatic retry."
+      exit 1
+    fi
+    QA_EXECUTE_REQUIRED=false
+    echo "  QA bootstrap already completed once for job generation ${QA_JOB_GENERATION}; no second execution."
+  fi
+fi
+
+if [[ "${QA_EXECUTE_REQUIRED}" == "true" ]]; then
+  gcloud run jobs execute caseops-ip-qa-bootstrap \
+    --region "${REGION}" \
+    --project "${PROJECT}" \
+    --wait --quiet
+  gcloud run jobs describe caseops-ip-qa-bootstrap \
+    --region "${REGION}" \
+    --project "${PROJECT}" \
+    --format=json > "${A0_QA_JOB_POST}"
+  read -r QA_AFTER_GENERATION QA_AFTER_EXECUTION_COUNT QA_LATEST_EXECUTION < <(
+    python - "${A0_QA_JOB_POST}" <<'PY'
+import json
+import sys
+
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+metadata = payload.get("metadata", {})
+status = payload.get("status", {})
+print(
+    metadata.get("generation", ""),
+    status.get("executionCount", 0),
+    status.get("latestCreatedExecution", {}).get("name", "-"),
+)
+PY
+  )
+  if [[ "${QA_AFTER_GENERATION}" != "${QA_JOB_GENERATION}" ]] || \
+     [[ "${QA_AFTER_EXECUTION_COUNT}" -ne $((QA_EXECUTION_COUNT + 1)) ]] || \
+     [[ "${QA_LATEST_EXECUTION}" == "-" ]]; then
+    echo "ERROR: QA bootstrap did not produce exactly one current-generation execution."
+    exit 1
+  fi
+  rm -f -- "${A0_QA_EXECUTION}"
+  A0_QA_EXECUTION=$(mktemp)
+  gcloud run jobs executions describe "${QA_LATEST_EXECUTION}" \
+    --region "${REGION}" \
+    --project "${PROJECT}" \
+    --format=json > "${A0_QA_EXECUTION}"
+  if ! python - "${A0_QA_EXECUTION}" "${QA_JOB_GENERATION}" <<'PY'
+import json
+import sys
+
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+expected_generation = sys.argv[2]
+labels = payload.get("metadata", {}).get("labels", {})
+completed = next(
+    (
+        row
+        for row in payload.get("status", {}).get("conditions", [])
+        if row.get("type") == "Completed"
+    ),
+    None,
+)
+if labels.get("run.googleapis.com/jobGeneration") != expected_generation:
+    raise SystemExit(1)
+if completed is None or str(completed.get("status")).lower() != "true":
+    raise SystemExit(1)
+PY
+  then
+    echo "ERROR: exact-generation QA bootstrap execution was not successful."
+    exit 1
+  fi
+  echo "  QA bootstrap ${QA_LATEST_EXECUTION} completed once for job generation ${QA_JOB_GENERATION}."
+fi
+rm -f -- "${A0_QA_JOB_POST}" "${A0_QA_EXECUTION}"
+A0_QA_JOB_POST=""
+A0_QA_EXECUTION=""
 
 # A push to main is not proof that a release started. Dispatch the exact-SHA
 # browser gate only after both services pass every synchronous deploy gate.

@@ -55,6 +55,52 @@ function Get-WorkingTreeFingerprint {
     }
 }
 
+function Test-TcpPortBlockAvailable {
+    param(
+        [Parameter(Mandatory=$true)]
+        [int]$BasePort
+    )
+
+    $Listeners = @()
+    try {
+        foreach ($Offset in 0..4) {
+            $Listener = [Net.Sockets.TcpListener]::new(
+                [Net.IPAddress]::Loopback,
+                $BasePort + $Offset
+            )
+            $Listener.ExclusiveAddressUse = $true
+            $Listener.Start()
+            $Listeners += $Listener
+        }
+        return $true
+    }
+    catch [Net.Sockets.SocketException] {
+        # Windows excluded ranges and an existing listener both surface here.
+        return $false
+    }
+    finally {
+        foreach ($Listener in $Listeners) {
+            $Listener.Stop()
+        }
+    }
+}
+
+function Get-AvailablePortBase {
+    param(
+        [Parameter(Mandatory=$true)]
+        [int]$InitialBlock
+    )
+
+    foreach ($ProbeOffset in 0..5999) {
+        $CandidateBlock = ($InitialBlock + $ProbeOffset) % 6000
+        $CandidateBase = 20000 + ($CandidateBlock * 5)
+        if (Test-TcpPortBlockAvailable -BasePort $CandidateBase) {
+            return $CandidateBase
+        }
+    }
+    throw "No available five-port Docker acceptance block exists between 20000 and 49999."
+}
+
 $SourceFingerprint = if ($PreCommit) { Get-WorkingTreeFingerprint } else { $null }
 $ReleaseSha = if ($PreCommit) {
     # Runtime release endpoints deliberately accept only exact Git-shaped revisions.
@@ -72,7 +118,8 @@ if (
 
 $ComposeProject = "caseops-acceptance-$($ReleaseSha.Substring(0, 12))"
 $PortBlock = [Convert]::ToInt32($ReleaseSha.Substring(0, 6), 16) % 6000
-$PortBase = 20000 + ($PortBlock * 5)
+$PreferredPortBase = 20000 + ($PortBlock * 5)
+$PortBase = Get-AvailablePortBase -InitialBlock $PortBlock
 $ApiPort = ($PortBase + 0).ToString()
 $TestApiPort = ($PortBase + 1).ToString()
 $WebPort = ($PortBase + 2).ToString()
@@ -129,6 +176,12 @@ try {
     Write-Host "[docker-acceptance] exact $IdentityKind $CandidateIdentity"
     if ($PreCommit) {
         Write-Host "[docker-acceptance] derived runtime revision $ReleaseSha"
+    }
+    if ($PortBase -ne $PreferredPortBase) {
+        Write-Host (
+            "[docker-acceptance] preferred port block $PreferredPortBase-$($PreferredPortBase + 4) " +
+            "is reserved or occupied; using $PortBase-$($PortBase + 4)"
+        )
     }
     Write-Host "[docker-acceptance] preparing frozen host test dependencies"
     & npm ci --no-audit --no-fund
@@ -246,8 +299,23 @@ try {
         } else { "" }
         throw "Docker acceptance API proxy did not become ready. $ProxyError"
     }
-    & npx playwright test --config playwright.docker.config.ts --reporter=list @PlaywrightArgs
-    if ($LASTEXITCODE -ne 0) { throw "Docker Playwright acceptance failed." }
+    if ($PlaywrightArgs.Count -eq 0) {
+        # Bound each Windows worker's lifetime without retries: every desktop
+        # test still runs exactly once, and the mobile project remains whole.
+        & npx playwright test --config playwright.docker.config.ts --reporter=list `
+            --project=app-chromium --shard=1/2
+        if ($LASTEXITCODE -ne 0) { throw "Docker Playwright desktop shard 1/2 failed." }
+        & npx playwright test --config playwright.docker.config.ts --reporter=list `
+            --project=app-chromium --shard=2/2
+        if ($LASTEXITCODE -ne 0) { throw "Docker Playwright desktop shard 2/2 failed." }
+        & npx playwright test --config playwright.docker.config.ts --reporter=list `
+            --project=app-mobile
+        if ($LASTEXITCODE -ne 0) { throw "Docker Playwright mobile project failed." }
+    }
+    else {
+        & npx playwright test --config playwright.docker.config.ts --reporter=list @PlaywrightArgs
+        if ($LASTEXITCODE -ne 0) { throw "Docker Playwright focused acceptance failed." }
+    }
 
     $PostTestHealth = Invoke-RestMethod "http://127.0.0.1:$ApiPort/api/health"
     if ($PostTestHealth.status -ne "ok") { throw "API became unhealthy after Playwright." }
