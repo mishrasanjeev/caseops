@@ -126,10 +126,22 @@ $WebPort = ($PortBase + 2).ToString()
 $PostgresPort = ($PortBase + 3).ToString()
 $ValkeyPort = ($PortBase + 4).ToString()
 
-$DirtyContext = ((& git -C $RepoRoot status --porcelain --untracked-files=all -- apps/api apps/web docker-compose.yml package.json package-lock.json .dockerignore .gcloudignore playwright.docker.config.ts scripts/docker-acceptance-api-proxy.mjs scripts/verify-docker.ps1 | Out-String).Trim())
+$DirtyContext = ((& git -C $RepoRoot status --porcelain --untracked-files=all -- apps/api apps/web docker-compose.yml package.json package-lock.json .nvmrc .dockerignore .gcloudignore playwright.docker.config.ts scripts/docker-acceptance-api-proxy.mjs scripts/verify-docker.ps1 | Out-String).Trim())
 if ($DirtyContext -and -not $PreCommit) {
     throw "Docker acceptance requires a committed, clean build context. Commit the candidate first.`n$DirtyContext"
 }
+
+$PinnedNodeVersion = ((Get-Content -LiteralPath (Join-Path $RepoRoot ".nvmrc") -Raw).Trim() -replace "^v", "")
+$NodePath = (Get-Command node -ErrorAction Stop).Source
+$ActualNodeVersion = (((& $NodePath --version) | Out-String).Trim() -replace "^v", "")
+if ($ActualNodeVersion -ne $PinnedNodeVersion) {
+    throw (
+        "Docker acceptance requires Node v$PinnedNodeVersion from .nvmrc; " +
+        "found v$ActualNodeVersion at $NodePath. Activate the pinned runtime before retrying."
+    )
+}
+$NpmPath = (Get-Command npm -ErrorAction Stop).Source
+$NpxPath = (Get-Command npx -ErrorAction Stop).Source
 
 $PreviousEnvironment = @{}
 $AcceptanceEnvironment = @{
@@ -184,7 +196,7 @@ try {
         )
     }
     Write-Host "[docker-acceptance] preparing frozen host test dependencies"
-    & npm ci --no-audit --no-fund
+    & $NpmPath ci --no-audit --no-fund
     if ($LASTEXITCODE -ne 0) { throw "Host Node dependency sync failed." }
     & uv sync --project $ApiDir --frozen
     if ($LASTEXITCODE -ne 0) { throw "Host API dependency sync failed." }
@@ -269,7 +281,6 @@ try {
     }
 
     Write-Host "[docker-acceptance] running Playwright against Docker + PostgreSQL"
-    $NodePath = (Get-Command node -ErrorAction Stop).Source
     $TestApiProxyStdout = [IO.Path]::GetTempFileName()
     $TestApiProxyStderr = [IO.Path]::GetTempFileName()
     $TestApiProxyProcess = Start-Process `
@@ -302,18 +313,18 @@ try {
     if ($PlaywrightArgs.Count -eq 0) {
         # Bound each Windows worker's lifetime without retries: every desktop
         # test still runs exactly once, and the mobile project remains whole.
-        & npx playwright test --config playwright.docker.config.ts --reporter=list `
+        & $NpxPath playwright test --config playwright.docker.config.ts --reporter=list `
             --project=app-chromium --shard=1/2
         if ($LASTEXITCODE -ne 0) { throw "Docker Playwright desktop shard 1/2 failed." }
-        & npx playwright test --config playwright.docker.config.ts --reporter=list `
+        & $NpxPath playwright test --config playwright.docker.config.ts --reporter=list `
             --project=app-chromium --shard=2/2
         if ($LASTEXITCODE -ne 0) { throw "Docker Playwright desktop shard 2/2 failed." }
-        & npx playwright test --config playwright.docker.config.ts --reporter=list `
+        & $NpxPath playwright test --config playwright.docker.config.ts --reporter=list `
             --project=app-mobile
         if ($LASTEXITCODE -ne 0) { throw "Docker Playwright mobile project failed." }
     }
     else {
-        & npx playwright test --config playwright.docker.config.ts --reporter=list @PlaywrightArgs
+        & $NpxPath playwright test --config playwright.docker.config.ts --reporter=list @PlaywrightArgs
         if ($LASTEXITCODE -ne 0) { throw "Docker Playwright focused acceptance failed." }
     }
 

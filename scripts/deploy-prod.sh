@@ -684,7 +684,7 @@ gcloud run jobs describe caseops-ip-qa-bootstrap \
   --project "${PROJECT}" \
   --format=json > "${A0_QA_JOB_POST}"
 read -r QA_JOB_GENERATION QA_EXECUTION_COUNT QA_LATEST_EXECUTION < <(
-  python - "${A0_QA_JOB_POST}" <<'PY'
+  python - "${A0_QA_JOB_POST}" <<'PY' | tr -d '\r'
 import json
 import sys
 
@@ -698,6 +698,9 @@ print(
 )
 PY
 )
+QA_JOB_GENERATION="${QA_JOB_GENERATION//$'\r'/}"
+QA_EXECUTION_COUNT="${QA_EXECUTION_COUNT//$'\r'/}"
+QA_LATEST_EXECUTION="${QA_LATEST_EXECUTION//$'\r'/}"
 if [[ ! "${QA_JOB_GENERATION}" =~ ^[0-9]+$ ]] || \
    [[ ! "${QA_EXECUTION_COUNT}" =~ ^[0-9]+$ ]]; then
   echo "ERROR: caseops-ip-qa-bootstrap generation/execution count is invalid."
@@ -711,14 +714,16 @@ if [[ "${QA_LATEST_EXECUTION}" != "-" ]]; then
     --region "${REGION}" \
     --project "${PROJECT}" \
     --format=json > "${A0_QA_EXECUTION}"
-  QA_LATEST_JOB_GENERATION=$(python - "${A0_QA_EXECUTION}" <<'PY'
+  QA_LATEST_JOB_GENERATION=$(
+    python - "${A0_QA_EXECUTION}" <<'PY' | tr -d '\r'
 import json
 import sys
 
 payload = json.load(open(sys.argv[1], encoding="utf-8"))
 print(payload.get("metadata", {}).get("labels", {}).get("run.googleapis.com/jobGeneration", ""))
 PY
-)
+  )
+  QA_LATEST_JOB_GENERATION="${QA_LATEST_JOB_GENERATION//$'\r'/}"
   if [[ "${QA_LATEST_JOB_GENERATION}" == "${QA_JOB_GENERATION}" ]]; then
     if ! python - "${A0_QA_EXECUTION}" <<'PY'
 import json
@@ -755,7 +760,7 @@ if [[ "${QA_EXECUTE_REQUIRED}" == "true" ]]; then
     --project "${PROJECT}" \
     --format=json > "${A0_QA_JOB_POST}"
   read -r QA_AFTER_GENERATION QA_AFTER_EXECUTION_COUNT QA_LATEST_EXECUTION < <(
-    python - "${A0_QA_JOB_POST}" <<'PY'
+    python - "${A0_QA_JOB_POST}" <<'PY' | tr -d '\r'
 import json
 import sys
 
@@ -769,6 +774,9 @@ print(
 )
 PY
   )
+  QA_AFTER_GENERATION="${QA_AFTER_GENERATION//$'\r'/}"
+  QA_AFTER_EXECUTION_COUNT="${QA_AFTER_EXECUTION_COUNT//$'\r'/}"
+  QA_LATEST_EXECUTION="${QA_LATEST_EXECUTION//$'\r'/}"
   if [[ "${QA_AFTER_GENERATION}" != "${QA_JOB_GENERATION}" ]] || \
      [[ "${QA_AFTER_EXECUTION_COUNT}" -ne $((QA_EXECUTION_COUNT + 1)) ]] || \
      [[ "${QA_LATEST_EXECUTION}" == "-" ]]; then
