@@ -131,6 +131,30 @@ if ($DirtyContext -and -not $PreCommit) {
     throw "Docker acceptance requires a committed, clean build context. Commit the candidate first.`n$DirtyContext"
 }
 
+function Get-ComposeServiceState {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Project,
+        [Parameter(Mandatory=$true)]
+        [string]$File,
+        [Parameter(Mandatory=$true)]
+        [string]$Service
+    )
+
+    $ContainerId = ((
+        & docker compose --project-name $Project --file $File ps --all --quiet $Service |
+            Out-String
+    ).Trim())
+    if ($LASTEXITCODE -ne 0 -or $ContainerId -notmatch "^[0-9a-f]+$") {
+        throw "Could not resolve the $Service container in $Project."
+    }
+    $State = ((& docker inspect --format "{{.State.Status}}" $ContainerId | Out-String).Trim())
+    if ($LASTEXITCODE -ne 0 -or -not $State) {
+        throw "Could not inspect the $Service container in $Project."
+    }
+    return $State
+}
+
 $PinnedNodeVersion = ((Get-Content -LiteralPath (Join-Path $RepoRoot ".nvmrc") -Raw).Trim() -replace "^v", "")
 $NodePath = (Get-Command node -ErrorAction Stop).Source
 $ActualNodeVersion = (((& $NodePath --version) | Out-String).Trim() -replace "^v", "")
@@ -270,6 +294,17 @@ try {
         throw "PostgreSQL index health exceeded its 512 MiB production job ceiling or failed."
     }
 
+    Write-Host "[docker-acceptance] pausing the document worker for migration-state validation"
+    & docker compose --project-name $ComposeProject --file $ComposeFile stop --timeout 30 worker
+    if ($LASTEXITCODE -ne 0) { throw "Could not stop the document worker before PostgreSQL validation." }
+    $WorkerStateBeforePostgres = Get-ComposeServiceState `
+        -Project $ComposeProject `
+        -File $ComposeFile `
+        -Service "worker"
+    if ($WorkerStateBeforePostgres -ne "exited") {
+        throw "Document worker remained $WorkerStateBeforePostgres during migration-state validation."
+    }
+
     Write-Host "[docker-acceptance] running the complete PostgreSQL + pgvector validation suite"
     Push-Location $ApiDir
     try {
@@ -278,6 +313,17 @@ try {
     }
     finally {
         Pop-Location
+    }
+    Write-Host "[docker-acceptance] restarting the document worker at the restored schema head"
+    & docker compose --project-name $ComposeProject --file $ComposeFile start worker
+    if ($LASTEXITCODE -ne 0) { throw "Could not restart the document worker after PostgreSQL validation." }
+    Start-Sleep -Seconds 2
+    $WorkerStateAfterRestart = Get-ComposeServiceState `
+        -Project $ComposeProject `
+        -File $ComposeFile `
+        -Service "worker"
+    if ($WorkerStateAfterRestart -ne "running") {
+        throw "Document worker was $WorkerStateAfterRestart after PostgreSQL validation."
     }
 
     Write-Host "[docker-acceptance] running Playwright against Docker + PostgreSQL"
@@ -328,6 +374,13 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Docker Playwright focused acceptance failed." }
     }
 
+    $WorkerStateAfterPlaywright = Get-ComposeServiceState `
+        -Project $ComposeProject `
+        -File $ComposeFile `
+        -Service "worker"
+    if ($WorkerStateAfterPlaywright -ne "running") {
+        throw "Document worker was $WorkerStateAfterPlaywright after Playwright."
+    }
     $PostTestHealth = Invoke-RestMethod "http://127.0.0.1:$ApiPort/api/health"
     if ($PostTestHealth.status -ne "ok") { throw "API became unhealthy after Playwright." }
     $Succeeded = $true

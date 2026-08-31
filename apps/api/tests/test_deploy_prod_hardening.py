@@ -420,6 +420,18 @@ def test_workstation_docker_gate_is_migration_first_and_exact_release() -> None:
     assert "--memory-swap 512m" in docker_script
     assert "label=com.docker.compose.network=default" in docker_script
     assert "exceeded its 512 MiB production job ceiling" in docker_script
+    assert "function Get-ComposeServiceState" in docker_script
+    assert "stop --timeout 30 worker" in docker_script
+    assert "start worker" in docker_script
+    assert '$WorkerStateAfterRestart -ne "running"' in docker_script
+    assert '$WorkerStateAfterPlaywright -ne "running"' in docker_script
+    assert docker_script.index("stop --timeout 30 worker") < docker_script.index(
+        "-m postgres"
+    )
+    assert docker_script.index("-m postgres") < docker_script.index("start worker")
+    assert docker_script.index("start worker") < docker_script.index(
+        '$WorkerStateAfterPlaywright = Get-ComposeServiceState'
+    )
 
     assert "globalSetup: undefined" in playwright_config
     assert "webServer: undefined" in playwright_config
