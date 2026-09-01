@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import event, select
+from sqlalchemy import event, func, select
 from sqlalchemy.exc import IntegrityError
 
 from caseops_api.core.settings import get_settings
@@ -34,6 +34,7 @@ from caseops_api.db.models import (
 )
 from caseops_api.db.session import get_engine, get_session_factory
 from caseops_api.schemas.ip_operations import IpDocketCreateRequest
+from caseops_api.scripts import private_projection_integrity
 from caseops_api.services import data_disposition, private_retrieval, private_retrieval_jobs
 from caseops_api.services.data_disposition import (
     DataDispositionInvariantError,
@@ -58,6 +59,8 @@ from caseops_api.services.private_retrieval import (
 from caseops_api.services.private_retrieval_jobs import (
     MAX_PRIVATE_PROVIDER_BATCH,
     MAX_PRIVATE_REBUILD_PROJECTIONS,
+    MAX_PRIVATE_WRITE_BATCH,
+    PrivateMaintenanceCandidates,
     inspect_private_index_integrity,
     list_private_maintenance_companies,
     process_pending_private_projection_events,
@@ -90,6 +93,64 @@ class _SpyEmbeddingProvider:
             model=self.model,
             dimensions=self.dimensions,
         )
+
+
+def test_rebuild_removes_committed_batches_when_security_epoch_changes(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    company_id = str(bootstrap["company"]["id"])
+    for index in range(MAX_PRIVATE_WRITE_BATCH + 1):
+        _matter(client, token, f"IPLF-066B-STALE-BATCH-{index:02d}")
+
+    real_upsert = private_retrieval_jobs.upsert_private_projection
+    upsert_count = 0
+
+    def _upsert_after_epoch_change(*args: object, **kwargs: object) -> object:
+        nonlocal upsert_count
+        upsert_count += 1
+        if upsert_count == MAX_PRIVATE_WRITE_BATCH + 1:
+            generation_id = str(kwargs["generation_id"])
+            with get_session_factory()() as concurrent_session:
+                shadow = concurrent_session.get(PrivateIndexGeneration, generation_id)
+                assert shadow is not None
+                shadow.access_policy_generation += 1
+                concurrent_session.commit()
+        return real_upsert(*args, **kwargs)
+
+    monkeypatch.setattr(
+        private_retrieval_jobs,
+        "upsert_private_projection",
+        _upsert_after_epoch_change,
+    )
+    with get_session_factory()() as session:
+        with pytest.raises(PrivateRetrievalInvariantError):
+            rebuild_private_index(session, company_id=company_id)
+
+    with get_session_factory()() as session:
+        failed_shadow = session.scalar(
+            select(PrivateIndexGeneration)
+            .where(
+                PrivateIndexGeneration.company_id == company_id,
+                PrivateIndexGeneration.state == "failed",
+            )
+            .order_by(PrivateIndexGeneration.created_at.desc())
+        )
+        assert failed_shadow is not None
+        retained_projection_count = int(
+            session.scalar(
+                select(func.count(PrivateIndexProjection.id)).where(
+                    PrivateIndexProjection.generation_id == failed_shadow.id,
+                    PrivateIndexProjection.company_id == company_id,
+                )
+            )
+            or 0
+        )
+
+    assert upsert_count == MAX_PRIVATE_WRITE_BATCH + 1
+    assert retained_projection_count == 0
 
 
 def _context(company_id: str, membership_id: str) -> SessionContext:
@@ -1217,6 +1278,110 @@ def test_source_change_during_unlocked_enumeration_fences_stale_rebuild(
         assert failed_shadow is not None
         assert failed_shadow.state == "failed"
         assert failed_shadow.failure_code == "PrivateRetrievalInvariantError"
+
+
+def test_maintenance_retries_one_stale_shadow_and_activates_cleanly(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    company_id = str(bootstrap["company"]["id"])
+    membership_id = str(bootstrap["membership"]["id"])
+    matter = _matter(client, token, "PRIVATE-MAINTENANCE-RETRY")
+    with get_session_factory()() as session:
+        rebuild_private_index(session, company_id=company_id, activate=True)
+        session.commit()
+        propagate_private_projection_change(
+            session,
+            company_id=company_id,
+            actor_membership_id=membership_id,
+            idempotency_key="iplf-066b-maintenance-retry-trigger",
+            event_type="source_changed",
+            target_type="matter",
+            target_id=str(matter["id"]),
+            target_version=None,
+            reason_code="source_changed_before_maintenance",
+        )
+        session.commit()
+
+    real_inputs = private_retrieval_jobs._private_projection_inputs
+    raced = False
+
+    def race_first_rebuild(session, **kwargs):
+        nonlocal raced
+        if not raced:
+            raced = True
+            with get_session_factory()() as concurrent:
+                propagate_private_projection_change(
+                    concurrent,
+                    company_id=company_id,
+                    actor_membership_id=membership_id,
+                    idempotency_key="iplf-066b-maintenance-retry-race",
+                    event_type="access_changed",
+                    target_type="matter",
+                    target_id=str(matter["id"]),
+                    target_version=None,
+                    reason_code="access_changed_during_maintenance",
+                )
+                concurrent.commit()
+        return real_inputs(session, **kwargs)
+
+    monkeypatch.setattr(
+        private_retrieval_jobs,
+        "_private_projection_inputs",
+        race_first_rebuild,
+    )
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "list_private_maintenance_companies",
+        lambda _session, *, limit: PrivateMaintenanceCandidates(
+            company_ids=(company_id,),
+            truncated=False,
+        ),
+    )
+
+    result = private_projection_integrity._maintain(
+        max_companies=1,
+        max_rebuilds=1,
+        event_lag_slo_seconds=300,
+    )
+
+    assert raced is True
+    assert result["status"] == "ok"
+    assert result["release_blocked"] is False
+    assert result["rebuild_count"] == 1
+    assert result["companies"][0]["rebuilt"] is True
+    with get_session_factory()() as session:
+        failed_shadow = session.scalar(
+            select(PrivateIndexGeneration)
+            .where(
+                PrivateIndexGeneration.company_id == company_id,
+                PrivateIndexGeneration.state == "failed",
+            )
+            .order_by(PrivateIndexGeneration.generation_number.desc())
+            .limit(1)
+        )
+        active = session.scalar(
+            select(PrivateIndexGeneration).where(
+                PrivateIndexGeneration.company_id == company_id,
+                PrivateIndexGeneration.state == "active",
+            )
+        )
+        assert failed_shadow is not None
+        assert failed_shadow.failure_code == "PrivateRetrievalInvariantError"
+        assert active is not None
+        assert active.generation_number > failed_shadow.generation_number
+        assert (
+            session.scalar(
+                select(func.count(PrivateIndexProjection.id)).where(
+                    PrivateIndexProjection.company_id == company_id,
+                    PrivateIndexProjection.generation_id == failed_shadow.id,
+                )
+            )
+            == 0
+        )
+        assert not inspect_private_index_integrity(session, company_id=company_id).blockers
 
 
 @pytest.mark.parametrize(

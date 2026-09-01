@@ -107,9 +107,18 @@ requirements when using the fallback.
 - Private-projection rebuild bounds must be derived from observed production
   tenant volume, not small fixture assumptions. The 2026-09-01 production
   baseline was 9,820 eligible projections; keep the 20,000-row cap, 50-row
-  commit batches, tenant isolation, and explicit bounded error detail under
+  commit batches, tenant isolation, and sanitized bounded error detail under
   regression. Never silently truncate a rebuild or hold parent locks across it.
 - A destructive production canary must be rerunnable without resurrecting its
   terminal fixture. Bootstrap a new release-scoped iteration, preserve every
   disposed predecessor, discover the one active iteration through public
   server-owned identifiers, and prove both idempotence and terminal immutability.
+- Private-index rebuilds must not retain source-row foreign-key locks across an
+  unbounded tenant transaction. Commit unreadable shadow projections in bounded
+  batches, fence every batch with the captured security epochs, remove partial
+  rows when a shadow fails, and prove on PostgreSQL that ordinary IP writers
+  remain below the lock-timeout budget while projection scopes are inserted.
+- An HTTP 200 from an LLM provider is not evidence of valid structured output.
+  Use the provider's native strict schema path when available, preserve the
+  existing validation boundary for every provider, and test malformed/refusal
+  behavior so legal reviews cannot fail later on truncated free-form JSON.

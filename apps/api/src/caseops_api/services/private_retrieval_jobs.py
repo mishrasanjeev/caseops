@@ -16,7 +16,7 @@ from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import and_, exists, func, or_, select
+from sqlalchemy import and_, delete, exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
@@ -65,6 +65,10 @@ DEFAULT_PRIVATE_EVENT_RETRY_BACKOFF_SECONDS = 30
 DEFAULT_PRIVATE_EVENT_LAG_SLO_SECONDS = 300
 DEFAULT_PRIVATE_PROVIDER_DEADLINE_SECONDS = 30.0
 LOW_OCR_QUALITY_THRESHOLD = 0.65
+PRIVATE_REBUILD_LIMIT_DETAIL = (
+    "Private rebuild exceeded its bounded projection limit; leave the "
+    "last verified generation active and resume through a larger offline plan."
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,10 +143,7 @@ def _bounded_append(
     limit: int,
 ) -> None:
     if len(payloads) >= limit:
-        raise PrivateRetrievalInvariantError(
-            "Private rebuild exceeded its bounded projection limit; leave the "
-            "last verified generation active and resume through a larger offline plan."
-        )
+        raise PrivateRetrievalInvariantError(PRIVATE_REBUILD_LIMIT_DETAIL)
     payloads.append(payload)
 
 
@@ -574,10 +575,12 @@ def rebuild_private_index(
 
     Shadow creation is committed before source enumeration or any provider
     call. The worker therefore never scans a tenant corpus while retaining the
-    company/generation authority locks. Every later write presents the exact
-    access/tombstone epochs captured with the shadow; an event landing during
-    enumeration or provider I/O makes the job stale and the shadow is failed
-    rather than populated or activated.
+    company/generation authority locks. Projection writes are committed in
+    bounded batches because scope FKs take ``KEY SHARE`` locks on canonical
+    Matters and IP dockets. Every batch presents the exact access/tombstone
+    epochs captured with the shadow; an event landing during enumeration,
+    provider I/O, or writes makes the job stale, removes partial shadow rows,
+    and prevents activation.
     """
 
     if session.new or session.dirty or session.deleted:
@@ -648,7 +651,8 @@ def rebuild_private_index(
                 )
             # The shadow is unreadable while building. Commit each bounded
             # batch so generation and scope-parent locks cannot accumulate
-            # across a production-sized corpus.
+            # across a production-sized corpus. The next batch revalidates the
+            # captured security epochs.
             session.commit()
         mark_private_generation_ready(
             session,
@@ -679,6 +683,15 @@ def rebuild_private_index(
             .execution_options(populate_existing=True)
         )
         if failed_shadow is not None:
+            # Earlier batches may already be committed. A failed/building
+            # shadow is never readable, so remove its partial payloads before
+            # recording the failure instead of retaining unreachable data.
+            session.execute(
+                delete(PrivateIndexProjection).where(
+                    PrivateIndexProjection.generation_id == shadow_generation_id,
+                    PrivateIndexProjection.company_id == company_id,
+                )
+            )
             failed_shadow.state = "failed"
             failed_shadow.failure_code = type(exc).__name__[:80]
             session.commit()
@@ -1066,6 +1079,7 @@ __all__ = [
     "MAX_PRIVATE_WRITE_BATCH",
     "MAX_PRIVATE_MAINTENANCE_COMPANIES",
     "MAX_PRIVATE_REBUILD_PROJECTIONS",
+    "PRIVATE_REBUILD_LIMIT_DETAIL",
     "PrivateIntegrityReport",
     "PrivateRebuildSummary",
     "inspect_private_index_integrity",
