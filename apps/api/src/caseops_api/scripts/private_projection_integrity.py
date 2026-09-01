@@ -8,7 +8,10 @@ from uuid import uuid4
 
 from caseops_api.db.session import get_session_factory
 from caseops_api.services.embeddings import build_provider
-from caseops_api.services.private_retrieval import PrivateRetrievalInvariantError
+from caseops_api.services.private_retrieval import (
+    STALE_PRIVATE_PROJECTION_WRITER_DETAIL,
+    PrivateRetrievalInvariantError,
+)
 from caseops_api.services.private_retrieval_jobs import (
     DEFAULT_PRIVATE_EVENT_LAG_SLO_SECONDS,
     MAX_PRIVATE_MAINTENANCE_COMPANIES,
@@ -29,6 +32,13 @@ def _safe_error_detail(exc: BaseException) -> str:
     if isinstance(exc, PrivateRetrievalInvariantError) and detail == PRIVATE_REBUILD_LIMIT_DETAIL:
         return detail
     return _REDACTED_ERROR_DETAIL
+
+
+def _is_retryable_stale_writer(exc: BaseException) -> bool:
+    return (
+        isinstance(exc, PrivateRetrievalInvariantError)
+        and str(exc).strip() == STALE_PRIVATE_PROJECTION_WRITER_DETAIL
+    )
 
 
 def _integrity_payload(report) -> dict[str, object]:
@@ -100,14 +110,41 @@ def _maintain(
                     and set(after.blockers) <= repairable_blockers
                     and rebuild_count < max_rebuilds
                 ):
-                    rebuild_private_index(
-                        session,
-                        company_id=company_id,
-                        activate=True,
-                    )
-                    session.commit()
-                    rebuild_count += 1
-                    rebuilt = True
+                    for rebuild_attempt in range(2):
+                        try:
+                            rebuild_private_index(
+                                session,
+                                company_id=company_id,
+                                activate=True,
+                            )
+                        except PrivateRetrievalInvariantError as exc:
+                            if rebuild_attempt or not _is_retryable_stale_writer(exc):
+                                raise
+                            # A canonical mutation that lands during an unlocked
+                            # rebuild deliberately fences that shadow. Drain the
+                            # mutation, re-inspect, and permit exactly one fresh
+                            # rebuild; a second race remains alertable.
+                            retry_applied = process_pending_private_projection_events(
+                                session,
+                                company_id=company_id,
+                                commit_after_each_event=True,
+                            )
+                            applied = tuple(dict.fromkeys((*applied, *retry_applied)))
+                            session.commit()
+                            after = inspect_private_index_integrity(
+                                session,
+                                company_id=company_id,
+                                event_lag_slo_seconds=event_lag_slo_seconds,
+                            )
+                            if not after.blockers:
+                                break
+                            if not set(after.blockers) <= repairable_blockers:
+                                raise
+                            continue
+                        session.commit()
+                        rebuild_count += 1
+                        rebuilt = True
+                        break
                     after = inspect_private_index_integrity(
                         session,
                         company_id=company_id,

@@ -187,6 +187,13 @@ run recovers it. Cloud Scheduler delivery has bounded retry/backoff, and a
 log-based alert routes every structured `ERROR` run to the production alert
 channel with correlation ID and runbook context.
 
+If a canonical source or access mutation advances the security epoch during an
+unlocked rebuild, the worker deletes the failed shadow's partial rows, drains any
+new event, re-inspects the tenant, and retries the rebuild once. The retry still
+uses bounded 50-row commits and must pass the same epoch and activation fences. A
+second stale epoch, a non-repairable blocker, or an unknown exception remains a
+tenant-isolated release-blocking error; Cloud Run task retries stay disabled.
+
 The production verifier owns a SHA-scoped synthetic Matter/document fixture in
 the isolated `caseops-ip-qa` tenant. The migration-first deploy repins that job
 without execution before traffic, proves exact latest-only API/web identity and

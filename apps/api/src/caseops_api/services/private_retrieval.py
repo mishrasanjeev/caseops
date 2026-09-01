@@ -64,6 +64,9 @@ MAX_PRIVATE_RESULTS = 20
 MAX_QUERY_TERMS = 8
 PRIVATE_PROJECTION_EVENT_KEY_MAX_LENGTH = 120
 PRIVATE_SAVED_SOURCE_SCHEMA = "caseops.private-saved-output-source.v1"
+STALE_PRIVATE_PROJECTION_WRITER_DETAIL = (
+    "A stale private projection writer cannot cross an access or tombstone change."
+)
 _CACHE_TTL = timedelta(seconds=30)
 _CACHE_MAX_ENTRIES = 256
 _CACHE_LOCK = threading.Lock()
@@ -509,9 +512,7 @@ def upsert_private_projection(
         generation.access_policy_generation != expected_access_policy_generation
         or generation.tombstone_generation != expected_tombstone_generation
     ):
-        raise PrivateRetrievalInvariantError(
-            "A stale private projection writer cannot cross an access or tombstone change."
-        )
+        raise PrivateRetrievalInvariantError(STALE_PRIVATE_PROJECTION_WRITER_DETAIL)
     row = session.scalar(
         select(PrivateIndexProjection).where(
             PrivateIndexProjection.generation_id == generation_id,
@@ -2011,6 +2012,7 @@ __all__ = [
     "MAX_PREFILTER_CANDIDATES",
     "PRIVATE_PROJECTION_EVENT_KEY_MAX_LENGTH",
     "PRIVATE_SAVED_SOURCE_SCHEMA",
+    "STALE_PRIVATE_PROJECTION_WRITER_DETAIL",
     "PrivateAutocompleteSuggestion",
     "PrivateProjectionInput",
     "PrivateRetrievalActivation",

@@ -181,3 +181,183 @@ def test_maintenance_error_detail_preserves_known_safe_capacity_message() -> Non
     )
 
     assert detail == safe_detail
+
+
+def test_maintenance_retries_one_stale_rebuild_and_converges(monkeypatch) -> None:
+    repairable = SimpleNamespace(
+        oldest_pending_lag_seconds=None,
+        blockers=("active_generation_manifest_mismatch",),
+        release_blocked=True,
+        pending_event_count=0,
+        failed_event_count=0,
+    )
+    ready = SimpleNamespace(
+        oldest_pending_lag_seconds=None,
+        blockers=(),
+        release_blocked=False,
+        pending_event_count=0,
+        failed_event_count=0,
+    )
+    reports = iter((repairable, repairable, repairable, ready))
+    rebuild_calls = 0
+    process_calls = 0
+
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "get_session_factory",
+        lambda: _WorkerSession,
+    )
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "list_private_maintenance_companies",
+        lambda _session, *, limit: SimpleNamespace(
+            company_ids=("company-1",),
+            truncated=False,
+        ),
+    )
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "inspect_private_index_integrity",
+        lambda _session, **_kwargs: next(reports),
+    )
+
+    def process(_session, **_kwargs):
+        nonlocal process_calls
+        process_calls += 1
+        return (f"event-{process_calls}",)
+
+    def rebuild(_session, **_kwargs):
+        nonlocal rebuild_calls
+        rebuild_calls += 1
+        if rebuild_calls == 1:
+            raise private_projection_integrity.PrivateRetrievalInvariantError(
+                private_projection_integrity.STALE_PRIVATE_PROJECTION_WRITER_DETAIL
+            )
+
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "process_pending_private_projection_events",
+        process,
+    )
+    monkeypatch.setattr(private_projection_integrity, "rebuild_private_index", rebuild)
+
+    result = private_projection_integrity._maintain(
+        max_companies=1,
+        max_rebuilds=1,
+        event_lag_slo_seconds=60,
+    )
+
+    assert result["status"] == "ok"
+    assert result["rebuild_count"] == 1
+    assert result["companies"][0]["applied_event_count"] == 2
+    assert result["companies"][0]["rebuilt"] is True
+    assert rebuild_calls == 2
+    assert process_calls == 2
+
+
+def test_maintenance_rejects_a_second_stale_rebuild(monkeypatch) -> None:
+    repairable = SimpleNamespace(
+        oldest_pending_lag_seconds=None,
+        blockers=("active_generation_manifest_mismatch",),
+        release_blocked=True,
+        pending_event_count=0,
+        failed_event_count=0,
+    )
+    rebuild_calls = 0
+
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "get_session_factory",
+        lambda: _WorkerSession,
+    )
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "list_private_maintenance_companies",
+        lambda _session, *, limit: SimpleNamespace(
+            company_ids=("company-1",),
+            truncated=False,
+        ),
+    )
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "inspect_private_index_integrity",
+        lambda _session, **_kwargs: repairable,
+    )
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "process_pending_private_projection_events",
+        lambda _session, **_kwargs: (),
+    )
+
+    def rebuild(_session, **_kwargs):
+        nonlocal rebuild_calls
+        rebuild_calls += 1
+        raise private_projection_integrity.PrivateRetrievalInvariantError(
+            private_projection_integrity.STALE_PRIVATE_PROJECTION_WRITER_DETAIL
+        )
+
+    monkeypatch.setattr(private_projection_integrity, "rebuild_private_index", rebuild)
+
+    result = private_projection_integrity._maintain(
+        max_companies=1,
+        max_rebuilds=1,
+        event_lag_slo_seconds=60,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["release_blocked"] is True
+    assert result["companies"][0]["error_code"] == "PrivateRetrievalInvariantError"
+    assert rebuild_calls == 2
+
+
+def test_maintenance_does_not_retry_an_unknown_rebuild_failure(monkeypatch) -> None:
+    repairable = SimpleNamespace(
+        oldest_pending_lag_seconds=None,
+        blockers=("active_generation_manifest_mismatch",),
+        release_blocked=True,
+        pending_event_count=0,
+        failed_event_count=0,
+    )
+    rebuild_calls = 0
+
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "get_session_factory",
+        lambda: _WorkerSession,
+    )
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "list_private_maintenance_companies",
+        lambda _session, *, limit: SimpleNamespace(
+            company_ids=("company-1",),
+            truncated=False,
+        ),
+    )
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "inspect_private_index_integrity",
+        lambda _session, **_kwargs: repairable,
+    )
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "process_pending_private_projection_events",
+        lambda _session, **_kwargs: (),
+    )
+
+    def rebuild(_session, **_kwargs):
+        nonlocal rebuild_calls
+        rebuild_calls += 1
+        raise RuntimeError("unknown rebuild failure")
+
+    monkeypatch.setattr(private_projection_integrity, "rebuild_private_index", rebuild)
+
+    result = private_projection_integrity._maintain(
+        max_companies=1,
+        max_rebuilds=1,
+        event_lag_slo_seconds=60,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["release_blocked"] is True
+    assert result["companies"][0]["error_code"] == "RuntimeError"
+    assert rebuild_calls == 1
