@@ -3,11 +3,13 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from caseops_api.scripts import private_projection_integrity
+from caseops_api.services.private_retrieval import STALE_PRIVATE_PROJECTION_WRITER_DETAIL
 
 
 class _WorkerSession:
     def __init__(self) -> None:
         self.commit_count = 0
+        self.rollback_count = 0
 
     def __enter__(self) -> _WorkerSession:
         return self
@@ -17,6 +19,9 @@ class _WorkerSession:
 
     def commit(self) -> None:
         self.commit_count += 1
+
+    def rollback(self) -> None:
+        self.rollback_count += 1
 
 
 def test_maintenance_releases_projection_locks_after_each_event(monkeypatch) -> None:
@@ -183,6 +188,16 @@ def test_maintenance_error_detail_preserves_known_safe_capacity_message() -> Non
     assert detail == safe_detail
 
 
+def test_maintenance_error_detail_preserves_typed_concurrency_message() -> None:
+    detail = private_projection_integrity._safe_error_detail(
+        private_projection_integrity.PrivateRetrievalConcurrencyError(
+            STALE_PRIVATE_PROJECTION_WRITER_DETAIL
+        )
+    )
+
+    assert detail == STALE_PRIVATE_PROJECTION_WRITER_DETAIL
+
+
 def test_maintenance_retries_one_stale_rebuild_and_converges(monkeypatch) -> None:
     repairable = SimpleNamespace(
         oldest_pending_lag_seconds=None,
@@ -230,8 +245,8 @@ def test_maintenance_retries_one_stale_rebuild_and_converges(monkeypatch) -> Non
         nonlocal rebuild_calls
         rebuild_calls += 1
         if rebuild_calls == 1:
-            raise private_projection_integrity.PrivateRetrievalInvariantError(
-                private_projection_integrity.STALE_PRIVATE_PROJECTION_WRITER_DETAIL
+            raise private_projection_integrity.PrivateRetrievalConcurrencyError(
+                STALE_PRIVATE_PROJECTION_WRITER_DETAIL
             )
 
     monkeypatch.setattr(
@@ -292,8 +307,8 @@ def test_maintenance_rejects_a_second_stale_rebuild(monkeypatch) -> None:
     def rebuild(_session, **_kwargs):
         nonlocal rebuild_calls
         rebuild_calls += 1
-        raise private_projection_integrity.PrivateRetrievalInvariantError(
-            private_projection_integrity.STALE_PRIVATE_PROJECTION_WRITER_DETAIL
+        raise private_projection_integrity.PrivateRetrievalConcurrencyError(
+            STALE_PRIVATE_PROJECTION_WRITER_DETAIL
         )
 
     monkeypatch.setattr(private_projection_integrity, "rebuild_private_index", rebuild)
@@ -306,7 +321,7 @@ def test_maintenance_rejects_a_second_stale_rebuild(monkeypatch) -> None:
 
     assert result["status"] == "blocked"
     assert result["release_blocked"] is True
-    assert result["companies"][0]["error_code"] == "PrivateRetrievalInvariantError"
+    assert result["companies"][0]["error_code"] == "PrivateRetrievalConcurrencyError"
     assert rebuild_calls == 2
 
 

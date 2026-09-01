@@ -55,7 +55,7 @@ from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from threading import Event
+from threading import Event, Lock
 from time import monotonic
 from uuid import uuid4
 
@@ -9974,3 +9974,135 @@ def test_private_rebuild_releases_interactive_parent_locks_on_postgres(
     assert inserted_during_enumeration is True
     assert parent_lock_acquired_between_batches is True
     assert summary.projection_count == 3
+
+
+def test_private_rebuild_serializes_same_tenant_across_worker_commits(
+    pg_engine,
+    monkeypatch,
+) -> None:
+    """Two job executions cannot own an open shadow for one tenant."""
+
+    from caseops_api.db.models import Company, Matter, PrivateIndexGeneration
+    from caseops_api.services import private_retrieval_jobs
+
+    company_id = str(uuid4())
+    matter_id = str(uuid4())
+    with Session(pg_engine) as session:
+        session.add(
+            Company(
+                id=company_id,
+                name="PostgreSQL Serialized Rebuild Firm",
+                slug=f"pg-serialized-rebuild-{company_id[:8]}",
+                company_type="law_firm",
+                tenant_key=company_id,
+            )
+        )
+        session.add(
+            Matter(
+                id=matter_id,
+                company_id=company_id,
+                title="Serialized private projection rebuild",
+                matter_code=f"PG-SERIAL-{matter_id[:8]}",
+                status="active",
+                practice_area="Intellectual Property",
+                forum_level="high_court",
+                is_active=True,
+                updated_at=datetime.now(UTC),
+            )
+        )
+        session.commit()
+
+    real_inputs = private_retrieval_jobs._private_projection_inputs
+    call_lock = Lock()
+    input_call_count = 0
+    first_enumerating = Event()
+    release_first = Event()
+    second_started = Event()
+
+    def pause_first_enumeration(session, **kwargs):
+        nonlocal input_call_count
+        with call_lock:
+            input_call_count += 1
+            call_number = input_call_count
+        if call_number == 1:
+            first_enumerating.set()
+            assert release_first.wait(timeout=10)
+        return real_inputs(session, **kwargs)
+
+    monkeypatch.setattr(
+        private_retrieval_jobs,
+        "_private_projection_inputs",
+        pause_first_enumeration,
+    )
+
+    def rebuild(*, mark_started: bool = False):
+        if mark_started:
+            second_started.set()
+        with Session(pg_engine) as session:
+            return private_retrieval_jobs.rebuild_private_index(
+                session,
+                company_id=company_id,
+                activate=True,
+            )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(rebuild)
+        assert first_enumerating.wait(timeout=10)
+        second = executor.submit(rebuild, mark_started=True)
+        assert second_started.wait(timeout=10)
+        assert not second.done()
+        release_first.set()
+        first_summary = first.result(timeout=20)
+        second_summary = second.result(timeout=20)
+
+    assert input_call_count == 2
+    assert first_summary.generation_id != second_summary.generation_id
+    with Session(pg_engine) as session:
+        active = session.scalar(
+            select(PrivateIndexGeneration).where(
+                PrivateIndexGeneration.company_id == company_id,
+                PrivateIndexGeneration.state == "active",
+            )
+        )
+        report = private_retrieval_jobs.inspect_private_index_integrity(
+            session,
+            company_id=company_id,
+        )
+    assert active is not None
+    assert active.id == second_summary.generation_id
+    assert report.blockers == ()
+
+
+def test_private_rebuild_lease_timeout_is_bounded_and_does_not_leak(pg_engine) -> None:
+    from caseops_api.services import private_retrieval_jobs
+    from caseops_api.services.private_retrieval import PrivateRetrievalConcurrencyError
+
+    company_id = str(uuid4())
+    with Session(pg_engine) as owner:
+        with private_retrieval_jobs._serialize_private_rebuild(
+            owner,
+            company_id=company_id,
+            wait_seconds=1,
+        ):
+            started = monotonic()
+            with Session(pg_engine) as contender:
+                with pytest.raises(
+                    PrivateRetrievalConcurrencyError,
+                    match="bounded wait",
+                ):
+                    with private_retrieval_jobs._serialize_private_rebuild(
+                        contender,
+                        company_id=company_id,
+                        wait_seconds=0.15,
+                    ):
+                        raise AssertionError("contender acquired an owned rebuild lease")
+            elapsed = monotonic() - started
+
+    assert 0.1 <= elapsed < 1
+    with Session(pg_engine) as successor:
+        with private_retrieval_jobs._serialize_private_rebuild(
+            successor,
+            company_id=company_id,
+            wait_seconds=0.2,
+        ):
+            pass
