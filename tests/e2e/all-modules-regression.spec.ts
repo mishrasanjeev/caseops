@@ -43,13 +43,18 @@ async function signIn(page: Page, tenant: Tenant): Promise<void> {
   await page.waitForURL(/\/app/);
 }
 
-function formatLegalDate(value: string): string {
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(`${value}T00:00:00Z`));
+async function formatLegalDateInBrowser(
+  page: Page,
+  value: string,
+): Promise<string> {
+  return page.evaluate((legalDate) => {
+    const [year, month, day] = legalDate.split("-").map(Number);
+    return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  }, value);
 }
 
 test.describe.serial("All modules and critical court operations", () => {
@@ -77,7 +82,8 @@ test.describe.serial("All modules and critical court operations", () => {
     page.on("response", (response) => {
       if (
         response.status() >= 500 &&
-        (response.url().startsWith(apiBaseUrl) || response.url().includes("127.0.0.1"))
+        (response.url().startsWith(apiBaseUrl) ||
+          response.url().includes("127.0.0.1"))
       ) {
         serverErrors.push(
           `${response.status()} ${response.request().method()} ${response.url()}`,
@@ -87,19 +93,27 @@ test.describe.serial("All modules and critical court operations", () => {
 
     const sidebar = page.locator('aside[aria-label="Primary navigation"]');
     await expect(sidebar).toBeVisible();
-    await expect.poll(() => sidebar.locator("a[href]").count()).toBeGreaterThan(30);
+    await expect
+      .poll(() => sidebar.locator("a[href]").count())
+      .toBeGreaterThan(30);
     const routes = await sidebar.locator("a[href]").evaluateAll((links) =>
       links.map((link) => ({
         href: link.getAttribute("href") ?? "",
-        label: link.getAttribute("aria-label") ?? link.textContent?.trim() ?? "",
+        label:
+          link.getAttribute("aria-label") ?? link.textContent?.trim() ?? "",
       })),
     );
 
     expect(new Set(routes.map((route) => route.href)).size).toBe(routes.length);
     for (const route of routes) {
       const response = await page.goto(route.href);
-      expect(response?.status(), `${route.label} (${route.href})`).toBeLessThan(400);
-      await expect(page.locator("h1").first(), `${route.label} heading`).toBeVisible({
+      expect(response?.status(), `${route.label} (${route.href})`).toBeLessThan(
+        400,
+      );
+      await expect(
+        page.locator("h1").first(),
+        `${route.label} heading`,
+      ).toBeVisible({
         timeout: 30_000,
       });
     }
@@ -151,7 +165,9 @@ test.describe.serial("All modules and critical court operations", () => {
     );
 
     await expect(
-      page.getByText("Local Docker Petitioner v Local Docker Respondent").first(),
+      page
+        .getByText("Local Docker Petitioner v Local Docker Respondent")
+        .first(),
     ).toBeVisible();
     const bookmarkResponse = page.waitForResponse(
       (candidate) =>
@@ -197,7 +213,9 @@ test.describe.serial("All modules and critical court operations", () => {
     await page.getByTestId("schedule-hearing-open").click();
     const dialog = page.getByRole("dialog");
     await dialog.getByTestId("schedule-hearing-date").fill(hearingDate);
-    await dialog.getByLabel(/Forum \/ bench/i).fill("Delhi High Court, Court 12");
+    await dialog
+      .getByLabel(/Forum \/ bench/i)
+      .fill("Delhi High Court, Court 12");
     await dialog.getByLabel(/Purpose \/ stage/i).fill("Final arguments");
     await dialog.getByTestId("schedule-hearing-submit").click();
     await expect(dialog).toBeHidden({ timeout: 20_000 });
@@ -207,12 +225,18 @@ test.describe.serial("All modules and critical court operations", () => {
     await page.locator("#matter-filter-q").fill(matterCode);
     await page.getByRole("button", { name: /Apply/i }).click();
     await expect(page.getByText(matterCode)).toBeVisible();
-    await expect(page.getByText(formatLegalDate(hearingDate))).toBeVisible();
+    const renderedHearingDate = await formatLegalDateInBrowser(
+      page,
+      hearingDate,
+    );
+    await expect(page.getByText(renderedHearingDate)).toBeVisible();
 
     await page.goto("/app/hearings");
-    const portfolioHearing = page.getByRole("link", { name: new RegExp(matterTitle) });
+    const portfolioHearing = page.getByRole("link", {
+      name: new RegExp(matterTitle),
+    });
     await expect(portfolioHearing).toBeVisible();
-    await expect(portfolioHearing).toContainText(formatLegalDate(hearingDate));
+    await expect(portfolioHearing).toContainText(renderedHearingDate);
 
     const causeListDate = plusDays(9);
     const imported = await api.post(
@@ -244,13 +268,15 @@ test.describe.serial("All modules and critical court operations", () => {
       headers,
     });
     expect(persisted.status(), await persisted.text()).toBe(200);
-    expect(((await persisted.json()) as { next_hearing_on: string }).next_hearing_on).toBe(
-      hearingDate,
-    );
+    expect(
+      ((await persisted.json()) as { next_hearing_on: string }).next_hearing_on,
+    ).toBe(hearingDate);
 
     await page.goto("/app/cause-list");
     await page.getByLabel("From").fill(causeListDate);
-    await page.getByRole("textbox", { name: "To", exact: true }).fill(causeListDate);
+    await page
+      .getByRole("textbox", { name: "To", exact: true })
+      .fill(causeListDate);
     await page
       .locator("label", { hasText: /^Source/ })
       .locator("select")
