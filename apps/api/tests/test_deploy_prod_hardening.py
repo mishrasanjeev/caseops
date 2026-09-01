@@ -93,7 +93,10 @@ def test_private_retrieval_production_acceptance_is_exact_and_release_owned() ->
     assert "spawnSync" not in spec
     assert "DATABASE_URL" not in spec
     assert '_required_env("CASEOPS_QA_RELEASE_SHA")' in bootstrap
-    assert "refusing to resurrect" in bootstrap
+    assert "fixture_pattern = re.compile" in bootstrap
+    assert 'candidate.status == "active"' in bootstrap
+    assert 'candidate.status not in {"closed", "disposed"}' in bootstrap
+    assert "max(iterations.values(), default=0) + 1" in bootstrap
     assert "--update-env-vars \"CASEOPS_QA_RELEASE_SHA=${HEAD_SHA}\"" in deploy
     assert deploy.index("run deploy caseops-web") < deploy.index(
         "run jobs execute caseops-ip-qa-bootstrap"

@@ -16,6 +16,7 @@ disposition decisions.
 - Command: `caseops-private-projection-maintenance --mode maintain`
 - Tenant scan cap: 50 companies per run
 - Automatic rebuild cap: 5 companies per run
+- Per-tenant projection cap: 20,000 rows, written in batches of at most 50
 - Event lag SLO: 300 seconds
 - Event attempts: 3, with 30-second then 60-second application backoff
 - Scheduler delivery attempts: at most 5 within 900 seconds
@@ -48,6 +49,11 @@ An `ERROR` maintenance record means at least one of these conditions occurred:
 - projection or scope integrity remained blocked after bounded repair;
 - more than 50 tenants required inspection in one run;
 - a rebuild or database operation failed.
+
+The per-tenant cap is intentionally above the 9,820 eligible projections
+observed in production on 2026-09-01 while remaining finite. If production
+volume reaches the 20,000-row ceiling, the worker must report the bounded error
+detail and keep the last verified generation active; do not silently truncate.
 
 The structured record contains a correlation ID, affected company IDs, event lag,
 pending and failed counts, blockers, and whether a bounded rebuild ran. It contains
