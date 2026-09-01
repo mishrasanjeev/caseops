@@ -187,14 +187,12 @@ def resolve_membership_capabilities(
         return set()
 
     static = static_capabilities_for_role(role)
-    try:
-        from caseops_api.services.platform_admin import platform_capabilities_for_user
+    from caseops_api.services.platform_admin import platform_capabilities_for_user
 
-        static = static | platform_capabilities_for_user(session, membership.user_id)
-    except Exception:
-        # Platform-admin capability resolution must never make ordinary tenant
-        # sessions unusable. The platform routes still enforce their own DB gate.
-        static = set(static)
+    # Capability resolution participates in the caller's transaction. Keep the
+    # lookup read-only and let database errors fail the request; swallowing a
+    # failed flush leaves SQLAlchemy in rollback-only state and poisons later work.
+    static = static | platform_capabilities_for_user(session, membership.user_id)
     if role == MembershipRole.OWNER:
         return static
 

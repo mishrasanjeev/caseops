@@ -28,25 +28,33 @@ PLATFORM_SUPER_ADMIN_CAPABILITIES = [
 ]
 
 
-def _configured_founder_user(session: Session) -> User | None:
+def _configured_founder_user_id(
+    session: Session,
+    *,
+    user_id: str | None = None,
+) -> str | None:
     email = (get_settings().platform_super_admin_email or "").strip().lower()
     if not email:
         return None
+    predicates = [
+        func.lower(User.email) == email,
+        User.is_active.is_(True),
+        CompanyMembership.role == "owner",
+        CompanyMembership.is_active.is_(True),
+    ]
+    if user_id is not None:
+        predicates.append(User.id == user_id)
     return session.scalar(
-        select(User)
+        select(User.id)
         .join(CompanyMembership, CompanyMembership.user_id == User.id)
-        .where(
-            func.lower(User.email) == email,
-            User.is_active.is_(True),
-            CompanyMembership.role == "owner",
-            CompanyMembership.is_active.is_(True),
-        )
+        .where(*predicates)
         .limit(1)
     )
 
 
-def _revoke_non_founders(session: Session, *, founder_user_id: str | None) -> None:
+def _revoke_non_founders(session: Session, *, founder_user_id: str | None) -> bool:
     now = datetime.now(UTC)
+    changed = False
     rows = session.scalars(select(PlatformAdminMembership))
     for row in rows:
         if row.user_id == founder_user_id:
@@ -54,6 +62,8 @@ def _revoke_non_founders(session: Session, *, founder_user_id: str | None) -> No
         if row.status == "active":
             row.status = "revoked"
             row.updated_at = now
+            changed = True
+    return changed
 
 
 def ensure_configured_platform_super_admin(session: Session) -> PlatformAdminMembership | None:
@@ -63,20 +73,27 @@ def ensure_configured_platform_super_admin(session: Session) -> PlatformAdminMem
     environments and lets bootstrap/login create the platform identity as
     soon as the configured founder account appears.
     """
-    user = _configured_founder_user(session)
-    if user is None:
-        _revoke_non_founders(session, founder_user_id=None)
-        session.flush()
+    founder_user_id = _configured_founder_user_id(session)
+    if founder_user_id is None:
+        if _revoke_non_founders(session, founder_user_id=None):
+            session.flush()
         return None
 
     now = datetime.now(UTC)
+    changed = False
     row = session.scalar(
-        select(PlatformAdminMembership).where(PlatformAdminMembership.user_id == user.id)
+        select(PlatformAdminMembership).where(
+            PlatformAdminMembership.user_id == founder_user_id
+        )
     )
+    # Revoke any prior founder before activating or inserting the configured
+    # founder, otherwise the one-active-admin constraint can reject the flush.
+    if _revoke_non_founders(session, founder_user_id=founder_user_id):
+        session.flush()
     if row is None:
         grace_until = now + timedelta(days=get_settings().mfa_existing_user_grace_days)
         row = PlatformAdminMembership(
-            user_id=user.id,
+            user_id=founder_user_id,
             role="super_admin",
             capabilities_json=list(PLATFORM_SUPER_ADMIN_CAPABILITIES),
             status="active",
@@ -86,35 +103,46 @@ def ensure_configured_platform_super_admin(session: Session) -> PlatformAdminMem
             updated_at=now,
         )
         session.add(row)
+        changed = True
     else:
-        row.role = "super_admin"
-        row.capabilities_json = list(PLATFORM_SUPER_ADMIN_CAPABILITIES)
-        row.status = "active"
-        row.mfa_required = True
+        desired_capabilities = list(PLATFORM_SUPER_ADMIN_CAPABILITIES)
+        if row.role != "super_admin":
+            row.role = "super_admin"
+            changed = True
+        if row.capabilities_json != desired_capabilities:
+            row.capabilities_json = desired_capabilities
+            changed = True
+        if row.status != "active":
+            row.status = "active"
+            changed = True
+        if not row.mfa_required:
+            row.mfa_required = True
+            changed = True
         if row.mfa_enforced_at is None:
             row.mfa_enforced_at = now + timedelta(days=get_settings().mfa_existing_user_grace_days)
-        row.updated_at = now
+            changed = True
 
-    # Launch rule: no second active platform admin. Keep historical rows but
-    # revoke them if they are not the configured founder.
-    _revoke_non_founders(session, founder_user_id=user.id)
-    session.flush()
+    if changed:
+        row.updated_at = now
+        session.flush()
     return row
 
 
 def platform_capabilities_for_user(session: Session, user_id: str) -> set[str]:
-    founder = ensure_configured_platform_super_admin(session)
-    if founder is None or founder.user_id != user_id:
+    """Resolve platform capabilities without mutating the request transaction."""
+
+    founder_user_id = _configured_founder_user_id(session, user_id=user_id)
+    if founder_user_id != user_id:
         return set()
-    row = session.scalar(
-        select(PlatformAdminMembership).where(
+    capabilities = session.scalar(
+        select(PlatformAdminMembership.capabilities_json).where(
             PlatformAdminMembership.user_id == user_id,
             PlatformAdminMembership.status == "active",
         )
     )
-    if row is None:
+    if capabilities is None:
         return set()
-    return {str(cap).strip() for cap in (row.capabilities_json or []) if str(cap).strip()}
+    return {str(cap).strip() for cap in capabilities if str(cap).strip()}
 
 
 def require_platform_admin(

@@ -270,6 +270,8 @@ def _policy_requires_mfa(
     context: SessionContext,
     *,
     platform_admin: PlatformAdminMembership | None = None,
+    platform_admin_required: bool = False,
+    platform_admin_enforced_at: datetime | None = None,
 ) -> tuple[bool, datetime | None, dict[str, bool]]:
     flags = {
         "platform_admin_required": False,
@@ -280,6 +282,9 @@ def _policy_requires_mfa(
     if platform_admin is not None and platform_admin.mfa_required:
         flags["platform_admin_required"] = True
         enforced_at = _as_aware(platform_admin.mfa_enforced_at)
+    elif platform_admin_required:
+        flags["platform_admin_required"] = True
+        enforced_at = _as_aware(platform_admin_enforced_at)
     policy = tenant_security_policy(session, company_id=context.company.id)
     if policy is not None:
         policy_enforced_at = _as_aware(policy.mfa_enforced_at)
@@ -347,16 +352,24 @@ def login_mfa_challenge_state(
     *,
     context: SessionContext,
 ) -> dict[str, object]:
-    platform_admin = session.scalar(
-        select(PlatformAdminMembership).where(
+    platform_mfa = session.execute(
+        select(
+            PlatformAdminMembership.mfa_required,
+            PlatformAdminMembership.mfa_enforced_at,
+        ).where(
             PlatformAdminMembership.user_id == context.user.id,
             PlatformAdminMembership.status == "active",
         )
-    )
+    ).one_or_none()
     required, enforced_at, flags = _policy_requires_mfa(
         session,
         context,
-        platform_admin=platform_admin,
+        platform_admin_required=(
+            bool(platform_mfa.mfa_required) if platform_mfa is not None else False
+        ),
+        platform_admin_enforced_at=(
+            platform_mfa.mfa_enforced_at if platform_mfa is not None else None
+        ),
     )
     enforced_at = _as_aware(enforced_at)
     if not required or enforced_at is None or enforced_at > _now():
