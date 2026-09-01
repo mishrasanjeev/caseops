@@ -9,14 +9,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import and_, delete, exists, func, or_, select
+from sqlalchemy import and_, delete, exists, func, or_, select, text
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
@@ -40,6 +42,7 @@ from caseops_api.db.models import (
 from caseops_api.services.embeddings import EmbeddingProvider
 from caseops_api.services.private_retrieval import (
     PrivateProjectionInput,
+    PrivateRetrievalConcurrencyError,
     PrivateRetrievalInvariantError,
     ProjectionScopeInput,
     activate_private_generation,
@@ -69,6 +72,68 @@ PRIVATE_REBUILD_LIMIT_DETAIL = (
     "Private rebuild exceeded its bounded projection limit; leave the "
     "last verified generation active and resume through a larger offline plan."
 )
+PRIVATE_REBUILD_SERIALIZATION_TIMEOUT_SECONDS = 45.0
+PRIVATE_REBUILD_SERIALIZATION_POLL_SECONDS = 0.25
+PRIVATE_REBUILD_SERIALIZATION_TIMEOUT_DETAIL = (
+    "Another private projection rebuild did not release its tenant lease within the bounded wait."
+)
+PRIVATE_REBUILD_PENDING_EVENTS_DETAIL = (
+    "Private rebuild requires every projection event to reach a terminal applied state."
+)
+
+
+@contextmanager
+def _serialize_private_rebuild(
+    session: Session,
+    *,
+    company_id: str,
+    wait_seconds: float = PRIVATE_REBUILD_SERIALIZATION_TIMEOUT_SECONDS,
+) -> Iterator[None]:
+    """Hold one PostgreSQL session-level rebuild lease across worker commits."""
+
+    bind = session.get_bind()
+    if bind.dialect.name != "postgresql":
+        yield
+        return
+
+    engine = getattr(bind, "engine", bind)
+    resource = f"caseops:private-projection-rebuild:{company_id}"
+    lock_sql = text("SELECT pg_try_advisory_lock(hashtextextended(:resource, 0))")
+    unlock_sql = text("SELECT pg_advisory_unlock(hashtextextended(:resource, 0))")
+    deadline = time.monotonic() + max(0.01, wait_seconds)
+    with engine.connect() as lock_connection:
+        while True:
+            acquired = bool(lock_connection.scalar(lock_sql, {"resource": resource}))
+            lock_connection.commit()
+            if acquired:
+                break
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise PrivateRetrievalConcurrencyError(
+                    PRIVATE_REBUILD_SERIALIZATION_TIMEOUT_DETAIL
+                )
+            time.sleep(min(PRIVATE_REBUILD_SERIALIZATION_POLL_SECONDS, remaining))
+
+        def release() -> bool:
+            try:
+                released = bool(lock_connection.scalar(unlock_sql, {"resource": resource}))
+                lock_connection.commit()
+                if released:
+                    return True
+            except Exception:
+                pass
+            lock_connection.invalidate()
+            return False
+
+        try:
+            yield
+        except BaseException:
+            release()
+            raise
+        if not release():
+            raise PrivateRetrievalInvariantError(
+                "The private projection rebuild lease could not be released safely."
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -560,7 +625,7 @@ def _embed_private_payloads(
     return embedded, batch_count
 
 
-def rebuild_private_index(
+def _rebuild_private_index_owned(
     session: Session,
     *,
     company_id: str,
@@ -597,9 +662,7 @@ def rebuild_private_index(
         or 0
     )
     if unresolved_event_count:
-        raise PrivateRetrievalInvariantError(
-            "Private rebuild requires every projection event to reach a terminal applied state."
-        )
+        raise PrivateRetrievalConcurrencyError(PRIVATE_REBUILD_PENDING_EVENTS_DETAIL)
     active = ensure_active_private_generation(session, company_id=company_id)
     shadow = create_shadow_private_generation(session, company_id=company_id)
     previous_generation_id = str(active.id)
@@ -705,6 +768,37 @@ def rebuild_private_index(
         provider_text_count=len(payloads) if provider is not None else 0,
         activated=activate,
     )
+
+
+def rebuild_private_index(
+    session: Session,
+    *,
+    company_id: str,
+    provider: EmbeddingProvider | None = None,
+    allow_external_provider: bool = False,
+    provider_deadline_seconds: float = DEFAULT_PRIVATE_PROVIDER_DEADLINE_SECONDS,
+    projection_limit: int = MAX_PRIVATE_REBUILD_PROJECTIONS,
+    write_batch_size: int = MAX_PRIVATE_WRITE_BATCH,
+    activate: bool = False,
+) -> PrivateRebuildSummary:
+    """Serialize one tenant rebuild while preserving interactive writer progress."""
+
+    with _serialize_private_rebuild(session, company_id=company_id):
+        summary = _rebuild_private_index_owned(
+            session,
+            company_id=company_id,
+            provider=provider,
+            allow_external_provider=allow_external_provider,
+            provider_deadline_seconds=provider_deadline_seconds,
+            projection_limit=projection_limit,
+            write_batch_size=write_batch_size,
+            activate=activate,
+        )
+        # Activation is the final ownership change. Commit it before releasing
+        # the session-level lease so the next rebuild owner cannot observe the
+        # predecessor generation as active.
+        session.commit()
+        return summary
 
 
 def process_pending_private_projection_events(
@@ -1080,6 +1174,8 @@ __all__ = [
     "MAX_PRIVATE_MAINTENANCE_COMPANIES",
     "MAX_PRIVATE_REBUILD_PROJECTIONS",
     "PRIVATE_REBUILD_LIMIT_DETAIL",
+    "PRIVATE_REBUILD_PENDING_EVENTS_DETAIL",
+    "PRIVATE_REBUILD_SERIALIZATION_TIMEOUT_DETAIL",
     "PrivateIntegrityReport",
     "PrivateRebuildSummary",
     "inspect_private_index_integrity",

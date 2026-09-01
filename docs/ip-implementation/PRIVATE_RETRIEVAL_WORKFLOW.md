@@ -187,12 +187,18 @@ run recovers it. Cloud Scheduler delivery has bounded retry/backoff, and a
 log-based alert routes every structured `ERROR` run to the production alert
 channel with correlation ID and runbook context.
 
-If a canonical source or access mutation advances the security epoch during an
-unlocked rebuild, the worker deletes the failed shadow's partial rows, drains any
-new event, re-inspects the tenant, and retries the rebuild once. The retry still
-uses bounded 50-row commits and must pass the same epoch and activation fences. A
-second stale epoch, a non-repairable blocker, or an unknown exception remains a
-tenant-isolated release-blocking error; Cloud Run task retries stay disabled.
+Rebuilds serialize on a tenant-scoped PostgreSQL advisory lease held on a dedicated
+connection across bounded commits. This prevents maintenance, release bootstrap,
+and an operator rebuild from opening competing shadows without retaining Company,
+Matter, or IP-docket row locks. A second rebuild owner waits at most 45 seconds.
+If a canonical source or access mutation advances the security epoch, an event
+arrives after the first drain, or another valid rebuild changes the active
+generation, the worker deletes any failed shadow's partial rows, rolls back,
+drains due events, re-inspects the tenant, and replans once. The retry still uses
+bounded 50-row commits and must pass the same epoch and activation fences. A
+second conflict, lease timeout, non-repairable blocker, or unknown exception
+remains a tenant-isolated release-blocking error; Cloud Run task retries stay
+disabled.
 
 The production verifier owns a SHA-scoped synthetic Matter/document fixture in
 the isolated `caseops-ip-qa` tenant. The migration-first deploy repins that job

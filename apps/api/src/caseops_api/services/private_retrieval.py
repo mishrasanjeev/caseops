@@ -78,6 +78,10 @@ class PrivateRetrievalInvariantError(RuntimeError):
     """A private-index state transition would weaken a security invariant."""
 
 
+class PrivateRetrievalConcurrencyError(PrivateRetrievalInvariantError):
+    """A private-index operation lost a bounded race to another valid writer."""
+
+
 def build_private_projection_event_key(raw_key: str) -> str:
     """Return the stable database key for one projection event operation.
 
@@ -325,7 +329,7 @@ def create_shadow_private_generation(
         ).all()
     )
     if any(row.state in {"building", "ready"} for row in generations):
-        raise PrivateRetrievalInvariantError("A private shadow generation is already open.")
+        raise PrivateRetrievalConcurrencyError("A private shadow generation is already open.")
     row = PrivateIndexGeneration(
         company_id=company_id,
         generation_number=max(row.generation_number for row in generations) + 1,
@@ -366,7 +370,7 @@ def mark_private_generation_ready(
         expected_tombstone_generation is not None
         and row.tombstone_generation != expected_tombstone_generation
     ):
-        raise PrivateRetrievalInvariantError(
+        raise PrivateRetrievalConcurrencyError(
             "A stale private rebuild cannot verify after an access or tombstone change."
         )
     count = int(
@@ -424,14 +428,14 @@ def activate_private_generation(
     current = next((row for row in generations if row.state == "active"), None)
     target = next((row for row in generations if row.id == generation_id), None)
     if current is None or current.id != expected_active_generation_id:
-        raise PrivateRetrievalInvariantError("The active private generation changed.")
+        raise PrivateRetrievalConcurrencyError("The active private generation changed.")
     if target is None or target.state != "ready" or target.verified_at is None:
-        raise PrivateRetrievalInvariantError("The shadow private generation is not verified.")
+        raise PrivateRetrievalConcurrencyError("The shadow private generation is not verified.")
     if (
         target.access_policy_generation < current.access_policy_generation
         or target.tombstone_generation < current.tombstone_generation
     ):
-        raise PrivateRetrievalInvariantError(
+        raise PrivateRetrievalConcurrencyError(
             "A stale private generation cannot bypass access or tombstone changes."
         )
     pending = session.scalar(
@@ -443,7 +447,7 @@ def activate_private_generation(
         .limit(1)
     )
     if pending is not None:
-        raise PrivateRetrievalInvariantError(
+        raise PrivateRetrievalConcurrencyError(
             "A private generation cannot activate while projection events are unresolved."
         )
     now = datetime.now(UTC)
@@ -512,7 +516,7 @@ def upsert_private_projection(
         generation.access_policy_generation != expected_access_policy_generation
         or generation.tombstone_generation != expected_tombstone_generation
     ):
-        raise PrivateRetrievalInvariantError(STALE_PRIVATE_PROJECTION_WRITER_DETAIL)
+        raise PrivateRetrievalConcurrencyError(STALE_PRIVATE_PROJECTION_WRITER_DETAIL)
     row = session.scalar(
         select(PrivateIndexProjection).where(
             PrivateIndexProjection.generation_id == generation_id,
@@ -2016,6 +2020,7 @@ __all__ = [
     "PrivateAutocompleteSuggestion",
     "PrivateProjectionInput",
     "PrivateRetrievalActivation",
+    "PrivateRetrievalConcurrencyError",
     "PrivateRetrievalFence",
     "PrivateRetrievalInvariantError",
     "ProjectionScopeInput",

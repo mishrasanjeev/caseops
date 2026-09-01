@@ -9,7 +9,7 @@ from uuid import uuid4
 from caseops_api.db.session import get_session_factory
 from caseops_api.services.embeddings import build_provider
 from caseops_api.services.private_retrieval import (
-    STALE_PRIVATE_PROJECTION_WRITER_DETAIL,
+    PrivateRetrievalConcurrencyError,
     PrivateRetrievalInvariantError,
 )
 from caseops_api.services.private_retrieval_jobs import (
@@ -29,16 +29,15 @@ _REDACTED_ERROR_DETAIL = (
 
 def _safe_error_detail(exc: BaseException) -> str:
     detail = str(exc).strip()
+    if isinstance(exc, PrivateRetrievalConcurrencyError):
+        return detail
     if isinstance(exc, PrivateRetrievalInvariantError) and detail == PRIVATE_REBUILD_LIMIT_DETAIL:
         return detail
     return _REDACTED_ERROR_DETAIL
 
 
-def _is_retryable_stale_writer(exc: BaseException) -> bool:
-    return (
-        isinstance(exc, PrivateRetrievalInvariantError)
-        and str(exc).strip() == STALE_PRIVATE_PROJECTION_WRITER_DETAIL
-    )
+def _is_retryable_rebuild_conflict(exc: BaseException) -> bool:
+    return isinstance(exc, PrivateRetrievalConcurrencyError)
 
 
 def _integrity_payload(report) -> dict[str, object]:
@@ -118,12 +117,13 @@ def _maintain(
                                 activate=True,
                             )
                         except PrivateRetrievalInvariantError as exc:
-                            if rebuild_attempt or not _is_retryable_stale_writer(exc):
+                            if rebuild_attempt or not _is_retryable_rebuild_conflict(exc):
                                 raise
-                            # A canonical mutation that lands during an unlocked
-                            # rebuild deliberately fences that shadow. Drain the
-                            # mutation, re-inspect, and permit exactly one fresh
-                            # rebuild; a second race remains alertable.
+                            # A concurrent rebuild or canonical mutation can win
+                            # while this worker is between bounded transactions.
+                            # Replan exactly once; a second conflict remains
+                            # alertable instead of becoming an unbounded retry.
+                            session.rollback()
                             retry_applied = process_pending_private_projection_events(
                                 session,
                                 company_id=company_id,

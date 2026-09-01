@@ -17,8 +17,11 @@ disposition decisions.
 - Tenant scan cap: 50 companies per run
 - Automatic rebuild cap: 5 companies per run
 - Per-tenant projection cap: 20,000 rows, written in batches of at most 50
-- Concurrent-change recovery: one in-process rebuild retry only when the first
-  shadow is fenced by the exact access/tombstone generation invariant
+- Rebuild ownership: one PostgreSQL advisory lease per tenant, retained across
+  bounded batch commits; a second worker waits at most 45 seconds
+- Concurrent-change recovery: one in-process replan for a typed rebuild conflict,
+  including a competing shadow, a newly pending event, active-generation turnover,
+  or an access/tombstone epoch fence
 - Event lag SLO: 300 seconds
 - Event attempts: 3, with 30-second then 60-second application backoff
 - Scheduler delivery attempts: at most 5 within 900 seconds
@@ -58,10 +61,14 @@ volume reaches the 20,000-row ceiling, the worker must report the bounded error
 detail and keep the last verified generation active; do not silently truncate.
 
 A source or access mutation may deliberately fence a shadow while the worker is
-enumerating or writing it. The worker removes that shadow's partial projections,
-drains any newly due tenant event, re-inspects integrity, and permits exactly one
-fresh rebuild. A second concurrent change, a non-repairable blocker, or any other
-exception fails the tenant and the job. Cloud Run task retries remain disabled.
+enumerating or writing it. A deploy can also place the exact-release QA bootstrap
+beside a scheduled maintenance execution. Rebuild owners therefore serialize on a
+tenant-scoped PostgreSQL advisory lease that does not block canonical request
+writers and survives the worker's bounded commits. The worker removes a fenced
+shadow's partial projections, drains any newly due tenant event, re-inspects
+integrity, and permits exactly one fresh rebuild. A second conflict, a lease wait
+beyond 45 seconds, a non-repairable blocker, or any other exception fails the
+tenant and the job. Cloud Run task retries remain disabled.
 
 The structured record contains a correlation ID, affected company IDs, event lag,
 pending and failed counts, blockers, and whether a bounded rebuild ran. It contains
@@ -97,8 +104,10 @@ source content in job arguments or incident notes.
 - `active_generation_manifest_mismatch`, `orphan_or_stale_scopes`, or
   `stale_or_ineligible_sources`: the worker may build a bounded shadow generation
   and activate it only after integrity passes. The last verified generation remains
-  active until that point. One exact stale-writer fence is retried in-process after
-  event drain and integrity re-inspection; a second fence remains alertable.
+  active until that point. One typed concurrency loss is replanned in-process after
+  rollback, event drain, and integrity re-inspection; a second conflict remains
+  alertable. Do not add Cloud Run retries or extend the lease wait to hide a stuck
+  rebuild owner.
 - `integrity_scan_limit_exceeded` or candidate truncation: stop automatic repair
   and prepare a larger offline, tenant-bounded plan with query-count evidence.
 - `unsafe_tombstone_payload`: do not rebuild over it. Preserve evidence, block the

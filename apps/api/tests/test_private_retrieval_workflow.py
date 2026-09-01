@@ -1277,7 +1277,7 @@ def test_source_change_during_unlocked_enumeration_fences_stale_rebuild(
         )
         assert failed_shadow is not None
         assert failed_shadow.state == "failed"
-        assert failed_shadow.failure_code == "PrivateRetrievalInvariantError"
+        assert failed_shadow.failure_code == "PrivateRetrievalConcurrencyError"
 
 
 def test_maintenance_retries_one_stale_shadow_and_activates_cleanly(
@@ -1369,7 +1369,7 @@ def test_maintenance_retries_one_stale_shadow_and_activates_cleanly(
             )
         )
         assert failed_shadow is not None
-        assert failed_shadow.failure_code == "PrivateRetrievalInvariantError"
+        assert failed_shadow.failure_code == "PrivateRetrievalConcurrencyError"
         assert active is not None
         assert active.generation_number > failed_shadow.generation_number
         assert (
