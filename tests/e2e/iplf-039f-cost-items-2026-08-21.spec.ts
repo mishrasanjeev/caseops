@@ -27,15 +27,12 @@ import {
   request,
   test,
   type APIRequestContext,
-  type APIResponse,
   type Page,
 } from "@playwright/test";
 
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
 
 const PASSWORD = "CostEvidence2026!";
-const BOOTSTRAP_TRANSPORT_ATTEMPTS = 2;
-const BOOTSTRAP_TRANSPORT_RETRY_DELAY_MS = 250;
 
 test.beforeAll(() => {
   const apiHost = new URL(apiBaseUrl).hostname;
@@ -44,11 +41,6 @@ test.beforeAll(() => {
     "This spec grants local fixtures and reads the local database; use the dated production spec for deployed acceptance.",
   ).toContain(apiHost);
 });
-
-function isConnectionReset(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /(?:ECONNRESET|socket hang up)/i.test(message);
-}
 
 function grantIpEntitlement(companyId: string): void {
   const python = process.platform === "win32"
@@ -123,36 +115,22 @@ function billingEffectSnapshot(companyId: string): BillingEffectSnapshot {
 }
 
 async function bootstrap(api: APIRequestContext) {
-  for (let attempt = 1; attempt <= BOOTSTRAP_TRANSPORT_ATTEMPTS; attempt += 1) {
-    const slug = `cost-evidence-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const email = `owner-${slug}@example.com`;
-    let response: APIResponse;
-    try {
-      response = await api.post(`${apiBaseUrl}/api/bootstrap/company`, {
-        data: {
-          company_name: "IPLF 039F Cost Evidence LLP",
-          company_slug: slug,
-          company_type: "law_firm",
-          owner_full_name: "Cost Finance Owner",
-          owner_email: email,
-          owner_password: PASSWORD,
-        },
-      });
-    } catch (error) {
-      if (!isConnectionReset(error) || attempt === BOOTSTRAP_TRANSPORT_ATTEMPTS) {
-        throw error;
-      }
-      await new Promise((resolve) => setTimeout(resolve, BOOTSTRAP_TRANSPORT_RETRY_DELAY_MS));
-      continue;
-    }
-
-    expect(response.status(), await response.text()).toBe(200);
-    const body = await response.json();
-    grantIpEntitlement(body.company.id as string);
-    return { ...body, slug, email };
-  }
-
-  throw new Error("IPLF-039F bootstrap exhausted its transport attempts");
+  const slug = `cost-evidence-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const email = `owner-${slug}@example.com`;
+  const response = await api.post(`${apiBaseUrl}/api/bootstrap/company`, {
+    data: {
+      company_name: "IPLF 039F Cost Evidence LLP",
+      company_slug: slug,
+      company_type: "law_firm",
+      owner_full_name: "Cost Finance Owner",
+      owner_email: email,
+      owner_password: PASSWORD,
+    },
+  });
+  expect(response.status(), await response.text()).toBe(200);
+  const body = await response.json();
+  grantIpEntitlement(body.company.id as string);
+  return { ...body, slug, email };
 }
 
 async function enableWorkspace(
