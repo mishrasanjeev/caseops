@@ -84,6 +84,27 @@ services:
       retries: 24
       start_period: 30s
 
+  acceptance-case-provider:
+    profiles: ["acceptance"]
+    image: caseops-api-local:${CASEOPS_RELEASE_SHA:-dev}
+    command:
+      ["python", "-m", "caseops_api.scripts.docker_acceptance_case_provider"]
+    environment:
+      CASEOPS_ACCEPTANCE_PROVIDER_PORT: 8080
+      CASEOPS_ECOURTSINDIA_API_TOKEN: ${CASEOPS_ECOURTSINDIA_API_TOKEN:-docker-acceptance-provider-token}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)",
+        ]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+      start_period: 2s
+
   migrate:
     image: caseops-api-local:${CASEOPS_RELEASE_SHA:-dev}
     build:

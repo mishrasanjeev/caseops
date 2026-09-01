@@ -64,6 +64,12 @@ test.describe.serial("Bulk matter creation", () => {
     await page.goto("/app/matters/imports");
     await expect(page.getByRole("heading", { name: "Bulk upload matters" })).toBeVisible();
 
+    const xlsxTemplateDownload = page.waitForEvent("download");
+    await page.getByTestId("matter-import-template-xlsx").click();
+    await expect((await xlsxTemplateDownload).suggestedFilename()).toBe(
+      "caseops-matter-import-template.xlsx",
+    );
+
     const templateDownload = page.waitForEvent("download");
     await page.getByTestId("matter-import-template-csv").click();
     await expect((await templateDownload).suggestedFilename()).toBe(

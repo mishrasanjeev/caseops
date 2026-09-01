@@ -39,6 +39,7 @@ export default defineConfig({
     /contracts-detail\.spec\.ts/,
     /matter-hearings\.spec\.ts/,
     /bulk-matter-creation\.spec\.ts/,
+    /all-modules-regression\.spec\.ts/,
     /research\.spec\.ts/,
     /billing-payment\.spec\.ts/,
     /hari-ii-bugs\.spec\.ts/,

@@ -169,6 +169,7 @@ $NpxPath = (Get-Command npx -ErrorAction Stop).Source
 
 $PreviousEnvironment = @{}
 $AcceptanceEnvironment = @{
+    COMPOSE_PROFILES = "acceptance"
     CASEOPS_RELEASE_SHA = $ReleaseSha
     CASEOPS_DOCKER_ENV = "e2e"
     CASEOPS_DOCKER_API_PORT = $ApiPort
@@ -183,7 +184,7 @@ $AcceptanceEnvironment = @{
     CASEOPS_IP_WORKSPACE_ENABLED = "true"
     CASEOPS_IP_RULE_GOVERNANCE_ENABLED = "true"
     CASEOPS_CASE_TRACKING_PROVIDER = "ecourtsindia"
-    CASEOPS_ECOURTSINDIA_API_BASE_URL = "https://provider.example"
+    CASEOPS_ECOURTSINDIA_API_BASE_URL = "http://acceptance-case-provider:8080"
     CASEOPS_ECOURTSINDIA_API_TOKEN = "docker-acceptance-provider-token"
     # Playwright's Node control-plane and browser calls go through a loopback
     # proxy that opens one fresh Windows-to-Docker connection per request.
@@ -394,7 +395,7 @@ finally {
     if (-not $Succeeded) {
         Write-Host "[docker-acceptance] failure diagnostics"
         & docker compose --project-name $ComposeProject --file $ComposeFile ps --all
-        & docker compose --project-name $ComposeProject --file $ComposeFile logs --tail 200 api web migrate worker
+        & docker compose --project-name $ComposeProject --file $ComposeFile logs --tail 200 api web migrate worker acceptance-case-provider
         if ($TestApiProxyStderr -and (Test-Path -LiteralPath $TestApiProxyStderr)) {
             Get-Content -LiteralPath $TestApiProxyStderr
         }
