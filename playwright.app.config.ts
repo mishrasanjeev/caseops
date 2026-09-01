@@ -128,12 +128,17 @@ export default defineConfig({
       // bucket scripts) holds a lock on a .venv/Scripts/*.exe.
       command:
         process.platform === "win32"
-          ? `apps\\api\\.venv\\Scripts\\python.exe -m uvicorn caseops_api.main:app --host 127.0.0.1 --port ${apiPort} --app-dir apps/api/src`
-          : `apps/api/.venv/bin/uvicorn caseops_api.main:app --host 127.0.0.1 --port ${apiPort} --app-dir apps/api/src`,
+          ? `apps\\api\\.venv\\Scripts\\python.exe -m uvicorn caseops_api.main:app --host 127.0.0.1 --port ${apiPort} --timeout-keep-alive 0 --app-dir apps/api/src`
+          : `apps/api/.venv/bin/uvicorn caseops_api.main:app --host 127.0.0.1 --port ${apiPort} --timeout-keep-alive 0 --app-dir apps/api/src`,
       cwd: repoRoot,
       env: { ...process.env, ...e2eEnv },
       url: `${apiBaseUrl}/api/health`,
       timeout: 120_000,
+      // Playwright creates and disposes many APIRequestContexts. Its shared
+      // Node transport can otherwise race Uvicorn's five-second idle close
+      // and reuse a socket just as the server closes it. This loopback-only
+      // server closes each response so mutation requests stay single-attempt
+      // instead of hiding the race behind transport retries.
       // Always start a fresh API for the e2e suite. Reusing an existing
       // local dev server reuses ITS env (notably CASEOPS_CORS_ORIGINS),
       // which silently breaks the prod-build browser flow on port 3100

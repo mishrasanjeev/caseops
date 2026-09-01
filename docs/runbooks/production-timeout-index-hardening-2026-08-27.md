@@ -230,6 +230,11 @@ state transition.
 - Mutation requests are never transport-retried. Every lifecycle write remains
   single-attempt and protected by expected status, timestamp, and lifecycle
   state assertions.
+- The local Playwright Uvicorn server disables HTTP keep-alive. Playwright
+  creates and disposes many API request contexts, and a pooled Node connection
+  could otherwise race Uvicorn's five-second idle close before a request
+  reached FastAPI. Closing loopback test responses removes that race for the
+  whole suite without retrying a mutation or increasing a timeout.
 - A retried GET must still return the exact expected HTTP status and persisted
   legal state. Retry exhaustion remains a hard test failure.
 - The focused serial lifecycle flow must pass ten complete repetitions before

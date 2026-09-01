@@ -48,6 +48,17 @@ def test_web_gcloudignore_blocks_local_build_artifacts() -> None:
         assert pattern in ignore_text
 
 
+def test_local_playwright_api_does_not_reuse_idle_mutation_connections() -> None:
+    config = _read_repo_text("playwright.app.config.ts")
+    cost_spec = _read_repo_text(
+        "tests/e2e/iplf-039f-cost-items-2026-08-21.spec.ts"
+    )
+
+    assert config.count("--timeout-keep-alive 0") == 2
+    assert "BOOTSTRAP_TRANSPORT_ATTEMPTS" not in cost_spec
+    assert "isConnectionReset" not in cost_spec
+
+
 @pytest.mark.parametrize(
     "config_path",
     [
