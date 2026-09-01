@@ -7466,6 +7466,108 @@ def test_login_releases_identity_fence_before_background_audit_on_postgres(
         assert profile is not None and profile.last_login_at is not None
 
 
+# ---------- platform capability read isolation (2026-09-01) ----------
+
+
+def test_founder_tenant_capability_does_not_wait_on_platform_admin_row(
+    pg_engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Tenant guards must not write the one global platform-admin row."""
+
+    from caseops_api.core.settings import get_settings
+    from caseops_api.db.models import CompanyMembership, PlatformAdminMembership, User
+    from caseops_api.schemas.matters import MatterCreateRequest
+    from caseops_api.services.capabilities import membership_has_capability
+    from caseops_api.services.matters import create_matter
+    from caseops_api.services.platform_admin import ensure_configured_platform_super_admin
+    from caseops_api.services.security import login_mfa_challenge_state
+
+    with Session(pg_engine) as seed:
+        seed.execute(
+            text(
+                "UPDATE platform_admin_memberships "
+                "SET status = 'revoked', updated_at = :now WHERE status = 'active'"
+            ),
+            {"now": datetime.now(UTC)},
+        )
+        company_id = _seed_company(seed)
+        membership_id = _seed_membership(seed, company_id, role="owner")
+        membership = seed.get(CompanyMembership, membership_id)
+        assert membership is not None
+        user = seed.get(User, membership.user_id)
+        assert user is not None
+        founder_email = f"platform-lock-{user.id[:8]}@example.com"
+        user.email = founder_email
+        seed.commit()
+
+    monkeypatch.setenv("CASEOPS_PLATFORM_SUPER_ADMIN_EMAIL", founder_email)
+    get_settings.cache_clear()
+    try:
+        with Session(pg_engine) as bootstrap:
+            platform_admin = ensure_configured_platform_super_admin(bootstrap)
+            assert platform_admin is not None
+            platform_admin_id = platform_admin.id
+            original_updated_at = platform_admin.updated_at
+            bootstrap.commit()
+
+        with Session(pg_engine) as locker:
+            locked_id = locker.scalar(
+                select(PlatformAdminMembership.id)
+                .where(PlatformAdminMembership.id == platform_admin_id)
+                .with_for_update()
+            )
+            assert locked_id == platform_admin_id
+
+            with Session(pg_engine) as candidate:
+                candidate.execute(text("SET LOCAL lock_timeout = '250ms'"))
+                context = _ip_race_context(
+                    candidate,
+                    company_id=company_id,
+                    membership_id=membership_id,
+                )
+                assert login_mfa_challenge_state(
+                    candidate,
+                    context=context,
+                )["mfa_required"]
+                assert membership_has_capability(
+                    candidate,
+                    context.membership,
+                    "matters:create",
+                )
+                assert not any(
+                    isinstance(row, PlatformAdminMembership)
+                    for row in candidate.identity_map.values()
+                )
+
+                matter = create_matter(
+                    candidate,
+                    context=context,
+                    payload=MatterCreateRequest(
+                        title="Platform lock isolation matter",
+                        matter_code=f"PLATFORM-LOCK-{str(uuid4())[:8]}",
+                        practice_area="litigation",
+                        forum_level="high_court",
+                        court_name="Delhi High Court",
+                    ),
+                )
+                assert matter.company_id == company_id
+                assert not any(
+                    isinstance(row, PlatformAdminMembership)
+                    for row in candidate.dirty
+                )
+                assert candidate.scalar(text("SELECT 1")) == 1
+
+            locker.rollback()
+
+        with Session(pg_engine) as verify:
+            platform_admin = verify.get(PlatformAdminMembership, platform_admin_id)
+            assert platform_admin is not None
+            assert platform_admin.updated_at == original_updated_at
+    finally:
+        get_settings.cache_clear()
+
+
 # ---------- document worker / Notice upload lock order (2026-08-26) ----------
 
 

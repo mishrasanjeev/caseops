@@ -36,13 +36,19 @@ from caseops_api.db.models import (
     User,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.services.capabilities import membership_has_capability
 from caseops_api.services.pine_labs import verify_pine_labs_plural_signature
-from caseops_api.services.platform_admin import require_platform_admin
+from caseops_api.services.platform_admin import (
+    ensure_configured_platform_super_admin,
+    platform_capabilities_for_user,
+    require_platform_admin,
+)
 from caseops_api.services.saas_billing import (
     assert_ai_credits_available,
     debit_ai_credits,
     ensure_billing_account,
 )
+from caseops_api.services.security import login_mfa_challenge_state
 from caseops_api.services.session_context import SessionContext
 from tests.test_auth_company import auth_headers, bootstrap_company
 
@@ -839,6 +845,49 @@ def test_platform_admin_is_founder_only_and_audited(
             assert exc.status_code == 403
         audit_count = session.scalar(select(func.count(PlatformAdminAuditEvent.id)))
         assert audit_count == 3
+
+
+def test_platform_admin_seed_and_capability_lookup_are_write_idempotent(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("CASEOPS_PLATFORM_SUPER_ADMIN_EMAIL", "owner@asterlegal.in")
+    get_settings.cache_clear()
+    bootstrap_company(client)
+
+    factory = get_session_factory()
+    with factory() as session:
+        founder = session.scalar(
+            select(User).where(User.email == "owner@asterlegal.in")
+        )
+        assert founder is not None
+        platform_admin = session.scalar(select(PlatformAdminMembership))
+        membership = session.scalar(
+            select(CompanyMembership).where(CompanyMembership.user_id == founder.id)
+        )
+        assert platform_admin is not None and membership is not None
+        original_updated_at = platform_admin.updated_at
+        context = SessionContext(
+            company=membership.company,
+            membership=membership,
+            user=founder,
+        )
+        session.expunge(platform_admin)
+
+        assert login_mfa_challenge_state(session, context=context)["mfa_required"]
+        assert "platform:admin" in platform_capabilities_for_user(session, founder.id)
+        assert membership_has_capability(session, membership, "matters:create")
+        assert not any(
+            isinstance(row, PlatformAdminMembership)
+            for row in session.identity_map.values()
+        )
+        platform_admin = ensure_configured_platform_super_admin(session)
+        assert platform_admin is not None
+        session.flush()
+        session.refresh(platform_admin)
+
+        assert platform_admin.updated_at == original_updated_at
+        assert not session.dirty
 
 
 def test_tenant_owner_is_denied_from_platform_admin_route_surface(

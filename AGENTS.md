@@ -122,3 +122,8 @@ requirements when using the fallback.
   Use the provider's native strict schema path when available, preserve the
   existing validation boundary for every provider, and test malformed/refusal
   behavior so legal reviews cannot fail later on truncated free-form JSON.
+- Authentication, MFA, and capability reads must not dirty shared platform
+  administration rows. Select scalar policy/capability data on ordinary tenant
+  paths, keep founder seeding idempotent, and never swallow a database exception
+  while leaving the request session rollback-only. A PostgreSQL regression must
+  hold the shared row lock while an unrelated tenant mutation still completes.
