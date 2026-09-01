@@ -10,6 +10,7 @@ is converged and verified on every release.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import re
 import shutil
@@ -36,6 +37,26 @@ def load_inventory(path: Path) -> dict[str, Any]:
     if errors:
         raise InventoryError("invalid scheduler inventory:\n- " + "\n- ".join(errors))
     return payload
+
+
+def hold_schedulers_paused(
+    inventory: dict[str, Any],
+    scheduler_names: list[str],
+) -> dict[str, Any]:
+    """Return a release-only inventory that keeps named schedulers paused."""
+
+    requested = set(scheduler_names)
+    canonical = {str(job["scheduler_name"]) for job in inventory["jobs"]}
+    unknown = sorted(requested - canonical)
+    if unknown:
+        raise InventoryError(
+            "cannot hold unknown scheduler(s) paused: " + ", ".join(unknown)
+        )
+    effective = copy.deepcopy(inventory)
+    for job in effective["jobs"]:
+        if job["scheduler_name"] in requested:
+            job["desired_state"] = "PAUSED"
+    return effective
 
 
 def validate_inventory(payload: object) -> list[str]:
@@ -794,9 +815,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--project")
     parser.add_argument("--region")
     parser.add_argument("--image")
+    parser.add_argument(
+        "--hold-scheduler-paused",
+        action="append",
+        default=[],
+        help="Keep one canonical scheduler paused during this reconcile only.",
+    )
     args = parser.parse_args(argv)
     try:
         inventory = load_inventory(args.inventory)
+        if args.hold_scheduler_paused and args.command != "reconcile":
+            raise InventoryError(
+                "--hold-scheduler-paused is valid only for reconcile"
+            )
         if args.command == "validate":
             print(f"scheduler inventory valid: {len(inventory['jobs'])} recurring jobs")
             return 0
@@ -804,6 +835,11 @@ def main(argv: list[str] | None = None) -> int:
         region = args.region or inventory["location"]
         if not args.image:
             raise InventoryError("--image is required for reconcile, verify, and audit")
+        if args.hold_scheduler_paused:
+            inventory = hold_schedulers_paused(
+                inventory,
+                args.hold_scheduler_paused,
+            )
         if args.command == "reconcile":
             reconcile(inventory, project=project, region=region, image=args.image)
         errors, summary = inspect_live(

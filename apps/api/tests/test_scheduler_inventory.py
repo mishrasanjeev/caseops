@@ -72,7 +72,9 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
         "max_doublings": 5,
     }
     mapping_job = next(
-        job for job in inventory["jobs"] if job["run_job_name"] == "caseops-judge-mapping-refresh"
+        job
+        for job in inventory["jobs"]
+        if job["run_job_name"] == "caseops-judge-mapping-refresh"
     )
     assert mapping_job["schedule"] == "15 1 * * *"
     assert mapping_job["time_zone"] == "Asia/Kolkata"
@@ -80,18 +82,53 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
     assert mapping_job["task_timeout_seconds"] == 3_600
     assert mapping_job["image_policy"] == "release_digest"
     assert mapping_job["canary_policy"] == "manual_safe"
-    assert mapping_job["bootstrap"]["command"] == ["caseops-refresh-bench-analysis-layers"]
+    assert mapping_job["bootstrap"]["command"] == [
+        "caseops-refresh-bench-analysis-layers"
+    ]
     assert mapping_job["bootstrap"]["args"] == []
     assert all(job.get("bootstrap") for job in inventory["jobs"])
     assert all(
-        job["bootstrap"]["command"][0].casefold() not in {"uv", "uvx"} for job in inventory["jobs"]
+        job["bootstrap"]["command"][0].casefold() not in {"uv", "uvx"}
+        for job in inventory["jobs"]
     )
     assert all(
         job["desired_state"] == "ENABLED"
         for job in inventory["jobs"]
         if job not in (authority_job, mapping_job)
     )
-    assert inventory["legacy_schedulers_to_pause"] == ["caseops-case-tracking-poll-midnight"]
+    assert inventory["legacy_schedulers_to_pause"] == [
+        "caseops-case-tracking-poll-midnight"
+    ]
+
+
+def test_release_hold_pauses_only_the_named_effective_scheduler() -> None:
+    inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
+    scheduler_name = "caseops-private-projection-maintenance-cadence"
+
+    effective = scheduler_inventory.hold_schedulers_paused(
+        inventory,
+        [scheduler_name],
+    )
+
+    canonical_job = next(
+        job for job in inventory["jobs"] if job["scheduler_name"] == scheduler_name
+    )
+    effective_job = next(
+        job for job in effective["jobs"] if job["scheduler_name"] == scheduler_name
+    )
+    assert canonical_job["desired_state"] == "ENABLED"
+    assert effective_job["desired_state"] == "PAUSED"
+    assert sum(job["desired_state"] == "PAUSED" for job in effective["jobs"]) == 3
+
+
+def test_release_hold_rejects_an_unknown_scheduler() -> None:
+    inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
+
+    with pytest.raises(scheduler_inventory.InventoryError, match="unknown scheduler"):
+        scheduler_inventory.hold_schedulers_paused(
+            inventory,
+            ["invented-private-projection-scheduler"],
+        )
 
 
 def test_inventory_rejects_duplicate_owners_and_mutable_image_policy() -> None:

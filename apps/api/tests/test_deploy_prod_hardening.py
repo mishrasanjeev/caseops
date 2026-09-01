@@ -982,6 +982,7 @@ def _run_deploy_with_fakes(
     migration_timeout_drift: bool = False,
     python_crlf: bool = False,
     main_drift_after_fetches: int | None = None,
+    private_projection_scheduler_hold: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir()
@@ -1410,6 +1411,10 @@ exec "${FAKE_REAL_PYTHON}" "$@"
                 ),
             }
         )
+    if private_projection_scheduler_hold is not None:
+        env["CASEOPS_PRIVATE_PROJECTION_SCHEDULER_HOLD"] = (
+            private_projection_scheduler_hold
+        )
     command = [
         _find_working_bash(),
         "-c",
@@ -1554,6 +1559,40 @@ def test_deploy_prod_accepts_clean_head_and_healthy_api(tmp_path: Path) -> None:
         "gh workflow run prod-verify.yml --repo mishrasanjeev/caseops --ref main "
         "-f expected_release_sha=abcdef1234567890abcdef1234567890abcdef12"
     ) in "\n".join(calls)
+
+
+def test_deploy_prod_keeps_private_projection_scheduler_paused_during_incident(
+    tmp_path: Path,
+) -> None:
+    result = _run_deploy_with_fakes(
+        tmp_path,
+        "abcdef1",
+        private_projection_scheduler_hold="true",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "private projection scheduler remains paused" in result.stdout
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+    assert any(
+        "scheduler_inventory.py reconcile" in call
+        and "--hold-scheduler-paused "
+        "caseops-private-projection-maintenance-cadence" in call
+        for call in calls
+    )
+
+
+def test_deploy_prod_rejects_invalid_private_projection_scheduler_hold(
+    tmp_path: Path,
+) -> None:
+    result = _run_deploy_with_fakes(
+        tmp_path,
+        "abcdef1",
+        private_projection_scheduler_hold="yes",
+    )
+
+    assert result.returncode == 2
+    assert "CASEOPS_PRIVATE_PROJECTION_SCHEDULER_HOLD must be true or false" in result.stdout
+    assert not (tmp_path / "gcloud.log").exists()
 
 
 @pytest.mark.parametrize(
