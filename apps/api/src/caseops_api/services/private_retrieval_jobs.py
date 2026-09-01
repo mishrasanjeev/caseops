@@ -49,9 +49,9 @@ from caseops_api.services.private_retrieval import (
     apply_private_projection_event,
     create_shadow_private_generation,
     ensure_active_private_generation,
+    insert_private_projection_batch,
     mark_private_generation_ready,
     private_source_version,
-    upsert_private_projection,
 )
 
 # Production had 9,820 eligible rows for one tenant on 2026-09-01. Keep the
@@ -109,9 +109,7 @@ def _serialize_private_rebuild(
                 break
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise PrivateRetrievalConcurrencyError(
-                    PRIVATE_REBUILD_SERIALIZATION_TIMEOUT_DETAIL
-                )
+                raise PrivateRetrievalConcurrencyError(PRIVATE_REBUILD_SERIALIZATION_TIMEOUT_DETAIL)
             time.sleep(min(PRIVATE_REBUILD_SERIALIZATION_POLL_SECONDS, remaining))
 
         def release() -> bool:
@@ -701,17 +699,29 @@ def _rebuild_private_index_owned(
                 allow_external_provider=allow_external_provider,
                 provider_deadline_seconds=provider_deadline_seconds,
             )
+        projection_keys = {
+            (
+                payload.source_type,
+                payload.source_id,
+                payload.source_version,
+                payload.chunk_ordinal,
+            )
+            for payload in payloads
+        }
+        if len(projection_keys) != len(payloads):
+            raise PrivateRetrievalInvariantError(
+                "Private rebuild source enumeration produced duplicate source chunks."
+            )
         bounded_write_batch = max(1, min(write_batch_size, MAX_PRIVATE_WRITE_BATCH))
         for offset in range(0, len(payloads), bounded_write_batch):
-            for payload in payloads[offset : offset + bounded_write_batch]:
-                upsert_private_projection(
-                    session,
-                    company_id=company_id,
-                    generation_id=shadow_generation_id,
-                    payload=payload,
-                    expected_access_policy_generation=expected_access_policy_generation,
-                    expected_tombstone_generation=expected_tombstone_generation,
-                )
+            insert_private_projection_batch(
+                session,
+                company_id=company_id,
+                generation_id=shadow_generation_id,
+                payloads=payloads[offset : offset + bounded_write_batch],
+                expected_access_policy_generation=expected_access_policy_generation,
+                expected_tombstone_generation=expected_tombstone_generation,
+            )
             # The shadow is unreadable while building. Commit each bounded
             # batch so generation and scope-parent locks cannot accumulate
             # across a production-sized corpus. The next batch revalidates the

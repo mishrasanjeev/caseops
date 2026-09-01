@@ -105,25 +105,25 @@ def test_rebuild_removes_committed_batches_when_security_epoch_changes(
     for index in range(MAX_PRIVATE_WRITE_BATCH + 1):
         _matter(client, token, f"IPLF-066B-STALE-BATCH-{index:02d}")
 
-    real_upsert = private_retrieval_jobs.upsert_private_projection
-    upsert_count = 0
+    real_insert_batch = private_retrieval_jobs.insert_private_projection_batch
+    batch_count = 0
 
-    def _upsert_after_epoch_change(*args: object, **kwargs: object) -> object:
-        nonlocal upsert_count
-        upsert_count += 1
-        if upsert_count == MAX_PRIVATE_WRITE_BATCH + 1:
+    def _insert_batch_after_epoch_change(*args: object, **kwargs: object) -> object:
+        nonlocal batch_count
+        batch_count += 1
+        if batch_count == 2:
             generation_id = str(kwargs["generation_id"])
             with get_session_factory()() as concurrent_session:
                 shadow = concurrent_session.get(PrivateIndexGeneration, generation_id)
                 assert shadow is not None
                 shadow.access_policy_generation += 1
                 concurrent_session.commit()
-        return real_upsert(*args, **kwargs)
+        return real_insert_batch(*args, **kwargs)
 
     monkeypatch.setattr(
         private_retrieval_jobs,
-        "upsert_private_projection",
-        _upsert_after_epoch_change,
+        "insert_private_projection_batch",
+        _insert_batch_after_epoch_change,
     )
     with get_session_factory()() as session:
         with pytest.raises(PrivateRetrievalInvariantError):
@@ -149,7 +149,7 @@ def test_rebuild_removes_committed_batches_when_security_epoch_changes(
             or 0
         )
 
-    assert upsert_count == MAX_PRIVATE_WRITE_BATCH + 1
+    assert batch_count == 2
     assert retained_projection_count == 0
 
 
@@ -1193,16 +1193,16 @@ def test_rebuild_commits_each_bounded_projection_batch(
     company_id = str(bootstrap["company"]["id"])
     _matter(client, token, "IPLF-066B-WRITE-BATCH-1")
     _matter(client, token, "IPLF-066B-WRITE-BATCH-2")
-    real_upsert = private_retrieval_jobs.upsert_private_projection
+    real_insert_batch = private_retrieval_jobs.insert_private_projection_batch
     transaction_states: list[bool] = []
 
     def inspect_transaction(session, **kwargs):
         transaction_states.append(session.in_transaction())
-        return real_upsert(session, **kwargs)
+        return real_insert_batch(session, **kwargs)
 
     monkeypatch.setattr(
         private_retrieval_jobs,
-        "upsert_private_projection",
+        "insert_private_projection_batch",
         inspect_transaction,
     )
     with get_session_factory()() as session:

@@ -92,6 +92,7 @@ WEB_MIN_INSTANCES="${WEB_MIN_INSTANCES:-1}"
 # releases preserve the historical path exactly.
 A0_CAPTURE_RULE_GOVERNANCE_BASELINE="${CASEOPS_A0_CAPTURE_RULE_GOVERNANCE_BASELINE:-false}"
 A0_RULE_GOVERNANCE_BASELINE_OUTPUT="${CASEOPS_A0_RULE_GOVERNANCE_BASELINE_OUTPUT:-}"
+PRIVATE_PROJECTION_SCHEDULER_HOLD="${CASEOPS_PRIVATE_PROJECTION_SCHEDULER_HOLD:-false}"
 
 if [[ "${A0_CAPTURE_RULE_GOVERNANCE_BASELINE}" != "true" && "${A0_CAPTURE_RULE_GOVERNANCE_BASELINE}" != "false" ]]; then
   echo "ERROR: CASEOPS_A0_CAPTURE_RULE_GOVERNANCE_BASELINE must be true or false."
@@ -110,6 +111,10 @@ if [[ "${A0_CAPTURE_RULE_GOVERNANCE_BASELINE}" == "true" ]]; then
     echo "ERROR: A0 fingerprint evidence directory does not exist."
     exit 2
   fi
+fi
+if [[ "${PRIVATE_PROJECTION_SCHEDULER_HOLD}" != "true" && "${PRIVATE_PROJECTION_SCHEDULER_HOLD}" != "false" ]]; then
+  echo "ERROR: CASEOPS_PRIVATE_PROJECTION_SCHEDULER_HOLD must be true or false."
+  exit 2
 fi
 
 if [[ "$#" -gt 1 ]]; then
@@ -297,10 +302,19 @@ echo "  migrate-job completed."
 # source, verifies the canonical configuration, and only then pauses
 # superseded scheduler names.
 echo "--- 3/6 reconcile recurring-job inventory ---"
+SCHEDULER_HOLD_ARGS=()
+if [[ "${PRIVATE_PROJECTION_SCHEDULER_HOLD}" == "true" ]]; then
+  SCHEDULER_HOLD_ARGS+=(
+    --hold-scheduler-paused
+    caseops-private-projection-maintenance-cadence
+  )
+  echo "  private projection scheduler remains paused through release certification."
+fi
 python scripts/scheduler_inventory.py reconcile \
   --project "${PROJECT}" \
   --region "${REGION}" \
-  --image "${API_IMMUTABLE_IMAGE}"
+  --image "${API_IMMUTABLE_IMAGE}" \
+  "${SCHEDULER_HOLD_ARGS[@]}"
 
 # Private projection failures have a zero-error-budget security impact at
 # hydration and a five-minute removal SLO in the derived index. Reconcile the

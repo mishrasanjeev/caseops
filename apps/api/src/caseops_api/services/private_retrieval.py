@@ -527,12 +527,6 @@ def upsert_private_projection(
         )
     )
     now = datetime.now(UTC)
-    content = " ".join(payload.content.split())
-    encoded_embedding = (
-        json.dumps(list(payload.embedding), separators=(",", ":"))
-        if payload.embedding is not None
-        else None
-    )
     if row is None:
         row = PrivateIndexProjection(
             company_id=company_id,
@@ -544,6 +538,38 @@ def upsert_private_projection(
             created_at=now,
         )
         session.add(row)
+    _apply_private_projection_payload(
+        row,
+        payload=payload,
+        generation=generation,
+        now=now,
+    )
+    session.flush()
+    session.execute(
+        delete(PrivateIndexProjectionScope).where(
+            PrivateIndexProjectionScope.company_id == company_id,
+            PrivateIndexProjectionScope.projection_id == row.id,
+        )
+    )
+    session.add_all(_projection_scope_rows(row=row, payload=payload, now=now))
+    session.flush()
+    invalidate_private_retrieval_cache(company_id=company_id)
+    return row
+
+
+def _apply_private_projection_payload(
+    row: PrivateIndexProjection,
+    *,
+    payload: PrivateProjectionInput,
+    generation: PrivateIndexGeneration,
+    now: datetime,
+) -> None:
+    content = " ".join(payload.content.split())
+    encoded_embedding = (
+        json.dumps(list(payload.embedding), separators=(",", ":"))
+        if payload.embedding is not None
+        else None
+    )
     row.label = payload.label.strip()[:255]
     row.content_text = content
     row.content_sha256 = hashlib.sha256(content.encode("utf-8")).hexdigest()
@@ -562,28 +588,112 @@ def upsert_private_projection(
     row.tombstoned_at = None
     row.tombstone_reason = None
     row.updated_at = now
-    session.flush()
-    session.execute(
-        delete(PrivateIndexProjectionScope).where(
-            PrivateIndexProjectionScope.company_id == company_id,
-            PrivateIndexProjectionScope.projection_id == row.id,
+
+
+def _projection_scope_rows(
+    *,
+    row: PrivateIndexProjection,
+    payload: PrivateProjectionInput,
+    now: datetime,
+) -> list[PrivateIndexProjectionScope]:
+    return [
+        PrivateIndexProjectionScope(
+            company_id=row.company_id,
+            projection_id=row.id,
+            scope_type=scope.scope_type,
+            scope_id=scope.scope_id,
+            access_policy_version=scope.access_policy_version,
+            created_at=now,
+            **_typed_scope_values(scope),
         )
+        for scope in payload.scopes
+    ]
+
+
+def insert_private_projection_batch(
+    session: Session,
+    *,
+    company_id: str,
+    generation_id: str,
+    payloads: Sequence[PrivateProjectionInput],
+    expected_access_policy_generation: int,
+    expected_tombstone_generation: int,
+) -> tuple[PrivateIndexProjection, ...]:
+    """Insert one fresh shadow batch under a single epoch fence.
+
+    Rebuild shadows are write-once. Batching removes per-projection generation
+    locks, existence reads, scope deletes, flushes and cache invalidations while
+    preserving the same fail-closed epoch check at every commit boundary.
+    """
+
+    batch = tuple(payloads)
+    if not batch:
+        return ()
+    for payload in batch:
+        _assert_projection_input(payload)
+    keys = {
+        (
+            payload.source_type,
+            payload.source_id,
+            payload.source_version,
+            payload.chunk_ordinal,
+        )
+        for payload in batch
+    }
+    if len(keys) != len(batch):
+        raise PrivateRetrievalInvariantError(
+            "A private projection rebuild batch contains duplicate source chunks."
+        )
+
+    generation = session.scalar(
+        select(PrivateIndexGeneration)
+        .where(
+            PrivateIndexGeneration.id == generation_id,
+            PrivateIndexGeneration.company_id == company_id,
+            PrivateIndexGeneration.state == "building",
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
-    for scope in payload.scopes:
-        session.add(
-            PrivateIndexProjectionScope(
-                company_id=company_id,
-                projection_id=row.id,
-                scope_type=scope.scope_type,
-                scope_id=scope.scope_id,
-                access_policy_version=scope.access_policy_version,
-                created_at=now,
-                **_typed_scope_values(scope),
-            )
+    if generation is None:
+        raise PrivateRetrievalInvariantError("Private generation is not writable.")
+    if (
+        generation.access_policy_generation != expected_access_policy_generation
+        or generation.tombstone_generation != expected_tombstone_generation
+    ):
+        raise PrivateRetrievalConcurrencyError(STALE_PRIVATE_PROJECTION_WRITER_DETAIL)
+
+    now = datetime.now(UTC)
+    rows: list[PrivateIndexProjection] = []
+    for payload in batch:
+        row = PrivateIndexProjection(
+            company_id=company_id,
+            generation_id=generation_id,
+            source_type=payload.source_type,
+            source_id=payload.source_id,
+            source_version=payload.source_version,
+            chunk_ordinal=payload.chunk_ordinal,
+            created_at=now,
         )
+        _apply_private_projection_payload(
+            row,
+            payload=payload,
+            generation=generation,
+            now=now,
+        )
+        rows.append(row)
+    session.add_all(rows)
+    session.flush()
+    session.add_all(
+        [
+            scope_row
+            for row, payload in zip(rows, batch, strict=True)
+            for scope_row in _projection_scope_rows(row=row, payload=payload, now=now)
+        ]
+    )
     session.flush()
     invalidate_private_retrieval_cache(company_id=company_id)
-    return row
+    return tuple(rows)
 
 
 def _refreshed_context(
@@ -2034,6 +2144,7 @@ __all__ = [
     "create_shadow_private_generation",
     "ensure_active_private_generation",
     "hydrate_private_projection_results",
+    "insert_private_projection_batch",
     "mark_private_generation_ready",
     "prefilter_private_projection_ids",
     "private_retrieval_activation",

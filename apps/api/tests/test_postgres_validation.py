@@ -60,7 +60,7 @@ from time import monotonic
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine, inspect, select, text
+from sqlalchemy import create_engine, event, func, inspect, select, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
@@ -10035,15 +10035,15 @@ def test_private_rebuild_releases_interactive_parent_locks_on_postgres(
         insert_matter_then_enumerate,
     )
 
-    real_upsert = private_retrieval_jobs.upsert_private_projection
+    real_insert_batch = private_retrieval_jobs.insert_private_projection_batch
     write_count = 0
     parent_lock_acquired_between_batches = False
     first_scope_parent_id: str | None = None
 
-    def lock_parent_then_upsert(session, **kwargs):
+    def lock_parent_then_insert_batch(session, **kwargs):
         nonlocal write_count, parent_lock_acquired_between_batches, first_scope_parent_id
         write_count += 1
-        payload = kwargs["payload"]
+        payload = kwargs["payloads"][0]
         if write_count == 1:
             first_scope_parent_id = payload.scopes[0].scope_id
         if write_count == 2:
@@ -10056,12 +10056,12 @@ def test_private_rebuild_releases_interactive_parent_locks_on_postgres(
                 )
                 concurrent.commit()
             parent_lock_acquired_between_batches = True
-        return real_upsert(session, **kwargs)
+        return real_insert_batch(session, **kwargs)
 
     monkeypatch.setattr(
         private_retrieval_jobs,
-        "upsert_private_projection",
-        lock_parent_then_upsert,
+        "insert_private_projection_batch",
+        lock_parent_then_insert_batch,
     )
 
     with Session(pg_engine) as session:
@@ -10076,6 +10076,203 @@ def test_private_rebuild_releases_interactive_parent_locks_on_postgres(
     assert inserted_during_enumeration is True
     assert parent_lock_acquired_between_batches is True
     assert summary.projection_count == 3
+
+
+def test_private_rebuild_ten_thousand_projection_query_budget_and_concurrency_on_postgres(
+    pg_engine,
+    monkeypatch,
+) -> None:
+    """A production-sized shadow rebuild must scale by batch, never by row."""
+
+    from caseops_api.db.models import (
+        Client,
+        Company,
+        PrivateIndexGeneration,
+        PrivateIndexProjection,
+        PrivateIndexProjectionScope,
+    )
+    from caseops_api.services import private_retrieval_jobs
+    from caseops_api.services.private_retrieval import (
+        PrivateProjectionInput,
+        PrivateRetrievalConcurrencyError,
+        ProjectionScopeInput,
+        ensure_active_private_generation,
+    )
+
+    company_id = str(uuid4())
+    client_id = str(uuid4())
+    projection_count = 10_000
+    with Session(pg_engine) as session:
+        session.add(
+            Company(
+                id=company_id,
+                name="PostgreSQL Production Scale Private Firm",
+                slug=f"pg-private-scale-{company_id[:8]}",
+                company_type="law_firm",
+                tenant_key=company_id,
+            )
+        )
+        session.add(
+            Client(
+                id=client_id,
+                company_id=company_id,
+                name="Production Scale Client",
+                client_type="organization",
+                is_active=True,
+            )
+        )
+        session.flush()
+        ensure_active_private_generation(session, company_id=company_id)
+        session.commit()
+
+    payloads = [
+        PrivateProjectionInput(
+            source_type="client",
+            source_id=client_id,
+            source_version=f"scale-{index}",
+            chunk_ordinal=0,
+            label=f"Scale projection {index}",
+            content=f"Bounded production scale private projection {index}",
+            scopes=(
+                ProjectionScopeInput(
+                    scope_type="client",
+                    scope_id=client_id,
+                    access_policy_version=0,
+                ),
+            ),
+        )
+        for index in range(projection_count)
+    ]
+    monkeypatch.setattr(
+        private_retrieval_jobs,
+        "_private_projection_inputs",
+        lambda _session, **_kwargs: payloads,
+    )
+
+    statement_count = 0
+
+    def count_statements(*_args, **_kwargs) -> None:
+        nonlocal statement_count
+        statement_count += 1
+
+    event.listen(pg_engine, "before_cursor_execute", count_statements)
+    started = monotonic()
+    try:
+        with Session(pg_engine) as session:
+            summary = private_retrieval_jobs.rebuild_private_index(
+                session,
+                company_id=company_id,
+                write_batch_size=50,
+                activate=True,
+            )
+    finally:
+        elapsed = monotonic() - started
+        event.remove(pg_engine, "before_cursor_execute", count_statements)
+
+    assert summary.projection_count == projection_count
+    assert summary.activated is True
+    assert statement_count <= 850
+    assert elapsed < 60
+    with Session(pg_engine) as session:
+        active = session.scalar(
+            select(PrivateIndexGeneration).where(
+                PrivateIndexGeneration.company_id == company_id,
+                PrivateIndexGeneration.state == "active",
+            )
+        )
+        assert active is not None
+        live_projection_count = int(
+            session.scalar(
+                select(func.count(PrivateIndexProjection.id)).where(
+                    PrivateIndexProjection.company_id == company_id,
+                    PrivateIndexProjection.generation_id == active.id,
+                    PrivateIndexProjection.is_tombstoned.is_(False),
+                )
+            )
+            or 0
+        )
+        scope_count = int(
+            session.scalar(
+                select(func.count(PrivateIndexProjectionScope.id)).where(
+                    PrivateIndexProjectionScope.company_id == company_id,
+                )
+            )
+            or 0
+        )
+    assert live_projection_count == projection_count
+    assert scope_count == projection_count
+
+    active_generation_id = summary.generation_id
+    real_insert_batch = private_retrieval_jobs.insert_private_projection_batch
+    batch_calls = 0
+    concurrent_epoch_commit_seconds: float | None = None
+
+    def advance_epoch_before_second_batch(session, **kwargs):
+        nonlocal batch_calls, concurrent_epoch_commit_seconds
+        batch_calls += 1
+        if batch_calls == 2:
+            concurrent_started = monotonic()
+            with Session(pg_engine) as concurrent:
+                concurrent.execute(text("SET LOCAL lock_timeout = '300ms'"))
+                shadow = concurrent.get(
+                    PrivateIndexGeneration,
+                    str(kwargs["generation_id"]),
+                )
+                assert shadow is not None
+                shadow.access_policy_generation += 1
+                concurrent.commit()
+            concurrent_epoch_commit_seconds = monotonic() - concurrent_started
+        return real_insert_batch(session, **kwargs)
+
+    monkeypatch.setattr(
+        private_retrieval_jobs,
+        "insert_private_projection_batch",
+        advance_epoch_before_second_batch,
+    )
+    with Session(pg_engine) as session:
+        with pytest.raises(
+            PrivateRetrievalConcurrencyError,
+            match="stale private projection writer",
+        ):
+            private_retrieval_jobs.rebuild_private_index(
+                session,
+                company_id=company_id,
+                write_batch_size=50,
+                activate=True,
+            )
+
+    assert batch_calls == 2
+    assert concurrent_epoch_commit_seconds is not None
+    assert concurrent_epoch_commit_seconds < 1
+    with Session(pg_engine) as session:
+        still_active = session.scalar(
+            select(PrivateIndexGeneration).where(
+                PrivateIndexGeneration.company_id == company_id,
+                PrivateIndexGeneration.state == "active",
+            )
+        )
+        failed_shadow = session.scalar(
+            select(PrivateIndexGeneration)
+            .where(
+                PrivateIndexGeneration.company_id == company_id,
+                PrivateIndexGeneration.state == "failed",
+            )
+            .order_by(PrivateIndexGeneration.generation_number.desc())
+            .limit(1)
+        )
+        assert still_active is not None
+        assert still_active.id == active_generation_id
+        assert failed_shadow is not None
+        assert failed_shadow.failure_code == "PrivateRetrievalConcurrencyError"
+        assert (
+            session.scalar(
+                select(func.count(PrivateIndexProjection.id)).where(
+                    PrivateIndexProjection.company_id == company_id,
+                    PrivateIndexProjection.generation_id == failed_shadow.id,
+                )
+            )
+            == 0
+        )
 
 
 def test_private_rebuild_serializes_same_tenant_across_worker_commits(

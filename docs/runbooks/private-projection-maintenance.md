@@ -17,6 +17,9 @@ disposition decisions.
 - Tenant scan cap: 50 companies per run
 - Automatic rebuild cap: 5 companies per run
 - Per-tenant projection cap: 20,000 rows, written in batches of at most 50
+- Batch work bound: one shadow epoch lock/check, one bulk projection flush and
+  one bulk scope flush per batch; the 10,000-row PostgreSQL gate permits at most
+  850 SQL statements and 60 seconds
 - Rebuild ownership: one PostgreSQL advisory lease per tenant, retained across
   bounded batch commits; a second worker waits at most 45 seconds
 - Concurrent-change recovery: one in-process replan for a typed rebuild conflict,
@@ -37,6 +40,12 @@ source checks merely to make the new record immediately reviewable.
 
 The scheduler inventory is authoritative. Reconcile or inspect it with the exact
 immutable API image digest; do not deploy or verify a mutable tag.
+
+During an active private-projection incident, keep the cadence paused through the
+canonical deployment by setting `CASEOPS_PRIVATE_PROJECTION_SCHEDULER_HOLD=true`.
+This changes only the effective reconcile state for that release; the checked-in
+inventory remains `ENABLED`. Resume the canonical cadence manually only after the
+exact release, production browser and controlled maintenance proofs are clean.
 
 ```bash
 python scripts/scheduler_inventory.py inspect-live \
@@ -66,9 +75,12 @@ beside a scheduled maintenance execution. Rebuild owners therefore serialize on 
 tenant-scoped PostgreSQL advisory lease that does not block canonical request
 writers and survives the worker's bounded commits. The worker removes a fenced
 shadow's partial projections, drains any newly due tenant event, re-inspects
-integrity, and permits exactly one fresh rebuild. A second conflict, a lease wait
-beyond 45 seconds, a non-repairable blocker, or any other exception fails the
-tenant and the job. Cloud Run task retries remain disabled.
+integrity, and permits exactly one fresh rebuild. Rebuild writes are bulked per
+50-row epoch-fenced batch rather than issuing generation, projection, scope and
+cache work per row; this reduces the stale-writer exposure window without
+weakening the fence. A second conflict, a lease wait beyond 45 seconds, a
+non-repairable blocker, or any other exception fails the tenant and the job.
+Cloud Run task retries remain disabled.
 
 The structured record contains a correlation ID, affected company IDs, event lag,
 pending and failed counts, blockers, and whether a bounded rebuild ran. It contains
@@ -138,8 +150,9 @@ the canonical data-governance process.
    unauthorized content must not be returned to improve availability.
 5. Correct forward, rerun migration and focused PostgreSQL checks, then execute one
    canary maintenance run before resuming the cadence.
-6. Reconcile scheduler inventory and alert policy, verify latest-only traffic, and
-   prove the same dated production browser scenario before closing rollback.
+6. Deploy with `CASEOPS_PRIVATE_PROJECTION_SCHEDULER_HOLD=true`, reconcile scheduler
+   inventory and alert policy, verify latest-only traffic, and prove the same dated
+   production browser scenario before closing rollback.
 
 Database downgrade is not a normal rollback. The migration refuses downgrade when
 retry or disposition evidence exists because deleting that evidence would make the

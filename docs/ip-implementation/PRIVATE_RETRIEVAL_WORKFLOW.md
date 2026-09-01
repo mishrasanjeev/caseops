@@ -195,8 +195,14 @@ If a canonical source or access mutation advances the security epoch, an event
 arrives after the first drain, or another valid rebuild changes the active
 generation, the worker deletes any failed shadow's partial rows, rolls back,
 drains due events, re-inspects the tenant, and replans once. The retry still uses
-bounded 50-row commits and must pass the same epoch and activation fences. A
-second conflict, lease timeout, non-repairable blocker, or unknown exception
+bounded 50-row commits and must pass the same epoch and activation fences. Each
+fresh-shadow batch performs one generation lock/epoch check, one bulk projection
+flush and one bulk scope flush; it does not repeat generation reads, projection
+existence reads, scope deletes, flushes or cache invalidations per row. The real
+PostgreSQL acceptance creates 10,000 projections below an 850-statement and
+60-second ceiling, then advances the epoch concurrently and proves the next batch
+fails closed, removes the partial shadow and leaves the active generation intact.
+A second conflict, lease timeout, non-repairable blocker, or unknown exception
 remains a tenant-isolated release-blocking error; Cloud Run task retries stay
 disabled.
 
