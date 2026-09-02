@@ -144,7 +144,16 @@ export function TenantAIPolicyCard(): React.JSX.Element | null {
 
   const enabled = policyQuery.data?.predictive_bench_strategy_enabled ?? false;
   const assistantEnabled = policyQuery.data?.workspace_assistant_enabled ?? false;
-  const isPending = policyQuery.isPending || updateMutation.isPending;
+  const policyStatus = policyQuery.isPending
+    ? "Loading policy…"
+    : policyQuery.isError || !policyQuery.data
+      ? "Policy unavailable"
+      : null;
+  const isPending =
+    policyQuery.isPending ||
+    policyQuery.isError ||
+    !policyQuery.data ||
+    updateMutation.isPending;
   const tokenPending = tokenQuery.isPending || tokenMutation.isPending;
 
   return (
@@ -180,7 +189,7 @@ export function TenantAIPolicyCard(): React.JSX.Element | null {
             <p className="mt-2 text-xs text-[var(--color-mute-2)]">
               Status:{" "}
               <strong>
-                {enabled ? "Predictive (B)" : "Evidence-only (A, default)"}
+                {policyStatus ?? (enabled ? "Predictive (B)" : "Evidence-only (A, default)")}
               </strong>
             </p>
           </div>
@@ -214,7 +223,8 @@ export function TenantAIPolicyCard(): React.JSX.Element | null {
               citation checks remain enforced by the server.
             </p>
             <p className="mt-2 text-xs text-[var(--color-mute-2)]">
-              Status: <strong>{assistantEnabled ? "Enabled" : "Disabled"}</strong>
+              Status:{" "}
+              <strong>{policyStatus ?? (assistantEnabled ? "Enabled" : "Disabled")}</strong>
             </p>
           </div>
           <Button

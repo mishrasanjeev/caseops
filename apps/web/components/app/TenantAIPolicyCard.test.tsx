@@ -79,12 +79,42 @@ describe("TenantAIPolicyCard (PG-107 v1.5)", () => {
     });
     renderCard();
     await waitFor(() =>
-      expect(screen.getByTestId("tenant-ai-policy-card")).toBeInTheDocument(),
+      expect(screen.getByTestId("tenant-ai-policy-predictive-toggle")).toBeEnabled(),
     );
     expect(screen.getByText(/Evidence-only \(A, default\)/i)).toBeInTheDocument();
     expect(
       screen.getByTestId("tenant-ai-policy-predictive-toggle"),
     ).toHaveTextContent(/Enable/i);
+  });
+
+  it("does not present a default policy state while the authoritative policy is loading", async () => {
+    capabilityMock.mockReturnValue(true);
+    let resolvePolicy!: (value: {
+      company_id: string;
+      predictive_bench_strategy_enabled: boolean;
+      workspace_assistant_enabled: boolean;
+      policy_version: number;
+    }) => void;
+    getMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolvePolicy = resolve;
+        }),
+    );
+    renderCard();
+
+    const toggle = await screen.findByTestId("tenant-ai-policy-assistant-toggle");
+    expect(toggle).toBeDisabled();
+    expect(screen.getAllByText("Loading policy…")).toHaveLength(2);
+
+    resolvePolicy({
+      company_id: "c-1",
+      predictive_bench_strategy_enabled: false,
+      workspace_assistant_enabled: true,
+      policy_version: 9,
+    });
+    await waitFor(() => expect(toggle).toBeEnabled());
+    expect(screen.getByText("Enabled")).toBeInTheDocument();
   });
 
   it("flips to Predictive on click and calls update endpoint", async () => {
@@ -103,12 +133,9 @@ describe("TenantAIPolicyCard (PG-107 v1.5)", () => {
     });
     const user = userEvent.setup();
     renderCard();
-    await waitFor(() =>
-      expect(screen.getByTestId("tenant-ai-policy-card")).toBeInTheDocument(),
-    );
-    await user.click(
-      screen.getByTestId("tenant-ai-policy-predictive-toggle"),
-    );
+    const predictiveToggle = screen.getByTestId("tenant-ai-policy-predictive-toggle");
+    await waitFor(() => expect(predictiveToggle).toBeEnabled());
+    await user.click(predictiveToggle);
     await waitFor(() =>
       expect(updateMock).toHaveBeenCalledWith({
         predictive_bench_strategy_enabled: true,
@@ -137,7 +164,9 @@ describe("TenantAIPolicyCard (PG-107 v1.5)", () => {
     const user = userEvent.setup();
     renderCard();
 
-    await user.click(await screen.findByTestId("tenant-ai-policy-assistant-toggle"));
+    const assistantToggle = await screen.findByTestId("tenant-ai-policy-assistant-toggle");
+    await waitFor(() => expect(assistantToggle).toBeEnabled());
+    await user.click(assistantToggle);
     await waitFor(() =>
       expect(updateMock).toHaveBeenCalledWith({
         workspace_assistant_enabled: true,
@@ -159,7 +188,9 @@ describe("TenantAIPolicyCard (PG-107 v1.5)", () => {
     const user = userEvent.setup();
     renderCard();
 
-    await user.click(await screen.findByTestId("tenant-ai-policy-assistant-toggle"));
+    const assistantToggle = await screen.findByTestId("tenant-ai-policy-assistant-toggle");
+    await waitFor(() => expect(assistantToggle).toBeEnabled());
+    await user.click(assistantToggle);
     await waitFor(() => expect(updateMock).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(getMock).toHaveBeenCalledTimes(2));
   });

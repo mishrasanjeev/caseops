@@ -265,6 +265,7 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
     await page.goto(`${BASE_URL}/app/admin`);
     const toggle = page.getByTestId("tenant-ai-policy-assistant-toggle");
     await expect(toggle).toBeVisible();
+    await expect(toggle).toBeEnabled();
 
     if ((await toggle.getAttribute("aria-pressed")) === "true") {
       const disabled = page.waitForResponse(
@@ -285,6 +286,7 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
     await recoveryLink.click();
     await expect(page).toHaveURL(/\/app\/admin(?:[/?]|$)/);
     const ownerToggle = page.getByTestId("tenant-ai-policy-assistant-toggle");
+    await expect(ownerToggle).toBeEnabled();
     await expect(ownerToggle).toHaveAttribute("aria-pressed", "false");
     const enabled = page.waitForResponse(
       (response) =>
