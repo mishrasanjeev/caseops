@@ -13,19 +13,26 @@ import {
   type Page,
 } from "@playwright/test";
 import { spawnSync } from "node:child_process";
+import path from "node:path";
+
+import { e2eEnv, repoRoot } from "./support/env";
 
 const envOr = (key: string, fallback: string): string =>
   (process.env[key] ?? "").trim() || fallback;
 
 const BASE_URL = envOr(
   "PROD_BASE_URL",
-  envOr("CASEOPS_WEB_BASE_URL", "http://127.0.0.1:13100"),
+  envOr("CASEOPS_WEB_BASE_URL", "http://127.0.0.1:3100"),
 );
-const IS_LOCAL = ["127.0.0.1", "localhost"].includes(new URL(BASE_URL).hostname);
+const IS_LOCAL = ["127.0.0.1", "localhost"].includes(
+  new URL(BASE_URL).hostname,
+);
+const IS_DOCKER_LOCAL =
+  IS_LOCAL && Boolean(envOr("CASEOPS_E2E_DOCKER_PROJECT", ""));
 const API_BASE_URL = envOr(
   "PROD_API_BASE_URL",
   IS_LOCAL
-    ? `http://127.0.0.1:${envOr("CASEOPS_E2E_API_PORT", "18100")}`
+    ? `http://127.0.0.1:${envOr("CASEOPS_E2E_API_PORT", "8000")}`
     : "https://api.caseops.ai",
 );
 const RUN_ID = `${Date.now().toString(36)}-${Math.random()
@@ -37,7 +44,9 @@ const COMPANY_SLUG = envOr(
 );
 const TESTER_EMAIL = envOr(
   "CASEOPS_RAM_PROD_EMAIL",
-  IS_LOCAL ? `ram-sep02-${RUN_ID.toLowerCase()}@example.com` : "hari.gupta@gmail.com",
+  IS_LOCAL
+    ? `ram-sep02-${RUN_ID.toLowerCase()}@example.com`
+    : "hari.gupta@gmail.com",
 );
 const LOCAL_PASSWORD = "RamSep02Local!";
 
@@ -78,7 +87,8 @@ async function expectStatus(
   expected: number,
   label: string,
 ): Promise<void> {
-  const detail = response.status() === expected ? "" : ` ${await response.text()}`;
+  const detail =
+    response.status() === expected ? "" : ` ${await response.text()}`;
   expect(response.status(), `${label}.${detail}`).toBe(expected);
 }
 
@@ -129,8 +139,10 @@ function seedVerifiedLocalStatute(): void {
   if (!IS_LOCAL) return;
   const project = envOr("CASEOPS_E2E_DOCKER_PROJECT", "");
   const composeFile = envOr("CASEOPS_E2E_DOCKER_COMPOSE_FILE", "");
-  if (!project || !composeFile) {
-    throw new Error("Docker project metadata is required to seed the local statute fixture.");
+  if (Boolean(project) !== Boolean(composeFile)) {
+    throw new Error(
+      "Docker project and compose-file metadata must be supplied together.",
+    );
   }
   const script = `
 from datetime import UTC, datetime
@@ -189,13 +201,48 @@ with get_session_factory()() as session:
         session.add(section)
     session.commit()
 `;
-  const seeded = spawnSync(
-    "docker",
-    ["compose", "-p", project, "-f", composeFile, "exec", "-T", "api", "python", "-c", script],
-    { encoding: "utf8" },
-  );
+  const seeded = project
+    ? spawnSync(
+        "docker",
+        [
+          "compose",
+          "-p",
+          project,
+          "-f",
+          composeFile,
+          "exec",
+          "-T",
+          "api",
+          "python",
+          "-c",
+          script,
+        ],
+        { encoding: "utf8" },
+      )
+    : spawnSync(
+        process.platform === "win32"
+          ? path.join(repoRoot, "apps", "api", ".venv", "Scripts", "python.exe")
+          : path.join(repoRoot, "apps", "api", ".venv", "bin", "python"),
+        ["-c", script],
+        {
+          cwd: repoRoot,
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            ...e2eEnv,
+            PYTHONPATH: [
+              path.join(repoRoot, "apps", "api", "src"),
+              process.env.PYTHONPATH,
+            ]
+              .filter(Boolean)
+              .join(path.delimiter),
+          },
+        },
+      );
   if (seeded.status !== 0) {
-    throw new Error(`Could not seed verified statute fixture.\n${seeded.stdout}\n${seeded.stderr}`);
+    throw new Error(
+      `Could not seed verified statute fixture.\n${seeded.stdout}\n${seeded.stderr}`,
+    );
   }
 }
 
@@ -223,28 +270,37 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
 
   test.afterAll(async () => {
     if (matter?.id && matter.status !== "disposed") {
-      const current = await api.get(`${API_BASE_URL}/api/matters/${matter.id}`, {
-        headers: headers(),
-      });
+      const current = await api.get(
+        `${API_BASE_URL}/api/matters/${matter.id}`,
+        {
+          headers: headers(),
+        },
+      );
       if (current.status() === 200) {
         const row = (await current.json()) as MatterRecord;
         if (row.status !== "disposed") {
-          await api.patch(`${API_BASE_URL}/api/matters/${row.id}/lifecycle/status`, {
-            headers: headers(),
-            data: {
-              to_status: "disposed",
-              expected_from_status: row.status,
-              expected_updated_at: row.updated_at,
-              reason: "Close the September 02 regression fixture after validation.",
+          await api.patch(
+            `${API_BASE_URL}/api/matters/${row.id}/lifecycle/status`,
+            {
+              headers: headers(),
+              data: {
+                to_status: "disposed",
+                expected_from_status: row.status,
+                expected_updated_at: row.updated_at,
+                reason:
+                  "Close the September 02 regression fixture after validation.",
+              },
             },
-          });
+          );
         }
       }
     }
     await api.dispose();
   });
 
-  test("exact production release identifies the deployed revision", async ({ page }) => {
+  test("exact production release identifies the deployed revision", async ({
+    page,
+  }) => {
     test.skip(IS_LOCAL, "Production-only exact release gate.");
     const expectedSha = envOr("CASEOPS_EXPECTED_RELEASE_SHA", "").toLowerCase();
     expect(expectedSha).toMatch(/^[0-9a-f]{40}$/);
@@ -274,14 +330,22 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
           response.request().method() === "PATCH",
       );
       await toggle.click();
-      await expectStatus(await disabled, 200, "disable assistant through owner control");
+      await expectStatus(
+        await disabled,
+        200,
+        "disable assistant through owner control",
+      );
       await expect(toggle).toHaveAttribute("aria-pressed", "false");
       await expect(toggle).toBeEnabled();
     }
     await page.goto(`${BASE_URL}/app/assistant`);
-    await page.getByRole("textbox", { name: "Find workspace records" }).fill("workspace");
+    await page
+      .getByRole("textbox", { name: "Find workspace records" })
+      .fill("workspace");
     await page.getByRole("button", { name: "Find permitted records" }).click();
-    const recoveryLink = page.getByRole("link", { name: "Admin → AI controls" });
+    const recoveryLink = page.getByRole("link", {
+      name: "Admin → AI controls",
+    });
     await expect(recoveryLink).toBeVisible();
     await recoveryLink.click();
     await expect(page).toHaveURL(/\/app\/admin(?:[/?]|$)/);
@@ -295,14 +359,21 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
     );
     await ownerToggle.click();
     const enabledResponse = await enabled;
-    await expectStatus(enabledResponse, 200, "enable assistant through owner control");
+    await expectStatus(
+      enabledResponse,
+      200,
+      "enable assistant through owner control",
+    );
     expect(enabledResponse.request().postDataJSON()).toMatchObject({
       workspace_assistant_enabled: true,
     });
     await expect(ownerToggle).toHaveAttribute("aria-pressed", "true");
-    const persisted = await api.get(`${API_BASE_URL}/api/admin/tenant-ai-policy`, {
-      headers: headers(),
-    });
+    const persisted = await api.get(
+      `${API_BASE_URL}/api/admin/tenant-ai-policy`,
+      {
+        headers: headers(),
+      },
+    );
     await expectStatus(persisted, 200, "read persisted assistant policy");
     expect((await persisted.json()).workspace_assistant_enabled).toBe(true);
   });
@@ -324,12 +395,16 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
     };
     expect(readinessBody.missing_approval_keys).toEqual([]);
 
-    const operations = await api.get(`${API_BASE_URL}/api/admin/provider-operations/readiness`, {
-      headers: headers(),
-    });
+    const operations = await api.get(
+      `${API_BASE_URL}/api/admin/provider-operations/readiness`,
+      {
+        headers: headers(),
+      },
+    );
     await expectStatus(operations, 200, "provider operations readiness");
-    const indianKanoon = ((await operations.json()).providers as Array<Record<string, unknown>>)
-      .find((provider) => provider.provider === "indian-kanoon");
+    const indianKanoon = (
+      (await operations.json()).providers as Array<Record<string, unknown>>
+    ).find((provider) => provider.provider === "indian-kanoon");
     expect(indianKanoon).toBeTruthy();
     expect(indianKanoon?.required_approval_keys).toEqual([]);
     expect(indianKanoon?.missing_approval_keys).toEqual([]);
@@ -338,10 +413,14 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
     await page.goto(`${BASE_URL}/app/research`);
     await page.getByTestId("research-source-indian-kanoon").click();
     const readinessCopy = page.getByTestId("research-indian-kanoon-readiness");
-    await expect(readinessCopy).not.toContainText("Checking licensed-source readiness");
+    await expect(readinessCopy).not.toContainText(
+      "Checking licensed-source readiness",
+    );
     const copy = await readinessCopy.innerText();
     expect(copy.toLowerCase()).not.toContain("approval");
-    expect(copy).toMatch(/disabled|missing configuration|invalid or expired|cost profiles|active/);
+    expect(copy).toMatch(
+      /disabled|missing configuration|invalid or expired|cost profiles|active/,
+    );
   });
 
   test("BUG-006: Add Reference offers only Acts with verified sections and attaches one", async ({
@@ -352,22 +431,34 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
     });
     await expectStatus(catalogResponse, 200, "read verified statute catalog");
     const catalog = (await catalogResponse.json()) as {
-      statutes: Array<{ id: string; short_name: string; section_count: number }>;
+      statutes: Array<{
+        id: string;
+        short_name: string;
+        section_count: number;
+      }>;
     };
-    const selectable = catalog.statutes.filter((statute) => statute.section_count > 0);
+    const selectable = catalog.statutes.filter(
+      (statute) => statute.section_count > 0,
+    );
 
     await signIn(page);
     await page.goto(`${BASE_URL}/app/matters/${matter.id}/statutes`);
     await page.getByTestId("matter-statute-add-trigger").click();
     const actSelect = page.getByTestId("matter-statute-act-select");
-    await expect(actSelect.locator("option")).toHaveCount(selectable.length + 1);
-    for (const unavailable of catalog.statutes.filter((row) => row.section_count === 0)) {
-      await expect(actSelect.locator(`option[value="${unavailable.id}"]`)).toHaveCount(0);
+    await expect(actSelect.locator("option")).toHaveCount(
+      selectable.length + 1,
+    );
+    for (const unavailable of catalog.statutes.filter(
+      (row) => row.section_count === 0,
+    )) {
+      await expect(
+        actSelect.locator(`option[value="${unavailable.id}"]`),
+      ).toHaveCount(0);
     }
     if (selectable.length === 0) {
-      await expect(page.getByTestId("matter-statute-no-selectable-acts")).toContainText(
-        "No Acts currently have source-verified sections",
-      );
+      await expect(
+        page.getByTestId("matter-statute-no-selectable-acts"),
+      ).toContainText("No Acts currently have source-verified sections");
       return;
     }
     const sectionsResponsePromise = page.waitForResponse(
@@ -380,13 +471,19 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
     const sectionsResponse = await sectionsResponsePromise;
     await expectStatus(sectionsResponse, 200, "load selected Act sections");
     const sectionSelect = page.getByTestId("matter-statute-section-select");
-    await expect.poll(() => sectionSelect.locator("option").count()).toBeGreaterThan(1);
-    const firstSection = await sectionSelect.locator("option").nth(1).getAttribute("value");
+    await expect
+      .poll(() => sectionSelect.locator("option").count())
+      .toBeGreaterThan(1);
+    const firstSection = await sectionSelect
+      .locator("option")
+      .nth(1)
+      .getAttribute("value");
     expect(firstSection).toBeTruthy();
     await sectionSelect.selectOption(firstSection!);
     const attach = page.waitForResponse(
       (response) =>
-        new URL(response.url()).pathname === `/api/matters/${matter.id}/statute-references` &&
+        new URL(response.url()).pathname ===
+          `/api/matters/${matter.id}/statute-references` &&
         response.request().method() === "POST",
     );
     await page.getByTestId("matter-statute-add-submit").click();
@@ -398,7 +495,9 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
   }) => {
     await signIn(page);
     await page.route(
-      new RegExp(`/api/matters/${matter.id}/litigation-intelligence/review(?:\\?.*)?$`),
+      new RegExp(
+        `/api/matters/${matter.id}/litigation-intelligence/review(?:\\?.*)?$`,
+      ),
       (route) =>
         route.fulfill({
           contentType: "application/json",
@@ -418,7 +517,8 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
                 id: "affidavit-question:ram902",
                 item_type: "affidavit_question",
                 title: "Verify the supporting attachment",
-                description: "Canonical source-action target fields must survive validation.",
+                description:
+                  "Canonical source-action target fields must survive validation.",
                 status: "review_required",
                 priority: "high",
                 confidence_label: "high",
@@ -438,8 +538,7 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
                     label: "Open source",
                     open_url:
                       "/api/source-actions/targets/matter_attachment/attachment-ram902/open",
-                    source_reference:
-                      `/api/matters/${matter.id}/attachments/attachment-ram902/download`,
+                    source_reference: `/api/matters/${matter.id}/attachments/attachment-ram902/download`,
                     reason: null,
                     opens_new_tab: true,
                     target_type: "matter_attachment",
@@ -458,11 +557,17 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
           }),
         }),
     );
-    await page.goto(`${BASE_URL}/app/matters/${matter.id}/litigation-intelligence`);
-    await expect(page.getByText("Verify the supporting attachment")).toBeVisible();
+    await page.goto(
+      `${BASE_URL}/app/matters/${matter.id}/litigation-intelligence`,
+    );
+    await expect(
+      page.getByText("Verify the supporting attachment"),
+    ).toBeVisible();
     await expect(page.getByTestId("source-action-open")).toBeVisible();
     await expect(page.getByTestId("source-action-report")).toBeVisible();
-    await expect(page.getByText("Could not load litigation intelligence review")).toHaveCount(0);
+    await expect(
+      page.getByText("Could not load litigation intelligence review"),
+    ).toHaveCount(0);
   });
 
   test("BUG-004: strategy generation never reaches the invalid strict-schema 400", async () => {
@@ -484,7 +589,7 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
   test("BUG-001: transient case-tracking failures do not require administrator replay", async ({
     page,
   }) => {
-    if (IS_LOCAL) {
+    if (IS_DOCKER_LOCAL) {
       await signIn(page);
       await page.goto(`${BASE_URL}/app/case-tracking`);
       const caseNumber = `WP(C) ${Date.now().toString().slice(-6)}/2026`;
@@ -495,25 +600,36 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
           response.request().method() === "POST",
       );
       await page.getByTestId("case-tracking-search-submit").click();
-      await expectStatus(await searched, 200, "search by case number through Docker provider");
-      await expect(page.getByText("Local Docker Petitioner v Local Docker Respondent")).toBeVisible();
+      await expectStatus(
+        await searched,
+        200,
+        "search by case number through Docker provider",
+      );
+      await expect(
+        page.getByText("Local Docker Petitioner v Local Docker Respondent"),
+      ).toBeVisible();
       return;
     }
 
-    const bookmarks = await api.get(`${API_BASE_URL}/api/case-tracking/bookmarks`, {
-      headers: headers(),
-    });
-    await expectStatus(bookmarks, 200, "read production tracked cases");
-    const rows = ((await bookmarks.json()).bookmarks as Array<{
-      id: string;
-      tracked_case: {
-        response_class: string | null;
-        freshness_status: string;
-        provider_health: string;
-        manual_refresh_allowed: boolean;
-        manual_refresh_disabled_reason: string | null;
-      };
-    }>).filter((row) =>
+    const bookmarks = await api.get(
+      `${API_BASE_URL}/api/case-tracking/bookmarks`,
+      {
+        headers: headers(),
+      },
+    );
+    await expectStatus(bookmarks, 200, "read tracked cases");
+    const rows = (
+      (await bookmarks.json()).bookmarks as Array<{
+        id: string;
+        tracked_case: {
+          response_class: string | null;
+          freshness_status: string;
+          provider_health: string;
+          manual_refresh_allowed: boolean;
+          manual_refresh_disabled_reason: string | null;
+        };
+      }>
+    ).filter((row) =>
       ["provider_error", "rate_limit", "timeout"].includes(
         row.tracked_case.response_class ?? "",
       ),
@@ -525,7 +641,9 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
         /administrator|review or replay/i,
       );
     }
-    const recoverable = rows.find((row) => row.tracked_case.manual_refresh_allowed);
+    const recoverable = rows.find(
+      (row) => row.tracked_case.manual_refresh_allowed,
+    );
     if (recoverable) {
       const refreshed = await api.post(
         `${API_BASE_URL}/api/case-tracking/bookmarks/${recoverable.id}/refresh`,
