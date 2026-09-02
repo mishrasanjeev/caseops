@@ -25,25 +25,26 @@ from caseops_api.services.private_retrieval import (
     PrivateRetrievalInvariantError,
     ProjectionScopeInput,
     build_private_projection_event_key,
+    capture_private_saved_source_manifest,
     create_shadow_private_generation,
     ensure_active_private_generation,
     hydrate_private_projection_results,
     mark_private_generation_ready,
     prefilter_private_projection_ids,
     private_retrieval_cache_key,
+    private_saved_source_manifest_is_current,
     private_source_version,
     propagate_private_projection_change,
     retrieve_private_content,
     upsert_private_projection,
 )
+from caseops_api.services.private_retrieval_jobs import rebuild_private_index
 from caseops_api.services.session_context import SessionContext
 from tests.test_auth_company import auth_headers, bootstrap_company
 from tests.test_workspace_assistant_qa import _ask, _enable_assistant, _matter, _session
 
 
-def _context(
-    session: Session, *, company_id: str, membership_id: str
-) -> SessionContext:
+def _context(session: Session, *, company_id: str, membership_id: str) -> SessionContext:
     company = session.get(Company, company_id)
     membership = session.get(CompanyMembership, membership_id)
     assert company is not None and membership is not None
@@ -109,6 +110,76 @@ def test_private_source_version_normalizes_persisted_utc_timestamps() -> None:
     assert naive_version == "7:2026-08-31T12:30:15.123456+00:00"
 
 
+def test_saved_manifest_survives_only_an_equivalent_unrelated_rebuild(
+    client: TestClient,
+) -> None:
+    """Unrelated source creation must not revoke an unchanged saved source.
+
+    Production rebuilds the tenant shadow after new Matters are created. The
+    old implementation compared generation IDs and made every saved Draft
+    unreadable even when its exact source/version/hash and ACL were unchanged.
+    A later event on the saved Matter must still tombstone the retired proof
+    and fail closed.
+    """
+
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    company_id = str(bootstrap["company"]["id"])
+    membership_id = str(bootstrap["membership"]["id"])
+    saved_matter = _matter(client, token, "PRIVATE-SAVED-001")
+
+    with get_session_factory()() as session:
+        rebuild_private_index(session, company_id=company_id, activate=True)
+        context = _context(
+            session,
+            company_id=company_id,
+            membership_id=membership_id,
+        )
+        manifest = capture_private_saved_source_manifest(
+            session,
+            context=context,
+            sources=(("matter", str(saved_matter["id"])),),
+        )
+        assert manifest
+        assert private_saved_source_manifest_is_current(
+            session,
+            context=context,
+            manifest=manifest,
+        )
+
+    _matter(client, token, "PRIVATE-UNRELATED-002")
+    with get_session_factory()() as session:
+        rebuild_private_index(session, company_id=company_id, activate=True)
+        context = _context(
+            session,
+            company_id=company_id,
+            membership_id=membership_id,
+        )
+        assert private_saved_source_manifest_is_current(
+            session,
+            context=context,
+            manifest=manifest,
+        )
+
+    restricted = client.post(
+        f"/api/matters/{saved_matter['id']}/access/restricted",
+        headers=auth_headers(token),
+        json={"restricted": True},
+    )
+    assert restricted.status_code == 200, restricted.text
+    with get_session_factory()() as session:
+        context = _context(
+            session,
+            company_id=company_id,
+            membership_id=membership_id,
+        )
+        assert not private_saved_source_manifest_is_current(
+            session,
+            context=context,
+            manifest=manifest,
+        )
+
+
 def test_acl_prefilter_hydration_revocation_and_cross_tenant_are_fail_closed(
     client: TestClient,
 ) -> None:
@@ -160,12 +231,15 @@ def test_acl_prefilter_hydration_revocation_and_cross_tenant_are_fail_closed(
             query_embedding=(1.0, 0.0, 0.0),
         )
         assert [row.projection_id for row in owner_results] == [projection.id]
-        assert retrieve_private_content(
-            session,
-            context=member_context,
-            query="trademark strategy",
-            query_embedding=(1.0, 0.0, 0.0),
-        ) == ()
+        assert (
+            retrieve_private_content(
+                session,
+                context=member_context,
+                query="trademark strategy",
+                query_embedding=(1.0, 0.0, 0.0),
+            )
+            == ()
+        )
 
         # A forged context from another company can neither prefilter nor hydrate
         # a known projection ID, so it cannot infer label, count, or snippet.
@@ -186,15 +260,21 @@ def test_acl_prefilter_hydration_revocation_and_cross_tenant_are_fail_closed(
             company_id=str(other.json()["company"]["id"]),
             membership_id=str(other.json()["membership"]["id"]),
         )
-        assert prefilter_private_projection_ids(
-            session, context=other_context, query="trademark strategy"
-        ) == ()
-        assert hydrate_private_projection_results(
-            session,
-            context=other_context,
-            projection_ids=[projection.id],
-            query="trademark strategy",
-        ) == ()
+        assert (
+            prefilter_private_projection_ids(
+                session, context=other_context, query="trademark strategy"
+            )
+            == ()
+        )
+        assert (
+            hydrate_private_projection_results(
+                session,
+                context=other_context,
+                projection_ids=[projection.id],
+                query="trademark strategy",
+            )
+            == ()
+        )
 
     grant = client.post(
         f"/api/matters/{matter['id']}/access/grants",
@@ -244,12 +324,15 @@ def test_acl_prefilter_hydration_revocation_and_cross_tenant_are_fail_closed(
             filters={"matter_id": matter_row.id},
         )
         assert [row.projection_id for row in vector_only] == [replacement.id]
-        assert prefilter_private_projection_ids(
-            session,
-            context=member_context,
-            query="trademark strategy",
-            filters={"matter_id": "00000000-0000-0000-0000-000000000000"},
-        ) == ()
+        assert (
+            prefilter_private_projection_ids(
+                session,
+                context=member_context,
+                query="trademark strategy",
+                filters={"matter_id": "00000000-0000-0000-0000-000000000000"},
+            )
+            == ()
+        )
         with pytest.raises(PrivateRetrievalInvariantError):
             prefilter_private_projection_ids(
                 session,
@@ -266,12 +349,15 @@ def test_acl_prefilter_hydration_revocation_and_cross_tenant_are_fail_closed(
         assert membership is not None
         membership.role = "viewer"
         session.flush()
-        assert hydrate_private_projection_results(
-            session,
-            context=member_context,
-            projection_ids=candidate_ids,
-            query="trademark strategy",
-        ) == ()
+        assert (
+            hydrate_private_projection_results(
+                session,
+                context=member_context,
+                projection_ids=candidate_ids,
+                query="trademark strategy",
+            )
+            == ()
+        )
         assert hydrate_private_projection_results(
             session,
             context=member_context,
@@ -292,12 +378,15 @@ def test_acl_prefilter_hydration_revocation_and_cross_tenant_are_fail_closed(
             company_id=company_id,
             membership_id=member_id,
         )
-        assert hydrate_private_projection_results(
-            session,
-            context=member_context,
-            projection_ids=candidate_ids,
-            query="trademark strategy",
-        ) == ()
+        assert (
+            hydrate_private_projection_results(
+                session,
+                context=member_context,
+                projection_ids=candidate_ids,
+                query="trademark strategy",
+            )
+            == ()
+        )
         tombstone = session.get(PrivateIndexProjection, replacement.id)
         assert tombstone is not None
         assert tombstone.is_tombstoned is True
@@ -415,11 +504,14 @@ def test_shadow_generation_receives_tombstones_before_atomic_activation(
         session.commit()
         assert activated.state == "active"
         context = _context(session, company_id=company_id, membership_id=membership_id)
-        assert retrieve_private_content(
-            session,
-            context=context,
-            query="shadow generation private text",
-        ) == ()
+        assert (
+            retrieve_private_content(
+                session,
+                context=context,
+                query="shadow generation private text",
+            )
+            == ()
+        )
 
 
 def test_authoritative_matter_disposal_and_reopen_never_resurrect_projection(
@@ -496,11 +588,14 @@ def test_authoritative_matter_disposal_and_reopen_never_resurrect_projection(
         )
         persisted = session.get(PrivateIndexProjection, projection.id)
         assert persisted is not None and persisted.is_tombstoned
-        assert retrieve_private_content(
-            session,
-            context=context,
-            query="private trademark analysis",
-        ) == ()
+        assert (
+            retrieve_private_content(
+                session,
+                context=context,
+                query="private trademark analysis",
+            )
+            == ()
+        )
         assert session.scalar(
             select(PrivateProjectionEvent.id).where(
                 PrivateProjectionEvent.company_id == company_id,

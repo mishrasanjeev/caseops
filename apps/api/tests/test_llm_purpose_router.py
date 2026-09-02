@@ -5,6 +5,7 @@ recommendations run fine on Sonnet; metadata extraction scales on
 Haiku. `build_provider(purpose=...)` picks the configured model for
 each; the global `llm_model` is the fallback.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -58,10 +59,7 @@ def test_recommendations_and_hearing_pack_resolve_independently(
 
     assert build_provider(purpose=PURPOSE_RECOMMENDATIONS).model == "claude-sonnet-4-6"
     assert build_provider(purpose=PURPOSE_HEARING_PACK).model == "claude-sonnet-4-6"
-    assert (
-        build_provider(purpose=PURPOSE_METADATA_EXTRACT).model
-        == "claude-haiku-4-5-20251001"
-    )
+    assert build_provider(purpose=PURPOSE_METADATA_EXTRACT).model == "claude-haiku-4-5-20251001"
 
 
 def test_unset_purpose_falls_back_to_global_model(
@@ -96,11 +94,11 @@ def test_each_structured_purpose_gets_its_configured_max_tokens_ceiling(
     assert max_tokens_for_purpose(None) == 2048
 
 
-def test_openai_metadata_extraction_disables_sdk_retries(
+def test_openai_background_and_interactive_calls_use_bounded_sdk_retries(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Quota exhaustion must reach the corpus driver's stop signal once."""
-    captured_retries: list[tuple[str, int]] = []
+    """Retry multiplication must not cross the surrounding job/request budget."""
+    captured_budgets: list[tuple[str, float, int]] = []
 
     class _FakeOpenAIProvider:
         name = "openai"
@@ -116,7 +114,7 @@ def test_openai_metadata_extraction_disables_sdk_retries(
             assert api_key == "sk-test"
             assert timeout_seconds > 0
             self.model = model
-            captured_retries.append((model, max_retries))
+            captured_budgets.append((model, timeout_seconds, max_retries))
 
     monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "openai")
     monkeypatch.setenv("CASEOPS_LLM_API_KEY", "sk-test")
@@ -131,4 +129,7 @@ def test_openai_metadata_extraction_disables_sdk_retries(
     build_provider(purpose=PURPOSE_METADATA_EXTRACT)
     build_provider(purpose=PURPOSE_RECOMMENDATIONS)
 
-    assert captured_retries == [("gpt-5-mini", 0), ("gpt-5.1", 1)]
+    assert captured_budgets == [
+        ("gpt-5-mini", 60.0, 0),
+        ("gpt-5.1", 100.0, 0),
+    ]

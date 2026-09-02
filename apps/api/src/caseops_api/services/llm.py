@@ -1090,24 +1090,18 @@ def _build_inner_provider(settings: object, purpose: str | None) -> LLMProvider:
         raise LLMProviderError(
             f"CASEOPS_LLM_API_KEY must be set when CASEOPS_LLM_PROVIDER={provider_name!r}.",
         )
-    # BUG-015 (Ram 2026-04-26 Critical reopen): the recommendations
-    # endpoint hung for the full Cloud Run 300-second timeout (504),
-    # surfacing in the browser as "Could not reach the workspace API".
-    # Cloud Run access logs confirmed: every recommendation POST
-    # returned 504 at 300.0006s. Worst-case Anthropic call with the
-    # default timeout=60s + max_retries=2 = up to 180s per provider;
-    # times Sonnet primary + Haiku fallback + OpenAI fallback = ~9 min.
-    # Cap the per-purpose worst case so the handler fits inside Cloud
-    # Run's 300s budget with headroom for citation-verification + DB.
-    # 2026-04-30: budgets recalibrated for gpt-5.1 (sole provider).
-    # Anthropic Haiku 4.5 typical was 3-5s so 30s + 1 retry was generous.
-    # gpt-5.1 with reasoning_effort=low typically 15-30s, p95 60-90s,
-    # so the prior budget was tight at the wire (test 1/2 just timed
-    # out at 30s on prod). Cloud Run's 300s request ceiling sets the
-    # ceiling; leave 60s headroom for retrieval + verification + DB.
+    # BUG-015 / Ram 2026-09-02 BUG-004: an SDK timeout is per attempt,
+    # not an end-to-end request budget. Production recommendations run
+    # behind a 120-second Cloud Run deadline. A 90-second OpenAI attempt
+    # plus one automatic SDK retry therefore reached the platform 504
+    # before CaseOps could return a controlled provider error. Keep the
+    # interactive recommendation call to one attempt of at most 100 seconds,
+    # leaving 20 seconds for bounded retrieval, verification, persistence,
+    # and response serialization. Other purposes retain their independently
+    # measured budgets.
     per_purpose_timeout: dict[str, float] = {
         PURPOSE_ASSISTANT: 60.0,
-        PURPOSE_RECOMMENDATIONS: 90.0,
+        PURPOSE_RECOMMENDATIONS: 100.0,
         PURPOSE_HEARING_PACK: 90.0,
         PURPOSE_METADATA_EXTRACT: 60.0,
         # Drafting can legitimately need longer responses (full appeal
@@ -1117,7 +1111,7 @@ def _build_inner_provider(settings: object, purpose: str | None) -> LLMProvider:
     }
     per_purpose_retries: dict[str, int] = {
         PURPOSE_ASSISTANT: 1,
-        PURPOSE_RECOMMENDATIONS: 1,
+        PURPOSE_RECOMMENDATIONS: 0,
         PURPOSE_HEARING_PACK: 1,
         PURPOSE_METADATA_EXTRACT: 1,
         PURPOSE_DRAFTING: 1,

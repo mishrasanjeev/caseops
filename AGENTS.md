@@ -191,3 +191,14 @@ requirements when using the fallback.
   section-level link. Pin and execute the current seed image before production
   traffic, then assert a positive verified provision through API and Playwright;
   never satisfy acceptance only with a synthetic local statute row.
+- A private-output manifest must distinguish a relevant source/access change
+  from a benign shadow-generation rebuild. Reauthorize an unchanged saved
+  source only when the retired projection is not tombstoned and the active
+  generation has the exact same complete source/type/id/version/hash multiset
+  under the current ACL; relevant source, access, or tombstone events remain
+  fail-closed.
+- A synchronous interactive AI call in an async route must run off the event
+  loop, and its total provider budget must fit inside the platform deadline.
+  SDK retries must not multiply a per-attempt timeout past Cloud Run's limit;
+  after a provider timeout, regression acceptance must also prove an unrelated
+  endpoint remains responsive before a single bounded user-level retry.
