@@ -156,3 +156,9 @@ requirements when using the fallback.
   paths, keep founder seeding idempotent, and never swallow a database exception
   while leaving the request session rollback-only. A PostgreSQL regression must
   hold the shared row lock while an unrelated tenant mutation still completes.
+- A schema-valid LLM response can still violate a legal-safety rule. Never
+  weaken the fail-closed detector or hide the failure with a browser retry.
+  Persist the rejected model-run evidence, revalidate tenant access, target
+  lifecycle, private-generation manifests, and frozen source versions, then
+  allow at most one server-side regeneration that does not echo the rejected
+  text. A second violation remains terminal and must retain its audit linkage.

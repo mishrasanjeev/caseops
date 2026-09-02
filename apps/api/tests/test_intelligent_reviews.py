@@ -19,6 +19,7 @@ from caseops_api.db.models import (
     DraftVersion,
     Matter,
     MatterStatus,
+    ModelRun,
     Recommendation,
     User,
 )
@@ -60,6 +61,35 @@ class StaticReviewProvider:
             completion_tokens=80,
             latency_ms=9,
         )
+
+
+class SequencedReviewProvider(StaticReviewProvider):
+    def __init__(self, payloads: list[dict]) -> None:
+        assert payloads
+        super().__init__(payloads[0])
+        self.payloads = payloads
+
+    def generate(self, messages: list[LLMMessage], **kwargs) -> LLMCompletion:
+        if self.called:
+            assert "SAFETY_RETRY" in messages[-1].content
+        self.payload = self.payloads[min(self.called, len(self.payloads) - 1)]
+        return super().generate(messages, **kwargs)
+
+
+class SourceMutatingUnsafeProvider(StaticReviewProvider):
+    def __init__(self, payload: dict, *, authority_id: str) -> None:
+        super().__init__(payload)
+        self.authority_id = authority_id
+
+    def generate(self, messages: list[LLMMessage], **kwargs) -> LLMCompletion:
+        completion = super().generate(messages, **kwargs)
+        factory = get_session_factory()
+        with factory() as session:
+            document = session.get(AuthorityDocument, self.authority_id)
+            assert document is not None
+            document.source_version = "official-v2"
+            session.commit()
+        return completion
 
 
 class NeverCalledProvider(StaticReviewProvider):
@@ -376,7 +406,6 @@ def test_intelligent_review_normal_selection_finalize_and_publish(
     assert "not exhaustive legal research" in review["non_exhaustive_disclaimer"]
     run_intelligent_review_job(review_id, provider=provider)
     assert provider.called == 1
-
 
     remove_contrary = client.patch(
         f"/api/research/reviews/{review_id}/authorities",
@@ -770,9 +799,10 @@ def test_intelligent_review_rejects_prohibited_output(client: TestClient, monkey
     bootstrap, matter_id, report_id, authority_ids, passages = _setup(client)
     payload = _review_payload(authority_ids, passages)
     payload["issue_summary"] = "The strategy is guaranteed to succeed."
+    provider = StaticReviewProvider(payload)
     monkeypatch.setattr(
         "caseops_api.services.intelligent_reviews.build_provider",
-        lambda *args, **kwargs: StaticReviewProvider(payload),
+        lambda *args, **kwargs: provider,
     )
     token = str(bootstrap["access_token"])
     review_id = _queue(
@@ -785,11 +815,85 @@ def test_intelligent_review_rejects_prohibited_output(client: TestClient, monkey
     review = client.get(f"/api/research/reviews/{review_id}", headers=auth_headers(token)).json()
     assert review["state"] == "failed"
     assert review["error_code"] == "prohibited_output:guarantee"
+    assert provider.called == 2
     factory = get_session_factory()
     with factory() as session:
         row = session.get(Recommendation, review_id)
         assert row is not None
         assert row.output_hash is None
+        rejected_runs = session.scalars(
+            select(ModelRun)
+            .where(
+                ModelRun.purpose == "intelligent_review",
+                ModelRun.status == "rejected_unsafe_output",
+                ModelRun.error == "prohibited_output:guarantee",
+            )
+            .order_by(ModelRun.created_at, ModelRun.id)
+        ).all()
+        assert len(rejected_runs) == 2
+        assert row.model_run_id == rejected_runs[-1].id
+
+
+def test_intelligent_review_recovers_after_one_unsafe_model_response(
+    client: TestClient, monkeypatch
+) -> None:
+    bootstrap, matter_id, report_id, authority_ids, passages = _setup(client)
+    unsafe = _review_payload(authority_ids, passages)
+    unsafe["issue_summary"] = "The strategy is guaranteed to succeed."
+    safe = _review_payload(authority_ids, passages)
+    provider = SequencedReviewProvider([unsafe, safe])
+    monkeypatch.setattr(
+        "caseops_api.services.intelligent_reviews.build_provider",
+        lambda *args, **kwargs: provider,
+    )
+
+    token = str(bootstrap["access_token"])
+    review_id = _queue(
+        client,
+        token=token,
+        matter_id=matter_id,
+        report_id=report_id,
+        authority_ids=authority_ids,
+    )
+    review = client.get(f"/api/research/reviews/{review_id}", headers=auth_headers(token)).json()
+
+    assert review["state"] == "ready", review
+    assert provider.called == 2
+    factory = get_session_factory()
+    with factory() as session:
+        runs = session.scalars(
+            select(ModelRun)
+            .where(ModelRun.purpose == "intelligent_review")
+            .order_by(ModelRun.created_at)
+        ).all()
+        assert [run.status for run in runs] == ["rejected_unsafe_output", "ok"]
+
+
+def test_intelligent_review_does_not_safety_retry_after_source_change(
+    client: TestClient, monkeypatch
+) -> None:
+    bootstrap, matter_id, report_id, authority_ids, passages = _setup(client)
+    unsafe = _review_payload(authority_ids, passages)
+    unsafe["issue_summary"] = "The strategy is guaranteed to succeed."
+    provider = SourceMutatingUnsafeProvider(unsafe, authority_id=authority_ids[0])
+    monkeypatch.setattr(
+        "caseops_api.services.intelligent_reviews.build_provider",
+        lambda *args, **kwargs: provider,
+    )
+
+    token = str(bootstrap["access_token"])
+    review_id = _queue(
+        client,
+        token=token,
+        matter_id=matter_id,
+        report_id=report_id,
+        authority_ids=authority_ids,
+    )
+    review = client.get(f"/api/research/reviews/{review_id}", headers=auth_headers(token)).json()
+
+    assert review["state"] == "abstained"
+    assert review["error_code"] == "source_changed_during_generation"
+    assert provider.called == 1
 
 
 def test_intelligent_review_preserves_stale_warning_and_prompt_injection_marker(

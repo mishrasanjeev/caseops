@@ -202,7 +202,7 @@ function reviewFixture(overrides: Record<string, unknown> = {}) {
       reasons: [],
     },
     review_template_version: "caseops-intelligent-review-v1",
-    prompt_policy_version: "caseops-legal-review-safety-v1",
+    prompt_policy_version: "caseops-legal-review-safety-v2",
     model_run_id: "run-1",
     output_hash: "output-hash",
     finalized_by_membership_id: null,

@@ -74,7 +74,7 @@ from caseops_api.services.source_actions import (
 logger = logging.getLogger(__name__)
 
 REVIEW_TEMPLATE_VERSION = "caseops-intelligent-review-v1"
-PROMPT_POLICY_VERSION = "caseops-legal-review-safety-v1"
+PROMPT_POLICY_VERSION = "caseops-legal-review-safety-v2"
 NON_EXHAUSTIVE_DISCLAIMER = (
     "This is source-bounded decision support, not exhaustive legal research. "
     "A lawyer must verify the authorities, current law, facts, and procedural posture."
@@ -534,8 +534,8 @@ def _build_messages(
         "Every authority passage must be a short verbatim substring of that authority's "
         "excerpt. Separate supporting and contrary authorities. Surface contradictions; "
         "do not reconcile them silently. Do not state judge favorability, outcome odds or "
-        "probabilities, guarantees, or exhaustive-research claims. If contrary authority "
-        "is absent, say so in gaps and add a lawyer check."
+        "probabilities, promises about results, or exhaustive-research claims. If contrary "
+        "authority is absent, say so in gaps and add a lawyer check."
     )
     user = (
         "CONTEXT_MANIFEST:\n"
@@ -766,8 +766,7 @@ def run_intelligent_review_job(
             private_manifest = [
                 item
                 for item in _json_load(review.source_manifest_json, [])
-                if isinstance(item, dict)
-                and item.get("schema") == PRIVATE_SAVED_SOURCE_SCHEMA
+                if isinstance(item, dict) and item.get("schema") == PRIVATE_SAVED_SOURCE_SCHEMA
             ]
             if not private_saved_source_manifest_is_current(
                 session,
@@ -816,69 +815,12 @@ def run_intelligent_review_job(
                 documents=available_documents,
             )
             active_provider = provider or build_provider(purpose=PURPOSE_RECOMMENDATIONS)
-            parsed, completion, generation_messages = _generate_review_response(
-                active_provider,
-                session=session,
-                messages=messages,
-                context=LLMCallContext(
-                    tenant_id=review.company_id,
-                    matter_id=review.matter_id,
-                    actor_membership_id=review.created_by_membership_id,
-                    purpose="recommendation:intelligent_review",
-                ),
-            )
-            prompt_hash = _prompt_hash(generation_messages)
-
-            review = session.scalar(
-                select(Recommendation).where(Recommendation.id == review_id).with_for_update()
-            )
-            if review is None or review.review_state != "running":
-                return
-            context = _load_context_for_worker(session, review.created_by_membership_id or "")
-            _load_target(
-                session,
-                context=context,
+            generation_context = LLMCallContext(
+                tenant_id=review.company_id,
                 matter_id=review.matter_id,
-                ip_docket_id=review.ip_docket_id,
-                ip_proceeding_id=review.ip_proceeding_id,
-                require_operational=True,
+                actor_membership_id=review.created_by_membership_id,
+                purpose="recommendation:intelligent_review",
             )
-            if not private_saved_source_manifest_is_current(
-                session,
-                context=context,
-                manifest=private_manifest,
-            ):
-                _mark_terminal_failure(
-                    session,
-                    review_id=review.id,
-                    state="abstained",
-                    code="private_source_changed_during_generation",
-                    detail=(
-                        "Private source access or generation changed while the review ran. "
-                        "Run a new review."
-                    ),
-                )
-                return
-            current_report = _load_report(
-                session,
-                company_id=review.company_id,
-                report_id=review.source_research_report_id or "",
-            )
-            current_documents = _source_documents(
-                session,
-                report_id=current_report.id,
-                authority_ids=authority_ids,
-            )
-            current_manifest = [_manifest_entry(document) for document in current_documents]
-            current_versions = [
-                (
-                    item["authority_document_id"],
-                    item["content_hash"],
-                    item["source_version"],
-                    item["source_access_state"],
-                )
-                for item in current_manifest
-            ]
             original_versions = [
                 (
                     item["authority_document_id"],
@@ -888,22 +830,88 @@ def run_intelligent_review_job(
                 )
                 for item in manifest
             ]
-            if current_versions != original_versions:
-                _mark_terminal_failure(
-                    session,
-                    review_id=review.id,
-                    state="abstained",
-                    code="source_changed_during_generation",
-                    detail=(
-                        "A selected source changed while the review ran. "
-                        "Run a new review from a fresh report."
-                    ),
+            attempt_messages = messages
+            for policy_attempt in range(2):
+                parsed, completion, generation_messages = _generate_review_response(
+                    active_provider,
+                    session=session,
+                    messages=attempt_messages,
+                    context=generation_context,
                 )
-                return
+                prompt_hash = _prompt_hash(generation_messages)
 
-            prohibited = _prohibited_category(parsed)
-            if prohibited:
-                _make_model_run(
+                # Re-check every authorization and source fence after each live
+                # model call.  The successful check after attempt one is also
+                # the precondition for a bounded policy retry; attempt two is
+                # checked again before any content can be persisted.
+                review = session.scalar(
+                    select(Recommendation).where(Recommendation.id == review_id).with_for_update()
+                )
+                if review is None or review.review_state != "running":
+                    return
+                context = _load_context_for_worker(session, review.created_by_membership_id or "")
+                _load_target(
+                    session,
+                    context=context,
+                    matter_id=review.matter_id,
+                    ip_docket_id=review.ip_docket_id,
+                    ip_proceeding_id=review.ip_proceeding_id,
+                    require_operational=True,
+                )
+                if not private_saved_source_manifest_is_current(
+                    session,
+                    context=context,
+                    manifest=private_manifest,
+                ):
+                    _mark_terminal_failure(
+                        session,
+                        review_id=review.id,
+                        state="abstained",
+                        code="private_source_changed_during_generation",
+                        detail=(
+                            "Private source access or generation changed while the review ran. "
+                            "Run a new review."
+                        ),
+                    )
+                    return
+                current_report = _load_report(
+                    session,
+                    company_id=review.company_id,
+                    report_id=review.source_research_report_id or "",
+                )
+                current_documents = _source_documents(
+                    session,
+                    report_id=current_report.id,
+                    authority_ids=authority_ids,
+                )
+                current_manifest = [_manifest_entry(document) for document in current_documents]
+                current_versions = [
+                    (
+                        item["authority_document_id"],
+                        item["content_hash"],
+                        item["source_version"],
+                        item["source_access_state"],
+                    )
+                    for item in current_manifest
+                ]
+                if current_versions != original_versions:
+                    _mark_terminal_failure(
+                        session,
+                        review_id=review.id,
+                        state="abstained",
+                        code="source_changed_during_generation",
+                        detail=(
+                            "A selected source changed while the review ran. "
+                            "Run a new review from a fresh report."
+                        ),
+                    )
+                    return
+
+                prohibited = _prohibited_category(parsed)
+                if prohibited is None:
+                    break
+
+                rejected_run = _make_model_run(
                     session,
                     review=review,
                     completion=completion,
@@ -911,18 +919,37 @@ def run_intelligent_review_job(
                     status_label="rejected_unsafe_output",
                     error=f"prohibited_output:{prohibited}",
                 )
+                review.model_run_id = rejected_run.id
                 session.commit()
-                _mark_terminal_failure(
-                    session,
-                    review_id=review.id,
-                    state="failed",
-                    code=f"prohibited_output:{prohibited}",
-                    detail=(
-                        "Generated output violated the legal-review safety policy. "
-                        "No review was saved."
-                    ),
+                if policy_attempt == 1:
+                    _mark_terminal_failure(
+                        session,
+                        review_id=review.id,
+                        state="failed",
+                        code=f"prohibited_output:{prohibited}",
+                        detail=(
+                            "Generated output violated the legal-review safety policy "
+                            "after one bounded retry. No review was saved."
+                        ),
+                    )
+                    return
+
+                safety_retry = (
+                    "The previous structured response violated one legal-review safety rule. "
+                    "Generate a new assessment from the same frozen evidence without repeating "
+                    "or quoting the rejected response. "
+                    "Do not use judicial-preference, prediction, assurance, odds, full-coverage, "
+                    "or negated-assurance wording anywhere in the JSON. Express uncertainty "
+                    "only as: Outcome remains uncertain and requires lawyer review. Return "
+                    "only the required JSON object."
                 )
-                return
+                attempt_messages = [
+                    *messages[:-1],
+                    LLMMessage(
+                        role=messages[-1].role,
+                        content=f"{messages[-1].content}\n\nSAFETY_RETRY:\n{safety_retry}",
+                    ),
+                ]
 
             by_id = {document.id: document for document in current_documents}
             valid_ids = {

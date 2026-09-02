@@ -377,6 +377,9 @@ test("IPLF-063B production proves the exact UJ-18 release", async ({
       "queue production IP intelligent review",
     );
   expect(ipReady.state, JSON.stringify(ipReady)).toBe("ready");
+  expect(JSON.stringify(ipReady)).not.toMatch(
+    /\b\d{1,3}%\b|guaranteed strategy|judge favour|judge favor/i,
+  );
   const ipFinalized = await json(
     await page.request.post(
       `${API}/api/research/reviews/${ipQueued.id}/finalize`,
