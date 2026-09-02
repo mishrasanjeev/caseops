@@ -40,13 +40,13 @@ const RUN_ID = `${Date.now().toString(36)}-${Math.random()
   .slice(2, 8)}`.toUpperCase();
 const COMPANY_SLUG = envOr(
   "CASEOPS_RAM_PROD_SLUG",
-  IS_LOCAL ? `ram-sep02-${RUN_ID.toLowerCase()}` : "legal",
+  IS_LOCAL ? `ram-sep02-${RUN_ID.toLowerCase()}` : "test-legal",
 );
 const TESTER_EMAIL = envOr(
   "CASEOPS_RAM_PROD_EMAIL",
   IS_LOCAL
     ? `ram-sep02-${RUN_ID.toLowerCase()}@example.com`
-    : "hari.gupta@gmail.com",
+    : "ram@testfirm.com",
 );
 const LOCAL_PASSWORD = "RamSep02Local!";
 
@@ -148,8 +148,11 @@ function seedVerifiedLocalStatute(): void {
 from datetime import UTC, datetime
 from caseops_api.db.models import Statute, StatuteSection
 from caseops_api.db.session import get_session_factory
+from caseops_api.scripts.seed_statutes import _seed
 
 now = datetime.now(UTC)
+with get_session_factory()() as seed_session:
+    _seed(seed_session)
 with get_session_factory()() as session:
     statute = session.get(Statute, "e2e-verified-evidence-act")
     if statute is None:
@@ -378,7 +381,7 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
     expect((await persisted.json()).workspace_assistant_enabled).toBe(true);
   });
 
-  test("BUG-002: Indian Kanoon reports only machine-verifiable prerequisites", async ({
+  test("BUG-002 / UPDATED-BUG-003: Indian Kanoon reports actionable machine-verifiable prerequisites", async ({
     page,
   }) => {
     const readiness = await api.get(
@@ -419,11 +422,20 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
     const copy = await readinessCopy.innerText();
     expect(copy.toLowerCase()).not.toContain("approval");
     expect(copy).toMatch(
-      /disabled|missing configuration|invalid or expired|cost profiles|active/,
+      /setup is incomplete|disabled by the runtime switch|invalid or expired|cost profiles|active/,
     );
+    if (
+      readinessBody.state === "blocked_disabled" &&
+      (readinessBody.missing_config_names.length > 0 ||
+        readinessBody.missing_cost_categories.length > 0)
+    ) {
+      expect(copy).toContain("setup is incomplete");
+      expect(copy).toContain("No provider call will be made");
+      expect(copy).not.toContain("INDIAN_KANOON_");
+    }
   });
 
-  test("BUG-006: Add Reference offers only Acts with verified sections and attaches one", async ({
+  test("BUG-006 / UPDATED-BUG-002: official Article 14 is selectable and attachable", async ({
     page,
   }) => {
     const catalogResponse = await api.get(`${API_BASE_URL}/api/statutes/`, {
@@ -455,31 +467,40 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
         actSelect.locator(`option[value="${unavailable.id}"]`),
       ).toHaveCount(0);
     }
-    if (selectable.length === 0) {
-      await expect(
-        page.getByTestId("matter-statute-no-selectable-acts"),
-      ).toContainText("No Acts currently have source-verified sections");
-      return;
-    }
+    expect(selectable.length).toBeGreaterThan(0);
+    const constitution = selectable.find(
+      (row) => row.id === "constitution-india",
+    );
+    expect(constitution).toBeTruthy();
     const sectionsResponsePromise = page.waitForResponse(
       (response) =>
         new URL(response.url()).pathname ===
-          `/api/statutes/${encodeURIComponent(selectable[0].id)}/sections` &&
+          "/api/statutes/constitution-india/sections" &&
         response.request().method() === "GET",
     );
-    await actSelect.selectOption(selectable[0].id);
+    await actSelect.selectOption("constitution-india");
     const sectionsResponse = await sectionsResponsePromise;
     await expectStatus(sectionsResponse, 200, "load selected Act sections");
+    const article14Record = (
+      (await sectionsResponse.json()) as {
+        sections: Array<{
+          id: string;
+          section_number: string;
+          verification_status: string;
+        }>;
+      }
+    ).sections.find((row) => row.section_number === "Article 14");
+    expect(article14Record).toBeTruthy();
+    expect(article14Record?.verification_status).toBe("verified_official");
     const sectionSelect = page.getByTestId("matter-statute-section-select");
     await expect
       .poll(() => sectionSelect.locator("option").count())
       .toBeGreaterThan(1);
-    const firstSection = await sectionSelect
-      .locator("option")
-      .nth(1)
-      .getAttribute("value");
-    expect(firstSection).toBeTruthy();
-    await sectionSelect.selectOption(firstSection!);
+    const article14 = sectionSelect.locator(
+      `option[value="${article14Record!.id}"]`,
+    );
+    await expect(article14).toHaveCount(1);
+    await sectionSelect.selectOption(article14Record!.id);
     const attach = page.waitForResponse(
       (response) =>
         new URL(response.url()).pathname ===
@@ -586,6 +607,32 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
     expect(body).not.toMatch(/invalid.*strict.*schema/i);
   });
 
+  test("UPDATED-BUG-001: invented court code is rejected before a paid provider search", async ({
+    page,
+  }) => {
+    await signIn(page);
+    await page.goto(`${BASE_URL}/app/case-tracking`);
+    await page
+      .getByTestId("case-tracking-query")
+      .fill("Reliance Industries vs Regulatory");
+    await page.getByTestId("case-tracking-case-number").fill("CIV-114/2026");
+    await page.getByTestId("case-tracking-court-code").fill("COURT-FORUM-114");
+    const searched = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === "/api/case-tracking/search" &&
+        response.request().method() === "POST",
+    );
+    await page.getByTestId("case-tracking-search-submit").click();
+    const response = await searched;
+    expect(response.status(), await response.text()).toBe(422);
+    await expect(page.getByTestId("case-tracking-search-error")).toContainText(
+      /provider-published alphanumeric search code|Court code/i,
+    );
+    await expect(
+      page.getByTestId("case-tracking-search-error"),
+    ).not.toContainText("Case tracking provider search failed");
+  });
+
   test("BUG-001: transient case-tracking failures do not require administrator replay", async ({
     page,
   }) => {
@@ -630,7 +677,7 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
         };
       }>
     ).filter((row) =>
-      ["provider_error", "rate_limit", "timeout"].includes(
+      ["billing", "provider_error", "rate_limit", "timeout"].includes(
         row.tracked_case.response_class ?? "",
       ),
     );
@@ -651,5 +698,98 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
       );
       expect(refreshed.status(), await refreshed.text()).not.toBe(409);
     }
+  });
+
+  test("REOPENING: only the audited lifecycle route reopens a disposed matter", async () => {
+    const before = await api.get(`${API_BASE_URL}/api/matters/${matter.id}`, {
+      headers: headers(),
+    });
+    await expectStatus(before, 200, "read matter before lifecycle regression");
+    const active = (await before.json()) as MatterRecord;
+    const disposedResponse = await api.patch(
+      `${API_BASE_URL}/api/matters/${matter.id}/lifecycle/status`,
+      {
+        headers: headers(),
+        data: {
+          to_status: "disposed",
+          expected_from_status: active.status,
+          expected_updated_at: active.updated_at,
+          reason:
+            "Verify the reported reopening path from persisted lifecycle state.",
+        },
+      },
+    );
+    await expectStatus(disposedResponse, 200, "dispose lifecycle fixture");
+    const disposed = (await disposedResponse.json()) as MatterRecord;
+    matter = disposed;
+
+    const genericReopen = await api.patch(
+      `${API_BASE_URL}/api/matters/${matter.id}`,
+      {
+        headers: headers(),
+        data: {
+          status: "active",
+          expected_updated_at: disposed.updated_at,
+        },
+      },
+    );
+    await expectStatus(genericReopen, 409, "reject generic metadata reopening");
+    const today = await api.get(`${API_BASE_URL}/api/me/today`, {
+      headers: headers(),
+    });
+    await expectStatus(today, 200, "read operational view after disposal");
+    expect(JSON.stringify(await today.json())).not.toContain(matter.id);
+
+    const reopenResponse = await api.patch(
+      `${API_BASE_URL}/api/matters/${matter.id}/lifecycle/status`,
+      {
+        headers: headers(),
+        data: {
+          to_status: "intake",
+          expected_from_status: "disposed",
+          expected_updated_at: disposed.updated_at,
+          reason: "Fresh instructions require a controlled reopen into Intake.",
+        },
+      },
+    );
+    await expectStatus(reopenResponse, 200, "controlled reopen to Intake");
+    const reopened = (await reopenResponse.json()) as MatterRecord;
+    expect(reopened.status).toBe("intake");
+
+    const persisted = await api.get(
+      `${API_BASE_URL}/api/matters/${matter.id}`,
+      { headers: headers() },
+    );
+    await expectStatus(persisted, 200, "reload reopened matter");
+    const persistedReopen = (await persisted.json()) as MatterRecord;
+    expect(persistedReopen.status).toBe("intake");
+    const audit = await api.get(
+      `${API_BASE_URL}/api/matters/${matter.id}/audit-events`,
+      { headers: headers(), params: { limit: 200 } },
+    );
+    await expectStatus(audit, 200, "read lifecycle audit trail");
+    const actions = (
+      (await audit.json()) as { events: Array<{ action: string }> }
+    ).events.map((row) => row.action);
+    expect(actions).toEqual(
+      expect.arrayContaining([
+        "matter.lifecycle.disposed",
+        "matter.lifecycle.reopened",
+      ]),
+    );
+
+    const activate = await api.patch(
+      `${API_BASE_URL}/api/matters/${matter.id}`,
+      {
+        headers: headers(),
+        data: {
+          status: "active",
+          expected_updated_at: persistedReopen.updated_at,
+        },
+      },
+    );
+    await expectStatus(activate, 200, "explicit Intake to Active transition");
+    matter = (await activate.json()) as MatterRecord;
+    expect(matter.status).toBe("active");
   });
 });

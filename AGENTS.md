@@ -170,3 +170,19 @@ requirements when using the fallback.
   recommendation, or audit persistence. Regression tests
   must assert the session is out of transaction inside the provider callback
   and that a concurrent disposal wins without leaving generated rows behind.
+- Initial provider search and tracked-bookmark recovery are separate failure
+  boundaries. A recovery-only regression cannot close a search defect. Validate
+  user-supplied provider codes before a credit-bearing request, test the exact
+  reported search inputs through the browser, and prove malformed or invented
+  identifiers result in zero provider calls.
+- Configured credentials do not prove that a paid provider is operational.
+  Classify authentication, billing exhaustion, rate limits, timeouts, and data
+  errors separately; expose safe actionable copy, keep billing recovery free of
+  manual replay gates, and require a real paid-path result before describing the
+  integration as end-to-end operational.
+- A populated statute seed is not a selectable verified statute catalog.
+  Verified release provisions must carry exact official text, a text hash,
+  official publisher and issuing body, an exact source version, and a checked
+  section-level link. Pin and execute the current seed image before production
+  traffic, then assert a positive verified provision through API and Playwright;
+  never satisfy acceptance only with a synthetic local statute row.

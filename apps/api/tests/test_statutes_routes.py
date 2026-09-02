@@ -3,6 +3,7 @@
 Maps to FT-S2-1 .. FT-S2-7 in
 ``docs/PRD_STATUTE_MODEL_2026-04-25.md`` §6.
 """
+
 from __future__ import annotations
 
 import json
@@ -118,8 +119,7 @@ def _seed_legal_update_authority() -> str:
                 authority_document_id=document.id,
                 chunk_index=0,
                 content=(
-                    "Section 138 registry notification metadata for "
-                    "cheque dishonour filing review."
+                    "Section 138 registry notification metadata for cheque dishonour filing review."
                 ),
                 token_count=12,
             )
@@ -157,14 +157,52 @@ def test_ft_s2_1_list_statutes_returns_seeded_acts(client: TestClient) -> None:
     body = resp.json()
     short_names = {a["short_name"] for a in body["statutes"]}
     assert {
-        "BNSS", "BNS", "BSA", "CrPC", "IPC", "Constitution", "NI Act",
+        "BNSS",
+        "BNS",
+        "BSA",
+        "CrPC",
+        "IPC",
+        "Constitution",
+        "NI Act",
     } <= short_names
-    assert body["total_section_count"] == 0
+    assert body["total_section_count"] >= 1
     assert body["total_catalog_section_count"] > 0
     # Catalog coverage is truthful: unreviewed seed text is not counted as verified.
     bnss = next(a for a in body["statutes"] if a["short_name"] == "BNSS")
     assert bnss["section_count"] == 0
     assert bnss["catalog_section_count"] >= 17
+    constitution = next(a for a in body["statutes"] if a["short_name"] == "Constitution")
+    assert constitution["section_count"] >= 1
+
+
+def test_official_release_manifest_makes_article_14_selectable_and_traceable(
+    client: TestClient,
+) -> None:
+    token = _bootstrap_with_seed(client)
+    listed = client.get(
+        "/api/statutes/constitution-india/sections",
+        headers=auth_headers(token),
+    )
+    assert listed.status_code == 200, listed.text
+    assert [row["section_number"] for row in listed.json()["sections"]] == ["Article 14"]
+
+    detail = client.get(
+        "/api/statutes/constitution-india/sections/Article%2014",
+        headers=auth_headers(token),
+    )
+    assert detail.status_code == 200, detail.text
+    section = detail.json()["section"]
+    assert section["verification_status"] == "verified_official"
+    assert section["source_sha256"] == (
+        "13161f8028e54fc6a7d49f89e189998c315b4c030803b678d8557576dea89f9e"
+    )
+    assert section["section_text"] == (
+        "14. Equality before law.— The State shall not deny to any person "
+        "equality before the law or the equal protection of the laws within "
+        "the territory of India."
+    )
+    assert section["section_url"].endswith(".pdf#page=62")
+    assert section["source_action"]["state"] == "available"
 
 
 def test_ft_s2_2_list_statutes_requires_auth(client: TestClient) -> None:
@@ -186,7 +224,8 @@ def test_ft_s2_3_get_statute_returns_metadata(client: TestClient) -> None:
 def test_ft_s2_4_get_statute_404_unknown_id(client: TestClient) -> None:
     token = _bootstrap_with_seed(client)
     resp = client.get(
-        "/api/statutes/does-not-exist", headers=auth_headers(token),
+        "/api/statutes/does-not-exist",
+        headers=auth_headers(token),
     )
     assert resp.status_code == 404
     assert "not found" in resp.json()["detail"].lower()
@@ -195,7 +234,8 @@ def test_ft_s2_4_get_statute_404_unknown_id(client: TestClient) -> None:
 def test_ft_s2_5_list_sections_returns_ordered_rows(client: TestClient) -> None:
     token = _bootstrap_with_seed(client)
     resp = client.get(
-        "/api/statutes/crpc-1973/sections", headers=auth_headers(token),
+        "/api/statutes/crpc-1973/sections",
+        headers=auth_headers(token),
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -285,9 +325,7 @@ def test_adp18_legal_update_watchlist_run_is_in_app_idempotent_and_bounded(
     assert "document_text" not in response_blob
     assert "source_payload" not in response_blob
     assert "storage_key" not in response_blob
-    assert all(
-        len(item.get("snippet") or "") <= 280 for item in preview_body["matches"]
-    )
+    assert all(len(item.get("snippet") or "") <= 280 for item in preview_body["matches"])
     assert all(
         item["source_key"] and item["source_category"] and item["provenance_status"]
         for item in preview_body["matches"]
@@ -340,7 +378,9 @@ def test_adp18_legal_update_watchlist_run_is_in_app_idempotent_and_bounded(
         assert session.scalar(select(ModelRun)) is None
         assert (
             session.scalar(
-                select(func.count()).select_from(LegalUpdateAlert).where(
+                select(func.count())
+                .select_from(LegalUpdateAlert)
+                .where(
                     LegalUpdateAlert.watchlist_id == watchlist["id"],
                     LegalUpdateAlert.company_id == watchlist["company_id"],
                 )
@@ -491,23 +531,25 @@ def test_matter_scoped_legal_update_watchlist_rejects_disposed_mutations_but_kee
         session.commit()
         baseline_alert_count = int(
             session.scalar(
-                select(func.count()).select_from(LegalUpdateAlert).where(
-                    LegalUpdateAlert.watchlist_id == watchlist_id
-                )
+                select(func.count())
+                .select_from(LegalUpdateAlert)
+                .where(LegalUpdateAlert.watchlist_id == watchlist_id)
             )
             or 0
         )
         baseline_intent_count = int(
             session.scalar(
-                select(func.count()).select_from(NotificationDeliveryIntent).where(
-                    NotificationDeliveryIntent.matter_id == matter_id
-                )
+                select(func.count())
+                .select_from(NotificationDeliveryIntent)
+                .where(NotificationDeliveryIntent.matter_id == matter_id)
             )
             or 0
         )
         baseline_run_audit_count = int(
             session.scalar(
-                select(func.count()).select_from(AuditEvent).where(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(
                     AuditEvent.action == "legal_update.watchlist_run",
                     AuditEvent.target_id == watchlist_id,
                 )
@@ -562,9 +604,7 @@ def test_matter_scoped_legal_update_watchlist_rejects_disposed_mutations_but_kee
     )
     assert watchlist_history.status_code == 200, watchlist_history.text
     historical_watchlist = next(
-        row
-        for row in watchlist_history.json()["watchlists"]
-        if row["id"] == watchlist_id
+        row for row in watchlist_history.json()["watchlists"] if row["id"] == watchlist_id
     )
     assert historical_watchlist["name"] == "Matter-scoped NI Act updates"
 
@@ -574,9 +614,7 @@ def test_matter_scoped_legal_update_watchlist_rejects_disposed_mutations_but_kee
     )
     assert alert_history.status_code == 200, alert_history.text
     historical_alert = next(
-        row
-        for row in alert_history.json()["updates"]
-        if row["watchlist_id"] == watchlist_id
+        row for row in alert_history.json()["updates"] if row["watchlist_id"] == watchlist_id
     )
     mark_read = client.patch(
         f"/api/statutes/legal-updates/{historical_alert['id']}",
@@ -603,31 +641,33 @@ def test_matter_scoped_legal_update_watchlist_rejects_disposed_mutations_but_kee
     with get_session_factory()() as session:
         assert (
             session.scalar(
-                select(func.count()).select_from(LegalUpdateWatchlist).where(
-                    LegalUpdateWatchlist.matter_id == matter_id
-                )
+                select(func.count())
+                .select_from(LegalUpdateWatchlist)
+                .where(LegalUpdateWatchlist.matter_id == matter_id)
             )
             == 1
         )
         assert (
             session.scalar(
-                select(func.count()).select_from(LegalUpdateAlert).where(
-                    LegalUpdateAlert.watchlist_id == watchlist_id
-                )
+                select(func.count())
+                .select_from(LegalUpdateAlert)
+                .where(LegalUpdateAlert.watchlist_id == watchlist_id)
             )
             == baseline_alert_count
         )
         assert (
             session.scalar(
-                select(func.count()).select_from(NotificationDeliveryIntent).where(
-                    NotificationDeliveryIntent.matter_id == matter_id
-                )
+                select(func.count())
+                .select_from(NotificationDeliveryIntent)
+                .where(NotificationDeliveryIntent.matter_id == matter_id)
             )
             == baseline_intent_count
         )
         assert (
             session.scalar(
-                select(func.count()).select_from(AuditEvent).where(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(
                     AuditEvent.action == "legal_update.watchlist_run",
                     AuditEvent.target_id == watchlist_id,
                 )
@@ -711,26 +751,24 @@ def test_matter_scoped_legal_update_watchlist_treats_inactive_active_row_as_term
     )
     assert historical_list.status_code == 200, historical_list.text
     historical = next(
-        row
-        for row in historical_list.json()["watchlists"]
-        if row["id"] == watchlist_id
+        row for row in historical_list.json()["watchlists"] if row["id"] == watchlist_id
     )
     assert historical["is_archived"] is False
 
     with get_session_factory()() as session:
         assert (
             session.scalar(
-                select(func.count()).select_from(LegalUpdateWatchlist).where(
-                    LegalUpdateWatchlist.matter_id == matter_id
-                )
+                select(func.count())
+                .select_from(LegalUpdateWatchlist)
+                .where(LegalUpdateWatchlist.matter_id == matter_id)
             )
             == 1
         )
         assert (
             session.scalar(
-                select(func.count()).select_from(LegalUpdateAlert).where(
-                    LegalUpdateAlert.watchlist_id == watchlist_id
-                )
+                select(func.count())
+                .select_from(LegalUpdateAlert)
+                .where(LegalUpdateAlert.watchlist_id == watchlist_id)
             )
             == 0
         )
@@ -801,22 +839,29 @@ def test_matter_scoped_legal_update_run_rechecks_after_disposal_race(
         assert matter is not None
         assert matter.status == "disposed"
         assert matter.is_active is False
-        assert session.scalar(
-            select(LegalUpdateAlert).where(
-                LegalUpdateAlert.watchlist_id == watchlist_id
+        assert (
+            session.scalar(
+                select(LegalUpdateAlert).where(LegalUpdateAlert.watchlist_id == watchlist_id)
             )
-        ) is None
-        assert session.scalar(
-            select(NotificationDeliveryIntent).where(
-                NotificationDeliveryIntent.matter_id == matter_id
+            is None
+        )
+        assert (
+            session.scalar(
+                select(NotificationDeliveryIntent).where(
+                    NotificationDeliveryIntent.matter_id == matter_id
+                )
             )
-        ) is None
-        assert session.scalar(
-            select(AuditEvent).where(
-                AuditEvent.action == "legal_update.watchlist_run",
-                AuditEvent.target_id == watchlist_id,
+            is None
+        )
+        assert (
+            session.scalar(
+                select(AuditEvent).where(
+                    AuditEvent.action == "legal_update.watchlist_run",
+                    AuditEvent.target_id == watchlist_id,
+                )
             )
-        ) is None
+            is None
+        )
 
 
 def test_ai_enhancement_prs_parser_and_sync_are_idempotent(
@@ -868,9 +913,7 @@ def test_ai_enhancement_prs_parser_and_sync_are_idempotent(
             title="The Dated Example Act, 2026",
             normalized_title="the dated example act 2026",
             source_url="https://prsindia.org/acts/parliament/dated-example-act",
-            source_document_url=(
-                "https://prsindia.org/acts/parliament/dated-example-act"
-            ),
+            source_document_url=("https://prsindia.org/acts/parliament/dated-example-act"),
             published_date=date(2026, 5, 26),
             act_year=2026,
             content_hash="1" * 64,
@@ -901,15 +944,10 @@ def test_ai_enhancement_prs_parser_and_sync_are_idempotent(
     assert records
     assert records[0]["source_key"] == "prs_acts_parliament"
     assert records[0]["summary_status"] in {"failed", "completed", "not_required"}
-    assert records[0]["summary"]["review_framing"] == (
-        "Source-backed summary for lawyer review."
-    )
+    assert records[0]["summary"]["review_framing"] == ("Source-backed summary for lawyer review.")
 
     filtered_records = client.get(
-        (
-            "/api/statutes/legal-updates/source-records"
-            "?since_date=2026-05-01&until_date=2026-12-31"
-        ),
+        ("/api/statutes/legal-updates/source-records?since_date=2026-05-01&until_date=2026-12-31"),
         headers=auth_headers(token),
     )
     assert filtered_records.status_code == 200, filtered_records.text
@@ -1015,17 +1053,16 @@ def test_ai_enhancement_source_records_match_watchlists_and_enqueue_in_app_inten
 
     with get_session_factory()() as session:
         alert_count = session.scalar(
-            select(func.count()).select_from(LegalUpdateAlert).where(
-                LegalUpdateAlert.watchlist_id == watchlist["id"]
-            )
+            select(func.count())
+            .select_from(LegalUpdateAlert)
+            .where(LegalUpdateAlert.watchlist_id == watchlist["id"])
         )
         assert alert_count == 1
         intents = list(
             session.scalars(
                 select(NotificationDeliveryIntent).where(
                     NotificationDeliveryIntent.company_id == watchlist["company_id"],
-                    NotificationDeliveryIntent.event_type
-                    == "legal_update.watchlist_matched",
+                    NotificationDeliveryIntent.event_type == "legal_update.watchlist_matched",
                 )
             )
         )

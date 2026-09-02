@@ -158,7 +158,8 @@ describe("ResearchPage", () => {
         terms_url: "https://indiankanoon.org/terms.html",
         logo_required: true,
       },
-      disclaimer: "Verify the exact passage and subsequent treatment before reliance.",
+      disclaimer:
+        "Verify the exact passage and subsequent treatment before reliance.",
     });
   });
 
@@ -189,13 +190,15 @@ describe("ResearchPage", () => {
       query: "constitutional proportionality",
       maxResults: 20,
     });
-    expect(screen.getByTestId("research-indian-kanoon-attribution")).toHaveTextContent(
-      "Powered by Indian Kanoon",
+    expect(
+      screen.getByTestId("research-indian-kanoon-attribution"),
+    ).toHaveTextContent("Powered by Indian Kanoon");
+    expect(
+      screen.getByTestId("research-indian-kanoon-attribution"),
+    ).toHaveTextContent("estimated provider cost ₹0.50");
+    expect(screen.getByTestId("source-action-open")).toHaveTextContent(
+      "Source",
     );
-    expect(screen.getByTestId("research-indian-kanoon-attribution")).toHaveTextContent(
-      "estimated provider cost ₹0.50",
-    );
-    expect(screen.getByTestId("source-action-open")).toHaveTextContent("Source");
     expect(searchMock).not.toHaveBeenCalled();
   });
 
@@ -218,6 +221,39 @@ describe("ResearchPage", () => {
     fireEvent.change(screen.getByTestId("research-query-input"), {
       target: { value: "constitutional proportionality" },
     });
+    expect(screen.getByTestId("research-query-submit")).toBeDisabled();
+    expect(indianKanoonSearchMock).not.toHaveBeenCalled();
+  });
+
+  it("explains incomplete disabled setup without exposing raw configuration keys", async () => {
+    indianKanoonReadinessMock.mockResolvedValueOnce({
+      ...(await indianKanoonReadinessMock()),
+      state: "blocked_disabled",
+      enabled: false,
+      external_calls_enabled: false,
+      missing_config_names: [
+        "INDIAN_KANOON_TOKEN",
+        "INDIAN_KANOON_TERMS_OWNER",
+        "INDIAN_KANOON_PERMITTED_USES",
+        "INDIAN_KANOON_RETENTION_DAYS",
+        "INDIAN_KANOON_DAILY_BUDGET_MINOR",
+      ],
+      missing_cost_categories: ["legal_source_search"],
+    });
+    indianKanoonReadinessMock.mockClear();
+
+    render(withClient(<ResearchPage />));
+    fireEvent.click(screen.getByTestId("research-source-indian-kanoon"));
+
+    const message = screen.getByTestId("research-indian-kanoon-readiness");
+    await waitFor(() =>
+      expect(message).toHaveTextContent("setup is incomplete"),
+    );
+    expect(message).toHaveTextContent("provider credentials");
+    expect(message).toHaveTextContent("contractual terms");
+    expect(message).toHaveTextContent("verified cost profiles");
+    expect(message).toHaveTextContent("No provider call will be made");
+    expect(message).not.toHaveTextContent("INDIAN_KANOON_TOKEN");
     expect(screen.getByTestId("research-query-submit")).toBeDisabled();
     expect(indianKanoonSearchMock).not.toHaveBeenCalled();
   });
@@ -300,7 +336,10 @@ describe("ResearchPage", () => {
     fireEvent.click(screen.getByTestId("research-query-submit"));
     await waitFor(() =>
       expect(searchMock).toHaveBeenCalledWith(
-        expect.objectContaining({ mode: "exact_citation", query: "2026:DHC:111" }),
+        expect.objectContaining({
+          mode: "exact_citation",
+          query: "2026:DHC:111",
+        }),
       ),
     );
   });
@@ -379,7 +418,8 @@ describe("ResearchPage", () => {
 
     fireEvent.change(screen.getByTestId("research-query-input"), {
       target: {
-        value: "Triple test for bail under BNSS s.483; parity; custody duration",
+        value:
+          "Triple test for bail under BNSS s.483; parity; custody duration",
       },
     });
     fireEvent.change(screen.getByTestId("research-filter-court"), {
@@ -487,7 +527,9 @@ describe("ResearchPage", () => {
         "Cheque dishonour Section 138 notice delay OCR damaged record",
       ),
     ).not.toBeInTheDocument();
-    expect(screen.queryByTestId("research-result-garbled")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("research-result-garbled"),
+    ).not.toBeInTheDocument();
   });
 
   it("omits an unreadable OCR-only authority card instead of rendering corrupted text", async () => {
@@ -551,13 +593,17 @@ describe("ResearchPage", () => {
       await screen.findByText(/Matching records were omitted/i),
     ).toBeInTheDocument();
     expect(screen.queryByText(/\[2003\] 3 -- f\.t/i)).not.toBeInTheDocument();
-    expect(screen.queryByTestId("research-result-garbled")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("research-result-garbled"),
+    ).not.toBeInTheDocument();
   });
 
   it("does not render the removed Judgment Alerts submodule", () => {
     render(withClient(<ResearchPage />));
 
-    expect(screen.queryByTestId("judgment-alert-center")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("judgment-alert-center"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText(/Judgment alerts/i)).not.toBeInTheDocument();
   });
 });

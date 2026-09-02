@@ -1,0 +1,27 @@
+[
+  {
+    "statute_id": "constitution-india",
+    "section_number": "Article 14",
+    "section_label": "Equality before law",
+    "section_text": "14. Equality before law.— The State shall not deny to any person equality before the law or the equal protection of the laws within the territory of India.",
+    "section_text_source": "official_release_manifest",
+    "source_url": "https://www.legislative.gov.in/static/uploads/2025/08/7af1daa22d65f9d04c00ae9b9aa5a799.pdf#page=62",
+    "source_sha256": "13161f8028e54fc6a7d49f89e189998c315b4c030803b678d8557576dea89f9e",
+    "source_document_sha256": "d001a5b4a1546f6dcf4c6f9c136b63504289627b4e560046fdbc10ee5e59d4d5",
+    "source_publisher": "Legislative Department, Ministry of Law and Justice",
+    "issuing_body": "Government of India",
+    "source_category": "consolidated_statute",
+    "source_status": "official",
+    "legal_status": "enacted",
+    "effective_from": "1950-01-26",
+    "exact_source_version": "Official Constitution of India PDF, 2025 edition, document sha256 d001a5b4a1546f6d",
+    "source_locator_type": "section_deep_link",
+    "link_health_status": "available",
+    "source_policy": {
+      "release_manifest_verified": true,
+      "official_pdf_page": 62,
+      "source_document_sha256": "d001a5b4a1546f6dcf4c6f9c136b63504289627b4e560046fdbc10ee5e59d4d5",
+      "verification_method": "official PDF text and page visually reconciled"
+    }
+  }
+]
