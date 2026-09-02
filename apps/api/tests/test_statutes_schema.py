@@ -3,6 +3,7 @@
 Maps to FT-S1-1 .. FT-S1-5 in
 ``docs/PRD_STATUTE_MODEL_2026-04-25.md`` §6.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -33,8 +34,13 @@ def test_ft_s1_1_seed_inserts_central_acts(client: TestClient) -> None:
         ids = {row.id for row in s.scalars(select(Statute)).all()}
     # Original FT-S1.1 7 acts MUST still be in the seed.
     assert {
-        "constitution-india", "bnss-2023", "bns-2023", "bsa-2023",
-        "crpc-1973", "ipc-1860", "ni-act-1881",
+        "constitution-india",
+        "bnss-2023",
+        "bns-2023",
+        "bsa-2023",
+        "crpc-1973",
+        "ipc-1860",
+        "ni-act-1881",
     } <= ids
     # Total inserted equals the live catalog size — bumps automatically
     # as new acts land instead of pinning a stale literal.
@@ -59,6 +65,35 @@ def test_ft_s1_2_seed_is_idempotent(client: TestClient) -> None:
     assert s_upd == len(first_pass_ids)  # every act re-validated, none new
 
 
+def test_seed_upgrades_only_manifested_official_provision(client: TestClient) -> None:
+    from caseops_api.db.session import get_session_factory
+
+    bootstrap_company(client)
+    with get_session_factory()() as session:
+        _seed(session)
+        article_14 = session.scalar(
+            select(StatuteSection).where(
+                StatuteSection.statute_id == "constitution-india",
+                StatuteSection.section_number == "Article 14",
+            )
+        )
+        article_19 = session.scalar(
+            select(StatuteSection).where(
+                StatuteSection.statute_id == "constitution-india",
+                StatuteSection.section_number == "Article 19",
+            )
+        )
+        assert article_14 is not None
+        assert article_14.verification_status == "verified_official"
+        assert article_14.is_provisional is False
+        assert article_14.section_text_source == "official_release_manifest"
+        assert article_14.source_policy_json["official_pdf_page"] == 62
+        assert article_14.section_url.endswith(".pdf#page=62")
+        assert article_19 is not None
+        assert article_19.verification_status == "unverified"
+        assert article_19.is_provisional is True
+
+
 def test_ft_s1_3_unique_constraint_on_section_per_statute(
     client: TestClient,
 ) -> None:
@@ -72,23 +107,32 @@ def test_ft_s1_3_unique_constraint_on_section_per_statute(
     with get_session_factory()() as s:
         s.add(
             Statute(
-                id="test-act", short_name="TEST",
+                id="test-act",
+                short_name="TEST",
                 long_name="Test Act for unique-constraint test",
-                enacted_year=2026, jurisdiction="india", is_active=True,
+                enacted_year=2026,
+                jurisdiction="india",
+                is_active=True,
             ),
         )
         s.commit()
         s.add(
             StatuteSection(
-                statute_id="test-act", section_number="1",
-                section_label="First section", ordinal=1, is_active=True,
+                statute_id="test-act",
+                section_number="1",
+                section_label="First section",
+                ordinal=1,
+                is_active=True,
             ),
         )
         s.commit()
         s.add(
             StatuteSection(
-                statute_id="test-act", section_number="1",
-                section_label="Duplicate", ordinal=2, is_active=True,
+                statute_id="test-act",
+                section_number="1",
+                section_label="Duplicate",
+                ordinal=2,
+                is_active=True,
             ),
         )
         with pytest.raises(IntegrityError):
@@ -141,17 +185,18 @@ def test_ft_s1_5_fk_constraints_declared_correctly(
 
     # FK declarations on the ORM model match the migration.
     fk_section_to_statute = next(
-        fk for fk in StatuteSection.__table__.foreign_keys
-        if fk.column.table.name == "statutes"
+        fk for fk in StatuteSection.__table__.foreign_keys if fk.column.table.name == "statutes"
     )
     assert fk_section_to_statute.ondelete == "CASCADE"
     fk_matter_ref_to_section = next(
-        fk for fk in MatterStatuteReference.__table__.foreign_keys
+        fk
+        for fk in MatterStatuteReference.__table__.foreign_keys
         if fk.column.table.name == "statute_sections"
     )
     assert fk_matter_ref_to_section.ondelete == "RESTRICT"
     fk_authority_ref_to_section = next(
-        fk for fk in AuthorityStatuteReference.__table__.foreign_keys
+        fk
+        for fk in AuthorityStatuteReference.__table__.foreign_keys
         if fk.column.table.name == "statute_sections"
     )
     assert fk_authority_ref_to_section.ondelete == "RESTRICT"

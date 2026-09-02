@@ -53,6 +53,19 @@ class CaseTrackingSearchRequest(BaseModel):
             raise ValueError("CNR number looks too short.")
         return value
 
+    @field_validator("court_code")
+    @classmethod
+    def _validate_court_code(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.upper()
+        if not re.fullmatch(r"[A-Z0-9]{4,12}", normalized):
+            raise ValueError(
+                "Court code must be a provider-published alphanumeric search code "
+                "(for example, DLHC01)."
+            )
+        return normalized
+
     @model_validator(mode="after")
     def _require_identity(self) -> CaseTrackingSearchRequest:
         if not self.query and not self.cnr_number and not self.case_number:
@@ -150,9 +163,9 @@ class TrackedCaseRecord(BaseModel):
     )
     response_class: str | None = None
     last_operation_id: str | None = None
-    provider_health: Literal[
-        "healthy", "degraded", "unhealthy", "disabled", "quarantined"
-    ] = "unhealthy"
+    provider_health: Literal["healthy", "degraded", "unhealthy", "disabled", "quarantined"] = (
+        "unhealthy"
+    )
     manual_refresh_allowed: bool = False
     manual_refresh_disabled_reason: str | None = None
     refresh_cost_minor: int = 0

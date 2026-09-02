@@ -37,7 +37,9 @@ def _http_error_response_class(exc: httpx.HTTPError) -> str:
     if isinstance(exc, httpx.HTTPStatusError):
         if exc.response.status_code in {401, 403}:
             return "authentication"
-        if exc.response.status_code in {402, 429}:
+        if exc.response.status_code == 402:
+            return "billing"
+        if exc.response.status_code == 429:
             return "rate_limit"
     return "provider_error"
 
@@ -103,15 +105,12 @@ class CaseTrackingProvider(Protocol):
     provider_key: str
 
     def search_cases(self, *, query: CaseSearchQuery) -> list[ProviderCaseSnapshot]:
-
         raise NotImplementedError
 
     def get_case_by_cnr(self, *, cnr: str) -> ProviderCaseSnapshot:
-
         raise NotImplementedError
 
     def refresh_cases(self, *, cnrs: list[str]) -> ProviderBulkRefreshResult:
-
         raise NotImplementedError
 
 
@@ -235,11 +234,7 @@ def _first_list(*values: object) -> list[object]:
 
 def _string_list(value: object, *, limit: int = 20) -> list[str]:
     if isinstance(value, list):
-        return [
-            compacted
-            for item in value[:limit]
-            if (compacted := _compact(item, limit=160))
-        ]
+        return [compacted for item in value[:limit] if (compacted := _compact(item, limit=160))]
     if text := _compact(value, limit=160):
         return [text]
     return []
@@ -265,9 +260,7 @@ def _court_name(payload: dict[str, object], descriptions: dict[str, object] | No
     if court_name:
         return court_name
     court_code = _compact(
-        payload.get("court_code")
-        or payload.get("courtCode")
-        or payload.get("cnrCourtCode"),
+        payload.get("court_code") or payload.get("courtCode") or payload.get("cnrCourtCode"),
         limit=80,
     )
     enum_lookup = descriptions.get("enumLookup") if descriptions else None
@@ -305,10 +298,7 @@ def _case_order_events(
             continue
         order_url = _compact(item.get("orderUrl") or item.get("pdfFile"), limit=800)
         title = _compact(
-            item.get("description")
-            or item.get("orderType")
-            or item.get("title")
-            or "Case order",
+            item.get("description") or item.get("orderType") or item.get("title") or "Case order",
             limit=500,
         )
         if not title:
@@ -410,11 +400,9 @@ def _snapshot_from_payload(
     entity_info = entity if isinstance(entity, dict) else {}
     descriptions_dict = descriptions if isinstance(descriptions, dict) else None
     cnr = _compact(case.get("cnr_number") or case.get("cnr") or entity_info.get("cnr"), limit=32)
-    parties = (
-        _string_list(case.get("party_names") or case.get("parties"))
-        or _string_list(case.get("petitioners"))
-        + _string_list(case.get("respondents"))
-    )
+    parties = _string_list(case.get("party_names") or case.get("parties")) or _string_list(
+        case.get("petitioners")
+    ) + _string_list(case.get("respondents"))
     orders = _case_order_events(
         _first_list(case.get("orders"), case.get("daily_orders"), case.get("interimOrders")),
         prefix="order",
@@ -437,9 +425,7 @@ def _snapshot_from_payload(
         provider=provider,
         cnr_number=cnr,
         case_number=_compact(
-            case.get("case_number")
-            or case.get("caseNumber")
-            or case.get("registrationNumber"),
+            case.get("case_number") or case.get("caseNumber") or case.get("registrationNumber"),
             limit=120,
         ),
         court_code=_compact(
@@ -592,9 +578,7 @@ class EcourtsIndiaApiProvider:
             except httpx.HTTPError as exc:
                 response_class = _http_error_response_class(exc)
                 for cnr in unique_cnrs:
-                    errors[cnr] = (
-                        f"Case tracking provider bulk refresh failed. [{response_class}]"
-                    )
+                    errors[cnr] = f"Case tracking provider bulk refresh failed. [{response_class}]"
                 return ProviderBulkRefreshResult(snapshots=snapshots, errors=errors)
         for cnr in unique_cnrs:
             try:

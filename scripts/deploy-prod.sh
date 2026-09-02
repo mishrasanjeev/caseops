@@ -11,6 +11,7 @@
 # This script enforces the order:
 #   1. build api + web images in parallel
 #   2. update + execute caseops-migrate-job (alembic upgrade head)
+#      and seed the machine-verified statute release manifest
 #   3. refresh scheduled/background jobs with an immutable API image
 #   4. deploy caseops-api with the new image
 #   5. deploy caseops-web with the new image
@@ -295,6 +296,39 @@ unset MIGRATION_JOB_JSON
 gcloud run jobs execute caseops-migrate-job \
   --region "${REGION}" --project "${PROJECT}" --wait --quiet
 echo "  migrate-job completed."
+
+# The statute catalog is release data, not an optional operator follow-up.
+# Pin the one-shot job to the exact candidate image and run it before traffic
+# so a green application deploy cannot leave production with an empty verified
+# Act selector or a stale seed image.
+echo "--- verified statute catalog seed (exact candidate image) ---"
+STATUTE_SEED_JOB=caseops-seed-statutes
+STATUTE_SEED_ACTION=update
+if ! gcloud run jobs describe "${STATUTE_SEED_JOB}" \
+  --region "${REGION}" --project "${PROJECT}" >/dev/null 2>&1; then
+  STATUTE_SEED_ACTION=create
+fi
+gcloud run jobs "${STATUTE_SEED_ACTION}" "${STATUTE_SEED_JOB}" \
+  --image "${API_IMMUTABLE_IMAGE}" \
+  --command python \
+  --args "^|^-m|caseops_api.scripts.seed_statutes" \
+  --service-account "caseops-runtime@${PROJECT}.iam.gserviceaccount.com" \
+  --set-env-vars "CASEOPS_ENV=cloud,CASEOPS_AUTO_MIGRATE=false" \
+  --set-secrets "CASEOPS_DATABASE_URL=caseops-database-url:latest,CASEOPS_AUTH_SECRET=caseops-auth-secret:latest" \
+  --set-cloudsql-instances "${PROJECT}:${REGION}:caseops-db" \
+  --task-timeout 10m \
+  --max-retries 0 \
+  --region "${REGION}" --project "${PROJECT}" --quiet
+STATUTE_SEED_IMAGE=$(gcloud run jobs describe "${STATUTE_SEED_JOB}" \
+  --region "${REGION}" --project "${PROJECT}" \
+  --format='value(spec.template.spec.template.spec.containers[0].image)')
+if [[ "${STATUTE_SEED_IMAGE}" != "${API_IMMUTABLE_IMAGE}" ]]; then
+  echo "ERROR: ${STATUTE_SEED_JOB} is not pinned to the candidate API digest."
+  exit 1
+fi
+gcloud run jobs execute "${STATUTE_SEED_JOB}" \
+  --region "${REGION}" --project "${PROJECT}" --wait --quiet
+echo "  verified statute catalog seeded from ${API_IMMUTABLE_IMAGE}."
 
 # Step 3 - converge the complete recurring-job inventory. This repairs image,
 # target, cadence, time-zone, desired scheduler state, inventory-owned task

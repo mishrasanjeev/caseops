@@ -84,12 +84,18 @@ _MAX_BODY_LENGTH = 500
 _RELEASE_SMOKE_MAX_SNAPSHOT_EVENTS = 200
 _RED_PROVIDER_RESPONSE_CLASSES = {
     "authentication",
+    "billing",
     "parse_error",
     "provider_error",
     "rate_limit",
     "timeout",
 }
-_TRANSIENT_PROVIDER_RESPONSE_CLASSES = {"provider_error", "rate_limit", "timeout"}
+_TRANSIENT_PROVIDER_RESPONSE_CLASSES = {
+    "billing",
+    "provider_error",
+    "rate_limit",
+    "timeout",
+}
 _TRANSIENT_RECOVERY_COOLDOWN = timedelta(hours=1)
 _TENANT_METADATA_BLOCKLIST = (
     "secret",
@@ -239,7 +245,9 @@ def _response_class(exc: BaseException) -> str:
         return "timeout"
     if any(token in value for token in ("401", "403", "auth", "token", "credential")):
         return "authentication"
-    if any(token in value for token in ("402", "429", "billing", "payment", "rate", "quota")):
+    if any(token in value for token in ("402", "billing", "payment")):
+        return "billing"
+    if any(token in value for token in ("429", "rate", "quota")):
         return "rate_limit"
     if any(token in value for token in ("parse", "schema", "malformed", "decode")):
         return "parse_error"
@@ -340,8 +348,7 @@ def _new_operation(
                 TrackedCaseProviderOperation.status == "failed",
                 TrackedCaseProviderOperation.next_attempt_at.is_not(None),
                 TrackedCaseProviderOperation.next_attempt_at <= _now(),
-                TrackedCaseProviderOperation.attempts
-                < TrackedCaseProviderOperation.max_attempts,
+                TrackedCaseProviderOperation.attempts < TrackedCaseProviderOperation.max_attempts,
             )
             .order_by(TrackedCaseProviderOperation.created_at.desc())
             .limit(1)
@@ -367,9 +374,7 @@ def _new_operation(
             "scope": "single_tracked_case",
             "cost_disclosed": True,
             **(
-                {"retry_of_operation_id": automatic_retry.id}
-                if automatic_retry is not None
-                else {}
+                {"retry_of_operation_id": automatic_retry.id} if automatic_retry is not None else {}
             ),
         },
     )
@@ -503,9 +508,7 @@ def _fail_operation(
     transient_failure = response_class in _TRANSIENT_PROVIDER_RESPONSE_CLASSES
     operation.status = "quarantined" if exhausted and not transient_failure else "failed"
     operation.next_attempt_at = operation.completed_at + (
-        _TRANSIENT_RECOVERY_COOLDOWN
-        if exhausted and transient_failure
-        else timedelta(minutes=15)
+        _TRANSIENT_RECOVERY_COOLDOWN if exhausted and transient_failure else timedelta(minutes=15)
     )
     if exhausted and not transient_failure:
         operation.next_attempt_at = None
@@ -619,6 +622,15 @@ def _safe_provider_error(exc: BaseException) -> HTTPException:
         return HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(exc),
+        )
+    if _response_class(exc) == "billing":
+        return HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Case search is temporarily unavailable because the provider "
+                "prepaid balance is exhausted. The service owner must replenish "
+                "the provider account before retrying."
+            ),
         )
     return HTTPException(
         status_code=status.HTTP_502_BAD_GATEWAY,
@@ -1485,14 +1497,16 @@ def _create_update(
         )
     )
     if existing is not None:
-        if event and event.text and (
-            existing.source_text is None
-            or (existing.source_text_truncated and not event.text_truncated)
+        if (
+            event
+            and event.text
+            and (
+                existing.source_text is None
+                or (existing.source_text_truncated and not event.text_truncated)
+            )
         ):
             existing.source_text = event.text
-            existing.source_text_sha256 = hashlib.sha256(
-                event.text.encode("utf-8")
-            ).hexdigest()
+            existing.source_text_sha256 = hashlib.sha256(event.text.encode("utf-8")).hexdigest()
             existing.source_text_truncated = event.text_truncated
             if not existing.source_url and event.source_url:
                 existing.source_url = event.source_url
@@ -1530,9 +1544,7 @@ def _create_update(
         source_url=event.source_url if event else None,
         source_text=event.text if event else None,
         source_text_sha256=(
-            hashlib.sha256(event.text.encode("utf-8")).hexdigest()
-            if event and event.text
-            else None
+            hashlib.sha256(event.text.encode("utf-8")).hexdigest() if event and event.text else None
         ),
         source_text_truncated=event.text_truncated if event else False,
         order_date=order_date,
@@ -1987,11 +1999,7 @@ def _release_smoke_authority_source_text(
         return None
     ecourts_source_reference: str | None = None
     cnr = normalize_cnr(tracked_case.cnr_number)
-    if (
-        tracked_case.provider == "ecourtsindia"
-        and cnr
-        and update.source_url
-    ):
+    if tracked_case.provider == "ecourtsindia" and cnr and update.source_url:
         order_match = re.search(
             rf"/case/{re.escape(cnr)}/order/order-([1-9][0-9]*)\.pdf$",
             unquote(urlparse(update.source_url).path),
@@ -2015,11 +2023,9 @@ def _release_smoke_authority_source_text(
     elif case_number and court_name:
         identity_predicates = [
             and_(
-                func.upper(func.trim(AuthorityDocument.court_name))
-                == court_name.upper(),
+                func.upper(func.trim(AuthorityDocument.court_name)) == court_name.upper(),
                 or_(
-                    func.upper(func.trim(AuthorityDocument.case_reference))
-                    == case_number,
+                    func.upper(func.trim(AuthorityDocument.case_reference)) == case_number,
                     func.upper(func.trim(AuthorityDocument.case_number)) == case_number,
                 ),
             )
@@ -2046,8 +2052,7 @@ def _release_smoke_authority_source_text(
         if (
             ecourts_source_reference
             and row.source == "ecourts-hc"
-            and (row.source_reference or "").strip().upper()
-            == ecourts_source_reference.upper()
+            and (row.source_reference or "").strip().upper() == ecourts_source_reference.upper()
         ):
             matches.append((row, "ecourts_cnr_order_reference"))
         elif not ecourts_source_reference and (
@@ -2181,8 +2186,7 @@ def _backfill_release_smoke_source_from_snapshot(
                     "authority_source": authority.source,
                     "authority_source_reference": authority.source_reference
                     or authority.canonical_url,
-                    "authority_content_hash": authority.content_hash
-                    or source_text_sha256,
+                    "authority_content_hash": authority.content_hash or source_text_sha256,
                     "authority_match_mode": authority_match_mode,
                 }
                 if authority is not None
@@ -2209,8 +2213,7 @@ def _backfill_release_smoke_source_from_snapshot(
                     {
                         "authority_document_id": authority.id,
                         "authority_source": authority.source,
-                        "authority_content_hash": authority.content_hash
-                        or source_text_sha256,
+                        "authority_content_hash": authority.content_hash or source_text_sha256,
                         "authority_match_mode": authority_match_mode,
                     }
                     if authority is not None
@@ -2332,8 +2335,7 @@ def _release_smoke_response(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    "Stored release evidence no longer resolves to a successful "
-                    "provider snapshot."
+                    "Stored release evidence no longer resolves to a successful provider snapshot."
                 ),
             )
         provider_evidence = verified[0]
@@ -2685,9 +2687,7 @@ def download_case_tracking_source(
                         "provider_response_class": "billing",
                         "source_format": "provider-markdown",
                         "update_type": update.update_type,
-                        "source_record_key_sha256": _hash_value(
-                            update.source_record_key
-                        ),
+                        "source_record_key_sha256": _hash_value(update.source_record_key),
                         "source_text_sha256": update.source_text_sha256,
                     },
                 )
@@ -3028,9 +3028,8 @@ def poll_tracked_cases(
                     "partial_reason": "window_closed_before_case_refresh",
                 }
                 break
-            if (
-                tracked_case.quarantined_at is not None
-                and not _is_transient_provider_failure(tracked_case)
+            if tracked_case.quarantined_at is not None and not _is_transient_provider_failure(
+                tracked_case
             ):
                 run.skipped_count += 1
                 run.backlog_remaining_count += 1

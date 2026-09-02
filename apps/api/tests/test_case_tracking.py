@@ -470,9 +470,7 @@ def test_ecourts_provider_uses_partner_paths_and_normalizes_payloads() -> None:
     assert snapshot.orders[0].text == "# Interim order\n\nOfficial directions."
     assert snapshot.orders[0].text_truncated is False
     assert snapshot.judgments[0].title == "Final judgment dated 2026-05-27"
-    assert snapshot.judgments[0].text == (
-        "# Final judgment\n\nOfficial final directions."
-    )
+    assert snapshot.judgments[0].text == ("# Final judgment\n\nOfficial final directions.")
     assert snapshot.judgments[0].text_truncated is False
     assert requests[1].url.path == "/api/partner/case/DLHC010012342026"
 
@@ -501,18 +499,18 @@ def test_ecourts_provider_classifies_payment_required_without_exposing_body() ->
         provider.get_case_by_cnr(cnr="DLHC010012342026")
 
     assert str(raised.value) == "Case tracking provider refresh failed."
-    assert raised.value.response_class == "rate_limit"
+    assert raised.value.response_class == "billing"
     assert raised.value.http_status_code == 402
     assert "balance" not in str(raised.value)
 
     bulk = provider.refresh_cases(cnrs=["DLHC010012342026"])
     assert bulk.snapshots == []
     assert bulk.errors == {
-        "DLHC010012342026": "Case tracking provider bulk refresh failed. [rate_limit]"
+        "DLHC010012342026": "Case tracking provider bulk refresh failed. [billing]"
     }
 
 
-def test_payment_required_persists_rate_limit_provider_health(
+def test_payment_required_persists_recoverable_billing_provider_health(
     client: TestClient,
     monkeypatch,
 ) -> None:
@@ -550,18 +548,45 @@ def test_payment_required_persists_rate_limit_provider_health(
         f"/api/case-tracking/bookmarks/{created.json()['id']}/refresh",
         headers=auth_headers(token),
     )
-    assert refresh.status_code == 502
-    assert "balance" not in refresh.text
+    assert refresh.status_code == 503
+    assert "prepaid balance is exhausted" in refresh.text
+    assert "internal_billing_message" not in refresh.text
 
     with get_session_factory()() as session:
         operation = session.scalar(select(TrackedCaseProviderOperation))
         tracked_case = session.scalar(select(TrackedCase))
         assert operation is not None
         assert tracked_case is not None
-        assert operation.response_class == "rate_limit"
-        assert tracked_case.last_response_class == "rate_limit"
+        assert operation.response_class == "billing"
+        assert tracked_case.last_response_class == "billing"
         assert tracked_case.provider_freshness_status == "never_succeeded"
         assert "balance" not in (operation.error_redacted or "")
+
+
+def test_case_search_rejects_invented_court_code_before_provider_call(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    token = _bootstrap(client)
+    provider = FakeCaseTrackingProvider()
+    monkeypatch.setattr(
+        "caseops_api.services.case_tracking.get_case_tracking_provider",
+        lambda: provider,
+    )
+
+    response = client.post(
+        "/api/case-tracking/search",
+        headers=auth_headers(token),
+        json={
+            "query": "Reliance Industries vs Regulatory",
+            "case_number": "CIV-114/2026",
+            "court_code": "COURT-FORUM-114",
+        },
+    )
+
+    assert response.status_code == 422, response.text
+    assert "provider-published alphanumeric search code" in response.text
+    assert provider.search_calls == []
 
 
 def test_case_tracking_search_bookmark_update_and_archive(
@@ -727,9 +752,7 @@ def test_case_tracking_refresh_detects_order_and_enqueues_in_app_idempotently(
     with get_session_factory()() as session:
         restored_update = session.scalar(select(TrackedCaseUpdate))
         assert restored_update is not None
-        assert restored_update.source_text == (
-            "The court issued directions and listed the matter."
-        )
+        assert restored_update.source_text == ("The court issued directions and listed the matter.")
         assert restored_update.source_text_sha256
         assert restored_update.source_text_truncated is False
         operations = list(
@@ -976,17 +999,14 @@ def test_exact_release_smoke_is_qa_only_idempotent_and_reuses_verified_evidence(
         assert authority_audit is not None
         authority_audit_metadata = json.loads(authority_audit.metadata_json or "{}")
         assert authority_audit_metadata["provenance"] == "verified_authority_document"
-        assert authority_audit_metadata["authority_match_mode"] == (
-            "ecourts_cnr_order_reference"
-        )
+        assert authority_audit_metadata["authority_match_mode"] == ("ecourts_cnr_order_reference")
 
         # An exact order-2 URL may never fall back to order 1 merely because
         # both records share a case, court, and decision date.
         authority_update.source_text = None
         authority_update.source_text_sha256 = None
         authority_update.source_url = (
-            "https://provider.example/api/partner/case/DLHC010012342026/"
-            "order/order-2.pdf"
+            "https://provider.example/api/partner/case/DLHC010012342026/order/order-2.pdf"
         )
         bookmark = session.get(TrackedCaseBookmark, bookmark_id)
         assert bookmark is not None
@@ -1006,9 +1026,7 @@ def test_exact_release_smoke_is_qa_only_idempotent_and_reuses_verified_evidence(
     )
     assert jobs.status_code == 200, jobs.text
     cached_job = next(
-        row
-        for row in jobs.json()["operations"]
-        if row["response_class"] == "verified_cached"
+        row for row in jobs.json()["operations"] if row["response_class"] == "verified_cached"
     )
     assert cached_job["status"] == "succeeded"
     assert any("made no external call" in note for note in cached_job["notes"])
@@ -1280,6 +1298,7 @@ def test_case_tracking_source_download_uses_server_side_provider_auth(
                 "Payment required",
             ]
             for payment_response in payment_responses:
+
                 def billing_handler(
                     request: httpx.Request,
                     response_body=payment_response,
@@ -1295,9 +1314,7 @@ def test_case_tracking_source_download_uses_server_side_provider_auth(
                     update_id=update["id"],
                     transport=httpx.MockTransport(billing_handler),
                 )
-                assert fallback.content == (
-                    b"The court issued directions and listed the matter."
-                )
+                assert fallback.content == (b"The court issued directions and listed the matter.")
                 assert fallback.content_type == "text/markdown; charset=utf-8"
                 assert fallback.filename.endswith(".md")
                 assert fallback.source_format == "provider-markdown"
@@ -1392,8 +1409,7 @@ def test_case_tracking_poll_continues_after_provider_failure(
             assert session.scalar(select(TrackedCaseProviderSnapshot)) is None
             page = session.scalar(
                 select(NotificationDeliveryIntent).where(
-                    NotificationDeliveryIntent.event_type
-                    == "case_tracking.provider_unhealthy"
+                    NotificationDeliveryIntent.event_type == "case_tracking.provider_unhealthy"
                 )
             )
             assert page is not None

@@ -75,10 +75,10 @@ export default function ResearchPage() {
   const [forumLevel, setForumLevel] = useState<ForumFilter>("any");
   const [courtName, setCourtName] = useState("");
   const [documentType, setDocumentType] = useState<DocTypeFilter>("any");
-  const [searchMode, setSearchMode] = useState<AuthoritySearchMode>(initialMode);
-  const [researchSource, setResearchSource] = useState<ResearchSource>(
-    "caseops_corpus",
-  );
+  const [searchMode, setSearchMode] =
+    useState<AuthoritySearchMode>(initialMode);
+  const [researchSource, setResearchSource] =
+    useState<ResearchSource>("caseops_corpus");
   // PG-110 (2026-05-01): language filter + pagination. Default "en"
   // because the 2026-04-28 ingest sweep dropped the EN-only filter,
   // so without a default users were seeing Garo / Hindi / Tamil
@@ -137,7 +137,9 @@ export default function ResearchPage() {
     ],
     queryFn: () => {
       if (!searchCriteria) {
-        throw new Error("Search criteria are required before authority search.");
+        throw new Error(
+          "Search criteria are required before authority search.",
+        );
       }
       return searchAuthorities({
         query: searchCriteria.query,
@@ -146,10 +148,14 @@ export default function ResearchPage() {
         offset: page * PAGE_SIZE,
         language: searchCriteria.language,
         forumLevel:
-          searchCriteria.forumLevel === "any" ? null : searchCriteria.forumLevel,
+          searchCriteria.forumLevel === "any"
+            ? null
+            : searchCriteria.forumLevel,
         courtName: searchCriteria.courtName.trim() || null,
         documentType:
-          searchCriteria.documentType === "any" ? null : searchCriteria.documentType,
+          searchCriteria.documentType === "any"
+            ? null
+            : searchCriteria.documentType,
       });
     },
     enabled:
@@ -176,7 +182,10 @@ export default function ResearchPage() {
       if (!searchCriteria) {
         throw new Error("Search criteria are required before provider search.");
       }
-      return searchIndianKanoon({ query: searchCriteria.query, maxResults: 20 });
+      return searchIndianKanoon({
+        query: searchCriteria.query,
+        maxResults: 20,
+      });
     },
     enabled:
       canSearch &&
@@ -190,10 +199,9 @@ export default function ResearchPage() {
       createAuthorityAnnotation({
         authorityId: input.authority_document_id,
         kind: "flag",
-        title:
-          searchCriteria?.query
-            ? `Research: ${searchCriteria.query.slice(0, 200)}`
-            : input.title.slice(0, 200),
+        title: searchCriteria?.query
+          ? `Research: ${searchCriteria.query.slice(0, 200)}`
+          : input.title.slice(0, 200),
         body: input.snippet.slice(0, 2000),
       }),
     onSuccess: (_result, input) => {
@@ -228,9 +236,12 @@ export default function ResearchPage() {
         },
       });
     },
-    onSuccess: () => toast.success("Research report saved as an immutable snapshot"),
+    onSuccess: () =>
+      toast.success("Research report saved as an immutable snapshot"),
     onError: (error) =>
-      toast.error(apiErrorMessage(error, "Could not save this research report.")),
+      toast.error(
+        apiErrorMessage(error, "Could not save this research report."),
+      ),
   });
 
   const handleSubmit = (event: React.FormEvent) => {
@@ -252,14 +263,17 @@ export default function ResearchPage() {
   };
 
   const results = searchQuery.data?.results ?? [];
-  const visibleResults = results.filter((result) => !isUnreadableAuthorityResult(result));
+  const visibleResults = results.filter(
+    (result) => !isUnreadableAuthorityResult(result),
+  );
   const contextualPlan = searchQuery.data?.contextual_plan ?? null;
   const coverageNotice = searchQuery.data?.coverage_notice ?? null;
   const searchOutcome = searchQuery.data?.outcome ?? null;
   const corpusCoverage = searchQuery.data?.corpus_coverage ?? null;
   const totalAfterFilter = searchQuery.data?.total_after_filter ?? 0;
   const hasSearched = Boolean(searchCriteria?.query);
-  const unreadableOnlyResults = results.length > 0 && visibleResults.length === 0;
+  const unreadableOnlyResults =
+    results.length > 0 && visibleResults.length === 0;
   const hasNextPage = (page + 1) * PAGE_SIZE < totalAfterFilter;
   const hasPrevPage = page > 0;
   const licensedReady =
@@ -286,7 +300,11 @@ export default function ResearchPage() {
         }
         actions={
           <Link href="/app/research/saved">
-            <Button variant="outline" size="sm" data-testid="research-open-saved">
+            <Button
+              variant="outline"
+              size="sm"
+              data-testid="research-open-saved"
+            >
               <Bookmark className="mr-1 h-3.5 w-3.5" />
               Saved research
             </Button>
@@ -308,7 +326,9 @@ export default function ResearchPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="flex flex-col gap-3">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <Label className="text-xs text-[var(--color-mute-2)]">Source</Label>
+              <Label className="text-xs text-[var(--color-mute-2)]">
+                Source
+              </Label>
               <div
                 className="flex w-full min-w-0 rounded-md border border-[var(--color-line)] bg-white sm:w-auto"
                 data-testid="research-source-toggle"
@@ -357,43 +377,48 @@ export default function ResearchPage() {
               </div>
             ) : null}
             {researchSource === "caseops_corpus" ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <Label className="text-xs text-[var(--color-mute-2)]">
-                Mode
-              </Label>
-              <div
-                className="flex w-full min-w-0 flex-wrap rounded-md border border-[var(--color-line)] bg-white sm:w-auto"
-                data-testid="research-mode-toggle"
-              >
-                {([
-                  ["keyword", "Keyword"],
-                  ["contextual", "Context"],
-                  ["exact_citation", "Citation"],
-                  ["party", "Party"],
-                  ["court", "Court"],
-                  ["judge", "Judge"],
-                  ["act_section", "Act / section"],
-                ] as const).map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setSearchMode(value)}
-                    data-testid={`research-mode-${value.replace("_", "-")}`}
-                    className={`min-w-0 flex-1 px-3 py-1 text-xs font-medium sm:flex-none ${
-                      searchMode === value
-                        ? "bg-[var(--color-ink)] text-white"
-                        : "text-[var(--color-ink-2)]"
-                    }`}
-                    aria-pressed={searchMode === value}
-                  >
-                    {label}
-                  </button>
-                ))}
+              <div className="flex flex-wrap items-center gap-2">
+                <Label className="text-xs text-[var(--color-mute-2)]">
+                  Mode
+                </Label>
+                <div
+                  className="flex w-full min-w-0 flex-wrap rounded-md border border-[var(--color-line)] bg-white sm:w-auto"
+                  data-testid="research-mode-toggle"
+                >
+                  {(
+                    [
+                      ["keyword", "Keyword"],
+                      ["contextual", "Context"],
+                      ["exact_citation", "Citation"],
+                      ["party", "Party"],
+                      ["court", "Court"],
+                      ["judge", "Judge"],
+                      ["act_section", "Act / section"],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setSearchMode(value)}
+                      data-testid={`research-mode-${value.replace("_", "-")}`}
+                      className={`min-w-0 flex-1 px-3 py-1 text-xs font-medium sm:flex-none ${
+                        searchMode === value
+                          ? "bg-[var(--color-ink)] text-white"
+                          : "text-[var(--color-ink-2)]"
+                      }`}
+                      aria-pressed={searchMode === value}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
             ) : null}
             <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
-              <Search className="h-4 w-4 text-[var(--color-mute)]" aria-hidden />
+              <Search
+                className="h-4 w-4 text-[var(--color-mute)]"
+                aria-hidden
+              />
               <Input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
@@ -415,7 +440,8 @@ export default function ResearchPage() {
               >
                 {activeSearchFetching ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Searching…
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />{" "}
+                    Searching…
                   </>
                 ) : (
                   <>
@@ -425,102 +451,118 @@ export default function ResearchPage() {
               </Button>
             </div>
             {researchSource === "caseops_corpus" ? (
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="flex flex-col gap-1">
-                <Label htmlFor="forum-filter" className="text-xs">
-                  <SlidersHorizontal className="mr-1 inline h-3 w-3" aria-hidden /> Forum
-                </Label>
-                <Select
-                  value={forumLevel}
-                  onValueChange={(value) => setForumLevel(value as ForumFilter)}
-                >
-                  <SelectTrigger id="forum-filter" data-testid="research-filter-forum">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="any">Any forum</SelectItem>
-                    <SelectItem value="supreme_court">Supreme Court</SelectItem>
-                    <SelectItem value="high_court">High Court</SelectItem>
-                    <SelectItem value="tribunal">Tribunal</SelectItem>
-                    <SelectItem value="lower_court">Lower court</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="forum-filter" className="text-xs">
+                    <SlidersHorizontal
+                      className="mr-1 inline h-3 w-3"
+                      aria-hidden
+                    />{" "}
+                    Forum
+                  </Label>
+                  <Select
+                    value={forumLevel}
+                    onValueChange={(value) =>
+                      setForumLevel(value as ForumFilter)
+                    }
+                  >
+                    <SelectTrigger
+                      id="forum-filter"
+                      data-testid="research-filter-forum"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="any">Any forum</SelectItem>
+                      <SelectItem value="supreme_court">
+                        Supreme Court
+                      </SelectItem>
+                      <SelectItem value="high_court">High Court</SelectItem>
+                      <SelectItem value="tribunal">Tribunal</SelectItem>
+                      <SelectItem value="lower_court">Lower court</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="court-filter" className="text-xs">
+                    Court name contains
+                  </Label>
+                  <Input
+                    id="court-filter"
+                    value={courtName}
+                    onChange={(event) => setCourtName(event.target.value)}
+                    placeholder="Delhi, Bombay, Supreme…"
+                    data-testid="research-filter-court"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="doctype-filter" className="text-xs">
+                    Document type
+                  </Label>
+                  <Select
+                    value={documentType}
+                    onValueChange={(value) =>
+                      setDocumentType(value as DocTypeFilter)
+                    }
+                  >
+                    <SelectTrigger
+                      id="doctype-filter"
+                      data-testid="research-filter-doctype"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="any">Any type</SelectItem>
+                      <SelectItem value="judgment">Judgment</SelectItem>
+                      <SelectItem value="order">Order</SelectItem>
+                      <SelectItem value="statute">Statute</SelectItem>
+                      <SelectItem value="regulation">Regulation</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <div className="flex flex-col gap-1">
-                <Label htmlFor="court-filter" className="text-xs">
-                  Court name contains
-                </Label>
-                <Input
-                  id="court-filter"
-                  value={courtName}
-                  onChange={(event) => setCourtName(event.target.value)}
-                  placeholder="Delhi, Bombay, Supreme…"
-                  data-testid="research-filter-court"
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <Label htmlFor="doctype-filter" className="text-xs">
-                  Document type
-                </Label>
-                <Select
-                  value={documentType}
-                  onValueChange={(value) => setDocumentType(value as DocTypeFilter)}
-                >
-                  <SelectTrigger id="doctype-filter" data-testid="research-filter-doctype">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="any">Any type</SelectItem>
-                    <SelectItem value="judgment">Judgment</SelectItem>
-                    <SelectItem value="order">Order</SelectItem>
-                    <SelectItem value="statute">Statute</SelectItem>
-                    <SelectItem value="regulation">Regulation</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
             ) : null}
             {/* PG-110 (2026-05-01): language filter. Default English so
                 Garo / Hindi / Tamil judgments pulled by the 2026-04-28
                 ingest sweep don't dominate top results. */}
             {researchSource === "caseops_corpus" ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <Label className="text-xs text-[var(--color-mute-2)]">
-                Language
-              </Label>
-              <div
-                className="inline-flex rounded-md border border-[var(--color-line)] bg-white"
-                data-testid="research-language-toggle"
-              >
-                <button
-                  type="button"
-                  onClick={() => setLanguage("en")}
-                  data-testid="research-language-en"
-                  className={`px-3 py-1 text-xs font-medium ${
-                    language === "en"
-                      ? "bg-[var(--color-ink)] text-white"
-                      : "text-[var(--color-ink-2)]"
-                  }`}
-                  aria-pressed={language === "en"}
+              <div className="flex flex-wrap items-center gap-2">
+                <Label className="text-xs text-[var(--color-mute-2)]">
+                  Language
+                </Label>
+                <div
+                  className="inline-flex rounded-md border border-[var(--color-line)] bg-white"
+                  data-testid="research-language-toggle"
                 >
-                  English
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLanguage("any")}
-                  data-testid="research-language-any"
-                  className={`px-3 py-1 text-xs font-medium ${
-                    language === "any"
-                      ? "bg-[var(--color-ink)] text-white"
-                      : "text-[var(--color-ink-2)]"
-                  }`}
-                  aria-pressed={language === "any"}
-                >
-                  All languages
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setLanguage("en")}
+                    data-testid="research-language-en"
+                    className={`px-3 py-1 text-xs font-medium ${
+                      language === "en"
+                        ? "bg-[var(--color-ink)] text-white"
+                        : "text-[var(--color-ink-2)]"
+                    }`}
+                    aria-pressed={language === "en"}
+                  >
+                    English
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLanguage("any")}
+                    data-testid="research-language-any"
+                    className={`px-3 py-1 text-xs font-medium ${
+                      language === "any"
+                        ? "bg-[var(--color-ink)] text-white"
+                        : "text-[var(--color-ink-2)]"
+                    }`}
+                    aria-pressed={language === "any"}
+                  >
+                    All languages
+                  </button>
+                </div>
               </div>
-            </div>
             ) : null}
           </form>
         </CardContent>
@@ -534,7 +576,9 @@ export default function ResearchPage() {
           <span className="font-semibold text-[var(--color-ink)]">
             Corpus scope
           </span>{" "}
-          {corpusCoverage.scope_summary}. {corpusCoverage.document_count.toLocaleString()} documents; index {corpusCoverage.index_state}.
+          {corpusCoverage.scope_summary}.{" "}
+          {corpusCoverage.document_count.toLocaleString()} documents; index{" "}
+          {corpusCoverage.index_state}.
           {corpusCoverage.last_ingested_at
             ? ` Latest ingest ${formatLegalDate(corpusCoverage.last_ingested_at, { day: "2-digit", month: "short", year: "numeric" })}.`
             : " No completed ingest timestamp is available."}
@@ -615,12 +659,14 @@ export default function ResearchPage() {
       ) : visibleResults.length === 0 ? (
         <EmptyState
           icon={Scale}
-          title={researchOutcomeCopy(searchOutcome, unreadableOnlyResults).title}
+          title={
+            researchOutcomeCopy(searchOutcome, unreadableOnlyResults).title
+          }
           description={
             unreadableOnlyResults
               ? researchOutcomeCopy(searchOutcome, true).description
-              : coverageNotice ??
-                researchOutcomeCopy(searchOutcome, false).description
+              : (coverageNotice ??
+                researchOutcomeCopy(searchOutcome, false).description)
           }
         />
       ) : (
@@ -766,7 +812,10 @@ function IndianKanoonResults({
     );
   }
   return (
-    <div className="flex min-w-0 flex-col gap-3" data-testid="research-indian-kanoon-results">
+    <div
+      className="flex min-w-0 flex-col gap-3"
+      data-testid="research-indian-kanoon-results"
+    >
       <div
         className={`rounded-md border px-4 py-3 text-xs ${
           call?.stale
@@ -786,7 +835,9 @@ function IndianKanoonResults({
               : " · no new provider charge"}
           </span>
         ) : null}
-        {call?.freshness_warning ? <p className="mt-1">{call.freshness_warning}</p> : null}
+        {call?.freshness_warning ? (
+          <p className="mt-1">{call.freshness_warning}</p>
+        ) : null}
         {disclaimer ? <p className="mt-1">{disclaimer}</p> : null}
       </div>
       <ul className="flex flex-col gap-3">
@@ -813,7 +864,9 @@ function IndianKanoonResults({
                     </span>
                   ) : null}
                   {result.canonical_citation ? (
-                    <span className="font-mono">{result.canonical_citation}</span>
+                    <span className="font-mono">
+                      {result.canonical_citation}
+                    </span>
                   ) : null}
                 </div>
                 <h3 className="mt-1 text-base font-semibold text-[var(--color-ink)]">
@@ -851,10 +904,14 @@ function indianKanoonReadinessMessage(
     return "Licensed-source readiness could not be determined.";
   }
   if (readiness.state === "blocked_disabled") {
-    return "Licensed access is disabled by the runtime switch.";
+    const missing = indianKanoonMissingSetup(readiness);
+    return missing.length
+      ? `Indian Kanoon search is disabled because setup is incomplete: ${missing.join(", ")}. No provider call will be made.`
+      : "Indian Kanoon search is disabled by the runtime switch. No provider call will be made.";
   }
   if (readiness.state === "blocked_missing_config") {
-    return `Licensed access is missing configuration: ${readiness.missing_config_names.join(", ") || "provider settings"}.`;
+    const missing = indianKanoonMissingSetup(readiness);
+    return `Indian Kanoon search setup is incomplete: ${missing.join(", ") || "provider settings"}. No provider call will be made.`;
   }
   if (readiness.state === "blocked_terms") {
     return `Licensed access has invalid or expired terms metadata: ${readiness.invalid_terms_config.join(", ") || "terms dates"}.`;
@@ -868,7 +925,34 @@ function indianKanoonReadinessMessage(
   return "Licensed-source readiness could not be determined.";
 }
 
-function researchErrorCopy(error: unknown): { title: string; description: string } {
+function indianKanoonMissingSetup(readiness: IndianKanoonReadiness): string[] {
+  const names = readiness.missing_config_names;
+  const categories: string[] = [];
+  if (names.some((name) => name.includes("TOKEN"))) {
+    categories.push("provider credentials");
+  }
+  if (names.some((name) => name.includes("TERMS_"))) {
+    categories.push("contractual terms");
+  }
+  if (names.some((name) => name.includes("PERMITTED_USES"))) {
+    categories.push("permitted uses");
+  }
+  if (names.some((name) => name.includes("RETENTION"))) {
+    categories.push("retention policy");
+  }
+  if (names.some((name) => name.includes("BUDGET"))) {
+    categories.push("machine budgets");
+  }
+  if (readiness.missing_cost_categories.length > 0) {
+    categories.push("verified cost profiles");
+  }
+  return categories;
+}
+
+function researchErrorCopy(error: unknown): {
+  title: string;
+  description: string;
+} {
   if (error instanceof DOMException && error.name === "AbortError") {
     return {
       title: "Request timed out",
@@ -906,7 +990,9 @@ function researchErrorCopy(error: unknown): { title: string; description: string
   };
 }
 
-function parseAuthoritySearchMode(value: string | null | undefined): AuthoritySearchMode {
+function parseAuthoritySearchMode(
+  value: string | null | undefined,
+): AuthoritySearchMode {
   const modes: AuthoritySearchMode[] = [
     "keyword",
     "contextual",
@@ -935,7 +1021,8 @@ function researchOutcomeCopy(
   if (outcome === "corpus_unavailable") {
     return {
       title: "Corpus unavailable",
-      description: "No searchable authority corpus is available. Retry after corpus health is restored.",
+      description:
+        "No searchable authority corpus is available. Retry after corpus health is restored.",
     };
   }
   if (outcome === "index_stale") {
@@ -948,13 +1035,15 @@ function researchOutcomeCopy(
   if (outcome === "provider_unavailable") {
     return {
       title: "Provider unavailable",
-      description: "The configured provider is unavailable. Retry the preserved query later.",
+      description:
+        "The configured provider is unavailable. Retry the preserved query later.",
     };
   }
   if (outcome === "offset_out_of_range") {
     return {
       title: "Page no longer available",
-      description: "The result set changed. Return to the previous page or rerun the search.",
+      description:
+        "The result set changed. Return to the previous page or rerun the search.",
     };
   }
   return {
@@ -989,8 +1078,9 @@ export function isGarbledSnippet(text: string | null | undefined): boolean {
   const replacementChars = (text.match(/\uFFFD/g) ?? []).length;
   if (replacementChars / text.length > 0.02) return true;
   // v1: Box-drawing / private-use / weird-symbol density.
-  const oddChars =
-    (text.match(/[\u2500-\u259F\uE000-\uF8FF\u2630-\u2BFF]/g) ?? []).length;
+  const oddChars = (
+    text.match(/[\u2500-\u259F\uE000-\uF8FF\u2630-\u2BFF]/g) ?? []
+  ).length;
   if (oddChars / text.length > 0.05) return true;
   // v1: Single-letter density (broken-ligature OCR fragments).
   const tokens = text.split(/\s+/).filter(Boolean);
@@ -1007,12 +1097,13 @@ export function isGarbledSnippet(text: string | null | undefined): boolean {
   // Tokens containing non-alphanumeric mid-token chars (e.g. `?J`,
   // `$O`, `:J`, `>2>`, `120-?J`). Real legal text has clean tokens.
   if (tokens.length >= 8) {
-    const dirtyTokens = tokens.filter((t) =>
-      /[^A-Za-z0-9.,;:()\-'/&]/.test(t) ||
-      // Mid-token punctuation that isn't a comma/period at the end.
-      /[A-Za-z]\?[A-Za-z]/.test(t) ||
-      /[A-Za-z]\$[A-Za-z]/.test(t) ||
-      /[A-Za-z]>[A-Za-z]/.test(t),
+    const dirtyTokens = tokens.filter(
+      (t) =>
+        /[^A-Za-z0-9.,;:()\-'/&]/.test(t) ||
+        // Mid-token punctuation that isn't a comma/period at the end.
+        /[A-Za-z]\?[A-Za-z]/.test(t) ||
+        /[A-Za-z]\$[A-Za-z]/.test(t) ||
+        /[A-Za-z]>[A-Za-z]/.test(t),
     ).length;
     if (dirtyTokens / tokens.length > 0.3) return true;
   }
@@ -1153,9 +1244,9 @@ function AuthorityCard({
               className="mt-2 rounded-[var(--radius-md)] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
               data-testid="research-result-garbled"
             >
-              The source PDF text isn&apos;t legible enough to preview
-              here (low-quality OCR on the original). Open the source
-              link below to read the authoritative text.
+              The source PDF text isn&apos;t legible enough to preview here
+              (low-quality OCR on the original). Open the source link below to
+              read the authoritative text.
             </p>
           ) : (
             <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-ink-2)]">
@@ -1202,7 +1293,6 @@ function AuthorityCard({
     </li>
   );
 }
-
 
 function TreatmentBadge({
   treatment,

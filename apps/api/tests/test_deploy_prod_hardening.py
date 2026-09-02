@@ -50,13 +50,25 @@ def test_web_gcloudignore_blocks_local_build_artifacts() -> None:
 
 def test_local_playwright_api_does_not_reuse_idle_mutation_connections() -> None:
     config = _read_repo_text("playwright.app.config.ts")
-    cost_spec = _read_repo_text(
-        "tests/e2e/iplf-039f-cost-items-2026-08-21.spec.ts"
-    )
+    cost_spec = _read_repo_text("tests/e2e/iplf-039f-cost-items-2026-08-21.spec.ts")
 
     assert config.count("--timeout-keep-alive 0") == 2
     assert "BOOTSTRAP_TRANSPORT_ATTEMPTS" not in cost_spec
     assert "isConnectionReset" not in cost_spec
+
+
+def test_production_deploy_seeds_verified_statutes_before_routing_traffic() -> None:
+    deploy = _read_repo_text("scripts/deploy-prod.sh")
+
+    seed_update = 'gcloud run jobs "${STATUTE_SEED_ACTION}" "${STATUTE_SEED_JOB}"'
+    seed_execute = 'gcloud run jobs execute "${STATUTE_SEED_JOB}"'
+    api_deploy = "gcloud run deploy caseops-api"
+    assert "caseops_api.scripts.seed_statutes" in deploy
+    assert "STATUTE_SEED_JOB=caseops-seed-statutes" in deploy
+    assert '--image "${API_IMMUTABLE_IMAGE}"' in deploy
+    assert seed_update in deploy
+    assert seed_execute in deploy
+    assert deploy.index(seed_update) < deploy.index(seed_execute) < deploy.index(api_deploy)
 
 
 @pytest.mark.parametrize(
@@ -84,12 +96,8 @@ def test_private_retrieval_production_acceptance_is_exact_and_release_owned() ->
     config = _read_repo_text("playwright.prod-ram.config.ts")
     workflow = _read_repo_text(".github/workflows/prod-verify.yml")
     deploy = _read_repo_text("scripts/deploy-prod.sh")
-    bootstrap = _read_repo_text(
-        "apps/api/src/caseops_api/scripts/bootstrap_ip_production_qa.py"
-    )
-    spec = _read_repo_text(
-        "tests/e2e/iplf-066b-private-retrieval-2026-08-31-prod.spec.ts"
-    )
+    bootstrap = _read_repo_text("apps/api/src/caseops_api/scripts/bootstrap_ip_production_qa.py")
+    spec = _read_repo_text("tests/e2e/iplf-066b-private-retrieval-2026-08-31-prod.spec.ts")
 
     assert config.count("iplf-066b-private-retrieval-2026-08-31-prod") == 2
     assert "playwright.prod-ram.config.ts" in workflow
@@ -108,7 +116,7 @@ def test_private_retrieval_production_acceptance_is_exact_and_release_owned() ->
     assert 'candidate.status == "active"' in bootstrap
     assert 'candidate.status not in {"closed", "disposed"}' in bootstrap
     assert "max(iterations.values(), default=0) + 1" in bootstrap
-    assert "--update-env-vars \"CASEOPS_QA_RELEASE_SHA=${HEAD_SHA}\"" in deploy
+    assert '--update-env-vars "CASEOPS_QA_RELEASE_SHA=${HEAD_SHA}"' in deploy
     assert deploy.index("run deploy caseops-web") < deploy.index(
         "run jobs execute caseops-ip-qa-bootstrap"
     )
@@ -135,9 +143,7 @@ def test_a0_production_acceptance_is_an_isolated_verify_only_gate() -> None:
     # independently after the broad RAM batch. The historical A0 transition
     # gate additionally requires an explicit manual opt-in.
     assert workflow.count(prerequisite_gate) == 6
-    assert (
-        prerequisite_gate + " && inputs.run_historical_a0_gate == true"
-    ) in workflow
+    assert (prerequisite_gate + " && inputs.run_historical_a0_gate == true") in workflow
     assert "CASEOPS_IP_A0_PROD_MODE: verify" in workflow
     assert (
         "npx playwright test --config=playwright.ip-a0-prod.config.ts --reporter=list" in workflow
@@ -442,12 +448,10 @@ def test_workstation_docker_gate_is_migration_first_and_exact_release() -> None:
     assert "start worker" in docker_script
     assert '$WorkerStateAfterRestart -ne "running"' in docker_script
     assert '$WorkerStateAfterPlaywright -ne "running"' in docker_script
-    assert docker_script.index("stop --timeout 30 worker") < docker_script.index(
-        "-m postgres"
-    )
+    assert docker_script.index("stop --timeout 30 worker") < docker_script.index("-m postgres")
     assert docker_script.index("-m postgres") < docker_script.index("start worker")
     assert docker_script.index("start worker") < docker_script.index(
-        '$WorkerStateAfterPlaywright = Get-ComposeServiceState'
+        "$WorkerStateAfterPlaywright = Get-ComposeServiceState"
     )
 
     assert "globalSetup: undefined" in playwright_config
@@ -1369,12 +1373,8 @@ exec "${FAKE_REAL_PYTHON}" "$@"
                 if qa_already_completed or qa_already_failed
                 else "registry.invalid/caseops-api:old",
                 5 if qa_already_completed or qa_already_failed else 4,
-                execution_count=(
-                    10 if qa_already_completed or qa_already_failed else 9
-                ),
-                release_sha=(
-                    release_sha if qa_already_completed or qa_already_failed else None
-                ),
+                execution_count=(10 if qa_already_completed or qa_already_failed else 9),
+                release_sha=(release_sha if qa_already_completed or qa_already_failed else None),
                 latest_execution=(
                     "caseops-ip-qa-bootstrap-new"
                     if qa_already_completed or qa_already_failed
@@ -1412,9 +1412,7 @@ exec "${FAKE_REAL_PYTHON}" "$@"
             }
         )
     if private_projection_scheduler_hold is not None:
-        env["CASEOPS_PRIVATE_PROJECTION_SCHEDULER_HOLD"] = (
-            private_projection_scheduler_hold
-        )
+        env["CASEOPS_PRIVATE_PROJECTION_SCHEDULER_HOLD"] = private_projection_scheduler_hold
     command = [
         _find_working_bash(),
         "-c",
@@ -1542,8 +1540,7 @@ def test_deploy_prod_accepts_clean_head_and_healthy_api(tmp_path: Path) -> None:
     assert sum("run jobs execute caseops-ip-qa-bootstrap" in call for call in calls) == 1
     assert any(
         "run jobs update caseops-ip-qa-bootstrap" in call
-        and "--update-env-vars "
-        "CASEOPS_QA_RELEASE_SHA=abcdef1234567890abcdef1234567890abcdef12"
+        and "--update-env-vars CASEOPS_QA_RELEASE_SHA=abcdef1234567890abcdef1234567890abcdef12"
         in call
         for call in calls
     )
@@ -1575,8 +1572,7 @@ def test_deploy_prod_keeps_private_projection_scheduler_paused_during_incident(
     calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
     assert any(
         "scheduler_inventory.py reconcile" in call
-        and "--hold-scheduler-paused "
-        "caseops-private-projection-maintenance-cadence" in call
+        and "--hold-scheduler-paused caseops-private-projection-maintenance-cadence" in call
         for call in calls
     )
 
@@ -1668,14 +1664,8 @@ def test_deploy_prod_normalizes_windows_crlf_before_qa_execution_arguments(
     assert result.returncode == 0, result.stdout + result.stderr
     calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
     assert sum("run jobs execute caseops-ip-qa-bootstrap" in call for call in calls) == 1
-    assert any(
-        "run jobs executions describe caseops-ip-qa-bootstrap-old" in call
-        for call in calls
-    )
-    assert any(
-        "run jobs executions describe caseops-ip-qa-bootstrap-new" in call
-        for call in calls
-    )
+    assert any("run jobs executions describe caseops-ip-qa-bootstrap-old" in call for call in calls)
+    assert any("run jobs executions describe caseops-ip-qa-bootstrap-new" in call for call in calls)
 
 
 def test_deploy_prod_refuses_to_retry_a_failed_current_generation_qa_bootstrap(
