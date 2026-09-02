@@ -49,6 +49,7 @@ def _integrity_payload(report) -> dict[str, object]:
         "pending_event_count": report.pending_event_count,
         "failed_event_count": report.failed_event_count,
         "oldest_pending_lag_seconds": report.oldest_pending_lag_seconds,
+        "oldest_repair_lag_seconds": report.oldest_repair_lag_seconds,
         "orphan_scope_count": report.orphan_scope_count,
         "stale_source_count": report.stale_source_count,
         "unsafe_tombstone_count": report.unsafe_tombstone_count,
@@ -104,6 +105,7 @@ def _maintain(
                     event_lag_slo_seconds=event_lag_slo_seconds,
                 )
                 rebuilt = False
+                repair_deferred = False
                 if (
                     after.blockers
                     and set(after.blockers) <= repairable_blockers
@@ -117,7 +119,7 @@ def _maintain(
                                 activate=True,
                             )
                         except PrivateRetrievalInvariantError as exc:
-                            if rebuild_attempt or not _is_retryable_rebuild_conflict(exc):
+                            if not _is_retryable_rebuild_conflict(exc):
                                 raise
                             # A concurrent rebuild or canonical mutation can win
                             # while this worker is between bounded transactions.
@@ -140,6 +142,15 @@ def _maintain(
                                 break
                             if not set(after.blockers) <= repairable_blockers:
                                 raise
+                            if rebuild_attempt:
+                                # The active generation remains fail-closed and
+                                # the failed shadow has already been removed.
+                                # Do not turn expected interactive writer
+                                # progress into a release failure while this
+                                # repair remains inside its bounded SLO. The
+                                # next cadence replans from canonical state.
+                                repair_deferred = True
+                                break
                             continue
                         session.commit()
                         rebuild_count += 1
@@ -150,7 +161,25 @@ def _maintain(
                         company_id=company_id,
                         event_lag_slo_seconds=event_lag_slo_seconds,
                     )
-                tenant_blocked = breached_before_recovery or after.release_blocked
+                oldest_repair_lag_seconds = getattr(
+                    after,
+                    "oldest_repair_lag_seconds",
+                    None,
+                )
+                repair_lag_slo_breached = (
+                    oldest_repair_lag_seconds is not None
+                    and oldest_repair_lag_seconds > event_lag_slo_seconds
+                )
+                deferred_within_slo = (
+                    repair_deferred
+                    and getattr(after, "active_generation_id", None) is not None
+                    and bool(after.blockers)
+                    and set(after.blockers) <= repairable_blockers
+                    and not repair_lag_slo_breached
+                )
+                tenant_blocked = breached_before_recovery or (
+                    after.release_blocked and not deferred_within_slo
+                )
                 blocked = blocked or tenant_blocked
                 companies.append(
                     {
@@ -161,6 +190,12 @@ def _maintain(
                         "oldest_pending_lag_seconds_before": (before.oldest_pending_lag_seconds),
                         "pending_event_count_after": after.pending_event_count,
                         "failed_event_count_after": after.failed_event_count,
+                        "repair_deferred": repair_deferred,
+                        "repair_deferred_reason": (
+                            "concurrent_access_or_tombstone_change" if repair_deferred else None
+                        ),
+                        "oldest_repair_lag_seconds_after": oldest_repair_lag_seconds,
+                        "repair_lag_slo_breached": repair_lag_slo_breached,
                         "blockers_after": list(after.blockers),
                     }
                 )

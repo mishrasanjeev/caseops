@@ -34,7 +34,9 @@ def test_maintenance_releases_projection_locks_after_each_event(monkeypatch) -> 
         return session
 
     report = SimpleNamespace(
+        active_generation_id="generation-1",
         oldest_pending_lag_seconds=None,
+        oldest_repair_lag_seconds=None,
         blockers=(),
         release_blocked=False,
         pending_event_count=0,
@@ -165,6 +167,10 @@ def test_maintenance_isolates_one_tenant_failure_and_continues(monkeypatch) -> N
             "oldest_pending_lag_seconds_before": None,
             "pending_event_count_after": 0,
             "failed_event_count_after": 0,
+            "repair_deferred": False,
+            "repair_deferred_reason": None,
+            "oldest_repair_lag_seconds_after": None,
+            "repair_lag_slo_breached": False,
             "blockers_after": [],
         },
     ]
@@ -200,14 +206,18 @@ def test_maintenance_error_detail_preserves_typed_concurrency_message() -> None:
 
 def test_maintenance_retries_one_stale_rebuild_and_converges(monkeypatch) -> None:
     repairable = SimpleNamespace(
+        active_generation_id="generation-1",
         oldest_pending_lag_seconds=None,
+        oldest_repair_lag_seconds=0,
         blockers=("active_generation_manifest_mismatch",),
         release_blocked=True,
         pending_event_count=0,
         failed_event_count=0,
     )
     ready = SimpleNamespace(
+        active_generation_id="generation-2",
         oldest_pending_lag_seconds=None,
+        oldest_repair_lag_seconds=None,
         blockers=(),
         release_blocked=False,
         pending_event_count=0,
@@ -270,9 +280,11 @@ def test_maintenance_retries_one_stale_rebuild_and_converges(monkeypatch) -> Non
     assert process_calls == 2
 
 
-def test_maintenance_rejects_a_second_stale_rebuild(monkeypatch) -> None:
+def test_maintenance_defers_a_second_stale_rebuild_within_slo(monkeypatch) -> None:
     repairable = SimpleNamespace(
+        active_generation_id="generation-1",
         oldest_pending_lag_seconds=None,
+        oldest_repair_lag_seconds=59,
         blockers=("active_generation_manifest_mismatch",),
         release_blocked=True,
         pending_event_count=0,
@@ -319,15 +331,76 @@ def test_maintenance_rejects_a_second_stale_rebuild(monkeypatch) -> None:
         event_lag_slo_seconds=60,
     )
 
+    assert result["status"] == "ok"
+    assert result["release_blocked"] is False
+    assert result["companies"][0]["repair_deferred"] is True
+    assert result["companies"][0]["repair_deferred_reason"] == (
+        "concurrent_access_or_tombstone_change"
+    )
+    assert result["companies"][0]["blockers_after"] == ["active_generation_manifest_mismatch"]
+    assert rebuild_calls == 2
+
+
+def test_maintenance_blocks_a_deferred_repair_after_slo(monkeypatch) -> None:
+    repairable = SimpleNamespace(
+        active_generation_id="generation-1",
+        oldest_pending_lag_seconds=None,
+        oldest_repair_lag_seconds=301,
+        blockers=("active_generation_manifest_mismatch",),
+        release_blocked=True,
+        pending_event_count=0,
+        failed_event_count=0,
+    )
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "get_session_factory",
+        lambda: _WorkerSession,
+    )
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "list_private_maintenance_companies",
+        lambda _session, *, limit: SimpleNamespace(
+            company_ids=("company-1",),
+            truncated=False,
+        ),
+    )
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "inspect_private_index_integrity",
+        lambda _session, **_kwargs: repairable,
+    )
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "process_pending_private_projection_events",
+        lambda _session, **_kwargs: (),
+    )
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "rebuild_private_index",
+        lambda _session, **_kwargs: (_ for _ in ()).throw(
+            private_projection_integrity.PrivateRetrievalConcurrencyError(
+                STALE_PRIVATE_PROJECTION_WRITER_DETAIL
+            )
+        ),
+    )
+
+    result = private_projection_integrity._maintain(
+        max_companies=1,
+        max_rebuilds=1,
+        event_lag_slo_seconds=300,
+    )
+
     assert result["status"] == "blocked"
     assert result["release_blocked"] is True
-    assert result["companies"][0]["error_code"] == "PrivateRetrievalConcurrencyError"
-    assert rebuild_calls == 2
+    assert result["companies"][0]["repair_deferred"] is True
+    assert result["companies"][0]["repair_lag_slo_breached"] is True
 
 
 def test_maintenance_does_not_retry_an_unknown_rebuild_failure(monkeypatch) -> None:
     repairable = SimpleNamespace(
+        active_generation_id="generation-1",
         oldest_pending_lag_seconds=None,
+        oldest_repair_lag_seconds=0,
         blockers=("active_generation_manifest_mismatch",),
         release_blocked=True,
         pending_event_count=0,

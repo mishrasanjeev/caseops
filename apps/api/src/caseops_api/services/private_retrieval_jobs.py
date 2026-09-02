@@ -155,6 +155,7 @@ class PrivateIntegrityReport:
     pending_event_count: int
     failed_event_count: int
     oldest_pending_lag_seconds: int | None
+    oldest_repair_lag_seconds: int | None
     orphan_scope_count: int
     stale_source_count: int
     unsafe_tombstone_count: int
@@ -1155,6 +1156,38 @@ def inspect_private_index_integrity(
         blockers.append("stale_or_ineligible_sources")
     if unsafe_tombstones:
         blockers.append("unsafe_tombstone_payload")
+    repairable_blockers = {
+        "active_generation_manifest_mismatch",
+        "orphan_or_stale_scopes",
+        "stale_or_ineligible_sources",
+    }
+    oldest_repair_lag = None
+    if generation is not None and blockers and set(blockers) <= repairable_blockers:
+        generation_started_at = generation.activated_at or generation.created_at
+        repair_started_at = session.scalar(
+            select(func.min(PrivateProjectionEvent.applied_at)).where(
+                PrivateProjectionEvent.company_id == company_id,
+                PrivateProjectionEvent.status == "applied",
+                PrivateProjectionEvent.applied_at.is_not(None),
+                PrivateProjectionEvent.applied_at >= generation_started_at,
+            )
+        )
+        if repair_started_at is None:
+            # A missing propagation event is itself abnormal. Use the last
+            # verified/activated generation boundary as a conservative age so
+            # an untracked stale source cannot be deferred indefinitely.
+            repair_started_at = (
+                generation.verified_at or generation.activated_at or generation.created_at
+            )
+        normalized_repair_started_at = (
+            repair_started_at.replace(tzinfo=UTC)
+            if repair_started_at.tzinfo is None
+            else repair_started_at
+        )
+        oldest_repair_lag = max(
+            0,
+            int((current - normalized_repair_started_at).total_seconds()),
+        )
     state = "blocked" if blockers else "ready"
     return PrivateIntegrityReport(
         company_id=company_id,
@@ -1165,6 +1198,7 @@ def inspect_private_index_integrity(
         pending_event_count=pending_count,
         failed_event_count=failed_count,
         oldest_pending_lag_seconds=oldest_lag,
+        oldest_repair_lag_seconds=oldest_repair_lag,
         orphan_scope_count=orphan_scope_count,
         stale_source_count=stale_source_count,
         unsafe_tombstone_count=unsafe_tombstones,

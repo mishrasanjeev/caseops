@@ -10078,6 +10078,139 @@ def test_private_rebuild_releases_interactive_parent_locks_on_postgres(
     assert summary.projection_count == 3
 
 
+def test_private_maintenance_defers_two_epoch_races_then_converges_on_postgres(
+    pg_engine,
+    monkeypatch,
+) -> None:
+    """A safe stale-writer collision is deferred, bounded and repeatable on PG."""
+
+    from caseops_api.db.models import Company, Matter, PrivateIndexGeneration
+    from caseops_api.scripts import private_projection_integrity
+    from caseops_api.services import private_retrieval_jobs
+    from caseops_api.services.private_retrieval_jobs import PrivateMaintenanceCandidates
+
+    company_id = str(uuid4())
+    matter_id = str(uuid4())
+    now = datetime.now(UTC)
+    with Session(pg_engine) as session:
+        session.add(
+            Company(
+                id=company_id,
+                name="PostgreSQL Deferred Rebuild Firm",
+                slug=f"pg-deferred-rebuild-{company_id[:8]}",
+                company_type="law_firm",
+                tenant_key=company_id,
+            )
+        )
+        session.add(
+            Matter(
+                id=matter_id,
+                company_id=company_id,
+                title="Deferred private projection rebuild",
+                matter_code=f"PG-DEFER-{matter_id[:8]}",
+                status="active",
+                practice_area="Intellectual Property",
+                forum_level="high_court",
+                is_active=True,
+                updated_at=now,
+            )
+        )
+        session.commit()
+        private_retrieval_jobs.rebuild_private_index(
+            session,
+            company_id=company_id,
+            activate=True,
+        )
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        matter.title = "Canonical source changed before maintenance"
+        matter.updated_at = now + timedelta(seconds=1)
+        session.commit()
+
+    worker_factory = sessionmaker(bind=pg_engine, expire_on_commit=False)
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "get_session_factory",
+        lambda: worker_factory,
+    )
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "list_private_maintenance_companies",
+        lambda _session, *, limit: PrivateMaintenanceCandidates(
+            company_ids=(company_id,),
+            truncated=False,
+        ),
+    )
+    real_inputs = private_retrieval_jobs._private_projection_inputs
+    race_count = 0
+
+    def advance_both_shadow_epochs(session, **kwargs):
+        nonlocal race_count
+        payloads = real_inputs(session, **kwargs)
+        if race_count < 2:
+            race_count += 1
+            with Session(pg_engine) as concurrent:
+                concurrent.execute(text("SET LOCAL lock_timeout = '300ms'"))
+                shadow = concurrent.scalar(
+                    select(PrivateIndexGeneration)
+                    .where(
+                        PrivateIndexGeneration.company_id == company_id,
+                        PrivateIndexGeneration.state == "building",
+                    )
+                    .with_for_update()
+                )
+                assert shadow is not None
+                shadow.access_policy_generation += 1
+                concurrent.commit()
+        return payloads
+
+    monkeypatch.setattr(
+        private_retrieval_jobs,
+        "_private_projection_inputs",
+        advance_both_shadow_epochs,
+    )
+
+    deferred = private_projection_integrity._maintain(
+        max_companies=1,
+        max_rebuilds=1,
+        event_lag_slo_seconds=300,
+    )
+
+    assert race_count == 2
+    assert deferred["status"] == "ok"
+    assert deferred["release_blocked"] is False
+    assert deferred["rebuild_count"] == 0
+    assert deferred["companies"][0]["repair_deferred"] is True
+    assert deferred["companies"][0]["repair_lag_slo_breached"] is False
+    with Session(pg_engine) as session:
+        failed_shadows = list(
+            session.scalars(
+                select(PrivateIndexGeneration).where(
+                    PrivateIndexGeneration.company_id == company_id,
+                    PrivateIndexGeneration.state == "failed",
+                )
+            ).all()
+        )
+        assert len(failed_shadows) == 2
+
+    monkeypatch.setattr(
+        private_retrieval_jobs,
+        "_private_projection_inputs",
+        real_inputs,
+    )
+    converged = private_projection_integrity._maintain(
+        max_companies=1,
+        max_rebuilds=1,
+        event_lag_slo_seconds=300,
+    )
+
+    assert converged["status"] == "ok"
+    assert converged["release_blocked"] is False
+    assert converged["rebuild_count"] == 1
+    assert converged["companies"][0]["rebuilt"] is True
+    assert converged["companies"][0]["blockers_after"] == []
+
+
 def test_private_rebuild_ten_thousand_projection_query_budget_and_concurrency_on_postgres(
     pg_engine,
     monkeypatch,

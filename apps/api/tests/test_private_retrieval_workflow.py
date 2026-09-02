@@ -1384,6 +1384,127 @@ def test_maintenance_retries_one_stale_shadow_and_activates_cleanly(
         assert not inspect_private_index_integrity(session, company_id=company_id).blockers
 
 
+def test_maintenance_defers_repeated_writer_races_then_next_run_converges(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    company_id = str(bootstrap["company"]["id"])
+    membership_id = str(bootstrap["membership"]["id"])
+    matter = _matter(client, token, "PRIVATE-MAINTENANCE-DEFER")
+    with get_session_factory()() as session:
+        rebuild_private_index(session, company_id=company_id, activate=True)
+        session.commit()
+        propagate_private_projection_change(
+            session,
+            company_id=company_id,
+            actor_membership_id=membership_id,
+            idempotency_key="iplf-066b-maintenance-defer-trigger",
+            event_type="source_changed",
+            target_type="matter",
+            target_id=str(matter["id"]),
+            target_version=None,
+            reason_code="source_changed_before_deferred_maintenance",
+        )
+        session.commit()
+
+    real_inputs = private_retrieval_jobs._private_projection_inputs
+    race_count = 0
+
+    def race_both_rebuild_attempts(session, **kwargs):
+        nonlocal race_count
+        if race_count < 2:
+            race_count += 1
+            with get_session_factory()() as concurrent:
+                propagate_private_projection_change(
+                    concurrent,
+                    company_id=company_id,
+                    actor_membership_id=membership_id,
+                    idempotency_key=f"iplf-066b-maintenance-defer-race-{race_count}",
+                    event_type="access_changed",
+                    target_type="matter",
+                    target_id=str(matter["id"]),
+                    target_version=None,
+                    reason_code="access_changed_during_deferred_maintenance",
+                )
+                concurrent.commit()
+        return real_inputs(session, **kwargs)
+
+    monkeypatch.setattr(
+        private_retrieval_jobs,
+        "_private_projection_inputs",
+        race_both_rebuild_attempts,
+    )
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "list_private_maintenance_companies",
+        lambda _session, *, limit: PrivateMaintenanceCandidates(
+            company_ids=(company_id,),
+            truncated=False,
+        ),
+    )
+
+    deferred = private_projection_integrity._maintain(
+        max_companies=1,
+        max_rebuilds=1,
+        event_lag_slo_seconds=300,
+    )
+
+    assert race_count == 2
+    assert deferred["status"] == "ok"
+    assert deferred["release_blocked"] is False
+    assert deferred["rebuild_count"] == 0
+    assert deferred["companies"][0]["rebuilt"] is False
+    assert deferred["companies"][0]["repair_deferred"] is True
+    assert deferred["companies"][0]["repair_lag_slo_breached"] is False
+    assert set(deferred["companies"][0]["blockers_after"]) <= {
+        "active_generation_manifest_mismatch",
+        "orphan_or_stale_scopes",
+        "stale_or_ineligible_sources",
+    }
+    with get_session_factory()() as session:
+        failed_shadows = list(
+            session.scalars(
+                select(PrivateIndexGeneration).where(
+                    PrivateIndexGeneration.company_id == company_id,
+                    PrivateIndexGeneration.state == "failed",
+                )
+            ).all()
+        )
+        assert len(failed_shadows) == 2
+        assert all(row.failure_code == "PrivateRetrievalConcurrencyError" for row in failed_shadows)
+        assert (
+            session.scalar(
+                select(func.count(PrivateIndexProjection.id)).where(
+                    PrivateIndexProjection.company_id == company_id,
+                    PrivateIndexProjection.generation_id.in_([row.id for row in failed_shadows]),
+                )
+            )
+            == 0
+        )
+
+    monkeypatch.setattr(
+        private_retrieval_jobs,
+        "_private_projection_inputs",
+        real_inputs,
+    )
+    converged = private_projection_integrity._maintain(
+        max_companies=1,
+        max_rebuilds=1,
+        event_lag_slo_seconds=300,
+    )
+
+    assert converged["status"] == "ok"
+    assert converged["release_blocked"] is False
+    assert converged["rebuild_count"] == 1
+    assert converged["companies"][0]["rebuilt"] is True
+    assert converged["companies"][0]["repair_deferred"] is False
+    assert converged["companies"][0]["blockers_after"] == []
+    with get_session_factory()() as session:
+        assert not inspect_private_index_integrity(session, company_id=company_id).blockers
+
+
 @pytest.mark.parametrize(
     ("revocation", "expected_problem_type"),
     (

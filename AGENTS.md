@@ -81,6 +81,12 @@ requirements when using the fallback.
   events. Do not infer an automatic resurrection from an explicit, audited
   `Disposed -> Intake` transition, and do not weaken lifecycle protections to
   make a UI symptom disappear.
+- A private-projection stale-writer rejection during a rebuild is a working
+  security fence, not proof of corruption. Remove the partial shadow, keep the
+  active generation fail-closed, and defer only repairable blockers while their
+  persisted repair age remains inside the bounded SLO. Repeated concurrency
+  must be regression-tested across consecutive maintenance runs; unsafe
+  blockers and SLO breaches remain release-blocking.
 - Provider rate limits, timeouts, and generic outages are transient availability
   states, not corrupt records. Bound retries and apply a machine-scheduled
   cooldown, but never permanently quarantine a tracked case or require human

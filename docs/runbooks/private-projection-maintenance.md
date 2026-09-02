@@ -25,6 +25,9 @@ disposition decisions.
 - Concurrent-change recovery: one in-process replan for a typed rebuild conflict,
   including a competing shadow, a newly pending event, active-generation turnover,
   or an access/tombstone epoch fence
+- Repeated-change handling: after the replan, another typed epoch conflict removes
+  the second partial shadow and defers only repairable blockers to the next cadence
+  while their persisted repair age is at most 300 seconds
 - Event lag SLO: 300 seconds
 - Event attempts: 3, with 30-second then 60-second application backoff
 - Scheduler delivery attempts: at most 5 within 900 seconds
@@ -78,13 +81,18 @@ shadow's partial projections, drains any newly due tenant event, re-inspects
 integrity, and permits exactly one fresh rebuild. Rebuild writes are bulked per
 50-row epoch-fenced batch rather than issuing generation, projection, scope and
 cache work per row; this reduces the stale-writer exposure window without
-weakening the fence. A second conflict, a lease wait beyond 45 seconds, a
+weakening the fence. A second typed epoch conflict is reported as
+`repair_deferred=true` with `oldest_repair_lag_seconds_after`; it does not fail the
+run while the active generation exists, every remaining blocker is repairable,
+and the repair age is within 300 seconds. The next cadence must replan from
+canonical state. A repair SLO breach, lease wait beyond 45 seconds,
 non-repairable blocker, or any other exception fails the tenant and the job.
 Cloud Run task retries remain disabled.
 
-The structured record contains a correlation ID, affected company IDs, event lag,
-pending and failed counts, blockers, and whether a bounded rebuild ran. It contains
-no source text, document names, matter names, user email, embedding, or source ID.
+The structured record contains a correlation ID, affected company IDs, event and
+repair lag, pending and failed counts, blockers, whether a bounded rebuild ran,
+and whether repair was safely deferred. It contains no source text, document
+names, matter names, user email, embedding, or source ID.
 
 ## Triage
 
@@ -117,9 +125,11 @@ source content in job arguments or incident notes.
   `stale_or_ineligible_sources`: the worker may build a bounded shadow generation
   and activate it only after integrity passes. The last verified generation remains
   active until that point. One typed concurrency loss is replanned in-process after
-  rollback, event drain, and integrity re-inspection; a second conflict remains
-  alertable. Do not add Cloud Run retries or extend the lease wait to hide a stuck
-  rebuild owner.
+  rollback, event drain, and integrity re-inspection. A second typed epoch loss may
+  defer to the next cadence only while `oldest_repair_lag_seconds_after <= 300` and
+  `repair_lag_slo_breached=false`; it becomes release-blocking when that persisted
+  age exceeds the SLO. Do not add Cloud Run retries or extend the lease wait to
+  hide a stuck rebuild owner.
 - `integrity_scan_limit_exceeded` or candidate truncation: stop automatic repair
   and prepare a larger offline, tenant-bounded plan with query-count evidence.
 - `unsafe_tombstone_payload`: do not rebuild over it. Preserve evidence, block the
@@ -165,6 +175,8 @@ Close the alert only when all of the following are true:
 - the exact immutable job revision completed successfully;
 - pending and failed event counts are zero for every affected tenant;
 - oldest pending lag is absent or within 300 seconds;
+- any deferred repair converged on a later run and its oldest repair lag never
+  exceeded 300 seconds;
 - integrity reports no blockers and no unsafe tombstone payload;
 - an unrelated endpoint remains responsive;
 - scheduler retry configuration and invoker IAM match inventory;

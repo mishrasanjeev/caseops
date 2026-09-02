@@ -179,13 +179,14 @@ completion timestamp. Rebuild continues to honor that event after reload.
 `GET /api/private-retrieval/integrity` and the company-scoped command-line
 operation return tenant-safe aggregates for active-generation manifest match,
 live/tombstoned projections, pending/failed event lag, orphan or stale scopes,
-stale/ineligible sources, and unsafe tombstone payload. Any mismatch blocks
-release. `caseops-private-projection-maintenance` runs the bounded maintain mode
-every five minutes. It processes due events, performs only approved bounded
-shadow repairs, and fails the run if lag exceeded 300 seconds even when the same
-run recovers it. Cloud Scheduler delivery has bounded retry/backoff, and a
-log-based alert routes every structured `ERROR` run to the production alert
-channel with correlation ID and runbook context.
+stale/ineligible sources, unsafe tombstone payload, and the persisted age of a
+repairable blocker. Direct integrity mode reports any mismatch as blocked.
+`caseops-private-projection-maintenance` runs the bounded maintain mode every five
+minutes. It processes due events, performs only bounded shadow repairs, and fails
+the run if event or repair lag exceeded 300 seconds even when the same run
+recovers it. Cloud Scheduler delivery has bounded retry/backoff, and a log-based
+alert routes every structured `ERROR` run to the production alert channel with
+correlation ID and runbook context.
 
 Rebuilds serialize on a tenant-scoped PostgreSQL advisory lease held on a dedicated
 connection across bounded commits. This prevents maintenance, release bootstrap,
@@ -202,9 +203,16 @@ existence reads, scope deletes, flushes or cache invalidations per row. The real
 PostgreSQL acceptance creates 10,000 projections below an 850-statement and
 60-second ceiling, then advances the epoch concurrently and proves the next batch
 fails closed, removes the partial shadow and leaves the active generation intact.
-A second conflict, lease timeout, non-repairable blocker, or unknown exception
-remains a tenant-isolated release-blocking error; Cloud Run task retries stay
-disabled.
+A second typed epoch conflict deletes the new partial shadow and may defer the
+repair to the next five-minute cadence only when an active fail-closed generation
+remains, all blockers are repairable, and the persisted repair age is still within
+the 300-second SLO. The structured result records the deferral reason and repair
+age. The next run must replan and converge; an SLO breach, lease timeout,
+non-repairable blocker, or unknown exception remains a tenant-isolated
+release-blocking error. Cloud Run task retries stay disabled. PostgreSQL and
+SQLite regressions force both attempts to lose their epochs, prove both shadows
+are cleaned, then prove the following maintenance run activates a clean
+generation.
 
 The production verifier owns a SHA-scoped synthetic Matter/document fixture in
 the isolated `caseops-ip-qa` tenant. The migration-first deploy repins that job
