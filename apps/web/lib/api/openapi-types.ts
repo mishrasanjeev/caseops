@@ -39350,7 +39350,7 @@ export interface components {
              * Commercial Terms Status
              * @enum {string}
              */
-            commercial_terms_status: "support_matrix_governed" | "not_approved";
+            commercial_terms_status: "support_matrix_governed" | "runtime_metadata_governed" | "not_approved";
             /** Cost Categories */
             cost_categories?: string[];
             /** Display Name */

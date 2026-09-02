@@ -9,6 +9,7 @@ import {
   outsideCounselSpendStatus,
   panelStatus,
   providerAdapterContractRecord,
+  providerCostProfileRecord,
   providerOperationRecord,
 } from "@/lib/api/schemas";
 
@@ -169,7 +170,7 @@ describe("providerAdapterContractRecord", () => {
       display_name: "Indian Kanoon licensed API",
       domain: "legal_research",
       adapter_status: "implemented_default_off",
-      commercial_terms_status: "not_approved",
+      commercial_terms_status: "runtime_metadata_governed",
       required_capabilities: ["search", "document"],
       implemented_capabilities: ["search", "document"],
       attribution_label: "Powered by Indian Kanoon",
@@ -185,6 +186,44 @@ describe("providerAdapterContractRecord", () => {
 
     expect(parsed.domain).toBe("legal_research");
     expect(parsed.adapter_status).toBe("implemented_default_off");
+  });
+});
+
+describe("providerCostProfileRecord", () => {
+  it.each([
+    ["legal_source_search", 50],
+    ["legal_source_document", 20],
+    ["legal_source_original_document", 50],
+    ["legal_source_fragment", 5],
+    ["legal_source_metadata", 2],
+  ])("accepts the Indian Kanoon cost category %s", (category, amount) => {
+    const parsed = providerCostProfileRecord.parse({
+      id: `indian-kanoon-${category}`,
+      category,
+      provider: "indian-kanoon",
+      currency: "INR",
+      unit_amount_minor: amount,
+      unit_amount_bps: null,
+      unit_label: "request",
+      effective_from: "2026-09-02T00:00:00Z",
+      effective_until: null,
+      status: "active",
+      source: "https://api.indiankanoon.org/pricing/",
+      tax_fee_notes: null,
+      cost_basis: "actual",
+      confidence_level: "high",
+      evidence_ref: "Indian Kanoon API pricing checked 2026-09-02",
+      founder_approval_status: "pending",
+      approved_at: null,
+      approved_by_platform_admin_id: null,
+      notes: null,
+      created_by_platform_admin_id: "platform-1",
+      created_at: "2026-09-02T00:00:00Z",
+      updated_at: "2026-09-02T00:00:00Z",
+    });
+
+    expect(parsed.category).toBe(category);
+    expect(parsed.unit_amount_minor).toBe(amount);
   });
 });
 

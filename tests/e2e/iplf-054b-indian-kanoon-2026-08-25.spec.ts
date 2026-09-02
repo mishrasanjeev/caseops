@@ -226,9 +226,15 @@ test.describe.serial("IPLF-054 licensed Indian Kanoon research", () => {
       .fill("constitutional proportionality");
     await page.getByTestId("research-query-submit").click();
     await expect(page.getByText("Example Industries v State")).toBeVisible();
-    await expect(
-      page.getByTestId("research-indian-kanoon-attribution"),
-    ).toContainText("Powered by Indian Kanoon");
+    const officialLogo = page.getByRole("img", { name: "Powered by IKanoon" });
+    await expect(officialLogo).toBeVisible();
+    await expect(officialLogo).toHaveAttribute(
+      "src",
+      "https://api.indiankanoon.org/static/pics/ikanoon6_powered_transparent.png",
+    );
+    await expect
+      .poll(() => officialLogo.evaluate((image) => (image as HTMLImageElement).currentSrc))
+      .toContain("ikanoon_mobile_powered_transparent.png");
     await expect(
       page.getByTestId("research-indian-kanoon-attribution"),
     ).toContainText("₹0.50");

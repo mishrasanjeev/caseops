@@ -41,6 +41,7 @@ ProviderAdapterStatus = Literal[
 ]
 ProviderCommercialTermsStatus = Literal[
     "support_matrix_governed",
+    "runtime_metadata_governed",
     "not_approved",
 ]
 ProviderAdapterCapability = Literal[

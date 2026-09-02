@@ -8299,7 +8299,12 @@ export type ProviderCostProfileInput = {
     | "email"
     | "sms"
     | "whatsapp"
-    | "manual_support";
+    | "manual_support"
+    | "legal_source_search"
+    | "legal_source_document"
+    | "legal_source_original_document"
+    | "legal_source_fragment"
+    | "legal_source_metadata";
   provider?: string;
   unitAmountMinor?: number | null;
   unitAmountBps?: number | null;
@@ -8330,7 +8335,9 @@ export async function createProviderCostProfile(
       cost_basis: input.costBasis ?? "estimated",
       confidence_level: input.confidenceLevel ?? "low",
       evidence_ref: input.evidenceRef ?? null,
-      founder_approval_status: input.founderApprovalStatus ?? "pending",
+      ...(input.founderApprovalStatus
+        ? { founder_approval_status: input.founderApprovalStatus }
+        : {}),
       notes: input.notes ?? null,
     },
   });

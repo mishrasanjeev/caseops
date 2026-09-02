@@ -1,6 +1,6 @@
 # Indian Kanoon licensed adapter
 
-**Owner:** CaseOps platform operations and Legal jointly
+**Owner:** Orchestrum Technologies LLP through CaseOps platform operations
 **Implementation:** IPLF-054A/B
 **Default state:** deployed, disabled, no external calls
 
@@ -9,7 +9,7 @@
 CaseOps calls only `https://api.indiankanoon.org` through the contracted API.
 It does not scrape `indiankanoon.org` search, document, or bare-act HTML.
 Public document URLs are generated only as safe source actions and carry the
-required `Powered by Indian Kanoon` attribution.
+required official responsive `Powered by IKanoon` logo attribution.
 
 The adapter implements bounded search, processed document, original document,
 exact fragment, metadata, health/readiness, import, content-change detection,
@@ -17,7 +17,7 @@ tenant cost attribution, and two-person legal-source review. Provider results
 remain research aids. A successful provider response is not proof that a case
 remains good law or that statutory text is current.
 
-## Contract evidence checked 25 August 2026
+## Provider evidence checked 2 September 2026
 
 The provider documentation describes these authenticated POST endpoints:
 
@@ -30,42 +30,45 @@ The provider documentation describes these authenticated POST endpoints:
 Authentication is server-side `Authorization: Token <token>`. The published
 pricing checked on that date was INR 0.50/search, INR 0.20/processed document,
 INR 0.50/original document, INR 0.05/fragment, and INR 0.02/metadata call.
-Indian Kanoon's terms require conspicuous attribution for direct display and
-attribution for RAG/model uses. The service is prepaid and its terms disclaim
-availability and accuracy warranties. Re-check the current
+Indian Kanoon's terms require its supplied logo for direct display and
+conspicuous attribution for RAG/model uses. The service is prepaid and its terms
+disclaim availability and accuracy warranties. Re-check the current
 [`API documentation and pricing`](https://api.indiankanoon.org/) and
-[`terms`](https://indiankanoon.org/terms.html) before every approval or renewal.
+[`terms`](https://api.indiankanoon.org/terms/) before every activation or renewal.
 
 ## Activation checklist
 
-All gates are conjunctive. A missing or expired item blocks every external
-request and leaves the CaseOps corpus available.
+All prerequisites are machine-verifiable. There is no human approval route or
+approval key. A missing or expired item blocks every external request and leaves
+the CaseOps corpus available.
 
-1. Execute and archive the signed provider contract and permitted-use scope.
-2. Legal approves coverage, display/attribution, RAG/storage, redistribution,
-   retention, deletion, expiry, and incident obligations.
-3. Record a named terms owner, approval timestamp, and future expiry timestamp.
-4. Put the API token in Secret Manager; never place it in Git, a browser env,
+1. Create the commercial API account, accept the provider terms, and record the
+   permitted-use scope supplied during registration.
+2. Record Orchestrum Technologies LLP as terms owner, the acceptance timestamp,
+   and a future machine revalidation timestamp.
+3. Put the API token in Secret Manager; never place it in Git, a browser env,
    a client response, logs, evidence, or a support ticket.
-5. Create five active `actual` provider cost profiles for provider
-   `indian-kanoon`, with source/evidence and explicit platform approval:
+4. Create five active `actual`, high-confidence provider cost profiles for
+   provider `indian-kanoon`, with the current pricing URL and dated evidence:
    `legal_source_search`, `legal_source_document`,
    `legal_source_original_document`, `legal_source_fragment`, and
    `legal_source_metadata`.
-6. Set positive daily and monthly minor-unit budgets and an approved retention
+5. Set positive daily and monthly minor-unit budgets and a configured retention
    period. Budgets apply per tenant and are checked before a provider call.
-7. Configure `CASEOPS_INDIAN_KANOON_PERMITTED_USES` with at least
+6. Configure `CASEOPS_INDIAN_KANOON_PERMITTED_USES` with at least
    `search,document_display,research_storage`.
-8. Deploy with `CASEOPS_INDIAN_KANOON_ENABLED=false`; verify migration, health,
+7. Deploy with `CASEOPS_INDIAN_KANOON_ENABLED=false`; verify migration, health,
    source URL safety, and exact release identity first.
-9. Bind `CASEOPS_INDIAN_KANOON_API_TOKEN` from Secret Manager, set all dated
-   approvals and budgets, then change the kill switch to `true`.
-10. Verify `/api/authorities/providers/indian-kanoon/readiness` is `ready` and
-    run a low-cost canary for every endpoint. Check attribution, billing usage,
-    cache state, source opening, content hash, and audit records.
+8. Bind `CASEOPS_INDIAN_KANOON_API_TOKEN` from Secret Manager and set the dated
+   terms metadata, permitted uses, retention, and budgets.
+9. Verify readiness has no missing configuration, invalid terms, missing cost
+   categories, or approval keys. Run one low-cost canary per endpoint while the
+   kill switch is controlled, then change it to `true`. Check the official logo,
+   billing usage, cache state, source opening, content hash, and audit records.
 
-Do not activate from repository fixtures or this runbook alone. Contract,
-Legal, Security, Finance, and provider acceptance are external decisions.
+Do not activate from repository fixtures or this runbook alone. A real funded
+provider credential and accepted provider terms are external facts that code
+cannot fabricate; they are configuration prerequisites, not approval gates.
 
 ## Runtime behavior
 
@@ -88,13 +91,13 @@ Legal, Security, Finance, and provider acceptance are external decisions.
 
 | Code | Meaning | Operator response |
 | --- | --- | --- |
-| `provider_disabled` | Kill switch is off | Keep off until activation is approved |
+| `provider_disabled` | Kill switch is off | Keep off until runtime prerequisites are complete |
 | `provider_configuration` | Host, token, terms dates, permitted use, retention, or budget missing | Correct config without exposing values |
-| `provider_terms` | Terms/coverage absent, invalid, or expired | Legal review and dated renewal |
-| `provider_cost_policy` | One or more actual costs are not approved | Finance/platform approval |
+| `provider_terms` | Terms metadata is absent, invalid, or expired | Refresh the dated terms configuration |
+| `provider_cost_policy` | One or more actual costs lacks high-confidence source/evidence | Refresh the machine-verifiable pricing profile |
 | `provider_budget_exhausted` | Tenant daily/monthly budget reached | Review usage; do not bypass silently |
 | `provider_authentication` | Provider rejected server credential | Rotate/reconcile secret and keep disabled if uncertain |
-| `provider_quota` | Prepaid balance or rate quota unavailable | Reconcile provider account and retry only when approved |
+| `provider_quota` | Prepaid balance or rate quota unavailable | Reconcile provider account and retry after it is funded |
 | `source_removed` | Document is absent or withdrawn | Preserve prior lineage; mark unavailable and verify elsewhere |
 | `provider_contract_changed` | Redirect, malformed JSON, excess size, or shape drift | Disable, inspect docs/terms, update fixtures and adapter |
 | `provider_outage` | Timeout, network error, or provider 5xx | Use visibly stale cache if supplied; otherwise retry later |

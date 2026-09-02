@@ -47,7 +47,7 @@ async function signIn(page: Page): Promise<string> {
   return session.access_token;
 }
 
-test("IPLF-054B production keeps unapproved Indian Kanoon calls disabled", async ({
+test("IPLF-054B production keeps unconfigured Indian Kanoon calls disabled", async ({
   page,
 }) => {
   const token = await signIn(page);

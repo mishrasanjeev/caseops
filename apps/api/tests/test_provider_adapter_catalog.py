@@ -31,3 +31,12 @@ def test_adapter_catalog_separates_shared_controls_from_ip_legal_coverage() -> N
     assert wipo.attribution_url == "https://www.wipo.int/madrid/monitor/"
     assert provider_supports("wipo-madrid", "record_fetch") is False
     assert "automated_sync_not_activated" in wipo.activation_blockers
+
+    [indian_kanoon] = provider_adapter_contracts(domain="legal_research")
+    assert indian_kanoon.provider == "indian-kanoon"
+    assert indian_kanoon.commercial_terms_status == "runtime_metadata_governed"
+    assert indian_kanoon.terms_url == "https://api.indiankanoon.org/terms/"
+    assert indian_kanoon.pricing_evidence_url == (
+        "https://api.indiankanoon.org/pricing/"
+    )
+    assert all("approval" not in blocker for blocker in indian_kanoon.activation_blockers)
