@@ -192,7 +192,13 @@ describe("ResearchPage", () => {
     });
     expect(
       screen.getByTestId("research-indian-kanoon-attribution"),
-    ).toHaveTextContent("Powered by Indian Kanoon");
+    ).toContainElement(screen.getByRole("img", { name: "Powered by IKanoon" }));
+    expect(
+      screen.getByRole("img", { name: "Powered by IKanoon" }),
+    ).toHaveAttribute(
+      "src",
+      "https://api.indiankanoon.org/static/pics/ikanoon6_powered_transparent.png",
+    );
     expect(
       screen.getByTestId("research-indian-kanoon-attribution"),
     ).toHaveTextContent("estimated provider cost ₹0.50");

@@ -75,4 +75,43 @@ describe("PlatformCostsPage", () => {
       ).toBe(true);
     });
   });
+
+  it("loads machine-verifiable Indian Kanoon pricing without an approval gate", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(<PlatformCostsPage />);
+
+    expect(await screen.findByText("Founder smoke margin")).toBeInTheDocument();
+    await user.click(screen.getAllByRole("combobox")[0]);
+    await user.click(screen.getByRole("option", { name: "legal source search" }));
+
+    expect(screen.getByLabelText("Provider")).toHaveValue("indian-kanoon");
+    expect(screen.getByLabelText("Unit minor")).toHaveValue("50");
+    expect(screen.getByLabelText("Source")).toHaveValue(
+      "https://api.indiankanoon.org/pricing/",
+    );
+    expect(screen.getByTestId("indian-kanoon-cost-policy")).toHaveTextContent(
+      "no human approval gate",
+    );
+    expect(screen.queryByText("Founder approval")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /save cost profile/i }));
+    await waitFor(() => {
+      const request = fetchMock.mock.calls.find(
+        ([input, init]) =>
+          String(input).includes("/api/platform-admin/cost-profiles") &&
+          init?.method === "POST",
+      );
+      expect(request).toBeDefined();
+      expect(JSON.parse(String(request?.[1]?.body))).toMatchObject({
+        category: "legal_source_search",
+        provider: "indian-kanoon",
+        unit_amount_minor: 50,
+        cost_basis: "actual",
+        confidence_level: "high",
+      });
+      expect(JSON.parse(String(request?.[1]?.body))).not.toHaveProperty(
+        "founder_approval_status",
+      );
+    });
+  });
 });

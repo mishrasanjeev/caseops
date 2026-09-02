@@ -20,7 +20,7 @@ export function buildContentSecurityPolicy({
     "object-src 'none'",
     "style-src 'self' 'unsafe-inline'",
     `script-src 'self' 'nonce-${nonce}' https://www.googletagmanager.com`,
-    "img-src 'self' data: blob: https://www.googletagmanager.com",
+    "img-src 'self' data: blob: https://www.googletagmanager.com https://api.indiankanoon.org",
     "font-src 'self' data:",
     `connect-src 'self' ${apiBaseUrl} ${appUrl} https://www.google-analytics.com https://analytics.google.com`,
     "worker-src 'self' blob:",

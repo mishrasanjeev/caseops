@@ -13567,7 +13567,7 @@
       "blockers": [
         {
           "id": "IPLF-056B-LIVE-PROVIDER-ACTIVATION",
-          "summary": "Live IP India and Indian Kanoon operation requires provider, legal, security and release approvals that repository code cannot self-issue.",
+          "summary": "Live IP India remains separately provider-governed. Indian Kanoon activation requires a funded licensed token plus machine-verifiable terms, permitted-use, retention, actual-cost and budget metadata that repository code cannot fabricate; it has no human approval gate.",
           "owner": "Authorized provider, legal, security and release owners",
           "evidence_needed": "Executed contracts, permitted-use and retention approval, verified coverage, approved cost profiles, secret references, provider canaries and operator acceptance.",
           "safe_fallback": "External calls stay disabled, source/attempt evidence remains visible, and manual sourced IP docketing remains available.",

@@ -563,7 +563,7 @@ Status values: Already usable, Partial, Missing, Unsafe/stale-doc.
 | Official tribunal sites | Conditional | One tribunal family at a time; record terms, source URL, bench metadata, and parser quality. |
 | India Code and official gazette sources | Allowed | Use for statutes and rules. |
 | Paid commentary or databases | Deferred until licensed | SCC, Manupatra, and similar sources require contract, usage scope, and SEC-024 tracking. |
-| Indian Kanoon | Not default | Use only after licensing/terms approval; do not treat as official source. |
+| Indian Kanoon | Licensed, default off | Use only with a funded licensed API token and machine-verifiable terms, permitted-use, retention, cost, and budget metadata; do not treat it as an official source. |
 
 ### 5.2 Ingestion Quality Rules
 

@@ -1165,6 +1165,9 @@ def test_provider_readiness_is_names_only_and_fail_closed(
     assert providers["indian-kanoon"]["adapter_contract"]["kill_switch_name"] == (
         "INDIAN_KANOON_ENABLED"
     )
+    assert providers["indian-kanoon"]["adapter_contract"][
+        "commercial_terms_status"
+    ] == "runtime_metadata_governed"
     assert providers["ipindia-registry"]["adapter_contract"][
         "commercial_terms_status"
     ] == "not_approved"

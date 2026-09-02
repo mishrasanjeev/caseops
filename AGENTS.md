@@ -81,6 +81,11 @@ requirements when using the fallback.
   events. Do not infer an automatic resurrection from an explicit, audited
   `Disposed -> Intake` transition, and do not weaken lifecycle protections to
   make a UI symptom disappear.
+- A licensed-provider activation must use machine-verifiable runtime terms
+  metadata, dated official pricing evidence, positive budgets, retention, and a
+  server-side secret. Do not introduce a human approval key or route. When the
+  provider mandates attribution assets, render its supplied responsive asset
+  unaltered and assert that exact user-visible surface before activation.
 - A tenant AI-policy disablement must fail closed across the entire assistant
   surface, including scope discovery that returns private record labels. Gate
   discovery, session creation, retrieval, generation, and actions with the

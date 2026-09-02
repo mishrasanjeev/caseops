@@ -182,7 +182,7 @@ PROVIDER_ADAPTERS: tuple[ProviderAdapterDefinition, ...] = (
         display_name="Indian Kanoon licensed API",
         domain="legal_research",
         adapter_status="implemented_default_off",
-        commercial_terms_status="not_approved",
+        commercial_terms_status="runtime_metadata_governed",
         required_capabilities=_FULL_PROVIDER_CAPABILITIES,
         implemented_capabilities=(
             "search",
@@ -196,8 +196,8 @@ PROVIDER_ADAPTERS: tuple[ProviderAdapterDefinition, ...] = (
         ),
         attribution_label="Powered by Indian Kanoon",
         attribution_url="https://indiankanoon.org/",
-        terms_url="https://indiankanoon.org/terms.html",
-        pricing_evidence_url="https://api.indiankanoon.org/",
+        terms_url="https://api.indiankanoon.org/terms/",
+        pricing_evidence_url="https://api.indiankanoon.org/pricing/",
         cost_categories=(
             "legal_source_search",
             "legal_source_document",

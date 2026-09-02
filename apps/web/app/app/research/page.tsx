@@ -817,16 +817,28 @@ function IndianKanoonResults({
       data-testid="research-indian-kanoon-results"
     >
       <div
-        className={`rounded-md border px-4 py-3 text-xs ${
+        className={`flex flex-col items-start gap-2 rounded-md border px-4 py-3 text-xs ${
           call?.stale
             ? "border-[var(--color-warn-600)]/30 bg-[var(--color-warn-50)] text-[var(--color-warn-700)]"
             : "border-[var(--color-line)] bg-[var(--color-bg-2)] text-[var(--color-ink-2)]"
         }`}
         data-testid="research-indian-kanoon-attribution"
       >
-        <span className="font-semibold text-[var(--color-ink)]">
-          Powered by Indian Kanoon
-        </span>
+        <picture data-testid="research-indian-kanoon-official-attribution">
+          <source
+            media="(max-width: 639px)"
+            srcSet="https://api.indiankanoon.org/static/pics/ikanoon_mobile_powered_transparent.png"
+          />
+          {/* The provider's terms require this supplied logo to remain unaltered. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="https://api.indiankanoon.org/static/pics/ikanoon6_powered_transparent.png"
+            alt="Powered by IKanoon"
+            width={150}
+            height={61}
+            referrerPolicy="no-referrer"
+          />
+        </picture>
         {call ? (
           <span>
             {` · ${call.cached ? "Cached response" : "Licensed API response"}`}

@@ -58,7 +58,28 @@ const costCategories: ProviderCostProfileInput["category"][] = [
   "sms",
   "whatsapp",
   "manual_support",
+  "legal_source_search",
+  "legal_source_document",
+  "legal_source_original_document",
+  "legal_source_fragment",
+  "legal_source_metadata",
 ];
+
+const indianKanoonCostPresets = {
+  legal_source_search: 50,
+  legal_source_document: 20,
+  legal_source_original_document: 50,
+  legal_source_fragment: 5,
+  legal_source_metadata: 2,
+} satisfies Partial<Record<ProviderCostProfileInput["category"], number>>;
+
+function indianKanoonCostFor(
+  category: ProviderCostProfileInput["category"],
+): number | null {
+  return indianKanoonCostPresets[
+    category as keyof typeof indianKanoonCostPresets
+  ] ?? null;
+}
 
 const requiredScenarios = [
   "solo_light_user",
@@ -118,10 +139,18 @@ function ProfilesTable({ profiles }: { profiles: ProviderCostProfileRecord[] }) 
               <td className="py-3 pr-4">
                 <Badge
                   tone={
-                    profile.founder_approval_status === "approved" ? "success" : "warning"
+                    profile.provider === "indian-kanoon" &&
+                    indianKanoonCostFor(profile.category) !== null
+                      ? "success"
+                      : profile.founder_approval_status === "approved"
+                        ? "success"
+                        : "warning"
                   }
                 >
-                  {profile.founder_approval_status}
+                  {profile.provider === "indian-kanoon" &&
+                  indianKanoonCostFor(profile.category) !== null
+                    ? "machine verified"
+                    : profile.founder_approval_status}
                 </Badge>
               </td>
               <td className="py-3 pr-4">
@@ -266,6 +295,22 @@ export default function PlatformCostsPage() {
   const createDisabled =
     createMutation.isPending ||
     (category === "payment_mdr" ? !unitBps.trim() : !unitMinor.trim());
+  const isIndianKanoonCost = indianKanoonCostFor(category) !== null;
+
+  const selectCategory = (value: ProviderCostProfileInput["category"]) => {
+    setCategory(value);
+    const preset = indianKanoonCostFor(value);
+    if (preset === null) return;
+    setProvider("indian-kanoon");
+    setUnitMinor(String(preset));
+    setUnitBps("");
+    setUnitLabel("request");
+    setCostBasis("actual");
+    setConfidenceLevel("high");
+    setSource("https://api.indiankanoon.org/pricing/");
+    setEvidenceRef("Indian Kanoon API pricing checked 2026-09-02");
+    setApprovalStatus("pending");
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -301,7 +346,10 @@ export default function PlatformCostsPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Category</Label>
-                <Select value={category} onValueChange={(value) => setCategory(value as typeof category)}>
+                <Select
+                  value={category}
+                  onValueChange={(value) => selectCategory(value as typeof category)}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -382,22 +430,33 @@ export default function PlatformCostsPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>Founder approval</Label>
-                <Select
-                  value={approvalStatus}
-                  onValueChange={(value) => setApprovalStatus(value as typeof approvalStatus)}
+              {isIndianKanoonCost ? (
+                <div
+                  className="rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] p-3 text-xs text-[var(--color-ink-2)]"
+                  data-testid="indian-kanoon-cost-policy"
                 >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pending">pending</SelectItem>
-                    <SelectItem value="approved">approved</SelectItem>
-                    <SelectItem value="rejected">rejected</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                  Indian Kanoon activation uses the published actual price, high
+                  confidence, source URL, and dated evidence. It has no human
+                  approval gate.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label>Founder approval</Label>
+                  <Select
+                    value={approvalStatus}
+                    onValueChange={(value) => setApprovalStatus(value as typeof approvalStatus)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pending">pending</SelectItem>
+                      <SelectItem value="approved">approved</SelectItem>
+                      <SelectItem value="rejected">rejected</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
@@ -448,7 +507,9 @@ export default function PlatformCostsPage() {
                   costBasis,
                   confidenceLevel,
                   evidenceRef: evidenceRef.trim() || null,
-                  founderApprovalStatus: approvalStatus,
+                  ...(isIndianKanoonCost
+                    ? {}
+                    : { founderApprovalStatus: approvalStatus }),
                   notes,
                 })
               }
