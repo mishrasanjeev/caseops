@@ -162,3 +162,11 @@ requirements when using the fallback.
   lifecycle, private-generation manifests, and frozen source versions, then
   allow at most one server-side regeneration that does not echo the rejected
   text. A second violation remains terminal and must retain its audit linkage.
+- An external model call must never wait while the request owns an open
+  database transaction or parent-row lock. Complete read-only retrieval and
+  policy/quota preflight, release the transaction, invoke the provider, then
+  start a fresh transaction for durable usage accounting and reload tenant
+  access plus the authoritative lifecycle lock before model-run,
+  recommendation, or audit persistence. Regression tests
+  must assert the session is out of transaction inside the provider callback
+  and that a concurrent disposal wins without leaving generated rows behind.

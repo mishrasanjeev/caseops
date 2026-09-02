@@ -1294,13 +1294,22 @@ def generate_structured[T: BaseModel](
             company_id=context.tenant_id,
             estimated_credits=estimated_billing_credits,
         )
-        if release_session_before_provider:
-            # Preflight is intentionally read-only on the success path. Do not
-            # leave its transaction open across a provider deadline: SQLite
-            # can otherwise retain a reader that delays a writer, while on
-            # PostgreSQL it needlessly pins an MVCC snapshot. A blocked quota
-            # call raises above and retains its independently committed audit.
-            session.rollback()
+    if release_session_before_provider and session is not None:
+        # This boundary is allowed to discard only a read transaction.  A
+        # caller that staged ORM writes must choose and document its own commit
+        # boundary; silently rolling those writes back here would corrupt the
+        # surrounding workflow.  The check also makes the opt-in useful for
+        # system/background calls whose context intentionally has no tenant ID.
+        if session.new or session.dirty or session.deleted:
+            raise RuntimeError(
+                "Cannot release the database session before an LLM provider "
+                "call while ORM writes are pending."
+            )
+        # Preflight is intentionally read-only on the success path. Do not
+        # leave its transaction open across a provider deadline: SQLite can
+        # otherwise retain a reader that delays a writer, while PostgreSQL can
+        # terminate an idle transaction and retains every acquired row lock.
+        session.rollback()
     native_generate = getattr(provider, "generate_structured", None)
     if callable(native_generate):
         completion = native_generate(

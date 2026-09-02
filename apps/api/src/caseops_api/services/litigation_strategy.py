@@ -1274,6 +1274,7 @@ def generate_litigation_strategy(
         matter=matter,
         operation="generate litigation strategy",
     )
+    source_lifecycle_version = matter.lifecycle_version
 
     # Per-statement timeout to keep retrieval from blowing the
     # request budget on a busy day. Same pattern as
@@ -1315,6 +1316,7 @@ def generate_litigation_strategy(
             context=call_context,
             temperature=settings.llm_temperature,
             max_tokens=settings.llm_max_output_tokens_recommendations,
+            release_session_before_provider=True,
         )
 
     try:
@@ -1338,6 +1340,61 @@ def generate_litigation_strategy(
             noun="strategy",
             exc=exc,
         ) from exc
+
+    # The provider call consumed credits even if a concurrent source change
+    # later makes the generated answer stale.  Persist that usage in its own
+    # short transaction; never let a lifecycle/source refusal erase honest
+    # accounting for a call that actually happened.
+    session.commit()
+
+    # The provider deadline is deliberately outside a database transaction.
+    # PostgreSQL terminates sessions that sit idle in a transaction longer than
+    # its safety budget; more importantly, keeping the request-entry Matter
+    # lock during an external call would block disposal.  Reload the tenant-
+    # scoped parent and take the authoritative lifecycle lock only after every
+    # bounded provider attempt.  This also prevents a stale pre-provider ORM
+    # object from resurrecting work after a concurrent disposal.
+    matter = _load_matter(session, context=context, matter_id=matter_id)
+    matter = require_operational_matter(
+        session,
+        matter=matter,
+        operation="save a generated litigation strategy",
+    )
+    if matter.lifecycle_version != source_lifecycle_version:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "The matter lifecycle changed while the strategy was being "
+                "generated. No strategy was saved; refresh and try again."
+            ),
+        )
+
+    # A matter can remain operational while a hearing, order, attachment,
+    # statute link, cause-list entry, matter field, or retrieved authority
+    # changes. Rebuild the exact source-owned prompt under the parent lock and
+    # compare its hash. Persisting output against any other source snapshot is
+    # a stale-write bug, even when the model response itself is valid.
+    current_retrieved = _gather_authorities(
+        session,
+        query=_build_retrieval_query(matter, "litigation_strategy"),
+        forum_level=matter.forum_level,
+        matter=matter,
+        limit=8,
+    )
+    current_ctx = _assemble_context(session, matter)
+    current_messages = _build_prompt(ctx=current_ctx, authorities=current_retrieved)
+    if _prompt_hash(current_messages) != prompt_hash:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "The matter or its source material changed while the strategy "
+                "was being generated. No strategy was saved; refresh and try again."
+            ),
+        )
+    retrieved = current_retrieved
+    ctx = current_ctx
 
     # Verify citations on the recommended route + alternatives.
     all_routes = [parsed.recommended_route, *parsed.alternative_routes]

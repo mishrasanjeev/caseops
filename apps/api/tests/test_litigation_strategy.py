@@ -438,6 +438,88 @@ def test_litigation_strategy_is_a_supported_recommendation_type() -> None:
     assert "litigation_strategy" in SUPPORTED_TYPES
 
 
+@pytest.mark.parametrize("concurrent_change", ["disposed", "reopened", "source"])
+def test_strategy_provider_wait_releases_transaction_and_rejects_stale_sources(
+    client: TestClient,
+    monkeypatch,
+    concurrent_change: str,
+) -> None:
+    """A provider wait cannot pin a transaction or cross a source fence."""
+    from caseops_api.db.models import Matter, MatterStatus
+    from caseops_api.services import litigation_strategy as strategy_service
+    from caseops_api.services.llm import LLMCompletion, LLMMessage
+
+    citation = _seed_relevant_authority()
+    payload = _valid_strategy_payload(citation)
+    token, _, matter_id = _setup_matter(client, forum_level="high_court")
+    factory = get_session_factory()
+    original_generate_structured = strategy_service.generate_structured
+    request_sessions = []
+
+    def _tracked_generate_structured(*args, **kwargs):
+        request_sessions[:] = [kwargs["session"]]
+        return original_generate_structured(*args, **kwargs)
+
+    monkeypatch.setattr(
+        strategy_service,
+        "generate_structured",
+        _tracked_generate_structured,
+    )
+
+    class _DisposingProvider:
+        name = "mock"
+        model = "mock-strategy-disposal-race"
+
+        def generate(self, messages: list[LLMMessage], **_kwargs):
+            assert request_sessions
+            assert request_sessions[0].in_transaction() is False
+            with factory() as concurrent:
+                matter = concurrent.get(Matter, matter_id)
+                assert matter is not None
+                if concurrent_change == "disposed":
+                    matter.status = MatterStatus.DISPOSED
+                    matter.is_active = False
+                    matter.lifecycle_version += 1
+                elif concurrent_change == "reopened":
+                    # The final state is operational, but crossing a terminal
+                    # lifecycle generation still makes the response stale.
+                    matter.status = MatterStatus.INTAKE
+                    matter.is_active = True
+                    matter.lifecycle_version += 2
+                else:
+                    matter.description = "Source changed during provider wait."
+                concurrent.commit()
+            return LLMCompletion(
+                text=json.dumps(payload),
+                provider=self.name,
+                model=self.model,
+                prompt_tokens=10,
+                completion_tokens=20,
+                latency_ms=5,
+            )
+
+    monkeypatch.setattr(
+        strategy_service,
+        "build_provider",
+        lambda *args, **kwargs: _DisposingProvider(),
+    )
+
+    response = client.post(
+        f"/api/matters/{matter_id}/recommendations",
+        headers=auth_headers(token),
+        json={"type": "litigation_strategy"},
+    )
+
+    assert response.status_code == 409, response.text
+    with factory() as session:
+        assert session.scalar(
+            select(Recommendation.id).where(Recommendation.matter_id == matter_id)
+        ) is None
+        assert session.scalar(
+            select(ModelRun.id).where(ModelRun.matter_id == matter_id)
+        ) is None
+
+
 def test_strategy_quota_error_returns_actionable_503_without_raw_provider_leak(
     client: TestClient, monkeypatch,
 ) -> None:

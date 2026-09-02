@@ -260,12 +260,28 @@ def test_generate_recommendation_rechecks_matter_after_provider_callback_disposa
     token, _, matter_id = _setup_matter(client)
     _seed_relevant_authority()
     factory = get_session_factory()
+    from caseops_api.services import recommendations as recommendation_service
+
+    original_generate_structured = recommendation_service.generate_structured
+    request_sessions = []
+
+    def _tracked_generate_structured(*args, **kwargs):
+        request_sessions[:] = [kwargs["session"]]
+        return original_generate_structured(*args, **kwargs)
+
+    monkeypatch.setattr(
+        recommendation_service,
+        "generate_structured",
+        _tracked_generate_structured,
+    )
 
     class _DisposingProvider:
         name = "mock"
         model = "mock-disposal-race"
 
         def generate(self, messages: list[LLMMessage], **_kwargs):
+            assert request_sessions
+            assert request_sessions[0].in_transaction() is False
             with factory() as disposal_session:
                 matter = disposal_session.get(Matter, matter_id)
                 assert matter is not None

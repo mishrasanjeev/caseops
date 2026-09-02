@@ -105,6 +105,61 @@ def test_generate_structured_validates_schema() -> None:
     assert isinstance(completion, LLMCompletion)
 
 
+def test_generate_structured_release_boundary_applies_without_tenant_id() -> None:
+    class _ReadOnlySession:
+        new: set = set()
+        dirty: set = set()
+        deleted: set = set()
+
+        def __init__(self) -> None:
+            self.rollback_count = 0
+
+        def rollback(self) -> None:
+            self.rollback_count += 1
+
+    class _BoundaryProvider(MockProvider):
+        def __init__(self, session: _ReadOnlySession) -> None:
+            super().__init__()
+            self.session = session
+
+        def generate(self, messages, **kwargs):  # type: ignore[override]
+            assert self.session.rollback_count == 1
+            return super().generate(messages, **kwargs)
+
+    session = _ReadOnlySession()
+    validated, _completion = generate_structured(
+        _BoundaryProvider(session),
+        schema=_Structured,
+        messages=_prompt(structured=True),
+        context=LLMCallContext(purpose="unit-test"),
+        session=session,
+        release_session_before_provider=True,
+    )
+
+    assert isinstance(validated, _Structured)
+    assert session.rollback_count == 1
+
+
+def test_generate_structured_release_refuses_pending_orm_writes() -> None:
+    class _DirtySession:
+        new = {object()}
+        dirty: set = set()
+        deleted: set = set()
+
+        def rollback(self) -> None:
+            raise AssertionError("pending writes must not be rolled back implicitly")
+
+    with pytest.raises(RuntimeError, match="ORM writes are pending"):
+        generate_structured(
+            MockProvider(),
+            schema=_Structured,
+            messages=_prompt(structured=True),
+            context=LLMCallContext(purpose="unit-test"),
+            session=_DirtySession(),
+            release_session_before_provider=True,
+        )
+
+
 def test_generate_structured_raises_on_invalid_json() -> None:
     class _BrokenProvider:
         name = "broken"

@@ -1626,6 +1626,7 @@ def generate_recommendation(
         matter=matter,
         operation="generate a recommendation",
     )
+    source_lifecycle_version = matter.lifecycle_version
     _stage("load_matter")
     objective = _resolve_objective(
         session,
@@ -1680,6 +1681,7 @@ def generate_recommendation(
         matter_intelligence_context=matter_intelligence_context,
     )
     prompt_hash = _prompt_hash(messages)
+    source_prompt_hash = prompt_hash
     _stage("build_prompt")
 
     settings = get_settings()
@@ -1701,6 +1703,7 @@ def generate_recommendation(
             context=_call_context,
             temperature=settings.llm_temperature,
             max_tokens=settings.llm_max_output_tokens_recommendations,
+            release_session_before_provider=True,
         )
 
     # 2026-04-30: gpt-5.1-only path. The prior Anthropic→Haiku→OpenAI
@@ -1750,6 +1753,11 @@ def generate_recommendation(
     unsafe_output_category = _classify_unsafe_response(parsed)
     if unsafe_output_category is not None and not provider_retry_used:
         safety_repair_category = unsafe_output_category
+        # A schema-valid rejected response has already incurred a billable
+        # provider call.  Commit only that debit before the bounded repair so
+        # the next preflight can close its own read transaction without
+        # silently rolling back usage accounting.
+        session.commit()
         repair_messages = _build_safety_repair_messages(
             messages,
             category=unsafe_output_category,
@@ -1779,11 +1787,49 @@ def generate_recommendation(
     # recommendation, option, or audit row is staged. Keeping this lock until
     # the terminal commit makes disposal and recommendation persistence
     # mutually exclusive.
+    session.commit()
+    matter = _load_matter(session, context=context, matter_id=matter_id)
     matter = require_operational_matter(
         session,
         matter=matter,
         operation="save a generated recommendation",
     )
+    if matter.lifecycle_version != source_lifecycle_version:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "The matter lifecycle changed while the recommendation was being "
+                "generated. No recommendation was saved; refresh and try again."
+            ),
+        )
+
+    current_retrieved, _current_bench_trace = _gather_authorities_with_trace(
+        session,
+        query=_build_retrieval_query(matter, rec_type, objective=objective),
+        forum_level=matter.forum_level,
+        matter=matter,
+        context=context,
+        enable_bench_citation_rerank=(rec_type == "authority"),
+    )
+    current_intelligence_context = _build_matter_intelligence_context(session, matter)
+    current_messages = _build_prompt(
+        rec_type=rec_type,
+        matter=matter,
+        authorities=current_retrieved,
+        objective=objective,
+        matter_intelligence_context=current_intelligence_context,
+    )
+    if _prompt_hash(current_messages) != source_prompt_hash:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "The matter or its source material changed while the recommendation "
+                "was being generated. No recommendation was saved; refresh and try again."
+            ),
+        )
+    retrieved = current_retrieved
 
     if unsafe_output_category is not None:
         logger.warning(
