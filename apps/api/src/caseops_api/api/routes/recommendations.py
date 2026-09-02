@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from starlette.concurrency import run_in_threadpool
 
 from caseops_api.api.dependencies import DbSession, get_current_context, require_capability
 from caseops_api.core.rate_limit import (
@@ -140,8 +141,7 @@ def _recommendation_record(recommendation: Recommendation) -> RecommendationReco
             )
         except Exception:  # noqa: BLE001
             _logging.getLogger(__name__).warning(
-                "recommendation %s strategy_payload_json failed to validate; "
-                "returning None",
+                "recommendation %s strategy_payload_json failed to validate; returning None",
                 recommendation.id,
             )
             strategy_payload = None
@@ -180,9 +180,7 @@ async def list_recommendations(
     context: CurrentContext,
     session: DbSession,
 ) -> RecommendationListResponse:
-    recommendations = list_matter_recommendations(
-        session, context=context, matter_id=matter_id
-    )
+    recommendations = list_matter_recommendations(session, context=context, matter_id=matter_id)
     return RecommendationListResponse(
         matter_id=matter_id,
         recommendations=[_recommendation_record(r) for r in recommendations],
@@ -284,7 +282,14 @@ async def create_recommendation(
     if payload.type == "litigation_strategy":
         _require_capability_inline(session, context, "strategy:generate")
 
-    recommendation = generate_recommendation(
+    # Retrieval, strict-schema model generation, verification, and persistence
+    # are synchronous. Running them directly in this async handler pins the
+    # sole Uvicorn event loop for the whole provider deadline; on a
+    # concurrency-one Cloud Run instance that also prevents an unrelated
+    # health/read request from making progress. Keep the request session on
+    # one worker thread for the complete synchronous service call.
+    recommendation = await run_in_threadpool(
+        generate_recommendation,
         session,
         context=context,
         matter_id=matter_id,

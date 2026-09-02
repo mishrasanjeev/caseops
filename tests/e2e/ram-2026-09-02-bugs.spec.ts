@@ -592,17 +592,36 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
   });
 
   test("BUG-004: strategy generation never reaches the invalid strict-schema 400", async () => {
-    const generated = await api.post(
-      `${API_BASE_URL}/api/matters/${matter.id}/recommendations`,
-      {
-        headers: headers(),
-        data: { type: "litigation_strategy" },
-        timeout: 120_000,
-      },
-    );
-    const body = await generated.text();
-    expect(generated.status(), body).not.toBe(400);
-    expect(generated.status(), body).toBeLessThan(500);
+    test.setTimeout(260_000);
+    let status = 503;
+    let body = "Recommendation provider was not called.";
+
+    // Provider failures are transient at the user boundary. Keep every
+    // attempt inside Cloud Run's 120-second deadline, prove the service stays
+    // responsive after a failed attempt, and allow one bounded retry.
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const generated = await api.post(
+        `${API_BASE_URL}/api/matters/${matter.id}/recommendations`,
+        {
+          headers: headers(),
+          data: { type: "litigation_strategy" },
+          timeout: 110_000,
+        },
+      );
+      status = generated.status();
+      body = await generated.text();
+      expect(status, body).not.toBe(400);
+      expect(body).not.toMatch(/additionalProperties.*required.*false/i);
+      expect(body).not.toMatch(/invalid.*strict.*schema/i);
+      if (status < 500) break;
+
+      const health = await api.get(`${API_BASE_URL}/api/health`, {
+        timeout: 10_000,
+      });
+      expect(health.status(), await health.text()).toBe(200);
+    }
+
+    expect(status, body).toBeLessThan(500);
     expect(body).not.toMatch(/additionalProperties.*required.*false/i);
     expect(body).not.toMatch(/invalid.*strict.*schema/i);
   });
