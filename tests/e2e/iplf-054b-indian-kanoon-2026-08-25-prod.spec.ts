@@ -21,7 +21,8 @@ async function expectStatus(
   expected: number,
   label: string,
 ): Promise<void> {
-  const detail = response.status() === expected ? "" : ` ${await response.text()}`;
+  const detail =
+    response.status() === expected ? "" : ` ${await response.text()}`;
   expect(response.status(), `${label}.${detail}`).toBe(expected);
 }
 
@@ -36,14 +37,20 @@ async function signIn(page: Page): Promise<string> {
   await expectStatus(login, 200, "production tester API sign-in");
   const session = await login.json();
   await page.goto(`${BASE_URL}/`);
-  await page.evaluate((context) => {
-    window.localStorage.setItem("caseops.session.context", JSON.stringify(context));
-  }, {
-    company: session.company,
-    user: session.user,
-    membership: session.membership,
-    capabilities: session.capabilities,
-  });
+  await page.evaluate(
+    (context) => {
+      window.localStorage.setItem(
+        "caseops.session.context",
+        JSON.stringify(context),
+      );
+    },
+    {
+      company: session.company,
+      user: session.user,
+      membership: session.membership,
+      capabilities: session.capabilities,
+    },
+  );
   return session.access_token;
 }
 
@@ -57,9 +64,16 @@ test("IPLF-054B production keeps unconfigured Indian Kanoon calls disabled", asy
     { headers },
   );
   await expectStatus(readiness, 200, "licensed-source readiness");
-  const body = await readiness.json();
+  const body = (await readiness.json()) as {
+    state: string;
+    external_calls_enabled: boolean;
+    missing_approval_keys: string[];
+    missing_config_names: string[];
+    missing_cost_categories: string[];
+  };
   expect(body.state).toBe("blocked_disabled");
   expect(body.external_calls_enabled).toBe(false);
+  expect(body.missing_approval_keys).toEqual([]);
 
   const search = await page.request.post(
     `${API_BASE_URL}/api/authorities/providers/indian-kanoon/search`,
@@ -73,9 +87,24 @@ test("IPLF-054B production keeps unconfigured Indian Kanoon calls disabled", asy
 
   await page.goto(`${BASE_URL}/app/research`);
   await page.getByTestId("research-source-indian-kanoon").click();
-  await expect(page.getByTestId("research-indian-kanoon-readiness")).toContainText(
-    "Licensed access is disabled by the runtime switch",
+  const readinessMessage = page.getByTestId("research-indian-kanoon-readiness");
+  await expect(readinessMessage).not.toContainText(
+    "Checking licensed-source readiness",
   );
-  await page.getByTestId("research-query-input").fill("constitutional proportionality");
+  const readinessCopy = await readinessMessage.innerText();
+  expect(readinessCopy.toLowerCase()).not.toContain("approval");
+  if (
+    body.missing_config_names.length > 0 ||
+    body.missing_cost_categories.length > 0
+  ) {
+    expect(readinessCopy).toContain("setup is incomplete");
+    expect(readinessCopy).toContain("No provider call will be made");
+    expect(readinessCopy).not.toContain("INDIAN_KANOON_");
+  } else {
+    expect(readinessCopy).toContain("disabled by the runtime switch");
+  }
+  await page
+    .getByTestId("research-query-input")
+    .fill("constitutional proportionality");
   await expect(page.getByTestId("research-query-submit")).toBeDisabled();
 });
