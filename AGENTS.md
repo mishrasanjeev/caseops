@@ -81,6 +81,11 @@ requirements when using the fallback.
   events. Do not infer an automatic resurrection from an explicit, audited
   `Disposed -> Intake` transition, and do not weaken lifecycle protections to
   make a UI symptom disappear.
+- A tenant AI-policy disablement must fail closed across the entire assistant
+  surface, including scope discovery that returns private record labels. Gate
+  discovery, session creation, retrieval, generation, and actions with the
+  same server-owned policy and typed recovery error; a disabled toggle with a
+  still-working picker is not a complete fix.
 - A private-projection stale-writer rejection during a rebuild is a working
   security fence, not proof of corruption. Remove the partial shadow, keep the
   active generation fail-closed, and defer only repairable blockers while their

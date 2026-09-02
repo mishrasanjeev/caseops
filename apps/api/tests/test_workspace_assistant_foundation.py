@@ -72,6 +72,14 @@ def test_policy_is_fail_closed_and_admin_policy_is_versioned(client: TestClient)
     token = str(bootstrap["access_token"])
     company_id = str(bootstrap["company"]["id"])
 
+    disabled_search = client.get(
+        "/api/workspace-assistant/scope-options",
+        headers=auth_headers(token),
+        params={"q": "workspace", "limit": 5},
+    )
+    assert disabled_search.status_code == 403
+    assert disabled_search.json()["type"] == "workspace_assistant_disabled"
+
     disabled = _create(
         client,
         token,

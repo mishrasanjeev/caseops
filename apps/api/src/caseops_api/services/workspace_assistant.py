@@ -727,6 +727,11 @@ def search_assistant_scopes(
     query: str,
     limit: int,
 ) -> AssistantScopeSearchResponse:
+    # Scope discovery is part of the assistant surface, not a generic matter
+    # search. Fail closed before returning tenant-private labels when the
+    # workspace owner has disabled the assistant, and give the UI the same
+    # typed recovery signal as session creation/asking.
+    _assistant_policy_or_403(session, context=context)
     bounded_limit = min(limit, MAX_SCOPE_SEARCH_RESULTS)
     per_type_limit = min(5, bounded_limit)
     pattern = _like_pattern(query.strip())
