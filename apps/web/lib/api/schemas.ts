@@ -8,6 +8,17 @@ export const sourceActionContract = z
     source_reference: z.string().nullable(),
     reason: z.string().nullable(),
     opens_new_tab: z.boolean(),
+    target_type: z
+      .enum([
+        "authority_document",
+        "statute_section",
+        "judge_appointment",
+        "matter_attachment",
+        "ip_document_version",
+      ])
+      .nullable()
+      .optional(),
+    target_id: z.string().nullable().optional(),
   })
   .strict();
 

@@ -81,6 +81,21 @@ requirements when using the fallback.
   events. Do not infer an automatic resurrection from an explicit, audited
   `Disposed -> Intake` transition, and do not weaken lifecycle protections to
   make a UI symptom disappear.
+- Provider rate limits, timeouts, and generic outages are transient availability
+  states, not corrupt records. Bound retries and apply a machine-scheduled
+  cooldown, but never permanently quarantine a tracked case or require human
+  replay solely for a transient response. Auto-release legacy transient
+  quarantines and prove successful recovery in regression tests.
+- Every object node in a provider-facing strict structured-output schema must
+  reject additional properties. Do not use bare dictionaries in an LLM response
+  contract; recursively assert `additionalProperties: false` in the generated
+  JSON Schema.
+- Frontend validators must mirror the complete nested API contract, including
+  optional source-action target identity. A page test must exercise canonical
+  payloads rather than accepting a locally simplified fixture.
+- Legal-reference pickers must only offer Acts that have verified selectable
+  sections and must distinguish an honest empty catalog from catalog- and
+  section-load failures. A visible Act with zero sections is not a usable option.
 - A cost reference is not permanently valid merely because it was active when
   first linked or approved. Every workflow transition that depends on an
   estimate, fee, actual, invoice, or other cost evidence must re-resolve the

@@ -40,7 +40,7 @@ from caseops_api.schemas.indian_kanoon import (
     IndianKanoonSourceRecord,
 )
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.provider_costs import approved_actual_cost_minor
+from caseops_api.services.provider_costs import verified_actual_cost_minor
 from caseops_api.services.saas_billing import record_usage
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.source_actions import inspect_source_action, inspect_source_target_action
@@ -115,7 +115,7 @@ def indian_kanoon_readiness(session: Session | None = None) -> IndianKanoonReadi
     settings = get_settings()
     now = _now()
     missing_config: list[str] = []
-    missing_approvals: list[str] = []
+    invalid_terms: list[str] = []
 
     parsed_base = urlsplit(settings.indian_kanoon_api_base_url.rstrip("/"))
     if (
@@ -145,16 +145,12 @@ def indian_kanoon_readiness(session: Session | None = None) -> IndianKanoonReadi
     if settings.indian_kanoon_monthly_budget_minor <= 0:
         missing_config.append("INDIAN_KANOON_MONTHLY_BUDGET_MINOR")
 
-    if not settings.indian_kanoon_terms_approved:
-        missing_approvals.append("indian_kanoon_terms_approved")
-    if not settings.indian_kanoon_legal_coverage_approved:
-        missing_approvals.append("indian_kanoon_legal_coverage_approved")
     terms_expires_at = _as_utc(settings.indian_kanoon_terms_expires_at)
     terms_approved_at = _as_utc(settings.indian_kanoon_terms_approved_at)
     if terms_expires_at is not None and terms_expires_at <= now:
-        missing_approvals.append("indian_kanoon_terms_current")
+        invalid_terms.append("INDIAN_KANOON_TERMS_EXPIRES_AT")
     if terms_approved_at is not None and terms_approved_at > now:
-        missing_approvals.append("indian_kanoon_terms_approval_timestamp_valid")
+        invalid_terms.append("INDIAN_KANOON_TERMS_APPROVED_AT")
 
     missing_costs: list[str] = []
     if session is None:
@@ -163,7 +159,7 @@ def indian_kanoon_readiness(session: Session | None = None) -> IndianKanoonReadi
         missing_costs = [
             str(category)
             for category in COST_CATEGORIES
-            if approved_actual_cost_minor(
+            if verified_actual_cost_minor(
                 session, category=category, provider=PROVIDER_KEY
             )
             is None
@@ -173,7 +169,7 @@ def indian_kanoon_readiness(session: Session | None = None) -> IndianKanoonReadi
         state = "blocked_disabled"
     elif missing_config:
         state = "blocked_missing_config"
-    elif missing_approvals:
+    elif invalid_terms:
         state = "blocked_terms"
     elif missing_costs:
         state = "blocked_costs"
@@ -186,7 +182,8 @@ def indian_kanoon_readiness(session: Session | None = None) -> IndianKanoonReadi
         enabled=enabled,
         external_calls_enabled=enabled,
         missing_config_names=sorted(set(missing_config)),
-        missing_approval_keys=sorted(set(missing_approvals)),
+        invalid_terms_config=sorted(set(invalid_terms)),
+        missing_approval_keys=[],
         missing_cost_categories=sorted(missing_costs),
         permitted_uses=permitted,
         daily_budget_minor=settings.indian_kanoon_daily_budget_minor,
@@ -397,7 +394,7 @@ def _call_provider(
 ) -> tuple[dict[str, Any], IndianKanoonCallMetadata]:
     _assert_ready(session)
     settings = get_settings()
-    unit_cost = approved_actual_cost_minor(
+    unit_cost = verified_actual_cost_minor(
         session, category=category, provider=PROVIDER_KEY
     )
     if unit_cost is None:
@@ -525,7 +522,7 @@ def _call_provider(
             retrieved_at=_now(),
             estimated_cost_minor=unit_cost,
             cost_category=category,
-            cost_basis="approved_actual",
+            cost_basis="verified_actual",
         )
     finally:
         if own_client:

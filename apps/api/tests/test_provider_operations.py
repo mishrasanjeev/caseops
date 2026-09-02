@@ -1078,6 +1078,22 @@ def test_provider_readiness_is_names_only_and_fail_closed(
     try:
         boot = bootstrap_company(client)
         token = str(boot["access_token"])
+        blocked_response = client.get(
+            "/api/admin/provider-operations/readiness",
+            headers=auth_headers(token),
+        )
+        assert blocked_response.status_code == 200, blocked_response.text
+        blocked_ecourts = next(
+            row
+            for row in blocked_response.json()["providers"]
+            if row["provider"] == "ecourtsindia"
+        )
+        assert blocked_ecourts["state"] == "blocked_missing_config"
+        assert blocked_ecourts["required_approval_keys"] == []
+        assert blocked_ecourts["missing_approval_keys"] == []
+        assert "CASE_TRACKING_SUPPORT_MATRIX_SCOPE" in blocked_ecourts[
+            "missing_config_names"
+        ]
         with get_session_factory()() as session:
             session.add(
                 CaseTrackingSupportMatrix(
@@ -1128,6 +1144,8 @@ def test_provider_readiness_is_names_only_and_fail_closed(
     assert providers["digest_delivery"]["external_calls_enabled"] is False
     assert providers["ecourtsindia"]["state"] == "ready"
     assert providers["ecourtsindia"]["external_calls_enabled"] is True
+    assert providers["ecourtsindia"]["required_approval_keys"] == []
+    assert providers["ecourtsindia"]["missing_approval_keys"] == []
     assert providers["ecourtsindia"]["adapter_contract"]["domain"] == "court_tracking"
     assert providers["ipindia-registry"]["configured"] is False
     assert providers["ipindia-registry"]["external_calls_enabled"] is False
@@ -1139,6 +1157,8 @@ def test_provider_readiness_is_names_only_and_fail_closed(
     ]
     assert providers["indian-kanoon"]["state"] == "blocked_missing_config"
     assert providers["indian-kanoon"]["external_calls_enabled"] is False
+    assert providers["indian-kanoon"]["required_approval_keys"] == []
+    assert providers["indian-kanoon"]["missing_approval_keys"] == []
     assert "INDIAN_KANOON_API_TOKEN" in providers["indian-kanoon"][
         "missing_config_names"
     ]

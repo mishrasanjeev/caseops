@@ -19,6 +19,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { AssistantActionDialog } from "@/components/assistant/AssistantActionDialog";
@@ -396,7 +397,17 @@ export function WorkspaceAssistant() {
           {policyDisabled ? (
             <div className="mt-4 flex gap-2 border-l-2 border-[var(--color-warning-500)] pl-3 text-sm text-[var(--color-ink-2)]" role="status">
               <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-              Workspace AI policy has not enabled this assistant.
+              <span>
+                Workspace AI policy has not enabled this assistant. A workspace owner can enable
+                it under{" "}
+                <Link
+                  href="/app/admin"
+                  className="font-semibold text-[var(--color-brand-700)] underline underline-offset-2"
+                >
+                  Admin → AI controls
+                </Link>
+                .
+              </span>
             </div>
           ) : null}
 

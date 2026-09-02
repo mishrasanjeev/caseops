@@ -4,7 +4,8 @@ export type SourceTargetType =
   | "authority_document"
   | "statute_section"
   | "judge_appointment"
-  | "matter_attachment";
+  | "matter_attachment"
+  | "ip_document_version";
 
 export type SourceOriginSurface =
   | "research"
@@ -13,6 +14,7 @@ export type SourceOriginSurface =
   | "uploaded_case_analysis"
   | "intelligent_review"
   | "statute"
+  | "ip_document"
   | "other";
 
 export type SourceIssueType =

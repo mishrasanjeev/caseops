@@ -43,7 +43,7 @@ import logging
 from dataclasses import dataclass
 
 from fastapi import HTTPException, status
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -164,7 +164,19 @@ _OUTCOME_BIAS: dict[str, dict[str, tuple[str, ...]]] = {
 # ---------------------------------------------------------------
 
 
-class _StrategyOption(BaseModel):
+class _StrictLLMModel(BaseModel):
+    """Base for OpenAI structured-output models.
+
+    OpenAI strict JSON schemas reject object nodes that permit arbitrary
+    properties.  Using bare ``dict`` fields here previously generated
+    ``additionalProperties: true`` below ``items[]`` and caused the provider
+    to reject the entire strategy request before inference.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class _StrategyOption(_StrictLLMModel):
     """Mirror of ``StrategyRoute`` shape for the LLM JSON. Kept narrow
     so generate_structured does not have to teach the model the
     nuances of pydantic discriminators — the LLM emits this, we
@@ -178,7 +190,39 @@ class _StrategyOption(BaseModel):
     risk_notes: str | None = None
 
 
-class _LLMStrategyResponse(BaseModel):
+class _LLMForumStep(_StrictLLMModel):
+    forum_level: str = Field(min_length=2, max_length=80)
+    stage_label: str = Field(min_length=2, max_length=120)
+    forum_name: str | None = Field(default=None, max_length=255)
+    rationale: str = Field(min_length=2, max_length=2000)
+    statutory_basis: list[str] = Field(default_factory=list, max_length=10)
+    expected_filings: list[str] = Field(default_factory=list, max_length=10)
+    supporting_citations: list[str] = Field(default_factory=list, max_length=10)
+
+
+class _LLMLimitationFlag(_StrictLLMModel):
+    label: str = Field(min_length=2, max_length=200)
+    description: str = Field(min_length=2, max_length=1000)
+    statutory_basis: str | None = Field(default=None, max_length=200)
+    deadline_iso: str | None = Field(default=None, max_length=10)
+    severity: str = Field(default="info", max_length=20)
+    supporting_citations: list[str] = Field(default_factory=list, max_length=10)
+
+
+class _LLMStrategyRisk(_StrictLLMModel):
+    label: str = Field(min_length=2, max_length=200)
+    description: str = Field(min_length=2, max_length=2000)
+    severity: str = Field(default="medium", max_length=20)
+    mitigation: str | None = Field(default=None, max_length=1000)
+    supporting_citations: list[str] = Field(default_factory=list, max_length=10)
+
+
+class _LLMNextBestAction(_StrictLLMModel):
+    action: str = Field(min_length=2, max_length=600)
+    supporting_citations: list[str] = Field(default_factory=list, max_length=10)
+
+
+class _LLMStrategyResponse(_StrictLLMModel):
     """The LLM's structured response. Note that we ALSO accept the
     ``LitigationStrategyPayload`` fields directly so the payload
     persisted on the Recommendation row is faithful to what the LLM
@@ -192,18 +236,20 @@ class _LLMStrategyResponse(BaseModel):
     alternative_routes: list[_StrategyOption] = Field(
         default_factory=list, max_length=4,
     )
-    forum_sequence: list[dict] = Field(min_length=1, max_length=10)
-    limitation_flags: list[dict] = Field(default_factory=list, max_length=10)
+    forum_sequence: list[_LLMForumStep] = Field(min_length=1, max_length=10)
+    limitation_flags: list[_LLMLimitationFlag] = Field(default_factory=list, max_length=10)
     required_documents: list[str] = Field(default_factory=list, max_length=20)
     missing_facts: list[str] = Field(default_factory=list, max_length=20)
-    risks: list[dict] = Field(default_factory=list, max_length=10)
+    risks: list[_LLMStrategyRisk] = Field(default_factory=list, max_length=10)
     # Round-2 P1 #4: structured next_best_actions so each action's
     # procedural basis can be cited and verified. We accept either
     # ``[str]`` (legacy) or ``[{"action": str, "supporting_citations": [...]}]``
     # so an LLM that hasn't picked up the new schema doesn't 502 the
     # whole strategy. The post-processor coerces both forms into
     # ``list[NextBestAction]`` before persistence.
-    next_best_actions: list[str | dict] = Field(default_factory=list, max_length=10)
+    next_best_actions: list[str | _LLMNextBestAction] = Field(
+        default_factory=list, max_length=10
+    )
     rationale: str = Field(min_length=2, max_length=8000)
     confidence: str = "low"
     next_action: str | None = None
@@ -1705,8 +1751,7 @@ def _extract_template_slugs(parsed: _LLMStrategyResponse) -> list[str]:
     slugs: list[str] = []
     seen: set[str] = set()
     for step in parsed.forum_sequence:
-        if not isinstance(step, dict):
-            continue
+        step = _llm_mapping(step)
         for slug in step.get("expected_filings", []) or []:
             if not isinstance(slug, str):
                 continue
@@ -1718,7 +1763,7 @@ def _extract_template_slugs(parsed: _LLMStrategyResponse) -> list[str]:
 
 
 def _first_step_survived(
-    parsed_steps: list[dict], surviving: list[ForumStep]
+    parsed_steps: list[dict | BaseModel], surviving: list[ForumStep]
 ) -> bool:
     """Round-4 R4 #3 — ladder coherence.
 
@@ -1737,9 +1782,7 @@ def _first_step_survived(
     """
     if not parsed_steps:
         return True
-    first = parsed_steps[0]
-    if not isinstance(first, dict):
-        return True
+    first = _llm_mapping(parsed_steps[0])
     first_label = str(first.get("stage_label", "Stage"))
     first_forum = first.get("forum_level", "other")
     return any(
@@ -1749,7 +1792,7 @@ def _first_step_survived(
 
 
 def _build_forum_steps(
-    raw_steps: list[dict], retrieved: list[RetrievedAuthority]
+    raw_steps: list[dict | BaseModel], retrieved: list[RetrievedAuthority]
 ) -> list[ForumStep]:
     """Round-2 P1 #4 + Round-3 P2 #R3-3. Coerce LLM forum_sequence dicts
     into ForumStep models with verified citations and ``unverified``
@@ -1780,8 +1823,7 @@ def _build_forum_steps(
     """
     out: list[ForumStep] = []
     for raw in raw_steps:
-        if not isinstance(raw, dict):
-            continue
+        raw = _llm_mapping(raw)
         raw_citations = raw.get("supporting_citations") or []
         if not isinstance(raw_citations, list):
             raw_citations = []
@@ -1822,7 +1864,7 @@ def _build_forum_steps(
 
 
 def _build_limitation_flags(
-    raw_flags: list[dict], retrieved: list[RetrievedAuthority]
+    raw_flags: list[dict | BaseModel], retrieved: list[RetrievedAuthority]
 ) -> list[LimitationFlag]:
     """Round-2 P1 #4 + Round-3 P2 #R3-3. Limitation flags claim a
     statutory deadline.
@@ -1836,8 +1878,7 @@ def _build_limitation_flags(
     out: list[LimitationFlag] = []
     dropped_flags: list[str] = []
     for raw in raw_flags:
-        if not isinstance(raw, dict):
-            continue
+        raw = _llm_mapping(raw)
         raw_citations = raw.get("supporting_citations") or []
         if not isinstance(raw_citations, list):
             raw_citations = []
@@ -1883,7 +1924,7 @@ def _build_limitation_flags(
 
 
 def _build_risks(
-    raw_risks: list[dict], retrieved: list[RetrievedAuthority]
+    raw_risks: list[dict | BaseModel], retrieved: list[RetrievedAuthority]
 ) -> list[StrategyRisk]:
     """Round-2 P1 #4. Risks are the most heterogeneous of the four —
     some are factual (cost, client withdrawal, reputation) and need no
@@ -1898,8 +1939,7 @@ def _build_risks(
     """
     out: list[StrategyRisk] = []
     for raw in raw_risks:
-        if not isinstance(raw, dict):
-            continue
+        raw = _llm_mapping(raw)
         raw_citations = raw.get("supporting_citations") or []
         if not isinstance(raw_citations, list):
             raw_citations = []
@@ -1923,7 +1963,7 @@ def _build_risks(
 
 
 def _build_next_best_actions(
-    raw_actions: list[str | dict],
+    raw_actions: list[str | dict | BaseModel],
     retrieved: list[RetrievedAuthority],
 ) -> list[NextBestAction]:
     """Round-2 P1 #4 + Round-3 P1 #R3-2. Convert the LLM next_best_actions
@@ -1960,8 +2000,7 @@ def _build_next_best_actions(
             except ValidationError:
                 continue
             continue
-        if not isinstance(raw, dict):
-            continue
+        raw = _llm_mapping(raw)
         action_text = str(raw.get("action", "")).strip()
         if not action_text:
             continue
@@ -1994,6 +2033,12 @@ def _build_next_best_actions(
         except ValidationError:
             continue
     return out
+
+
+def _llm_mapping(value: dict | BaseModel) -> dict:
+    """Return one validated LLM object as a plain mapping for post-processing."""
+
+    return value if isinstance(value, dict) else value.model_dump()
 
 
 __all__ = [

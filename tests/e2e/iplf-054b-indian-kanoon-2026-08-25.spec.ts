@@ -82,7 +82,7 @@ test.describe.serial("IPLF-054 licensed Indian Kanoon research", () => {
     await page.goto("/app/research");
     await page.getByTestId("research-source-indian-kanoon").click();
     await expect(page.getByTestId("research-indian-kanoon-readiness")).toContainText(
-      "Licensed access is unavailable",
+      "Licensed access is disabled by the runtime switch",
     );
     await page.getByTestId("research-query-input").fill("constitutional proportionality");
     await expect(page.getByTestId("research-query-submit")).toBeDisabled();
@@ -101,6 +101,7 @@ test.describe.serial("IPLF-054 licensed Indian Kanoon research", () => {
           enabled: true,
           external_calls_enabled: true,
           missing_config_names: [],
+          invalid_terms_config: [],
           missing_approval_keys: [],
           missing_cost_categories: [],
           permitted_uses: ["document_display", "research_storage", "search"],
@@ -171,7 +172,7 @@ test.describe.serial("IPLF-054 licensed Indian Kanoon research", () => {
             estimated_cost_minor: 50,
             currency: "INR",
             cost_category: "legal_source_search",
-            cost_basis: "approved_actual",
+            cost_basis: "verified_actual",
           },
           attribution: {
             label: "Powered by Indian Kanoon",

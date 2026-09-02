@@ -338,6 +338,35 @@ def approved_actual_cost_minor(
     return int(row.unit_amount_minor)
 
 
+def verified_actual_cost_minor(
+    session: Session,
+    *,
+    category: str,
+    provider: str,
+    currency: str = "INR",
+    at: datetime | None = None,
+) -> int | None:
+    """Return a machine-verifiable actual cost without a manual approval gate."""
+
+    row = _active_profile(
+        session,
+        category=category,
+        provider=provider,
+        currency=currency,
+        at=at,
+    )
+    if (
+        row is None
+        or row.unit_amount_minor is None
+        or row.cost_basis != "actual"
+        or row.confidence_level != "high"
+        or not row.source
+        or not row.evidence_ref
+    ):
+        return None
+    return int(row.unit_amount_minor)
+
+
 def _cost_readiness(row: ProviderCostProfile | None, source: str) -> tuple[bool, str]:
     if row is None or source == "fallback_default":
         return True, "fallback_default"

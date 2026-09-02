@@ -21272,7 +21272,7 @@ export interface components {
              * Cost Basis
              * @enum {string}
              */
-            cost_basis: "approved_actual" | "fresh_cache" | "stale_cache";
+            cost_basis: "verified_actual" | "fresh_cache" | "stale_cache";
             /** Cost Category */
             cost_category: string;
             /**
@@ -21453,6 +21453,8 @@ export interface components {
             enabled: boolean;
             /** External Calls Enabled */
             external_calls_enabled: boolean;
+            /** Invalid Terms Config */
+            invalid_terms_config?: string[];
             /**
              * Kill Switch Name
              * @default INDIAN_KANOON_ENABLED

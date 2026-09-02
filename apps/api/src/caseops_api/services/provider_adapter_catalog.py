@@ -227,8 +227,6 @@ PROVIDER_ADAPTERS: tuple[ProviderAdapterDefinition, ...] = (
         required_config_names=(
             "INDIAN_KANOON_ENABLED",
             "INDIAN_KANOON_API_TOKEN",
-            "INDIAN_KANOON_TERMS_APPROVED",
-            "INDIAN_KANOON_LEGAL_COVERAGE_APPROVED",
             "INDIAN_KANOON_TERMS_OWNER",
             "INDIAN_KANOON_TERMS_APPROVED_AT",
             "INDIAN_KANOON_TERMS_EXPIRES_AT",
@@ -242,16 +240,15 @@ PROVIDER_ADAPTERS: tuple[ProviderAdapterDefinition, ...] = (
             "documents use the approved licensed retention period and immutable lineage."
         ),
         activation_blockers=(
-            "provider_contract_and_terms_not_approved",
+            "provider_terms_metadata_not_configured",
             "provider_credentials_not_configured",
             "permitted_uses_not_configured",
-            "approved_actual_cost_profiles_not_configured",
-            "legal_coverage_not_verified",
+            "verified_actual_cost_profiles_not_configured",
         ),
         limitations=(
             "No public-page scraping is permitted; only the contracted API host is called.",
             "External calls remain disabled until every runtime, terms, cost, and "
-            "budget gate passes.",
+            "budget prerequisite is machine-verifiable.",
             "Results are research aids, not a representation that a decision remains good law.",
         ),
     ),

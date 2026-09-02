@@ -330,4 +330,33 @@ describe("LitigationIntelligenceReviewPage", () => {
       }),
     ).toThrow();
   });
+
+  it("accepts canonical source target identity nested in source_action", () => {
+    const parsed = litigationIntelligenceReviewResponse.parse({
+      ...REVIEW_RESPONSE,
+      items: [
+        {
+          ...REVIEW_RESPONSE.items[0],
+          source: {
+            ...REVIEW_RESPONSE.items[0].source,
+            source_action: {
+              state: "available",
+              label: "Open source",
+              open_url: "/api/source-actions/targets/matter_attachment/a-1/open",
+              source_reference: "/api/matters/m-1/attachments/a-1/download",
+              reason: null,
+              opens_new_tab: true,
+              target_type: "matter_attachment",
+              target_id: "a-1",
+            },
+          },
+        },
+      ],
+    });
+
+    expect(parsed.items[0].source.source_action?.target_type).toBe(
+      "matter_attachment",
+    );
+    expect(parsed.items[0].source.source_action?.target_id).toBe("a-1");
+  });
 });

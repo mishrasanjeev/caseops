@@ -368,6 +368,29 @@ def _valid_strategy_payload(citation: str) -> dict:
     }
 
 
+def test_llm_strategy_response_schema_forbids_additional_properties_recursively() -> None:
+    """BUG-004: every structured-output object must satisfy OpenAI strict mode."""
+
+    from caseops_api.services.litigation_strategy import _LLMStrategyResponse
+
+    schema = _LLMStrategyResponse.model_json_schema()
+    object_paths: list[str] = []
+
+    def walk(value: object, path: str) -> None:
+        if isinstance(value, dict):
+            if value.get("type") == "object":
+                object_paths.append(path)
+                assert value.get("additionalProperties") is False, path
+            for key, child in value.items():
+                walk(child, f"{path}.{key}")
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                walk(child, f"{path}[{index}]")
+
+    walk(schema, "$")
+    assert object_paths
+
+
 @pytest.fixture
 def mock_strategy_provider(monkeypatch):
     """Install an LLM provider that always returns the valid payload."""

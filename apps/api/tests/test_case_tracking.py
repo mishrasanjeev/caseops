@@ -51,8 +51,14 @@ from tests.test_auth_company import auth_headers, bootstrap_company
 class FakeCaseTrackingProvider:
     provider_key = "ecourtsindia"
 
-    def __init__(self, *, fail_refresh: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        fail_refresh: bool = False,
+        failure_response_class: str = "provider_error",
+    ) -> None:
         self.fail_refresh = fail_refresh
+        self.failure_response_class = failure_response_class
         self.search_calls: list[CaseSearchQuery] = []
         self.refresh_calls: list[str] = []
         self.bulk_refresh_calls: list[list[str]] = []
@@ -78,7 +84,10 @@ class FakeCaseTrackingProvider:
     def get_case_by_cnr(self, *, cnr: str) -> ProviderCaseSnapshot:
         self.refresh_calls.append(cnr)
         if self.fail_refresh:
-            raise CaseTrackingProviderError("provider token abcdefghijklmnopqrstuvwxyz failed")
+            raise CaseTrackingProviderError(
+                "provider token abcdefghijklmnopqrstuvwxyz failed",
+                response_class=self.failure_response_class,
+            )
         return ProviderCaseSnapshot(
             provider=self.provider_key,
             cnr_number=cnr,
@@ -113,7 +122,7 @@ class FakeCaseTrackingProvider:
             try:
                 snapshots.append(self.get_case_by_cnr(cnr=cnr))
             except CaseTrackingProviderError as exc:
-                errors[cnr] = str(exc)
+                errors[cnr] = f"{exc} [{exc.response_class}]"
         return ProviderBulkRefreshResult(snapshots=snapshots, errors=errors)
 
 
@@ -819,6 +828,7 @@ def test_exact_release_smoke_is_qa_only_idempotent_and_reuses_verified_evidence(
         tracked_case.last_response_class = "rate_limit"
         tracked_case.last_error = "Provider quota requires operator attention."
         tracked_case.provider_freshness_status = "stale"
+        tracked_case.next_provider_refresh_at = datetime.now(UTC) - timedelta(minutes=1)
         update = session.scalar(select(TrackedCaseUpdate))
         assert update is not None
         update.source_text = None
@@ -847,8 +857,8 @@ def test_exact_release_smoke_is_qa_only_idempotent_and_reuses_verified_evidence(
     assert cached_body["provider_call_performed"] is False
     assert cached_body["provider_evidence_operation_id"] == body["operation_id"]
     assert cached_body["source_text_sha256"]
-    assert cached_body["bookmark"]["tracked_case"]["provider_health"] == "unhealthy"
-    assert cached_body["bookmark"]["tracked_case"]["manual_refresh_allowed"] is False
+    assert cached_body["bookmark"]["tracked_case"]["provider_health"] == "degraded"
+    assert cached_body["bookmark"]["tracked_case"]["manual_refresh_allowed"] is True
     assert provider.refresh_calls == ["DLHC010012342026"]
 
     with get_session_factory()() as session:
@@ -1356,7 +1366,10 @@ def test_case_tracking_poll_continues_after_provider_failure(
     monkeypatch.setenv("CASEOPS_CASE_TRACKING_ENABLED", "true")
     get_settings.cache_clear()
     try:
-        provider = FakeCaseTrackingProvider(fail_refresh=True)
+        provider = FakeCaseTrackingProvider(
+            fail_refresh=True,
+            failure_response_class="authentication",
+        )
         with get_session_factory()() as session:
             runs = poll_tracked_cases(
                 session,
@@ -1490,7 +1503,7 @@ def test_case_tracking_poll_continues_after_provider_failure(
         get_settings.cache_clear()
 
 
-def test_case_tracking_automatic_retries_are_bounded_and_auto_quarantine(
+def test_case_tracking_transient_failures_cool_down_and_auto_recover(
     client: TestClient,
     monkeypatch,
 ) -> None:
@@ -1540,30 +1553,57 @@ def test_case_tracking_automatic_retries_are_bounded_and_auto_quarantine(
             tracked = session.scalar(select(TrackedCase))
             assert tracked is not None
             assert [row.attempts for row in operations] == [1, 2, 3]
-            assert [row.status for row in operations] == ["failed", "failed", "quarantined"]
+            assert [row.status for row in operations] == ["failed", "failed", "failed"]
             assert operations[1].metadata_json["retry_of_operation_id"] == operations[0].id
             assert operations[2].metadata_json["retry_of_operation_id"] == operations[1].id
-            assert tracked.quarantined_at is not None
-            assert tracked.provider_freshness_status == "blocked"
+            assert operations[2].metadata_json["automatic_recovery_scheduled"] is True
+            assert tracked.quarantined_at is None
+            assert tracked.provider_freshness_status == "never_succeeded"
+            assert tracked.next_provider_refresh_at is not None
 
         jobs = client.get(
             "/api/admin/provider-operations/jobs",
             headers=auth_headers(token),
         )
         assert jobs.status_code == 200, jobs.text
-        quarantined_record = next(
-            row
+        assert not any(
+            row["job_kind"] == "case_tracking_record" and row["status"] == "quarantined"
             for row in jobs.json()["operations"]
-            if row["job_kind"] == "case_tracking_record" and row["status"] == "quarantined"
         )
-        assert quarantined_record["replay_available"] is True
 
-        poison_probe = FakeCaseTrackingProvider(fail_refresh=True)
+        healthy_provider = FakeCaseTrackingProvider()
         with get_session_factory()() as session:
-            run = poll_tracked_cases(session, provider=poison_probe, force=True)[0]
-            assert run.checked_count == 0
-            assert run.provider_call_count == 0
-            assert poison_probe.bulk_refresh_calls == []
+            tracked = session.scalar(select(TrackedCase))
+            assert tracked is not None
+            due = datetime.now(UTC) - timedelta(minutes=1)
+            # Production contained legacy transient quarantines. They must be
+            # released by the same machine recovery path without a replay gate.
+            tracked.quarantined_at = due
+            tracked.quarantine_reason_redacted = "legacy rate limit quarantine"
+            tracked.next_provider_refresh_at = due
+            session.commit()
+
+            run = poll_tracked_cases(session, provider=healthy_provider, force=True)[0]
+            assert run.checked_count == 1
+            assert healthy_provider.bulk_refresh_calls == [["DLHC010012342026"]]
+            session.refresh(tracked)
+            assert tracked.quarantined_at is None
+            assert tracked.provider_freshness_status == "fresh"
+            assert tracked.last_response_class in {"success", "no_change"}
+
+            operations = list(
+                session.scalars(
+                    select(TrackedCaseProviderOperation).order_by(
+                        TrackedCaseProviderOperation.created_at
+                    )
+                )
+            )
+            assert [row.status for row in operations] == [
+                "failed",
+                "failed",
+                "failed",
+                "succeeded",
+            ]
     finally:
         get_settings.cache_clear()
 

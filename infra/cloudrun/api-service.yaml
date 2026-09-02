@@ -152,10 +152,6 @@ spec:
               value: "false"
             - name: CASEOPS_INDIAN_KANOON_API_BASE_URL
               value: "https://api.indiankanoon.org"
-            - name: CASEOPS_INDIAN_KANOON_TERMS_APPROVED
-              value: "false"
-            - name: CASEOPS_INDIAN_KANOON_LEGAL_COVERAGE_APPROVED
-              value: "false"
             - name: CASEOPS_INDIAN_KANOON_DAILY_BUDGET_MINOR
               value: "0"
             - name: CASEOPS_INDIAN_KANOON_MONTHLY_BUDGET_MINOR

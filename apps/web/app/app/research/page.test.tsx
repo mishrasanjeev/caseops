@@ -86,6 +86,7 @@ describe("ResearchPage", () => {
       enabled: true,
       external_calls_enabled: true,
       missing_config_names: [],
+      invalid_terms_config: [],
       missing_approval_keys: [],
       missing_cost_categories: [],
       permitted_uses: ["document_display", "research_storage", "search"],
@@ -149,7 +150,7 @@ describe("ResearchPage", () => {
         estimated_cost_minor: 50,
         currency: "INR",
         cost_category: "legal_source_search",
-        cost_basis: "approved_actual",
+        cost_basis: "verified_actual",
       },
       attribution: {
         label: "Powered by Indian Kanoon",
@@ -204,12 +205,15 @@ describe("ResearchPage", () => {
       state: "blocked_terms",
       enabled: false,
       external_calls_enabled: false,
+      invalid_terms_config: ["INDIAN_KANOON_TERMS_EXPIRES_AT"],
     });
     indianKanoonReadinessMock.mockClear();
     render(withClient(<ResearchPage />));
     fireEvent.click(screen.getByTestId("research-source-indian-kanoon"));
     expect(
-      await screen.findByText(/Licensed access is unavailable/),
+      await screen.findByText(
+        "Licensed access has invalid or expired terms metadata: INDIAN_KANOON_TERMS_EXPIRES_AT.",
+      ),
     ).toBeInTheDocument();
     fireEvent.change(screen.getByTestId("research-query-input"), {
       target: { value: "constitutional proportionality" },

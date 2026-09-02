@@ -14,6 +14,7 @@ Design decisions:
 - Every call records a ``ModelRun`` so tenant usage is auditable. The writer
   hook is injected so the service layer stays ignorant of the DB session.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -74,6 +75,8 @@ class MockProvider:
             text = _mock_hearing_pack_response(joined)
         elif "drafting a legal document" in lowered or "draft title:" in lowered:
             text = _mock_draft_response(joined)
+        elif "produce a litigation strategy" in lowered and "forum_sequence" in lowered:
+            text = _mock_litigation_strategy_response(joined)
         elif "respond with json" in lowered:
             text = _mock_structured_response(joined)
         else:
@@ -293,9 +296,7 @@ def _mock_matter_file_qa_response(prompt: str) -> str:
         "limitations": ["Only uploaded matter document chunks were used."],
     }
     if analysis_language != "en":
-        payload["local_language_analysis"] = (
-            f"Local-language aid ({analysis_language}): {preview}"
-        )
+        payload["local_language_analysis"] = f"Local-language aid ({analysis_language}): {preview}"
     return json.dumps(payload, separators=(",", ":"))
 
 
@@ -335,12 +336,10 @@ def _mock_structured_response(prompt: str) -> str:
         "title": f"Recommendation for {title.strip()}",
         "options": [
             {
-                "label": (
-                    f"Proceed under the available precedent{' ('+primary+')' if primary else ''}"
-                ),
+                "label": "Proceed under the available precedent"
+                + (f" ({primary})" if primary else ""),
                 "rationale": (
-                    "The retrieved authority supports this route: "
-                    f"{primary_fragment}"
+                    f"The retrieved authority supports this route: {primary_fragment}"
                     if primary_fragment
                     else "No retrieved authority strongly supports this route."
                 ),
@@ -357,7 +356,7 @@ def _mock_structured_response(prompt: str) -> str:
             },
         ],
         "primary_recommendation_label": (
-            f"Proceed under the available precedent{' ('+primary+')' if primary else ''}"
+            f"Proceed under the available precedent{' (' + primary + ')' if primary else ''}"
         ),
         "rationale": (
             "The retrieved authorities align with the matter's forum and stage. "
@@ -373,6 +372,93 @@ def _mock_structured_response(prompt: str) -> str:
         ],
         "confidence": "medium" if primary else "low",
         "next_action": "Partner review before any external share.",
+    }
+    return json.dumps(payload, separators=(",", ":"))
+
+
+def _mock_litigation_strategy_response(prompt: str) -> str:
+    """Mirror the strict litigation-strategy contract for offline acceptance.
+
+    The general recommendation fixture predates the nested strategy payload.
+    Keeping this purpose-specific emitter aligned with the production schema
+    ensures Docker and CI exercise validation rather than failing on fixture
+    drift before the workflow itself is reached.
+    """
+    forum = (_extract_between(prompt, "FORUM:", "\n") or "unknown").strip()
+    title = (_extract_between(prompt, "MATTER_TITLE:", "\n") or "Unknown matter").strip()
+    authorities = _extract_citations(prompt)
+    tagged_authorities = [f"[{index}] {citation}" for index, citation in enumerate(authorities, 1)]
+    primary = tagged_authorities[:1]
+    confidence = "medium" if primary else "low"
+    forum_level = (
+        "supreme_court"
+        if "supreme" in forum
+        else "lower_court"
+        if forum in {"district_court", "lower_court"}
+        else "tribunal"
+        if "tribunal" in forum
+        else "high_court_single_bench"
+        if "high_court" in forum
+        else "other"
+    )
+    payload: dict[str, Any] = {
+        "title": f"Litigation strategy for {title}",
+        "current_posture": (
+            f"The matter is recorded at the {forum or 'unknown'} stage. "
+            "The available record must be checked before any filing."
+        ),
+        "recommended_route": {
+            "label": "Review the present record and prepare the next procedural filing",
+            "rationale": (
+                "The available authority supports a record-led procedural review."
+                if primary
+                else "No retrieved authority supports a more specific route."
+            ),
+            "confidence": confidence,
+            "availability": "available" if primary else "uncertain",
+            "supporting_citations": primary,
+            "risk_notes": "Confirm limitation, maintainability, and the latest order first.",
+        },
+        "alternative_routes": [],
+        "forum_sequence": [
+            {
+                "forum_level": forum_level,
+                "stage_label": "Current procedural stage",
+                "forum_name": None,
+                "rationale": "Use the recorded forum and verify jurisdiction from the case file.",
+                "statutory_basis": [],
+                "expected_filings": ["procedural filing after lawyer review"],
+                "supporting_citations": primary,
+            }
+        ],
+        "limitation_flags": [],
+        "required_documents": ["Latest order", "Complete pleadings", "Limitation chronology"],
+        "missing_facts": ["Latest operative order", "Confirmed limitation start date"],
+        "risks": [
+            {
+                "label": "Incomplete procedural record",
+                "description": (
+                    "The next filing cannot be settled until the latest order is checked."
+                ),
+                "severity": "medium",
+                "mitigation": "Obtain and review the certified record.",
+                "supporting_citations": [],
+            }
+        ],
+        "next_best_actions": [
+            {
+                "action": "Review the latest order and calculate limitation.",
+                "supporting_citations": primary,
+            }
+        ],
+        "rationale": "This route keeps the recommendation within the available record.",
+        "confidence": confidence,
+        "next_action": "Lawyer review before any external filing.",
+        "assumptions": ["The recorded forum and matter stage are current."],
+        "disclaimer": (
+            "Strategy outputs are citation-grounded but require lawyer review before any filing. "
+            "CaseOps does not promise outcomes."
+        ),
     }
     return json.dumps(payload, separators=(",", ":"))
 
@@ -453,8 +539,7 @@ def _mock_draft_response(prompt: str) -> str:
     authorities = _extract_citations(prompt)
     cite_list = authorities[:5]
     cite_sentences = "\n".join(
-        f"The Hon'ble Court's ruling in [{c}] applies to the facts here."
-        for c in cite_list
+        f"The Hon'ble Court's ruling in [{c}] applies to the facts here." for c in cite_list
     )
     body_lines = [
         f"Brief in {title.strip()}",
@@ -483,8 +568,7 @@ def _mock_draft_response(prompt: str) -> str:
         "body": "\n".join(body_lines),
         "citations": cite_list,
         "summary": (
-            f"Draft generated for {title.strip()}; "
-            f"{len(cite_list)} authorities cited."
+            f"Draft generated for {title.strip()}; {len(cite_list)} authorities cited."
             if cite_list
             else (
                 f"Draft generated for {title.strip()}; NO authorities cited — "
@@ -516,6 +600,7 @@ def _extract_citations(text: str) -> list[str]:
     """
     citations: list[str] = []
     import re as _re
+
     for line in text.splitlines():
         stripped = line.strip()
         # Match either "- CITATION:" or "[N] CITATION:" prefix.
@@ -578,9 +663,7 @@ class AnthropicProvider:
     # Currently Opus 4.7 and its reasoning-model siblings. Add newer
     # prefixes here as they ship; keeping the list explicit beats
     # guessing from error strings at runtime.
-    _NO_TEMPERATURE_PREFIXES: tuple[str, ...] = (
-        "claude-opus-4-7",
-    )
+    _NO_TEMPERATURE_PREFIXES: tuple[str, ...] = ("claude-opus-4-7",)
 
     def _model_rejects_temperature(self) -> bool:
         name = (self.model or "").lower()
@@ -722,10 +805,7 @@ class OpenAIProvider:
     def _effective_max_completion_tokens(self, requested: int) -> int:
         """Floor for reasoning-class models. See ``_REASONING_MIN_COMPLETION_TOKENS``
         for the rationale (PR #7 / 2026-05-03 prod incident)."""
-        if (
-            self._is_reasoning_model()
-            and requested < self._REASONING_MIN_COMPLETION_TOKENS
-        ):
+        if self._is_reasoning_model() and requested < self._REASONING_MIN_COMPLETION_TOKENS:
             logger.warning(
                 "openai: bumping max_completion_tokens %d -> %d for reasoning "
                 "model %s; the requested cap would have starved visible content "
@@ -750,8 +830,7 @@ class OpenAIProvider:
         kwargs: dict[str, Any] = {
             "model": self.model,
             "messages": [
-                {"role": message.role, "content": message.content}
-                for message in messages
+                {"role": message.role, "content": message.content} for message in messages
             ],
             "max_completion_tokens": self._effective_max_completion_tokens(max_tokens),
         }
@@ -867,9 +946,7 @@ class OpenAIProvider:
         if parsed is None:
             refusal = bool(getattr(message, "refusal", None))
             detail = "refused" if refusal else "contained no parsed value"
-            raise LLMResponseFormatError(
-                f"OpenAI:{self.model} structured response {detail}."
-            )
+            raise LLMResponseFormatError(f"OpenAI:{self.model} structured response {detail}.")
         try:
             validated = schema.model_validate(parsed)
         except ValidationError as exc:
@@ -938,9 +1015,7 @@ def _split_system_and_chat(
 ) -> tuple[str, list[dict[str, str]]]:
     system_parts = [m.content for m in messages if m.role == "system"]
     chat = [
-        {"role": m.role, "content": m.content}
-        for m in messages
-        if m.role in {"user", "assistant"}
+        {"role": m.role, "content": m.content} for m in messages if m.role in {"user", "assistant"}
     ]
     return "\n\n".join(system_parts), chat
 
@@ -982,9 +1057,7 @@ def _resolve_model_for_purpose(settings: object, purpose: str | None) -> str:
         PURPOSE_ASSISTANT: getattr(settings, "llm_model_assistant", None),
         PURPOSE_RECOMMENDATIONS: getattr(settings, "llm_model_recommendations", None),
         PURPOSE_HEARING_PACK: getattr(settings, "llm_model_hearing_pack", None),
-        PURPOSE_METADATA_EXTRACT: getattr(
-            settings, "llm_model_metadata_extract", None
-        ),
+        PURPOSE_METADATA_EXTRACT: getattr(settings, "llm_model_metadata_extract", None),
         PURPOSE_EVAL: getattr(settings, "llm_model_eval", None),
     }
     override = mapping.get(purpose) if purpose else None
@@ -1000,6 +1073,7 @@ def build_provider(purpose: str | None = None) -> LLMProvider:
     # eval: capture once with credentials in `record` mode, replay
     # forever in CI in `replay` mode.
     from caseops_api.services.llm_cassette import maybe_wrap_with_cassette
+
     return maybe_wrap_with_cassette(
         inner,
         mode=getattr(settings, "llm_cassette_mode", None),
@@ -1179,9 +1253,7 @@ def generate_structured[T: BaseModel](
         )
 
         policy = resolve_tenant_policy(session, company_id=context.tenant_id)
-        if not is_model_allowed(
-            policy, purpose=context.purpose, model=provider.model
-        ):
+        if not is_model_allowed(policy, purpose=context.purpose, model=provider.model):
             from fastapi import HTTPException
             from fastapi import status as _status
 
@@ -1290,8 +1362,7 @@ def generate_structured[T: BaseModel](
         # Field violations and payload keys are the diagnosis; the raw body is
         # not, and it is the part that carries client content.
         logger.warning(
-            "generate_structured schema mismatch (%s:%s). violations=%s "
-            "payload_keys=%s %s",
+            "generate_structured schema mismatch (%s:%s). violations=%s payload_keys=%s %s",
             completion.provider,
             completion.model,
             violations,

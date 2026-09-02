@@ -663,6 +663,7 @@ export const googleWorkspaceConfiguration = {
     "https://www.googleapis.com/auth/gmail.readonly",
   ],
   missing_config_names: [],
+  invalid_terms_config: [],
   missing_approval_keys: [],
   missing_machine_control_keys: [],
   connection_counts: {

@@ -74,7 +74,7 @@ test("IPLF-054B production keeps unapproved Indian Kanoon calls disabled", async
   await page.goto(`${BASE_URL}/app/research`);
   await page.getByTestId("research-source-indian-kanoon").click();
   await expect(page.getByTestId("research-indian-kanoon-readiness")).toContainText(
-    "Licensed access is unavailable",
+    "Licensed access is disabled by the runtime switch",
   );
   await page.getByTestId("research-query-input").fill("constitutional proportionality");
   await expect(page.getByTestId("research-query-submit")).toBeDisabled();

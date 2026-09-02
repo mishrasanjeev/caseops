@@ -89,6 +89,8 @@ _RED_PROVIDER_RESPONSE_CLASSES = {
     "rate_limit",
     "timeout",
 }
+_TRANSIENT_PROVIDER_RESPONSE_CLASSES = {"provider_error", "rate_limit", "timeout"}
+_TRANSIENT_RECOVERY_COOLDOWN = timedelta(hours=1)
 _TENANT_METADATA_BLOCKLIST = (
     "secret",
     "token",
@@ -230,7 +232,7 @@ def _next_refresh_at(now: datetime | None = None) -> datetime:
 
 def _response_class(exc: BaseException) -> str:
     explicit = getattr(exc, "response_class", None)
-    if explicit in _RED_PROVIDER_RESPONSE_CLASSES and explicit != "provider_error":
+    if explicit in _RED_PROVIDER_RESPONSE_CLASSES:
         return str(explicit)
     value = f"{type(exc).__name__} {exc}".lower()
     if "timeout" in value:
@@ -242,6 +244,31 @@ def _response_class(exc: BaseException) -> str:
     if any(token in value for token in ("parse", "schema", "malformed", "decode")):
         return "parse_error"
     return "provider_error"
+
+
+def _aware_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
+def _is_transient_provider_failure(tracked_case: TrackedCase) -> bool:
+    return tracked_case.last_response_class in _TRANSIENT_PROVIDER_RESPONSE_CLASSES
+
+
+def _transient_recovery_due(tracked_case: TrackedCase) -> bool:
+    due_at = _aware_utc(tracked_case.next_provider_refresh_at)
+    return due_at is None or due_at <= _now()
+
+
+def _release_legacy_transient_quarantine(tracked_case: TrackedCase) -> None:
+    if tracked_case.quarantined_at is None or not _is_transient_provider_failure(tracked_case):
+        return
+    tracked_case.quarantined_at = None
+    tracked_case.quarantine_reason_redacted = None
+    tracked_case.provider_freshness_status = (
+        "stale" if tracked_case.last_provider_successful_at else "never_succeeded"
+    )
 
 
 def _manual_refresh_cost(session: Session, tracked_case: TrackedCase) -> tuple[int, str]:
@@ -473,14 +500,19 @@ def _fail_operation(
     operation.error_redacted = error
     operation.completed_at = _now()
     exhausted = operation.attempts >= operation.max_attempts
-    operation.status = "quarantined" if exhausted else "failed"
-    operation.next_attempt_at = (
-        None if exhausted else operation.completed_at + timedelta(minutes=15)
+    transient_failure = response_class in _TRANSIENT_PROVIDER_RESPONSE_CLASSES
+    operation.status = "quarantined" if exhausted and not transient_failure else "failed"
+    operation.next_attempt_at = operation.completed_at + (
+        _TRANSIENT_RECOVERY_COOLDOWN
+        if exhausted and transient_failure
+        else timedelta(minutes=15)
     )
+    if exhausted and not transient_failure:
+        operation.next_attempt_at = None
     tracked_case.last_error = error
     tracked_case.last_response_class = response_class
     tracked_case.next_provider_refresh_at = operation.next_attempt_at
-    if exhausted:
+    if exhausted and not transient_failure:
         tracked_case.quarantined_at = operation.completed_at
         tracked_case.quarantine_reason_redacted = error
         operation.quarantined_at = operation.completed_at
@@ -490,6 +522,12 @@ def _fail_operation(
         tracked_case.provider_freshness_status = (
             "stale" if tracked_case.last_provider_successful_at else "never_succeeded"
         )
+        if exhausted:
+            operation.metadata_json = {
+                **dict(operation.metadata_json or {}),
+                "automatic_recovery_scheduled": True,
+                "automatic_recovery_at": operation.next_attempt_at.isoformat(),
+            }
     session.add_all([operation, tracked_case])
     admins = list(
         session.scalars(
@@ -511,10 +549,18 @@ def _fail_operation(
             event_type="case_tracking.provider_unhealthy",
             source_type="tracked_case_provider_operation",
             source_id=operation.id,
-            title="Case tracking provider needs attention",
+            title=(
+                "Case tracking provider recovery scheduled"
+                if transient_failure
+                else "Case tracking provider needs attention"
+            ),
             body=(
                 f"{operation.provider} returned {response_class}. "
-                "Review the correlated provider operation before replay."
+                + (
+                    f"Automatic recovery is scheduled for {operation.next_attempt_at.isoformat()}."
+                    if transient_failure and operation.next_attempt_at is not None
+                    else "Review the correlated provider operation before replay."
+                )
             ),
         )
 
@@ -703,17 +749,34 @@ def _tracked_case_record(session: Session, case: TrackedCase) -> TrackedCaseReco
     if last_success is not None:
         aware = last_success if last_success.tzinfo else last_success.replace(tzinfo=UTC)
         freshness = "fresh" if (_now() - aware) <= timedelta(hours=24) else "stale"
-    if case.quarantined_at is not None:
+    transient_failure = _is_transient_provider_failure(case)
+    transient_recovery_due = _transient_recovery_due(case)
+    effective_quarantine = case.quarantined_at is not None and not transient_failure
+    if transient_failure:
+        freshness = "stale" if last_success else "never_succeeded"
+    if effective_quarantine:
         freshness = "quarantined"
     elif not enabled or not configured:
         freshness = "disabled"
-    provider_health_red = case.last_response_class in _RED_PROVIDER_RESPONSE_CLASSES
+    provider_health_red = (
+        case.last_response_class in _RED_PROVIDER_RESPONSE_CLASSES and not transient_failure
+    )
     manual_allowed = bool(
-        enabled and configured and case.quarantined_at is None and not provider_health_red
+        enabled
+        and configured
+        and not effective_quarantine
+        and not provider_health_red
+        and (not transient_failure or transient_recovery_due)
     )
     disabled_reason = None
-    if case.quarantined_at is not None:
+    if effective_quarantine:
         disabled_reason = "Provider work is quarantined; an administrator must review it."
+    elif transient_failure and not transient_recovery_due:
+        recovery_at = _aware_utc(case.next_provider_refresh_at)
+        disabled_reason = (
+            "The provider is temporarily unavailable. Automatic recovery is scheduled"
+            + (f" for {recovery_at.isoformat()}." if recovery_at else ".")
+        )
     elif provider_health_red:
         disabled_reason = (
             "Provider health is red after the latest failed operation; "
@@ -742,7 +805,7 @@ def _tracked_case_record(session: Session, case: TrackedCase) -> TrackedCaseReco
         last_operation_id=case.last_operation_id,
         provider_health=(
             "quarantined"
-            if case.quarantined_at is not None
+            if effective_quarantine
             else "disabled"
             if not enabled or not configured
             else "unhealthy"
@@ -1670,12 +1733,22 @@ def refresh_bookmark(
 ) -> CaseTrackingRefreshResponse:
     bookmark = _get_bookmark(session, context=context, bookmark_id=bookmark_id)
     tracked_case = bookmark.tracked_case
-    if tracked_case.quarantined_at is not None:
+    transient_failure = _is_transient_provider_failure(tracked_case)
+    if tracked_case.quarantined_at is not None and not transient_failure:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Case tracking provider work is quarantined pending administrator review.",
         )
-    if tracked_case.last_response_class in _RED_PROVIDER_RESPONSE_CLASSES:
+    if transient_failure and not _transient_recovery_due(tracked_case):
+        recovery_at = _aware_utc(tracked_case.next_provider_refresh_at)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                "The provider is temporarily unavailable; automatic recovery is scheduled"
+                + (f" for {recovery_at.isoformat()}." if recovery_at else ".")
+            ),
+        )
+    if tracked_case.last_response_class in _RED_PROVIDER_RESPONSE_CLASSES and not transient_failure:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
@@ -1683,6 +1756,7 @@ def refresh_bookmark(
                 "an administrator must review or replay it."
             ),
         )
+    _release_legacy_transient_quarantine(tracked_case)
     if bookmark.matter_id:
         linked_matter = _matter_or_none(
             session,
@@ -2879,7 +2953,12 @@ def poll_tracked_cases(
                 .where(
                     TrackedCase.company_id == context.company.id,
                     _eligible_tracked_case_predicate(company_id=context.company.id),
-                    TrackedCase.quarantined_at.is_(None),
+                    or_(
+                        TrackedCase.quarantined_at.is_(None),
+                        TrackedCase.last_response_class.in_(
+                            tuple(_TRANSIENT_PROVIDER_RESPONSE_CLASSES)
+                        ),
+                    ),
                     or_(
                         TrackedCase.next_provider_refresh_at.is_(None),
                         TrackedCase.next_provider_refresh_at <= _now(),
@@ -2949,10 +3028,14 @@ def poll_tracked_cases(
                     "partial_reason": "window_closed_before_case_refresh",
                 }
                 break
-            if tracked_case.quarantined_at is not None:
+            if (
+                tracked_case.quarantined_at is not None
+                and not _is_transient_provider_failure(tracked_case)
+            ):
                 run.skipped_count += 1
                 run.backlog_remaining_count += 1
                 continue
+            _release_legacy_transient_quarantine(tracked_case)
             operation = _new_operation(
                 session,
                 context=context,
@@ -2964,7 +3047,17 @@ def poll_tracked_cases(
                 if tracked_case.cnr_number:
                     normalized_cnr = normalize_cnr(tracked_case.cnr_number)
                     if normalized_cnr and normalized_cnr in bulk_errors:
-                        raise CaseTrackingProviderError(bulk_errors[normalized_cnr])
+                        bulk_error = bulk_errors[normalized_cnr]
+                        classified = re.search(
+                            r"\[(authentication|parse_error|provider_error|rate_limit|timeout)\]$",
+                            bulk_error,
+                        )
+                        raise CaseTrackingProviderError(
+                            bulk_error,
+                            response_class=(
+                                classified.group(1) if classified else "provider_error"
+                            ),
+                        )
                     snapshot = bulk_snapshots.get(normalized_cnr or "") if normalized_cnr else None
                     if snapshot is None:
                         run.provider_call_count += 1

@@ -44,6 +44,8 @@ class IndianKanoonReadinessResponse(BaseModel):
     enabled: bool
     external_calls_enabled: bool
     missing_config_names: list[str] = Field(default_factory=list)
+    invalid_terms_config: list[str] = Field(default_factory=list)
+    # Kept as a compatibility projection. Indian Kanoon has no manual approval gates.
     missing_approval_keys: list[str] = Field(default_factory=list)
     missing_cost_categories: list[str] = Field(default_factory=list)
     permitted_uses: list[str] = Field(default_factory=list)
@@ -108,7 +110,7 @@ class IndianKanoonCallMetadata(BaseModel):
     estimated_cost_minor: int = Field(ge=0)
     currency: Literal["INR"] = "INR"
     cost_category: str
-    cost_basis: Literal["approved_actual", "fresh_cache", "stale_cache"]
+    cost_basis: Literal["verified_actual", "fresh_cache", "stale_cache"]
 
 
 class IndianKanoonSearchResponse(BaseModel):

@@ -36,8 +36,7 @@ def _prompt(structured: bool) -> list[LLMMessage]:
         LLMMessage(
             role="user",
             content=(
-                ("Respond with json. " if structured else "")
-                + "MATTER_TITLE: State v. Rao\n"
+                ("Respond with json. " if structured else "") + "MATTER_TITLE: State v. Rao\n"
                 "FORUM: high_court\n"
                 "- CITATION: Ssangyong Engg v. NHAI (2019)\n"
                 "- CITATION: Patel Engg v. Union of India (2008)\n"
@@ -64,6 +63,33 @@ def test_mock_provider_structured_returns_valid_json() -> None:
     assert "options" in payload
     assert payload["options"][0]["supporting_citations"]
     assert "Ssangyong" in payload["options"][0]["supporting_citations"][0]
+
+
+def test_mock_provider_litigation_strategy_matches_strict_nested_schema() -> None:
+    from caseops_api.services.litigation_strategy import _LLMStrategyResponse
+
+    provider = MockProvider()
+    completion = provider.generate(
+        [
+            LLMMessage(role="system", content="You are the litigation strategy engine."),
+            LLMMessage(
+                role="user",
+                content=(
+                    "Respond with json. Produce a litigation strategy.\n"
+                    "MATTER_TITLE: State v. Rao\n"
+                    "FORUM: high_court\n"
+                    "RETRIEVED_AUTHORITIES:\n"
+                    "[1] CITATION: Ssangyong Engg v. NHAI (2019)\n"
+                    "SCHEMA includes recommended_route and forum_sequence."
+                ),
+            ),
+        ]
+    )
+
+    validated = _LLMStrategyResponse.model_validate_json(completion.text)
+
+    assert validated.recommended_route.supporting_citations == ["[1] Ssangyong Engg v. NHAI (2019)"]
+    assert validated.forum_sequence[0].forum_level == "high_court_single_bench"
 
 
 def test_generate_structured_validates_schema() -> None:
@@ -202,12 +228,15 @@ def _install_fake_openai(monkeypatch: pytest.MonkeyPatch, captured: dict) -> Non
     class _FakeCompletions:
         def create(self, **kwargs):
             captured.update(kwargs)
+
             class _Choice:
                 class message:
                     content = '{"ok": true}'
+
             class _Resp:
                 choices = [_Choice()]
                 usage = type("U", (), {"prompt_tokens": 1, "completion_tokens": 1})()
+
             return _Resp()
 
     class _FakeChat:
@@ -223,6 +252,7 @@ def _install_fake_openai(monkeypatch: pytest.MonkeyPatch, captured: dict) -> Non
         {"OpenAI": _FakeClient},
     )
     import sys as _sys
+
     monkeypatch.setitem(_sys.modules, "openai", fake_module)
 
 

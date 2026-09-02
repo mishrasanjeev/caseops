@@ -966,6 +966,11 @@ export type AppealStrengthReport = {
 export type TenantAIPolicy = {
   company_id: string;
   predictive_bench_strategy_enabled: boolean;
+  disabled_template_types: string[];
+  workspace_assistant_enabled: boolean;
+  allowed_models_assistant: string[];
+  assistant_retention_days: number;
+  policy_version: number;
 };
 
 export type AITokenQuotaState = "unlimited" | "ok" | "warning" | "hard_limit";
@@ -1095,7 +1100,11 @@ export async function getTenantAIPolicy(): Promise<TenantAIPolicy> {
 }
 
 export async function updateTenantAIPolicy(input: {
-  predictive_bench_strategy_enabled: boolean;
+  predictive_bench_strategy_enabled?: boolean;
+  workspace_assistant_enabled?: boolean;
+  allowed_models_assistant?: string[];
+  assistant_retention_days?: number;
+  expected_version?: number;
 }): Promise<TenantAIPolicy> {
   return apiRequest<TenantAIPolicy>("/api/admin/tenant-ai-policy", {
     method: "PATCH",
@@ -5366,6 +5375,7 @@ export type IndianKanoonReadiness = {
   enabled: boolean;
   external_calls_enabled: boolean;
   missing_config_names: string[];
+  invalid_terms_config: string[];
   missing_approval_keys: string[];
   missing_cost_categories: string[];
   permitted_uses: string[];
@@ -5417,7 +5427,7 @@ export type IndianKanoonSearchResponse = {
     estimated_cost_minor: number;
     currency: "INR";
     cost_category: string;
-    cost_basis: "approved_actual" | "fresh_cache" | "stale_cache";
+    cost_basis: "verified_actual" | "fresh_cache" | "stale_cache";
   };
   attribution: IndianKanoonReadiness["attribution"];
   disclaimer: string;

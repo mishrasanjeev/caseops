@@ -3,10 +3,12 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { capabilityMock, getMock, updateMock } = vi.hoisted(() => ({
+const { capabilityMock, getMock, updateMock, getTokenMock, updateTokenMock } = vi.hoisted(() => ({
   capabilityMock: vi.fn(),
   getMock: vi.fn(),
   updateMock: vi.fn(),
+  getTokenMock: vi.fn(),
+  updateTokenMock: vi.fn(),
 }));
 
 vi.mock("@/lib/capabilities", () => ({
@@ -16,6 +18,8 @@ vi.mock("@/lib/capabilities", () => ({
 vi.mock("@/lib/api/endpoints", () => ({
   getTenantAIPolicy: getMock,
   updateTenantAIPolicy: updateMock,
+  getAITokenGovernance: getTokenMock,
+  updateAITokenGovernance: updateTokenMock,
 }));
 
 vi.mock("sonner", () => ({
@@ -40,6 +44,18 @@ describe("TenantAIPolicyCard (PG-107 v1.5)", () => {
     capabilityMock.mockReset();
     getMock.mockReset();
     updateMock.mockReset();
+    getTokenMock.mockReset();
+    updateTokenMock.mockReset();
+    getTokenMock.mockResolvedValue({
+      firm_quota_tokens: null,
+      user_quota_tokens: null,
+      warning_threshold_percent: 90,
+      firm_state: "unlimited",
+      firm_used_tokens: 0,
+      firm_remaining_tokens: null,
+      top_users: [],
+      usage_by_purpose_model: [],
+    });
   });
 
   afterEach(() => {
@@ -58,6 +74,8 @@ describe("TenantAIPolicyCard (PG-107 v1.5)", () => {
     getMock.mockResolvedValue({
       company_id: "c-1",
       predictive_bench_strategy_enabled: false,
+      workspace_assistant_enabled: false,
+      policy_version: 1,
     });
     renderCard();
     await waitFor(() =>
@@ -74,10 +92,14 @@ describe("TenantAIPolicyCard (PG-107 v1.5)", () => {
     getMock.mockResolvedValue({
       company_id: "c-1",
       predictive_bench_strategy_enabled: false,
+      workspace_assistant_enabled: false,
+      policy_version: 1,
     });
     updateMock.mockResolvedValue({
       company_id: "c-1",
       predictive_bench_strategy_enabled: true,
+      workspace_assistant_enabled: false,
+      policy_version: 2,
     });
     const user = userEvent.setup();
     renderCard();
@@ -90,10 +112,55 @@ describe("TenantAIPolicyCard (PG-107 v1.5)", () => {
     await waitFor(() =>
       expect(updateMock).toHaveBeenCalledWith({
         predictive_bench_strategy_enabled: true,
+        expected_version: 1,
       }),
     );
     await waitFor(() =>
       expect(screen.getByText(/Predictive \(B\)/i)).toBeInTheDocument(),
     );
+  });
+
+  it("lets an admin enable the workspace assistant with optimistic concurrency", async () => {
+    capabilityMock.mockReturnValue(true);
+    getMock.mockResolvedValue({
+      company_id: "c-1",
+      predictive_bench_strategy_enabled: false,
+      workspace_assistant_enabled: false,
+      policy_version: 7,
+    });
+    updateMock.mockResolvedValue({
+      company_id: "c-1",
+      predictive_bench_strategy_enabled: false,
+      workspace_assistant_enabled: true,
+      policy_version: 8,
+    });
+    const user = userEvent.setup();
+    renderCard();
+
+    await user.click(await screen.findByTestId("tenant-ai-policy-assistant-toggle"));
+    await waitFor(() =>
+      expect(updateMock).toHaveBeenCalledWith({
+        workspace_assistant_enabled: true,
+        expected_version: 7,
+      }),
+    );
+    expect(await screen.findByText("Enabled")).toBeInTheDocument();
+  });
+
+  it("refetches the authoritative policy after a conflicting update", async () => {
+    capabilityMock.mockReturnValue(true);
+    getMock.mockResolvedValue({
+      company_id: "c-1",
+      predictive_bench_strategy_enabled: false,
+      workspace_assistant_enabled: false,
+      policy_version: 7,
+    });
+    updateMock.mockRejectedValue(new Error("Policy version conflict"));
+    const user = userEvent.setup();
+    renderCard();
+
+    await user.click(await screen.findByTestId("tenant-ai-policy-assistant-toggle"));
+    await waitFor(() => expect(updateMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(getMock).toHaveBeenCalledTimes(2));
   });
 });

@@ -41,8 +41,6 @@ def _settings(**updates):
             "indian_kanoon_enabled": True,
             "indian_kanoon_api_base_url": "https://api.indiankanoon.org",
             "indian_kanoon_api_token": "server-only-test-token",
-            "indian_kanoon_terms_approved": True,
-            "indian_kanoon_legal_coverage_approved": True,
             "indian_kanoon_terms_owner": "CaseOps legal",
             "indian_kanoon_terms_approved_at": now - timedelta(days=1),
             "indian_kanoon_terms_expires_at": now + timedelta(days=30),
@@ -66,7 +64,7 @@ def _context(session, boot: dict[str, object]) -> SessionContext:
     return SessionContext(company=company, membership=membership, user=user)
 
 
-def _approve_costs(session) -> None:
+def _configure_costs(session) -> None:
     now = datetime.now(UTC)
     for category, amount in _PRICES.items():
         session.add(
@@ -82,8 +80,8 @@ def _approve_costs(session) -> None:
                 cost_basis="actual",
                 confidence_level="high",
                 evidence_ref="Indian Kanoon API pricing checked 2026-08-25",
-                founder_approval_status="approved",
-                approved_at=now,
+                founder_approval_status="pending",
+                approved_at=None,
             )
         )
     session.flush()
@@ -131,7 +129,7 @@ def _document_transport(content: str) -> httpx.MockTransport:
     return httpx.MockTransport(handler)
 
 
-def test_readiness_is_default_off_and_requires_every_approved_cost(
+def test_readiness_is_default_off_and_requires_every_verified_cost(
     client: TestClient,
     monkeypatch,
 ) -> None:
@@ -143,13 +141,26 @@ def test_readiness_is_default_off_and_requires_every_approved_cost(
         assert "INDIAN_KANOON_API_TOKEN" in default.missing_config_names
 
         monkeypatch.setattr(ik, "get_settings", _settings)
-        _approve_costs(session)
+        _configure_costs(session)
         ready = ik.indian_kanoon_readiness(session)
         assert ready.state == "ready"
         assert ready.external_calls_enabled is True
         assert ready.missing_cost_categories == []
         assert ready.attribution.label == "Powered by Indian Kanoon"
         assert _context(session, boot).company.id == str(boot["company"]["id"])  # type: ignore[index]
+
+        unverifiable = session.scalar(
+            select(ProviderCostProfile).where(
+                ProviderCostProfile.category == ProviderCostCategory.LEGAL_SOURCE_SEARCH,
+                ProviderCostProfile.provider == ik.PROVIDER_KEY,
+            )
+        )
+        assert unverifiable is not None
+        unverifiable.evidence_ref = ""
+        session.flush()
+        blocked = ik.indian_kanoon_readiness(session)
+        assert blocked.state == "blocked_costs"
+        assert ProviderCostCategory.LEGAL_SOURCE_SEARCH in blocked.missing_cost_categories
 
 
 def test_search_uses_only_licensed_api_attributes_cost_once_and_caches(
@@ -162,7 +173,7 @@ def test_search_uses_only_licensed_api_attributes_cost_once_and_caches(
     ik.clear_indian_kanoon_cache()
     monkeypatch.setattr(ik, "get_settings", _settings)
     with get_session_factory()() as session:
-        _approve_costs(session)
+        _configure_costs(session)
         context = _context(session, boot)
         first = ik.search_indian_kanoon(
             session,
@@ -187,7 +198,7 @@ def test_search_uses_only_licensed_api_attributes_cost_once_and_caches(
     assert calls[0].url.host == "api.indiankanoon.org"
     assert calls[0].headers["authorization"] == "Token server-only-test-token"
     assert first.call.estimated_cost_minor == 50
-    assert first.call.cost_basis == "approved_actual"
+    assert first.call.cost_basis == "verified_actual"
     assert second.call.estimated_cost_minor == 0
     assert second.call.cost_basis == "fresh_cache"
     assert usage_count == 1
@@ -223,7 +234,7 @@ def test_typed_provider_failures_do_not_record_usage(
 
     provider = httpx.Client(transport=httpx.MockTransport(handler))
     with get_session_factory()() as session:
-        _approve_costs(session)
+        _configure_costs(session)
         with pytest.raises(HTTPException) as caught:
             ik.search_indian_kanoon(
                 session,
@@ -251,7 +262,7 @@ def test_budget_is_checked_before_external_call(
     )
     provider = httpx.Client(transport=_search_transport(calls))
     with get_session_factory()() as session:
-        _approve_costs(session)
+        _configure_costs(session)
         with pytest.raises(HTTPException) as caught:
             ik.search_indian_kanoon(
                 session,
@@ -290,7 +301,7 @@ def test_import_change_invalidates_linked_report_and_requires_two_reviewers(
         transport=_document_transport("Original licensed source text " * 8)
     )
     with get_session_factory()() as session:
-        _approve_costs(session)
+        _configure_costs(session)
         owner_context = _context(session, boot)
         imported = ik.import_indian_kanoon_document(
             session,

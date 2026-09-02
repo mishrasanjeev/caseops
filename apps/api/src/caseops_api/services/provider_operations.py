@@ -3016,15 +3016,15 @@ def provider_readiness_status(
                 )
             ).all()
         )
-    ecourts_approved_scopes = [
+    ecourts_available_scopes = [
         row
         for row in ecourts_support_rows
         if row.enabled and row.legal_tos_status.strip().lower() == "approved"
     ]
-    ecourts_missing_approvals = (
-        [] if ecourts_approved_scopes else ["case_tracking_support_matrix_scope_approved"]
+    ecourts_missing_scope = (
+        [] if ecourts_available_scopes else ["CASE_TRACKING_SUPPORT_MATRIX_SCOPE"]
     )
-    ecourts_enabled = not ecourts_missing_config and not ecourts_missing_approvals
+    ecourts_enabled = not ecourts_missing_config and not ecourts_missing_scope
     ecourts_adapter = provider_adapter_definition("ecourtsindia")
     ipindia_adapter = provider_adapter_definition("ipindia-registry")
     wipo_madrid_adapter = provider_adapter_definition("wipo-madrid")
@@ -3041,16 +3041,8 @@ def provider_readiness_status(
                 provider="ecourtsindia",
                 display_name=ecourts_adapter.display_name,
                 adp_slice="IPLF-050",
-                state=(
-                    "ready"
-                    if ecourts_enabled
-                    else (
-                        "blocked_missing_config"
-                        if ecourts_missing_config
-                        else "blocked_pending_admin_approval"
-                    )
-                ),
-                configured=not ecourts_missing_config,
+                state="ready" if ecourts_enabled else "blocked_missing_config",
+                configured=not ecourts_missing_config and not ecourts_missing_scope,
                 enabled=ecourts_enabled,
                 external_calls_enabled=ecourts_enabled,
                 durable_workflow_available=workflow.available,
@@ -3059,10 +3051,11 @@ def provider_readiness_status(
                     "CASE_TRACKING_PROVIDER",
                     "ECOURTSINDIA_API_BASE_URL",
                     "ECOURTSINDIA_API_TOKEN",
+                    "CASE_TRACKING_SUPPORT_MATRIX_SCOPE",
                 ],
-                missing_config_names=ecourts_missing_config,
-                required_approval_keys=["case_tracking_support_matrix_scope_approved"],
-                missing_approval_keys=ecourts_missing_approvals,
+                missing_config_names=[*ecourts_missing_config, *ecourts_missing_scope],
+                required_approval_keys=[],
+                missing_approval_keys=[],
                 endpoint_paths=list(ecourts_adapter.endpoint_paths),
                 idempotency_fields=["tracked_case_id", "provider_operation_id"],
                 change_detection_fields=[
@@ -3129,31 +3122,22 @@ def provider_readiness_status(
                 state=(
                     "ready"
                     if indian_kanoon_status.state == "ready"
-                    else (
-                        "blocked_missing_config"
-                        if indian_kanoon_status.state
-                        in {"blocked_disabled", "blocked_missing_config"}
-                        else "blocked_pending_admin_approval"
-                    )
+                    else "blocked_missing_config"
                 ),
                 configured=indian_kanoon_status.configured,
                 enabled=indian_kanoon_status.enabled,
                 external_calls_enabled=indian_kanoon_status.external_calls_enabled,
                 durable_workflow_available=workflow.available,
                 required_config_names=list(indian_kanoon_adapter.required_config_names),
-                missing_config_names=indian_kanoon_status.missing_config_names,
-                required_approval_keys=[
-                    "indian_kanoon_terms_approved",
-                    "indian_kanoon_legal_coverage_approved",
-                    "approved_actual_cost_profiles",
-                ],
-                missing_approval_keys=[
-                    *indian_kanoon_status.missing_approval_keys,
-                    *(
-                        ["approved_actual_cost_profiles"]
-                        if indian_kanoon_status.missing_cost_categories
-                        else []
-                    ),
+                required_approval_keys=[],
+                missing_approval_keys=[],
+                missing_config_names=[
+                    *indian_kanoon_status.missing_config_names,
+                    *indian_kanoon_status.invalid_terms_config,
+                    *[
+                        f"PROVIDER_COST_PROFILE:{category}"
+                        for category in indian_kanoon_status.missing_cost_categories
+                    ],
                 ],
                 endpoint_paths=list(indian_kanoon_adapter.endpoint_paths),
                 idempotency_fields=["provider_document_id", "content_hash"],

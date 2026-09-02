@@ -307,12 +307,10 @@ class Settings(BaseSettings):
 
     # IPLF-054: licensed legal-research access. The API token is server-only
     # and the provider remains fail-closed until terms, permitted uses, costs,
-    # and explicit budgets are all configured.
+    # and explicit budgets are all configured and machine-verifiable.
     indian_kanoon_enabled: bool = Field(default=False)
     indian_kanoon_api_base_url: str = Field(default="https://api.indiankanoon.org")
     indian_kanoon_api_token: str | None = Field(default=None)
-    indian_kanoon_terms_approved: bool = Field(default=False)
-    indian_kanoon_legal_coverage_approved: bool = Field(default=False)
     indian_kanoon_terms_owner: str | None = Field(default=None)
     indian_kanoon_terms_approved_at: datetime | None = Field(default=None)
     indian_kanoon_terms_expires_at: datetime | None = Field(default=None)

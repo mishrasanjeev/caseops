@@ -171,7 +171,13 @@ describe("WorkspaceAssistant", () => {
     await user.type(screen.getByRole("textbox", { name: "Find workspace records" }), "workspace");
     await user.click(screen.getByRole("button", { name: "Find permitted records" }));
 
-    expect(await screen.findByText("Workspace AI policy has not enabled this assistant.")).toBeVisible();
+    expect(
+      await screen.findByText(/Workspace AI policy has not enabled this assistant/),
+    ).toBeVisible();
+    expect(screen.getByRole("link", { name: "Admin → AI controls" })).toHaveAttribute(
+      "href",
+      "/app/admin",
+    );
     expect(screen.queryByRole("button", { name: "Start conversation" })).toBeDisabled();
   });
 

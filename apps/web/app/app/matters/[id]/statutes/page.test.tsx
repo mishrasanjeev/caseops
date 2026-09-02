@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -110,5 +111,75 @@ describe("MatterStatutesPage", () => {
     );
     expect(screen.getByText(/cited/i)).toBeInTheDocument();
     expect(screen.getByText(/opposing/i)).toBeInTheDocument();
+  });
+
+  it("only offers Acts that have selectable verified sections", async () => {
+    listMatterStatuteReferencesMock.mockResolvedValue({ matter_id: "m-1", references: [] });
+    listStatutesMock.mockResolvedValue({
+      statutes: [
+        {
+          id: "empty-act",
+          short_name: "Empty",
+          long_name: "Catalog-only Act",
+          section_count: 0,
+          catalog_section_count: 20,
+        },
+        {
+          id: "verified-act",
+          short_name: "Verified",
+          long_name: "Source-backed Act",
+          section_count: 2,
+          catalog_section_count: 2,
+        },
+      ],
+      total_section_count: 2,
+    });
+    listStatuteSectionsMock.mockResolvedValue({ statute: {}, sections: [] });
+    const user = userEvent.setup();
+    render(withClient(<MatterStatutesPage />));
+
+    await user.click(await screen.findByTestId("matter-statute-add-trigger"));
+    const select = await screen.findByTestId("matter-statute-act-select");
+    expect(within(select).queryByRole("option", { name: /Catalog-only Act/ })).toBeNull();
+    expect(
+      within(select).getByRole("option", { name: /Source-backed Act \(2 verified\)/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows an honest empty state when no Act has a verified selectable section", async () => {
+    listMatterStatuteReferencesMock.mockResolvedValue({ matter_id: "m-1", references: [] });
+    listStatutesMock.mockResolvedValue({
+      statutes: [
+        {
+          id: "catalog-only",
+          short_name: "Catalog",
+          long_name: "Unverified catalog",
+          section_count: 0,
+          catalog_section_count: 12,
+        },
+      ],
+      total_section_count: 0,
+    });
+    const user = userEvent.setup();
+    render(withClient(<MatterStatutesPage />));
+
+    await user.click(await screen.findByTestId("matter-statute-add-trigger"));
+    expect(await screen.findByTestId("matter-statute-no-selectable-acts")).toHaveTextContent(
+      "No Acts currently have source-verified sections",
+    );
+  });
+
+  it("distinguishes a catalog load failure from a genuinely empty verified catalog", async () => {
+    listMatterStatuteReferencesMock.mockResolvedValue({ matter_id: "m-1", references: [] });
+    listStatutesMock.mockRejectedValue(new Error("catalog unavailable"));
+    const user = userEvent.setup();
+    render(withClient(<MatterStatutesPage />));
+
+    await user.click(await screen.findByTestId("matter-statute-add-trigger"));
+    expect(await screen.findByTestId("matter-statute-catalog-error")).toHaveTextContent(
+      "verified statute catalog could not be loaded",
+    );
+    expect(screen.queryByTestId("matter-statute-no-selectable-acts")).toBeNull();
+    expect(screen.getByTestId("matter-statute-act-select")).toBeDisabled();
   });
 });

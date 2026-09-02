@@ -214,6 +214,10 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
     enabled: open && Boolean(statuteId),
     staleTime: 30 * 60_000,
   });
+  const selectableStatutes = (statutesQuery.data?.statutes ?? []).filter(
+    (statute) => statute.section_count > 0,
+  );
+  const sections = sectionsQuery.data?.sections ?? [];
 
   const addMutation = useMutation({
     mutationFn: () =>
@@ -261,15 +265,43 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
                 setStatuteId(e.target.value);
                 setSectionId("");
               }}
+              disabled={
+                statutesQuery.isPending ||
+                statutesQuery.isError ||
+                selectableStatutes.length === 0
+              }
               data-testid="matter-statute-act-select"
             >
-              <option value="">Select an Act…</option>
-              {(statutesQuery.data?.statutes ?? []).map((s) => (
+              <option value="">
+                {statutesQuery.isPending
+                  ? "Loading verified Acts…"
+                  : statutesQuery.isError
+                    ? "Could not load verified Acts"
+                    : selectableStatutes.length === 0
+                      ? "No verified Acts available"
+                      : "Select an Act…"}
+              </option>
+              {selectableStatutes.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.short_name} — {s.long_name}
+                  {s.short_name} — {s.long_name} ({s.section_count} verified)
                 </option>
               ))}
             </select>
+            {statutesQuery.isError ? (
+              <span
+                className="text-xs text-[var(--color-danger-700)]"
+                data-testid="matter-statute-catalog-error"
+              >
+                The verified statute catalog could not be loaded. Retry by reopening this dialog.
+              </span>
+            ) : !statutesQuery.isPending && selectableStatutes.length === 0 ? (
+              <span
+                className="text-xs text-[var(--color-warn-700)]"
+                data-testid="matter-statute-no-selectable-acts"
+              >
+                No Acts currently have source-verified sections available to attach.
+              </span>
+            ) : null}
           </label>
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium">Section</span>
@@ -285,15 +317,27 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
                   ? "Select an Act first"
                   : sectionsQuery.isPending
                     ? "Loading sections…"
-                    : "Select a section…"}
+                    : sectionsQuery.isError
+                      ? "Could not load verified sections"
+                      : sections.length === 0
+                        ? "No verified sections available"
+                        : "Select a section…"}
               </option>
-              {(sectionsQuery.data?.sections ?? []).map((sec) => (
+              {sections.map((sec) => (
                 <option key={sec.id} value={sec.id}>
                   {sec.section_number}
                   {sec.section_label ? ` — ${sec.section_label}` : ""}
                 </option>
               ))}
             </select>
+            {sectionsQuery.isError ? (
+              <span
+                className="text-xs text-[var(--color-danger-700)]"
+                data-testid="matter-statute-sections-error"
+              >
+                Verified sections could not be loaded. Retry by selecting the Act again.
+              </span>
+            ) : null}
           </label>
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium">Relevance</span>

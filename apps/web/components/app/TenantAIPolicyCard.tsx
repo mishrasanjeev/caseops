@@ -11,7 +11,7 @@
  * Owner/admin gate: hides itself when the caller is not workspace:admin.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Gauge, ShieldAlert } from "lucide-react";
+import { Bot, Gauge, ShieldAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -102,18 +102,25 @@ export function TenantAIPolicyCard(): React.JSX.Element | null {
   ]);
 
   const updateMutation = useMutation({
-    mutationFn: (next: boolean) =>
-      updateTenantAIPolicy({ predictive_bench_strategy_enabled: next }),
-    onSuccess: async (data) => {
+    mutationFn: (change: {
+      field: "predictive_bench_strategy_enabled" | "workspace_assistant_enabled";
+      next: boolean;
+    }) =>
+      updateTenantAIPolicy({
+        [change.field]: change.next,
+        expected_version: policyQuery.data?.policy_version,
+      }),
+    onSuccess: async (data, change) => {
       queryClient.setQueryData(["admin", "tenant-ai-policy"], data);
-      toast.success(
-        data.predictive_bench_strategy_enabled
-          ? "Predictive bench analytics enabled."
-          : "Predictive bench analytics disabled.",
-      );
+      const label =
+        change.field === "workspace_assistant_enabled"
+          ? "Workspace assistant"
+          : "Predictive bench analytics";
+      toast.success(`${label} ${change.next ? "enabled" : "disabled"}.`);
     },
     onError: (err) => {
       toast.error(apiErrorMessage(err, "Could not update AI policy."));
+      void queryClient.invalidateQueries({ queryKey: ["admin", "tenant-ai-policy"] });
     },
   });
 
@@ -136,6 +143,7 @@ export function TenantAIPolicyCard(): React.JSX.Element | null {
   if (!canAdmin) return null;
 
   const enabled = policyQuery.data?.predictive_bench_strategy_enabled ?? false;
+  const assistantEnabled = policyQuery.data?.workspace_assistant_enabled ?? false;
   const isPending = policyQuery.isPending || updateMutation.isPending;
   const tokenPending = tokenQuery.isPending || tokenMutation.isPending;
 
@@ -181,12 +189,50 @@ export function TenantAIPolicyCard(): React.JSX.Element | null {
             size="sm"
             variant={enabled ? "primary" : "secondary"}
             disabled={isPending}
-            onClick={() => updateMutation.mutate(!enabled)}
+            onClick={() =>
+              updateMutation.mutate({
+                field: "predictive_bench_strategy_enabled",
+                next: !enabled,
+              })
+            }
             aria-pressed={enabled}
             aria-label="Predictive bench analytics toggle"
             data-testid="tenant-ai-policy-predictive-toggle"
           >
             {enabled ? "Disable" : "Enable"}
+          </Button>
+        </div>
+
+        <div className="flex items-start justify-between gap-4 rounded-lg border border-[var(--color-line)] p-4">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 text-sm font-medium text-[var(--color-ink)]">
+              <Bot className="h-4 w-4" aria-hidden /> Workspace assistant
+            </div>
+            <p className="mt-1 text-sm text-[var(--color-mute)]">
+              Enables source-cited questions over Matters the signed-in user can already
+              access. Retrieval, tenant boundaries, model allowlists, retention, and
+              citation checks remain enforced by the server.
+            </p>
+            <p className="mt-2 text-xs text-[var(--color-mute-2)]">
+              Status: <strong>{assistantEnabled ? "Enabled" : "Disabled"}</strong>
+            </p>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant={assistantEnabled ? "primary" : "secondary"}
+            disabled={isPending}
+            onClick={() =>
+              updateMutation.mutate({
+                field: "workspace_assistant_enabled",
+                next: !assistantEnabled,
+              })
+            }
+            aria-pressed={assistantEnabled}
+            aria-label="Workspace assistant toggle"
+            data-testid="tenant-ai-policy-assistant-toggle"
+          >
+            {assistantEnabled ? "Disable" : "Enable"}
           </Button>
         </div>
 

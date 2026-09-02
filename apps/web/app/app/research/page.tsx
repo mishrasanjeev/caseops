@@ -43,6 +43,7 @@ import {
   type AuthoritySearchOutcome,
   type AuthoritySearchResult,
   type IndianKanoonSearchResult,
+  type IndianKanoonReadiness,
   createAuthorityResearchReport,
   createAuthorityAnnotation,
   fetchIndianKanoonReadiness,
@@ -352,7 +353,7 @@ export default function ResearchPage() {
                   ? "Checking licensed-source readiness…"
                   : licensedReady
                     ? "Powered by Indian Kanoon. Licensed access is active for this workspace."
-                    : "Licensed access is unavailable until a workspace administrator completes provider, terms, cost, and budget approval."}
+                    : indianKanoonReadinessMessage(licensedReadinessQuery.data)}
               </div>
             ) : null}
             {researchSource === "caseops_corpus" ? (
@@ -751,7 +752,7 @@ function IndianKanoonResults({
     retrieved_at: string;
     estimated_cost_minor: number;
     currency: "INR";
-    cost_basis: "approved_actual" | "fresh_cache" | "stale_cache";
+    cost_basis: "verified_actual" | "fresh_cache" | "stale_cache";
   } | null;
   disclaimer: string | null;
 }) {
@@ -841,6 +842,30 @@ function IndianKanoonResults({
       </ul>
     </div>
   );
+}
+
+function indianKanoonReadinessMessage(
+  readiness: IndianKanoonReadiness | undefined,
+): string {
+  if (!readiness) {
+    return "Licensed-source readiness could not be determined.";
+  }
+  if (readiness.state === "blocked_disabled") {
+    return "Licensed access is disabled by the runtime switch.";
+  }
+  if (readiness.state === "blocked_missing_config") {
+    return `Licensed access is missing configuration: ${readiness.missing_config_names.join(", ") || "provider settings"}.`;
+  }
+  if (readiness.state === "blocked_terms") {
+    return `Licensed access has invalid or expired terms metadata: ${readiness.invalid_terms_config.join(", ") || "terms dates"}.`;
+  }
+  if (readiness.state === "blocked_costs") {
+    return `Licensed access is missing verified cost profiles: ${readiness.missing_cost_categories.join(", ")}.`;
+  }
+  if (readiness.state === "blocked_budget") {
+    return "Licensed access has exhausted its configured machine budget.";
+  }
+  return "Licensed-source readiness could not be determined.";
 }
 
 function researchErrorCopy(error: unknown): { title: string; description: string } {
