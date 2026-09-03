@@ -217,6 +217,11 @@ requirements when using the fallback.
   consumes stored, hash-verified evidence only. A deliberate live-provider
   check is a separately budgeted operational action, never part of bulk or
   regular regression testing.
+- The explicit no-paid-provider request marker is authoritative in every
+  runtime, including production and real tenants. Do not make it depend on a
+  test-looking tenant slug. Keep funded production tenants out of the static
+  test-tenant blocklist, seed provider-wide support from the reviewed provider
+  contract, and validate activation with one opt-in, budget-capped live probe.
 - Tenant document naming must not copy corpus-scale filename history into a
   request DTO. Serialize allocations under the tenant lock, probe a fixed
   number of exact candidates, and retain a regression with more than 500

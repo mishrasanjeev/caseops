@@ -65,10 +65,11 @@ def paid_provider_block_reason(
     if (hostname or "").lower() not in _PAID_PROVIDER_HOSTS:
         return None
     tenant_reason = paid_provider_test_tenant_reason(context)
-    if paid_providers_blocked_for_request() and (
-        tenant_reason is not None
-        or get_settings().env.strip().lower() in {"ci", "e2e", "local", "test"}
-    ):
+    # The explicit automation marker is authoritative in every environment.
+    # Production Playwright uses the real tenant, so coupling this boundary to
+    # the runtime environment or a test-looking slug would allow routine
+    # verification to spend provider credits as soon as the tenant is enabled.
+    if paid_providers_blocked_for_request():
         return "automated_test_request"
     if tenant_reason is not None:
         return tenant_reason

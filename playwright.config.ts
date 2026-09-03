@@ -32,6 +32,7 @@ export default defineConfig({
   testIgnore: [
     /iplf-027b-a0-quiescence-2026-08-14-prod\.spec\.ts$/,
     /iplf-039c-guard-first-2026-08-16-prod\.spec\.ts$/,
+    /paid-provider-live-2026-09-03-prod\.spec\.ts$/,
   ],
   fullyParallel: false,
   workers: 1,

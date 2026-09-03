@@ -48,6 +48,7 @@ from caseops_api.services.case_tracking_providers import (
     ProviderCaseSnapshot,
     _source_text,
 )
+from caseops_api.services.production_safety import support_matrix_match
 from caseops_api.services.session_context import SessionContext
 from tests.test_auth_company import auth_headers, bootstrap_company
 
@@ -198,9 +199,10 @@ def test_automated_browser_marker_blocks_live_paid_search_before_transport(
         "https://webapi.ecourtsindia.com",
     )
     monkeypatch.setenv("CASEOPS_ECOURTSINDIA_API_TOKEN", "must-not-be-used")
+    monkeypatch.setenv("CASEOPS_ENV", "cloud")
     monkeypatch.setenv(
         "CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS",
-        "aster-legal",
+        "caseops-qa,caseops-ip-qa,test-legal",
     )
     get_settings.cache_clear()
     provider = ExplodingLiveCaseTrackingProvider()
@@ -226,6 +228,50 @@ def test_automated_browser_marker_blocks_live_paid_search_before_transport(
     assert body["provider"] == "ecourtsindia"
     assert body["reason"] == "automated_test_request"
     assert "no external request was made" in body["detail"]
+
+
+def test_provider_wide_support_scope_is_fallback_not_exact_override(
+    client: TestClient,
+) -> None:
+    bootstrap_company(client)
+    with get_session_factory()() as session:
+        wildcard = CaseTrackingSupportMatrix(
+            provider="ecourtsindia",
+            court="*",
+            bench_jurisdiction="All provider-published courts",
+            lookup_method="cnr_or_case_number",
+            legal_tos_status="approved",
+            enabled=True,
+            tenant_visible=True,
+        )
+        exact = CaseTrackingSupportMatrix(
+            provider="ecourtsindia",
+            court="Delhi High Court",
+            bench_jurisdiction="Delhi",
+            lookup_method="cnr",
+            legal_tos_status="approved",
+            enabled=False,
+            tenant_visible=True,
+        )
+        session.add_all([wildcard, exact])
+        session.commit()
+
+        assert (
+            support_matrix_match(
+                session,
+                provider="ecourtsindia",
+                court_name="Delhi High Court",
+            )
+            is exact
+        )
+        assert (
+            support_matrix_match(
+                session,
+                provider="ecourtsindia",
+                court_name="Supreme Court of India",
+            )
+            is wildcard
+        )
 
 
 def test_matter_create_auto_links_case_tracking_bookmark_when_provider_configured(
@@ -1252,7 +1298,7 @@ def test_scheduler_skips_paid_provider_for_configured_test_tenant(
     monkeypatch.setenv("CASEOPS_ECOURTSINDIA_API_TOKEN", "must-not-be-used")
     monkeypatch.setenv(
         "CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS",
-        "caseops-qa,caseops-ip-qa,test-legal,legal",
+        "caseops-qa,caseops-ip-qa,test-legal",
     )
     get_settings.cache_clear()
     boot = bootstrap_company(client)

@@ -149,7 +149,7 @@ spec:
             # deterministic fixtures only. This list is also enforced by the
             # background poller, where there is no inbound test header.
             - name: CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS
-              value: "caseops-qa;caseops-ip-qa;test-legal;legal"
+              value: "caseops-qa;caseops-ip-qa;test-legal"
             # IPLF-054: licensed access is active for real workspaces. Routine
             # automation and the persistent QA tenants above remain hard-blocked.
             - name: CASEOPS_INDIAN_KANOON_ENABLED

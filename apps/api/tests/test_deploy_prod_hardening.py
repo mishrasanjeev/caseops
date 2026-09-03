@@ -86,10 +86,7 @@ def test_production_deploy_owns_indian_kanoon_activation_without_manual_data_ent
     assert "CASEOPS_INDIAN_KANOON_API_TOKEN=${INDIAN_KANOON_API_TOKEN_SECRET}:latest" in deploy
     assert "CASEOPS_INDIAN_KANOON_ENABLED=true" in deploy
     assert '--update-env-vars "^|^CASEOPS_RELEASE_SHA=${HEAD_SHA}|' in deploy
-    assert (
-        "|CASEOPS_INDIAN_KANOON_PERMITTED_USES=${INDIAN_KANOON_PERMITTED_USES}|"
-        in deploy
-    )
+    assert "|CASEOPS_INDIAN_KANOON_PERMITTED_USES=${INDIAN_KANOON_PERMITTED_USES}|" in deploy
     assert 'env.get("CASEOPS_INDIAN_KANOON_API_TOKEN")' in deploy
     assert "expected_indian_kanoon_env" in deploy
     assert 'value: "Orchestrum Technologies LLP"' in manifest
@@ -97,7 +94,7 @@ def test_production_deploy_owns_indian_kanoon_activation_without_manual_data_ent
 
 
 def test_production_manifests_block_paid_providers_for_test_tenants() -> None:
-    blocked_slugs = "caseops-qa;caseops-ip-qa;test-legal;legal"
+    blocked_slugs = "caseops-qa;caseops-ip-qa;test-legal"
     expected = f'"{blocked_slugs}"'
     api_manifest = _read_repo_text("infra/cloudrun/api-service.yaml")
     poll_manifest = _read_repo_text("infra/cloudrun/case-tracking-poll-job.yaml")
@@ -112,6 +109,18 @@ def test_production_manifests_block_paid_providers_for_test_tenants() -> None:
         "${PAID_PROVIDER_BLOCKED_COMPANY_SLUGS}" in deploy
     )
     assert 'env.get("CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS")' in deploy
+
+
+def test_live_paid_provider_probe_is_explicit_and_excluded_from_regular_e2e() -> None:
+    config = _read_repo_text("playwright.paid-provider-live.config.ts")
+    regular_config = _read_repo_text("playwright.config.ts")
+    spec = _read_repo_text("tests/e2e/paid-provider-live-2026-09-03-prod.spec.ts")
+
+    assert "CASEOPS_ALLOW_LIVE_PAID_PROVIDER_TESTS" in config
+    assert "noPaidProviderHeaders" not in config
+    assert "paid-provider-live-2026-09-03-prod" in regular_config
+    assert "max_results: 1" in spec
+    assert "bulk-refresh" not in spec
 
 
 @pytest.mark.parametrize(
@@ -1177,7 +1186,7 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
     '{"name":"CASEOPS_IP_RULE_GOVERNANCE_ENABLED","value":"' \
     "${FAKE_GOVERNANCE_FLAG}" '"},' \
     '{"name":"CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS",' \
-    '"value":"caseops-qa;caseops-ip-qa;test-legal;legal"},' \
+    '"value":"caseops-qa;caseops-ip-qa;test-legal"},' \
     '{"name":"CASEOPS_INDIAN_KANOON_ENABLED","value":"true"},' \
     '{"name":"CASEOPS_INDIAN_KANOON_API_BASE_URL",' \
     '"value":"https://api.indiankanoon.org"},' \

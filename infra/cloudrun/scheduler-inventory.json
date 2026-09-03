@@ -53,7 +53,7 @@
           "CASEOPS_CASE_TRACKING_ENABLED": "true",
           "CASEOPS_CASE_TRACKING_PROVIDER": "ecourtsindia",
           "CASEOPS_ECOURTSINDIA_API_BASE_URL": "https://webapi.ecourtsindia.com",
-          "CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS": "caseops-qa;caseops-ip-qa;test-legal;legal",
+          "CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS": "caseops-qa;caseops-ip-qa;test-legal",
           "CASEOPS_CASE_TRACKING_POLL_LIMIT": "50"
         },
         "secrets": {

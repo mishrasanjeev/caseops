@@ -97,7 +97,7 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
     )
     assert (
         tracking_job["bootstrap"]["environment"]["CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS"]
-        == "caseops-qa;caseops-ip-qa;test-legal;legal"
+        == "caseops-qa;caseops-ip-qa;test-legal"
     )
 
 
