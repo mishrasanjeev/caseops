@@ -396,6 +396,120 @@ def test_maintenance_blocks_a_deferred_repair_after_slo(monkeypatch) -> None:
     assert result["companies"][0]["repair_lag_slo_breached"] is True
 
 
+def test_repeated_epoch_conflicts_block_after_slo_then_quiescence_stays_clean(
+    monkeypatch,
+) -> None:
+    """Continuous writers stay fail-closed; two quiet cadences prove recovery."""
+
+    state = {
+        "repair_lag_seconds": 59,
+        "writers_active": True,
+        "converged": False,
+    }
+    rebuild_calls = 0
+
+    def report():
+        if state["converged"]:
+            return SimpleNamespace(
+                active_generation_id="generation-2",
+                oldest_pending_lag_seconds=None,
+                oldest_repair_lag_seconds=None,
+                blockers=(),
+                release_blocked=False,
+                pending_event_count=0,
+                failed_event_count=0,
+            )
+        return SimpleNamespace(
+            active_generation_id="generation-1",
+            oldest_pending_lag_seconds=None,
+            oldest_repair_lag_seconds=state["repair_lag_seconds"],
+            blockers=("active_generation_manifest_mismatch",),
+            release_blocked=True,
+            pending_event_count=0,
+            failed_event_count=0,
+        )
+
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "get_session_factory",
+        lambda: _WorkerSession,
+    )
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "list_private_maintenance_companies",
+        lambda _session, *, limit: SimpleNamespace(
+            company_ids=("company-1",),
+            truncated=False,
+        ),
+    )
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "inspect_private_index_integrity",
+        lambda _session, **_kwargs: report(),
+    )
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "process_pending_private_projection_events",
+        lambda _session, **_kwargs: (),
+    )
+
+    def rebuild(_session, **_kwargs):
+        nonlocal rebuild_calls
+        rebuild_calls += 1
+        if state["writers_active"]:
+            raise private_projection_integrity.PrivateRetrievalConcurrencyError(
+                STALE_PRIVATE_PROJECTION_WRITER_DETAIL
+            )
+        state["converged"] = True
+
+    monkeypatch.setattr(private_projection_integrity, "rebuild_private_index", rebuild)
+
+    within_slo = private_projection_integrity._maintain(
+        max_companies=1,
+        max_rebuilds=1,
+        event_lag_slo_seconds=300,
+    )
+    assert within_slo["status"] == "ok"
+    assert within_slo["release_blocked"] is False
+    assert within_slo["companies"][0]["repair_deferred"] is True
+    assert within_slo["companies"][0]["repair_lag_slo_breached"] is False
+
+    state["repair_lag_seconds"] = 301
+    after_slo = private_projection_integrity._maintain(
+        max_companies=1,
+        max_rebuilds=1,
+        event_lag_slo_seconds=300,
+    )
+    assert after_slo["status"] == "blocked"
+    assert after_slo["release_blocked"] is True
+    assert after_slo["companies"][0]["repair_deferred"] is True
+    assert after_slo["companies"][0]["repair_lag_slo_breached"] is True
+
+    state["writers_active"] = False
+    recovered = private_projection_integrity._maintain(
+        max_companies=1,
+        max_rebuilds=1,
+        event_lag_slo_seconds=300,
+    )
+    assert recovered["status"] == "ok"
+    assert recovered["release_blocked"] is False
+    assert recovered["rebuild_count"] == 1
+    assert recovered["companies"][0]["rebuilt"] is True
+    assert recovered["companies"][0]["blockers_after"] == []
+
+    stable = private_projection_integrity._maintain(
+        max_companies=1,
+        max_rebuilds=1,
+        event_lag_slo_seconds=300,
+    )
+    assert stable["status"] == "ok"
+    assert stable["release_blocked"] is False
+    assert stable["rebuild_count"] == 0
+    assert stable["companies"][0]["rebuilt"] is False
+    assert stable["companies"][0]["blockers_after"] == []
+    assert rebuild_calls == 5
+
+
 def test_maintenance_does_not_retry_an_unknown_rebuild_failure(monkeypatch) -> None:
     repairable = SimpleNamespace(
         active_generation_id="generation-1",
