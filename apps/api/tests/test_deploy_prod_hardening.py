@@ -1151,6 +1151,8 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
     '"value":"abcdef1234567890abcdef1234567890abcdef12"},' \
     '{"name":"CASEOPS_IP_RULE_GOVERNANCE_ENABLED","value":"' \
     "${FAKE_GOVERNANCE_FLAG}" '"},' \
+    '{"name":"CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS",' \
+    '"value":"caseops-qa;caseops-ip-qa;test-legal;legal"},' \
     '{"name":"CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET",' \
     '"valueFrom":{"secretKeyRef":{"key":"latest","name":"' \
     "${FAKE_MACHINE_SECRET}" '"}}}' \
