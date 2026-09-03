@@ -64,6 +64,26 @@ and its audit events. An explicit audited `Disposed -> Intake` transition is a
 controlled reopen, not automatic resurrection. Generic PATCH, import, worker,
 or child writes remain prohibited from reactivating a terminal Matter.
 
+### Production concurrency finding
+
+The first exact-release production sweep exposed a deeper source of apparent
+reopening: one disposal returned `503 database_temporarily_unavailable` because
+PostgreSQL detected a real deadlock. The lifecycle transaction held the tenant
+`Company` lock and waited for `PrivateIndexGeneration` shadow rows while a
+readiness-plus-activation transaction held a shadow generation and then waited
+for the same `Company` row. PostgreSQL rolled back the disposal; no persisted
+`Disposed -> Active` transition occurred. An operator who did not notice the
+failed disposal could nevertheless interpret the still-active row as reopened.
+
+The correction makes every private generation state transition acquire the
+tenant row first, matching access, tombstone, and Matter lifecycle events. A
+real two-session PostgreSQL regression holds the tenant lock in the lifecycle
+writer while readiness begins; maintenance must wait before it can lock the
+shadow generation, after which both transactions complete without a deadlock
+and exactly one active generation remains. Retrying all lifecycle `503`s would
+be a shallow fix: it could duplicate non-idempotent work and would leave the
+lock inversion in every caller.
+
 ## Permanent regression map
 
 - `test_20260903_bulk_matter_exact_court_forum.py` proves exact names, approved

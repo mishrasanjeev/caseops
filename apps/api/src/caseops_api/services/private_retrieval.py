@@ -352,6 +352,16 @@ def mark_private_generation_ready(
     expected_access_policy_generation: int | None = None,
     expected_tombstone_generation: int | None = None,
 ) -> PrivateIndexGeneration:
+    """Verify a shadow generation under the tenant's canonical lock order.
+
+    Access/tombstone events (including Matter disposal) lock the Company row
+    before any active or shadow generation.  Readiness followed by activation
+    runs in one transaction, so taking a generation lock first here inverted
+    that order and could deadlock a lifecycle write.  Serialize on Company
+    first everywhere a generation can transition.
+    """
+
+    _lock_private_company(session, company_id=company_id)
     row = session.scalar(
         select(PrivateIndexGeneration)
         .where(

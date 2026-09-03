@@ -9583,6 +9583,125 @@ def test_matterless_ip_cost_evidence_is_immutable_on_postgres(pg_engine):
             text("SELECT count(*) FROM ip_cost_item_corrections WHERE docket_id = :id"),
             {"id": docket_id},
         ) == 0
+def test_private_generation_readiness_and_lifecycle_event_share_tenant_first_lock_order(
+    pg_engine,
+) -> None:
+    """A shadow activation cannot deadlock a concurrent lifecycle event.
+
+    Production verification on 2026-09-03 caught the former inverse order:
+    the lifecycle transaction held Company and waited for a shadow generation,
+    while readiness held that generation and activation waited for Company.
+    This test deliberately creates the same overlap on PostgreSQL. It fails
+    with a deadlock on the old generation-first implementation.
+    """
+
+    from caseops_api.db.models import Company, PrivateIndexGeneration
+    from caseops_api.services.private_retrieval import (
+        activate_private_generation,
+        create_shadow_private_generation,
+        ensure_active_private_generation,
+        mark_private_generation_ready,
+    )
+
+    company_id = str(uuid4())
+    with Session(pg_engine) as seed:
+        seed.add(
+            Company(
+                id=company_id,
+                name="PostgreSQL Private Lock Order Firm",
+                slug=f"pg-private-lock-{company_id[:8]}",
+                company_type="law_firm",
+                tenant_key=company_id,
+            )
+        )
+        seed.commit()
+        active = ensure_active_private_generation(seed, company_id=company_id)
+        shadow = create_shadow_private_generation(seed, company_id=company_id)
+        seed.commit()
+        active_generation_id = active.id
+        shadow_generation_id = shadow.id
+
+    company_locked = Event()
+    release_lifecycle = Event()
+    maintenance_application_name = f"caseops-private-ready-{str(uuid4())[:8]}"
+
+    def lifecycle_writer() -> tuple[str, ...]:
+        with Session(pg_engine) as session:
+            session.execute(text("SET LOCAL lock_timeout = '5s'"))
+            session.execute(text("SET LOCAL statement_timeout = '10s'"))
+            company = session.scalar(
+                select(Company).where(Company.id == company_id).with_for_update()
+            )
+            assert company is not None
+            company_locked.set()
+            if not release_lifecycle.wait(timeout=10):
+                raise TimeoutError("Maintenance did not reach the tenant lock wait.")
+            shadows = tuple(
+                session.scalars(
+                    select(PrivateIndexGeneration)
+                    .where(
+                        PrivateIndexGeneration.company_id == company_id,
+                        PrivateIndexGeneration.state.in_(("building", "ready")),
+                    )
+                    .with_for_update()
+                ).all()
+            )
+            session.commit()
+            return tuple(row.id for row in shadows)
+
+    def maintenance_writer() -> str:
+        if not company_locked.wait(timeout=10):
+            raise TimeoutError("Lifecycle writer did not acquire the tenant lock.")
+        with Session(pg_engine) as session:
+            session.execute(text("SET LOCAL lock_timeout = '5s'"))
+            session.execute(text("SET LOCAL statement_timeout = '10s'"))
+            session.execute(
+                text("SELECT set_config('application_name', :name, true)"),
+                {"name": maintenance_application_name},
+            )
+            mark_private_generation_ready(
+                session,
+                company_id=company_id,
+                generation_id=shadow_generation_id,
+                expected_projection_count=0,
+                expected_access_policy_generation=1,
+                expected_tombstone_generation=0,
+            )
+            activated = activate_private_generation(
+                session,
+                company_id=company_id,
+                generation_id=shadow_generation_id,
+                expected_active_generation_id=active_generation_id,
+            )
+            session.commit()
+            return activated.id
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        lifecycle = executor.submit(lifecycle_writer)
+        assert company_locked.wait(timeout=10)
+        maintenance = executor.submit(maintenance_writer)
+        try:
+            _wait_for_postgres_lock_wait(
+                pg_engine,
+                application_name=maintenance_application_name,
+            )
+        finally:
+            release_lifecycle.set()
+        assert lifecycle.result(timeout=10) == (shadow_generation_id,)
+        assert maintenance.result(timeout=10) == shadow_generation_id
+
+    with Session(pg_engine) as verify:
+        generations = list(
+            verify.scalars(
+                select(PrivateIndexGeneration).where(
+                    PrivateIndexGeneration.company_id == company_id
+                )
+            ).all()
+        )
+    assert sum(row.state == "active" for row in generations) == 1
+    assert next(row for row in generations if row.state == "active").id == shadow_generation_id
+
+
 def test_private_retrieval_prefilters_before_bounded_rank_on_postgres(
     pg_engine,
     monkeypatch,
