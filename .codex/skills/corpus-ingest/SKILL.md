@@ -11,7 +11,7 @@ license: Internal. Captures lessons from 2026-04-19 SC/HC sweep.
 When the user asks for anything matching "ingest / embed / populate / backfill /
 re-embed / improve data quality" against the CaseOps authority corpus (SC, HC,
 or any future court), **follow this pipeline exactly**. Skipping a step or
-reordering costs real money (Voyage + Anthropic spend) and drops retrieval
+reordering costs real money (Voyage + OpenAI spend) and drops retrieval
 quality below the starting bar. This was learned the hard way on 2026-04-19 —
 see `memory/feedback_vector_embedding_pipeline.md` for the incident.
 
@@ -26,7 +26,7 @@ see `memory/feedback_vector_embedding_pipeline.md` for the incident.
 
 - For CaseOps production on GCP, the embedding default is **Voyage
   `voyage-4-large`**.
-- Anthropic-backed cleanup and evaluation steps are part of the production
+- OpenAI-backed cleanup and evaluation steps are part of the production
   quality path when the workflow calls for metadata normalization or quality
   recovery.
 - `BAAI/bge-small-en-v1.5` and similar local/offline options are fallback
@@ -62,7 +62,7 @@ Enforcement in this pipeline:
 ```
 
 **Never batch Layer 2 at the end of a multi-bucket sweep.** Ingest uses Voyage;
-Layer 2 uses Anthropic. No API contention. Running Layer 2 per-bucket means
+Layer 2 uses OpenAI. No API contention. Running Layer 2 per-bucket means
 every title-chunk is embedded from REAL case-name metadata instead of
 filename-derived placeholders like `"2024_2_231_238_EN.pdf"`. The title-chunk
 is the single biggest recall lever for case-name queries — it MUST be seeded
@@ -73,16 +73,16 @@ from good metadata.
 ```bash
 export DB_PW=$(gcloud secrets versions access latest --secret=caseops-db-password)
 export VOYAGE_KEY=$(gcloud secrets versions access latest --secret=caseops-voyage-api-key)
-export ANTHROPIC_KEY=$(gcloud secrets versions access latest --secret=caseops-anthropic-api-key)
+export OPENAI_KEY=$(gcloud secrets versions access latest --secret=caseops-openai-api-key)
 
 export CASEOPS_DATABASE_URL="postgresql+psycopg://caseops:${DB_PW}@127.0.0.1:25432/caseops"
 export CASEOPS_EMBEDDING_PROVIDER=voyage
 export CASEOPS_EMBEDDING_MODEL=voyage-4-large
 export CASEOPS_EMBEDDING_DIMENSIONS=1024
 export CASEOPS_EMBEDDING_API_KEY="$VOYAGE_KEY"
-export CASEOPS_LLM_PROVIDER=anthropic
-export CASEOPS_LLM_MODEL=claude-haiku-4-5-20251001
-export CASEOPS_LLM_API_KEY="$ANTHROPIC_KEY"
+export CASEOPS_LLM_PROVIDER=openai
+export CASEOPS_LLM_MODEL=gpt-5-mini
+export CASEOPS_LLM_API_KEY="$OPENAI_KEY"
 export CASEOPS_RERANK_ENABLED=true        # probe AND prod must have this
 export CASEOPS_RERANK_BACKEND=fastembed
 export PYTHONUNBUFFERED=1
@@ -117,7 +117,7 @@ Never disable these; they are the reason the pipeline works.
 
 ## Parallelism rules
 
-- Voyage (ingest + title-chunk) and Anthropic (Layer 2) run on distinct APIs.
+- Voyage (ingest + title-chunk) and OpenAI (Layer 2) run on distinct APIs.
   They CAN and SHOULD run in parallel. Different buckets serially, but
   within one bucket the three backend calls do not contend.
 - HuggingFace tokenizer fetches are slow (unauth rate limit). First Voyage
@@ -280,7 +280,7 @@ Ordered by impact per dollar:
 3. **Parties-JSON pre-filter** — for case-name queries, exact-match
    `parties_json @> '[...]'` BEFORE vector search. Bypasses the hard
    proper-noun queries entirely. Not yet implemented.
-4. **Query expansion (Haiku)** — thin queries like
+4. **Query expansion (Standard)** — thin queries like
    `"Rajan The State of Haryana"` rewritten to
    `"Rajan v. State of Haryana criminal appeal SLP"` before embedding.
    Not yet implemented.
@@ -314,8 +314,8 @@ bash /c/Users/mishr/caseops/tmp/sweep.sh
   `CASEOPS_DATABASE_URL` — tests hit prod via cached settings.
 - Ask the user questions when they've told you to run autonomously. Execute,
   report quality ratings on the 15-min cadence, surface failures, move on.
-- Use Sonnet for Layer 2 on huge docs. Sonnet returns malformed JSON at
-  >~45k chars output — use `--force-tier haiku` until `corpus_structured`
+- Use Premium for Layer 2 on huge docs. Premium returns malformed JSON at
+  >~45k chars output — use `--force-tier standard` until `corpus_structured`
   adds a tolerant JSON repair path.
 - Run the per-bucket retry loop with no timeout ceiling. Cloud SQL drops
   long-running client connections; treat that as retryable, not terminal.
@@ -334,15 +334,15 @@ cloud-sql-proxy --port 25432 perfect-period-305406:asia-south1:caseops-db &
 # 2. Export the env block. Reuse for ingest / Layer 2 / probe / backfill.
 export DB_PW=$(gcloud secrets versions access latest --secret=caseops-db-password)
 export VOYAGE_KEY=$(gcloud secrets versions access latest --secret=caseops-voyage-api-key)
-export ANTHROPIC_KEY=$(gcloud secrets versions access latest --secret=caseops-anthropic-api-key)
+export OPENAI_KEY=$(gcloud secrets versions access latest --secret=caseops-openai-api-key)
 export CASEOPS_DATABASE_URL="postgresql+psycopg://caseops:${DB_PW}@127.0.0.1:25432/caseops"
 export CASEOPS_EMBEDDING_PROVIDER=voyage
 export CASEOPS_EMBEDDING_MODEL=voyage-4-large
 export CASEOPS_EMBEDDING_DIMENSIONS=1024
 export CASEOPS_EMBEDDING_API_KEY="$VOYAGE_KEY"
-export CASEOPS_LLM_PROVIDER=anthropic
-export CASEOPS_LLM_MODEL=claude-haiku-4-5-20251001    # Haiku for Layer 2 reliability
-export CASEOPS_LLM_API_KEY="$ANTHROPIC_KEY"
+export CASEOPS_LLM_PROVIDER=openai
+export CASEOPS_LLM_MODEL=gpt-5-mini    # Standard for Layer 2 reliability
+export CASEOPS_LLM_API_KEY="$OPENAI_KEY"
 export CASEOPS_RERANK_ENABLED=true
 export CASEOPS_RERANK_BACKEND=fastembed
 export PYTHONUNBUFFERED=1
@@ -361,9 +361,9 @@ uv run --no-sync python -m caseops_api.scripts.ingest_corpus \
   --from-s3 --court "$COURT" $([ -n "$HC_COURTS" ] && echo "--hc-courts $HC_COURTS") \
   --year "$YEAR" --min-chars 4000 --limit 2000
 
-# 2. LAYER 2 (Haiku only — Sonnet has a JSON-parse defect on huge docs)
+# 2. LAYER 2 (Standard only — Premium has a JSON-parse defect on huge docs)
 uv run --no-sync python -m caseops_api.scripts.backfill_corpus_quality \
-  --stage structured --force-tier haiku --budget-usd 30
+  --stage structured --force-tier standard --budget-usd 30
 
 # 3. TITLE CHUNKS (new docs, idempotent via chunk_role='metadata')
 uv run --no-sync python -m caseops_api.scripts.backfill_title_chunks \
@@ -391,13 +391,13 @@ uv run --no-sync python -m caseops_api.scripts.eval_hnsw_recall \
 
 ### Known-broken docs (skip these)
 
-- `129b3e0a-d448-436a-8a11-dc876f5b12f1` — malformed JSON on Sonnet AND Haiku at >45k chars output. Skip until `corpus_structured._tolerant_json_loads` can repair this class.
+- `129b3e0a-d448-436a-8a11-dc876f5b12f1` — malformed JSON on Premium AND Standard at >45k chars output. Skip until `corpus_structured._tolerant_json_loads` can repair this class.
 
 ### Levers in priority order when stuck at 4.0-4.5
 
 1. Ensure title-chunk **refresh** ran AFTER Layer 2 — the commonest omission.
 2. Parties-JSON pre-filter at retrieval (exact-match before vector).
-3. ~~Query expansion via Haiku~~ — **TESTED AND KILLED** on 2026-04-20. Net-negative (recall@10 90% → 63%) because Haiku hallucinates party names on ambiguous / OCR-garbage / docket-number queries. Do not re-enable without a case-name-classifier gate in front.
+3. ~~Query expansion via Standard~~ — **TESTED AND KILLED** on 2026-04-20. Net-negative (recall@10 90% → 63%) because Standard hallucinates party names on ambiguous / OCR-garbage / docket-number queries. Do not re-enable without a case-name-classifier gate in front.
 4. OCR garbage gate at ingest (reject `(cid:\d+)` density > 1%).
 5. Language filter at retrieval (`WHERE language='en'`).
 6. Postgres connection retry wrapper — mitigated on GCE VM (same-region Cloud SQL).
@@ -405,4 +405,4 @@ uv run --no-sync python -m caseops_api.scripts.eval_hnsw_recall \
 ### Spend guard-rails
 
 - After every 5 buckets, probe budget + chunk ratio. If Voyage burns > $2/1k docs, stop and audit chunks-per-doc.
-- If Anthropic > 50% of $450 cap before SC is done, drop Layer 2 to `--budget-usd 15` per bucket.
+- If OpenAI > 50% of $450 cap before SC is done, drop Layer 2 to `--budget-usd 15` per bucket.

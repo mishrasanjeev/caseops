@@ -316,7 +316,7 @@ class DraftPreviewResponse(BaseModel):
     "/preview",
     response_model=DraftPreviewResponse,
     summary=(
-        "Sprint R4 — Haiku-backed partial draft preview for the "
+        "Sprint R4 — OpenAI extraction model-backed partial draft preview for the "
         "stepper. Returns a 300-500 word preview reflecting whatever "
         "fields the user has filled so far; unfilled fields render as "
         "'[not yet specified]' instead of invented values."

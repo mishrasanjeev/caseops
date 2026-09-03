@@ -3,7 +3,7 @@ and populate authority_citations.
 
 Per docs/PRD_BENCH_STRATEGY_2026-04-26.md §4.4 — citation extraction
 unblocks L-B (judge_authority_affinity) so the bench-strategy panel
-can surface top_authorities. Pure regex; zero Anthropic spend.
+can surface top_authorities. Pure regex; zero hosted LLM spend.
 
 CLI:
     python -m caseops_api.scripts.extract_authority_citations

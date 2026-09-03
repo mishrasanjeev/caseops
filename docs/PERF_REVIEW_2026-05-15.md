@@ -211,7 +211,7 @@ apply the matter-access visibility predicate that `list_matters` uses
 whose access is scoped by `MatterAccessGrant` / an ethical wall can see
 hearings, tasks, drafts-in-review, overdue invoices, and deadlines for
 matters they are **not** entitled to. This is a tenant/matter-isolation
-defect (CLAUDE.md: "Matter-level permissions and ethical walls must
+defect (CODEX.md: "Matter-level permissions and ethical walls must
 override broad role access"), not merely a scale concern — treat it as
 the higher-priority half of this item.
 

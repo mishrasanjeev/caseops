@@ -241,13 +241,13 @@ def test_build_provider_defaults_to_mock(monkeypatch: pytest.MonkeyPatch) -> Non
     assert provider.name == "mock"
 
 
-def test_build_provider_requires_api_key_for_real_providers(
+def test_build_provider_rejects_retired_anthropic_before_key_lookup(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "anthropic")
     monkeypatch.setenv("CASEOPS_LLM_API_KEY", "")
     get_settings.cache_clear()
-    with pytest.raises(LLMProviderError):
+    with pytest.raises(LLMProviderError, match="retired"):
         build_provider()
 
 

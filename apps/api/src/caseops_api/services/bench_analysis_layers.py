@@ -12,7 +12,7 @@ Three derived materializations powering the bench-strategy panel:
 - L-C judge_statute_focus: per (judge, statute_section) row.
   Aggregated from authority_statute_references joined with L-A.
 
-All three are pure SQL — zero Anthropic spend. Suitable for nightly
+All three are pure SQL — zero hosted LLM spend. Suitable for nightly
 cron.
 """
 from __future__ import annotations

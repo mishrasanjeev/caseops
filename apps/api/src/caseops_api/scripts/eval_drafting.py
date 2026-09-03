@@ -25,7 +25,7 @@ the recorded bodies and attaches a grade, the same EvaluationRun
 becomes a pair for the drafter-vs-expert claim.
 
 Provider routing: drafting goes through whatever ``purpose=drafting``
-is configured to — typically Opus in prod. The CLI deliberately does
+is configured to — typically OpenAI reasoning model in prod. The CLI deliberately does
 NOT force a provider so the eval measures the production pipeline,
 not a one-off fixture.
 """

@@ -1,5 +1,5 @@
 """Backfill statute_sections.section_text via the hybrid scrape →
-Haiku-fallback pipeline.
+model-fallback pipeline.
 
 Per docs/PRD_STATUTE_MODEL_2026-04-25.md + 2026-04-26 user decision.
 
@@ -7,10 +7,10 @@ CLI:
     python -m caseops_api.scripts.enrich_statute_sections
     python -m caseops_api.scripts.enrich_statute_sections --statute ipc-1860
     python -m caseops_api.scripts.enrich_statute_sections \\
-        --statute ipc-1860 --budget-usd 5 --no-haiku
+        --statute ipc-1860 --budget-usd 5 --no-model-fallback
     python -m caseops_api.scripts.enrich_statute_sections --dry-run
 
-Per-Act ``--budget-usd`` cap (default $5/Act) gates the Haiku fallback
+Per-Act ``--budget-usd`` cap (default $5/Act) gates the model fallback
 to prevent a single bad-prompt run from burning the entire monthly
 budget. The cap is enforced via ``ModelRun`` SUM of completion+prompt
 tokens × the configured price; when the cap is reached, remaining
@@ -32,21 +32,21 @@ from caseops_api.db.models import ModelRun, Statute, StatuteSection
 from caseops_api.db.session import get_session_factory
 from caseops_api.services.llm import PURPOSE_METADATA_EXTRACT
 from caseops_api.services.statute_enrichment import (
-    SOURCE_HAIKU,
     SOURCE_INDIACODE,
+    SOURCE_MODEL_GENERATED,
     enrich_section,
 )
 
 logger = logging.getLogger("enrich_statute_sections")
 
-# Approximate per-token cost for the Haiku 4.5 budget gate. Calibrated
-# against Anthropic's published Apr-2026 pricing of $0.80/M input +
+# Approximate per-token cost for the model 4.5 budget gate. Calibrated
+# against OpenAI's published Apr-2026 pricing of $0.80/M input +
 # $4/M output. We blend at $1.20/M as a coarse single-rate so the cap
 # math stays one-line.
-_HAIKU_BLENDED_USD_PER_M_TOKENS = 1.2
+_MODEL_BLENDED_USD_PER_M_TOKENS = 1.2
 
 
-def _haiku_spend_today_for_purpose(session, purpose: str) -> float:
+def _model_spend_today_for_purpose(session, purpose: str) -> float:
     day_start = datetime.now(UTC).replace(
         hour=0, minute=0, second=0, microsecond=0,
     )
@@ -60,10 +60,10 @@ def _haiku_spend_today_for_purpose(session, purpose: str) -> float:
         .where(ModelRun.purpose == purpose)
         .where(ModelRun.created_at >= day_start)
     ) or 0
-    return float(total_tokens) / 1_000_000.0 * _HAIKU_BLENDED_USD_PER_M_TOKENS
+    return float(total_tokens) / 1_000_000.0 * _MODEL_BLENDED_USD_PER_M_TOKENS
 
 
-def _haiku_spend_window(session, purpose: str, *, hours: int) -> float:
+def _model_spend_window(session, purpose: str, *, hours: int) -> float:
     cutoff = datetime.now(UTC) - timedelta(hours=hours)
     total_tokens = session.scalar(
         select(
@@ -75,21 +75,21 @@ def _haiku_spend_window(session, purpose: str, *, hours: int) -> float:
         .where(ModelRun.purpose == purpose)
         .where(ModelRun.created_at >= cutoff)
     ) or 0
-    return float(total_tokens) / 1_000_000.0 * _HAIKU_BLENDED_USD_PER_M_TOKENS
+    return float(total_tokens) / 1_000_000.0 * _MODEL_BLENDED_USD_PER_M_TOKENS
 
 
 def run(
     *,
     statute_filter: list[str] | None,
     budget_usd: float,
-    allow_haiku: bool,
+    allow_model_fallback: bool,
     dry_run: bool,
     limit_per_statute: int | None,
 ) -> int:
     factory = get_session_factory()
     counters: dict[str, dict[str, int]] = defaultdict(
         lambda: {
-            "scraped": 0, "haiku": 0, "skipped_budget": 0,
+            "scraped": 0, "model": 0, "skipped_budget": 0,
             "failed": 0, "already_filled": 0,
         }
     )
@@ -113,7 +113,7 @@ def run(
                 # in its own slot of the global ModelRun ledger; we
                 # snapshot the spend at the start so within-Act burn
                 # is easy to compute.
-                spend_at_act_start = _haiku_spend_today_for_purpose(
+                spend_at_act_start = _model_spend_today_for_purpose(
                     session, PURPOSE_METADATA_EXTRACT,
                 )
                 logger.info(
@@ -138,24 +138,24 @@ def run(
                 )
 
                 for sec in sections:
-                    # Per-Act budget gate (Haiku side). Scrape is free;
-                    # check budget only when we'd fall through to Haiku.
-                    spend_now = _haiku_spend_today_for_purpose(
+                    # Per-Act budget gate (model side). Scrape is free;
+                    # check budget only when we'd fall through to model.
+                    spend_now = _model_spend_today_for_purpose(
                         session, PURPOSE_METADATA_EXTRACT,
                     )
                     spent_this_act = spend_now - spend_at_act_start
-                    if allow_haiku and spent_this_act >= budget_usd:
+                    if allow_model_fallback and spent_this_act >= budget_usd:
                         counters[st.id]["skipped_budget"] += 1
                         logger.info(
-                            "BUDGET-CAP %s sec=%s — this-Act haiku spend $%.4f >= cap $%.2f",
+                            "BUDGET-CAP %s sec=%s — this-Act model spend $%.4f >= cap $%.2f",
                             act_label, sec.section_number,
                             spent_this_act, budget_usd,
                         )
                         # Keep iterating in case a later section
-                        # scrapes (free); only Haiku is gated.
+                        # scrapes (free); only model is gated.
                         result = enrich_section(
                             session, sec, statute=st, http_client=client,
-                            allow_haiku=False,
+                            allow_model_fallback=False,
                         )
                     else:
                         if dry_run:
@@ -166,13 +166,13 @@ def run(
                             continue
                         result = enrich_section(
                             session, sec, statute=st, http_client=client,
-                            allow_haiku=allow_haiku,
+                            allow_model_fallback=allow_model_fallback,
                         )
 
                     if result.source == SOURCE_INDIACODE:
                         counters[st.id]["scraped"] += 1
-                    elif result.source == SOURCE_HAIKU:
-                        counters[st.id]["haiku"] += 1
+                    elif result.source == SOURCE_MODEL_GENERATED:
+                        counters[st.id]["model"] += 1
                     elif result.source is None:
                         counters[st.id]["failed"] += 1
                     logger.info(
@@ -182,15 +182,15 @@ def run(
                         result.notes or "",
                     )
 
-                spend_after_act = _haiku_spend_today_for_purpose(
+                spend_after_act = _model_spend_today_for_purpose(
                     session, PURPOSE_METADATA_EXTRACT,
                 )
                 logger.info(
-                    "ACT END %s — scraped=%d haiku=%d skipped_budget=%d "
-                    "failed=%d (this-Act haiku spend: $%.4f)",
+                    "ACT END %s — scraped=%d model=%d skipped_budget=%d "
+                    "failed=%d (this-Act model spend: $%.4f)",
                     act_label,
                     counters[st.id]["scraped"],
-                    counters[st.id]["haiku"],
+                    counters[st.id]["model"],
                     counters[st.id]["skipped_budget"],
                     counters[st.id]["failed"],
                     spend_after_act - spend_at_act_start,
@@ -202,15 +202,15 @@ def run(
     print("Statute enrichment summary")
     print("=" * 78)
     widths = [22, 10, 10, 16, 10]
-    header = ["statute_id", "scraped", "haiku", "skipped_budget", "failed"]
+    header = ["statute_id", "scraped", "model", "skipped_budget", "failed"]
     print("  ".join(c.ljust(w) for c, w in zip(header, widths, strict=False)))
     print("-" * sum(widths))
-    grand = {"scraped": 0, "haiku": 0, "skipped_budget": 0, "failed": 0}
+    grand = {"scraped": 0, "model": 0, "skipped_budget": 0, "failed": 0}
     for sid, c in counters.items():
         cells = [
             sid,
             f"{c['scraped']:>6}",
-            f"{c['haiku']:>6}",
+            f"{c['model']:>6}",
             f"{c['skipped_budget']:>6}",
             f"{c['failed']:>6}",
         ]
@@ -221,7 +221,7 @@ def run(
     cells = [
         "TOTAL",
         f"{grand['scraped']:>6}",
-        f"{grand['haiku']:>6}",
+        f"{grand['model']:>6}",
         f"{grand['skipped_budget']:>6}",
         f"{grand['failed']:>6}",
     ]
@@ -244,11 +244,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--budget-usd", type=float, default=5.0,
-        help="Per-Act USD ceiling for Haiku fallback (default $5).",
+        help="Per-Act USD ceiling for model fallback (default $5).",
     )
     parser.add_argument(
-        "--no-haiku", action="store_true",
-        help="Scrape only; never call Haiku. Useful for a first pass.",
+        "--no-model-fallback", action="store_true",
+        help="Scrape only; never call model. Useful for a first pass.",
     )
     parser.add_argument(
         "--dry-run", action="store_true",
@@ -262,7 +262,7 @@ def main(argv: list[str] | None = None) -> int:
     return run(
         statute_filter=args.statute,
         budget_usd=args.budget_usd,
-        allow_haiku=not args.no_haiku,
+        allow_model_fallback=not args.no_model_fallback,
         dry_run=args.dry_run,
         limit_per_statute=args.limit_per_statute,
     )

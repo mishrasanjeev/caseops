@@ -264,7 +264,7 @@ Match implementation complexity to the aesthetic vision. Maximalist designs need
 
 Interpret creatively and make unexpected choices that feel genuinely designed for the context. No design should be the same. Vary between light and dark themes, different fonts, different aesthetics. NEVER converge on common choices across generations.
 
-Remember: Claude is capable of extraordinary creative work. Don't hold back. Show what can truly be created when thinking outside the box and committing fully to a distinctive vision.
+Remember: Codex is capable of extraordinary creative work. Don't hold back. Show what can truly be created when thinking outside the box and committing fully to a distinctive vision.
 
 ---
 
@@ -293,7 +293,7 @@ Note what you've learned and what remains unclear.
 
 ### Step 2: Ask UX-Focused Questions
 
-STOP and call the AskUserQuestion tool to clarify. Focus only on what you couldn't infer from the codebase:
+STOP and call the the user for concise clarification. Focus only on what you couldn't infer from the codebase:
 
 #### Users & Purpose
 - Who uses this? What's their context when using it?
@@ -338,7 +338,7 @@ Synthesize your findings and the user's answers into a `## Design Context` secti
 
 Write this section to `.impeccable.md` in the project root. If the file already exists, update the Design Context section in place.
 
-Then STOP and call the AskUserQuestion tool to clarify. whether they'd also like the Design Context appended to CLAUDE.md. If yes, append or update the section there as well.
+Then STOP and call the the user for concise clarification. whether they'd also like the Design Context appended to CODEX.md. If yes, append or update the section there as well.
 
 Confirm completion and summarize the key design principles that will now guide all future work.
 

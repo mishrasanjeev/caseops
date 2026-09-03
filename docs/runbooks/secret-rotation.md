@@ -22,8 +22,7 @@ reference them via `valueFrom.secretKeyRef.name=<secret-name>:latest`.
 |---|---|---|---|
 | `caseops-auth-secret` | `caseops-api` env `CASEOPS_AUTH_SECRET` | local: emit a fresh ≥32-byte random | rotating invalidates ALL active sessions; users re-login |
 | `caseops-database-url` | `caseops-api` + `caseops-migrate-job` env `CASEOPS_DATABASE_URL` | Cloud SQL: rotate `caseops` user password via `gcloud sql users set-password`; rebuild URL | prod-blocking; do during low-traffic window |
-| `caseops-anthropic-api-key` | `caseops-api` env `CASEOPS_LLM_API_KEY` | Anthropic console: create new key, deactivate old | LLM calls fall over to OpenAI on 402 — see `services/llm.py` cutover |
-| `caseops-openai-api-key` | `caseops-api` env `CASEOPS_OPENAI_API_KEY` | OpenAI dashboard: revoke + regenerate | fallback path; rotate calmly |
+| `caseops-openai-api-key` | `caseops-api` env `CASEOPS_LLM_API_KEY` | OpenAI dashboard: revoke + regenerate | sole hosted LLM credential; deployment readback verifies this binding |
 | `caseops-voyage-api-key` | `caseops-api` env `CASEOPS_EMBEDDING_API_KEY` | Voyage AI dashboard: regenerate | embeddings ingest pipeline halts until rotated |
 | `caseops-sendgrid-api-key` | `caseops-api` env `CASEOPS_SENDGRID_API_KEY` | SendGrid: create new restricted-permission key, delete old | hearing reminders + portal magic-link send |
 | `caseops-pine-labs-api-key` | `caseops-api` env `CASEOPS_PINE_LABS_API_KEY` | Pine Labs merchant portal: rotate API credentials | payment-link issuance |
@@ -50,7 +49,7 @@ provider credentials.
 ## 2. Standard rotation procedure (provider-managed credential)
 
 Use this for any secret where a third-party provider issues the
-credential (Anthropic, OpenAI, Voyage, SendGrid, Pine Labs, SMTP,
+credential (OpenAI, Voyage, SendGrid, Pine Labs, SMTP,
 Cloud SQL).
 
 ```bash
@@ -93,7 +92,7 @@ After step 4 above, prove the NEW credential is in use:
 
 | Provider | Verify by |
 |---|---|
-| Anthropic | Sign a draft via `POST /api/matters/{id}/drafts` and confirm `model_runs.provider='anthropic'` for the new draft |
+| OpenAI | Sign a draft via `POST /api/matters/{id}/drafts` and confirm `model_runs.provider='openai'` for the new draft |
 | OpenAI fallback | Force-set `CASEOPS_LLM_PROVIDER=openai` env and run `python -m caseops_api.scripts.eval_drafting -k smoke` against prod-equivalent |
 | Voyage | `python -m caseops_api.scripts.eval_hnsw_recall` — check the embedding latency stat is non-zero (key gates fetch) |
 | SendGrid | Send a portal-invitation magic link to a test email; confirm receipt |
@@ -155,7 +154,7 @@ proof is available.
 
 - **Quarterly rotation** (90 days) for every secret in §1.
   Tracked in the calendar with a 14-day pre-warn.
-- **Anthropic / OpenAI / Voyage / Pine Labs**: rotate within 24h of
+- **OpenAI / Voyage / Pine Labs**: rotate within 24h of
   any provider-side security incident notification.
 - **`caseops-auth-secret`**: rotate within 24h of any prod IAM change
   affecting the Cloud Run service account.

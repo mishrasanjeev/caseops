@@ -6,7 +6,7 @@ Usage::
     caseops-reextract-placeholder-titles --tenant aster-demo --dry-run
     caseops-reextract-placeholder-titles --tenant aster-demo --budget-usd 2 --limit 50
 
-Budget is Haiku spend only. ~$0.006/doc observed in prior passes, so
+Budget is OpenAI extraction spend only. ~$0.006/doc observed in prior passes, so
 $5 covers ~800 docs — more than the detector's typical flag count.
 Re-running is idempotent; the detector re-reads the current ``title``
 each call.
@@ -33,12 +33,9 @@ from caseops_api.services.corpus_title_reextract import (
     ReextractReport,
     run_reextract_sweep,
 )
-from caseops_api.services.llm import AnthropicProvider, build_provider
+from caseops_api.services.llm import PURPOSE_METADATA_EXTRACT, build_provider
 
 logger = logging.getLogger("caseops.corpus.reextract")
-
-
-_HAIKU_MODEL = "claude-haiku-4-5-20251001"
 
 
 def _resolve_tenant_id(*, slug: str) -> str:
@@ -107,25 +104,16 @@ def run(
                 dry_run=True,
             )
         else:
-            # Always Haiku for this pass — metadata extraction is cheap
-            # and reliable on short inputs; Sonnet is overkill.
             from caseops_api.core.settings import get_settings
             settings = get_settings()
-            if (settings.llm_provider or "").lower() != "anthropic":
+            if (settings.llm_provider or "").lower() != "openai":
                 raise SystemExit(
-                    "re-extract needs CASEOPS_LLM_PROVIDER=anthropic + api key"
+                    "re-extract needs CASEOPS_LLM_PROVIDER=openai + api key"
                 )
             if not settings.llm_api_key:
                 # Belt-and-braces: build_provider would complain too.
                 raise SystemExit("CASEOPS_LLM_API_KEY is not set")
-            provider = AnthropicProvider(
-                model=_HAIKU_MODEL,
-                api_key=settings.llm_api_key,
-                prompt_cache=bool(
-                    getattr(settings, "llm_prompt_cache_enabled", True)
-                ),
-            )
-            _ = build_provider  # silence unused-import; handy to keep for callers
+            provider = build_provider(purpose=PURPOSE_METADATA_EXTRACT)
             report = run_reextract_sweep(
                 session,
                 provider=provider,
@@ -148,7 +136,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     )
     parser.add_argument(
         "--budget-usd", type=float, default=5.0,
-        help="Haiku spend cap (default $5). Sweep stops when reached.",
+        help="OpenAI extraction model spend cap (default $5). Sweep stops when reached.",
     )
     parser.add_argument(
         "--limit", type=int, default=1000,

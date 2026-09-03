@@ -7,7 +7,7 @@ output on multiple dimensions and produces an aggregate 0-5 rating
 per template + overall.
 
 Why a separate script vs ``eval_drafting_types.py``:
-- ``eval_drafting_types.py`` hits Haiku with the per-template prompt
+- ``eval_drafting_types.py`` hits OpenAI extraction model with the per-template prompt
   + a bare "Facts: ..." user message. Cheap regression eval, but it
   does NOT exercise the production system prompt (the generic
   ABSOLUTE RULES block + STATUTE GUIDANCE + bench-history hooks).

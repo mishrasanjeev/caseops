@@ -485,7 +485,7 @@ Evidence:
     every missing module by name (catches the slowapi case before pytest's
     confusing collection-time ImportError).
   - Run ruff + targeted pytest with whatever args the caller passes.
-- Documented in `CLAUDE.md` under "Canonical backend verification recipe".
+- Documented in `CODEX.md` under "Canonical backend verification recipe".
 
 Verification run (2026-04-22):
 
@@ -501,7 +501,7 @@ Done when:
 - ✅ `uv sync --frozen --no-install-project` runs cleanly on a clean checkout.
 - ✅ Targeted backend pytest runs complete for outside counsel, intake,
   clients, reminders, contract intelligence, hearing packs, and drafting.
-- ✅ The recipe is in `scripts/` + documented in `CLAUDE.md` so any agent can
+- ✅ The recipe is in `scripts/` + documented in `CODEX.md` so any agent can
   repeat it without guessing.
 
 ## Release Gate

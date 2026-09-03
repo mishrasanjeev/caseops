@@ -24,8 +24,8 @@ Both suites reuse the BAIL_SUITE seed cases from eval_drafting
 (matter shape is identical) so a single tenant snapshot exercises
 all three surfaces.
 
-Provider routing: hearing packs hit purpose=hearing_pack (Sonnet by
-default), recommendations hit purpose=recommendations (Sonnet too).
+Provider routing: hearing packs hit purpose=hearing_pack (OpenAI recommendations model by
+default), recommendations hit purpose=recommendations (OpenAI recommendations model too).
 The cassette wrap (Sprint 11 record/replay) sits underneath both
 when CASEOPS_LLM_CASSETTE_MODE is set.
 """

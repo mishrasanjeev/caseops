@@ -1,8 +1,8 @@
 """Per-purpose LLM router (Pass 0).
 
-The drafting pipeline warrants Opus-class reasoning; structured
-recommendations run fine on Sonnet; metadata extraction scales on
-Haiku. `build_provider(purpose=...)` picks the configured model for
+The drafting pipeline warrants high-reliability reasoning; structured
+recommendations run fine on the recommendations model; metadata extraction scales on
+the extraction model. `build_provider(purpose=...)` picks the configured model for
 each; the global `llm_model` is the fallback.
 """
 
@@ -43,12 +43,12 @@ def test_drafting_uses_dedicated_model_when_configured(
 ) -> None:
     monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "mock")
     monkeypatch.setenv("CASEOPS_LLM_MODEL", "generic-fallback")
-    monkeypatch.setenv("CASEOPS_LLM_MODEL_DRAFTING", "claude-opus-4-7")
+    monkeypatch.setenv("CASEOPS_LLM_MODEL_DRAFTING", "gpt-5.1")
     _clear_cache()
 
     drafter = build_provider(purpose=PURPOSE_DRAFTING)
     default = build_provider()
-    assert drafter.model == "claude-opus-4-7"
+    assert drafter.model == "gpt-5.1"
     assert default.model == "generic-fallback"
 
 
@@ -57,14 +57,14 @@ def test_recommendations_and_hearing_pack_resolve_independently(
 ) -> None:
     monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "mock")
     monkeypatch.setenv("CASEOPS_LLM_MODEL", "fallback")
-    monkeypatch.setenv("CASEOPS_LLM_MODEL_RECOMMENDATIONS", "claude-sonnet-4-6")
-    monkeypatch.setenv("CASEOPS_LLM_MODEL_HEARING_PACK", "claude-sonnet-4-6")
-    monkeypatch.setenv("CASEOPS_LLM_MODEL_METADATA_EXTRACT", "claude-haiku-4-5-20251001")
+    monkeypatch.setenv("CASEOPS_LLM_MODEL_RECOMMENDATIONS", "gpt-5-mini")
+    monkeypatch.setenv("CASEOPS_LLM_MODEL_HEARING_PACK", "gpt-5-mini")
+    monkeypatch.setenv("CASEOPS_LLM_MODEL_METADATA_EXTRACT", "gpt-5-nano")
     _clear_cache()
 
-    assert build_provider(purpose=PURPOSE_RECOMMENDATIONS).model == "claude-sonnet-4-6"
-    assert build_provider(purpose=PURPOSE_HEARING_PACK).model == "claude-sonnet-4-6"
-    assert build_provider(purpose=PURPOSE_METADATA_EXTRACT).model == "claude-haiku-4-5-20251001"
+    assert build_provider(purpose=PURPOSE_RECOMMENDATIONS).model == "gpt-5-mini"
+    assert build_provider(purpose=PURPOSE_HEARING_PACK).model == "gpt-5-mini"
+    assert build_provider(purpose=PURPOSE_METADATA_EXTRACT).model == "gpt-5-nano"
 
 
 def test_unset_purpose_falls_back_to_global_model(

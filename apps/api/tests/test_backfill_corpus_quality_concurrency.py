@@ -94,11 +94,11 @@ def test_concurrent_run_processes_all_docs_under_budget(
         totals = mod._structured_pass(
             session,
             limit=None, dry_run=True, budget_usd=10.0,
-            force_tier="haiku", year_range=None,
+            force_tier="standard", year_range=None,
             concurrency=4,
         )
 
-    assert totals["haiku"]["done"] == 20
+    assert totals["standard"]["done"] == 20
     assert len(set(seen)) == 20
     # spent ~= 20 * 0.01 = $0.20
     assert 0.19 < totals["spent_usd"] < 0.22
@@ -118,12 +118,12 @@ def test_concurrent_budget_cap_stops_cleanly(
         totals = mod._structured_pass(
             session,
             limit=None, dry_run=True, budget_usd=0.05,
-            force_tier="haiku", year_range=None,
+            force_tier="standard", year_range=None,
             concurrency=4,
         )
 
     # Budget caps at 5 docs ($0.05 / $0.01) plus up to 3 in-flight workers.
-    assert 5 <= totals["haiku"]["done"] <= 5 + 4
+    assert 5 <= totals["standard"]["done"] <= 5 + 4
     assert totals["spent_usd"] >= 0.05
     assert totals["spent_usd"] <= 0.05 + 4 * 0.01 + 1e-9
 
@@ -142,11 +142,11 @@ def test_sequential_mode_unchanged(
         totals = mod._structured_pass(
             session,
             limit=None, dry_run=True, budget_usd=10.0,
-            force_tier="haiku", year_range=None,
+            force_tier="standard", year_range=None,
             concurrency=1,
         )
 
-    assert totals["haiku"]["done"] == 20
+    assert totals["standard"]["done"] == 20
     assert 0.19 < totals["spent_usd"] < 0.22
 
 
@@ -181,7 +181,7 @@ def test_concurrency_actually_parallelizes(
             limit=None,
             dry_run=True,
             budget_usd=10.0,
-            force_tier="haiku",
+            force_tier="standard",
             year_range=None,
             concurrency=1,
         )
@@ -196,7 +196,7 @@ def test_concurrency_actually_parallelizes(
             limit=None,
             dry_run=True,
             budget_usd=10.0,
-            force_tier="haiku",
+            force_tier="standard",
             year_range=None,
             concurrency=4,
         )

@@ -37,9 +37,9 @@ def test_resolver_parses_allowed_models(client) -> None:  # noqa: ARG001
         company = session.scalar(select(Company))
         row = TenantAIPolicy(
             company_id=company.id,
-            allowed_models_drafting_json=json.dumps(["claude-opus-4-7"]),
+            allowed_models_drafting_json=json.dumps(["gpt-5.1"]),
             allowed_models_recommendations_json=json.dumps(
-                ["claude-sonnet-4-6", "claude-opus-4-7"]
+                ["gpt-5-mini", "gpt-5.1"]
             ),
             allowed_models_hearing_pack_json=json.dumps([]),
             allowed_models_assistant_json=json.dumps(["caseops-assistant-1"]),
@@ -54,8 +54,8 @@ def test_resolver_parses_allowed_models(client) -> None:  # noqa: ARG001
         session.commit()
 
         policy = resolve_tenant_policy(session, company_id=company.id)
-    assert policy.allowed_drafting == ("claude-opus-4-7",)
-    assert "claude-sonnet-4-6" in policy.allowed_recommendations
+    assert policy.allowed_drafting == ("gpt-5.1",)
+    assert "gpt-5-mini" in policy.allowed_recommendations
     assert policy.allowed_hearing_pack == ()  # empty list → no restriction
     assert policy.allowed_assistant == ("caseops-assistant-1",)
     assert policy.workspace_assistant_enabled is True
@@ -73,7 +73,7 @@ def test_is_model_allowed_honours_allowlist(client) -> None:  # noqa: ARG001
         company = session.scalar(select(Company))
         row = TenantAIPolicy(
             company_id=company.id,
-            allowed_models_drafting_json=json.dumps(["claude-opus-4-7"]),
+            allowed_models_drafting_json=json.dumps(["gpt-5.1"]),
             allowed_models_recommendations_json=json.dumps([]),
             allowed_models_hearing_pack_json=json.dumps([]),
             max_tokens_per_session=16384,
@@ -85,10 +85,10 @@ def test_is_model_allowed_honours_allowlist(client) -> None:  # noqa: ARG001
         policy = resolve_tenant_policy(session, company_id=company.id)
 
     assert is_model_allowed(
-        policy, purpose="drafting", model="claude-opus-4-7"
+        policy, purpose="drafting", model="gpt-5.1"
     ) is True
     assert is_model_allowed(
-        policy, purpose="drafting", model="claude-haiku-4-5-20251001"
+        policy, purpose="drafting", model="gpt-5-nano"
     ) is False
     # Empty allowlist on a purpose means no restriction.
     assert is_model_allowed(

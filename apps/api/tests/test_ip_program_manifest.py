@@ -93,14 +93,13 @@ def test_active_ip_evidence_cannot_assign_work_to_claude(tmp_path: Path) -> None
     assert ip_program_manifest.forbidden_work_assignment_matches() == []
 
 
-def test_historical_and_provider_claude_references_remain_valid(tmp_path: Path) -> None:
+def test_historical_claude_attribution_remains_valid(tmp_path: Path) -> None:
     evidence = tmp_path / "evidence.md"
     evidence.write_text(
         "\n".join(
             (
                 "Historical branch: claude/ip-fasttrack-20260813.",
-                "Read `.claude/skills/impeccable/SKILL.md` for compatibility.",
-                "Anthropic (`claude-sonnet-4-6`) remains a supported provider model.",
+                "Read `.codex/skills/impeccable/SKILL.md` for compatibility.",
                 "Migration `20260821_0005` follows Claude-owned `20260821_0004`.",
                 "Completed historical fact: Claude repaired the generated client.",
             )
@@ -109,6 +108,29 @@ def test_historical_and_provider_claude_references_remain_valid(tmp_path: Path) 
     )
 
     assert ip_program_manifest.forbidden_work_assignment_matches(tmp_path) == []
+
+
+def test_active_runtime_and_workflows_cannot_select_or_assign_claude() -> None:
+    llm = (REPO_ROOT / "apps/api/src/caseops_api/services/llm.py").read_text(
+        encoding="utf-8"
+    )
+    dependencies = (REPO_ROOT / "apps/api/pyproject.toml").read_text(encoding="utf-8")
+    assert "class AnthropicProvider" not in llm
+    assert "import anthropic" not in llm
+    assert "return AnthropicProvider" not in llm
+    assert '"anthropic>=' not in dependencies
+
+    active_guidance = [
+        REPO_ROOT / "CODEX.md",
+        REPO_ROOT / ".codex/skills/corpus-ingest/SKILL.md",
+        REPO_ROOT / ".codex/skills/caseops-prd-execution/SKILL.md",
+        REPO_ROOT / ".codex/skills/strict-quality-review/SKILL.md",
+    ]
+    forbidden = ("caseops-anthropic-api-key", "claude-", ".claude/", "provider=anthropic")
+    for path in active_guidance:
+        contents = path.read_text(encoding="utf-8").casefold()
+        for token in forbidden:
+            assert token not in contents, f"{path.relative_to(REPO_ROOT)} contains {token}"
 
 
 def test_late_domain_execution_uses_machine_gates_not_manual_approval() -> None:

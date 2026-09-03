@@ -1,6 +1,6 @@
 """Voyage spend ledger + daily cap.
 
-Mirror of the Anthropic ``ModelRun`` audit, applied to Voyage embed
+Mirror of the hosted LLM ``ModelRun`` audit, applied to Voyage embed
 calls. Both helpers fail SOFT on DB issues so an audit-side outage
 never breaks an ingest, but the cap check still raises so a
 configuration mistake cannot bleed past the daily ceiling.

@@ -1,6 +1,6 @@
 """Structured extraction for authority documents (Corpus Layer 2).
 
-One Haiku call per judgment produces a rich, typed shape that beats
+One Standard call per judgment produces a rich, typed shape that beats
 flat-paragraph chunks on legal retrieval:
 
 - Document-level: case_title, judges, parties, advocates, case_number,
@@ -54,7 +54,7 @@ logger = logging.getLogger(__name__)
 def _coerce_str_list(v):  # noqa: ANN001 — pydantic validator signature
     """Accept either a list or a single scalar; return a list of strs.
 
-    Sonnet sometimes emits ``"M/s X & Ors."`` (a bare string) where the
+    Premium sometimes emits ``"M/s X & Ors."`` (a bare string) where the
     schema asks for ``list[str]`` because the model decides "there is
     only one respondent so I don't need a list". We coerce instead of
     rejecting — losing the doc to a list-vs-string nit costs more than
@@ -90,7 +90,7 @@ def _coerce_int_list(v):  # noqa: ANN001
 def _coerce_to_dict(v):  # noqa: ANN001
     """Coerce nullish / list / non-dict inputs to ``{}``.
 
-    Sonnet sometimes emits ``advocates: []`` (an empty list) when no
+    Premium sometimes emits ``advocates: []`` (an empty list) when no
     advocates were named, instead of the expected object/dict. Same
     pattern applies to ``parties``. Treat the empty-container case as
     "no data" and let the nested model populate its defaults."""
@@ -180,36 +180,34 @@ def _coerce_to_optional_str(v):  # noqa: ANN001
     return s or None
 
 # Version stamp encodes extraction tier so we never downgrade a
-# Sonnet-annotated doc with a later Haiku pass:
-#   1 = Haiku 4.5 (the budget tier)
-#   2 = Sonnet 4.6 (the premium tier reserved for SC 1990-2025 English)
-HAIKU_VERSION = 1
-SONNET_VERSION = 2
-STRUCTURED_VERSION = HAIKU_VERSION  # legacy alias; prefer tier-specific constants
+# Premium-annotated doc with a later Standard pass:
+#   1 = Standard 4.5 (the budget tier)
+#   2 = Premium 4.6 (the premium tier reserved for SC 1990-2025 English)
+STANDARD_VERSION = 1
+PREMIUM_VERSION = 2
+STRUCTURED_VERSION = STANDARD_VERSION  # legacy alias; prefer tier-specific constants
 
-# 2026-05-01: Layer 2 ingest cut over from Anthropic (Haiku/Sonnet) to
-# OpenAI gpt-5.1 — single model, no tiered routing. Tier names retained
-# for backward-compat with callers that still pass tier="haiku" /
-# "sonnet"; both resolve to gpt-5.1. Drives:
-#   - User directive "no more Anthropic key" (workstation .env locked
-#     to mock since 2026-04-26 burn).
+# Layer 2 uses OpenAI gpt-5.1. Provider-neutral tier names describe extraction
+# quality/version semantics; both currently resolve to the same hosted model.
+# This keeps callers and persisted numeric version stamps stable while making
+# the provider choice unambiguous.
 #   - Cost visibility via ModelRun + a $20/day cap enforced in
 #     ``ensure_daily_cap_not_exceeded`` (env: CASEOPS_LAYER2_DAILY_CAP_USD).
 #
 # We keep two distinct version stamps so docs annotated under the prior
-# Haiku/Sonnet runs aren't silently downgraded by the GPT-5.1 pass: a
-# doc with structured_version=SONNET_VERSION (=2) still wins over a
-# fresh GPT-5.1 (HAIKU_VERSION=1) extraction. Operators who want
-# GPT-5.1 to override an old Sonnet annotation can bump structured_version
+# Standard/Premium runs aren't silently downgraded by the GPT-5.1 pass: a
+# doc with structured_version=PREMIUM_VERSION (=2) still wins over a
+# fresh GPT-5.1 (STANDARD_VERSION=1) extraction. Operators who want
+# GPT-5.1 to override an old Premium annotation can bump structured_version
 # manually via SQL — the safe-by-default is "trust the higher number".
 _GPT_5_1 = "gpt-5.1"
 _TIER_MODEL: dict[str, str] = {
-    "haiku": _GPT_5_1,
-    "sonnet": _GPT_5_1,
+    "standard": _GPT_5_1,
+    "premium": _GPT_5_1,
 }
 _TIER_VERSION: dict[str, int] = {
-    "haiku": HAIKU_VERSION,
-    "sonnet": SONNET_VERSION,
+    "standard": STANDARD_VERSION,
+    "premium": PREMIUM_VERSION,
 }
 
 # OpenAI pricing as of 2026-05 (USD per 1M tokens). Conservative rates
@@ -225,11 +223,6 @@ _PRICING_USD_PER_MTOK: dict[str, tuple[float, float]] = {
     "gpt-5.4":       (2.50, 15.00),
     "gpt-5.4-mini":  (0.75,  4.50),
     "gpt-5.4-nano":  (0.20,  1.25),
-    # Legacy Anthropic entries retained so historical ModelRun rows
-    # still resolve correctly when summing today's spend.
-    "claude-haiku-4-5-20251001": (1.00, 5.00),
-    "claude-sonnet-4-6": (3.00, 15.00),
-    "claude-opus-4-7": (15.00, 75.00),
 }
 
 # Default daily spend cap for Layer 2 metadata extraction. Per
@@ -243,7 +236,7 @@ def build_tier_provider(tier: str) -> LLMProvider:
     its tier within a single run.
 
     2026-05-01: both tiers map to gpt-5.1. The function still accepts
-    "haiku" / "sonnet" labels so the triage router doesn't need to
+    "standard" / "premium" labels so the triage router doesn't need to
     change. Mock/noop providers fall back to the per-purpose mock so
     tests keep working without an OpenAI key.
     """
@@ -254,21 +247,24 @@ def build_tier_provider(tier: str) -> LLMProvider:
     # default. This is what makes Layer-2 model A/Bs possible without a
     # code change per candidate — set the env var, run a small batch,
     # rate the cohort, compare. The override applies to BOTH tier names
-    # ("haiku" and "sonnet") since post-cutover both already resolve to
+    # ("standard" and "premium") since post-cutover both already resolve to
     # a single model.
     override = getattr(settings, "llm_model_metadata_extract", None)
     model = override or _TIER_MODEL[tier]
     provider_name = (settings.llm_provider or "").lower()
     if provider_name in {"mock", "noop", "off"}:
         return build_provider(purpose=PURPOSE_METADATA_EXTRACT)
-    api_key = settings.llm_api_key or getattr(settings, "openai_api_key", None)
+    if provider_name != "openai":
+        raise LLMProviderError(
+            "Layer 2 ingest requires CASEOPS_LLM_PROVIDER=openai.",
+        )
+    api_key = settings.llm_api_key
     if not api_key:
         raise LLMProviderError(
             "Layer 2 ingest requires an OpenAI key. Set "
-            "CASEOPS_LLM_API_KEY (with CASEOPS_LLM_PROVIDER=openai) or "
-            "CASEOPS_OPENAI_API_KEY."
+            "CASEOPS_LLM_API_KEY with CASEOPS_LLM_PROVIDER=openai."
         )
-    # 180s timeout matches the prior Sonnet path — gpt-5.1 with
+    # 180s timeout matches the prior Premium path — gpt-5.1 with
     # reasoning_effort=low on a 60K-char SC judgment can sit at 60-90s,
     # and a single retry at 180s still fits inside the worker's
     # per-doc budget.
@@ -288,7 +284,7 @@ def completion_cost_usd(completion_provider: str, completion_model: str,
     model) pairs to ``_PRICING_USD_PER_MTOK`` when introducing one.
     """
     rates = _PRICING_USD_PER_MTOK.get(completion_model)
-    if not rates or completion_provider not in {"anthropic", "openai"}:
+    if not rates or completion_provider != "openai":
         return 0.0
     input_rate, output_rate = rates
     return (
@@ -403,7 +399,7 @@ class _ChunkAnnotation(BaseModel):
 
 
 class _ExtractionPayload(BaseModel):
-    """Shape we ask Haiku to emit. Field constraints stay permissive
+    """Shape we ask Standard to emit. Field constraints stay permissive
     so a slightly long judge name / citation list doesn't blow up
     the whole payload; we truncate at persist-time instead."""
 
@@ -466,7 +462,7 @@ class StructuredExtractionSummary:
     cost_usd: float = 0.0
     quality_score: float = 0.0
     quality_issues: tuple[str, ...] = ()
-    tier: str = "haiku"
+    tier: str = "standard"
 
 
 def _validate_quality(
@@ -520,7 +516,7 @@ def _build_prompt(
     )
 
     # Cap each chunk excerpt so a 300-chunk judgment fits in the
-    # prompt budget. Haiku context is 200K tokens; we keep plenty of
+    # prompt budget. Standard context is 200K tokens; we keep plenty of
     # headroom.
     chunk_block_lines: list[str] = []
     for chunk in chunks:
@@ -581,11 +577,11 @@ def extract_and_persist_structured(
     *,
     document: AuthorityDocument,
     provider: LLMProvider | None = None,
-    tier: str = "haiku",
+    tier: str = "standard",
 ) -> StructuredExtractionSummary:
     """Run the extractor on a single document and persist the payload.
 
-    ``tier`` selects Haiku 4.5 (budget) vs Sonnet 4.6 (premium). The
+    ``tier`` selects Standard 4.5 (budget) vs Premium 4.6 (premium). The
     resolved tier stamps ``structured_version`` so a later run of the
     same tier skips this doc and a higher tier can still upgrade it.
 
@@ -684,11 +680,11 @@ def extract_and_persist_structured(
                 purpose="authority.structured_extraction",
             ),
             temperature=0.0,
-            # 16384 (vs the prior 8192) gives Sonnet headroom on the
+            # 16384 (vs the prior 8192) gives Premium headroom on the
             # longest SC judgments. Empirically a handful of 100K+
             # char docs were truncating mid-string at 8192, throwing
             # JSONDecodeError("Unterminated string") and wasting the
-            # whole call. Sonnet 4.6 supports up to 64K output; 16K
+            # whole call. Premium 4.6 supports up to 64K output; 16K
             # is a comfortable middle. Cost impact is small: the
             # output cap is *bounded* by what the model emits, not
             # always paid; only docs that previously truncated will
@@ -750,7 +746,7 @@ def extract_and_persist_structured(
         )
     if payload.outcome:
         document.outcome_label = payload.outcome[:120]
-    document.structured_version = _TIER_VERSION.get(tier, HAIKU_VERSION)
+    document.structured_version = _TIER_VERSION.get(tier, STANDARD_VERSION)
     session.add(document)
 
     # Per-chunk annotations. Primary match: LLM emits chunk_index that
@@ -830,8 +826,8 @@ def extract_and_persist_structured(
 
 __all__ = [
     "ChunkRole",
-    "HAIKU_VERSION",
-    "SONNET_VERSION",
+    "STANDARD_VERSION",
+    "PREMIUM_VERSION",
     "STRUCTURED_VERSION",
     "StructuredExtractionSummary",
     "build_tier_provider",

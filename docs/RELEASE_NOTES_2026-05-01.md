@@ -201,7 +201,7 @@ Codex catalogues 15 P0 gaps. They split into four buckets:
    (PG-107 already gates predictive mode behind explicit tenant opt-in
    with a mandatory disclaimer + sample-size floor); template
    governance (Sprint 11 just shipped); strict positioning
-   (intentional today — see `docs/PRD_CLAUDE_CODE_2026-04-23.md`).
+   (intentional today — see `docs/PRD_CODEX_2026-04-23.md`).
 
 Net: Codex's report is mostly right. The strict ledger
 (`docs/STRICT_PRODUCT_GAPS_2026-04-30.md`) needs an update sweep that

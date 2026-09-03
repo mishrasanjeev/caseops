@@ -67,9 +67,9 @@ PURPOSE = "hearing_pack"
 # The item kinds we accept from the model. Anything else is dropped.
 _ALLOWED_KINDS = {kind.value for kind in HearingPackItemKind}
 
-# Haiku fallback (parallels services.drafting / services.recommendations).
+# OpenAI extraction model fallback (parallels services.drafting / services.recommendations).
 # 2026-04-30: gpt-5.1-only path. Single primary call → 422 with
-# actionable detail on failure. Prior Anthropic→Haiku→OpenAI ladder
+# actionable detail on failure. Prior hosted LLM→OpenAI extraction model→OpenAI ladder
 # burned 3x tokens per click.
 
 

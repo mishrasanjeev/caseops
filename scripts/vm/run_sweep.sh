@@ -1,9 +1,9 @@
 #!/bin/bash
 # CaseOps SC/HC corpus sweep — per-bucket pipeline with quality gate.
 #
-# Per-bucket order (see .claude/skills/corpus-ingest/SKILL.md):
+# Per-bucket order (see .codex/skills/corpus-ingest/SKILL.md):
 #   1. ingest (--from-s3)
-#   2. Layer-2 metadata (--stage structured --force-tier haiku --budget-usd 10, year-scoped for SC)
+#   2. Layer-2 metadata (--stage structured --force-tier standard --budget-usd 10, year-scoped for SC)
 #   3. title-chunk embed (--refresh, rebuilds metadata chunks with richer titles)
 #   4. HNSW probe (--tenant aster-demo --sample-size 30 --k 10 --seed 42)
 #   5. 0-5 rating: 5.0 * recall@10. Floor = 4.7; below that, STOP.
@@ -112,7 +112,7 @@ run_bucket() {
   fi
 
   # 2. LAYER-2 METADATA (per-bucket $10 cap, year-scoped for SC)
-  local l2_args=(--stage structured --force-tier haiku --budget-usd 10)
+  local l2_args=(--stage structured --force-tier standard --budget-usd 10)
   if [[ -n "$year_range" ]]; then
     l2_args+=(--year-range "$year_range")
   fi

@@ -1,14 +1,14 @@
 """Tests for the hybrid statute-section enrichment service.
 
-Per the 2026-04-26 user decision (scrape indiacode → Haiku fallback,
-mark Haiku rows is_provisional=True). The four anchor cases:
+Per the 2026-04-26 user decision (scrape indiacode → model fallback,
+mark model rows is_provisional=True). The four anchor cases:
 
 1. Scrape success → row persists with source=indiacode_scrape +
    is_provisional=False.
 2. Scrape ambiguous (multiple section-N matches in the act page) →
-   refuses to guess, falls through to Haiku.
-3. Haiku UNAVAILABLE refusal → row stays NULL (we never invent text).
-4. Haiku-supplied text → row persists with source=haiku_generated +
+   refuses to guess, falls through to model.
+3. model UNAVAILABLE refusal → row stays NULL (we never invent text).
+4. model-supplied text → row persists with source=model_generated +
    is_provisional=True.
 """
 from __future__ import annotations
@@ -99,12 +99,12 @@ def test_scrape_success_persists_with_indiacode_source(
     assert sec.section_text_fetched_at is not None
 
 
-def test_scrape_ambiguous_falls_through_to_haiku(
+def test_scrape_ambiguous_falls_through_to_model(
     client: TestClient,
 ) -> None:
     """When the act page contains multiple matches for the same
     section number (e.g. heading + sub-section reference), the scraper
-    refuses to guess and the Haiku path takes over."""
+    refuses to guess and the model path takes over."""
     factory = get_session_factory()
     with factory() as session:
         st, sec = _seed_statute_and_section(session, sec_no="300")
@@ -126,16 +126,16 @@ def test_scrape_ambiguous_falls_through_to_haiku(
             mock_client_cls.return_value = client_inst
 
             with patch.object(
-                se, "haiku_generate_section_text",
-                return_value=("OFFICIAL HAIKU TEXT FOR SECTION 300 …" + "Z" * 80, "haiku_ok"),
-            ) as mock_haiku:
+                se, "model_generate_section_text",
+                return_value=("OFFICIAL HAIKU TEXT FOR SECTION 300 …" + "Z" * 80, "model_ok"),
+            ) as mock_model:
                 sec = session.get(StatuteSection, sec_id)
                 st = session.get(Statute, "ipc-1860")
                 result = se.enrich_section(session, sec, statute=st)
 
-    assert result.source == se.SOURCE_HAIKU
+    assert result.source == se.SOURCE_MODEL_GENERATED
     assert result.is_provisional is True
-    assert mock_haiku.called
+    assert mock_model.called
     with factory() as session:
         sec = session.get(StatuteSection, sec_id)
     assert sec.section_text is None
@@ -144,10 +144,10 @@ def test_scrape_ambiguous_falls_through_to_haiku(
     assert sec.is_provisional is True
 
 
-def test_haiku_unavailable_refusal_leaves_row_null(
+def test_model_unavailable_refusal_leaves_row_null(
     client: TestClient,
 ) -> None:
-    """When scrape fails and Haiku replies UNAVAILABLE, we never
+    """When scrape fails and model replies UNAVAILABLE, we never
     invent text — section_text stays NULL and the operator can see
     the failure in the backfill summary."""
     factory = get_session_factory()
@@ -166,8 +166,8 @@ def test_haiku_unavailable_refusal_leaves_row_null(
             mock_client_cls.return_value = client_inst
 
             with patch.object(
-                se, "haiku_generate_section_text",
-                return_value=(None, "haiku_refused"),
+                se, "model_generate_section_text",
+                return_value=(None, "model_refused"),
             ):
                 sec = session.get(StatuteSection, sec_id)
                 st = session.get(Statute, "ipc-1860")
@@ -175,7 +175,7 @@ def test_haiku_unavailable_refusal_leaves_row_null(
 
     assert result.source is None
     assert result.section_text is None
-    assert "haiku_refused" in (result.notes or "")
+    assert "model_refused" in (result.notes or "")
     with factory() as session:
         sec = session.get(StatuteSection, sec_id)
     assert sec.section_text is None
@@ -201,8 +201,8 @@ def test_legacy_enrichment_never_calls_indian_kanoon_public_html(
             client_inst.__exit__.return_value = False
             mock_client_cls.return_value = client_inst
             with patch.object(
-                se, "haiku_generate_section_text",
-                return_value=(None, "haiku_refused"),
+                se, "model_generate_section_text",
+                return_value=(None, "model_refused"),
             ):
                 sec = session.get(StatuteSection, sec_id)
                 st = session.get(Statute, "ipc-1860")
@@ -214,11 +214,11 @@ def test_legacy_enrichment_never_calls_indian_kanoon_public_html(
     assert all("indiankanoon.org" not in url for url in requested_urls)
 
 
-def test_no_haiku_flag_skips_fallback_when_scrape_fails(
+def test_no_model_fallback_flag_skips_fallback_when_scrape_fails(
     client: TestClient,
 ) -> None:
-    """allow_haiku=False (CLI's --no-haiku flag) means a scrape miss
-    leaves the row untouched without ever calling Anthropic. Useful
+    """allow_model_fallback=False (CLI's --no-model-fallback flag) means a scrape miss
+    leaves the row untouched without ever calling OpenAI. Useful
     for a first pass where the operator wants only authoritative
     sources."""
     factory = get_session_factory()
@@ -236,16 +236,16 @@ def test_no_haiku_flag_skips_fallback_when_scrape_fails(
             client_inst.__exit__.return_value = False
             mock_client_cls.return_value = client_inst
 
-            with patch.object(se, "haiku_generate_section_text") as mock_haiku:
+            with patch.object(se, "model_generate_section_text") as mock_model:
                 sec = session.get(StatuteSection, sec_id)
                 st = session.get(Statute, "ipc-1860")
                 result = se.enrich_section(
-                    session, sec, statute=st, allow_haiku=False,
+                    session, sec, statute=st, allow_model_fallback=False,
                 )
-                assert not mock_haiku.called
+                assert not mock_model.called
 
     assert result.source is None
-    assert "haiku_disabled" in (result.notes or "")
+    assert "model_disabled" in (result.notes or "")
     with factory() as session:
         sec = session.get(StatuteSection, sec_id)
     assert sec.section_text is None

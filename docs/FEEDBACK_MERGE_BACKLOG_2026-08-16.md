@@ -395,5 +395,5 @@ that are selectable while structurally undeliverable.
   conflict with it
 - `docs/ip-implementation/PROGRAM_MANIFEST.yaml` — IPLF-031A/031B, IPLF-061,
   IPLF-063 delivery slices
-- `docs/PRD_CLAUDE_CODE_2026-04-23.md` §6.1 — the reconciliation precedent this
+- `docs/PRD_CODEX_2026-04-23.md` §6.1 — the reconciliation precedent this
   mapping follows

@@ -13,7 +13,7 @@ Providers shipped in v1:
 
 - ``MockReranker`` — no-op, preserves input order. Default for tests
   and offline dev.
-- ``LLMReranker`` — uses the existing ``LLMProvider`` (Haiku or
+- ``LLMReranker`` — uses the existing ``LLMProvider`` (OpenAI extraction model or
   equivalent) as a judge. Sends the query + a numbered list of
   candidates (title + summary, ≤ 250 chars each) in ONE call and asks
   the model to return a JSON array of candidate indices in

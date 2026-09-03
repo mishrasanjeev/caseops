@@ -1,10 +1,9 @@
 """Layer-2 corpus extraction — provider switch + $/day cap (2026-05-01).
 
 Anchors:
-- build_tier_provider returns an OpenAIProvider for both haiku and
-  sonnet tiers (cutover from Anthropic per user directive 2026-05-01).
-- completion_cost_usd applies the new gpt-5.1 rates and stays
-  backward-compatible for legacy Anthropic ModelRun rows.
+- build_tier_provider returns an OpenAIProvider for both standard and
+  premium tiers and rejects every other hosted provider.
+- completion_cost_usd applies the gpt-5.1 rates only to OpenAI calls.
 - ensure_daily_cap_not_exceeded sums today's metadata_extract spend
   via on-the-fly pricing and raises LLMProviderError once the cap
   is crossed. Default cap is $20; CASEOPS_LAYER2_DAILY_CAP_USD
@@ -32,32 +31,32 @@ from caseops_api.services.llm import LLMProviderError, OpenAIProvider
 # ---------- build_tier_provider ----------
 
 
-def test_build_tier_provider_returns_openai_for_haiku(
+def test_build_tier_provider_returns_openai_for_standard(
     client: TestClient, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Live-mode haiku tier returns OpenAIProvider on gpt-5.1 when no
+    """Live-mode standard tier returns OpenAIProvider on gpt-5.1 when no
     CASEOPS_LLM_MODEL_METADATA_EXTRACT override is set."""
     _ = client
     monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "openai")
     monkeypatch.setenv("CASEOPS_LLM_API_KEY", "sk-test-key")
     monkeypatch.setenv("CASEOPS_LLM_MODEL_METADATA_EXTRACT", "")
     get_settings.cache_clear()
-    provider = build_tier_provider("haiku")
+    provider = build_tier_provider("standard")
     assert isinstance(provider, OpenAIProvider)
     # OpenAIProvider exposes the model on the instance.
     assert provider.model == "gpt-5.1"
 
 
-def test_build_tier_provider_sonnet_also_gpt_5_1(
+def test_build_tier_provider_premium_also_gpt_5_1(
     client: TestClient, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Sonnet tier also resolves to gpt-5.1 — single-model cutover."""
+    """Premium tier also resolves to gpt-5.1 — single-model cutover."""
     _ = client
     monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "openai")
     monkeypatch.setenv("CASEOPS_LLM_API_KEY", "sk-test-key")
     monkeypatch.setenv("CASEOPS_LLM_MODEL_METADATA_EXTRACT", "")
     get_settings.cache_clear()
-    provider = build_tier_provider("sonnet")
+    provider = build_tier_provider("premium")
     assert isinstance(provider, OpenAIProvider)
     assert provider.model == "gpt-5.1"
 
@@ -72,7 +71,7 @@ def test_build_tier_provider_honors_env_override(
     monkeypatch.setenv("CASEOPS_LLM_API_KEY", "sk-test-key")
     monkeypatch.setenv("CASEOPS_LLM_MODEL_METADATA_EXTRACT", "gpt-5-nano")
     get_settings.cache_clear()
-    provider = build_tier_provider("haiku")
+    provider = build_tier_provider("standard")
     assert isinstance(provider, OpenAIProvider)
     assert provider.model == "gpt-5-nano"
 
@@ -80,7 +79,7 @@ def test_build_tier_provider_honors_env_override(
 def test_build_tier_provider_unknown_tier_raises(client: TestClient) -> None:
     _ = client
     with pytest.raises(ValueError):
-        build_tier_provider("opus-extreme")
+        build_tier_provider("unsupported")
 
 
 def test_build_tier_provider_mock_falls_back(
@@ -91,7 +90,7 @@ def test_build_tier_provider_mock_falls_back(
     _ = client
     monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "mock")
     get_settings.cache_clear()
-    provider = build_tier_provider("haiku")
+    provider = build_tier_provider("standard")
     # The build_provider mock fallback returns MockProvider; we just
     # assert it's NOT OpenAIProvider so the no-key path doesn't hit
     # the OpenAI SDK.
@@ -104,10 +103,9 @@ def test_build_tier_provider_missing_key_raises(
     _ = client
     monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "openai")
     monkeypatch.setenv("CASEOPS_LLM_API_KEY", "")
-    monkeypatch.delenv("CASEOPS_OPENAI_API_KEY", raising=False)
     get_settings.cache_clear()
     with pytest.raises(LLMProviderError):
-        build_tier_provider("haiku")
+        build_tier_provider("standard")
 
 
 # ---------- completion_cost_usd ----------
@@ -124,16 +122,13 @@ def test_cost_gpt_5_1_typical_doc() -> None:
     assert cost == pytest.approx(0.02, abs=0.0001)
 
 
-def test_cost_legacy_anthropic_still_resolves() -> None:
-    """Historical ModelRun rows from the Anthropic era keep their
-    cost so the cap query reads them correctly."""
+def test_cost_retired_provider_is_not_billable_as_a_live_call() -> None:
     cost = completion_cost_usd(
-        "anthropic", "claude-haiku-4-5-20251001",
+        "anthropic", "claude-standard-4-5-20251001",
         prompt_tokens=10_000,
         completion_tokens=2_000,
     )
-    # 10000*1/1M + 2000*5/1M = 0.01 + 0.01 = 0.02
-    assert cost == pytest.approx(0.02, abs=0.0001)
+    assert cost == 0.0
 
 
 def test_cost_unknown_provider_returns_zero() -> None:
@@ -357,7 +352,7 @@ def test_extract_writes_model_run_audit_row(client: TestClient) -> None:
         doc = s.get(AuthorityDocument, doc_id)
         assert doc is not None
         extract_and_persist_structured(
-            s, document=doc, provider=_ValidLayer2Provider(), tier="haiku",
+            s, document=doc, provider=_ValidLayer2Provider(), tier="standard",
         )
         s.commit()
         rows = s.execute(
@@ -412,7 +407,7 @@ def test_extract_audit_row_visible_to_daily_cap(
         extract_and_persist_structured(
             s, document=doc,
             provider=_PricedProvider(prompt_tokens=5_000, completion_tokens=1_000),
-            tier="haiku",
+            tier="standard",
         )
         s.commit()
     finally:
@@ -466,7 +461,7 @@ def test_extract_audit_row_survives_caller_rollback_on_format_error(
         with pytest.raises(LLMResponseFormatError):
             extract_and_persist_structured(
                 worker_session, document=doc,
-                provider=_BrokenLayer2Provider(), tier="haiku",
+                provider=_BrokenLayer2Provider(), tier="standard",
             )
         # EXACTLY what the real backfill caller does on any
         # extraction exception (apps/api/src/caseops_api/scripts/
@@ -532,7 +527,7 @@ def test_extract_audit_row_survives_caller_rollback_on_success(
         assert doc is not None
         extract_and_persist_structured(
             worker_session, document=doc,
-            provider=_ValidLayer2Provider(), tier="haiku",
+            provider=_ValidLayer2Provider(), tier="standard",
         )
         # Roll back the worker session BEFORE commit — this discards
         # the doc/chunk writes but must NOT touch the audit row.

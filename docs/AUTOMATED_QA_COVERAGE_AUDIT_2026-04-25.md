@@ -13,9 +13,9 @@ manual testers for ordinary regression discovery.
 
 Applied skills:
 
-- `.claude/skills/strict-quality-review/SKILL.md`
-- `.claude/skills/caseops-prd-execution/SKILL.md`
-- `.claude/skills/enterprise-hardening/SKILL.md`
+- `.codex/skills/strict-quality-review/SKILL.md`
+- `.codex/skills/caseops-prd-execution/SKILL.md`
+- `.codex/skills/enterprise-hardening/SKILL.md`
 
 ## Executive Verdict
 

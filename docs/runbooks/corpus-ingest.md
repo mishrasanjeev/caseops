@@ -155,7 +155,7 @@ re-embed was interrupted — rerun `--reembed`.
 
 Before calling any corpus slice production-ready, run a fixed 50-query legal
 eval set and record recall@10 and p95 retrieval latency. Current production
-truth assumes **Voyage `voyage-4-large`**, Anthropic-backed metadata cleanup
+truth assumes **Voyage `voyage-4-large`**, OpenAI-backed metadata cleanup
 where needed, and reranking enabled. If the slice fails the 4.8+/5 quality bar
 or recall is below the agreed target, try either:
 

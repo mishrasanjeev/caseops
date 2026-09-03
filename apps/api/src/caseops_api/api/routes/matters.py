@@ -1279,7 +1279,7 @@ async def get_current_company_matter_summary(
     "/{matter_id}/summary/regenerate",
     response_model=MatterExecutiveSummary,
     summary=(
-        "Force a fresh Haiku pass for the matter summary. Same "
+        "Force a fresh OpenAI extraction model pass for the matter summary. Same "
         "response shape as GET /summary; used by the cockpit "
         "'Regenerate' button."
     ),

@@ -24,7 +24,7 @@ re-embed, no index change.
 
 Every helper here is a pure function — no DB, no network — except
 ``translate_query_to_english`` which is a thin optional wrapper over the
-``metadata_extract`` LLM provider. The Haiku path is guarded by
+``metadata_extract`` LLM provider. The OpenAI extraction model path is guarded by
 ``settings.retrieval_non_english_translate`` (default OFF) so it stays
 zero-cost until operators opt in after measuring.
 """

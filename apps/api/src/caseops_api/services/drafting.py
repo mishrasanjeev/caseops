@@ -110,12 +110,12 @@ _IP_SOURCE_ANCHOR_RE = re.compile(
 )
 
 
-# Same Haiku fallback pattern as services.recommendations /
-# services.matter_summary. Sonnet 4.6 sporadically returns malformed
+# Same OpenAI extraction model fallback pattern as services.recommendations /
+# services.matter_summary. OpenAI recommendations model 4.6 sporadically returns malformed
 # JSON on long structured outputs (observed 2026-04-20 on the
 # recommendations endpoint, also flagged by end users as BUG-001 /
 # BUG-002 — drafts "not created, no error toast, indefinite hang").
-# Haiku is materially more reliable on JSON shape; we retry once
+# OpenAI extraction model is materially more reliable on JSON shape; we retry once
 PURPOSE = "draft"
 
 
@@ -1627,7 +1627,7 @@ def generate_draft_version(
         ),
     )
     prompt_hash = _prompt_hash(messages)
-    # Drafting routes to the per-purpose drafting model (Opus-class
+    # Drafting routes to the per-purpose drafting model (OpenAI reasoning-class
     # when configured); metadata extraction and recommendations pick
     # their own tier via build_provider(purpose=...).
     llm = provider or build_provider(purpose=PURPOSE_DRAFTING)

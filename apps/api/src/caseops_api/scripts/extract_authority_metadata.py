@@ -12,8 +12,7 @@ Usage::
 
 Network, cost, and time:
 
-- Each row sends ~3 KB of document text to the configured LLM provider
-  (``CASEOPS_LLM_PROVIDER``) — default Haiku.
+- Each row sends ~3 KB of document text to the configured OpenAI model.
 - Rows are processed concurrently (``--concurrency``, default 6).
 - A failed extraction logs and moves on; the row is left untouched so
   a re-run will pick it up.
@@ -56,8 +55,7 @@ HEAD_CHARS = 2800
 TAIL_CHARS = 1600
 MAX_PARTIES = 6
 
-# Phase B audit gap (2026-04-23): every Anthropic Opus call is now
-# recorded as a ``ModelRun`` row so corpus spend is finally visible
+# Every hosted extraction call is recorded as a ``ModelRun`` row so corpus spend is visible
 # on the same audit table the production AI surfaces use. Cost cap:
 # the worker periodically sums the last 24h of metadata-extract
 # spend and halts if it exceeds CASEOPS_LAYER2_DAILY_USD_CAP
@@ -66,19 +64,9 @@ MAX_PARTIES = 6
 #   CASEOPS_LAYER2_DAILY_USD_CAP=0   # disable cap entirely (unsafe)
 #   CASEOPS_LAYER2_DAILY_USD_CAP=200 # raise to $200
 #
-# Anthropic public per-million-token pricing as of 2026-04-23.
-# Update these if Anthropic changes pricing OR if the corpus sweep
-# starts using prompt caching write/read tiers (which it does — but
-# we deliberately apply the FULL rate so the cap is conservative;
-# real bill is at most this estimate, never higher).
-#
-# Keyed by a model-prefix so future variants (claude-haiku-4-6,
-# claude-opus-4-7-mini, etc.) match the closest family. ``default``
-# is Opus rates so an unknown model never under-counts.
+# OpenAI per-million-token rates. Keyed by model prefix; the default is
+# deliberately conservative so an unknown model cannot under-count spend.
 _PRICE_TABLE: dict[str, tuple[float, float]] = {
-    "claude-haiku-4":  (1.0,   5.0),    # $1/M in, $5/M out
-    "claude-sonnet-4": (3.0,   15.0),   # $3/M in, $15/M out
-    "claude-opus-4":   (15.0,  75.0),   # $15/M in, $75/M out
     # OpenAI family — keys are prefixes; gpt-5.1 / gpt-5-mini / etc all
     # match "gpt-5". Specific-rate entries below override the generic
     # one when their prefix matches first (dict-iteration order).
@@ -89,7 +77,7 @@ _PRICE_TABLE: dict[str, tuple[float, float]] = {
     "gpt-5-mini":      (0.25,  2.00),
     "gpt-5":           (2.0,   10.0),   # $2/M in, $10/M out — matches services/corpus_structured.py
 }
-_DEFAULT_RATES = (15.0, 75.0)  # Opus — conservative default
+_DEFAULT_RATES = (2.50, 15.00)
 _DEFAULT_DAILY_USD_CAP = 100.0
 EXIT_DAILY_CAP_REACHED = 2
 EXIT_QUOTA_EXHAUSTED = 3
@@ -97,8 +85,7 @@ EXIT_PROVIDER_CANARY_FAILED = 4
 
 
 def _rates_for(model: str | None) -> tuple[float, float]:
-    """Pick the price tuple whose key prefixes ``model``. Defaults to
-    Opus rates so an unknown model never under-counts the spend."""
+    """Pick the price tuple whose key prefixes ``model`` conservatively."""
     name = (model or "").lower()
     for prefix, rates in _PRICE_TABLE.items():
         if name.startswith(prefix):
@@ -134,9 +121,8 @@ def _layer2_daily_cap_usd() -> float:
 def _spend_last_24h_usd(session) -> float:
     """Sum tokens from model_runs for purpose='metadata_extract' in
     the last 24 hours and convert to USD using **per-model rates**.
-    Earlier revisions assumed Opus rates uniformly; with the sweep
-    now running on Haiku that would fire the $100 cap at only ~$7
-    of real spend. Returns 0.0 if the query fails (DB blip should
+    Rates are resolved per model so the cap remains meaningful across OpenAI
+    model changes. Returns 0.0 if the query fails (DB blip should
     not crash the cap check)."""
     try:
         rows = session.execute(text(
@@ -389,7 +375,7 @@ def _extract_one(doc_id: str, provider: LLMProvider) -> dict:
             _record_error_model_run(s, provider=provider, error=exc)
             return {"ok": False, "reason": "llm_error"}
 
-        # Record the successful Opus call so corpus spend is finally
+        # Record the successful OpenAI call so corpus spend is
         # visible in model_runs alongside production AI usage. The
         # _maybe_check_cap below uses this same table to decide if
         # the day's $100 ceiling has been reached.
@@ -563,6 +549,10 @@ def run(
         )
 
     provider = build_provider(purpose=PURPOSE_METADATA_EXTRACT)
+    if provider.name != "openai":
+        raise SystemExit(
+            "authority metadata extraction requires CASEOPS_LLM_PROVIDER=openai"
+        )
     logger.info("provider: %s model=%s", provider.name, provider.model)
 
     with _stats_lock:

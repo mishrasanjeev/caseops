@@ -1,7 +1,7 @@
 """CLI: refresh L-A / L-B / L-C bench-strategy analysis layers.
 
 Per docs/PRD_BENCH_STRATEGY_2026-04-26.md §4.4. Pure SQL aggregation —
-zero Anthropic spend. Suitable for nightly cron.
+zero hosted LLM spend. Suitable for nightly cron.
 
 CLI:
     python -m caseops_api.scripts.refresh_bench_analysis_layers

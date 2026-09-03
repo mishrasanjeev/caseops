@@ -682,7 +682,7 @@ def audit_statute_verification(
     for section in sections:
         body = section.section_text or ""
         if (
-            section.section_text_source == "haiku_generated"
+            section.section_text_source in {"model_generated", "haiku_generated"}
             or "\ufffd" in body
             or (body and len(body.strip()) < 20)
         ):
@@ -695,7 +695,10 @@ def audit_statute_verification(
         unverified=sum(s.verification_status == "unverified" for s in sections),
         quarantined=sum(s.verification_status == "quarantined" for s in sections),
         provisional=sum(bool(s.is_provisional) for s in sections),
-        ai_generated=sum(s.section_text_source == "haiku_generated" for s in sections),
+        ai_generated=sum(
+            s.section_text_source in {"model_generated", "haiku_generated"}
+            for s in sections
+        ),
         suspect_records=suspect,
     )
 

@@ -8,7 +8,7 @@ implementation on speculation.
 This is a depth extension to:
 
 - Journey `J06` — Court, judge, bench, and tribunal intelligence
-  (`docs/PRD_CLAUDE_CODE_2026-04-23.md` §10.J06).
+  (`docs/PRD_CODEX_2026-04-23.md` §10.J06).
 - Module `MOD-TS-001` — JudgeProfile (currently Implemented; this PRD
   adds career history + bench → judge resolution).
 - Module `MOD-TS-001-A` — Appeal Strength Analyzer (this PRD adds
@@ -51,7 +51,7 @@ their authored judgments, but the system does not know:
 
 ## 2. What is explicitly NOT in scope
 
-The bench-aware drafting hard rules from `CLAUDE.md` and the
+The bench-aware drafting hard rules from `CODEX.md` and the
 caseops-prd-execution skill apply. This PRD does **not** introduce:
 
 - Judge favorability scoring, win-rate, or "this bench is friendly to
@@ -394,7 +394,7 @@ This PRD is implemented when:
 4. The structural no-favorability test sweep (existing pattern from
    MOD-TS-001-A) passes against the new prompt + UI surfaces.
 5. All 22 functional tests above pass in CI.
-6. `docs/PRD_CLAUDE_CODE_2026-04-23.md` §6 module table updated to
+6. `docs/PRD_CODEX_2026-04-23.md` §6 module table updated to
    reflect MOD-TS-001-B/C/D/E status post-implementation.
 
 ---
@@ -429,7 +429,7 @@ This PRD is implemented when:
 
 ## 7. PRD execution skill compliance
 
-Per `.claude/skills/caseops-prd-execution/SKILL.md`:
+Per `.codex/skills/caseops-prd-execution/SKILL.md`:
 
 - **Affected journey IDs:** J06 (Court, judge, bench, tribunal
   intelligence), J07 (Drafting studio — appeal memorandum subset).
@@ -456,6 +456,6 @@ Per `.claude/skills/caseops-prd-execution/SKILL.md`:
 | mishra.sanjeev@gmail.com | 2026-04-25 | **Approved** — implementation may proceed per §6 answers (A + D parallel → B → C). Advocate-bias selection per §2.1 is mandatory, not optional. |
 
 Implementation kicks off immediately on Slices A + D. Will update
-`docs/PRD_CLAUDE_CODE_2026-04-23.md` §6 module table to add the four
+`docs/PRD_CODEX_2026-04-23.md` §6 module table to add the four
 new MOD-TS-001-B/C/D/E rows with `In progress` status as each lands
 in main.

@@ -208,6 +208,6 @@ When all 8 are checked, the gate (`project_bench_strategy_prd_gated`) is removed
 
 - Existing tasklist: `docs/BENCH_AWARE_APPEAL_DRAFTING_TASKLIST_2026-04-24.md` (BAAD-001)
 - Memory gate: `project_bench_strategy_prd_gated.md`
-- Bench-aware drafting hard rules: `.claude/skills/caseops-prd-execution/SKILL.md`
+- Bench-aware drafting hard rules: `.codex/skills/caseops-prd-execution/SKILL.md`
 - Advocate-bias rule: `feedback_user_bias_in_recommendations.md`
 - Spend ledger: `feedback_corpus_spend_audit.md`

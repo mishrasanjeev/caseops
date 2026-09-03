@@ -3,7 +3,7 @@
 Status: Approved addendum; LI-S1 through LI-S13 implemented/ready at their scoped V1/foundation boundaries
 Date: 2026-05-11
 Source input: `C:\Users\mishr\Downloads\CaseOps.pdf`
-Canonical PRD anchor: `docs/PRD_CLAUDE_CODE_2026-04-23.md`
+Canonical PRD anchor: `docs/PRD_CODEX_2026-04-23.md`
 Related addenda:
 - `docs/PRD_LEGALWORKSPACE_ENHANCEMENTS_2026-05-05.md`
 - `docs/PRD_BENCH_MAPPING_2026-04-25.md`
@@ -693,7 +693,7 @@ API/backend changes:
 
 - No product behavior change in LI-S0.
 - If implementation approval allows docs-only changes, link this addendum from
-  `docs/PRD_CLAUDE_CODE_2026-04-23.md`.
+  `docs/PRD_CODEX_2026-04-23.md`.
 - Add or update a source-policy section or ledger naming allowed, conditional,
   blocked, and deferred source classes.
 - Record that existing `predictive_bench_strategy_enabled` is the initial

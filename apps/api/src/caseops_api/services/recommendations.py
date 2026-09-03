@@ -237,7 +237,7 @@ def _safe_log_value(value: object, *, limit: int = 160) -> str:
 
 
 class _LLMOption(BaseModel):
-    # Bounds widened 2026-04-28 (BUG-035) — Haiku + GPT-5.1 routinely
+    # Bounds widened 2026-04-28 (BUG-035) — OpenAI extraction model + GPT-5.1 routinely
     # generate longer rationales and 6+ options on richly-described
     # matters; the prior tight bounds tripped pydantic ValidationError
     # and surfaced as 502s with no actionable detail.
@@ -1706,8 +1706,8 @@ def generate_recommendation(
             release_session_before_provider=True,
         )
 
-    # 2026-04-30: gpt-5.1-only path. The prior Anthropic→Haiku→OpenAI
-    # ladder burned ~3x tokens per click; with Anthropic credits gone
+    # 2026-04-30: gpt-5.1-only path. The prior hosted LLM→OpenAI extraction model→OpenAI
+    # ladder burned ~3x tokens per click; with hosted LLM credits gone
     # and the OpenAI bill now the single line item, one primary call is
     # all we want. LLMProviderError covers quota / 5xx / format / timeout.
     #

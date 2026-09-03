@@ -2,12 +2,12 @@
 
 Three capabilities, one module, shared provider plumbing:
 
-- ``extract_clauses``     — Haiku reads the contract text and writes
+- ``extract_clauses``     — OpenAI extraction model reads the contract text and writes
   ``ContractClause`` rows (clause type, title, quoted text, risk level).
-- ``extract_obligations`` — Haiku walks the same text and writes
+- ``extract_obligations`` — OpenAI extraction model walks the same text and writes
   ``ContractObligation`` rows (title, description, due date if present,
   priority).
-- ``compare_playbook``    — Sonnet compares the extracted clauses
+- ``compare_playbook``    — OpenAI recommendations model compares the extracted clauses
   against the contract's playbook rules (seeded from
   ``DEFAULT_INDIAN_COMMERCIAL_PLAYBOOK`` on first use) and returns
   structured findings. Ephemeral — caller can persist as clauses /
@@ -416,7 +416,7 @@ def install_default_playbook_rules(
 
 
 # ---------------------------------------------------------------------------
-# Clause extraction (Haiku, structured output)
+# Clause extraction (OpenAI extraction model, structured output)
 # ---------------------------------------------------------------------------
 
 
@@ -587,7 +587,7 @@ def _clause_extraction_messages(text: str) -> list[LLMMessage]:
 
 
 # ---------------------------------------------------------------------------
-# Obligation extraction (Haiku, structured output)
+# Obligation extraction (OpenAI extraction model, structured output)
 # ---------------------------------------------------------------------------
 
 
@@ -725,7 +725,7 @@ def _obligation_extraction_messages(text: str, contract: Contract) -> list[LLMMe
 
 
 # ---------------------------------------------------------------------------
-# Playbook comparison (Sonnet, ephemeral)
+# Playbook comparison (OpenAI recommendations model, ephemeral)
 # ---------------------------------------------------------------------------
 
 

@@ -11,7 +11,7 @@ This service:
 
 1. Finds docs whose ``title`` fails the case-name predicate (same set
    the probe skips).
-2. Re-prompts Haiku with a targeted instruction ("extract the case
+2. Re-prompts the configured OpenAI extraction model with a targeted instruction ("extract the case
    name; do NOT return the page header or bench name alone; return
    ``null`` if the first 3 pages don't contain a case name").
 3. Gates the new title through the same predicate before persisting.
@@ -27,7 +27,7 @@ already have a valid title (or already got `null` on a prior pass)
 are skipped by the initial detector.
 
 See also: ``memory/feedback_title_validation_legal_corpus.md`` and
-``.claude/skills/corpus-ingest/SKILL.md`` (Title hygiene section).
+``.codex/skills/corpus-ingest/SKILL.md`` (Title hygiene section).
 """
 from __future__ import annotations
 
@@ -40,6 +40,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import AuthorityDocument, AuthorityDocumentChunk
+from caseops_api.services.corpus_structured import completion_cost_usd
 from caseops_api.services.corpus_title_validation import title_is_case_name
 from caseops_api.services.llm import (
     PURPOSE_METADATA_EXTRACT,
@@ -209,11 +210,6 @@ def find_placeholder_title_docs(
     return out
 
 
-def _haiku_cost_usd(prompt_tokens: int, completion_tokens: int) -> float:
-    """Haiku 4.5 pricing, Apr 2026: $0.80 / 1M input, $4.00 / 1M output."""
-    return (prompt_tokens * 0.80 + completion_tokens * 4.00) / 1_000_000
-
-
 def reextract_title(
     session: Session,
     *,
@@ -271,7 +267,12 @@ def reextract_title(
             accepted=False, reason="llm_format_error", cost_usd=0.0,
         )
 
-    cost = _haiku_cost_usd(completion.prompt_tokens, completion.completion_tokens)
+    cost = completion_cost_usd(
+        completion.provider,
+        completion.model,
+        completion.prompt_tokens,
+        completion.completion_tokens,
+    )
 
     # Model returned `null` — document genuinely has no case name (e.g.
     # translation cover). Don't update title, but bump structured_version

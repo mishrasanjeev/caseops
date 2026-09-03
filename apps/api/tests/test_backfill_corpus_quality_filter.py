@@ -1,7 +1,7 @@
 """Coverage for the EN-only / forum / year filter on the Layer-2
 backfill candidate selector.
 
-Anchor: 2026-05-04 ingest VM probe showed 37 % of the haiku candidate
+Anchor: 2026-05-04 ingest VM probe showed 37 % of the standard candidate
 pool was Devanagari-content SC docs that always fail Layer-2 with
 malformed JSON. The fix filters them out at triage time and reduces
 the realistic candidate count to ~14K English SC docs + remaining
@@ -197,11 +197,11 @@ def test_english_only_filter_drops_devanagari_and_hin_suffix(
     with factory() as session:
         totals = mod._structured_pass(
             session, limit=None, dry_run=False, budget_usd=10.0,
-            force_tier="haiku", year_range=None, concurrency=1,
+            force_tier="standard", year_range=None, concurrency=1,
             english_only=True, forums=None,
         )
     assert sorted(seen) == sorted(seeded["en"])
-    assert totals["haiku"]["candidates"] == 3
+    assert totals["standard"]["candidates"] == 3
     # No spend on the 4 rejected docs.
     assert totals["spent_usd"] == pytest.approx(0.03, abs=1e-9)
 
@@ -224,12 +224,12 @@ def test_english_only_filter_off_processes_everything(
     with factory() as session:
         totals = mod._structured_pass(
             session, limit=None, dry_run=False, budget_usd=10.0,
-            force_tier="haiku", year_range=None, concurrency=1,
+            force_tier="standard", year_range=None, concurrency=1,
             english_only=False, forums=None,
         )
     expected = set(seeded["en"]) | set(seeded["devanagari"]) | set(seeded["hin"])
     assert set(seen) == expected
-    assert totals["haiku"]["candidates"] == 5
+    assert totals["standard"]["candidates"] == 5
 
 
 def test_forum_filter_excludes_district_court(
@@ -275,7 +275,7 @@ def test_forum_filter_excludes_district_court(
     with factory() as session:
         mod._structured_pass(
             session, limit=None, dry_run=False, budget_usd=10.0,
-            force_tier="haiku", year_range=None, concurrency=1,
+            force_tier="standard", year_range=None, concurrency=1,
             english_only=True, forums=mod._DEFAULT_FORUMS,
         )
     assert set(seen) == set(kept)

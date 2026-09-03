@@ -4,7 +4,7 @@ The LLM provider factory calls ``resolve_tenant_policy`` to decide
 whether a configured per-purpose model is actually permitted for the
 calling tenant. Default: no restriction (empty allowlists mean "use
 whatever the purpose-specific env var says"). Admins can lock a
-tenant to Opus-only for drafting, or block external models entirely.
+tenant to OpenAI reasoning model-only for drafting, or block external models entirely.
 
 Enforcement of ``max_tokens_per_session`` and
 ``external_share_requires_approval`` is scaffolded but not yet

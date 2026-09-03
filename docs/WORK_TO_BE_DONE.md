@@ -34,7 +34,7 @@
 > This file is a planning backlog, not closure evidence.
 >
 > The unified execution PRD for Codex work now lives at
-> [`docs/PRD_CLAUDE_CODE_2026-04-23.md`](./PRD_CLAUDE_CODE_2026-04-23.md).
+> [`docs/PRD_CODEX_2026-04-23.md`](./PRD_CODEX_2026-04-23.md).
 > Use that for merged product scope, journey detail, test mapping, and
 > source-data rules.
 
@@ -348,7 +348,7 @@ Without this, the PRD's central promise does not exist.
 
 - **Traces to:** `apps/api/pyproject.toml` (no SDK); PRD Section 12.1, Section 3.5
 - **Landed:**
-  - `services/llm.py` exposes a `LLMProvider` Protocol with `generate` + provider pluggability. Mock (deterministic, default), Anthropic (`claude-opus-4-7`, `claude-sonnet-4-6`), and Gemini (`gemini-2.5-pro`) adapters are wired behind runtime imports.
+  - `services/llm.py` exposes a `LLMProvider` Protocol with `generate` + provider pluggability. Mock is deterministic for local/CI use; OpenAI is the hosted production adapter; Gemini remains explicit non-production evaluation only.
   - Provider selected by `CASEOPS_LLM_PROVIDER` / `CASEOPS_LLM_MODEL` / `CASEOPS_LLM_API_KEY`.
   - `ModelRun` rows now capture prompt hash, model id, input/output tokens, latency, tenant, matter for every call (see Section 7.3 landed).
   - Prompt templates live in `apps/api/src/caseops_api/prompts/` and are keyed by template name + version.
@@ -1028,7 +1028,7 @@ These items are PRD-scoped but should not be started yet:
 Items whose resolution changes the plan:
 
 1. **Authority corpus model.** Shared global corpus (current default, simpler) or per-tenant namespaces (PRD Section 13.2 implies). Decision affects Section 4.2 schema.
-2. ~~**LLM provider.**~~ **Resolved 2026-04-18:** Anthropic hosted, default model `claude-haiku-4-5-20251001`. Revisit before first enterprise deal if self-host becomes a contractual requirement (PRD Section 3.5).
+2. ~~**LLM provider.**~~ **Resolved:** OpenAI is the sole hosted production provider, default model `gpt-5.1`. Revisit before first enterprise deal if self-host becomes a contractual requirement (PRD Section 3.5).
 3. **SSO priority.** Is OIDC+SAML required for first paying customer, or deferrable?
 4. **Commercial packaging.** Per-seat / per-matter / hybrid (PRD Section 22.2 open). Affects Section 10.5 entitlements.
 5. **Grantex deployment.** Is there an existing Grantex service, or do we build a minimal internal equivalent?

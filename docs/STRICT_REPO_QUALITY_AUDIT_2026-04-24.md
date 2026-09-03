@@ -11,11 +11,11 @@ runtime or deploy state.
 
 - Repository root: `C:\Users\mishr\caseops`.
 - Surfaces reviewed: `apps/api`, `apps/web`, `tests/e2e`, `.github/workflows`,
-  `infra`, `docs`, `.claude/skills`.
-- Product references: `docs/PRD_CLAUDE_CODE_2026-04-23.md`,
+  `infra`, `docs`, `.codex/skills`.
+- Product references: `docs/PRD_CODEX_2026-04-23.md`,
   `docs/WORK_TO_BE_DONE.md`, `docs/STRICT_ENTERPRISE_GAP_TASKLIST.md`.
-- Skills applied: `.claude/skills/enterprise-hardening/SKILL.md` and
-  `.claude/skills/caseops-prd-execution/SKILL.md`.
+- Skills applied: `.codex/skills/enterprise-hardening/SKILL.md` and
+  `.codex/skills/caseops-prd-execution/SKILL.md`.
 
 ## Evidence Snapshot
 
@@ -90,7 +90,7 @@ Evidence:
 
 Impact:
 
-- The documented backend verification recipe in `CLAUDE.md` is not repeatable
+- The documented backend verification recipe in `CODEX.md` is not repeatable
   for the current Windows workspace.
 - Outside agents can falsely assume backend verification passed because the
   documented command exists.

@@ -46,13 +46,13 @@ function SourceBadge({ source }: { source: string | null | undefined }) {
   const label =
     source === "indiacode_scrape"
       ? "indiacode"
-      : source === "haiku_generated"
+      : source === "model_generated" || source === "haiku_generated"
         ? "AI-generated"
         : source === "manual"
           ? "manual"
           : source;
   const tone =
-    source === "haiku_generated"
+    source === "model_generated" || source === "haiku_generated"
       ? "border-amber-300 bg-amber-50 text-amber-900"
       : "border-[var(--color-line)] bg-[var(--color-bg-2)] text-[var(--color-mute-2)]";
   return (

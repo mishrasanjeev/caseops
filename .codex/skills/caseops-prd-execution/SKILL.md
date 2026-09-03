@@ -12,7 +12,7 @@ revision, roadmap review, or module-gap analysis.
 
 Before doing substantial work, read:
 
-1. `docs/PRD_CLAUDE_CODE_2026-04-23.md`
+1. `docs/PRD_CODEX_2026-04-23.md`
 2. `docs/WORK_TO_BE_DONE.md`
 3. `docs/PRD_COVERAGE_MOD_TS_2026-04-20.md`
 4. `docs/STRICT_ENTERPRISE_GAP_TASKLIST.md`
@@ -50,9 +50,9 @@ document-intelligence work:
 - Current production truth for CaseOps is **Voyage `voyage-4-large` on GCP**,
   not the historical `BAAI/bge-small-en-v1.5` baseline.
 - Corpus enrichment that materially affects retrieval quality must use the
-  high-reliability Opus-assisted normalization path or an explicitly approved
+  high-reliability OpenAI-assisted normalization path or an explicitly approved
   equivalent.
-- Anthropic-backed enrichment, cleanup, or evaluation paths that are part of
+- OpenAI-backed enrichment, cleanup, or evaluation paths that are part of
   the production corpus workflow must not be described as optional if the task
   is about production readiness or production truth.
 - Production retrieval must keep reranking enabled where the PRD requires it.
@@ -97,7 +97,7 @@ strategy work:
 
 ## Documentation rules
 
-- Keep `docs/PRD_CLAUDE_CODE_2026-04-23.md` current when scope, sequencing, or
+- Keep `docs/PRD_CODEX_2026-04-23.md` current when scope, sequencing, or
   module status changes materially.
 - Keep `docs/STRICT_ENTERPRISE_GAP_TASKLIST.md` current when a feature task
   exposes a broader platform or hardening gap.
