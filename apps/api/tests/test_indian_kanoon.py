@@ -8,6 +8,10 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
+from caseops_api.core.automated_test_context import (
+    NO_PAID_PROVIDERS_HEADER,
+    NO_PAID_PROVIDERS_VALUE,
+)
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     AuthorityResearchReport,
@@ -57,7 +61,8 @@ def _settings(**updates):
 def _context(session, boot: dict[str, object]) -> SessionContext:
     company = session.get(Company, str(boot["company"]["id"]))  # type: ignore[index]
     membership = session.get(
-        CompanyMembership, str(boot["membership"]["id"])  # type: ignore[index]
+        CompanyMembership,
+        str(boot["membership"]["id"]),  # type: ignore[index]
     )
     user = session.get(User, str(boot["user"]["id"]))  # type: ignore[index]
     assert company is not None and membership is not None and user is not None
@@ -385,15 +390,11 @@ def test_provider_routes_are_capability_protected_and_default_off(
 ) -> None:
     boot = bootstrap_company(client)
     headers = auth_headers(str(boot["access_token"]))
-    readiness = client.get(
-        "/api/authorities/providers/indian-kanoon/readiness", headers=headers
-    )
+    readiness = client.get("/api/authorities/providers/indian-kanoon/readiness", headers=headers)
     assert readiness.status_code == 200
     assert readiness.json()["external_calls_enabled"] is False
 
-    health = client.get(
-        "/api/authorities/providers/indian-kanoon/health", headers=headers
-    )
+    health = client.get("/api/authorities/providers/indian-kanoon/health", headers=headers)
     assert health.status_code == 200
     assert health.json()["health"] == "blocked"
     assert health.json()["performs_external_probe"] is False
@@ -446,5 +447,38 @@ def test_provider_routes_are_capability_protected_and_default_off(
     assert missing_review.status_code == 404
     assert missing_review.json()["detail"] == "Licensed source not found."
 
+    with get_session_factory()() as session:
+        assert session.scalar(select(func.count(BillingUsageEvent.id))) == 0
+
+
+def test_automated_browser_marker_blocks_indian_kanoon_before_spend(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    boot = bootstrap_company(client)
+    monkeypatch.setenv(
+        "CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS",
+        "aster-legal",
+    )
+    get_settings.cache_clear()
+    monkeypatch.setattr(ik, "get_settings", _settings)
+    ik.clear_indian_kanoon_cache()
+    with get_session_factory()() as session:
+        _configure_costs(session)
+        session.commit()
+    headers = {
+        **auth_headers(str(boot["access_token"])),
+        NO_PAID_PROVIDERS_HEADER: NO_PAID_PROVIDERS_VALUE,
+    }
+
+    response = client.post(
+        "/api/authorities/providers/indian-kanoon/search",
+        headers=headers,
+        json={"query": "constitutional proportionality"},
+    )
+
+    assert response.status_code == 409, response.text
+    assert response.json()["code"] == "paid_provider_blocked_for_test"
+    assert response.json()["reason"] == "automated_test_request"
     with get_session_factory()() as session:
         assert session.scalar(select(func.count(BillingUsageEvent.id))) == 0

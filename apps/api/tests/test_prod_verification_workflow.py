@@ -5,6 +5,36 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
+def test_every_playwright_config_blocks_paid_provider_requests() -> None:
+    helper = (REPO_ROOT / "tests/e2e/support/cost-controls.ts").read_text(encoding="utf-8")
+    assert '"X-CaseOps-Automated-Test": "no-paid-providers"' in helper
+
+    inherited = {
+        "playwright.app.self-hosted.config.ts",
+        "playwright.docker.config.ts",
+    }
+    configs = sorted(REPO_ROOT.glob("playwright*.config.ts"))
+    assert {path.name for path in configs} >= inherited
+    for config_path in configs:
+        config = config_path.read_text(encoding="utf-8")
+        if config_path.name in inherited:
+            assert 'from "./playwright.app.config"' in config
+            assert "...appConfig" in config
+            continue
+        assert 'from "./tests/e2e/support/cost-controls"' in config
+        assert "extraHTTPHeaders: noPaidProviderHeaders" in config
+
+
+def test_exact_release_case_tracking_uses_only_stored_evidence() -> None:
+    spec = (REPO_ROOT / "tests/e2e/ram-2026-08-05-prod.spec.ts").read_text(encoding="utf-8")
+
+    assert "/api/case-tracking/search" not in spec
+    assert 'expect(canaryBody.evidence_mode).toBe("verified_cached")' in spec
+    assert "expect(canaryBody.provider_call_performed).toBe(false)" in spec
+    assert '"provider-markdown"' in spec
+    assert '"live_provider"' not in spec
+
+
 def test_prod_verification_is_deploy_triggered_not_push_triggered() -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / "prod-verify.yml").read_text(encoding="utf-8")
 
@@ -52,16 +82,12 @@ def test_historical_a0_acceptance_is_opt_in_not_a_recurring_release_gate() -> No
 
 
 def test_ip_cost_acceptance_is_isolated_and_partially_configured_runs_fail_closed() -> None:
-    workflow = (REPO_ROOT / ".github" / "workflows" / "prod-verify.yml").read_text(
-        encoding="utf-8"
-    )
+    workflow = (REPO_ROOT / ".github" / "workflows" / "prod-verify.yml").read_text(encoding="utf-8")
     broad = (REPO_ROOT / "playwright.prod-ram.config.ts").read_text(encoding="utf-8")
     release = (REPO_ROOT / ".github" / "workflows" / "release-verify.yml").read_text(
         encoding="utf-8"
     )
-    dedicated = (REPO_ROOT / "playwright.ip-cost-prod.config.ts").read_text(
-        encoding="utf-8"
-    )
+    dedicated = (REPO_ROOT / "playwright.ip-cost-prod.config.ts").read_text(encoding="utf-8")
 
     assert "iplf-039f-cost-items-2026-08-30-prod" not in broad
     assert "playwright.ip-cost-prod.config.ts" not in release

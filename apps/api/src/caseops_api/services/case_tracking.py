@@ -78,6 +78,10 @@ from caseops_api.services.notification_delivery import (
     enqueue_notification_delivery_intent,
     redact_provider_error,
 )
+from caseops_api.services.paid_provider_safety import (
+    assert_paid_provider_call_allowed,
+    paid_provider_block_reason,
+)
 from caseops_api.services.session_context import SessionContext
 
 _MAX_BODY_LENGTH = 500
@@ -707,6 +711,12 @@ def search_cases(
             provider=active_provider.provider_key,
             court_code=payload.court_code,
             court_name=payload.court_name,
+        )
+        assert_paid_provider_call_allowed(
+            context=context,
+            provider=active_provider.provider_key,
+            base_url=getattr(active_provider, "base_url", None),
+            transport_is_mocked=getattr(active_provider, "transport", None) is not None,
         )
         snapshots = active_provider.search_cases(query=query)
     except (CaseTrackingProviderUnavailable, CaseTrackingProviderError) as exc:
@@ -1808,6 +1818,12 @@ def refresh_bookmark(
             court_code=tracked_case.court_code,
             court_name=tracked_case.court_name,
         )
+        assert_paid_provider_call_allowed(
+            context=context,
+            provider=active_provider.provider_key,
+            base_url=getattr(active_provider, "base_url", None),
+            transport_is_mocked=getattr(active_provider, "transport", None) is not None,
+        )
         if tracked_case.cnr_number:
             snapshot = active_provider.get_case_by_cnr(cnr=tracked_case.cnr_number)
         else:
@@ -2431,32 +2447,24 @@ def run_release_smoke(
         context=context,
         bookmark=bookmark,
     )
-    if cached_evidence is not None:
-        operation = _create_cached_release_smoke_operation(
-            session,
-            context=context,
-            bookmark=bookmark,
-            correlation_id=correlation_id,
-            evidence=cached_evidence,
+    if cached_evidence is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "release_smoke_evidence_missing",
+                "message": (
+                    "Release verification requires stored provider evidence. "
+                    "No paid provider request was made."
+                ),
+            },
         )
-    else:
-        refresh_bookmark(
-            session,
-            context=context,
-            bookmark_id=bookmark_id,
-            provider=provider,
-            operation_type="canary",
-            correlation_id=correlation_id,
-            enforce_manual_limit=False,
-        )
-        operation = session.scalar(
-            select(TrackedCaseProviderOperation).where(
-                TrackedCaseProviderOperation.company_id == context.company.id,
-                TrackedCaseProviderOperation.correlation_id == correlation_id,
-            )
-        )
-        if operation is None:  # pragma: no cover - transaction invariant
-            raise RuntimeError("release canary operation was not persisted")
+    operation = _create_cached_release_smoke_operation(
+        session,
+        context=context,
+        bookmark=bookmark,
+        correlation_id=correlation_id,
+        evidence=cached_evidence,
+    )
     record_from_context(
         session,
         context,
@@ -2654,6 +2662,52 @@ def download_case_tracking_source(
         update.source_url,
         base_url=settings.ecourtsindia_api_base_url,
     )
+    provider_block = paid_provider_block_reason(
+        context=context,
+        provider=provider,
+        base_url=settings.ecourtsindia_api_base_url,
+        transport_is_mocked=transport is not None,
+    )
+    if provider_block is not None:
+        cached_source = _verified_cached_source(update)
+        if cached_source is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "paid_provider_blocked_for_test",
+                    "message": (
+                        "Paid provider source downloads are disabled for tests and this "
+                        "record has no complete verified cache. No external request was made."
+                    ),
+                    "provider": provider,
+                    "reason": provider_block,
+                },
+            )
+        record_from_context(
+            session,
+            context,
+            action="case_tracking.source_downloaded",
+            target_type="tracked_case_update",
+            target_id=update.id,
+            matter_id=bookmark.matter_id,
+            metadata={
+                "tracked_case_id_sha256": _hash_value(update.tracked_case_id),
+                "bookmark_id_sha256": _hash_value(bookmark.id),
+                "provider": provider,
+                "provider_response_class": provider_block,
+                "source_format": "provider-markdown",
+                "update_type": update.update_type,
+                "source_record_key_sha256": _hash_value(update.source_record_key),
+                "source_text_sha256": update.source_text_sha256,
+            },
+        )
+        session.commit()
+        return CaseTrackingSourceDownload(
+            content=cached_source,
+            content_type="text/markdown; charset=utf-8",
+            filename=_safe_markdown_filename(update),
+            source_format="provider-markdown",
+        )
     try:
         with httpx.Client(
             timeout=30,
@@ -2930,6 +2984,25 @@ def poll_tracked_cases(
         return runs
 
     for context in contexts:
+        provider_block = paid_provider_block_reason(
+            context=context,
+            provider=active_provider.provider_key,
+            base_url=getattr(active_provider, "base_url", None),
+            transport_is_mocked=getattr(active_provider, "transport", None) is not None,
+        )
+        if provider_block is not None:
+            runs.append(
+                _record_safe_poll_run(
+                    session,
+                    context=context,
+                    status_value="skipped",
+                    reason=provider_block,
+                    window=window,
+                    provider_key=active_provider.provider_key,
+                    force=force,
+                )
+            )
+            continue
         total_eligible = _eligible_tracked_case_count(session, company_id=context.company.id)
         run = TrackedCasePollRun(
             company_id=context.company.id,

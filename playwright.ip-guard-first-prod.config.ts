@@ -9,6 +9,8 @@
  */
 import { defineConfig } from "@playwright/test";
 
+import { noPaidProviderHeaders } from "./tests/e2e/support/cost-controls";
+
 export default defineConfig({
   testDir: "tests/e2e",
   testMatch: /iplf-039c-guard-first-2026-08-16-prod\.spec\.ts$/,
@@ -19,6 +21,7 @@ export default defineConfig({
   workers: 1,
   reporter: "list",
   use: {
+    extraHTTPHeaders: noPaidProviderHeaders,
     trace: "off",
     screenshot: "off",
     video: "off",

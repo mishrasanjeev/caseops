@@ -707,16 +707,9 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
         /administrator|review or replay/i,
       );
     }
-    const recoverable = rows.find(
-      (row) => row.tracked_case.manual_refresh_allowed,
-    );
-    if (recoverable) {
-      const refreshed = await api.post(
-        `${API_BASE_URL}/api/case-tracking/bookmarks/${recoverable.id}/refresh`,
-        { headers: headers(), timeout: 60_000 },
-      );
-      expect(refreshed.status(), await refreshed.text()).not.toBe(409);
-    }
+    // The same recovery path is exercised end to end against the Docker
+    // provider above. Production regression is read-only here so it never
+    // consumes a paid provider credit or creates a failed provider operation.
   });
 
   test("REOPENING: only the audited lifecycle route reopens a disposed matter", async () => {
