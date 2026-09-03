@@ -306,8 +306,16 @@ def test_sweep_stops_at_budget_cap(
     for i in range(5):
         _seed_doc(title=f"DHARWAD BEN CH {i}", document_text="some text")
 
-    # Each call costs $0.10 — 3 calls is $0.30 which exceeds our $0.20 cap.
+    # Keep the budget-loop regression independent from the configured provider
+    # price table. Provider/model migrations may legitimately change token
+    # rates; this test owns a deterministic $0.10-per-call cost while the
+    # pricing module has separate rate-table coverage.
     call_count = {"n": 0}
+
+    monkeypatch.setattr(
+        "caseops_api.services.corpus_title_reextract.completion_cost_usd",
+        lambda *_args: 0.10,
+    )
 
     def _fake_generate_structured(
         provider, *, schema, messages, context, max_tokens, session,
@@ -315,8 +323,7 @@ def test_sweep_stops_at_budget_cap(
         call_count["n"] += 1
         return (
             schema(title="Arun Kumar v. State"),
-            # Roughly $0.10 — 125000 prompt tokens * 0.80/1M = $0.10.
-            _FakeCompletion(prompt_tokens=125_000, completion_tokens=0),
+            _FakeCompletion(prompt_tokens=1, completion_tokens=0),
         )
     monkeypatch.setattr(
         "caseops_api.services.corpus_title_reextract.generate_structured",

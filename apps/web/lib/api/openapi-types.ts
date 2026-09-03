@@ -3878,7 +3878,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Sprint R4 — OpenAI-backed partial draft preview for the stepper. Returns a 300-500 word preview reflecting whatever fields the user has filled so far; unfilled fields render as '[not yet specified]' instead of invented values. */
+        /** Sprint R4 — OpenAI extraction model-backed partial draft preview for the stepper. Returns a 300-500 word preview reflecting whatever fields the user has filled so far; unfilled fields render as '[not yet specified]' instead of invented values. */
         post: operations["post_drafting_preview_api_drafting_preview_post"];
         delete?: never;
         options?: never;
@@ -9764,7 +9764,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Force a fresh OpenAI pass for the matter summary. Same response shape as GET /summary; used by the cockpit 'Regenerate' button. */
+        /** Force a fresh OpenAI extraction model pass for the matter summary. Same response shape as GET /summary; used by the cockpit 'Regenerate' button. */
         post: operations["post_current_company_matter_summary_regenerate_api_matters__matter_id__summary_regenerate_post"];
         delete?: never;
         options?: never;
