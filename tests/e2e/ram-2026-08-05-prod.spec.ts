@@ -90,10 +90,7 @@ async function csrfHeaders(page: Page): Promise<Record<string, string>> {
   return { "X-CSRF-Token": csrf! };
 }
 
-async function approvedBookmarkId(
-  page: Page,
-  headers: Record<string, string>,
-): Promise<string> {
+async function approvedBookmarkId(page: Page): Promise<string> {
   const configuredId = process.env.CASEOPS_QA_TRACKED_CASE_BOOKMARK_ID?.trim();
   if (configuredId) return configuredId;
 
@@ -107,38 +104,10 @@ async function approvedBookmarkId(
       bookmark.tracked_case?.metadata?.release_smoke_fixture === true,
   );
   if (tagged) return tagged.id as string;
-
-  const fixtureCnr = required("CASEOPS_QA_TRACKED_CASE_CNR");
-  const searched = await page.request.post(
-    `${PROD_API_BASE_URL}/api/case-tracking/search`,
-    { headers, data: { cnr_number: fixtureCnr } },
+  throw new Error(
+    "Stored CaseOps QA case-tracking evidence is required. Production verification " +
+      "must not create the fixture or call a paid provider.",
   );
-  const searchedBody = await searched.json();
-  expect(searched.status(), JSON.stringify(searchedBody)).toBe(200);
-  const result = searchedBody.results.find(
-    (row: { cnr_number?: string }) => row.cnr_number === fixtureCnr,
-  );
-  expect(result, `No exact provider result for QA CNR ${fixtureCnr}`).toBeTruthy();
-
-  const created = await page.request.post(
-    `${PROD_API_BASE_URL}/api/case-tracking/bookmarks`,
-    {
-      headers,
-      data: {
-        ...result,
-        name: "CaseOps exact-release provider canary",
-        notification_enabled: false,
-        metadata: {
-          release_smoke_fixture: true,
-          release_smoke_fixture_cnr: fixtureCnr,
-        },
-      },
-    },
-  );
-  const createdBody = await created.json();
-  expect(created.status(), JSON.stringify(createdBody)).toBe(201);
-  expect(createdBody.tracked_case.metadata.release_smoke_fixture).toBe(true);
-  return createdBody.id as string;
 }
 
 test.describe("Ram 2026-08-05 deployed statute trust", () => {
@@ -372,7 +341,7 @@ test.describe("Ram 2026-08-05 exact-release case tracking evidence", () => {
 
     await signIn(page);
     const headers = await csrfHeaders(page);
-    const bookmarkId = await approvedBookmarkId(page, headers);
+    const bookmarkId = await approvedBookmarkId(page);
     const canary = await page.request.post(
       `${PROD_API_BASE_URL}/api/case-tracking/bookmarks/${bookmarkId}/release-smoke`,
       { headers, data: { release_sha: releaseSha } },
@@ -380,34 +349,22 @@ test.describe("Ram 2026-08-05 exact-release case tracking evidence", () => {
     const canaryBody = await canary.json();
     expect(canary.status(), JSON.stringify(canaryBody)).toBe(200);
     expect(canaryBody.release_sha).toBe(releaseSha);
-    expect(["success", "no_change", "verified_cached"]).toContain(
-      canaryBody.response_class,
-    );
-    expect(["live_provider", "verified_cached"]).toContain(
-      canaryBody.evidence_mode,
-    );
-    expect(canaryBody.provider_call_performed).toBe(
-      canaryBody.evidence_mode === "live_provider",
-    );
+    expect(canaryBody.response_class).toBe("verified_cached");
+    expect(canaryBody.evidence_mode).toBe("verified_cached");
+    expect(canaryBody.provider_call_performed).toBe(false);
     expect(canaryBody.provider_evidence_operation_id).toBeTruthy();
     expect(canaryBody.provider_evidence_completed_at).toBeTruthy();
     expect(canaryBody.provider_evidence_age_seconds).toBeGreaterThanOrEqual(0);
     expect(canaryBody.operation_id).toBeTruthy();
     expect(canaryBody.bookmark.id).toBe(bookmarkId);
     expect(canaryBody.bookmark.tracked_case.last_provider_successful_at).toBeTruthy();
-    if (canaryBody.evidence_mode === "live_provider") {
-      expect(canaryBody.bookmark.tracked_case.freshness_status).toBe("fresh");
-      expect(canaryBody.bookmark.tracked_case.provider_health).toBe("healthy");
-    } else {
-      expect(canaryBody.response_class).toBe("verified_cached");
-      expect(canaryBody.source_text_sha256).toMatch(/^[0-9a-f]{64}$/);
-      expect(["fresh", "stale", "quarantined"]).toContain(
-        canaryBody.bookmark.tracked_case.freshness_status,
-      );
-      expect(["healthy", "degraded", "unhealthy", "quarantined"]).toContain(
-        canaryBody.bookmark.tracked_case.provider_health,
-      );
-    }
+    expect(canaryBody.source_text_sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(["fresh", "stale", "quarantined"]).toContain(
+      canaryBody.bookmark.tracked_case.freshness_status,
+    );
+    expect(["healthy", "degraded", "unhealthy", "quarantined"]).toContain(
+      canaryBody.bookmark.tracked_case.provider_health,
+    );
 
     const sourcePath = canaryBody.source_update.source_url as string;
     expect(sourcePath).toBe(
@@ -416,8 +373,8 @@ test.describe("Ram 2026-08-05 exact-release case tracking evidence", () => {
     const source = await page.request.get(`${PROD_API_BASE_URL}${sourcePath}`);
     expect(source.status(), await source.text()).toBe(200);
     expect(source.headers()["content-disposition"]).toMatch(/^attachment;/);
-    expect(["provider-document", "provider-markdown"]).toContain(
-      source.headers()["x-caseops-source-format"],
+    expect(source.headers()["x-caseops-source-format"]).toBe(
+      "provider-markdown",
     );
     expect((await source.body()).byteLength).toBeGreaterThan(16);
 

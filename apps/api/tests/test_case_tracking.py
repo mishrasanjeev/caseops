@@ -10,6 +10,10 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
+from caseops_api.core.automated_test_context import (
+    NO_PAID_PROVIDERS_HEADER,
+    NO_PAID_PROVIDERS_VALUE,
+)
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     AuditEvent,
@@ -126,6 +130,22 @@ class FakeCaseTrackingProvider:
         return ProviderBulkRefreshResult(snapshots=snapshots, errors=errors)
 
 
+class ExplodingLiveCaseTrackingProvider(FakeCaseTrackingProvider):
+    """A live-shaped provider that proves the boundary runs before transport."""
+
+    base_url = "https://webapi.ecourtsindia.com"
+    transport = None
+
+    def search_cases(self, *, query: CaseSearchQuery) -> list[ProviderCaseSnapshot]:
+        raise AssertionError("a paid provider transport was reached")
+
+    def get_case_by_cnr(self, *, cnr: str) -> ProviderCaseSnapshot:
+        raise AssertionError("a paid provider transport was reached")
+
+    def refresh_cases(self, *, cnrs: list[str]) -> ProviderBulkRefreshResult:
+        raise AssertionError("a paid provider transport was reached")
+
+
 def test_provider_source_text_is_format_preserving_and_bounded() -> None:
     normalized, truncated = _source_text("heading\r\n\r\nbody\x00")
     assert normalized == "heading\n\nbody"
@@ -165,6 +185,47 @@ def test_case_tracking_provider_disabled_state_is_safe(client: TestClient) -> No
     )
     assert search.status_code == 503
     assert "disabled" in search.json()["detail"].lower()
+
+
+def test_automated_browser_marker_blocks_live_paid_search_before_transport(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_ENABLED", "true")
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_PROVIDER", "ecourtsindia")
+    monkeypatch.setenv(
+        "CASEOPS_ECOURTSINDIA_API_BASE_URL",
+        "https://webapi.ecourtsindia.com",
+    )
+    monkeypatch.setenv("CASEOPS_ECOURTSINDIA_API_TOKEN", "must-not-be-used")
+    monkeypatch.setenv(
+        "CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS",
+        "aster-legal",
+    )
+    get_settings.cache_clear()
+    provider = ExplodingLiveCaseTrackingProvider()
+    monkeypatch.setattr(
+        "caseops_api.services.case_tracking.get_case_tracking_provider",
+        lambda: provider,
+    )
+    token = _bootstrap(client)
+    headers = {
+        **auth_headers(token),
+        NO_PAID_PROVIDERS_HEADER: NO_PAID_PROVIDERS_VALUE,
+    }
+
+    response = client.post(
+        "/api/case-tracking/search",
+        headers=headers,
+        json={"cnr_number": "DLHC010012342026"},
+    )
+
+    assert response.status_code == 409, response.text
+    body = response.json()
+    assert body["code"] == "paid_provider_blocked_for_test"
+    assert body["provider"] == "ecourtsindia"
+    assert body["reason"] == "automated_test_request"
+    assert "no external request was made" in body["detail"]
 
 
 def test_matter_create_auto_links_case_tracking_bookmark_when_provider_configured(
@@ -811,6 +872,23 @@ def test_exact_release_smoke_is_qa_only_idempotent_and_reuses_verified_evidence(
     assert create.status_code == 201, create.text
     bookmark_id = create.json()["id"]
 
+    # Provider evidence is acquired by the product workflow, never by release
+    # verification. The fake transport keeps this regression free of spend.
+    seeded = client.post(
+        f"/api/case-tracking/bookmarks/{bookmark_id}/refresh",
+        headers=headers,
+    )
+    assert seeded.status_code == 200, seeded.text
+    assert provider.refresh_calls == ["DLHC010012342026"]
+    with get_session_factory()() as session:
+        provider_evidence = session.scalar(
+            select(TrackedCaseProviderOperation).where(
+                TrackedCaseProviderOperation.operation_type == "manual"
+            )
+        )
+        assert provider_evidence is not None
+        provider_evidence_operation_id = provider_evidence.id
+
     first = client.post(
         f"/api/case-tracking/bookmarks/{bookmark_id}/release-smoke",
         headers=headers,
@@ -819,10 +897,11 @@ def test_exact_release_smoke_is_qa_only_idempotent_and_reuses_verified_evidence(
     assert first.status_code == 200, first.text
     body = first.json()
     assert body["release_sha"] == release_sha
-    assert body["response_class"] == "success"
-    assert body["evidence_mode"] == "live_provider"
-    assert body["provider_call_performed"] is True
-    assert body["provider_evidence_operation_id"] == body["operation_id"]
+    assert body["response_class"] == "verified_cached"
+    assert body["evidence_mode"] == "verified_cached"
+    assert body["provider_call_performed"] is False
+    assert body["provider_evidence_operation_id"] == provider_evidence_operation_id
+    assert body["provider_evidence_operation_id"] != body["operation_id"]
     assert body["provider_evidence_age_seconds"] >= 0
     assert body["reused"] is False
     assert body["bookmark"]["tracked_case"]["freshness_status"] == "fresh"
@@ -878,7 +957,7 @@ def test_exact_release_smoke_is_qa_only_idempotent_and_reuses_verified_evidence(
     assert cached_body["response_class"] == "verified_cached"
     assert cached_body["evidence_mode"] == "verified_cached"
     assert cached_body["provider_call_performed"] is False
-    assert cached_body["provider_evidence_operation_id"] == body["operation_id"]
+    assert cached_body["provider_evidence_operation_id"] == provider_evidence_operation_id
     assert cached_body["source_text_sha256"]
     assert cached_body["bookmark"]["tracked_case"]["provider_health"] == "degraded"
     assert cached_body["bookmark"]["tracked_case"]["manual_refresh_allowed"] is True
@@ -910,14 +989,16 @@ def test_exact_release_smoke_is_qa_only_idempotent_and_reuses_verified_evidence(
         assert backfill_audit is not None
         backfill_metadata = json.loads(backfill_audit.metadata_json or "{}")
         assert backfill_metadata["provenance"] == "verified_provider_snapshot"
-        assert backfill_metadata["provider_evidence_operation_id"] == body["operation_id"]
+        assert backfill_metadata["provider_evidence_operation_id"] == (
+            provider_evidence_operation_id
+        )
         assert backfill_metadata["provider_snapshot_raw_hash"]
 
         restored.source_text = None
         restored.source_text_sha256 = None
         snapshot = session.scalar(
             select(TrackedCaseProviderSnapshot).where(
-                TrackedCaseProviderSnapshot.operation_id == body["operation_id"]
+                TrackedCaseProviderSnapshot.operation_id == provider_evidence_operation_id
             )
         )
         assert snapshot is not None
@@ -1113,6 +1194,95 @@ def test_release_smoke_rejects_an_untagged_bookmark(
     )
     assert response.status_code == 403
     assert "approved QA fixture" in response.json()["detail"]
+
+
+def test_release_smoke_without_cached_evidence_never_calls_provider(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    release_sha = "f" * 40
+    monkeypatch.setenv("CASEOPS_RELEASE_SHA", release_sha)
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_ENABLED", "true")
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_PROVIDER", "ecourtsindia")
+    monkeypatch.setenv("CASEOPS_ECOURTSINDIA_API_BASE_URL", "https://provider.example")
+    monkeypatch.setenv("CASEOPS_ECOURTSINDIA_API_TOKEN", "fixture-token")
+    get_settings.cache_clear()
+    provider = FakeCaseTrackingProvider()
+    monkeypatch.setattr(
+        "caseops_api.services.case_tracking.get_case_tracking_provider",
+        lambda: provider,
+    )
+    token = _bootstrap(client)
+    headers = auth_headers(token)
+    create = client.post(
+        "/api/case-tracking/bookmarks",
+        headers=headers,
+        json={
+            "provider": "ecourtsindia",
+            "cnr_number": "DLHC010088882026",
+            "court_code": "DLHC",
+            "court_name": "Delhi High Court",
+            "case_title": "Stored-evidence-only fixture",
+            "metadata": {"release_smoke_fixture": True},
+        },
+    )
+    assert create.status_code == 201, create.text
+
+    response = client.post(
+        f"/api/case-tracking/bookmarks/{create.json()['id']}/release-smoke",
+        headers=headers,
+        json={"release_sha": release_sha},
+    )
+
+    assert response.status_code == 409, response.text
+    assert response.json()["code"] == "release_smoke_evidence_missing"
+    assert provider.refresh_calls == []
+
+
+def test_scheduler_skips_paid_provider_for_configured_test_tenant(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_ENABLED", "true")
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_PROVIDER", "ecourtsindia")
+    monkeypatch.setenv(
+        "CASEOPS_ECOURTSINDIA_API_BASE_URL",
+        "https://webapi.ecourtsindia.com",
+    )
+    monkeypatch.setenv("CASEOPS_ECOURTSINDIA_API_TOKEN", "must-not-be-used")
+    monkeypatch.setenv(
+        "CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS",
+        "caseops-qa,caseops-ip-qa,test-legal,legal",
+    )
+    get_settings.cache_clear()
+    boot = bootstrap_company(client)
+    token = str(boot["access_token"])
+    with get_session_factory()() as session:
+        company = session.get(Company, str(boot["company"]["id"]))  # type: ignore[index]
+        assert company is not None
+        company.slug = "caseops-qa"
+        session.commit()
+    create = client.post(
+        "/api/case-tracking/bookmarks",
+        headers=auth_headers(token),
+        json={
+            "provider": "ecourtsindia",
+            "cnr_number": "DLHC010077772026",
+            "court_code": "DLHC",
+            "court_name": "Delhi High Court",
+            "case_title": "Scheduler test fixture",
+        },
+    )
+    assert create.status_code == 201, create.text
+
+    provider = ExplodingLiveCaseTrackingProvider()
+    with get_session_factory()() as session:
+        runs = poll_tracked_cases(session, provider=provider, force=True)
+
+    qa_run = next(run for run in runs if run.company_id == str(boot["company"]["id"]))
+    assert qa_run.status == "skipped"
+    assert qa_run.provider_call_count == 0
+    assert qa_run.metadata["reason"] == "configured_test_tenant"
 
 
 def test_disposed_matter_blocks_case_tracking_refresh_before_provider_call(

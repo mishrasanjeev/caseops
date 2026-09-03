@@ -3,6 +3,8 @@ import path from "node:path";
 
 import { defineConfig, devices } from "@playwright/test";
 
+import { noPaidProviderHeaders } from "./tests/e2e/support/cost-controls";
+
 const browserExecutableCandidates = [
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
   "C:/Program Files/Google/Chrome/Application/chrome.exe",
@@ -26,6 +28,7 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   reporter: [["list"]],
   use: {
+    extraHTTPHeaders: noPaidProviderHeaders,
     baseURL: configuredBaseUrl ?? localBaseUrl,
     headless: true,
     trace: "off",

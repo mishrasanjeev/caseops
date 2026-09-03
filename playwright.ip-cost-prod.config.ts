@@ -3,6 +3,8 @@ import fs from "node:fs";
 
 import { defineConfig, devices } from "@playwright/test";
 
+import { noPaidProviderHeaders } from "./tests/e2e/support/cost-controls";
+
 const candidates = [
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
   "C:/Program Files/Google/Chrome/Application/chrome.exe",
@@ -18,6 +20,7 @@ export default defineConfig({
   workers: 1,
   reporter: "list",
   use: {
+    extraHTTPHeaders: noPaidProviderHeaders,
     ...devices["Desktop Chrome"],
     baseURL: process.env.PROD_BASE_URL ?? "https://caseops.ai",
     storageState: { cookies: [], origins: [] },

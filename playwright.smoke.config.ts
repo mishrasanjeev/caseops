@@ -17,6 +17,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { noPaidProviderHeaders } from "./tests/e2e/support/cost-controls";
+
 import { defineConfig, devices } from "@playwright/test";
 
 const browserExecutableCandidates = [
@@ -44,6 +46,7 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   globalTimeout: 0,
   use: {
+    extraHTTPHeaders: noPaidProviderHeaders,
     baseURL,
     headless: true,
     viewport: { width: 1280, height: 800 },

@@ -1,6 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 import fs from "node:fs";
 
+import { noPaidProviderHeaders } from "./tests/e2e/support/cost-controls";
+
 const candidates = [
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
   "C:/Program Files/Google/Chrome/Application/chrome.exe",
@@ -18,6 +20,7 @@ export default defineConfig({
   workers: 1,
   reporter: "list",
   use: {
+    extraHTTPHeaders: noPaidProviderHeaders,
     baseURL: process.env.PROD_BASE_URL ?? "https://caseops.ai",
     // This project runs against the live tenant. Text failures are retained,
     // but authenticated browser media must never become a CI artifact.

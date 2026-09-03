@@ -71,6 +71,16 @@ def test_production_deploy_seeds_verified_statutes_before_routing_traffic() -> N
     assert deploy.index(seed_update) < deploy.index(seed_execute) < deploy.index(api_deploy)
 
 
+def test_production_manifests_block_paid_providers_for_test_tenants() -> None:
+    expected = '"caseops-qa;caseops-ip-qa;test-legal;legal"'
+    api_manifest = _read_repo_text("infra/cloudrun/api-service.yaml")
+    poll_manifest = _read_repo_text("infra/cloudrun/case-tracking-poll-job.yaml")
+
+    for manifest in (api_manifest, poll_manifest):
+        assert "CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS" in manifest
+        assert expected in manifest
+
+
 @pytest.mark.parametrize(
     "config_path",
     [

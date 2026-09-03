@@ -3,6 +3,7 @@ import path from "node:path";
 
 import { defineConfig } from "@playwright/test";
 
+import { noPaidProviderHeaders } from "./tests/e2e/support/cost-controls";
 import {
   apiBaseUrl,
   e2eEnv,
@@ -61,6 +62,7 @@ export default defineConfig({
   globalSetup: path.join("tests", "e2e", "global-setup.ts"),
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
+    extraHTTPHeaders: noPaidProviderHeaders,
     baseURL: webBaseUrl,
     headless: true,
     trace: "retain-on-failure",

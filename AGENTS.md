@@ -202,3 +202,10 @@ requirements when using the fallback.
   SDK retries must not multiply a per-attempt timeout past Cloud Run's limit;
   after a provider timeout, regression acceptance must also prove an unrelated
   endpoint remains responsive before a single bounded user-level retry.
+- Automated suites and persistent QA/test tenants must never call paid external
+  APIs. Playwright sends `X-CaseOps-Automated-Test: no-paid-providers`; local
+  and Docker tests use deterministic provider emulators; scheduled provider
+  polling excludes configured test tenants; and exact-release verification
+  consumes stored, hash-verified evidence only. A deliberate live-provider
+  check is a separately budgeted operational action, never part of bulk or
+  regular regression testing.

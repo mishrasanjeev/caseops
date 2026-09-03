@@ -2,6 +2,8 @@ import fs from "node:fs";
 
 import { defineConfig } from "@playwright/test";
 
+import { noPaidProviderHeaders } from "./tests/e2e/support/cost-controls";
+
 const browserExecutableCandidates = [
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
   "C:/Program Files/Google/Chrome/Application/chrome.exe",
@@ -20,6 +22,7 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   reporter: [["list"]],
   use: {
+    extraHTTPHeaders: noPaidProviderHeaders,
     baseURL: process.env.CASEOPS_WEB_BASE_URL ?? "http://127.0.0.1:3100",
     headless: true,
     trace: "retain-on-failure",
