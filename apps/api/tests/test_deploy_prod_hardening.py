@@ -85,6 +85,11 @@ def test_production_deploy_owns_indian_kanoon_activation_without_manual_data_ent
     assert deploy.index(seed_update) < deploy.index(seed_execute) < deploy.index(api_deploy)
     assert "CASEOPS_INDIAN_KANOON_API_TOKEN=${INDIAN_KANOON_API_TOKEN_SECRET}:latest" in deploy
     assert "CASEOPS_INDIAN_KANOON_ENABLED=true" in deploy
+    assert '--update-env-vars "^|^CASEOPS_RELEASE_SHA=${HEAD_SHA}|' in deploy
+    assert (
+        "|CASEOPS_INDIAN_KANOON_PERMITTED_USES=${INDIAN_KANOON_PERMITTED_USES}|"
+        in deploy
+    )
     assert 'env.get("CASEOPS_INDIAN_KANOON_API_TOKEN")' in deploy
     assert "expected_indian_kanoon_env" in deploy
     assert 'value: "Orchestrum Technologies LLP"' in manifest
