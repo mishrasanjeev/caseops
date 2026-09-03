@@ -696,6 +696,62 @@ def test_case_search_rejects_invented_court_code_before_provider_call(
     assert provider.search_calls == []
 
 
+def test_provider_numeric_court_code_round_trips_into_case_number_search(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    token = _bootstrap(client)
+    provider = FakeCaseTrackingProvider()
+    original_search = provider.search_cases
+
+    def search_cases(*, query: CaseSearchQuery) -> list[ProviderCaseSnapshot]:
+        if query.cnr_number:
+            provider.search_calls.append(query)
+            return [
+                ProviderCaseSnapshot(
+                    provider="ecourtsindia",
+                    cnr_number=query.cnr_number,
+                    case_number="202400248072016",
+                    court_code="2",
+                    court_name="Chief Metropolitan Magistrate, New Delhi, PHC",
+                    case_title="Provider Petitioner v Provider Respondent",
+                    party_names=["Provider Petitioner", "Provider Respondent"],
+                    current_status="Pending",
+                    current_stage="Evidence",
+                    next_hearing_on=date(2026, 9, 10),
+                )
+            ]
+        return original_search(query=query)
+
+    monkeypatch.setattr(provider, "search_cases", search_cases)
+    monkeypatch.setattr(
+        "caseops_api.services.case_tracking.get_case_tracking_provider",
+        lambda: provider,
+    )
+
+    by_cnr = client.post(
+        "/api/case-tracking/search",
+        headers=auth_headers(token),
+        json={"cnr_number": "DLND020047882015"},
+    )
+    assert by_cnr.status_code == 200, by_cnr.text
+    result = by_cnr.json()["results"][0]
+    assert result["court_code"] == "2"
+
+    by_case_number = client.post(
+        "/api/case-tracking/search",
+        headers=auth_headers(token),
+        json={
+            "case_number": result["case_number"],
+            "court_code": result["court_code"],
+        },
+    )
+
+    assert by_case_number.status_code == 200, by_case_number.text
+    assert provider.search_calls[-1].case_number == "202400248072016"
+    assert provider.search_calls[-1].court_code == "2"
+
+
 def test_case_tracking_search_bookmark_update_and_archive(
     client: TestClient,
     monkeypatch,

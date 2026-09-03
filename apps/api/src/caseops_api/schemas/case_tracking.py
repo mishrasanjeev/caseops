@@ -59,10 +59,14 @@ class CaseTrackingSearchRequest(BaseModel):
         if value is None:
             return None
         normalized = value.upper()
-        if not re.fullmatch(r"[A-Z0-9]{4,12}", normalized):
+        # eCourtsIndia publishes numeric court identifiers as short as one
+        # character (for example, ``2``). Keep the value provider-shaped and
+        # bounded, but do not reject a code that the preceding provider lookup
+        # returned to the client.
+        if not re.fullmatch(r"[A-Z0-9]{1,12}", normalized):
             raise ValueError(
                 "Court code must be a provider-published alphanumeric search code "
-                "(for example, DLHC01)."
+                "(for example, 2 or DLHC01)."
             )
         return normalized
 
