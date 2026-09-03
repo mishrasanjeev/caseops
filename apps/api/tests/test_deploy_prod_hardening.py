@@ -5,8 +5,10 @@ import hashlib
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
+import time
 import tomllib
 from functools import cache
 from pathlib import Path
@@ -48,13 +50,84 @@ def test_web_gcloudignore_blocks_local_build_artifacts() -> None:
         assert pattern in ignore_text
 
 
-def test_local_playwright_api_does_not_reuse_idle_mutation_connections() -> None:
+def test_local_playwright_api_negotiates_connection_close() -> None:
     config = _read_repo_text("playwright.app.config.ts")
     cost_spec = _read_repo_text("tests/e2e/iplf-039f-cost-items-2026-08-21.spec.ts")
 
-    assert config.count("--timeout-keep-alive 0") == 2
+    assert config.count("--header Connection:close") == 2
+    assert "--timeout-keep-alive 0" not in config
     assert "BOOTSTRAP_TRANSPORT_ATTEMPTS" not in cost_spec
     assert "isConnectionReset" not in cost_spec
+
+
+def test_uvicorn_connection_close_is_advertised_and_body_completes(tmp_path: Path) -> None:
+    app_path = tmp_path / "connection_close_app.py"
+    app_path.write_text(
+        """async def app(scope, receive, send):
+    assert scope[\"type\"] == \"http\"
+    await send({
+        \"type\": \"http.response.start\",
+        \"status\": 200,
+        \"headers\": [(b\"content-length\", b\"10\")],
+    })
+    await send({\"type\": \"http.response.body\", \"body\": b\"caseops-ok\"})
+""",
+        encoding="utf-8",
+    )
+    with socket.socket() as reserved:
+        reserved.bind(("127.0.0.1", 0))
+        port = reserved.getsockname()[1]
+
+    server = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "connection_close_app:app",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+            "--header",
+            "Connection:close",
+            "--app-dir",
+            str(tmp_path),
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        response = b""
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            if server.poll() is not None:
+                pytest.fail(f"Uvicorn exited before serving: {server.stderr.read()}")
+            try:
+                with socket.create_connection(("127.0.0.1", port), timeout=1) as client:
+                    client.settimeout(2)
+                    client.sendall(
+                        b"GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: keep-alive\r\n\r\n"
+                    )
+                    while chunk := client.recv(4096):
+                        response += chunk
+                break
+            except (ConnectionRefusedError, TimeoutError, socket.timeout):
+                response = b""
+                time.sleep(0.05)
+        else:
+            pytest.fail("Uvicorn did not complete a loopback response in time")
+
+        headers, body = response.split(b"\r\n\r\n", maxsplit=1)
+        assert b"\r\nconnection: close\r\n" in headers.lower() + b"\r\n"
+        assert body == b"caseops-ok"
+    finally:
+        server.terminate()
+        try:
+            server.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            server.kill()
+            server.wait(timeout=5)
 
 
 def test_production_deploy_seeds_verified_statutes_before_routing_traffic() -> None:

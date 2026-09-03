@@ -81,6 +81,11 @@ requirements when using the fallback.
   events. Do not infer an automatic resurrection from an explicit, audited
   `Disposed -> Intake` transition, and do not weaken lifecycle protections to
   make a UI symptom disappear.
+- Do not use Uvicorn `--timeout-keep-alive 0` as a Playwright stability fix. It
+  schedules an immediate unannounced socket close and can move `ECONNRESET`
+  failures between unrelated requests. Advertise `Connection: close` on the
+  loopback test server and close only after the complete response; never hide a
+  mutation transport failure behind an automatic retry.
 - Every provider-normalized identifier exposed by CaseOps must round-trip
   through the corresponding CaseOps input schema. Do not impose guessed
   provider formats (such as a minimum court-code length); preserve bounded
