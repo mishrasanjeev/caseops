@@ -47,7 +47,7 @@ async function signIn(page: Page): Promise<string> {
   return session.access_token;
 }
 
-test("IPLF-056B production exposes one fail-closed IP provider control plane", async ({
+test("IPLF-056B production exposes one truthful IP provider control plane", async ({
   page,
 }) => {
   const token = await signIn(page);
@@ -75,7 +75,12 @@ test("IPLF-056B production exposes one fail-closed IP provider control plane", a
   );
   expect(providers.get("indian-kanoon")).toEqual(
     expect.objectContaining({
-      external_calls_enabled: false,
+      state: "ready",
+      configured: true,
+      enabled: true,
+      external_calls_enabled: true,
+      missing_config_names: [],
+      missing_approval_keys: [],
       adapter_contract: expect.objectContaining({
         operations_path: "/api/admin/provider-operations/jobs",
       }),
@@ -87,7 +92,7 @@ test("IPLF-056B production exposes one fail-closed IP provider control plane", a
     "external calls off",
   );
   await expect(page.getByTestId("readiness-indian-kanoon")).toContainText(
-    "external calls off",
+    "external calls on",
   );
   const visibleText = await page.locator("body").innerText();
   expect(visibleText).not.toContain(token);
