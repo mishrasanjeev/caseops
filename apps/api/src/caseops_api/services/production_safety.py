@@ -1846,10 +1846,14 @@ def support_matrix_match(
             )
         )
     )
+    wildcard: CaseTrackingSupportMatrix | None = None
     for row in rows:
+        if row.court.strip() == "*":
+            wildcard = row
+            continue
         if row.court.strip().lower() in court_values:
             return row
-    return None
+    return wildcard
 
 
 def assert_case_tracking_supported(

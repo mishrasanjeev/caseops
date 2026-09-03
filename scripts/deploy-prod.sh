@@ -95,7 +95,7 @@ API_MIN_INSTANCES=4
 # Automated suites and persistent QA/test workspaces use deterministic provider
 # fixtures only. Keep this value in the canonical deploy path so an image-only
 # service update cannot silently drop the production API boundary.
-PAID_PROVIDER_BLOCKED_COMPANY_SLUGS="caseops-qa;caseops-ip-qa;test-legal;legal"
+PAID_PROVIDER_BLOCKED_COMPANY_SLUGS="caseops-qa;caseops-ip-qa;test-legal"
 # P1-2b (2026-05-15 perf review): keep one web instance warm too.
 # /sign-in is `dynamic = "force-dynamic"` (SSR per request, no CDN
 # cache), so with web minScale=0 the first hit after an idle window

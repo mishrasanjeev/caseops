@@ -641,7 +641,9 @@ def test_finance_support_matrix_and_tenant_no_leak_paths(
     tenant_text = tenant_matrix.text
     assert "refresh_cost_minor" not in tenant_text
     assert "bulk_refresh_cost_minor" not in tenant_text
-    assert tenant_matrix.json()["rows"][0]["enabled"] is False
+    matrix_by_court = {row["court"]: row for row in tenant_matrix.json()["rows"]}
+    assert matrix_by_court["*"]["enabled"] is True
+    assert matrix_by_court["Delhi High Court"]["enabled"] is False
 
     blocked_bookmark = client.post(
         "/api/case-tracking/bookmarks",
@@ -656,7 +658,11 @@ def test_finance_support_matrix_and_tenant_no_leak_paths(
     assert blocked_bookmark.status_code == 402
 
     with get_session_factory()() as session:
-        row = session.scalar(select(CaseTrackingSupportMatrix))
+        row = session.scalar(
+            select(CaseTrackingSupportMatrix).where(
+                CaseTrackingSupportMatrix.court == "Delhi High Court"
+            )
+        )
         assert row is not None
         assert row.refresh_cost_minor == 42
 

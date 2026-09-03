@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
@@ -403,10 +403,7 @@ def test_provider_operation_replay_is_idempotent_and_audited(
 
     factory = get_session_factory()
     with factory() as session:
-        assert (
-            session.scalar(select(func.count()).select_from(NotificationDeliveryIntent))
-            == 1
-        )
+        assert session.scalar(select(func.count()).select_from(NotificationDeliveryIntent)) == 1
         intent = session.get(NotificationDeliveryIntent, intent_id)
         assert intent is not None
         assert intent.status == NotificationDeliveryStatus.QUEUED
@@ -615,14 +612,17 @@ def test_provider_operation_actor_demotion_wins_before_operation_lock_and_audit(
         assert sync is not None
         assert sync.sync_status == CalendarEventSyncStatus.DEAD_LETTER
         assert sync.dead_letter_reason != "operator_ignored"
-        assert session.scalar(
-            select(func.count())
-            .select_from(AuditEvent)
-            .where(
-                AuditEvent.company_id == company_id,
-                AuditEvent.action == "provider_operation.ignore",
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(
+                    AuditEvent.company_id == company_id,
+                    AuditEvent.action == "provider_operation.ignore",
+                )
             )
-        ) == 0
+            == 0
+        )
 
 
 def test_provider_operation_resolve_moves_item_out_of_default_open_list(
@@ -860,9 +860,7 @@ def test_raw_calendar_create_claim_is_never_replayed_or_operator_closed(
     )
     operation_id = f"calendar_sync:{sync_id}"
     expected_code = (
-        CALENDAR_UPSERT_CLAIM_IN_FLIGHT_CODE
-        if live
-        else CALENDAR_UPSERT_UNKNOWN_OUTCOME_CODE
+        CALENDAR_UPSERT_CLAIM_IN_FLIGHT_CODE if live else CALENDAR_UPSERT_UNKNOWN_OUTCOME_CODE
     )
 
     exact = client.get(
@@ -961,25 +959,29 @@ def test_expired_calendar_claim_sweep_is_source_and_range_independent_for_both_p
             CalendarProvider.GOOGLE_CALENDAR,
             CalendarProvider.OUTLOOK,
         ):
-            assert materialize_expired_calendar_upsert_claims(
-                session,
-                context=context,
-                calendar_provider=provider,
-                limit=3,
-            ) == 3
+            assert (
+                materialize_expired_calendar_upsert_claims(
+                    session,
+                    context=context,
+                    calendar_provider=provider,
+                    limit=3,
+                )
+                == 3
+            )
             # A second worker observes durable terminal UNKNOWN rows and does
             # no work; source lookup and provider I/O are never prerequisites.
-            assert materialize_expired_calendar_upsert_claims(
-                session,
-                context=context,
-                calendar_provider=provider,
-                limit=3,
-            ) == 0
+            assert (
+                materialize_expired_calendar_upsert_claims(
+                    session,
+                    context=context,
+                    calendar_provider=provider,
+                    limit=3,
+                )
+                == 0
+            )
 
         rows = list(
-            session.scalars(
-                select(CalendarEventSync).where(CalendarEventSync.id.in_(sync_ids))
-            )
+            session.scalars(select(CalendarEventSync).where(CalendarEventSync.id.in_(sync_ids)))
         )
         assert len(rows) == 6
         assert all(
@@ -1029,8 +1031,7 @@ def test_expired_raw_calendar_claim_can_be_reconciled_directly_from_exact_record
     assert record["manual_reconciliation_required"] is True
 
     reconciled = client.post(
-        "/api/admin/provider-operations/jobs/"
-        f"{operation_id}/reconcile-calendar-unknown-outcome",
+        f"/api/admin/provider-operations/jobs/{operation_id}/reconcile-calendar-unknown-outcome",
         headers=auth_headers(token),
         json={
             "action": "attest_remote_absence",
@@ -1078,22 +1079,23 @@ def test_provider_readiness_is_names_only_and_fail_closed(
     try:
         boot = bootstrap_company(client)
         token = str(boot["access_token"])
+        # The released schema seeds a reviewed provider-wide scope. Remove it
+        # only inside this test to retain the fail-closed missing-scope case.
+        with get_session_factory()() as session:
+            session.execute(delete(CaseTrackingSupportMatrix))
+            session.commit()
         blocked_response = client.get(
             "/api/admin/provider-operations/readiness",
             headers=auth_headers(token),
         )
         assert blocked_response.status_code == 200, blocked_response.text
         blocked_ecourts = next(
-            row
-            for row in blocked_response.json()["providers"]
-            if row["provider"] == "ecourtsindia"
+            row for row in blocked_response.json()["providers"] if row["provider"] == "ecourtsindia"
         )
         assert blocked_ecourts["state"] == "blocked_missing_config"
         assert blocked_ecourts["required_approval_keys"] == []
         assert blocked_ecourts["missing_approval_keys"] == []
-        assert "CASE_TRACKING_SUPPORT_MATRIX_SCOPE" in blocked_ecourts[
-            "missing_config_names"
-        ]
+        assert "CASE_TRACKING_SUPPORT_MATRIX_SCOPE" in blocked_ecourts["missing_config_names"]
         with get_session_factory()() as session:
             session.add(
                 CaseTrackingSupportMatrix(
@@ -1152,28 +1154,24 @@ def test_provider_readiness_is_names_only_and_fail_closed(
     assert providers["wipo-madrid"]["configured"] is False
     assert providers["wipo-madrid"]["external_calls_enabled"] is False
     assert providers["wipo-madrid"]["adapter_contract"]["endpoint_paths"] == []
-    assert "automated_sync_not_activated" in providers["wipo-madrid"][
-        "missing_approval_keys"
-    ]
+    assert "automated_sync_not_activated" in providers["wipo-madrid"]["missing_approval_keys"]
     assert providers["indian-kanoon"]["state"] == "blocked_missing_config"
     assert providers["indian-kanoon"]["external_calls_enabled"] is False
     assert providers["indian-kanoon"]["required_approval_keys"] == []
     assert providers["indian-kanoon"]["missing_approval_keys"] == []
-    assert "INDIAN_KANOON_API_TOKEN" in providers["indian-kanoon"][
-        "missing_config_names"
-    ]
+    assert "INDIAN_KANOON_API_TOKEN" in providers["indian-kanoon"]["missing_config_names"]
     assert providers["indian-kanoon"]["adapter_contract"]["kill_switch_name"] == (
         "INDIAN_KANOON_ENABLED"
     )
-    assert providers["indian-kanoon"]["adapter_contract"][
-        "commercial_terms_status"
-    ] == "runtime_metadata_governed"
-    assert providers["ipindia-registry"]["adapter_contract"][
-        "commercial_terms_status"
-    ] == "not_approved"
-    assert "GOOGLE_DRIVE_CLIENT_SECRET" in providers["google_drive"][
-        "required_config_names"
-    ]
+    assert (
+        providers["indian-kanoon"]["adapter_contract"]["commercial_terms_status"]
+        == "runtime_metadata_governed"
+    )
+    assert (
+        providers["ipindia-registry"]["adapter_contract"]["commercial_terms_status"]
+        == "not_approved"
+    )
+    assert "GOOGLE_DRIVE_CLIENT_SECRET" in providers["google_drive"]["required_config_names"]
 
 
 def test_bounded_batch_replay_rejects_cross_tenant_and_stale_scope(
@@ -1261,12 +1259,9 @@ def test_replay_preview_is_bounded_unique_and_invokes_step_up(
     token = str(boot["access_token"])
     company_id = str(boot["company"]["id"])
     membership_id = str(boot["membership"]["id"])
-    operation_id = (
-        "notification_delivery:"
-        + _notification_intent_fixture(
-            company_id=company_id,
-            membership_id=membership_id,
-        )
+    operation_id = "notification_delivery:" + _notification_intent_fixture(
+        company_id=company_id,
+        membership_id=membership_id,
     )
     duplicate = _replay_preview(
         client,
@@ -1380,21 +1375,17 @@ def test_unknown_calendar_create_requires_typed_audited_reconciliation(
         session.commit()
         first_hearing_id = first_hearing.id
         second_hearing_id = second_hearing.id
-    first_id, first_connection_id, first_updated_at = (
-        _unknown_calendar_create_fixture(
-            company_id=company_id,
-            membership_id=membership_id,
-            source_id=first_hearing_id,
-            provider=CalendarProvider.OUTLOOK,
-        )
+    first_id, first_connection_id, first_updated_at = _unknown_calendar_create_fixture(
+        company_id=company_id,
+        membership_id=membership_id,
+        source_id=first_hearing_id,
+        provider=CalendarProvider.OUTLOOK,
     )
-    second_id, second_connection_id, second_updated_at = (
-        _unknown_calendar_create_fixture(
-            company_id=company_id,
-            membership_id=membership_id,
-            source_id=second_hearing_id,
-            provider=CalendarProvider.GOOGLE_CALENDAR,
-        )
+    second_id, second_connection_id, second_updated_at = _unknown_calendar_create_fixture(
+        company_id=company_id,
+        membership_id=membership_id,
+        source_id=second_hearing_id,
+        provider=CalendarProvider.GOOGLE_CALENDAR,
     )
     first_operation_id = f"calendar_sync:{first_id}"
 
@@ -1408,10 +1399,7 @@ def test_unknown_calendar_create_requires_typed_audited_reconciliation(
     )
     assert first_record["replay_available"] is False
     assert first_record["manual_reconciliation_required"] is True
-    assert (
-        first_record["automatic_replay_block_code"]
-        == CALENDAR_UPSERT_UNKNOWN_OUTCOME_CODE
-    )
+    assert first_record["automatic_replay_block_code"] == CALENDAR_UPSERT_UNKNOWN_OUTCOME_CODE
 
     preview = _replay_preview(
         client,
@@ -1426,10 +1414,7 @@ def test_unknown_calendar_create_requires_typed_audited_reconciliation(
         json={"reason": "Provider search has not been performed yet."},
     )
     assert generic_resolution.status_code == 409, generic_resolution.text
-    assert (
-        generic_resolution.json()["code"]
-        == CALENDAR_UPSERT_UNKNOWN_OUTCOME_CODE
-    )
+    assert generic_resolution.json()["code"] == CALENDAR_UPSERT_UNKNOWN_OUTCOME_CODE
 
     create_member = client.post(
         "/api/companies/current/users",
@@ -1474,9 +1459,7 @@ def test_unknown_calendar_create_requires_typed_audited_reconciliation(
     client.cookies.clear()
     stale_payload = {
         **attach_payload,
-        "expected_updated_at": (
-            first_updated_at - timedelta(seconds=1)
-        ).isoformat(),
+        "expected_updated_at": (first_updated_at - timedelta(seconds=1)).isoformat(),
     }
     stale = client.post(
         f"/api/admin/provider-operations/jobs/{first_operation_id}/reconcile-calendar-unknown-outcome",
@@ -1502,9 +1485,7 @@ def test_unknown_calendar_create_requires_typed_audited_reconciliation(
             **attach_payload,
             "expected_updated_at": attached.json()["operation"]["updated_at"],
             "expected_status": "delete_pending",
-            "expected_dead_letter_reason": (
-                "manual_reconciliation_remote_event_attached"
-            ),
+            "expected_dead_letter_reason": ("manual_reconciliation_remote_event_attached"),
         },
     )
     assert bad_state.status_code == 409, bad_state.text
@@ -1533,9 +1514,7 @@ def test_unknown_calendar_create_requires_typed_audited_reconciliation(
     with factory() as session:
         attached_row = session.get(CalendarEventSync, first_id)
         absence_row = session.get(CalendarEventSync, second_id)
-        absence_connection = session.get(
-            UserCalendarConnection, second_connection_id
-        )
+        absence_connection = session.get(UserCalendarConnection, second_connection_id)
         assert attached_row is not None
         assert attached_row.provider_event_id == "verified-outlook-event-id"
         assert absence_row is not None
@@ -1546,16 +1525,13 @@ def test_unknown_calendar_create_requires_typed_audited_reconciliation(
             session.scalars(
                 select(AuditEvent).where(
                     AuditEvent.company_id == company_id,
-                    AuditEvent.action
-                    == "calendar.sync.unknown_outcome_reconciled",
+                    AuditEvent.action == "calendar.sync.unknown_outcome_reconciled",
                 )
             )
         )
         assert len(audits) == 2
         audit_metadata = [json.loads(row.metadata_json or "{}") for row in audits]
-        assert {
-            row["evidence_reference"] for row in audit_metadata
-        } == {
+        assert {row["evidence_reference"] for row in audit_metadata} == {
             "OUTLOOK-SEARCH-2026-08-17-001",
             "GOOGLE-SEARCH-2026-08-17-ABSENT",
         }
