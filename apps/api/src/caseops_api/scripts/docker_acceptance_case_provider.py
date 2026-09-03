@@ -51,11 +51,14 @@ class AcceptanceProviderHandler(BaseHTTPRequestHandler):
         if not self._authorized():
             return
         if parsed.path == "/api/partner/search":
-            query = parse_qs(parsed.query).get("query", [""])[0].strip()
-            if not query:
+            params = parse_qs(parsed.query)
+            case_number = params.get("caseNumbers", [""])[0].strip()
+            general_query = params.get("query", [""])[0].strip()
+            search_text = case_number or general_query
+            if not search_text:
                 self._write_json(
                     HTTPStatus.BAD_REQUEST,
-                    {"detail": "A case-number query is required."},
+                    {"detail": "A case-number or general query is required."},
                 )
                 return
             self._write_json(
@@ -64,7 +67,7 @@ class AcceptanceProviderHandler(BaseHTTPRequestHandler):
                     "data": {
                         "results": [
                             _case_payload(
-                                case_number=query,
+                                case_number=search_text,
                                 cnr="DLHC010091232026",
                             )
                         ],

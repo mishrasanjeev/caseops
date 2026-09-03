@@ -255,19 +255,28 @@ def _display_title(payload: dict[str, object]) -> str:
     return "Tracked case"
 
 
-def _court_name(payload: dict[str, object], descriptions: dict[str, object] | None) -> str | None:
+def _court_name(
+    payload: dict[str, object],
+    descriptions: dict[str, object] | None,
+    *,
+    court_code_override: str | None = None,
+) -> str | None:
     court_name = _compact(payload.get("court_name") or payload.get("courtName"), limit=255)
     if court_name:
         return court_name
-    court_code = _compact(
+    raw_court_code = _compact(
         payload.get("court_code") or payload.get("courtCode") or payload.get("cnrCourtCode"),
         limit=80,
     )
     enum_lookup = descriptions.get("enumLookup") if descriptions else None
     if isinstance(enum_lookup, dict):
         court_lookup = enum_lookup.get("courtCode")
-        if isinstance(court_lookup, dict) and court_code in court_lookup:
-            return _compact(court_lookup[court_code], limit=255)
+        if isinstance(court_lookup, dict):
+            # Historical case detail may key descriptions by the short raw
+            # value even when CaseOps derives the search-ready code from CNR.
+            for court_code in dict.fromkeys((court_code_override, raw_court_code)):
+                if court_code in court_lookup:
+                    return _compact(court_lookup[court_code], limit=255)
     return None
 
 
@@ -421,18 +430,35 @@ def _snapshot_from_payload(
         orders = _events(case.get("orders") or case.get("daily_orders"), prefix="order")
     if not judgments:
         judgments = _events(case.get("judgments") or case.get("final_judgments"), prefix="judgment")
+    provider_court_code = _compact(
+        case.get("court_code") or case.get("courtCode") or case.get("cnrCourtCode"),
+        limit=80,
+    )
+    # Case-detail payloads have historically exposed ``cnrCourtCode`` as either
+    # the full search-ready establishment code (DLND02) or its numeric suffix
+    # (2). A valid CNR carries the canonical six-character court code, so use
+    # it when the payload does not provide a search-ready value. Search results
+    # already expose the canonical ``courtCode`` and retain it above.
+    if cnr and re.fullmatch(r"[A-Z]{4}\d{12}", cnr.upper()) and (
+        not provider_court_code or provider_court_code.isdigit()
+    ):
+        provider_court_code = cnr[:6].upper()
     return ProviderCaseSnapshot(
         provider=provider,
         cnr_number=cnr,
         case_number=_compact(
-            case.get("case_number") or case.get("caseNumber") or case.get("registrationNumber"),
+            case.get("case_number")
+            or case.get("registrationNumber")
+            or case.get("filingNumber")
+            or case.get("caseNumber"),
             limit=120,
         ),
-        court_code=_compact(
-            case.get("court_code") or case.get("courtCode") or case.get("cnrCourtCode"),
-            limit=80,
+        court_code=provider_court_code,
+        court_name=_court_name(
+            case,
+            descriptions_dict,
+            court_code_override=provider_court_code,
         ),
-        court_name=_court_name(case, descriptions_dict),
         case_title=_display_title(case),
         party_names=parties,
         current_status=_case_status(case, descriptions_dict),
@@ -496,21 +522,29 @@ class EcourtsIndiaApiProvider:
     def search_cases(self, *, query: CaseSearchQuery) -> list[ProviderCaseSnapshot]:
         if query.cnr_number:
             return [self.get_case_by_cnr(cnr=query.cnr_number)]
-        search_text = query.query or query.case_number
+        search_params = {
+            key: value
+            for key, value in {
+                "query": query.query,
+                # v4 exact case-number lookup is a structured filter. Sending
+                # a case number as general full text can return HTTP 200 with
+                # zero results, which is not a valid round-trip from Case Detail.
+                "caseNumbers": query.case_number,
+                "litigants": query.query,
+                "courtCodes": query.court_code,
+                "state": query.state,
+                "courtName": query.court_name,
+                "pageSize": 20,
+            }.items()
+            if value is not None
+        }
         try:
             with self._client() as client:
                 response = request_with_retries(
                     "GET",
                     self._url("/search"),
                     client=client,
-                    params={
-                        "query": search_text,
-                        "litigants": query.query,
-                        "courtCodes": query.court_code,
-                        "state": query.state,
-                        "courtName": query.court_name,
-                        "pageSize": 20,
-                    },
+                    params=search_params,
                     headers=self._headers(),
                 )
         except httpx.HTTPError as exc:
@@ -520,7 +554,11 @@ class EcourtsIndiaApiProvider:
         rows = data.get("results") if isinstance(data, dict) else data
         if not isinstance(rows, list):
             rows = [data] if isinstance(data, dict) else []
-        descriptions = data.get("descriptions") if isinstance(data, dict) else None
+        descriptions = (
+            data.get("descriptions") or data.get("enumDescriptions")
+            if isinstance(data, dict)
+            else None
+        )
         snapshots: list[ProviderCaseSnapshot] = []
         for row in rows:
             if not isinstance(row, dict):
