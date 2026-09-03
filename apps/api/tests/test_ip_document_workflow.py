@@ -4,11 +4,13 @@ import hashlib
 import json
 
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import event, select
 
 from caseops_api.db.models import (
     CompanyMembership,
     IpDocketRecord,
+    IpDocument,
+    IpDocumentTaxonomyEntry,
     IpDocumentVersion,
     PrivateProjectionEvent,
 )
@@ -338,6 +340,136 @@ def test_duplicate_detection_uses_content_and_reuses_one_document_across_links(
     assert replacement.status_code == 200, replacement.text
     assert replacement.json()["outcome"] == "created"
     assert replacement.json()["document"]["current_version"] == 2
+
+
+def test_all_naming_paths_remain_bounded_after_more_than_500_historical_versions(
+    client: TestClient,
+) -> None:
+    """Production regression: tenant history must not be copied into a 500-item schema."""
+
+    bootstrap, headers, dockets = _seed_and_dockets(client)
+    company_id = str(bootstrap["company"]["id"])
+    membership_id = str(bootstrap["membership"]["id"])
+    requested_name = "ACME_Trademark_ASTER_IN_12345_evidence_2026-08-09_1.txt"
+    with get_session_factory()() as session:
+        taxonomy_id = session.scalar(
+            select(IpDocumentTaxonomyEntry.id).where(
+                IpDocumentTaxonomyEntry.company_id == company_id,
+                IpDocumentTaxonomyEntry.key == "evidence",
+            )
+        )
+        assert taxonomy_id is not None
+        historical = IpDocument(
+            company_id=company_id,
+            taxonomy_entry_id=taxonomy_id,
+            title="Production-scale naming history",
+            confidentiality="internal",
+            is_privileged=False,
+            current_version=501,
+            created_by_membership_id=membership_id,
+        )
+        session.add(historical)
+        session.flush()
+        session.add_all(
+            [
+                IpDocumentVersion(
+                    company_id=company_id,
+                    document_id=historical.id,
+                    version=index + 1,
+                    original_filename=f"historical-{index:03d}.txt",
+                    display_name=(requested_name if index == 0 else f"Historical_{index:03d}.txt"),
+                    storage_key=f"test/ip-document-history/{historical.id}/{index:03d}",
+                    content_type="text/plain",
+                    size_bytes=1,
+                    sha256_hex="f" * 64,
+                    uploaded_by_membership_id=membership_id,
+                )
+                for index in range(501)
+            ]
+        )
+        session.commit()
+
+    with get_session_factory()() as session:
+        engine = session.get_bind()
+    naming_queries: list[str] = []
+
+    def capture_naming_query(
+        _connection, _cursor, statement, _parameters, _context, _executemany
+    ) -> None:
+        if "lower(ip_document_versions.display_name)" in statement.lower():
+            naming_queries.append(statement)
+
+    event.listen(engine, "before_cursor_execute", capture_naming_query)
+    try:
+        created = _upload(
+            client,
+            headers,
+            filename="new-evidence.txt",
+            content=b"A production-scale upload must remain available and uniquely named. " * 12,
+            docket_id=dockets[0],
+        )
+        document_id = created["document"]["id"]
+        new_version = client.post(
+            f"/api/ip/documents/{document_id}/new-version",
+            headers=headers,
+            data={
+                "metadata_json": json.dumps(
+                    {
+                        "expected_current_version": 1,
+                        "client_code": "ACME",
+                        "asset_type": "Trademark",
+                        "mark": "ASTER",
+                        "jurisdiction": "IN",
+                        "application_no": "12345",
+                        "document_date": "2026-08-09",
+                    }
+                )
+            },
+            files={
+                "upload": (
+                    "revised-evidence.txt",
+                    b"The bounded new-version path uses distinct revised evidence. " * 12,
+                    "text/plain",
+                )
+            },
+        )
+        assert new_version.status_code == 200, new_version.text
+        bulk_items = [
+            {
+                "document_id": document_id,
+                "expected_current_version": 2,
+                "expected_taxonomy_key": "evidence",
+                "taxonomy_key": "correspondence",
+                "naming": {
+                    "client_code": "ACME",
+                    "document_type": "Correspondence",
+                    "version": 2,
+                    "extension": "txt",
+                },
+            }
+        ]
+        bulk_preview = client.post(
+            "/api/ip/documents/bulk-preview",
+            headers=headers,
+            json={"items": bulk_items},
+        )
+        assert bulk_preview.status_code == 200, bulk_preview.text
+        bulk_apply = client.post(
+            "/api/ip/documents/bulk-apply",
+            headers=headers,
+            json={
+                "items": bulk_items,
+                "preview_token": bulk_preview.json()["preview_token"],
+            },
+        )
+        assert bulk_apply.status_code == 200, bulk_apply.text
+    finally:
+        event.remove(engine, "before_cursor_execute", capture_naming_query)
+    assert created["outcome"] == "created"
+    assert created["document"]["versions"][0]["display_name"] == (
+        "ACME_Trademark_ASTER_IN_12345_evidence_2026-08-09_1_2.txt"
+    )
+    assert 4 <= len(naming_queries) <= 6
 
 
 def test_bulk_preview_is_required_and_conflicts_receive_deterministic_suffix(

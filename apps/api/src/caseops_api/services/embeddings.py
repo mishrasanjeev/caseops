@@ -30,6 +30,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Protocol
 
+from caseops_api.core.automated_test_context import paid_providers_blocked_for_request
 from caseops_api.core.settings import get_settings
 from caseops_api.services import voyage_usage as _voyage_usage
 from caseops_api.services.notification_delivery import redact_provider_error
@@ -457,6 +458,14 @@ class GeminiProvider:
 
 def build_provider() -> EmbeddingProvider:
     settings = get_settings()
+    if paid_providers_blocked_for_request():
+        # Never construct Voyage/Gemini clients for marked Playwright or API
+        # regression traffic. The deterministic vectors exercise the complete
+        # persistence and retrieval path without consuming provider credits.
+        return MockProvider(
+            model="caseops-automated-test-embed",
+            dimensions=settings.embedding_dimensions,
+        )
     provider_name = settings.embedding_provider.lower()
     if provider_name in {"mock", "noop", "off"}:
         return MockProvider(
