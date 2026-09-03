@@ -3562,9 +3562,22 @@ export type StatuteSectionRecord = {
 // full text fetch the section-detail endpoint.
 export type StatuteSectionListItem = Omit<StatuteSectionRecord, "section_text">;
 
+export type StatuteSectionCatalogListItem = {
+  id: string;
+  statute_id: string;
+  section_number: string;
+  section_label: string | null;
+  ordinal: number;
+  selection_state: "verified_selectable" | "verification_pending";
+};
+
 export type StatuteSectionsListResponse = {
   statute: StatuteRecord;
   sections: StatuteSectionListItem[];
+  catalog_sections: StatuteSectionCatalogListItem[];
+  verified_section_count: number;
+  catalog_section_count: number;
+  coverage_label: string;
 };
 
 export type StatuteSectionDetailResponse = {

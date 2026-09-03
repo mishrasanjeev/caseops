@@ -13,6 +13,7 @@ import {
 } from "@playwright/test";
 
 import { buildMinimalXlsx } from "./support/minimal-xlsx";
+import { seedVerifiedLocalStatute } from "./support/verified-statute-fixture";
 
 const envOr = (key: string, fallback: string): string =>
   (process.env[key] ?? "").trim() || fallback;
@@ -123,6 +124,7 @@ test.describe.serial("Ram 2026-09-03 Bulk Matter Exact Court mapping", () => {
       },
     });
     await expectStatus(bootstrap, 200, "bootstrap local tenant");
+    seedVerifiedLocalStatute(IS_LOCAL);
   });
 
   test.afterAll(async () => {
@@ -168,6 +170,210 @@ test.describe.serial("Ram 2026-09-03 Bulk Matter Exact Court mapping", () => {
     await expectStatus(webBuild, 200, "web release identity");
     expect((await apiBuild.json()).release_sha).toBe(expectedSha);
     expect((await webBuild.json()).release_sha).toBe(expectedSha);
+  });
+
+  test("BUG-004/005/006: providers are truthful and every statute entry is visible but only verified law is attachable", async ({
+    page,
+  }) => {
+    token = await signIn(page);
+    const headers = { Authorization: `Bearer ${token}` };
+
+    const readinessResponse = await page.request.get(
+      `${API_BASE_URL}/api/admin/provider-operations/readiness`,
+      { headers },
+    );
+    await expectStatus(readinessResponse, 200, "provider readiness");
+    const readiness = new Map(
+      (
+        (await readinessResponse.json()) as {
+          providers: Array<{
+            provider: string;
+            state: string;
+            configured: boolean;
+            enabled: boolean;
+            external_calls_enabled: boolean;
+            required_approval_keys: string[];
+            missing_approval_keys: string[];
+          }>;
+        }
+      ).providers.map((row) => [row.provider, row]),
+    );
+    for (const provider of ["ecourtsindia", "indian-kanoon"]) {
+      const row = readiness.get(provider);
+      expect(row, `${provider} readiness row`).toBeTruthy();
+      expect(row?.required_approval_keys).toEqual([]);
+      expect(row?.missing_approval_keys).toEqual([]);
+      if (!IS_LOCAL) {
+        expect(row).toEqual(
+          expect.objectContaining({
+            state: "ready",
+            configured: true,
+            enabled: true,
+            external_calls_enabled: true,
+          }),
+        );
+      }
+    }
+
+    const supportResponse = await page.request.get(
+      `${API_BASE_URL}/api/case-tracking/support-matrix`,
+      { headers },
+    );
+    await expectStatus(supportResponse, 200, "case-tracking support matrix");
+    const supportRows = (
+      (await supportResponse.json()) as {
+        rows: Array<{
+          provider: string;
+          court: string;
+          enabled: boolean;
+          bench_jurisdiction: string | null;
+        }>;
+      }
+    ).rows;
+    expect(supportRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          provider: "ecourtsindia",
+          court: "*",
+          enabled: true,
+        }),
+      ]),
+    );
+
+    const catalogResponse = await page.request.get(
+      `${API_BASE_URL}/api/statutes/`,
+      { headers },
+    );
+    await expectStatus(catalogResponse, 200, "statute catalog");
+    const catalog = (await catalogResponse.json()) as {
+      statutes: Array<{
+        id: string;
+        section_count: number;
+        catalog_section_count: number;
+      }>;
+      total_section_count: number;
+      total_catalog_section_count: number;
+    };
+    expect(catalog.statutes.length).toBeGreaterThan(1);
+    expect(catalog.total_catalog_section_count).toBeGreaterThan(
+      catalog.total_section_count,
+    );
+
+    const sectionsResponse = await page.request.get(
+      `${API_BASE_URL}/api/statutes/constitution-india/sections`,
+      { headers },
+    );
+    await expectStatus(sectionsResponse, 200, "Constitution section catalog");
+    const sectionCatalog = (await sectionsResponse.json()) as {
+      sections: Array<{
+        id: string;
+        section_number: string;
+        verification_status: string;
+      }>;
+      catalog_sections: Array<{
+        id: string;
+        section_number: string;
+        selection_state: string;
+      }>;
+      verified_section_count: number;
+      catalog_section_count: number;
+    };
+    const verified = sectionCatalog.sections.find(
+      (row) => row.section_number === "Article 14",
+    );
+    const pending = sectionCatalog.catalog_sections.find(
+      (row) => row.selection_state === "verification_pending",
+    );
+    expect(verified?.verification_status).toBe("verified_official");
+    expect(pending).toBeTruthy();
+
+    const matterResponse = await page.request.post(
+      `${API_BASE_URL}/api/matters/`,
+      {
+        headers,
+        data: {
+          title: `September 03 statute coverage ${RUN_ID}`,
+          matter_code: code("STATUTE"),
+          status: "active",
+          practice_area: "Commercial Litigation",
+          forum_level: "high_court",
+          forum_catalog_entry_id: "hc:delhi",
+        },
+      },
+    );
+    await expectStatus(matterResponse, 200, "create statute regression matter");
+    const matter = (await matterResponse.json()) as MatterRecord;
+    createdMatterIds.add(matter.id);
+
+    const bypass = await page.request.post(
+      `${API_BASE_URL}/api/matters/${matter.id}/statute-references`,
+      {
+        headers,
+        data: { section_id: pending!.id, relevance: "cited" },
+      },
+    );
+    await expectStatus(bypass, 409, "reject unverified direct API attachment");
+    expect((await bypass.json()).type).toBe("statute_section_not_verified");
+
+    await page.goto(`${BASE_URL}/app/matters/${matter.id}/statutes`);
+    await page.getByTestId("matter-statute-add-trigger").click();
+    const actSelect = page.getByTestId("matter-statute-act-select");
+    await expect(actSelect.locator("option")).toHaveCount(
+      catalog.statutes.length + 1,
+    );
+    for (const unavailable of catalog.statutes.filter(
+      (row) => row.section_count === 0,
+    )) {
+      await expect(
+        actSelect.locator(`option[value="${unavailable.id}"]`),
+      ).toHaveAttribute("disabled", "");
+    }
+    const sectionRequest = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname ===
+          "/api/statutes/constitution-india/sections" &&
+        response.request().method() === "GET",
+    );
+    await actSelect.selectOption("constitution-india");
+    await expectStatus(await sectionRequest, 200, "load section picker");
+    const sectionSelect = page.getByTestId("matter-statute-section-select");
+    await expect(sectionSelect.locator("option")).toHaveCount(
+      sectionCatalog.catalog_section_count + 1,
+    );
+    await expect(
+      sectionSelect.locator(`option[value="${pending!.id}"]`),
+    ).toHaveAttribute("disabled", "");
+    await expect(
+      sectionSelect.locator(`option[value="${verified!.id}"]`),
+    ).not.toHaveAttribute("disabled", "");
+    await sectionSelect.selectOption(verified!.id);
+    const attach = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname ===
+          `/api/matters/${matter.id}/statute-references` &&
+        response.request().method() === "POST",
+    );
+    await page.getByTestId("matter-statute-add-submit").click();
+    await expectStatus(await attach, 201, "attach verified statute section");
+
+    await page.goto(`${BASE_URL}/app/research`);
+    await page.getByTestId("research-source-indian-kanoon").click();
+    const indianKanoonReadiness = page.getByTestId(
+      "research-indian-kanoon-readiness",
+    );
+    if (IS_LOCAL) {
+      await expect(indianKanoonReadiness).toContainText(
+        "No provider call will be made",
+      );
+    } else {
+      await expect(indianKanoonReadiness).toContainText(
+        "Licensed access is active",
+      );
+    }
+    await page.goto(`${BASE_URL}/app/case-tracking`);
+    await expect(
+      page.getByTestId("case-tracking-support-matrix"),
+    ).toContainText("supported");
   });
 
   test("XLSX exact courts and configured alias map lineage; unknown row is not guessed", async ({

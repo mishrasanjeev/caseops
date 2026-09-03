@@ -184,7 +184,16 @@ def test_official_release_manifest_makes_article_14_selectable_and_traceable(
         headers=auth_headers(token),
     )
     assert listed.status_code == 200, listed.text
-    assert [row["section_number"] for row in listed.json()["sections"]] == ["Article 14"]
+    payload = listed.json()
+    assert [row["section_number"] for row in payload["sections"]] == ["Article 14"]
+    assert payload["verified_section_count"] == 1
+    assert payload["catalog_section_count"] == 11
+    assert len(payload["catalog_sections"]) == 11
+    catalog_by_number = {
+        row["section_number"]: row for row in payload["catalog_sections"]
+    }
+    assert catalog_by_number["Article 14"]["selection_state"] == "verified_selectable"
+    assert catalog_by_number["Article 19"]["selection_state"] == "verification_pending"
 
     detail = client.get(
         "/api/statutes/constitution-india/sections/Article%2014",

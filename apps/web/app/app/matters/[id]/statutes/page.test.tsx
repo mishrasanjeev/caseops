@@ -72,8 +72,7 @@ describe("MatterStatutesPage", () => {
           statute_short_name: "CrPC",
           section_number: "Section 482",
           section_label: "Saving of inherent powers of High Court",
-          section_url:
-            "https://www.indiacode.nic.in/handle/123456789/15272",
+          section_url: "https://www.indiacode.nic.in/handle/123456789/15272",
           relevance: "cited",
           notes: null,
           created_at: "2026-04-25T12:00:00Z",
@@ -86,8 +85,7 @@ describe("MatterStatutesPage", () => {
           statute_short_name: "IPC",
           section_number: "Section 302",
           section_label: "Punishment for murder",
-          section_url:
-            "https://www.indiacode.nic.in/handle/123456789/2263",
+          section_url: "https://www.indiacode.nic.in/handle/123456789/2263",
           relevance: "opposing",
           notes: null,
           created_at: "2026-04-25T12:01:00Z",
@@ -113,8 +111,11 @@ describe("MatterStatutesPage", () => {
     expect(screen.getByText(/opposing/i)).toBeInTheDocument();
   });
 
-  it("only offers Acts that have selectable verified sections", async () => {
-    listMatterStatuteReferencesMock.mockResolvedValue({ matter_id: "m-1", references: [] });
+  it("shows every catalogued Act but enables only Acts with verified sections", async () => {
+    listMatterStatuteReferencesMock.mockResolvedValue({
+      matter_id: "m-1",
+      references: [],
+    });
     listStatutesMock.mockResolvedValue({
       statutes: [
         {
@@ -133,6 +134,7 @@ describe("MatterStatutesPage", () => {
         },
       ],
       total_section_count: 2,
+      total_catalog_section_count: 22,
     });
     listStatuteSectionsMock.mockResolvedValue({ statute: {}, sections: [] });
     const user = userEvent.setup();
@@ -140,14 +142,87 @@ describe("MatterStatutesPage", () => {
 
     await user.click(await screen.findByTestId("matter-statute-add-trigger"));
     const select = await screen.findByTestId("matter-statute-act-select");
-    expect(within(select).queryByRole("option", { name: /Catalog-only Act/ })).toBeNull();
     expect(
-      within(select).getByRole("option", { name: /Source-backed Act \(2 verified\)/ }),
+      within(select).getByRole("option", { name: /Catalog-only Act/ }),
+    ).toBeDisabled();
+    expect(
+      within(select).getByRole("option", {
+        name: /Source-backed Act \(2 verified of 2 catalogued\)/,
+      }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("matter-statute-catalog-coverage"),
+    ).toHaveTextContent("2 verified of 22 catalogued sections across 2 Acts");
+  });
+
+  it("shows all catalogued sections while disabling unverified provisions", async () => {
+    listMatterStatuteReferencesMock.mockResolvedValue({
+      matter_id: "m-1",
+      references: [],
+    });
+    listStatutesMock.mockResolvedValue({
+      statutes: [
+        {
+          id: "verified-act",
+          short_name: "Verified",
+          long_name: "Source-backed Act",
+          section_count: 1,
+          catalog_section_count: 2,
+        },
+      ],
+      total_section_count: 1,
+      total_catalog_section_count: 2,
+    });
+    listStatuteSectionsMock.mockResolvedValue({
+      statute: {},
+      sections: [
+        { id: "s-1", section_number: "Section 1", section_label: "Verified" },
+      ],
+      catalog_sections: [
+        {
+          id: "s-1",
+          section_number: "Section 1",
+          section_label: "Verified",
+          selection_state: "verified_selectable",
+        },
+        {
+          id: "s-2",
+          section_number: "Section 2",
+          section_label: "Pending",
+          selection_state: "verification_pending",
+        },
+      ],
+      verified_section_count: 1,
+      catalog_section_count: 2,
+      coverage_label: "1 verified of 2 catalogued sections",
+    });
+    const user = userEvent.setup();
+    render(withClient(<MatterStatutesPage />));
+
+    await user.click(await screen.findByTestId("matter-statute-add-trigger"));
+    await user.selectOptions(
+      screen.getByTestId("matter-statute-act-select"),
+      "verified-act",
+    );
+    const sectionSelect = await screen.findByTestId(
+      "matter-statute-section-select",
+    );
+    expect(
+      within(sectionSelect).getByRole("option", { name: /Section 1/ }),
+    ).toBeEnabled();
+    expect(
+      within(sectionSelect).getByRole("option", { name: /Section 2/ }),
+    ).toBeDisabled();
+    expect(
+      screen.getByTestId("matter-statute-section-coverage"),
+    ).toHaveTextContent("1 verified of 2 catalogued sections");
   });
 
   it("shows an honest empty state when no Act has a verified selectable section", async () => {
-    listMatterStatuteReferencesMock.mockResolvedValue({ matter_id: "m-1", references: [] });
+    listMatterStatuteReferencesMock.mockResolvedValue({
+      matter_id: "m-1",
+      references: [],
+    });
     listStatutesMock.mockResolvedValue({
       statutes: [
         {
@@ -159,27 +234,33 @@ describe("MatterStatutesPage", () => {
         },
       ],
       total_section_count: 0,
+      total_catalog_section_count: 12,
     });
     const user = userEvent.setup();
     render(withClient(<MatterStatutesPage />));
 
     await user.click(await screen.findByTestId("matter-statute-add-trigger"));
-    expect(await screen.findByTestId("matter-statute-no-selectable-acts")).toHaveTextContent(
-      "No Acts currently have source-verified sections",
-    );
+    expect(
+      await screen.findByTestId("matter-statute-no-selectable-acts"),
+    ).toHaveTextContent("No Acts currently have source-verified sections");
   });
 
   it("distinguishes a catalog load failure from a genuinely empty verified catalog", async () => {
-    listMatterStatuteReferencesMock.mockResolvedValue({ matter_id: "m-1", references: [] });
+    listMatterStatuteReferencesMock.mockResolvedValue({
+      matter_id: "m-1",
+      references: [],
+    });
     listStatutesMock.mockRejectedValue(new Error("catalog unavailable"));
     const user = userEvent.setup();
     render(withClient(<MatterStatutesPage />));
 
     await user.click(await screen.findByTestId("matter-statute-add-trigger"));
-    expect(await screen.findByTestId("matter-statute-catalog-error")).toHaveTextContent(
-      "verified statute catalog could not be loaded",
-    );
-    expect(screen.queryByTestId("matter-statute-no-selectable-acts")).toBeNull();
+    expect(
+      await screen.findByTestId("matter-statute-catalog-error"),
+    ).toHaveTextContent("verified statute catalog could not be loaded");
+    expect(
+      screen.queryByTestId("matter-statute-no-selectable-acts"),
+    ).toBeNull();
     expect(screen.getByTestId("matter-statute-act-select")).toBeDisabled();
   });
 });

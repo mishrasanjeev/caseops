@@ -105,9 +105,9 @@ export default function MatterStatutesPage() {
         <div>
           <CardTitle>Statutes referenced</CardTitle>
           <CardDescription>
-            Sections this matter relies on or distinguishes. The
-            drafting flow injects bare text from these into the
-            appeal-memorandum prompt for verbatim quoting.
+            Sections this matter relies on or distinguishes. The drafting flow
+            injects bare text from these into the appeal-memorandum prompt for
+            verbatim quoting.
           </CardDescription>
         </div>
         <AddReferenceDialog matterId={matterId} />
@@ -217,7 +217,10 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
   const selectableStatutes = (statutesQuery.data?.statutes ?? []).filter(
     (statute) => statute.section_count > 0,
   );
+  const allStatutes = statutesQuery.data?.statutes ?? [];
   const sections = sectionsQuery.data?.sections ?? [];
+  const selectableSectionIds = new Set(sections.map((section) => section.id));
+  const catalogSections = sectionsQuery.data?.catalog_sections ?? sections;
 
   const addMutation = useMutation({
     mutationFn: () =>
@@ -265,11 +268,7 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
                 setStatuteId(e.target.value);
                 setSectionId("");
               }}
-              disabled={
-                statutesQuery.isPending ||
-                statutesQuery.isError ||
-                selectableStatutes.length === 0
-              }
+              disabled={statutesQuery.isPending || statutesQuery.isError}
               data-testid="matter-statute-act-select"
             >
               <option value="">
@@ -281,25 +280,45 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
                       ? "No verified Acts available"
                       : "Select an Act…"}
               </option>
-              {selectableStatutes.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.short_name} — {s.long_name} ({s.section_count} verified)
+              {allStatutes.map((s) => (
+                <option
+                  key={s.id}
+                  value={s.id}
+                  disabled={s.section_count === 0}
+                >
+                  {s.short_name} — {s.long_name} ({s.section_count} verified of{" "}
+                  {s.catalog_section_count ?? s.section_count} catalogued
+                  {s.section_count === 0 ? "; verification pending" : ""})
                 </option>
               ))}
             </select>
+            {!statutesQuery.isPending && !statutesQuery.isError ? (
+              <span
+                className="text-xs text-[var(--color-mute)]"
+                data-testid="matter-statute-catalog-coverage"
+              >
+                {statutesQuery.data?.total_section_count ?? 0} verified of{" "}
+                {statutesQuery.data?.total_catalog_section_count ?? 0}{" "}
+                catalogued sections across {allStatutes.length} Acts. All Acts
+                are shown; entries awaiting complete source verification are
+                visible but disabled.
+              </span>
+            ) : null}
             {statutesQuery.isError ? (
               <span
                 className="text-xs text-[var(--color-danger-700)]"
                 data-testid="matter-statute-catalog-error"
               >
-                The verified statute catalog could not be loaded. Retry by reopening this dialog.
+                The verified statute catalog could not be loaded. Retry by
+                reopening this dialog.
               </span>
             ) : !statutesQuery.isPending && selectableStatutes.length === 0 ? (
               <span
                 className="text-xs text-[var(--color-warn-700)]"
                 data-testid="matter-statute-no-selectable-acts"
               >
-                No Acts currently have source-verified sections available to attach.
+                No Acts currently have source-verified sections available to
+                attach.
               </span>
             ) : null}
           </label>
@@ -323,19 +342,40 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
                         ? "No verified sections available"
                         : "Select a section…"}
               </option>
-              {sections.map((sec) => (
-                <option key={sec.id} value={sec.id}>
+              {catalogSections.map((sec) => (
+                <option
+                  key={sec.id}
+                  value={sec.id}
+                  disabled={!selectableSectionIds.has(sec.id)}
+                >
                   {sec.section_number}
                   {sec.section_label ? ` — ${sec.section_label}` : ""}
+                  {!selectableSectionIds.has(sec.id)
+                    ? " — verification pending; not attachable"
+                    : ""}
                 </option>
               ))}
             </select>
+            {statuteId && !sectionsQuery.isPending && !sectionsQuery.isError ? (
+              <span
+                className="text-xs text-[var(--color-mute)]"
+                data-testid="matter-statute-section-coverage"
+              >
+                {sectionsQuery.data?.verified_section_count ?? sections.length}{" "}
+                verified of{" "}
+                {sectionsQuery.data?.catalog_section_count ??
+                  catalogSections.length}{" "}
+                catalogued sections. Unverified provisions cannot be attached
+                through the UI or API.
+              </span>
+            ) : null}
             {sectionsQuery.isError ? (
               <span
                 className="text-xs text-[var(--color-danger-700)]"
                 data-testid="matter-statute-sections-error"
               >
-                Verified sections could not be loaded. Retry by selecting the Act again.
+                Verified sections could not be loaded. Retry by selecting the
+                Act again.
               </span>
             ) : null}
           </label>
@@ -348,8 +388,12 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
               data-testid="matter-statute-relevance-select"
             >
               <option value="cited">cited (we rely on it)</option>
-              <option value="opposing">opposing (other side relies on it)</option>
-              <option value="context">context (in scope but not load-bearing)</option>
+              <option value="opposing">
+                opposing (other side relies on it)
+              </option>
+              <option value="context">
+                context (in scope but not load-bearing)
+              </option>
             </select>
           </label>
         </div>

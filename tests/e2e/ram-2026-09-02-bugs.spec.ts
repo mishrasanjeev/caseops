@@ -12,10 +12,7 @@ import {
   type APIRequestContext,
   type Page,
 } from "@playwright/test";
-import { spawnSync } from "node:child_process";
-import path from "node:path";
-
-import { e2eEnv, repoRoot } from "./support/env";
+import { seedVerifiedLocalStatute } from "./support/verified-statute-fixture";
 
 const envOr = (key: string, fallback: string): string =>
   (process.env[key] ?? "").trim() || fallback;
@@ -135,127 +132,13 @@ async function signIn(page: Page): Promise<void> {
   await page.waitForURL(/\/app(?:[/?]|$)/);
 }
 
-function seedVerifiedLocalStatute(): void {
-  if (!IS_LOCAL) return;
-  const project = envOr("CASEOPS_E2E_DOCKER_PROJECT", "");
-  const composeFile = envOr("CASEOPS_E2E_DOCKER_COMPOSE_FILE", "");
-  if (Boolean(project) !== Boolean(composeFile)) {
-    throw new Error(
-      "Docker project and compose-file metadata must be supplied together.",
-    );
-  }
-  const script = `
-from datetime import UTC, datetime
-from caseops_api.db.models import Statute, StatuteSection
-from caseops_api.db.session import get_session_factory
-from caseops_api.scripts.seed_statutes import _seed
-
-now = datetime.now(UTC)
-with get_session_factory()() as seed_session:
-    _seed(seed_session)
-with get_session_factory()() as session:
-    statute = session.get(Statute, "e2e-verified-evidence-act")
-    if statute is None:
-        statute = Statute(
-            id="e2e-verified-evidence-act",
-            short_name="E2E Evidence Act",
-            long_name="Deterministic verified-source acceptance fixture",
-            enacted_year=2026,
-            jurisdiction="india",
-            source_url="https://www.indiacode.nic.in/",
-            issuing_body="Legislative Department, Ministry of Law and Justice",
-            source_status="official",
-            verification_status="verified_official",
-            exact_source_version="E2E acceptance fixture 2026-09-02",
-            is_active=True,
-            created_at=now,
-            updated_at=now,
-        )
-        session.add(statute)
-        session.flush()
-    section = session.get(StatuteSection, "ram-sep02-verified-section")
-    if section is None:
-        section = StatuteSection(
-            id="ram-sep02-verified-section",
-            statute_id=statute.id,
-            section_number="73",
-            section_label="Deterministic acceptance evidence",
-            section_text="A deterministic local fixture used only to verify the reference workflow.",
-            section_text_source="indiacode",
-            section_text_fetched_at=now,
-            is_provisional=False,
-            verification_status="verified_official",
-            source_sha256="7b87df264c4fd520b9231f683c6de00553b8e48360547da816b1e09c78037ee0",
-            source_publisher="Legislative Department, Ministry of Law and Justice",
-            issuing_body="Legislative Department, Ministry of Law and Justice",
-            source_status="official",
-            legal_status="enacted",
-            exact_source_version="E2E acceptance fixture 2026-09-02",
-            source_locator_type="section_deep_link",
-            source_policy_json={"fixture": True},
-            link_health_status="available",
-            link_last_checked_at=now,
-            section_url="https://www.indiacode.nic.in/",
-            ordinal=1,
-            is_active=True,
-            created_at=now,
-            updated_at=now,
-        )
-        session.add(section)
-    session.commit()
-`;
-  const seeded = project
-    ? spawnSync(
-        "docker",
-        [
-          "compose",
-          "-p",
-          project,
-          "-f",
-          composeFile,
-          "exec",
-          "-T",
-          "api",
-          "python",
-          "-c",
-          script,
-        ],
-        { encoding: "utf8" },
-      )
-    : spawnSync(
-        process.platform === "win32"
-          ? path.join(repoRoot, "apps", "api", ".venv", "Scripts", "python.exe")
-          : path.join(repoRoot, "apps", "api", ".venv", "bin", "python"),
-        ["-c", script],
-        {
-          cwd: repoRoot,
-          encoding: "utf8",
-          env: {
-            ...process.env,
-            ...e2eEnv,
-            PYTHONPATH: [
-              path.join(repoRoot, "apps", "api", "src"),
-              process.env.PYTHONPATH,
-            ]
-              .filter(Boolean)
-              .join(path.delimiter),
-          },
-        },
-      );
-  if (seeded.status !== 0) {
-    throw new Error(
-      `Could not seed verified statute fixture.\n${seeded.stdout}\n${seeded.stderr}`,
-    );
-  }
-}
-
 test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
   test.setTimeout(240_000);
 
   test.beforeAll(async () => {
     api = await playwrightRequest.newContext();
     await ensureTenant();
-    seedVerifiedLocalStatute();
+    seedVerifiedLocalStatute(IS_LOCAL);
     const created = await api.post(`${API_BASE_URL}/api/matters/`, {
       headers: headers(),
       data: {
@@ -447,7 +330,10 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
         id: string;
         short_name: string;
         section_count: number;
+        catalog_section_count: number;
       }>;
+      total_section_count: number;
+      total_catalog_section_count: number;
     };
     const selectable = catalog.statutes.filter(
       (statute) => statute.section_count > 0,
@@ -458,14 +344,19 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
     await page.getByTestId("matter-statute-add-trigger").click();
     const actSelect = page.getByTestId("matter-statute-act-select");
     await expect(actSelect.locator("option")).toHaveCount(
-      selectable.length + 1,
+      catalog.statutes.length + 1,
+    );
+    await expect(
+      page.getByTestId("matter-statute-catalog-coverage"),
+    ).toContainText(
+      `${catalog.total_section_count} verified of ${catalog.total_catalog_section_count} catalogued`,
     );
     for (const unavailable of catalog.statutes.filter(
       (row) => row.section_count === 0,
     )) {
       await expect(
         actSelect.locator(`option[value="${unavailable.id}"]`),
-      ).toHaveCount(0);
+      ).toHaveAttribute("disabled", "");
     }
     expect(selectable.length).toBeGreaterThan(0);
     const constitution = selectable.find(
@@ -481,21 +372,36 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
     await actSelect.selectOption("constitution-india");
     const sectionsResponse = await sectionsResponsePromise;
     await expectStatus(sectionsResponse, 200, "load selected Act sections");
-    const article14Record = (
-      (await sectionsResponse.json()) as {
-        sections: Array<{
-          id: string;
-          section_number: string;
-          verification_status: string;
-        }>;
-      }
-    ).sections.find((row) => row.section_number === "Article 14");
+    const sectionPayload = (await sectionsResponse.json()) as {
+      sections: Array<{
+        id: string;
+        section_number: string;
+        verification_status: string;
+      }>;
+      catalog_sections: Array<{
+        id: string;
+        section_number: string;
+        selection_state: string;
+      }>;
+      verified_section_count: number;
+      catalog_section_count: number;
+    };
+    const article14Record = sectionPayload.sections.find(
+      (row) => row.section_number === "Article 14",
+    );
     expect(article14Record).toBeTruthy();
     expect(article14Record?.verification_status).toBe("verified_official");
     const sectionSelect = page.getByTestId("matter-statute-section-select");
-    await expect
-      .poll(() => sectionSelect.locator("option").count())
-      .toBeGreaterThan(1);
+    await expect(sectionSelect.locator("option")).toHaveCount(
+      sectionPayload.catalog_section_count + 1,
+    );
+    for (const unavailable of sectionPayload.catalog_sections.filter(
+      (row) => row.selection_state !== "verified_selectable",
+    )) {
+      await expect(
+        sectionSelect.locator(`option[value="${unavailable.id}"]`),
+      ).toHaveAttribute("disabled", "");
+    }
     const article14 = sectionSelect.locator(
       `option[value="${article14Record!.id}"]`,
     );
