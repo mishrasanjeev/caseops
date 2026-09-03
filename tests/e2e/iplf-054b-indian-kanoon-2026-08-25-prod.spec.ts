@@ -54,7 +54,7 @@ async function signIn(page: Page): Promise<string> {
   return session.access_token;
 }
 
-test("IPLF-054B production keeps unconfigured Indian Kanoon calls disabled", async ({
+test("IPLF-054B production activates Indian Kanoon while blocking QA spend", async ({
   page,
 }) => {
   const token = await signIn(page);
@@ -70,10 +70,18 @@ test("IPLF-054B production keeps unconfigured Indian Kanoon calls disabled", asy
     missing_approval_keys: string[];
     missing_config_names: string[];
     missing_cost_categories: string[];
+    permitted_uses: string[];
   };
-  expect(body.state).toBe("blocked_disabled");
-  expect(body.external_calls_enabled).toBe(false);
+  expect(body.state).toBe("ready");
+  expect(body.external_calls_enabled).toBe(true);
   expect(body.missing_approval_keys).toEqual([]);
+  expect(body.missing_config_names).toEqual([]);
+  expect(body.missing_cost_categories).toEqual([]);
+  expect(body.permitted_uses).toEqual([
+    "document_display",
+    "research_storage",
+    "search",
+  ]);
 
   const search = await page.request.post(
     `${API_BASE_URL}/api/authorities/providers/indian-kanoon/search`,
@@ -82,8 +90,8 @@ test("IPLF-054B production keeps unconfigured Indian Kanoon calls disabled", asy
       data: { query: "production acceptance must not reach the provider" },
     },
   );
-  await expectStatus(search, 503, "default-off search boundary");
-  expect((await search.json()).code).toBe("provider_disabled");
+  await expectStatus(search, 409, "no-paid-provider QA boundary");
+  expect((await search.json()).code).toBe("paid_provider_blocked_for_test");
 
   await page.goto(`${BASE_URL}/app/research`);
   await page.getByTestId("research-source-indian-kanoon").click();
@@ -93,18 +101,9 @@ test("IPLF-054B production keeps unconfigured Indian Kanoon calls disabled", asy
   );
   const readinessCopy = await readinessMessage.innerText();
   expect(readinessCopy.toLowerCase()).not.toContain("approval");
-  if (
-    body.missing_config_names.length > 0 ||
-    body.missing_cost_categories.length > 0
-  ) {
-    expect(readinessCopy).toContain("setup is incomplete");
-    expect(readinessCopy).toContain("No provider call will be made");
-    expect(readinessCopy).not.toContain("INDIAN_KANOON_");
-  } else {
-    expect(readinessCopy).toContain("disabled by the runtime switch");
-  }
+  expect(readinessCopy).toContain("Licensed access is active");
   await page
     .getByTestId("research-query-input")
     .fill("constitutional proportionality");
-  await expect(page.getByTestId("research-query-submit")).toBeDisabled();
+  await expect(page.getByTestId("research-query-submit")).toBeEnabled();
 });
