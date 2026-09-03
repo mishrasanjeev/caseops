@@ -222,3 +222,10 @@ requirements when using the fallback.
   number of exact candidates, and retain a regression with more than 500
   historical versions so upload, new-version, and bulk rename paths cannot
   regress into an unbounded scan or schema-limit 500.
+- Private projection generation transitions and lifecycle/access/tombstone
+  events must acquire locks in one tenant-first order: `Company`, then active
+  and shadow `PrivateIndexGeneration` rows. A readiness-plus-activation
+  transaction may never lock a generation before the tenant row. Prove the
+  overlap on PostgreSQL; converting the deadlock to a generic retry or a 503
+  assertion would hide the lifecycle-write failure and can look like a case
+  reopened when disposal actually rolled back.
