@@ -112,7 +112,7 @@ def test_uvicorn_connection_close_is_advertised_and_body_completes(tmp_path: Pat
                     while chunk := client.recv(4096):
                         response += chunk
                 break
-            except (ConnectionRefusedError, TimeoutError, socket.timeout):
+            except (ConnectionRefusedError, TimeoutError):
                 response = b""
                 time.sleep(0.05)
         else:
