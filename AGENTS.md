@@ -85,6 +85,12 @@ requirements when using the fallback.
   through the corresponding CaseOps input schema. Do not impose guessed
   provider formats (such as a minimum court-code length); preserve bounded
   provider-published values and prove lookup-result-to-follow-up-search flows.
+- Paid-provider acceptance must assert a meaningful returned record, not only
+  a successful HTTP status. For eCourtsIndia v4, exact case-number lookup uses
+  the structured `caseNumbers` filter with a public registration/filing number
+  and a search-ready court code; do not substitute packed internal
+  `caseNumber` values or general full-text `query`, both of which can produce a
+  misleading HTTP 200 with zero results.
 - When a client bulk file puts a configured leaf court in a hierarchy column,
   resolve the active court name or approved catalog alias before category
   validation. Alias data belongs in the server-owned catalog, never in parser

@@ -588,6 +588,97 @@ def test_ecourts_provider_uses_partner_paths_and_normalizes_payloads() -> None:
     assert requests[2].url.path == "/api/partner/case/bulk-refresh"
 
 
+def test_ecourts_case_detail_round_trips_through_exact_case_number_search() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path == "/api/partner/case/DLND020047882015":
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "courtCaseData": {
+                            "cnr": "DLND020047882015",
+                            "caseNumber": "202400248072016",
+                            "registrationNumber": "24807/2016",
+                            # Historical case-detail records can expose only
+                            # the numeric suffix; the CNR remains canonical.
+                            "cnrCourtCode": "2",
+                            "petitioners": ["MR.ARUN JAITLEY"],
+                            "respondents": ["MR. ARVIND KEJRIWAL"],
+                            "caseStatus": "DISPOSED",
+                        },
+                        "descriptions": {
+                            "enumLookup": {
+                                "caseStatus": {"DISPOSED": "Disposed"},
+                                "courtCode": {
+                                    "2": (
+                                        "Chief Metropolitan Magistrate, New Delhi, PHC"
+                                    )
+                                },
+                            }
+                        },
+                    }
+                },
+            )
+        if request.url.path == "/api/partner/search":
+            assert request.url.params.get("caseNumbers") == "24807/2016"
+            assert request.url.params.get("courtCodes") == "DLND02"
+            assert "query" not in request.url.params
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "results": [
+                            {
+                                "cnr": "DLND020047882015",
+                                "registrationNumber": "24807/2016",
+                                "courtCode": "DLND02",
+                                "petitioners": ["MR.ARUN JAITLEY"],
+                                "respondents": ["MR. ARVIND KEJRIWAL"],
+                                "caseStatus": "DISPOSED",
+                            }
+                        ],
+                        "enumDescriptions": {
+                            "enumLookup": {
+                                "caseStatus": {"DISPOSED": "Disposed"},
+                                "courtCode": {
+                                    "DLND02": (
+                                        "Chief Metropolitan Magistrate, New Delhi, PHC"
+                                    )
+                                },
+                            }
+                        },
+                    }
+                },
+            )
+        return httpx.Response(404, json={"detail": request.url.path})
+
+    provider = EcourtsIndiaApiProvider(
+        base_url="https://webapi.ecourtsindia.com",
+        token="test-token",
+        transport=httpx.MockTransport(handler),
+    )
+
+    detail = provider.get_case_by_cnr(cnr="DLND020047882015")
+    assert detail.case_number == "24807/2016"
+    assert detail.court_code == "DLND02"
+
+    matches = provider.search_cases(
+        query=CaseSearchQuery(
+            case_number=detail.case_number,
+            court_code=detail.court_code,
+        )
+    )
+    assert len(matches) == 1
+    assert matches[0].cnr_number == detail.cnr_number
+    assert matches[0].case_number == detail.case_number
+    assert matches[0].court_code == detail.court_code
+    assert matches[0].court_name == detail.court_name
+    assert len(requests) == 2
+
+
 def test_ecourts_provider_classifies_payment_required_without_exposing_body() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
