@@ -462,9 +462,12 @@
       "implementation_refs": [
         "apps/api/src/caseops_api/services/llm.py",
         "apps/api/src/caseops_api/scripts/extract_authority_metadata.py",
+        "apps/api/src/caseops_api/scripts/enrich_statute_sections.py",
         "apps/api/src/caseops_api/services/embeddings.py",
+        "apps/api/src/caseops_api/services/statute_enrichment.py",
         "apps/api/src/caseops_api/core/settings.py",
-        "apps/api/src/caseops_api/services/citations.py"
+        "apps/api/src/caseops_api/services/citations.py",
+        "infra/cloudrun/api-service.yaml"
       ]
     },
     {
