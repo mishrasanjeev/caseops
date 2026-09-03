@@ -209,3 +209,8 @@ requirements when using the fallback.
   consumes stored, hash-verified evidence only. A deliberate live-provider
   check is a separately budgeted operational action, never part of bulk or
   regular regression testing.
+- Tenant document naming must not copy corpus-scale filename history into a
+  request DTO. Serialize allocations under the tenant lock, probe a fixed
+  number of exact candidates, and retain a regression with more than 500
+  historical versions so upload, new-version, and bulk rename paths cannot
+  regress into an unbounded scan or schema-limit 500.

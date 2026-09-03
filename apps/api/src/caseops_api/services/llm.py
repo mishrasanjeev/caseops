@@ -25,6 +25,7 @@ from typing import Any, NoReturn
 
 from pydantic import BaseModel, ValidationError
 
+from caseops_api.core.automated_test_context import paid_providers_blocked_for_request
 from caseops_api.core.settings import get_settings
 from caseops_api.services.llm_types import (
     LLMCallContext,
@@ -1068,6 +1069,13 @@ def _resolve_model_for_purpose(settings: object, purpose: str | None) -> str:
 
 def build_provider(purpose: str | None = None) -> LLMProvider:
     settings = get_settings()
+    if paid_providers_blocked_for_request():
+        # Browser and API regression suites carry a request-scoped marker.
+        # Honor it before resolving credentials or constructing a paid SDK so
+        # every LLM-backed surface remains fully testable at zero external cost.
+        # Keep the configured model identity so tenant allow-lists remain an
+        # independently enforced boundary; ModelRun still records provider=mock.
+        return MockProvider(model=_resolve_model_for_purpose(settings, purpose))
     inner = _build_inner_provider(settings, purpose)
     # Cassette wrapping is opt-in (off by default). Sprint 11 offline
     # eval: capture once with credentials in `record` mode, replay

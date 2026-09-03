@@ -5,6 +5,7 @@ import json
 from fastapi.testclient import TestClient
 from sqlalchemy import event, func, select
 
+from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     AssistantCitation,
     AssistantSession,
@@ -72,15 +73,50 @@ def _ask(
     *,
     assistant_session: dict,
     question: str,
+    no_paid_providers: bool = False,
 ):
+    headers = auth_headers(token)
+    if no_paid_providers:
+        headers["X-CaseOps-Automated-Test"] = "no-paid-providers"
     return client.post(
         f"/api/workspace-assistant/sessions/{assistant_session['id']}/ask",
-        headers=auth_headers(token),
+        headers=headers,
         json={
             "expected_version": assistant_session["version"],
             "question": question,
         },
     )
+
+
+def test_automated_request_header_uses_offline_assistant_end_to_end(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("CASEOPS_LLM_API_KEY", "must-not-be-used")
+    monkeypatch.setenv("CASEOPS_LLM_MODEL_ASSISTANT", "caseops-mock-1")
+    get_settings.cache_clear()
+    try:
+        bootstrap = bootstrap_company(client)
+        token = str(bootstrap["access_token"])
+        _enable_assistant(client, token)
+        matter = _matter(client, token, "AI-NO-PAID-PROVIDER")
+        assistant_session = _session(client, token, matter["id"])
+        response = _ask(
+            client,
+            token,
+            assistant_session=assistant_session,
+            question="What is this matter's status and practice area?",
+            no_paid_providers=True,
+        )
+    finally:
+        get_settings.cache_clear()
+
+    assert response.status_code == 200, response.text
+    model = response.json()["assistant_turn"]["model"]
+    assert model["provider"] == "mock"
+    assert model["model"] == "caseops-mock-1"
+    assert response.json()["assistant_turn"]["citations"][0]["source_id"] == matter["id"]
 
 
 def test_scoped_qa_citations_abstention_proposals_export_and_deletion_boundary(

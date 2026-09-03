@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import re
 import unicodedata
+from collections.abc import Callable
 
 from fastapi import HTTPException, status
 from sqlalchemy import delete, select
@@ -318,6 +320,9 @@ def _sanitize_component(value: str) -> tuple[str, bool]:
 
 def preview_ip_document_name(
     payload: IpDocumentNamingPreviewRequest,
+    *,
+    name_is_taken: Callable[[str], bool] | None = None,
+    conflict_seed: str | None = None,
 ) -> IpDocumentNamingPreviewResponse:
     ordered_values = (
         ("client_code", payload.client_code),
@@ -361,15 +366,40 @@ def preview_ip_document_name(
         warnings.append("name was truncated to the 240-character storage-safe limit.")
     requested = f"{base}{extension}"
     existing = {name.casefold() for name in payload.existing_names}
+
+    def is_taken(candidate: str) -> bool:
+        return candidate.casefold() in existing or (
+            name_is_taken is not None and name_is_taken(candidate)
+        )
+
     resolved = requested
     suffix: int | None = None
-    candidate_number = 2
-    while resolved.casefold() in existing:
-        suffix = candidate_number
-        suffix_text = f"_{candidate_number}"
+    if name_is_taken is None:
+        candidate_numbers = iter(range(2, 2_147_483_647))
+    else:
+        # Persisted naming must never scan an entire tenant or perform an
+        # unbounded suffix loop. Try the familiar small suffixes first, then
+        # jump to a stable document-derived range. The caller serializes
+        # allocations under the tenant lock, so the selected name cannot race
+        # another upload in the same workspace.
+        stable_start = 1_000_000_000
+        if conflict_seed:
+            stable_start += int(hashlib.sha256(conflict_seed.encode()).hexdigest()[:8], 16)
+        candidate_numbers = iter([*range(2, 34), *range(stable_start, stable_start + 32)])
+    while is_taken(resolved):
+        try:
+            suffix = next(candidate_numbers)
+        except StopIteration as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "ip_document_name_allocation_exhausted",
+                    "message": "Could not allocate a unique document name. Retry the upload.",
+                },
+            ) from exc
+        suffix_text = f"_{suffix}"
         candidate_base = base[: 240 - len(extension) - len(suffix_text)].rstrip(" ._")
         resolved = f"{candidate_base}{suffix_text}{extension}"
-        candidate_number += 1
     if suffix is not None:
         warnings.append(
             "A deterministic numeric suffix was added; no existing name was overwritten."

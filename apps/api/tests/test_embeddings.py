@@ -4,6 +4,10 @@ import math
 
 import pytest
 
+from caseops_api.core.automated_test_context import (
+    reset_automated_test_request,
+    set_automated_test_request,
+)
 from caseops_api.core.settings import get_settings
 from caseops_api.services.embeddings import (
     EmbeddingProviderError,
@@ -78,6 +82,21 @@ def test_build_provider_requires_key_for_voyage(monkeypatch: pytest.MonkeyPatch)
     get_settings.cache_clear()
     with pytest.raises(EmbeddingProviderError):
         build_provider()
+
+
+def test_automated_request_uses_offline_embeddings_before_paid_sdk_construction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CASEOPS_EMBEDDING_PROVIDER", "voyage")
+    monkeypatch.setenv("CASEOPS_EMBEDDING_API_KEY", "paid-test-key")
+    get_settings.cache_clear()
+    marker = set_automated_test_request("no-paid-providers")
+    try:
+        provider = build_provider()
+    finally:
+        reset_automated_test_request(marker)
+    assert provider.name == "mock"
+    assert provider.model == "caseops-automated-test-embed"
 
 
 def test_build_provider_rejects_unknown(monkeypatch: pytest.MonkeyPatch) -> None:

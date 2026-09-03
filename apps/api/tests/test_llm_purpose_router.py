@@ -10,8 +10,13 @@ from __future__ import annotations
 
 import pytest
 
+from caseops_api.core.automated_test_context import (
+    reset_automated_test_request,
+    set_automated_test_request,
+)
 from caseops_api.core.settings import get_settings
 from caseops_api.services.llm import (
+    PURPOSE_ASSISTANT,
     PURPOSE_DRAFTING,
     PURPOSE_EVAL,
     PURPOSE_HEARING_PACK,
@@ -133,3 +138,19 @@ def test_openai_background_and_interactive_calls_use_bounded_sdk_retries(
         ("gpt-5-mini", 60.0, 0),
         ("gpt-5.1", 100.0, 0),
     ]
+
+
+def test_automated_request_uses_offline_llm_before_paid_sdk_construction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CASEOPS_LLM_PROVIDER", "openai")
+    monkeypatch.setenv("CASEOPS_LLM_API_KEY", "sk-test")
+    monkeypatch.setenv("CASEOPS_LLM_MODEL_ASSISTANT", "approved-test-model")
+    _clear_cache()
+    marker = set_automated_test_request("no-paid-providers")
+    try:
+        provider = build_provider(purpose=PURPOSE_ASSISTANT)
+    finally:
+        reset_automated_test_request(marker)
+    assert provider.name == "mock"
+    assert provider.model == "approved-test-model"
