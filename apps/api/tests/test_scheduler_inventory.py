@@ -72,9 +72,7 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
         "max_doublings": 5,
     }
     mapping_job = next(
-        job
-        for job in inventory["jobs"]
-        if job["run_job_name"] == "caseops-judge-mapping-refresh"
+        job for job in inventory["jobs"] if job["run_job_name"] == "caseops-judge-mapping-refresh"
     )
     assert mapping_job["schedule"] == "15 1 * * *"
     assert mapping_job["time_zone"] == "Asia/Kolkata"
@@ -82,23 +80,25 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
     assert mapping_job["task_timeout_seconds"] == 3_600
     assert mapping_job["image_policy"] == "release_digest"
     assert mapping_job["canary_policy"] == "manual_safe"
-    assert mapping_job["bootstrap"]["command"] == [
-        "caseops-refresh-bench-analysis-layers"
-    ]
+    assert mapping_job["bootstrap"]["command"] == ["caseops-refresh-bench-analysis-layers"]
     assert mapping_job["bootstrap"]["args"] == []
     assert all(job.get("bootstrap") for job in inventory["jobs"])
     assert all(
-        job["bootstrap"]["command"][0].casefold() not in {"uv", "uvx"}
-        for job in inventory["jobs"]
+        job["bootstrap"]["command"][0].casefold() not in {"uv", "uvx"} for job in inventory["jobs"]
     )
     assert all(
         job["desired_state"] == "ENABLED"
         for job in inventory["jobs"]
         if job not in (authority_job, mapping_job)
     )
-    assert inventory["legacy_schedulers_to_pause"] == [
-        "caseops-case-tracking-poll-midnight"
-    ]
+    assert inventory["legacy_schedulers_to_pause"] == ["caseops-case-tracking-poll-midnight"]
+    tracking_job = next(
+        job for job in inventory["jobs"] if job["run_job_name"] == "caseops-case-tracking-poll"
+    )
+    assert (
+        tracking_job["bootstrap"]["environment"]["CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS"]
+        == "caseops-qa;caseops-ip-qa;test-legal;legal"
+    )
 
 
 def test_release_hold_pauses_only_the_named_effective_scheduler() -> None:

@@ -40,6 +40,7 @@ from caseops_api.schemas.indian_kanoon import (
     IndianKanoonSourceRecord,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.paid_provider_safety import assert_paid_provider_call_allowed
 from caseops_api.services.provider_costs import verified_actual_cost_minor
 from caseops_api.services.saas_billing import record_usage
 from caseops_api.services.session_context import SessionContext
@@ -159,10 +160,7 @@ def indian_kanoon_readiness(session: Session | None = None) -> IndianKanoonReadi
         missing_costs = [
             str(category)
             for category in COST_CATEGORIES
-            if verified_actual_cost_minor(
-                session, category=category, provider=PROVIDER_KEY
-            )
-            is None
+            if verified_actual_cost_minor(session, category=category, provider=PROVIDER_KEY) is None
         ]
 
     if not settings.indian_kanoon_enabled:
@@ -394,9 +392,7 @@ def _call_provider(
 ) -> tuple[dict[str, Any], IndianKanoonCallMetadata]:
     _assert_ready(session)
     settings = get_settings()
-    unit_cost = verified_actual_cost_minor(
-        session, category=category, provider=PROVIDER_KEY
-    )
+    unit_cost = verified_actual_cost_minor(session, category=category, provider=PROVIDER_KEY)
     if unit_cost is None:
         raise _problem(
             http_status=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -414,6 +410,12 @@ def _call_provider(
             cost_category=category,
             cost_basis="fresh_cache",
         )
+    assert_paid_provider_call_allowed(
+        context=context,
+        provider=PROVIDER_KEY,
+        base_url=settings.indian_kanoon_api_base_url,
+        transport_is_mocked=client is not None,
+    )
     _assert_budget(session, context=context, call_cost_minor=unit_cost)
 
     own_client = client is None
@@ -590,9 +592,10 @@ def _source_record(payload: dict[str, Any], *, fallback_id: str) -> IndianKanoon
     document_id = _validate_document_id(
         str(_first(payload, "tid", "docid", "doc_id", "id") or fallback_id)
     )
-    publisher = _plain_text(
-        _first(payload, "publisher", "docsource", "court", "source"), limit=255
-    ) or "Indian Kanoon licensed source"
+    publisher = (
+        _plain_text(_first(payload, "publisher", "docsource", "court", "source"), limit=255)
+        or "Indian Kanoon licensed source"
+    )
     title = _plain_text(_first(payload, "title", "name"), limit=255) or f"Document {document_id}"
     source_category = _source_category(publisher)
     return IndianKanoonSourceRecord(
@@ -681,9 +684,7 @@ def search_indian_kanoon(
             IndianKanoonSearchResult(
                 **source.model_dump(),
                 rank=len(results) + 1,
-                headline=_plain_text(
-                    _first(raw, "headline", "fragment", "snippet"), limit=2000
-                )
+                headline=_plain_text(_first(raw, "headline", "fragment", "snippet"), limit=2000)
                 or None,
             )
         )
@@ -780,8 +781,7 @@ def fetch_indian_kanoon_metadata(
         **source.model_dump(),
         provider_metadata=provider_metadata,
         content_hash=provider_hash,
-        source_version=_plain_text(_first(payload, "version", "updated_at"), limit=120)
-        or None,
+        source_version=_plain_text(_first(payload, "version", "updated_at"), limit=120) or None,
         call=call,
     )
 

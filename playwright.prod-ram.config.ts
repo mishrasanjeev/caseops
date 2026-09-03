@@ -17,6 +17,8 @@
 import { defineConfig, devices } from "@playwright/test";
 import fs from "node:fs";
 
+import { noPaidProviderHeaders } from "./tests/e2e/support/cost-controls";
+
 const candidates = [
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
   "C:/Program Files/Google/Chrome/Application/chrome.exe",
@@ -42,6 +44,7 @@ export default defineConfig({
   workers: 1,
   reporter: "list",
   use: {
+    extraHTTPHeaders: noPaidProviderHeaders,
     baseURL: process.env.PROD_BASE_URL ?? "https://caseops.ai",
     // Production traces, screenshots, and videos can capture authenticated
     // legal data and session-bearing requests. Keep failure diagnostics in

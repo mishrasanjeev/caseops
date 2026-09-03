@@ -59,6 +59,8 @@ spec:
                     secretKeyRef:
                       name: "caseops-ecourtsindia-api-token"
                       key: "latest"
+                - name: CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS
+                  value: "caseops-qa;caseops-ip-qa;test-legal;legal"
                 - name: CASEOPS_CASE_TRACKING_POLL_LIMIT
                   value: "50"
               resources:

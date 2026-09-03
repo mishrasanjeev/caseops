@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { noPaidProviderHeaders } from "./tests/e2e/support/cost-controls";
+
 export default defineConfig({
   testDir: "tests/e2e",
   testMatch: /iplf-037b-renewal-2026-08-22-prod\.spec\.ts$/,
@@ -9,6 +11,7 @@ export default defineConfig({
   workers: 1,
   reporter: "list",
   use: {
+    extraHTTPHeaders: noPaidProviderHeaders,
     baseURL: "https://caseops.ai",
     trace: "off",
     screenshot: "off",

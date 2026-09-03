@@ -293,6 +293,10 @@ class Settings(BaseSettings):
     case_tracking_provider: str = Field(default="disabled")
     ecourtsindia_api_base_url: str | None = Field(default=None)
     ecourtsindia_api_token: str | None = Field(default=None)
+    # Paid providers are never exercised by ordinary automated suites. The
+    # request marker covers every Playwright tenant, while this list also
+    # protects persistent QA workspaces from background schedulers.
+    paid_provider_blocked_company_slugs: str = Field(default="caseops-qa,caseops-ip-qa,test-legal")
     case_tracking_poll_limit: int = Field(default=50, ge=1, le=500)
     case_tracking_default_poll_interval_hours: int = Field(default=24, ge=1, le=168)
     case_tracking_daily_window_start: str = Field(

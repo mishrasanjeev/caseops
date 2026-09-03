@@ -145,6 +145,11 @@ spec:
                 secretKeyRef:
                   name: "caseops-ecourtsindia-api-token"
                   key: "latest"
+            # Browser automation and persistent QA/test workspaces may use
+            # deterministic fixtures only. This list is also enforced by the
+            # background poller, where there is no inbound test header.
+            - name: CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS
+              value: "caseops-qa;caseops-ip-qa;test-legal;legal"
             # IPLF-054: repository capability is deployed fail-closed. Do not
             # add the provider token or enable this flag until the licensed
             # adapter runbook's legal, cost, retention, and budget gates pass.

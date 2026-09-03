@@ -8,6 +8,8 @@
  */
 import { defineConfig } from "@playwright/test";
 
+import { noPaidProviderHeaders } from "./tests/e2e/support/cost-controls";
+
 export default defineConfig({
   testDir: "tests/e2e",
   testMatch: /iplf-027b-a0-quiescence-2026-08-14-prod\.spec\.ts$/,
@@ -17,6 +19,7 @@ export default defineConfig({
   workers: 1,
   reporter: "list",
   use: {
+    extraHTTPHeaders: noPaidProviderHeaders,
     baseURL: "https://caseops.ai",
     trace: "off",
     screenshot: "off",
