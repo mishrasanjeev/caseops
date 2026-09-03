@@ -71,6 +71,26 @@ def test_production_deploy_seeds_verified_statutes_before_routing_traffic() -> N
     assert deploy.index(seed_update) < deploy.index(seed_execute) < deploy.index(api_deploy)
 
 
+def test_production_deploy_owns_indian_kanoon_activation_without_manual_data_entry() -> None:
+    deploy = _read_repo_text("scripts/deploy-prod.sh")
+    manifest = _read_repo_text("infra/cloudrun/api-service.yaml")
+
+    seed_update = (
+        'gcloud run jobs "${INDIAN_KANOON_COST_SEED_ACTION}" "${INDIAN_KANOON_COST_SEED_JOB}"'
+    )
+    seed_execute = 'gcloud run jobs execute "${INDIAN_KANOON_COST_SEED_JOB}"'
+    api_deploy = "gcloud run deploy caseops-api"
+    assert "caseops_api.scripts.seed_indian_kanoon_costs" in deploy
+    assert "INDIAN_KANOON_COST_SEED_JOB=caseops-seed-indian-kanoon-costs" in deploy
+    assert deploy.index(seed_update) < deploy.index(seed_execute) < deploy.index(api_deploy)
+    assert "CASEOPS_INDIAN_KANOON_API_TOKEN=${INDIAN_KANOON_API_TOKEN_SECRET}:latest" in deploy
+    assert "CASEOPS_INDIAN_KANOON_ENABLED=true" in deploy
+    assert 'env.get("CASEOPS_INDIAN_KANOON_API_TOKEN")' in deploy
+    assert "expected_indian_kanoon_env" in deploy
+    assert 'value: "Orchestrum Technologies LLP"' in manifest
+    assert 'name: "caseops-indian-kanoon-api-token"' in manifest
+
+
 def test_production_manifests_block_paid_providers_for_test_tenants() -> None:
     blocked_slugs = "caseops-qa;caseops-ip-qa;test-legal;legal"
     expected = f'"{blocked_slugs}"'
@@ -573,7 +593,7 @@ def test_deploy_prod_fences_rule_governance_and_verifies_exact_traffic() -> None
     assert ("MACHINE_READINESS_EVIDENCE_SECRET=caseops-machine-readiness-evidence-secret") in script
     assert (
         '--update-secrets "CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET='
-        '${MACHINE_READINESS_EVIDENCE_SECRET}:latest"'
+        "${MACHINE_READINESS_EVIDENCE_SECRET}:latest,"
     ) in script
     assert "LIVE_API_SERVICE_JSON=$(gcloud run services describe caseops-api" in script
     assert 'str(metadata.get("generation")) != str(status.get("observedGeneration"))' in script
@@ -1153,6 +1173,25 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
     "${FAKE_GOVERNANCE_FLAG}" '"},' \
     '{"name":"CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS",' \
     '"value":"caseops-qa;caseops-ip-qa;test-legal;legal"},' \
+    '{"name":"CASEOPS_INDIAN_KANOON_ENABLED","value":"true"},' \
+    '{"name":"CASEOPS_INDIAN_KANOON_API_BASE_URL",' \
+    '"value":"https://api.indiankanoon.org"},' \
+    '{"name":"CASEOPS_INDIAN_KANOON_TERMS_OWNER",' \
+    '"value":"Orchestrum Technologies LLP"},' \
+    '{"name":"CASEOPS_INDIAN_KANOON_TERMS_APPROVED_AT",' \
+    '"value":"2026-09-03T00:00:00Z"},' \
+    '{"name":"CASEOPS_INDIAN_KANOON_TERMS_EXPIRES_AT",' \
+    '"value":"2027-09-03T00:00:00Z"},' \
+    '{"name":"CASEOPS_INDIAN_KANOON_PERMITTED_USES",' \
+    '"value":"search,document_display,research_storage"},' \
+    '{"name":"CASEOPS_INDIAN_KANOON_DAILY_BUDGET_MINOR","value":"2500"},' \
+    '{"name":"CASEOPS_INDIAN_KANOON_MONTHLY_BUDGET_MINOR","value":"50000"},' \
+    '{"name":"CASEOPS_INDIAN_KANOON_RETENTION_DAYS","value":"30"},' \
+    '{"name":"CASEOPS_INDIAN_KANOON_MAX_SEARCH_PAGE","value":"2"},' \
+    '{"name":"CASEOPS_INDIAN_KANOON_MAX_RESULTS","value":"10"},' \
+    '{"name":"CASEOPS_INDIAN_KANOON_API_TOKEN",' \
+    '"valueFrom":{"secretKeyRef":{"key":"latest",' \
+    '"name":"caseops-indian-kanoon-api-token"}}},' \
     '{"name":"CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET",' \
     '"valueFrom":{"secretKeyRef":{"key":"latest","name":"' \
     "${FAKE_MACHINE_SECRET}" '"}}}' \
@@ -1570,6 +1609,18 @@ def test_deploy_prod_accepts_clean_head_and_healthy_api(tmp_path: Path) -> None:
         "CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET="
         "caseops-machine-readiness-evidence-secret:latest"
         in call
+        for call in calls
+    )
+    assert any(
+        "run jobs update caseops-seed-indian-kanoon-costs" in call
+        and "caseops_api.scripts.seed_indian_kanoon_costs" in call
+        for call in calls
+    )
+    assert any("run jobs execute caseops-seed-indian-kanoon-costs" in call for call in calls)
+    assert any(
+        "run deploy caseops-api" in call
+        and "CASEOPS_INDIAN_KANOON_API_TOKEN=caseops-indian-kanoon-api-token:latest" in call
+        and "CASEOPS_INDIAN_KANOON_ENABLED=true" in call
         for call in calls
     )
     assert (

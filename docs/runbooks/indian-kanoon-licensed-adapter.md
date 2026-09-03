@@ -2,7 +2,7 @@
 
 **Owner:** Orchestrum Technologies LLP through CaseOps platform operations
 **Implementation:** IPLF-054A/B
-**Default state:** deployed, disabled, no external calls
+**Production state:** active for real workspaces; machine-blocked for QA/test workspaces
 
 ## Boundary
 
@@ -17,7 +17,7 @@ tenant cost attribution, and two-person legal-source review. Provider results
 remain research aids. A successful provider response is not proof that a case
 remains good law or that statutory text is current.
 
-## Provider evidence checked 2 September 2026
+## Provider evidence checked 3 September 2026
 
 The provider documentation describes these authenticated POST endpoints:
 
@@ -48,8 +48,9 @@ the CaseOps corpus available.
    and a future machine revalidation timestamp.
 3. Put the API token in Secret Manager; never place it in Git, a browser env,
    a client response, logs, evidence, or a support ticket.
-4. Create five active `actual`, high-confidence provider cost profiles for
-   provider `indian-kanoon`, with the current pricing URL and dated evidence:
+4. The release-owned `seed_indian_kanoon_costs` job idempotently creates the
+   five active `actual`, high-confidence provider cost profiles for provider
+   `indian-kanoon`, with the current pricing URL and dated evidence:
    `legal_source_search`, `legal_source_document`,
    `legal_source_original_document`, `legal_source_fragment`, and
    `legal_source_metadata`.
@@ -57,18 +58,18 @@ the CaseOps corpus available.
    period. Budgets apply per tenant and are checked before a provider call.
 6. Configure `CASEOPS_INDIAN_KANOON_PERMITTED_USES` with at least
    `search,document_display,research_storage`.
-7. Deploy with `CASEOPS_INDIAN_KANOON_ENABLED=false`; verify migration, health,
-   source URL safety, and exact release identity first.
-8. Bind `CASEOPS_INDIAN_KANOON_API_TOKEN` from Secret Manager and set the dated
-   terms metadata, permitted uses, retention, and budgets.
-9. Verify readiness has no missing configuration, invalid terms, missing cost
-   categories, or approval keys. Run one low-cost canary per endpoint while the
-   kill switch is controlled, then change it to `true`. Check the official logo,
-   billing usage, cache state, source opening, content hash, and audit records.
+7. Bind `CASEOPS_INDIAN_KANOON_API_TOKEN` from Secret Manager and deploy the
+   dated terms metadata, permitted uses, retention, budgets and enabled runtime
+   switch through the canonical release script.
+8. Verify readiness has no missing configuration, invalid terms, missing cost
+   categories, or approval keys. Use fixture-backed tests for every endpoint and
+   only one INR 0.50 live search canary for credential/provider verification.
+   Check the official logo, billing usage, cache state, source opening, content
+   hash, and audit records without repeating paid requests.
 
-Do not activate from repository fixtures or this runbook alone. A real funded
-provider credential and accepted provider terms are external facts that code
-cannot fabricate; they are configuration prerequisites, not approval gates.
+The API account, prepaid balance and accepted provider terms are configuration
+facts, not approval gates. Once supplied, Codex-owned release automation seeds
+prices, binds the secret, deploys the runtime and verifies the resulting state.
 
 ## Runtime behavior
 
@@ -117,6 +118,6 @@ Run the focused API, migration, provider-readiness, source-action, web, and
 Playwright tests; regenerate OpenAPI and the data-governance map. After merge,
 deploy the exact main SHA with the canonical migration-before-traffic pipeline,
 verify API/web image digests and revisions, then run the dated production
-acceptance. In production's default-off state, acceptance must prove the
-readiness panel is blocked and no provider request occurs. It must not be
-reported as live-provider, legal, or pilot-firm acceptance.
+acceptance. Production automation uses fixture responses and the no-paid-provider
+marker; a single separately recorded live search is the activation canary and
+must not be repeated by regression runs.

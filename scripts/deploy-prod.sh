@@ -33,6 +33,18 @@ REGION=asia-south1
 REPO=caseops-images
 REGISTRY="${REGION}-docker.pkg.dev/${PROJECT}/${REPO}"
 MACHINE_READINESS_EVIDENCE_SECRET=caseops-machine-readiness-evidence-secret
+INDIAN_KANOON_API_TOKEN_SECRET=caseops-indian-kanoon-api-token
+INDIAN_KANOON_TERMS_OWNER="Orchestrum Technologies LLP"
+INDIAN_KANOON_TERMS_APPROVED_AT="2026-09-03T00:00:00Z"
+INDIAN_KANOON_TERMS_EXPIRES_AT="2027-09-03T00:00:00Z"
+INDIAN_KANOON_PERMITTED_USES="search,document_display,research_storage"
+# Provider prices are in paise. These per-tenant ceilings permit ordinary
+# interactive research while bounding spend to INR 25/day and INR 500/month.
+INDIAN_KANOON_DAILY_BUDGET_MINOR=2500
+INDIAN_KANOON_MONTHLY_BUDGET_MINOR=50000
+INDIAN_KANOON_RETENTION_DAYS=30
+INDIAN_KANOON_MAX_SEARCH_PAGE=2
+INDIAN_KANOON_MAX_RESULTS=10
 API_CPU=2
 API_MEMORY=4Gi
 API_SOURCE_DIR=apps/api
@@ -334,6 +346,38 @@ gcloud run jobs execute "${STATUTE_SEED_JOB}" \
   --region "${REGION}" --project "${PROJECT}" --wait --quiet
 echo "  verified statute catalog seeded from ${API_IMMUTABLE_IMAGE}."
 
+# Licensed-source prices are public release configuration. Seed all five
+# machine-verifiable cost categories before traffic so activation never waits
+# on platform-admin data entry or a human approval record.
+echo "--- verified Indian Kanoon price schedule seed (exact candidate image) ---"
+INDIAN_KANOON_COST_SEED_JOB=caseops-seed-indian-kanoon-costs
+INDIAN_KANOON_COST_SEED_ACTION=update
+if ! gcloud run jobs describe "${INDIAN_KANOON_COST_SEED_JOB}" \
+  --region "${REGION}" --project "${PROJECT}" >/dev/null 2>&1; then
+  INDIAN_KANOON_COST_SEED_ACTION=create
+fi
+gcloud run jobs "${INDIAN_KANOON_COST_SEED_ACTION}" "${INDIAN_KANOON_COST_SEED_JOB}" \
+  --image "${API_IMMUTABLE_IMAGE}" \
+  --command python \
+  --args "^|^-m|caseops_api.scripts.seed_indian_kanoon_costs" \
+  --service-account "caseops-runtime@${PROJECT}.iam.gserviceaccount.com" \
+  --set-env-vars "CASEOPS_ENV=cloud,CASEOPS_AUTO_MIGRATE=false" \
+  --set-secrets "CASEOPS_DATABASE_URL=caseops-database-url:latest,CASEOPS_AUTH_SECRET=caseops-auth-secret:latest" \
+  --set-cloudsql-instances "${PROJECT}:${REGION}:caseops-db" \
+  --task-timeout 10m \
+  --max-retries 0 \
+  --region "${REGION}" --project "${PROJECT}" --quiet
+INDIAN_KANOON_COST_SEED_IMAGE=$(gcloud run jobs describe "${INDIAN_KANOON_COST_SEED_JOB}" \
+  --region "${REGION}" --project "${PROJECT}" \
+  --format='value(spec.template.spec.template.spec.containers[0].image)')
+if [[ "${INDIAN_KANOON_COST_SEED_IMAGE}" != "${API_IMMUTABLE_IMAGE}" ]]; then
+  echo "ERROR: ${INDIAN_KANOON_COST_SEED_JOB} is not pinned to the candidate API digest."
+  exit 1
+fi
+gcloud run jobs execute "${INDIAN_KANOON_COST_SEED_JOB}" \
+  --region "${REGION}" --project "${PROJECT}" --wait --quiet
+echo "  verified Indian Kanoon prices seeded from ${API_IMMUTABLE_IMAGE}."
+
 # Step 3 - converge the complete recurring-job inventory. This repairs image,
 # target, cadence, time-zone, desired scheduler state, inventory-owned task
 # timeout, OAuth identity, and per-job invoker IAM drift from one checked-in
@@ -579,8 +623,8 @@ gcloud run deploy caseops-api \
   --container api \
   --port 8080 \
   --image "${API_IMAGE}" \
-  --update-secrets "CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET=${MACHINE_READINESS_EVIDENCE_SECRET}:latest" \
-  --update-env-vars "CASEOPS_RELEASE_SHA=${HEAD_SHA},CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false,CASEOPS_DB_STATEMENT_TIMEOUT_MS=60000,CASEOPS_DB_LOCK_TIMEOUT_MS=5000,CASEOPS_DB_IDLE_TRANSACTION_TIMEOUT_MS=60000,CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS=${PAID_PROVIDER_BLOCKED_COMPANY_SLUGS}" \
+  --update-secrets "CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET=${MACHINE_READINESS_EVIDENCE_SECRET}:latest,CASEOPS_INDIAN_KANOON_API_TOKEN=${INDIAN_KANOON_API_TOKEN_SECRET}:latest" \
+  --update-env-vars "CASEOPS_RELEASE_SHA=${HEAD_SHA},CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false,CASEOPS_DB_STATEMENT_TIMEOUT_MS=60000,CASEOPS_DB_LOCK_TIMEOUT_MS=5000,CASEOPS_DB_IDLE_TRANSACTION_TIMEOUT_MS=60000,CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS=${PAID_PROVIDER_BLOCKED_COMPANY_SLUGS},CASEOPS_INDIAN_KANOON_ENABLED=true,CASEOPS_INDIAN_KANOON_API_BASE_URL=https://api.indiankanoon.org,CASEOPS_INDIAN_KANOON_TERMS_OWNER=${INDIAN_KANOON_TERMS_OWNER},CASEOPS_INDIAN_KANOON_TERMS_APPROVED_AT=${INDIAN_KANOON_TERMS_APPROVED_AT},CASEOPS_INDIAN_KANOON_TERMS_EXPIRES_AT=${INDIAN_KANOON_TERMS_EXPIRES_AT},CASEOPS_INDIAN_KANOON_PERMITTED_USES=${INDIAN_KANOON_PERMITTED_USES},CASEOPS_INDIAN_KANOON_DAILY_BUDGET_MINOR=${INDIAN_KANOON_DAILY_BUDGET_MINOR},CASEOPS_INDIAN_KANOON_MONTHLY_BUDGET_MINOR=${INDIAN_KANOON_MONTHLY_BUDGET_MINOR},CASEOPS_INDIAN_KANOON_RETENTION_DAYS=${INDIAN_KANOON_RETENTION_DAYS},CASEOPS_INDIAN_KANOON_MAX_SEARCH_PAGE=${INDIAN_KANOON_MAX_SEARCH_PAGE},CASEOPS_INDIAN_KANOON_MAX_RESULTS=${INDIAN_KANOON_MAX_RESULTS}" \
   --cpu "${API_CPU}" \
   --memory "${API_MEMORY}" \
   --container clamav \
@@ -627,6 +671,16 @@ if ! LIVE_API_REVISION=$(python - \
   "${API_MIN_INSTANCES}" \
   "${MACHINE_READINESS_EVIDENCE_SECRET}" \
   "${PAID_PROVIDER_BLOCKED_COMPANY_SLUGS}" \
+  "${INDIAN_KANOON_API_TOKEN_SECRET}" \
+  "${INDIAN_KANOON_TERMS_OWNER}" \
+  "${INDIAN_KANOON_TERMS_APPROVED_AT}" \
+  "${INDIAN_KANOON_TERMS_EXPIRES_AT}" \
+  "${INDIAN_KANOON_PERMITTED_USES}" \
+  "${INDIAN_KANOON_DAILY_BUDGET_MINOR}" \
+  "${INDIAN_KANOON_MONTHLY_BUDGET_MINOR}" \
+  "${INDIAN_KANOON_RETENTION_DAYS}" \
+  "${INDIAN_KANOON_MAX_SEARCH_PAGE}" \
+  "${INDIAN_KANOON_MAX_RESULTS}" \
   "${LIVE_API_SERVICE_JSON}" <<'PY'
 import json
 import sys
@@ -635,7 +689,21 @@ expected_sha = sys.argv[1]
 expected_min = sys.argv[2]
 expected_machine_readiness_secret = sys.argv[3]
 expected_paid_provider_blocked_slugs = sys.argv[4]
-service = json.loads(sys.argv[5])
+expected_indian_kanoon_secret = sys.argv[5]
+expected_indian_kanoon_env = {
+    "CASEOPS_INDIAN_KANOON_ENABLED": "true",
+    "CASEOPS_INDIAN_KANOON_API_BASE_URL": "https://api.indiankanoon.org",
+    "CASEOPS_INDIAN_KANOON_TERMS_OWNER": sys.argv[6],
+    "CASEOPS_INDIAN_KANOON_TERMS_APPROVED_AT": sys.argv[7],
+    "CASEOPS_INDIAN_KANOON_TERMS_EXPIRES_AT": sys.argv[8],
+    "CASEOPS_INDIAN_KANOON_PERMITTED_USES": sys.argv[9],
+    "CASEOPS_INDIAN_KANOON_DAILY_BUDGET_MINOR": sys.argv[10],
+    "CASEOPS_INDIAN_KANOON_MONTHLY_BUDGET_MINOR": sys.argv[11],
+    "CASEOPS_INDIAN_KANOON_RETENTION_DAYS": sys.argv[12],
+    "CASEOPS_INDIAN_KANOON_MAX_SEARCH_PAGE": sys.argv[13],
+    "CASEOPS_INDIAN_KANOON_MAX_RESULTS": sys.argv[14],
+}
+service = json.loads(sys.argv[15])
 metadata = service.get("metadata") or {}
 spec = service.get("spec") or {}
 status = service.get("status") or {}
@@ -700,6 +768,9 @@ else:
         != expected_paid_provider_blocked_slugs
     ):
         errors.append("paid-provider test-tenant boundary is missing or stale")
+    for name, expected_value in expected_indian_kanoon_env.items():
+        if str((env.get(name) or {}).get("value")) != expected_value:
+            errors.append(f"{name} is missing or stale")
     machine_secret_ref = (
         (env.get("CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET") or {})
         .get("valueFrom", {})
@@ -712,6 +783,19 @@ else:
         errors.append(
             "CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET is not bound to the "
             "dedicated latest Secret Manager version"
+        )
+    indian_kanoon_secret_ref = (
+        (env.get("CASEOPS_INDIAN_KANOON_API_TOKEN") or {})
+        .get("valueFrom", {})
+        .get("secretKeyRef", {})
+    )
+    if (
+        str(indian_kanoon_secret_ref.get("name")) != expected_indian_kanoon_secret
+        or str(indian_kanoon_secret_ref.get("key")) != "latest"
+    ):
+        errors.append(
+            "CASEOPS_INDIAN_KANOON_API_TOKEN is not bound to the dedicated "
+            "latest Secret Manager version"
         )
 
 if errors:
