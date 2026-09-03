@@ -22,7 +22,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 
 from caseops_api.api.dependencies import (
     DbSession,
@@ -92,6 +92,39 @@ CurrentContext = Annotated[SessionContext, Depends(get_current_context)]
 MatterEditor = Annotated[SessionContext, Depends(require_capability("matters:edit"))]
 LegalUpdateUser = Annotated[SessionContext, Depends(require_capability("authorities:search"))]
 LegalUpdateAdmin = Annotated[SessionContext, Depends(require_capability("notifications:manage"))]
+
+
+def _selectable_statute_section_sql():
+    """One server-owned definition of an attachable statutory provision."""
+    return and_(
+        StatuteSection.is_active.is_(True),
+        StatuteSection.section_text.is_not(None),
+        StatuteSection.verification_status.in_(
+            {"verified_official", "verified_licensed"}
+        ),
+        StatuteSection.source_sha256.is_not(None),
+        StatuteSection.source_publisher.is_not(None),
+        StatuteSection.issuing_body.is_not(None),
+        StatuteSection.section_text_fetched_at.is_not(None),
+        StatuteSection.exact_source_version.is_not(None),
+        StatuteSection.source_locator_type == "section_deep_link",
+        StatuteSection.link_health_status == "available",
+    )
+
+
+def _is_selectable_statute_section(section: StatuteSection) -> bool:
+    return bool(
+        section.is_active
+        and section.section_text
+        and section.verification_status in {"verified_official", "verified_licensed"}
+        and section.source_sha256
+        and section.source_publisher
+        and section.issuing_body
+        and section.section_text_fetched_at
+        and section.exact_source_version
+        and section.source_locator_type == "section_deep_link"
+        and section.link_health_status == "available"
+    )
 
 
 class StatuteRecord(BaseModel):
@@ -255,9 +288,26 @@ class StatuteSectionListItem(BaseModel):
         return self
 
 
+class StatuteSectionCatalogListItem(BaseModel):
+    """Safe catalog metadata, including rows that are not yet attachable."""
+
+    id: str
+    statute_id: str
+    section_number: str
+    section_label: str | None
+    ordinal: int
+    selection_state: Literal[
+        "verified_selectable", "verification_pending", "quarantined", "retired"
+    ]
+
+
 class StatuteSectionsListResponse(BaseModel):
     statute: StatuteRecord
     sections: list[StatuteSectionListItem]
+    catalog_sections: list[StatuteSectionCatalogListItem] = Field(default_factory=list)
+    verified_section_count: int = 0
+    catalog_section_count: int = 0
+    coverage_label: str = "Verified statutory text only"
 
 
 class StatuteSectionDetailResponse(BaseModel):
@@ -409,18 +459,7 @@ def list_statutes(
             Statute,
             func.count(StatuteSection.id).label("catalog_section_count"),
             func.count(StatuteSection.id)
-            .filter(
-                StatuteSection.verification_status.in_(
-                    {"verified_official", "verified_licensed"}
-                ),
-                StatuteSection.source_sha256.is_not(None),
-                StatuteSection.source_publisher.is_not(None),
-                StatuteSection.issuing_body.is_not(None),
-                StatuteSection.section_text_fetched_at.is_not(None),
-                StatuteSection.exact_source_version.is_not(None),
-                StatuteSection.source_locator_type == "section_deep_link",
-                StatuteSection.link_health_status == "available",
-            )
+            .filter(_selectable_statute_section_sql())
             .label("verified_section_count"),
         )
         .outerjoin(
@@ -957,29 +996,45 @@ def list_statute_sections(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Statute {statute_id!r} not found.",
         )
-    sections = list(
+    catalog_sections = list(
         session.scalars(
             select(StatuteSection)
             .where(
                 StatuteSection.statute_id == statute_id,
                 StatuteSection.is_active.is_(True),
-                StatuteSection.verification_status.in_(
-                    {"verified_official", "verified_licensed"}
-                ),
-                StatuteSection.source_sha256.is_not(None),
-                StatuteSection.source_publisher.is_not(None),
-                StatuteSection.issuing_body.is_not(None),
-                StatuteSection.section_text_fetched_at.is_not(None),
-                StatuteSection.exact_source_version.is_not(None),
-                StatuteSection.source_locator_type == "section_deep_link",
-                StatuteSection.link_health_status == "available",
             )
             .order_by(StatuteSection.ordinal, StatuteSection.section_number)
         ).all()
     )
+    sections = [row for row in catalog_sections if _is_selectable_statute_section(row)]
+
+    def catalog_item(row: StatuteSection) -> StatuteSectionCatalogListItem:
+        if _is_selectable_statute_section(row):
+            selection_state = "verified_selectable"
+        elif row.verification_status == "quarantined":
+            selection_state = "quarantined"
+        elif row.verification_status == "retired":
+            selection_state = "retired"
+        else:
+            selection_state = "verification_pending"
+        return StatuteSectionCatalogListItem(
+            id=row.id,
+            statute_id=row.statute_id,
+            section_number=row.section_number,
+            section_label=row.section_label,
+            ordinal=row.ordinal,
+            selection_state=selection_state,
+        )
+
     return StatuteSectionsListResponse(
         statute=StatuteRecord.model_validate(statute),
         sections=[StatuteSectionListItem.model_validate(s) for s in sections],
+        catalog_sections=[catalog_item(s) for s in catalog_sections],
+        verified_section_count=len(sections),
+        catalog_section_count=len(catalog_sections),
+        coverage_label=(
+            f"{len(sections)} verified of {len(catalog_sections)} catalogued sections"
+        ),
     )
 
 
@@ -1191,10 +1246,22 @@ def add_matter_statute_reference(
             detail=f"Statute section {payload.section_id!r} not found.",
         )
     statute = session.scalar(select(Statute).where(Statute.id == section.statute_id))
-    if statute is None:
+    if statute is None or not statute.is_active:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Parent statute for this section is missing.",
+        )
+    if not _is_selectable_statute_section(section):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "type": "statute_section_not_verified",
+                "message": (
+                    "This provision is catalogued but does not yet have complete "
+                    "source-verified text, lineage, and an available section-level link. "
+                    "It cannot be attached to a Matter."
+                ),
+            },
         )
 
     relevance = (payload.relevance or "cited").strip().lower()

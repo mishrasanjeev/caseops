@@ -244,3 +244,12 @@ requirements when using the fallback.
   overlap on PostgreSQL; converting the deadlock to a generic retry or a 503
   assertion would hide the lifecycle-write failure and can look like a case
   reopened when disposal actually rolled back.
+- Catalog completeness is not fixed by proving one positive fixture. Expose
+  catalogued and verified totals separately, keep incomplete entries visible
+  but disabled, and enforce one source-verification predicate on every UI and
+  API write path. Never describe a partially verified seed as a complete
+  selectable legal catalog.
+- A no-paid-provider rejection is successful test isolation, not evidence that
+  the configured provider is unavailable. Regular, bulk, Docker, and
+  production regression runs must assert the rejection without spending; only
+  a separate opt-in budget-capped canary may establish live paid operation.

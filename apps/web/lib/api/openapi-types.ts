@@ -40704,6 +40704,27 @@ export interface components {
              */
             verification_status: string;
         };
+        /**
+         * StatuteSectionCatalogListItem
+         * @description Safe catalog metadata, including rows that are not yet attachable.
+         */
+        StatuteSectionCatalogListItem: {
+            /** Id */
+            id: string;
+            /** Ordinal */
+            ordinal: number;
+            /** Section Label */
+            section_label: string | null;
+            /** Section Number */
+            section_number: string;
+            /**
+             * Selection State
+             * @enum {string}
+             */
+            selection_state: "verified_selectable" | "verification_pending" | "quarantined" | "retired";
+            /** Statute Id */
+            statute_id: string;
+        };
         /** StatuteSectionDetailResponse */
         StatuteSectionDetailResponse: {
             /** Child Sections */
@@ -40873,9 +40894,26 @@ export interface components {
         };
         /** StatuteSectionsListResponse */
         StatuteSectionsListResponse: {
+            /**
+             * Catalog Section Count
+             * @default 0
+             */
+            catalog_section_count: number;
+            /** Catalog Sections */
+            catalog_sections?: components["schemas"]["StatuteSectionCatalogListItem"][];
+            /**
+             * Coverage Label
+             * @default Verified statutory text only
+             */
+            coverage_label: string;
             /** Sections */
             sections: components["schemas"]["StatuteSectionListItem"][];
             statute: components["schemas"]["StatuteRecord"];
+            /**
+             * Verified Section Count
+             * @default 0
+             */
+            verified_section_count: number;
         };
         /** StatuteSourceConflictCreateRequest */
         StatuteSourceConflictCreateRequest: {

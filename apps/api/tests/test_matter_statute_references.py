@@ -43,22 +43,28 @@ def _bootstrap_with_statutes_and_matter(client: TestClient):
     return token, resp.json()["id"], company_id
 
 
+def _verified_section_id() -> str:
+    from caseops_api.db.session import get_session_factory
+
+    with get_session_factory()() as session:
+        section_id = session.scalar(
+            select(StatuteSection.id).where(
+                StatuteSection.statute_id == "constitution-india",
+                StatuteSection.section_number == "Article 14",
+            )
+        )
+    assert section_id is not None
+    return str(section_id)
+
+
 def test_ft_s4_1_attach_statute_to_matter_returns_201(
     client: TestClient,
 ) -> None:
     """POST /matters/{id}/statute-references with a valid section_id
     creates a row + returns 201 with statute_short_name + section_number
     populated for UI rendering."""
-    from caseops_api.db.session import get_session_factory
-
     token, matter_id, _ = _bootstrap_with_statutes_and_matter(client)
-    with get_session_factory()() as s:
-        section_id = s.scalar(
-            select(StatuteSection.id).where(
-                StatuteSection.statute_id == "crpc-1973",
-                StatuteSection.section_number == "Section 482",
-            )
-        )
+    section_id = _verified_section_id()
     resp = client.post(
         f"/api/matters/{matter_id}/statute-references",
         json={"section_id": section_id, "relevance": "cited"},
@@ -66,25 +72,42 @@ def test_ft_s4_1_attach_statute_to_matter_returns_201(
     )
     assert resp.status_code == 201, resp.text
     body = resp.json()
-    assert body["statute_short_name"] == "CrPC"
-    assert body["section_number"] == "Section 482"
+    assert body["statute_short_name"] == "Constitution"
+    assert body["section_number"] == "Article 14"
     assert body["relevance"] == "cited"
+
+
+def test_unverified_catalog_section_cannot_bypass_picker_through_api(
+    client: TestClient,
+) -> None:
+    from caseops_api.db.session import get_session_factory
+
+    token, matter_id, _ = _bootstrap_with_statutes_and_matter(client)
+    with get_session_factory()() as session:
+        section_id = session.scalar(
+            select(StatuteSection.id).where(
+                StatuteSection.statute_id == "crpc-1973",
+                StatuteSection.section_number == "Section 482",
+            )
+        )
+    assert section_id is not None
+
+    response = client.post(
+        f"/api/matters/{matter_id}/statute-references",
+        json={"section_id": section_id, "relevance": "cited"},
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 409, response.text
+    assert response.json()["type"] == "statute_section_not_verified"
 
 
 def test_ft_s4_2_post_is_idempotent_on_duplicate(client: TestClient) -> None:
     """Re-posting the same (section_id, relevance) returns the
     existing row without erroring (uq_matter_statute_references_unique
     handled at the route level)."""
-    from caseops_api.db.session import get_session_factory
-
     token, matter_id, _ = _bootstrap_with_statutes_and_matter(client)
-    with get_session_factory()() as s:
-        section_id = s.scalar(
-            select(StatuteSection.id).where(
-                StatuteSection.statute_id == "ipc-1860",
-                StatuteSection.section_number == "Section 302",
-            )
-        )
+    section_id = _verified_section_id()
     payload = {"section_id": section_id, "relevance": "cited"}
     r1 = client.post(
         f"/api/matters/{matter_id}/statute-references",
@@ -108,8 +131,6 @@ def test_ft_s4_2_post_is_idempotent_on_duplicate(client: TestClient) -> None:
 def test_ft_s4_3_cross_tenant_matter_returns_404(client: TestClient) -> None:
     """Posting a statute reference against another tenant's matter id
     returns 404 (matter scope enforced via Matter.company_id)."""
-    from caseops_api.db.session import get_session_factory
-
     token_a, matter_a_id, _ = _bootstrap_with_statutes_and_matter(client)
     # Bootstrap a second company directly; that token can't see matter_a.
     resp_b = client.post(
@@ -125,13 +146,7 @@ def test_ft_s4_3_cross_tenant_matter_returns_404(client: TestClient) -> None:
     )
     assert resp_b.status_code == 200, resp_b.text
     token_b = str(resp_b.json()["access_token"])
-    with get_session_factory()() as s:
-        section_id = s.scalar(
-            select(StatuteSection.id).where(
-                StatuteSection.statute_id == "crpc-1973",
-                StatuteSection.section_number == "Section 482",
-            )
-        )
+    section_id = _verified_section_id()
     resp = client.post(
         f"/api/matters/{matter_a_id}/statute-references",
         json={"section_id": section_id, "relevance": "cited"},
@@ -147,16 +162,8 @@ def test_delete_matter_statute_reference_removes_row_returns_204(
     """DELETE /matters/{id}/statute-references/{ref_id} removes the
     row and returns 204. Re-deleting the same ref returns 404 —
     proves the FK row is actually gone, not soft-deleted."""
-    from caseops_api.db.session import get_session_factory
-
     token, matter_id, _ = _bootstrap_with_statutes_and_matter(client)
-    with get_session_factory()() as s:
-        section_id = s.scalar(
-            select(StatuteSection.id).where(
-                StatuteSection.statute_id == "ipc-1860",
-                StatuteSection.section_number == "Section 420",
-            )
-        )
+    section_id = _verified_section_id()
     create = client.post(
         f"/api/matters/{matter_id}/statute-references",
         json={"section_id": section_id, "relevance": "cited"},
@@ -192,19 +199,17 @@ def test_statute_reference_writes_reject_disposed_matter_but_history_remains(
     token, matter_id, _ = _bootstrap_with_statutes_and_matter(client)
     factory = get_session_factory()
     with factory() as session:
-        section_ids = list(
-            session.scalars(
-                select(StatuteSection.id)
-                .where(StatuteSection.statute_id == "ipc-1860")
-                .order_by(StatuteSection.section_number)
-                .limit(2)
+        section_id = session.scalar(
+            select(StatuteSection.id).where(
+                StatuteSection.statute_id == "constitution-india",
+                StatuteSection.section_number == "Article 14",
             )
         )
-    assert len(section_ids) == 2
+    assert section_id is not None
 
     created = client.post(
         f"/api/matters/{matter_id}/statute-references",
-        json={"section_id": section_ids[0], "relevance": "cited"},
+        json={"section_id": section_id, "relevance": "cited"},
         headers=auth_headers(token),
     )
     assert created.status_code == 201, created.text
@@ -218,7 +223,7 @@ def test_statute_reference_writes_reject_disposed_matter_but_history_remains(
 
     add_after_disposal = client.post(
         f"/api/matters/{matter_id}/statute-references",
-        json={"section_id": section_ids[1], "relevance": "context"},
+        json={"section_id": section_id, "relevance": "context"},
         headers=auth_headers(token),
     )
     assert add_after_disposal.status_code == 409, add_after_disposal.text
@@ -271,32 +276,6 @@ def test_ft_s4_4_drafting_prompt_includes_statutory_text_block(
             "any Court or otherwise to secure the ends of justice."
         )
         s.commit()
-
-    # Attach two refs: 'cited' Section 482 (with bare text) +
-    # 'opposing' Section 302 IPC (no bare text).
-    section_ids = []
-    with get_session_factory()() as s:
-        for stat_id, num in [
-            ("crpc-1973", "Section 482"),
-            ("ipc-1860", "Section 302"),
-        ]:
-            sid = s.scalar(
-                select(StatuteSection.id).where(
-                    StatuteSection.statute_id == stat_id,
-                    StatuteSection.section_number == num,
-                )
-            )
-            section_ids.append(sid)
-    client.post(
-        f"/api/matters/{matter_id}/statute-references",
-        json={"section_id": section_ids[0], "relevance": "cited"},
-        headers=auth_headers(token),
-    )
-    client.post(
-        f"/api/matters/{matter_id}/statute-references",
-        json={"section_id": section_ids[1], "relevance": "opposing"},
-        headers=auth_headers(token),
-    )
 
     # Build the prompt directly with the statute_refs we'd otherwise
     # fetch in generate_draft_version. Verifies _build_messages emits
