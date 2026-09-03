@@ -81,6 +81,10 @@ requirements when using the fallback.
   events. Do not infer an automatic resurrection from an explicit, audited
   `Disposed -> Intake` transition, and do not weaken lifecycle protections to
   make a UI symptom disappear.
+- Every provider-normalized identifier exposed by CaseOps must round-trip
+  through the corresponding CaseOps input schema. Do not impose guessed
+  provider formats (such as a minimum court-code length); preserve bounded
+  provider-published values and prove lookup-result-to-follow-up-search flows.
 - When a client bulk file puts a configured leaf court in a hierarchy column,
   resolve the active court name or approved catalog alias before category
   validation. Alias data belongs in the server-owned catalog, never in parser
