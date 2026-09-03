@@ -80,6 +80,10 @@ API_MAX_INSTANCES="${API_MAX_INSTANCES:-20}"
 # Four service-level warm instances leave headroom while another request is
 # stalled. The Matter cockpit also sequences its supporting reads.
 API_MIN_INSTANCES=4
+# Automated suites and persistent QA/test workspaces use deterministic provider
+# fixtures only. Keep this value in the canonical deploy path so an image-only
+# service update cannot silently drop the production API boundary.
+PAID_PROVIDER_BLOCKED_COMPANY_SLUGS="caseops-qa;caseops-ip-qa;test-legal;legal"
 # P1-2b (2026-05-15 perf review): keep one web instance warm too.
 # /sign-in is `dynamic = "force-dynamic"` (SSR per request, no CDN
 # cache), so with web minScale=0 the first hit after an idle window
@@ -576,7 +580,7 @@ gcloud run deploy caseops-api \
   --port 8080 \
   --image "${API_IMAGE}" \
   --update-secrets "CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET=${MACHINE_READINESS_EVIDENCE_SECRET}:latest" \
-  --update-env-vars "CASEOPS_RELEASE_SHA=${HEAD_SHA},CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false,CASEOPS_DB_STATEMENT_TIMEOUT_MS=60000,CASEOPS_DB_LOCK_TIMEOUT_MS=5000,CASEOPS_DB_IDLE_TRANSACTION_TIMEOUT_MS=60000" \
+  --update-env-vars "CASEOPS_RELEASE_SHA=${HEAD_SHA},CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false,CASEOPS_DB_STATEMENT_TIMEOUT_MS=60000,CASEOPS_DB_LOCK_TIMEOUT_MS=5000,CASEOPS_DB_IDLE_TRANSACTION_TIMEOUT_MS=60000,CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS=${PAID_PROVIDER_BLOCKED_COMPANY_SLUGS}" \
   --cpu "${API_CPU}" \
   --memory "${API_MEMORY}" \
   --container clamav \
@@ -622,6 +626,7 @@ if ! LIVE_API_REVISION=$(python - \
   "${HEAD_SHA}" \
   "${API_MIN_INSTANCES}" \
   "${MACHINE_READINESS_EVIDENCE_SECRET}" \
+  "${PAID_PROVIDER_BLOCKED_COMPANY_SLUGS}" \
   "${LIVE_API_SERVICE_JSON}" <<'PY'
 import json
 import sys
@@ -629,7 +634,8 @@ import sys
 expected_sha = sys.argv[1]
 expected_min = sys.argv[2]
 expected_machine_readiness_secret = sys.argv[3]
-service = json.loads(sys.argv[4])
+expected_paid_provider_blocked_slugs = sys.argv[4]
+service = json.loads(sys.argv[5])
 metadata = service.get("metadata") or {}
 spec = service.get("spec") or {}
 status = service.get("status") or {}
@@ -689,6 +695,11 @@ else:
         errors.append("CASEOPS_RELEASE_SHA does not match exact HEAD")
     if str((env.get("CASEOPS_IP_RULE_GOVERNANCE_ENABLED") or {}).get("value")) != "false":
         errors.append("CASEOPS_IP_RULE_GOVERNANCE_ENABLED is not explicitly false")
+    if (
+        str((env.get("CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS") or {}).get("value"))
+        != expected_paid_provider_blocked_slugs
+    ):
+        errors.append("paid-provider test-tenant boundary is missing or stale")
     machine_secret_ref = (
         (env.get("CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET") or {})
         .get("valueFrom", {})
