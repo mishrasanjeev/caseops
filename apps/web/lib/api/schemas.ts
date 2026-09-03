@@ -343,6 +343,9 @@ export const forumCatalogEntry = z.object({
   source_url: z.string().nullable().optional(),
   lineage: z.string(),
   display_order: z.number().int(),
+  // Optional keeps the web revision compatible while API instances roll; the
+  // server always emits the field after the catalog-alias migration.
+  aliases: z.array(z.string()).optional(),
 });
 
 export const forumCatalogResponse = z.object({

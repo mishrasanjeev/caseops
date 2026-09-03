@@ -12104,6 +12104,7 @@ class ForumCatalogEntry(Base):
     source_name: Mapped[str] = mapped_column(String(160), nullable=False)
     source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     lineage: Mapped[str] = mapped_column(String(500), nullable=False)
+    aliases_json: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     display_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(

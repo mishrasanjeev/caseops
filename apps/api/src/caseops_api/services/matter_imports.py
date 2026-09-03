@@ -1376,6 +1376,13 @@ class _ResolvedImportForum:
     error: str | None = None
 
 
+@dataclass(frozen=True)
+class _ImportForumCatalogLookup:
+    entries_by_id: dict[str, ForumCatalogEntry]
+    entries_by_category: dict[str, tuple[ForumCatalogEntry, ...]]
+    exact_courts_by_key: dict[str, tuple[ForumCatalogEntry, ...]]
+
+
 def _catalog_category(entry: ForumCatalogEntry) -> str:
     if entry.forum_type != "consumer_forum":
         return entry.forum_type
@@ -1384,6 +1391,25 @@ def _catalog_category(entry: ForumCatalogEntry) -> str:
         "state": "state_commission",
         "district": "district_commission",
     }.get(entry.consumer_level or "", "consumer_forum")
+
+
+def _forum_entry_aliases(entry: ForumCatalogEntry) -> tuple[str, ...]:
+    raw = entry.aliases_json
+    if not isinstance(raw, list):
+        return ()
+    return tuple(
+        alias.strip()
+        for alias in raw
+        if isinstance(alias, str) and alias.strip()
+    )
+
+
+def _forum_entry_identity_keys(entry: ForumCatalogEntry) -> set[str]:
+    return {
+        _controlled_value_key(value)
+        for value in (entry.name, *_forum_entry_aliases(entry))
+        if value
+    }
 
 
 def _forum_entry_match_keys(entry: ForumCatalogEntry) -> set[str]:
@@ -1395,7 +1421,10 @@ def _forum_entry_match_keys(entry: ForumCatalogEntry) -> set[str]:
         entry.district,
         entry.city,
     }
-    return {_controlled_value_key(value) for value in values if value}
+    return {
+        *(_controlled_value_key(value) for value in values if value),
+        *_forum_entry_identity_keys(entry),
+    }
 
 
 def _forum_match_tokens(*values: str | None) -> set[str]:
@@ -1427,21 +1456,85 @@ def _resolved_catalog_entry(entry: ForumCatalogEntry) -> _ResolvedImportForum:
     )
 
 
+def _build_import_forum_catalog_lookup(
+    catalog_entries: list[ForumCatalogEntry],
+) -> _ImportForumCatalogLookup:
+    """Build one bounded lookup for every row in a bulk import.
+
+    The import limit is 500 rows and the shared catalog is loaded once. Building
+    these maps once prevents a file from rescanning the complete catalog for
+    every row while preserving deterministic display-order/id tie handling.
+    """
+    entries_by_id: dict[str, ForumCatalogEntry] = {}
+    entries_by_category_lists: dict[str, list[ForumCatalogEntry]] = {}
+    exact_courts_by_key_lists: dict[str, list[ForumCatalogEntry]] = {}
+    for entry in catalog_entries:
+        entries_by_id[entry.id] = entry
+        entries_by_category_lists.setdefault(_catalog_category(entry), []).append(entry)
+        for key in _forum_entry_identity_keys(entry):
+            exact_courts_by_key_lists.setdefault(key, []).append(entry)
+    return _ImportForumCatalogLookup(
+        entries_by_id=entries_by_id,
+        entries_by_category={
+            key: tuple(entries) for key, entries in entries_by_category_lists.items()
+        },
+        exact_courts_by_key={
+            key: tuple(entries) for key, entries in exact_courts_by_key_lists.items()
+        },
+    )
+
+
+def _exact_forum_candidate_matches_context(
+    entry: ForumCatalogEntry,
+    *,
+    supplied_court: str,
+    supplied_state: str,
+    supplied_district: str,
+    supplied_city: str,
+    supplied_consumer_level: str,
+) -> bool:
+    if supplied_court and _controlled_value_key(supplied_court) not in (
+        _forum_entry_match_keys(entry)
+    ):
+        return False
+    for supplied, configured in (
+        (supplied_state, entry.state),
+        (supplied_district, entry.district),
+        (supplied_city, entry.city),
+        (supplied_consumer_level, entry.consumer_level),
+    ):
+        if supplied and _controlled_value_key(supplied) != _controlled_value_key(configured):
+            return False
+    return True
+
+
+def _row_prefix(row_number: int | None) -> str:
+    return f"Row {row_number}: " if row_number is not None else ""
+
+
 def _resolve_import_forum(
     *,
-    catalog_entries: list[ForumCatalogEntry],
+    catalog: _ImportForumCatalogLookup,
     supplied_forum: str | None,
     supplied_court: str | None,
     supplied_catalog_entry_id: str | None,
+    supplied_state: str | None = None,
+    supplied_district: str | None = None,
+    supplied_city: str | None = None,
+    supplied_consumer_level: str | None = None,
+    row_number: int | None = None,
 ) -> _ResolvedImportForum:
     """Resolve bulk input through the same active catalog as manual entry."""
     forum_text = (supplied_forum or "").strip()
     court_text = (supplied_court or "").strip()
     catalog_id = (supplied_catalog_entry_id or "").strip()
-    entries_by_id = {entry.id: entry for entry in catalog_entries}
+    state_text = (supplied_state or "").strip()
+    district_text = (supplied_district or "").strip()
+    city_text = (supplied_city or "").strip()
+    consumer_level_text = (supplied_consumer_level or "").strip()
 
     if catalog_id:
-        entry = entries_by_id.get(catalog_id)
+        entry = catalog.entries_by_id.get(catalog_id)
         if entry is None:
             return _ResolvedImportForum(
                 forum_level=None,
@@ -1474,6 +1567,59 @@ def _resolve_import_forum(
         # Leave the required-field message to the caller.
         return _ResolvedImportForum(forum_level=None, court_name=court_text or None)
 
+    # Client-maintained workbooks commonly put the leaf Exact Court in Forum.
+    # Resolve that configured identity (or an approved configured alias) before
+    # interpreting the same text as a hierarchy/category. Only one active match
+    # may populate the complete lineage; collisions always fail closed.
+    identity_candidates = catalog.exact_courts_by_key.get(
+        _controlled_value_key(forum_text),
+        (),
+    )
+    forum_category = _FORUM_CATEGORY_ALIASES.get(_controlled_value_key(forum_text))
+    if identity_candidates:
+        contextual_candidates = tuple(
+            entry
+            for entry in identity_candidates
+            if _exact_forum_candidate_matches_context(
+                entry,
+                supplied_court=court_text,
+                supplied_state=state_text,
+                supplied_district=district_text,
+                supplied_city=city_text,
+                supplied_consumer_level=consumer_level_text,
+            )
+        )
+        if len(contextual_candidates) == 1:
+            return _resolved_catalog_entry(contextual_candidates[0])
+        prefix = _row_prefix(row_number)
+        if not contextual_candidates:
+            # TDSAT is both a supported hierarchy/category label and the name
+            # of one catalog leaf. If a separate Court makes the leaf match
+            # impossible, preserve the established category + free-text Court
+            # workflow instead of turning a previously valid template row
+            # invalid. A non-category Exact Court still fails closed.
+            if forum_category is None:
+                return _ResolvedImportForum(
+                    forum_level=None,
+                    court_name=court_text or forum_text,
+                    error=(
+                        f"{prefix}Court value '{forum_text}' conflicts with the supplied "
+                        "Court/State/District context and could not be mapped to the "
+                        "configured Forum Hierarchy -> State -> Exact Court."
+                    ),
+                )
+        else:
+            return _ResolvedImportForum(
+                forum_level=None,
+                court_name=court_text or forum_text,
+                error=(
+                    f"{prefix}Court value '{forum_text}' matches multiple active Exact "
+                    "Court records and could not be uniquely mapped to Forum Hierarchy "
+                    "-> State -> Exact Court. Supply configured Court/State/District "
+                    "context; CaseOps will not guess."
+                ),
+            )
+
     # Preserve imports generated by earlier CaseOps templates, which used the
     # canonical enum tokens directly. Human-readable category labels go through
     # the catalog resolver below.
@@ -1490,7 +1636,7 @@ def _resolve_import_forum(
             court_name=court_text or None,
         )
 
-    category = _FORUM_CATEGORY_ALIASES.get(_controlled_value_key(forum_text))
+    category = forum_category
     if category is None:
         normalized_level = _normalise_forum_level(forum_text)
         if normalized_level not in _SUPPORTED_FORUM_LEVELS:
@@ -1498,7 +1644,9 @@ def _resolve_import_forum(
                 forum_level=None,
                 court_name=court_text or None,
                 error=(
-                    f"Forum '{forum_text}' is not a supported forum hierarchy value. "
+                    f"{_row_prefix(row_number)}Court value '{forum_text}' did not match "
+                    "an active configured Exact Court or approved alias and is not a "
+                    "supported Forum hierarchy value. "
                     f"Use one of: {', '.join(_FORUM_CATEGORY_LABELS.values())}, "
                     "Tribunal, Arbitration, Advisory."
                 ),
@@ -1508,7 +1656,7 @@ def _resolve_import_forum(
             court_name=court_text or None,
         )
 
-    candidates = [entry for entry in catalog_entries if _catalog_category(entry) == category]
+    candidates = list(catalog.entries_by_category.get(category, ()))
     match_key = _controlled_value_key(court_text)
     if match_key:
         exact = [entry for entry in candidates if match_key in _forum_entry_match_keys(entry)]
@@ -1768,6 +1916,7 @@ def dry_run_bulk_matter_import(
             .order_by(ForumCatalogEntry.display_order, ForumCatalogEntry.id)
         )
     )
+    forum_catalog = _build_import_forum_catalog_lookup(forum_catalog_entries)
     canonical_rows: list[tuple[ParsedMatterImportRow, dict[str, str], bool]] = []
     for row in parsed_import.rows:
         unsafe_headers = set(row.unsafe_headers)
@@ -1843,10 +1992,15 @@ def dry_run_bulk_matter_import(
         )
         description = row.get("description", "").strip() or None
         resolved_forum = _resolve_import_forum(
-            catalog_entries=forum_catalog_entries,
+            catalog=forum_catalog,
             supplied_forum=row.get("forum_level"),
             supplied_court=row.get("court_name"),
             supplied_catalog_entry_id=row.get("forum_catalog_entry_id"),
+            supplied_state=row.get("forum_state"),
+            supplied_district=row.get("forum_district"),
+            supplied_city=row.get("forum_city"),
+            supplied_consumer_level=row.get("forum_consumer_level"),
+            row_number=parsed.row_number,
         )
         forum_level = resolved_forum.forum_level
         court_name = resolved_forum.court_name
@@ -2266,6 +2420,19 @@ def _matter_template_csv_bytes() -> bytes:
 def _matter_template_xlsx_bytes(
     forum_catalog_entries: list[ForumCatalogEntry],
 ) -> bytes:
+    forum_catalog = _build_import_forum_catalog_lookup(forum_catalog_entries)
+    forum_choices = list(MATTER_IMPORT_TEMPLATE_FORUMS)
+    seen_forum_choice_keys = {_controlled_value_key(value) for value in forum_choices}
+    for entry in forum_catalog_entries:
+        for value in (entry.name, *_forum_entry_aliases(entry)):
+            key = _controlled_value_key(value)
+            if (
+                key
+                and key not in seen_forum_choice_keys
+                and len(forum_catalog.exact_courts_by_key.get(key, ())) == 1
+            ):
+                forum_choices.append(value)
+                seen_forum_choice_keys.add(key)
     import_rows = [
         MATTER_IMPORT_TEMPLATE_HEADERS,
         [
@@ -2294,7 +2461,7 @@ def _matter_template_xlsx_bytes(
     ]
     reference_rows = [["Matter Status", "Forum", "Practice Area"]]
     statuses = ["active", "intake", "on_hold"]
-    forums = list(MATTER_IMPORT_TEMPLATE_FORUMS)
+    forums = forum_choices
     max_reference_rows = max(len(statuses), len(forums), len(_DEFAULT_PRACTICE_AREAS))
     for index in range(max_reference_rows):
         reference_rows.append(
@@ -2355,10 +2522,10 @@ def _matter_template_xlsx_bytes(
         [
             "Forum catalog",
             (
-                "Forum is required and must be one of the Forum values listed in "
-                + "Reference Values. Court is optional: an exact value from Forum "
-                + "Catalog links the matter to the master catalog and fills in state, "
-                + "district, and city, while any other court name is kept as typed."
+                "Forum is required. It accepts a Forum hierarchy or any uniquely "
+                + "configured Exact Court/approved alias listed in Reference Values. "
+                + "An Exact Court in Forum fills the complete hierarchy automatically. "
+                + "Court remains optional for hierarchy choices and disambiguation."
             ),
         ],
         [
@@ -2389,6 +2556,7 @@ def _matter_template_xlsx_bytes(
         [
             "Forum",
             "Exact Court / Tribunal",
+            "Approved Aliases",
             "Forum Level",
             "State",
             "District",
@@ -2400,6 +2568,7 @@ def _matter_template_xlsx_bytes(
             [
                 _FORUM_CATEGORY_LABELS.get(_catalog_category(entry), entry.forum_type),
                 entry.name,
+                ", ".join(_forum_entry_aliases(entry)),
                 entry.forum_level,
                 entry.state or "",
                 entry.district or "",

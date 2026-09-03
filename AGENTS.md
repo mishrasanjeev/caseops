@@ -81,6 +81,14 @@ requirements when using the fallback.
   events. Do not infer an automatic resurrection from an explicit, audited
   `Disposed -> Intake` transition, and do not weaken lifecycle protections to
   make a UI symptom disappear.
+- When a client bulk file puts a configured leaf court in a hierarchy column,
+  resolve the active court name or approved catalog alias before category
+  validation. Alias data belongs in the server-owned catalog, never in parser
+  branches. Populate lineage only for one active match; reject conflicts and
+  collisions at the source row. Keep template, preview, commit revalidation,
+  audit preservation, and manual-entry behavior aligned, and regress unique
+  names, aliases, inactive configuration, ambiguity, 500-row bounded work, and
+  original input persistence.
 - A licensed-provider activation must use machine-verifiable runtime terms
   metadata, dated official pricing evidence, positive budgets, retention, and a
   server-side secret. Do not introduce a human approval key or route. When the
