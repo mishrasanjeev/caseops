@@ -20,7 +20,7 @@ spec:
         # through Secret Manager, never as a raw env value in the
         # manifest. Auth secret + DB URL + future SendGrid /
         # Anthropic / Pine Labs keys all use secretKeyRef.
-        run.googleapis.com/secrets: "caseops-auth-secret:projects/__PROJECT_NUMBER__/secrets/caseops-auth-secret,caseops-machine-readiness-evidence-secret:projects/__PROJECT_NUMBER__/secrets/caseops-machine-readiness-evidence-secret,caseops-database-url:projects/__PROJECT_NUMBER__/secrets/caseops-database-url,caseops-openai-api-key:projects/__PROJECT_NUMBER__/secrets/caseops-openai-api-key,caseops-sendgrid-webhook-public-key:projects/__PROJECT_NUMBER__/secrets/caseops-sendgrid-webhook-public-key,caseops-ecourtsindia-api-token:projects/__PROJECT_NUMBER__/secrets/caseops-ecourtsindia-api-token"
+        run.googleapis.com/secrets: "caseops-auth-secret:projects/__PROJECT_NUMBER__/secrets/caseops-auth-secret,caseops-machine-readiness-evidence-secret:projects/__PROJECT_NUMBER__/secrets/caseops-machine-readiness-evidence-secret,caseops-database-url:projects/__PROJECT_NUMBER__/secrets/caseops-database-url,caseops-openai-api-key:projects/__PROJECT_NUMBER__/secrets/caseops-openai-api-key,caseops-sendgrid-webhook-public-key:projects/__PROJECT_NUMBER__/secrets/caseops-sendgrid-webhook-public-key,caseops-ecourtsindia-api-token:projects/__PROJECT_NUMBER__/secrets/caseops-ecourtsindia-api-token,caseops-indian-kanoon-api-token:projects/__PROJECT_NUMBER__/secrets/caseops-indian-kanoon-api-token"
     spec:
       # 2026-06-08 incident: one blocking request pinned the API event
       # loop and every subsequent request to the same instance timed out.
@@ -150,19 +150,35 @@ spec:
             # background poller, where there is no inbound test header.
             - name: CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS
               value: "caseops-qa;caseops-ip-qa;test-legal;legal"
-            # IPLF-054: repository capability is deployed fail-closed. Do not
-            # add the provider token or enable this flag until the licensed
-            # adapter runbook's legal, cost, retention, and budget gates pass.
+            # IPLF-054: licensed access is active for real workspaces. Routine
+            # automation and the persistent QA tenants above remain hard-blocked.
             - name: CASEOPS_INDIAN_KANOON_ENABLED
-              value: "false"
+              value: "true"
             - name: CASEOPS_INDIAN_KANOON_API_BASE_URL
               value: "https://api.indiankanoon.org"
+            - name: CASEOPS_INDIAN_KANOON_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: "caseops-indian-kanoon-api-token"
+                  key: "latest"
+            - name: CASEOPS_INDIAN_KANOON_TERMS_OWNER
+              value: "Orchestrum Technologies LLP"
+            - name: CASEOPS_INDIAN_KANOON_TERMS_APPROVED_AT
+              value: "2026-09-03T00:00:00Z"
+            - name: CASEOPS_INDIAN_KANOON_TERMS_EXPIRES_AT
+              value: "2027-09-03T00:00:00Z"
+            - name: CASEOPS_INDIAN_KANOON_PERMITTED_USES
+              value: "search,document_display,research_storage"
             - name: CASEOPS_INDIAN_KANOON_DAILY_BUDGET_MINOR
-              value: "0"
+              value: "2500"
             - name: CASEOPS_INDIAN_KANOON_MONTHLY_BUDGET_MINOR
-              value: "0"
+              value: "50000"
             - name: CASEOPS_INDIAN_KANOON_RETENTION_DAYS
-              value: "0"
+              value: "30"
+            - name: CASEOPS_INDIAN_KANOON_MAX_SEARCH_PAGE
+              value: "2"
+            - name: CASEOPS_INDIAN_KANOON_MAX_RESULTS
+              value: "10"
           resources:
             limits:
               cpu: "2"
