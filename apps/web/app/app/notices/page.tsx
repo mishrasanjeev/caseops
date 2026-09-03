@@ -697,6 +697,13 @@ export default function NoticesPage() {
   });
 
   const createMutation = useMutation({
+    // A register read that started before this mutation cannot know about the
+    // committed notice. Cancel it before writing so its bounded, stale first
+    // page cannot later replace the authoritative create response and make the
+    // new row disappear in large workspaces.
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ["notices", "register"] });
+    },
     mutationFn: async ({ payload, file }: { payload: CreateNoticeInput; file: File | null }): Promise<{ notice: NoticeRecord; fileError: unknown | null }> => {
       let savedNotice = await createNotice(payload);
       if (!file) return { notice: savedNotice, fileError: null };

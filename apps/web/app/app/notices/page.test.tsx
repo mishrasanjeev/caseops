@@ -279,6 +279,71 @@ describe("centralized notice management", () => {
     expect(toastSuccessMock).toHaveBeenCalledWith("Notice created.");
   });
 
+  it("keeps a committed notice when an older register read resolves after creation", async () => {
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    const created = notice({
+      id: "committed-after-stale-read",
+      subject: "Committed after stale register read",
+      created_at: "2026-09-03T05:00:00Z",
+      updated_at: "2026-09-03T05:00:00Z",
+    });
+    createNoticeMock.mockResolvedValue(created);
+    render(
+      <QueryClientProvider client={client}>
+        <NoticesPage />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByText("No received notices");
+
+    let resolveStaleRegister!: (value: {
+      notices: NoticeRecord[];
+      total: number;
+      next_cursor: null;
+    }) => void;
+    let markStaleRegisterStarted!: () => void;
+    const staleRegisterStarted = new Promise<void>((resolve) => {
+      markStaleRegisterStarted = resolve;
+    });
+    listNoticesMock.mockImplementation(
+      async (params: { limit?: number; direction?: "received" | "sent" } = {}) => {
+        if (params.limit === 100 && params.direction === "received") {
+          markStaleRegisterStarted();
+          return new Promise((resolve) => {
+            resolveStaleRegister = resolve;
+          });
+        }
+        return { notices: [], total: 0, next_cursor: null };
+      },
+    );
+    const staleRefetch = client.refetchQueries({
+      queryKey: ["notices", "register"],
+    });
+    await staleRegisterStarted;
+
+    fireEvent.click(screen.getByRole("button", { name: "New notice" }));
+    const dialog = await screen.findByTestId("create-notice-dialog");
+    fireEvent.change(within(dialog).getByLabelText("Subject"), {
+      target: { value: created.subject },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create notice" }));
+
+    const committedRow = await screen.findByTestId(`notice-row-${created.id}`);
+    expect(committedRow).toHaveTextContent(created.subject);
+
+    resolveStaleRegister({ notices: [], total: 0, next_cursor: null });
+    await staleRefetch;
+    await Promise.resolve();
+    expect(screen.getByTestId(`notice-row-${created.id}`)).toHaveTextContent(
+      created.subject,
+    );
+  });
+
   it("keeps a committed sent notice visible across tabs while reconciliation is slow", async () => {
     const created = notice({
       id: "committed-sent-notice",
