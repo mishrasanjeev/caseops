@@ -169,7 +169,7 @@ caseops/
 - **Web** — Next.js 16, React 19, TypeScript 6, Tailwind CSS v4, Radix primitives, TanStack
   Query + Table, React Hook Form + Zod, Sonner toasts, Lucide icons.
 - **API** — Python 3.13, FastAPI, Pydantic, SQLAlchemy 2, Alembic, slowapi rate limiter.
-- **AI** — `LLMProvider` abstraction with Mock / Anthropic / Google Gemini backends; pluggable
+- **AI** — `LLMProvider` abstraction with Mock / OpenAI / Google Gemini backends; OpenAI is the hosted production provider
   embeddings provider. Gemini hosted for founder stage; architecture preserves a swap to
   self-hosted Gemma 4 for enterprise tenants that need private inference.
 - **Data** — PostgreSQL 17 with `pgvector`, Valkey cache, GCS (or local FS) for documents.
@@ -185,7 +185,7 @@ caseops/
 - **Tests** — pytest (unit + integration), Playwright (marketing + app spine + legacy).
 
 Dependency policy: latest stable production-ready versions only; no betas, no intentional
-pins to older majors without a documented blocker. See [`CLAUDE.md`](./CLAUDE.md).
+pins to older majors without a documented blocker. See [`CODEX.md`](./CODEX.md).
 
 ---
 
@@ -342,9 +342,9 @@ For the API, copy `apps/api/.env.example` and set at minimum `CASEOPS_AUTH_SECRE
 LLM provider settings (optional — defaults to the mock provider):
 
 ```
-CASEOPS_LLM_PROVIDER=mock         # mock | anthropic | gemini
-CASEOPS_LLM_MODEL=claude-opus-4-7 # or gemini-2.5-pro, etc.
-CASEOPS_LLM_API_KEY=              # required for anthropic / gemini
+CASEOPS_LLM_PROVIDER=mock         # mock locally; openai in hosted environments
+CASEOPS_LLM_MODEL=gpt-5.1
+CASEOPS_LLM_API_KEY=              # required for openai
 CASEOPS_MFA_EXISTING_USER_GRACE_DAYS=7
 CASEOPS_MFA_STEP_UP_TTL_MINUTES=15
 CASEOPS_MFA_MAX_FAILURES_PER_5M=5
@@ -399,19 +399,19 @@ and recompute connector health immediately.
 
 Any bug triage / fix / verification / reopen review on this repo MUST
 follow the fail-closed workflow in
-[`.claude/skills/bug-fixing/SKILL.md`](./.claude/skills/bug-fixing/SKILL.md):
+[`.codex/skills/bug-fixing/SKILL.md`](./.codex/skills/bug-fixing/SKILL.md):
 verdicts are exactly one of `Properly fixed` / `Partially fixed` /
 `Not fixed` / `Inconclusive`; mobile bugs need mobile proof; reopened
 bugs need fresh end-user verification; schema/enum drift needs the
 full adjacent-path audit (backend schema → Zod → TS types → create
-form → update form → fixtures). Hooked from `CLAUDE.md` so every
+form → update form → fixtures). Hooked from `CODEX.md` so every
 contributor gets it automatically.
 
 ### Post-deploy verification
 
 Every Cloud Run deploy must pass the four-step staleness sweep before
 being called "deployed" — see
-[`memory/feedback_post_deploy_staleness_check.md`](./.claude/projects/C--Users-mishr-caseops/memory/feedback_post_deploy_staleness_check.md):
+The deployment contract in [`scripts/deploy-prod.sh`](./scripts/deploy-prod.sh):
 (1) HEAD vs revision tag, (2) public-domain `/api/health`, (3)
 new-shape smoke (a route added in the deploy returns 401, not 404),
 (4) image digest cross-check (`gcloud artifacts docker images describe
@@ -930,7 +930,7 @@ required IAM.
 
 ## Product principles
 
-CaseOps follows a few non-negotiable rules. Read in full in [`CLAUDE.md`](./CLAUDE.md).
+CaseOps follows a few non-negotiable rules. Read in full in [`CODEX.md`](./CODEX.md).
 
 - Matter-native, not chatbot. Every workflow lives on a matter graph.
 - Citation-grounded AI. No substantive answer without a source.
@@ -944,7 +944,7 @@ CaseOps follows a few non-negotiable rules. Read in full in [`CLAUDE.md`](./CLAU
 ## Contributing
 
 This is a private repository during founder stage. If you're an invited collaborator, read
-[`CLAUDE.md`](./CLAUDE.md) before opening a PR: changes should be surgical, avoid speculative
+[`CODEX.md`](./CODEX.md) before opening a PR: changes should be surgical, avoid speculative
 abstractions, and include verification (tests or concrete checks).
 
 ---

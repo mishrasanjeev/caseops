@@ -259,7 +259,7 @@ def render_events_as_ical(
 
     No external dependency — the vcal grammar is simple enough that
     a 40-line hand-roll is clearer than pulling in a new package
-    (and keeps the Anthropic-friendly dep footprint tight).
+    (and keeps the hosted LLM-friendly dep footprint tight).
     """
     lines: list[str] = [
         "BEGIN:VCALENDAR",

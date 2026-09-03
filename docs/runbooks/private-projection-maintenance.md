@@ -89,6 +89,15 @@ canonical state. A repair SLO breach, lease wait beyond 45 seconds,
 non-repairable blocker, or any other exception fails the tenant and the job.
 Cloud Run task retries remain disabled.
 
+Continuous production-test mutation is not quiescence. A shared QA tenant can
+legitimately fence every shadow while dated browser journeys create, dispose,
+or reopen records. Do not reinterpret this as projection corruption, suppress
+the tenant, or relax the 300-second release blocker. Correlate the tenant's
+applied event epochs with the test window, let the workload stop, then require
+one successful rebuild cadence followed by a second clean cadence. A new event
+after a clean rebuild starts a new repair interval; it is not evidence that the
+preceding rebuild failed.
+
 The structured record contains a correlation ID, affected company IDs, event and
 repair lag, pending and failed counts, blockers, whether a bounded rebuild ran,
 and whether repair was safely deferred. It contains no source text, document

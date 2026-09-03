@@ -102,11 +102,11 @@ def _build_query(title: str) -> str:
     return " ".join(words[:10])
 
 
-def _expand_query_via_haiku(query: str) -> str:
-    """Ask Haiku to expand a short case-name query with procedural context.
+def _expand_query_via_model(query: str) -> str:
+    """Ask configured OpenAI model to expand a short case-name query with procedural context.
 
     Short queries like "Wahid State Govt of NCT of Delhi" carry little
-    semantic signal for Voyage. A Haiku rewrite expanding to include a
+    semantic signal for Voyage. A configured OpenAI model rewrite expanding to include a
     clean v./versus marker, likely procedural posture (bail, SLP,
     criminal appeal, writ petition), and typical court terms gives the
     cosine search much richer matching targets. Returns the original
@@ -136,7 +136,7 @@ def _expand_query_via_haiku(query: str) -> str:
     except Exception:  # noqa: BLE001
         return query
 
-    # Haiku sometimes prefaces with "Rewrite:" or "Sure! ..." — strip the
+    # configured OpenAI model sometimes prefaces with "Rewrite:" or "Sure! ..." — strip the
     # first chatty line if present.
     text = (result.text or "").strip().strip('"').strip("`").strip()
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
@@ -373,7 +373,7 @@ def run(
             if expand_query and probes:
                 expanded: list[_Probe] = []
                 for p in probes:
-                    new_q = _expand_query_via_haiku(p.query)
+                    new_q = _expand_query_via_model(p.query)
                     if new_q != p.query:
                         logging.info(
                             "query-expansion: %r -> %r", p.query, new_q[:140]
@@ -445,7 +445,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     parser.add_argument(
         "--expand-query", action="store_true",
         help=(
-            "Send each probe's stripped query through Haiku for expansion "
+            "Send each probe's stripped query through configured OpenAI model for expansion "
             "before embedding. Tests whether LLM-side query expansion is a "
             "quality lever. Adds ~0.5s + a few hundred tokens per probe."
         ),

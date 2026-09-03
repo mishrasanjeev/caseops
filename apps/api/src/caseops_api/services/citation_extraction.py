@@ -24,7 +24,7 @@ unreported decisions, foreign citations) — those rows still get
 inserted with cited_authority_document_id=NULL for raw count, but
 L-B aggregation only counts resolved (NOT NULL) rows.
 
-Per `feedback_corpus_spend_audit`: zero Anthropic spend (pure regex).
+Per `feedback_corpus_spend_audit`: zero hosted LLM spend (pure regex).
 Idempotent on (source_authority_document_id, normalized_reference)
 unique constraint.
 """

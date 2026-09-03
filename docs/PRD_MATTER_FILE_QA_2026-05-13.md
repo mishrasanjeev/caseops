@@ -3,7 +3,7 @@
 Status: Execution addendum; MFQ-S0 planning complete; MFQ-S1/S2/S3/S4/S5 implemented
 Date: 2026-05-13
 Source input: `C:\Users\mishr\Downloads\Feedback doc.docx`
-Canonical PRD anchor: `docs/PRD_CLAUDE_CODE_2026-04-23.md`
+Canonical PRD anchor: `docs/PRD_CODEX_2026-04-23.md`
 Related addenda:
 - `docs/PRD_LITIGATION_INTELLIGENCE_EXPANSION_2026-05-11.md`
 - `docs/PRD_LEGALWORKSPACE_ENHANCEMENTS_2026-05-05.md`
@@ -549,7 +549,7 @@ Read first:
 
 - `AGENTS.md`
 - `.agents/skills/caseops-prd-execution/SKILL.md`
-- `docs/PRD_CLAUDE_CODE_2026-04-23.md`
+- `docs/PRD_CODEX_2026-04-23.md`
 - `docs/PRD_MATTER_FILE_QA_2026-05-13.md`
 - `apps/api/src/caseops_api/services/matter_review.py`
 - `apps/api/src/caseops_api/api/routes/ai.py`
@@ -664,7 +664,7 @@ emotion, biometric, or psychological scoring.
 Read first:
 - AGENTS.md
 - .agents/skills/caseops-prd-execution/SKILL.md
-- docs/PRD_CLAUDE_CODE_2026-04-23.md
+- docs/PRD_CODEX_2026-04-23.md
 - docs/PRD_MATTER_FILE_QA_2026-05-13.md
 - apps/api/src/caseops_api/services/matter_review.py
 - apps/api/src/caseops_api/api/routes/ai.py

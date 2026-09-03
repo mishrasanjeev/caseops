@@ -1532,7 +1532,7 @@ class Matter(Base):
         index=True,
     )
     # EG-005 (2026-04-23) — cached executive summary so every GET /
-    # DOCX / PDF on the summary endpoint stops costing a Haiku call.
+    # DOCX / PDF on the summary endpoint stops costing a OpenAI extraction model call.
     # ``executive_summary_json`` holds the serialised
     # MatterExecutiveSummary; ``generated_at`` lets the cache decide
     # if a stale entry is still acceptable; ``model_run_id`` ties the
@@ -10072,7 +10072,7 @@ class AuthorityDocument(Base):
     document_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     extracted_char_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # Layer 2 structured extraction — JSON blobs populated by the
-    # Haiku structured-extraction pass. ``structured_version`` tracks
+    # OpenAI extraction model structured-extraction pass. ``structured_version`` tracks
     # which pipeline revision produced the payload so a future prompt
     # tweak can be rolled out without re-extracting everything.
     case_number: Mapped[str | None] = mapped_column(String(255), nullable=True)

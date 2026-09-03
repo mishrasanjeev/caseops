@@ -366,10 +366,8 @@ class Settings(BaseSettings):
 
     llm_provider: str = Field(default="mock")
     # Fallback model when a purpose-specific one is not set. Per-purpose
-    # routing (below) exists because legal drafting benefits from Opus
-    # while metadata extraction is fine on Haiku. Using one model for
-    # every call is either paying Opus prices for extraction or shipping
-    # Haiku-quality briefs.
+    # routing lets operators use an OpenAI reasoning model for legal drafting
+    # and a smaller OpenAI model for bounded extraction work.
     llm_model: str = Field(default="caseops-mock-1")
     llm_model_drafting: str | None = Field(default=None)
     llm_model_assistant: str | None = Field(default=None)
@@ -378,14 +376,6 @@ class Settings(BaseSettings):
     llm_model_metadata_extract: str | None = Field(default=None)
     llm_model_eval: str | None = Field(default=None)
     llm_api_key: str | None = Field(default=None)
-    # Hard cross-provider fallback when the primary Anthropic call
-    # returns 402 ("credit balance is too low"). Retrying on Haiku
-    # would hit the same wall, so we cut over to OpenAI instead.
-    # Wire the key via the caseops-openai-api-key Secret Manager
-    # secret in production; locally, leave unset and the fallback is
-    # silently disabled (the existing 422 message still fires).
-    openai_api_key: str | None = Field(default=None)
-    openai_fallback_model: str = Field(default="gpt-5.1")
     # 2026-05-01: $/day cap on Layer 2 corpus metadata extraction
     # (services/corpus_structured.py). Set to 0 or negative to fall
     # back to the hardcoded $20 default. The cap is enforced
@@ -401,17 +391,13 @@ class Settings(BaseSettings):
     llm_max_output_tokens_hearing_pack: int = Field(default=4096, ge=512)
     llm_max_output_tokens_assistant: int = Field(default=2048, ge=256, le=8192)
     # BUG-005 2026-04-21: the default 2048 was truncating
-    # recommendations mid-rationale — both Sonnet and Haiku ended
-    # their JSON at ~2k output tokens on a real matter, and the
+    # recommendations mid-rationale — provider responses ended their JSON at
+    # ~2k output tokens on a real matter, and the
     # tolerant JSON loader couldn't parse a doc with no closing
     # brace. Raising to 4096 is the same budget as hearing packs
     # and gives ~500-600 words of rationale per option.
     llm_max_output_tokens_recommendations: int = Field(default=4096, ge=512)
     llm_temperature: float = Field(default=0.1, ge=0.0, le=2.0)
-    # Anthropic ephemeral prompt caching (5-min TTL) on the large
-    # system prompt. When true, repeated calls within 5 min share the
-    # cache block and pay ~10% of the full prompt cost.
-    llm_prompt_cache_enabled: bool = Field(default=True)
     # LLM cassette — record real provider responses to a JSON file in
     # "record" mode, replay them deterministically in "replay" mode,
     # bypass entirely in "off" mode (default). Powers Sprint 11 offline
@@ -440,8 +426,8 @@ class Settings(BaseSettings):
     # uplift; operators can flip to False if quality regresses on
     # other surfaces.
     retrieval_query_normalisers_enabled: bool = Field(default=True)
-    # Haiku-backed transliteration for Indic-script queries. OFF by
-    # default — every non-English query would otherwise pay a Haiku
+    # Model-backed transliteration for Indic-script queries. OFF by
+    # default — every non-English query would otherwise pay an LLM
     # round-trip. Enable once the probe confirms the variant beats the
     # raw query on the Gurmukhi / Devanagari miss bucket.
     retrieval_non_english_translate: bool = Field(default=False)

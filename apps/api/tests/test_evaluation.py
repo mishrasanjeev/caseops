@@ -104,14 +104,14 @@ def test_open_run_carries_provenance(client) -> None:  # noqa: ARG001
         run = open_run(
             session,
             suite_name="drafting",
-            provider="anthropic",
-            model="claude-haiku-4-5-20251001",
+            provider="openai",
+            model="gpt-5-nano",
             git_sha="abc1234",
         )
         session.commit()
         session.refresh(run)
     assert run.suite_name == "drafting"
-    assert run.provider == "anthropic"
-    assert run.model == "claude-haiku-4-5-20251001"
+    assert run.provider == "openai"
+    assert run.model == "gpt-5-nano"
     assert run.git_sha == "abc1234"
     assert run.started_at is not None

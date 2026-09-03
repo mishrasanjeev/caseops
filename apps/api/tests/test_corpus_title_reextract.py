@@ -69,14 +69,14 @@ def _seed_doc(*, title: str, document_text: str = "") -> str:
 class _FakeCompletion:
     prompt_tokens: int
     completion_tokens: int
-    provider: str = "anthropic"
-    model: str = "claude-haiku-4-5-20251001"
+    provider: str = "openai"
+    model: str = "gpt-5-mini"
     latency_ms: int = 10
 
 
 class _StubProvider:
     """Provider stub — bypasses generate_structured by monkey-patching."""
-    def __init__(self, model: str = "claude-haiku-4-5-20251001") -> None:
+    def __init__(self, model: str = "gpt-5-mini") -> None:
         self.model = model
 
 

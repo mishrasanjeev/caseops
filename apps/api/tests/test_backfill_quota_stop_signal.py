@@ -126,12 +126,12 @@ def test_concurrent_daily_cap_drains_without_marking_failures(
     with factory() as session:
         totals = mod._structured_pass(
             session, limit=None, dry_run=False, budget_usd=10.0,
-            force_tier="haiku", year_range=(1990, 2025), concurrency=4,
+            force_tier="standard", year_range=(1990, 2025), concurrency=4,
             english_only=True, forums=mod._DEFAULT_FORUMS,
         )
 
     # 3 docs went through cleanly.
-    assert totals["haiku"]["done"] == 3
+    assert totals["standard"]["done"] == 3
     # 5 remaining docs: the cap-fired ones must NOT be counted as
     # failures. With concurrency=4 and a prime-then-as-completed
     # scheduler, some additional docs may have been in-flight when
@@ -169,11 +169,11 @@ def test_concurrent_quota_exhausted_drains_without_marking_failures(
     with factory() as session:
         totals = mod._structured_pass(
             session, limit=None, dry_run=False, budget_usd=10.0,
-            force_tier="haiku", year_range=(1990, 2025), concurrency=4,
+            force_tier="standard", year_range=(1990, 2025), concurrency=4,
             english_only=True, forums=mod._DEFAULT_FORUMS,
         )
 
-    assert totals["haiku"]["done"] == 2
+    assert totals["standard"]["done"] == 2
     assert totals["failures"] == 0
     assert totals["spent_usd"] == pytest.approx(0.02, abs=1e-9)
 
@@ -204,12 +204,12 @@ def test_concurrent_ordinary_exception_still_marks_failure(
     with factory() as session:
         totals = mod._structured_pass(
             session, limit=None, dry_run=False, budget_usd=10.0,
-            force_tier="haiku", year_range=(1990, 2025), concurrency=2,
+            force_tier="standard", year_range=(1990, 2025), concurrency=2,
             english_only=True, forums=mod._DEFAULT_FORUMS,
         )
 
     # 5 seeded - 2 failures = 3 successful.
-    assert totals["haiku"]["done"] == 3
+    assert totals["standard"]["done"] == 3
     # Two failures from the RuntimeError-emitting calls (positions 2 and 4).
     assert totals["failures"] == 2
     # Spend matches 3 successful calls.
@@ -242,12 +242,12 @@ def test_sequential_daily_cap_exits_bucket_without_failures(
     with factory() as session:
         totals = mod._structured_pass(
             session, limit=None, dry_run=False, budget_usd=10.0,
-            force_tier="haiku", year_range=(1990, 2025), concurrency=1,
+            force_tier="standard", year_range=(1990, 2025), concurrency=1,
             english_only=True, forums=mod._DEFAULT_FORUMS,
         )
 
     # 2 successful, then cap fires on call 3 — we exit.
-    assert totals["haiku"]["done"] == 2
+    assert totals["standard"]["done"] == 2
     assert totals["failures"] == 0
     # Critical: total calls made == 3 (2 OK + 1 cap-failure). The
     # remaining 3 docs were NOT attempted (no spin).
@@ -275,11 +275,11 @@ def test_sequential_quota_exhausted_exits_bucket_without_failures(
     with factory() as session:
         totals = mod._structured_pass(
             session, limit=None, dry_run=False, budget_usd=10.0,
-            force_tier="haiku", year_range=(1990, 2025), concurrency=1,
+            force_tier="standard", year_range=(1990, 2025), concurrency=1,
             english_only=True, forums=mod._DEFAULT_FORUMS,
         )
 
-    assert totals["haiku"]["done"] == 1
+    assert totals["standard"]["done"] == 1
     assert totals["failures"] == 0
     # 1 OK + 1 cap-failure = 2 calls made; remaining 4 docs not attempted.
     assert call_counter["n"] == 2
@@ -305,12 +305,12 @@ def test_sequential_ordinary_exception_still_marks_failure(
     with factory() as session:
         totals = mod._structured_pass(
             session, limit=None, dry_run=False, budget_usd=10.0,
-            force_tier="haiku", year_range=(1990, 2025), concurrency=1,
+            force_tier="standard", year_range=(1990, 2025), concurrency=1,
             english_only=True, forums=mod._DEFAULT_FORUMS,
         )
 
     # 3 OK + 1 failure; loop continued past the failure.
-    assert totals["haiku"]["done"] == 3
+    assert totals["standard"]["done"] == 3
     assert totals["failures"] == 1
     assert call_counter["n"] == 4
 

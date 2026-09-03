@@ -443,7 +443,7 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
     class, no internal trace markers leak.
   - **Test coverage:** `test_drafting_preview.py
     ::test_preview_redacts_provider_error_in_502` asserts the user-
-    visible detail does NOT contain `LLMProviderError`, `Anthropic`,
+    visible detail does NOT contain `LLMProviderError`, provider internals,
     or a planted `SECRET_INTERNAL_TRACE_xyz` substring;
     `test_preview_persists_error_model_run_when_provider_fails`
     asserts the failure-path ModelRun row is persisted.
@@ -452,7 +452,7 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   (closed 2026-04-25 with the rotation drill in revision
   `caseops-api-00052-5w2`).
   Every sensitive env on the API service flows through Secret Manager:
-  `caseops-auth-secret`, `caseops-anthropic-api-key`,
+  `caseops-auth-secret`,
   `caseops-voyage-api-key`, `caseops-sendgrid-api-key`,
   `caseops-database-url`, `caseops-openai-api-key`,
   `caseops-pine-labs-api-key`, `caseops-pine-labs-api-secret`. Web
@@ -797,7 +797,7 @@ ledger is `P1-002` / `P1-003` / `AQ-003` / `AQ-004` above.
 
 ## Codex Discipline
 
-- Codex must read `.claude/skills/enterprise-hardening/SKILL.md` before any
+- Codex must read `.codex/skills/enterprise-hardening/SKILL.md` before any
   enterprise-readiness, scale-hardening, or `WORK_TO_BE_DONE.md` audit.
 - Codex must update this file in the same task as the audit.
 - Codex must not close a hardening item without evidence from code, tests, and
@@ -1177,8 +1177,7 @@ work listed in `docs/EXECUTION_BACKLOG.md`.
 - **Status:** Missing.
 - **Gap found:** `apps/web/components/marketing/Security.tsx:83` sells
   "Prompt-injection tests" while the stripper is unreachable from
-  `AnthropicProvider` (`llm.py:398`), `OpenAIProvider` (`:509`) and
-  `GeminiProvider` (`:653`), with `conftest.py:106` pinning the suite to mock. A
+  the hosted provider adapters, with `conftest.py:106` pinning the suite to mock. A
   billable "API access - API keys and dashboard" SKU is seeded active while no
   API-key authentication exists.
 - **Control required:** a test that asserts each marketing claim against code.

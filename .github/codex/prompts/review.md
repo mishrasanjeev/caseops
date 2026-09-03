@@ -1,6 +1,6 @@
 Review the current pull request for the CaseOps repository.
 
-Start by reading `CLAUDE.md` and follow the repo's review standards. Then review
+Start by reading `CODEX.md` and follow the repo's review standards. Then review
 only the changes introduced by the current pull request against the base branch.
 Use the fetched pull request refs and `git diff` if needed to focus on the PR
 delta rather than the whole repository.

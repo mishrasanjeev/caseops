@@ -6,7 +6,7 @@ Owner: CaseOps product
 
 This PRD captures the implementation contract for the matter-level
 **Litigation Strategy and Escalation Planner**. It complements
-`docs/PRD_CLAUDE_CODE_2026-04-23.md` (the execution PRD) and slots into
+`docs/PRD_CODEX_2026-04-23.md` (the execution PRD) and slots into
 the matter cockpit alongside Documents, Drafts, Hearings, Recommendations,
 and Statutes.
 

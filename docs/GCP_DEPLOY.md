@@ -106,9 +106,9 @@ gcloud storage buckets create gs://$DOC_BUCKET \
 ## 4. Secret Manager — every credential
 
 ```bash
-# Anthropic
-gcloud secrets create caseops-anthropic-api-key --replication-policy=automatic
-echo -n "sk-ant-…YOUR-KEY…" | gcloud secrets versions add caseops-anthropic-api-key --data-file=-
+# OpenAI
+gcloud secrets create caseops-openai-api-key --replication-policy=automatic
+echo -n "YOUR-OPENAI-KEY" | gcloud secrets versions add caseops-openai-api-key --data-file=-
 
 # Voyage
 gcloud secrets create caseops-voyage-api-key --replication-policy=automatic
@@ -194,11 +194,11 @@ gcloud run deploy caseops-api \
 CASEOPS_DATABASE_URL=postgresql+psycopg://$DB_USER:$DB_PASSWORD@/cloudsql/$SQL_CONN/$DB_NAME,\
 CASEOPS_DOCUMENT_STORAGE_BACKEND=gcs,\
 CASEOPS_DOCUMENT_STORAGE_GCS_BUCKET=$DOC_BUCKET,\
-CASEOPS_LLM_PROVIDER=anthropic,\
-CASEOPS_LLM_MODEL=claude-haiku-4-5-20251001,\
-CASEOPS_LLM_MODEL_DRAFTING=claude-opus-4-7,\
-CASEOPS_LLM_MODEL_RECOMMENDATIONS=claude-sonnet-4-6,\
-CASEOPS_LLM_MODEL_HEARING_PACK=claude-sonnet-4-6,\
+CASEOPS_LLM_PROVIDER=openai,\
+CASEOPS_LLM_MODEL=gpt-5.1,\
+CASEOPS_LLM_MODEL_DRAFTING=gpt-5.1,\
+CASEOPS_LLM_MODEL_RECOMMENDATIONS=gpt-5-mini,\
+CASEOPS_LLM_MODEL_HEARING_PACK=gpt-5.1,\
 CASEOPS_EMBEDDING_PROVIDER=voyage,\
 CASEOPS_EMBEDDING_MODEL=voyage-4-large,\
 CASEOPS_EMBEDDING_DIMENSIONS=1024,\
@@ -207,7 +207,7 @@ CASEOPS_CORS_ORIGINS=[\"https://app.your-domain.example\"]" \
   --set-secrets=\
 "CASEOPS_AUTH_SECRET=caseops-auth-secret:latest,\
 CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET=caseops-machine-readiness-evidence-secret:latest,\
-CASEOPS_LLM_API_KEY=caseops-anthropic-api-key:latest,\
+CASEOPS_LLM_API_KEY=caseops-openai-api-key:latest,\
 CASEOPS_EMBEDDING_API_KEY=caseops-voyage-api-key:latest"
 ```
 
@@ -359,7 +359,7 @@ For the v1 demo, **skip this**. Add later when you put a custom domain + LB in f
 | Cloud Run API (idle most hours, 2GB / 2vCPU) | ~$15 |
 | Cloud Run web (idle most hours, 512MB) | ~$5 |
 | Cloud Storage (1-2 GB documents) | <$1 |
-| Anthropic + Voyage (demo usage) | ~$10-30 |
+| OpenAI + Voyage (demo usage) | ~$10-30 |
 | **Total** | **~$140-160/mo** |
 
 Drops by ~$30 if you commit Cloud SQL for 1 year.

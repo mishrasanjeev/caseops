@@ -244,6 +244,12 @@ requirements when using the fallback.
   overlap on PostgreSQL; converting the deadlock to a generic retry or a 503
   assertion would hide the lifecycle-write failure and can look like a case
   reopened when disposal actually rolled back.
+- Diagnose a private-projection maintenance alert against persisted event epochs
+  and the active workload. Continuous production E2E writes in a shared QA
+  tenant can correctly fence every shadow; preserve the 300-second blocker,
+  stop the overlapping mutation, and require one quiescent rebuild plus a
+  second clean cadence. Do not label a safe stale-writer rejection as
+  corruption, suppress QA blockers, or weaken the access/tombstone fence.
 - Catalog completeness is not fixed by proving one positive fixture. Expose
   catalogued and verified totals separately, keep incomplete entries visible
   but disabled, and enforce one source-verification predicate on every UI and

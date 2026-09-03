@@ -1,8 +1,8 @@
 """Sprint R8 — live-LLM regression eval for each DraftTemplateType.
 
 For every fixture in ``apps/api/tests/fixtures/drafting/``, this
-script hits Haiku with the per-type R2 system prompt + a "Facts: ..."
-user message, then runs the R5 ``validate_draft_by_type`` validator
+script hits the configured OpenAI evaluation model with the per-type R2 system
+prompt and a "Facts: ..." user message, then runs the R5 ``validate_draft_by_type`` validator
 over the generated body and records whether it passed.
 
 Output:
@@ -12,13 +12,11 @@ Output:
 - A JSON artifact containing the full generated drafts + findings at
   ``docs/eval_artifacts/drafting_types_2026_04_21.json``.
 
-Model routing: we construct an ``AnthropicProvider`` directly against
-the Haiku model from ``settings.llm_model_metadata_extract``. The
-drafting-purpose model (Opus) is deliberately skipped — this is a
-cheap regression eval, not a production draft.
+Model routing goes through the shared provider factory with the evaluation
+purpose. The CLI refuses any hosted provider other than OpenAI.
 
-Budget sizing: ~24 scenarios × ~2k output tokens × Haiku pricing
-(~$1/MTok input + $5/MTok output) ≈ $5 end-to-end.
+Budget sizing uses conservative OpenAI rates so dry-run reports do not
+understate the possible live cost.
 """
 from __future__ import annotations
 
@@ -43,19 +41,20 @@ from caseops_api.services.draft_type_validators import (
 )
 from caseops_api.services.drafting_prompts import get_prompt_parts
 from caseops_api.services.llm import (
-    AnthropicProvider,
+    PURPOSE_EVAL,
     LLMMessage,
+    LLMProvider,
     LLMProviderError,
+    build_provider,
 )
 
 # ---------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------
 
-# Haiku 4.5 pricing (per 1M tokens, USD) as of 2026-04.
-_HAIKU_INPUT_PRICE_PER_MTOK = 1.00
-_HAIKU_OUTPUT_PRICE_PER_MTOK = 5.00
-_DEFAULT_HAIKU_MODEL = "claude-haiku-4-5-20251001"
+# Conservative OpenAI pricing estimate (per 1M tokens, USD).
+_OPENAI_INPUT_PRICE_PER_MTOK = 2.00
+_OPENAI_OUTPUT_PRICE_PER_MTOK = 10.00
 
 # Fixture layout. Standalone files each carry one template_type;
 # misc_templates.json contains the remaining types in a nested map.
@@ -190,7 +189,7 @@ def _build_user_message(facts: dict[str, Any]) -> str:
 
 
 def _run_scenario(
-    provider: AnthropicProvider,
+    provider: LLMProvider,
     run: ScenarioRun,
     *,
     max_tokens: int,
@@ -280,7 +279,7 @@ def _format_report(
     runs: list[ScenarioRun],
 ) -> str:
     lines: list[str] = []
-    lines.append("# Sprint R8 — per-template drafting eval (live Haiku)")
+    lines.append("# Sprint R8 — per-template drafting eval (live OpenAI)")
     lines.append("")
     lines.append(f"- model: `{model}`")
     lines.append(f"- total scenarios: {len(runs)}")
@@ -406,8 +405,8 @@ def _write_report(report: str) -> None:
 def _total_cost_usd(runs: list[ScenarioRun]) -> float:
     total_in = sum(r.input_tokens for r in runs)
     total_out = sum(r.output_tokens for r in runs)
-    cost_in = (total_in / 1_000_000.0) * _HAIKU_INPUT_PRICE_PER_MTOK
-    cost_out = (total_out / 1_000_000.0) * _HAIKU_OUTPUT_PRICE_PER_MTOK
+    cost_in = (total_in / 1_000_000.0) * _OPENAI_INPUT_PRICE_PER_MTOK
+    cost_out = (total_out / 1_000_000.0) * _OPENAI_OUTPUT_PRICE_PER_MTOK
     return cost_in + cost_out
 
 
@@ -416,24 +415,13 @@ def _total_cost_usd(runs: list[ScenarioRun]) -> float:
 # ---------------------------------------------------------------
 
 
-def _build_haiku_provider() -> AnthropicProvider:
+def _build_eval_provider() -> LLMProvider:
     settings = get_settings()
-    api_key = settings.llm_api_key
-    if not api_key:
+    if (settings.llm_provider or "").lower() != "openai":
         raise SystemExit(
-            "CASEOPS_LLM_API_KEY is not set. Cannot run live-LLM eval."
+            "Live drafting evaluation requires CASEOPS_LLM_PROVIDER=openai."
         )
-    # Prefer the operator-configured metadata-extract model (already
-    # Haiku per .env), fall back to the pinned default.
-    model = (
-        getattr(settings, "llm_model_metadata_extract", None)
-        or _DEFAULT_HAIKU_MODEL
-    )
-    return AnthropicProvider(
-        model=model,
-        api_key=api_key,
-        prompt_cache=True,
-    )
+    return build_provider(purpose=PURPOSE_EVAL)
 
 
 def run(
@@ -466,7 +454,7 @@ def run(
 
     provider = None
     if not dry_run:
-        provider = _build_haiku_provider()
+        provider = _build_eval_provider()
 
     for i, run_ in enumerate(all_runs, start=1):
         sys.stderr.write(

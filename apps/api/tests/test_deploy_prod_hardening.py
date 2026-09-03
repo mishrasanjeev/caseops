@@ -93,6 +93,25 @@ def test_production_deploy_owns_indian_kanoon_activation_without_manual_data_ent
     assert 'name: "caseops-indian-kanoon-api-token"' in manifest
 
 
+def test_production_deploy_pins_openai_and_verifies_runtime_readback() -> None:
+    deploy = _read_repo_text("scripts/deploy-prod.sh")
+    manifest = _read_repo_text("infra/cloudrun/api-service.yaml")
+
+    assert "LLM_API_KEY_SECRET=caseops-openai-api-key" in deploy
+    assert "CASEOPS_LLM_API_KEY=${LLM_API_KEY_SECRET}:latest" in deploy
+    assert "CASEOPS_LLM_PROVIDER=${LLM_PROVIDER}" in deploy
+    assert "CASEOPS_LLM_MODEL=${LLM_MODEL}" in deploy
+    assert "CASEOPS_LLM_MODEL_RECOMMENDATIONS=${LLM_RECOMMENDATIONS_MODEL}" in deploy
+    assert 'env.get("CASEOPS_LLM_API_KEY")' in deploy
+    assert '"CASEOPS_LLM_PROVIDER": "openai"' in deploy
+    assert '"CASEOPS_LLM_MODEL": "gpt-5.1"' in deploy
+    assert '"CASEOPS_LLM_MODEL_RECOMMENDATIONS": "gpt-5-mini"' in deploy
+    assert 'name: CASEOPS_LLM_PROVIDER\n              value: "openai"' in manifest
+    assert 'name: CASEOPS_LLM_API_KEY' in manifest
+    assert 'name: "caseops-openai-api-key"' in manifest
+    assert "CASEOPS_OPENAI_API_KEY" not in manifest
+
+
 def test_production_manifests_block_paid_providers_for_test_tenants() -> None:
     blocked_slugs = "caseops-qa;caseops-ip-qa;test-legal"
     expected = f'"{blocked_slugs}"'
@@ -1163,6 +1182,8 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
   FAKE_OBSERVED_GENERATION='2'
   FAKE_GOVERNANCE_FLAG='false'
   FAKE_MACHINE_SECRET='caseops-machine-readiness-evidence-secret'
+  FAKE_LLM_PROVIDER='openai'
+  FAKE_LLM_SECRET='caseops-openai-api-key'
   FAKE_SERVICE_MIN='4'
   if [[ "${FAKE_TRAFFIC_MODE}" == "drift" ]]; then
     FAKE_TRAFFIC_REVISION='caseops-api-old'
@@ -1175,6 +1196,10 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
     FAKE_SERVICE_MIN='1'
   elif [[ "${FAKE_TRAFFIC_MODE}" == "secret-drift" ]]; then
     FAKE_MACHINE_SECRET='wrong-machine-readiness-secret'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "llm-provider-drift" ]]; then
+    FAKE_LLM_PROVIDER='mock'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "llm-secret-drift" ]]; then
+    FAKE_LLM_SECRET='wrong-llm-secret'
   fi
   printf '%s' \
     '{"metadata":{"generation":2,"annotations":{' \
@@ -1185,6 +1210,9 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
     '"value":"abcdef1234567890abcdef1234567890abcdef12"},' \
     '{"name":"CASEOPS_IP_RULE_GOVERNANCE_ENABLED","value":"' \
     "${FAKE_GOVERNANCE_FLAG}" '"},' \
+    '{"name":"CASEOPS_LLM_PROVIDER","value":"' "${FAKE_LLM_PROVIDER}" '"},' \
+    '{"name":"CASEOPS_LLM_MODEL","value":"gpt-5.1"},' \
+    '{"name":"CASEOPS_LLM_MODEL_RECOMMENDATIONS","value":"gpt-5-mini"},' \
     '{"name":"CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS",' \
     '"value":"caseops-qa;caseops-ip-qa;test-legal"},' \
     '{"name":"CASEOPS_INDIAN_KANOON_ENABLED","value":"true"},' \
@@ -1208,7 +1236,10 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
     '"name":"caseops-indian-kanoon-api-token"}}},' \
     '{"name":"CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET",' \
     '"valueFrom":{"secretKeyRef":{"key":"latest","name":"' \
-    "${FAKE_MACHINE_SECRET}" '"}}}' \
+    "${FAKE_MACHINE_SECRET}" '"}}},' \
+    '{"name":"CASEOPS_LLM_API_KEY",' \
+    '"valueFrom":{"secretKeyRef":{"key":"latest","name":"' \
+    "${FAKE_LLM_SECRET}" '"}}}' \
     ']}]}}},' \
     '"status":{"observedGeneration":' "${FAKE_OBSERVED_GENERATION}" ',' \
     '"latestCreatedRevisionName":"caseops-api-test",' \
@@ -1626,6 +1657,14 @@ def test_deploy_prod_accepts_clean_head_and_healthy_api(tmp_path: Path) -> None:
         for call in calls
     )
     assert any(
+        "run deploy caseops-api" in call
+        and "CASEOPS_LLM_API_KEY=caseops-openai-api-key:latest" in call
+        and "CASEOPS_LLM_PROVIDER=openai" in call
+        and "CASEOPS_LLM_MODEL=gpt-5.1" in call
+        and "CASEOPS_LLM_MODEL_RECOMMENDATIONS=gpt-5-mini" in call
+        for call in calls
+    )
+    assert any(
         "run jobs update caseops-seed-indian-kanoon-costs" in call
         and "caseops_api.scripts.seed_indian_kanoon_costs" in call
         for call in calls
@@ -1922,6 +1961,8 @@ def test_fingerprint_wrapper_fails_on_local_expected_digest_mismatch(
         ("flag-enabled", "TRAFFIC/REVISION DRIFT"),
         ("capacity-drift", "TRAFFIC/REVISION DRIFT"),
         ("secret-drift", "TRAFFIC/REVISION DRIFT"),
+        ("llm-provider-drift", "TRAFFIC/REVISION DRIFT"),
+        ("llm-secret-drift", "TRAFFIC/REVISION DRIFT"),
         ("image-drift", "REVISION IMAGE DRIFT"),
     ],
 )

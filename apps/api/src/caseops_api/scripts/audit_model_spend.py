@@ -2,7 +2,7 @@
 (provider, model, purpose) so the operator can see exactly what's
 burning tokens.
 
-Per the user's `feedback_corpus_spend_audit` memory: every Anthropic
+Per the user's `feedback_corpus_spend_audit` memory: every hosted LLM
 call writes a ModelRun row. This script is the read side.
 
 CLI: ``python -m caseops_api.scripts.audit_model_spend``

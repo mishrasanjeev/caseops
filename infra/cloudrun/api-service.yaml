@@ -18,8 +18,7 @@ spec:
         run.googleapis.com/execution-environment: gen2
         # EG-007 (2026-04-23): every sensitive runtime value flows
         # through Secret Manager, never as a raw env value in the
-        # manifest. Auth secret + DB URL + future SendGrid /
-        # Anthropic / Pine Labs keys all use secretKeyRef.
+        # manifest. Auth secret + DB URL + provider keys all use secretKeyRef.
         run.googleapis.com/secrets: "caseops-auth-secret:projects/__PROJECT_NUMBER__/secrets/caseops-auth-secret,caseops-machine-readiness-evidence-secret:projects/__PROJECT_NUMBER__/secrets/caseops-machine-readiness-evidence-secret,caseops-database-url:projects/__PROJECT_NUMBER__/secrets/caseops-database-url,caseops-openai-api-key:projects/__PROJECT_NUMBER__/secrets/caseops-openai-api-key,caseops-sendgrid-webhook-public-key:projects/__PROJECT_NUMBER__/secrets/caseops-sendgrid-webhook-public-key,caseops-ecourtsindia-api-token:projects/__PROJECT_NUMBER__/secrets/caseops-ecourtsindia-api-token,caseops-indian-kanoon-api-token:projects/__PROJECT_NUMBER__/secrets/caseops-indian-kanoon-api-token"
     spec:
       # 2026-06-08 incident: one blocking request pinned the API event
@@ -98,16 +97,20 @@ spec:
                 secretKeyRef:
                   name: "caseops-machine-readiness-evidence-secret"
                   key: "latest"
-            # 2026-04-30: gpt-5.1 is the sole LLM provider. The prior
-            # Anthropic→Haiku→OpenAI fallback ladder (commit 4104265)
-            # was removed because the 3x token burn per click was
-            # unjustified once Anthropic credits were retired. CASEOPS_
-            # LLM_API_KEY now binds to caseops-openai-api-key; CASEOPS_
-            # LLM_PROVIDER=openai. Rotate the key by adding a new secret
+            # OpenAI is the sole hosted production LLM provider. The provider,
+            # models, and key binding are explicit so manifest replacement
+            # cannot fall back to a retired adapter or local mock.
+            - name: CASEOPS_LLM_PROVIDER
+              value: "openai"
+            - name: CASEOPS_LLM_MODEL
+              value: "gpt-5.1"
+            - name: CASEOPS_LLM_MODEL_RECOMMENDATIONS
+              value: "gpt-5-mini"
+            # Rotate the key by adding a new secret
             # version and redeploying:
             #   gcloud secrets versions add caseops-openai-api-key \
             #     --project=__PROJECT_ID__ --data-file=-
-            - name: CASEOPS_OPENAI_API_KEY
+            - name: CASEOPS_LLM_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: "caseops-openai-api-key"

@@ -12,7 +12,7 @@ pilot that relies on the affected controls in §2.** See §1.
 
 > **How to read this.** The external review was *not* copied forward. Every
 > factual claim in it was re-verified against the code, following the precedent
-> in `docs/PRD_CLAUDE_CODE_2026-04-23.md` §6.1: an outside audit is a hypothesis
+> in `docs/PRD_CODEX_2026-04-23.md` §6.1: an outside audit is a hypothesis
 > until reconciled with repo truth. **35 of 111 verified claims were wrong or
 > overstated, in both directions.** Corrections are in §3. Items the outside
 > review missed entirely — several of them more serious than anything it found —
@@ -75,7 +75,7 @@ engineering record.
 
 ## 2. Affected activation and pilot control gaps
 
-Severity-first, per `.claude/skills/enterprise-hardening/SKILL.md`. Every item
+Severity-first, per `.codex/skills/enterprise-hardening/SKILL.md`. Every item
 here was found by verification, and **items 2.1–2.6 do not appear in the external
 review at all**. Here, "stop-ship" means stop activation or pilot use of the
 named surface until its control passes; it never means stop unrelated repository
@@ -223,8 +223,7 @@ be productised or underwritten until it verifies.
 
 - `apps/web/components/marketing/Security.tsx:83` sells **"Prompt-injection
   tests"** as a shipped control. The programmatic stripper is unreachable from
-  `AnthropicProvider` (`llm.py:398`), `OpenAIProvider` (`:509`) and
-  `GeminiProvider` (`:653`), and `conftest.py:106` pins the suite to mock — so no
+  the hosted provider adapters, and `conftest.py:106` pins the suite to mock — so no
   injection control is ever exercised against any real model. The test is
   tautological against the mock.
 - A billable **"API access — API keys and dashboard"** SKU is seeded and marked
@@ -446,7 +445,7 @@ and no scope checker would invert the product's own safety model.
 - `docs/STRICT_ENTERPRISE_GAP_TASKLIST.md` — `EH-SGR-01..09` added by this review
 - `docs/STRICT_REPO_QUALITY_AUDIT_2026-07-10.md` — prior deployment/evidence
   limitations remain for their affected surfaces; they are not an implementation freeze
-- `docs/PRD_CLAUDE_CODE_2026-04-23.md` §6.1 — the reconciliation precedent this
+- `docs/PRD_CODEX_2026-04-23.md` §6.1 — the reconciliation precedent this
   review follows
 - `docs/BUG_REOPEN_LEARNINGS_2026-08-14_RAM.md` — the enum-drift failure class
   that §2.2 repeats

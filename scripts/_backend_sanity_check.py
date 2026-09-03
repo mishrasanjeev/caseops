@@ -24,7 +24,6 @@ REQUIRED = [
     "slowapi",
     "httpx",
     "voyageai",
-    "anthropic",
     "fpdf",
     "docx",
     "google.cloud.storage",

@@ -8,7 +8,7 @@
 # - license allow-list check
 #
 # Each job is a separate GitHub job so failures attribute clearly
-# in the PR check list. None depend on Pine Labs / Anthropic /
+# in the PR check list. None depend on Pine Labs /
 # Voyage credentials.
 
 name: Security
@@ -91,7 +91,7 @@ jobs:
           # GITLEAKS_LICENSE only needed for org-level scanning — we
           # use the free per-repo path. Default config catches AWS
           # keys, GitHub PATs, Stripe keys, generic high-entropy
-          # strings, and Anthropic / OpenAI / SendGrid keys.
+          # strings, and OpenAI / SendGrid keys.
 
   license-allowlist:
     name: License allow-list
@@ -106,7 +106,7 @@ jobs:
           cache-dependency-path: package-lock.json
       - run: npm ci --ignore-scripts
       # license-checker enumerates every transitive package's license.
-      # CaseOps's CLAUDE.md allow-list: MIT, Apache-2.0, BSD-2-Clause,
+      # CaseOps's CODEX.md allow-list: MIT, Apache-2.0, BSD-2-Clause,
       # BSD-3-Clause, ISC, PostgreSQL, Python-2.0, Unlicense, CC0-1.0,
       # 0BSD, BlueOak-1.0.0. AGPL/SSPL/BSL/BUSL block.
       - name: Check JS licenses

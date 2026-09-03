@@ -1,6 +1,6 @@
-# `.claude/skills/`
+# `.codex/skills/`
 
-Vendored and CaseOps-authored Claude Code skills that apply to CaseOps.
+Vendored and CaseOps-authored Codex skills that apply to CaseOps.
 
 | Skill | Purpose | Scope |
 | --- | --- | --- |
@@ -8,24 +8,24 @@ Vendored and CaseOps-authored Claude Code skills that apply to CaseOps.
 | [`bug-fixing/`](./bug-fixing/SKILL.md) | Fail-closed bug triage and regression-hardening protocol that forces explicit verdicts, adjacent-path audits, and strongest-practical verification. | Any bug fix, bug verification, reopen analysis, or review of another agent's bug-fix claim. |
 | [`enterprise-hardening/`](./enterprise-hardening/SKILL.md) | Fail-closed enterprise-readiness and scale-hardening protocol that forces evidence-backed gap statuses, `WORK_TO_BE_DONE.md` drift checks, and durable gap-ledger updates. | Any enterprise audit, architecture or security hardening review, or backlog-gap scan. |
 | [`caseops-prd-execution/`](./caseops-prd-execution/SKILL.md) | Forces CaseOps feature work to map to the unified execution PRD, current repo truth, source-data rules, user stories, and test IDs before implementation. | Any CaseOps feature planning, implementation, UX redesign, or product-gap review. |
-| [`strict-quality-review/`](./strict-quality-review/SKILL.md) | Whole-repo strict quality gate for exhaustive route/page/test/security/doc audits, evidence-backed verdicts, and Claude Code fix briefs. | Any deep repo scan, strict QA review, security review, release-readiness audit, or test-matrix hardening task. |
+| [`strict-quality-review/`](./strict-quality-review/SKILL.md) | Whole-repo strict quality gate for exhaustive route/page/test/security/doc audits, evidence-backed verdicts, and Codex fix briefs. | Any deep repo scan, strict QA review, security review, release-readiness audit, or test-matrix hardening task. |
 | [`corpus-ingest/`](./corpus-ingest/SKILL.md) | Per-bucket SC/HC ingest pipeline (ingest → Layer-2 metadata → title-chunk embed → HNSW probe → 0-5 rating) that avoids the "placeholder title poisons embeddings" failure. | Any data-ingest / vector-quality request on the authority corpus. |
 
 ## Why these live in the repo
 
 Each skill here is either vendored (full source, not a pointer) or authored in
 this repo when CaseOps needs a permanent workflow policy. The harness loads
-them automatically for every contributor — the rule lives in `CLAUDE.md` and
+them automatically for every contributor — the rule lives in `CODEX.md` and
 the project design context lives in `.impeccable.md`.
 
 ## Adding a new skill
 
-1. Drop the skill's directory under `.claude/skills/<name>/`.
+1. Drop the skill's directory under `.codex/skills/<name>/`.
 2. If the skill is vendored, add an `ATTRIBUTION.md` alongside it with: source
    URL, commit, license, upstream notice, and what (if anything) we changed.
 3. If the skill is CaseOps-authored, keep the policy narrow, explicit, and
    tied to a recurring repository workflow.
-4. Update `CLAUDE.md` so future work knows to consult the skill.
+4. Update `CODEX.md` so future work knows to consult the skill.
 5. Update this README.
 
 ## Updating

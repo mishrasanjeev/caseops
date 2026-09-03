@@ -6,7 +6,7 @@ description: Use this skill for whole-repo quality audits, release-readiness rev
 # Strict Quality Review
 
 Use this skill whenever the task asks for a deep repo scan, exhaustive tests,
-strict release quality, security review, QA hardening, or a Claude Code fix
+strict release quality, security review, QA hardening, or a Codex fix
 brief. This skill is additive: also use `enterprise-hardening`,
 `caseops-prd-execution`, `bug-fixing`, or `impeccable` when their trigger
 conditions apply.
@@ -15,13 +15,13 @@ conditions apply.
 
 Read these before issuing a verdict:
 
-- `CLAUDE.md`
+- `CODEX.md`
 - `docs/STRICT_REPO_QUALITY_AUDIT_2026-04-24.md`
 - `docs/STRICT_ENTERPRISE_GAP_TASKLIST.md`
-- `docs/PRD_CLAUDE_CODE_2026-04-23.md`
+- `docs/PRD_CODEX_2026-04-23.md`
 - `docs/WORK_TO_BE_DONE.md`
-- `.claude/skills/enterprise-hardening/SKILL.md`
-- `.claude/skills/caseops-prd-execution/SKILL.md`
+- `.codex/skills/enterprise-hardening/SKILL.md`
+- `.codex/skills/caseops-prd-execution/SKILL.md`
 
 If any file is missing, say so and continue with the strongest available repo
 truth.
@@ -71,7 +71,7 @@ Manual testers may be treated as optional only when automation has proven the
 release across backend, frontend, database, provider, security, and deployed
 smoke surfaces.
 
-Before recommending reduced manual QA, Claude must verify and report:
+Before recommending reduced manual QA, Codex must verify and report:
 
 - Full backend coverage completion, not only selected per-file gates.
 - Full frontend coverage completion with thresholds and artifact output.
@@ -136,7 +136,7 @@ For repo-wide audits, create or update a Markdown file under `docs/` containing:
 - Evidence snapshot with commands and results.
 - Critical findings ordered by severity.
 - Exhaustive test case list with stable IDs.
-- Claude Code fix order.
+- Codex fix order.
 - Required verification commands.
 - Do-not-close checklist.
 

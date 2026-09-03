@@ -16,7 +16,7 @@
 #
 # Coverage: 24 High Courts × 26 years (2025-2000) = 624 buckets.
 # Per-bucket pipeline: ingest → Layer-2 metadata → title-chunk embed
-#   → HNSW probe → 0-5 rating (per CLAUDE.md vector-embedding rules).
+#   → HNSW probe → 0-5 rating (per CODEX.md vector-embedding rules).
 # Quality enforcement: halt sweep if a bucket rates <4.5/5 — caller
 #   must investigate before resuming. Transient INGEST-FAIL (S3
 #   connection errors etc.) does NOT halt; we move on to next bucket

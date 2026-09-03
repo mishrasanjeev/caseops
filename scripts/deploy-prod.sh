@@ -33,6 +33,10 @@ REGION=asia-south1
 REPO=caseops-images
 REGISTRY="${REGION}-docker.pkg.dev/${PROJECT}/${REPO}"
 MACHINE_READINESS_EVIDENCE_SECRET=caseops-machine-readiness-evidence-secret
+LLM_API_KEY_SECRET=caseops-openai-api-key
+LLM_PROVIDER=openai
+LLM_MODEL=gpt-5.1
+LLM_RECOMMENDATIONS_MODEL=gpt-5-mini
 INDIAN_KANOON_API_TOKEN_SECRET=caseops-indian-kanoon-api-token
 INDIAN_KANOON_TERMS_OWNER="Orchestrum Technologies LLP"
 INDIAN_KANOON_TERMS_APPROVED_AT="2026-09-03T00:00:00Z"
@@ -623,8 +627,8 @@ gcloud run deploy caseops-api \
   --container api \
   --port 8080 \
   --image "${API_IMAGE}" \
-  --update-secrets "CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET=${MACHINE_READINESS_EVIDENCE_SECRET}:latest,CASEOPS_INDIAN_KANOON_API_TOKEN=${INDIAN_KANOON_API_TOKEN_SECRET}:latest" \
-  --update-env-vars "^|^CASEOPS_RELEASE_SHA=${HEAD_SHA}|CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false|CASEOPS_DB_STATEMENT_TIMEOUT_MS=60000|CASEOPS_DB_LOCK_TIMEOUT_MS=5000|CASEOPS_DB_IDLE_TRANSACTION_TIMEOUT_MS=60000|CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS=${PAID_PROVIDER_BLOCKED_COMPANY_SLUGS}|CASEOPS_INDIAN_KANOON_ENABLED=true|CASEOPS_INDIAN_KANOON_API_BASE_URL=https://api.indiankanoon.org|CASEOPS_INDIAN_KANOON_TERMS_OWNER=${INDIAN_KANOON_TERMS_OWNER}|CASEOPS_INDIAN_KANOON_TERMS_APPROVED_AT=${INDIAN_KANOON_TERMS_APPROVED_AT}|CASEOPS_INDIAN_KANOON_TERMS_EXPIRES_AT=${INDIAN_KANOON_TERMS_EXPIRES_AT}|CASEOPS_INDIAN_KANOON_PERMITTED_USES=${INDIAN_KANOON_PERMITTED_USES}|CASEOPS_INDIAN_KANOON_DAILY_BUDGET_MINOR=${INDIAN_KANOON_DAILY_BUDGET_MINOR}|CASEOPS_INDIAN_KANOON_MONTHLY_BUDGET_MINOR=${INDIAN_KANOON_MONTHLY_BUDGET_MINOR}|CASEOPS_INDIAN_KANOON_RETENTION_DAYS=${INDIAN_KANOON_RETENTION_DAYS}|CASEOPS_INDIAN_KANOON_MAX_SEARCH_PAGE=${INDIAN_KANOON_MAX_SEARCH_PAGE}|CASEOPS_INDIAN_KANOON_MAX_RESULTS=${INDIAN_KANOON_MAX_RESULTS}" \
+  --update-secrets "CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET=${MACHINE_READINESS_EVIDENCE_SECRET}:latest,CASEOPS_LLM_API_KEY=${LLM_API_KEY_SECRET}:latest,CASEOPS_INDIAN_KANOON_API_TOKEN=${INDIAN_KANOON_API_TOKEN_SECRET}:latest" \
+  --update-env-vars "^|^CASEOPS_RELEASE_SHA=${HEAD_SHA}|CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false|CASEOPS_LLM_PROVIDER=${LLM_PROVIDER}|CASEOPS_LLM_MODEL=${LLM_MODEL}|CASEOPS_LLM_MODEL_RECOMMENDATIONS=${LLM_RECOMMENDATIONS_MODEL}|CASEOPS_DB_STATEMENT_TIMEOUT_MS=60000|CASEOPS_DB_LOCK_TIMEOUT_MS=5000|CASEOPS_DB_IDLE_TRANSACTION_TIMEOUT_MS=60000|CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS=${PAID_PROVIDER_BLOCKED_COMPANY_SLUGS}|CASEOPS_INDIAN_KANOON_ENABLED=true|CASEOPS_INDIAN_KANOON_API_BASE_URL=https://api.indiankanoon.org|CASEOPS_INDIAN_KANOON_TERMS_OWNER=${INDIAN_KANOON_TERMS_OWNER}|CASEOPS_INDIAN_KANOON_TERMS_APPROVED_AT=${INDIAN_KANOON_TERMS_APPROVED_AT}|CASEOPS_INDIAN_KANOON_TERMS_EXPIRES_AT=${INDIAN_KANOON_TERMS_EXPIRES_AT}|CASEOPS_INDIAN_KANOON_PERMITTED_USES=${INDIAN_KANOON_PERMITTED_USES}|CASEOPS_INDIAN_KANOON_DAILY_BUDGET_MINOR=${INDIAN_KANOON_DAILY_BUDGET_MINOR}|CASEOPS_INDIAN_KANOON_MONTHLY_BUDGET_MINOR=${INDIAN_KANOON_MONTHLY_BUDGET_MINOR}|CASEOPS_INDIAN_KANOON_RETENTION_DAYS=${INDIAN_KANOON_RETENTION_DAYS}|CASEOPS_INDIAN_KANOON_MAX_SEARCH_PAGE=${INDIAN_KANOON_MAX_SEARCH_PAGE}|CASEOPS_INDIAN_KANOON_MAX_RESULTS=${INDIAN_KANOON_MAX_RESULTS}" \
   --cpu "${API_CPU}" \
   --memory "${API_MEMORY}" \
   --container clamav \
@@ -688,6 +692,12 @@ import sys
 expected_sha = sys.argv[1]
 expected_min = sys.argv[2]
 expected_machine_readiness_secret = sys.argv[3]
+expected_llm_secret = "caseops-openai-api-key"
+expected_llm_env = {
+    "CASEOPS_LLM_PROVIDER": "openai",
+    "CASEOPS_LLM_MODEL": "gpt-5.1",
+    "CASEOPS_LLM_MODEL_RECOMMENDATIONS": "gpt-5-mini",
+}
 expected_paid_provider_blocked_slugs = sys.argv[4]
 expected_indian_kanoon_secret = sys.argv[5]
 expected_indian_kanoon_env = {
@@ -763,6 +773,9 @@ else:
         errors.append("CASEOPS_RELEASE_SHA does not match exact HEAD")
     if str((env.get("CASEOPS_IP_RULE_GOVERNANCE_ENABLED") or {}).get("value")) != "false":
         errors.append("CASEOPS_IP_RULE_GOVERNANCE_ENABLED is not explicitly false")
+    for name, expected_value in expected_llm_env.items():
+        if str((env.get(name) or {}).get("value")) != expected_value:
+            errors.append(f"{name} is missing or stale")
     if (
         str((env.get("CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS") or {}).get("value"))
         != expected_paid_provider_blocked_slugs
@@ -783,6 +796,19 @@ else:
         errors.append(
             "CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET is not bound to the "
             "dedicated latest Secret Manager version"
+        )
+    llm_secret_ref = (
+        (env.get("CASEOPS_LLM_API_KEY") or {})
+        .get("valueFrom", {})
+        .get("secretKeyRef", {})
+    )
+    if (
+        str(llm_secret_ref.get("name")) != expected_llm_secret
+        or str(llm_secret_ref.get("key")) != "latest"
+    ):
+        errors.append(
+            "CASEOPS_LLM_API_KEY is not bound to the dedicated OpenAI latest "
+            "Secret Manager version"
         )
     indian_kanoon_secret_ref = (
         (env.get("CASEOPS_INDIAN_KANOON_API_TOKEN") or {})

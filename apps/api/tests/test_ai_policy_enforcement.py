@@ -184,7 +184,7 @@ def test_blocked_model_raises_403_before_llm_call(ephemeral_db) -> None:
         _make_policy(
             session,
             company_id=company.id,
-            allowed_drafting=["claude-opus-4-7"],  # deliberately different
+            allowed_drafting=["gpt-5.1"],  # deliberately different
         )
         call_count = {"n": 0}
 
@@ -217,7 +217,7 @@ def test_purpose_scoping_isolates_allow_lists(ephemeral_db) -> None:
         _make_policy(
             session,
             company_id=company.id,
-            allowed_drafting=["claude-opus-4-7"],  # excludes toy-model-1
+            allowed_drafting=["gpt-5.1"],  # excludes toy-model-1
             allowed_recommendations=["toy-model-1"],
         )
         provider: LLMProvider = _AlwaysOKProvider()  # type: ignore[assignment]

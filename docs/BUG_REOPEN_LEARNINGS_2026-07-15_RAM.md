@@ -328,7 +328,7 @@ checks remain available as auditable review evidence.
 
 ## Permanent repository changes
 
-- `.claude/skills/bug-fixing/SKILL.md` now codifies feature-boundary tracing,
+- `.codex/skills/bug-fixing/SKILL.md` now codifies feature-boundary tracing,
   lifecycle state-machine/CAS/side-effect rules, and mandatory two-session tests.
 - `docs/runbooks/release-signoff-template.md` now requires acceptance-contract,
   lifecycle concurrency, terminal side-effect, regression-discovery, and

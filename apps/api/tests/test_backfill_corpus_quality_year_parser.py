@@ -277,14 +277,14 @@ def test_year_filter_includes_hc_docs_after_fallback(
     with factory() as session:
         totals = mod._structured_pass(
             session, limit=None, dry_run=False, budget_usd=10.0,
-            force_tier="haiku", year_range=(1990, 2025), concurrency=1,
+            force_tier="standard", year_range=(1990, 2025), concurrency=1,
             english_only=True, forums=mod._DEFAULT_FORUMS,
         )
     expected = set(seeded["hc_in"]) | set(seeded["sc_en"])
     assert set(seen) == expected, (
         f"missing: {expected - set(seen)}  unexpected: {set(seen) - expected}"
     )
-    assert totals["haiku"]["candidates"] == len(expected)
+    assert totals["standard"]["candidates"] == len(expected)
 
 
 def test_non_english_filter_still_excludes_devanagari_after_year_pass(
@@ -310,7 +310,7 @@ def test_non_english_filter_still_excludes_devanagari_after_year_pass(
     with factory() as session:
         mod._structured_pass(
             session, limit=None, dry_run=False, budget_usd=10.0,
-            force_tier="haiku", year_range=(1990, 2025), concurrency=1,
+            force_tier="standard", year_range=(1990, 2025), concurrency=1,
             english_only=True, forums=mod._DEFAULT_FORUMS,
         )
     assert set(seen) == set(seeded["sc_en"])
@@ -344,7 +344,7 @@ def test_triage_only_returns_counts_without_calling_llm(
     with factory() as session:
         totals = mod._structured_pass(
             session, limit=None, dry_run=False, budget_usd=10.0,
-            force_tier="haiku", year_range=(1990, 2025), concurrency=1,
+            force_tier="standard", year_range=(1990, 2025), concurrency=1,
             english_only=True, forums=mod._DEFAULT_FORUMS,
             triage_only=True,
         )
@@ -352,8 +352,8 @@ def test_triage_only_returns_counts_without_calling_llm(
     assert seen == []
     # Triage payload is shaped for the `triage-only:` stdout line.
     assert totals.get("triage_only") is True
-    assert totals["haiku"]["candidates"] == 4  # 2 HC in-range + 2 SC EN
-    assert totals["sonnet"]["candidates"] == 0
+    assert totals["standard"]["candidates"] == 4  # 2 HC in-range + 2 SC EN
+    assert totals["premium"]["candidates"] == 0
     ys = totals["year_sources"]
     # 2 HC in-range + 1 HC out-of-range = 3 hc_trailing_date matches
     # 2 SC EN + 1 SC Devanagari = 3 sc_filename matches

@@ -371,7 +371,7 @@ anything to a practitioner.
   question asked what use case was intended, and the honest answer is the
   Judge–Judgment–Court triangle, which is real.
 - **Any favorability, win/loss, tendency or reputation edge** — forbidden by
-  CLAUDE.md and not reintroduced under a graph label.
+  CODEX.md and not reintroduced under a graph label.
 
 **Also needed:** add a nullable `court_id` FK on `authority_documents`, populated
 at ingest, *before* building the graph UI — the current substring match is not a

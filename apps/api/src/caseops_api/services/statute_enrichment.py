@@ -2,8 +2,8 @@
 
 Per docs/PRD_STATUTE_MODEL_2026-04-25.md + 2026-04-26 user decision:
 - Try indiacode.nic.in scrape FIRST (authoritative source).
-- Fall back to Haiku generation when scrape fails.
-- Tag every Haiku-generated row ``is_provisional=True`` so the web UI
+- Fall back to model generation when scrape fails.
+- Tag every model-generated row ``is_provisional=True`` so the web UI
   can render the "AI-generated, not authoritative; verify against the
   official source" warning.
 
@@ -12,14 +12,14 @@ section heading + body cleanly in the act-level page, it returns
 None rather than guessing. A precise legal text wrong by one clause
 is more dangerous than no text at all.
 
-The Haiku path uses citation discipline: the prompt asks the model
+The model path uses citation discipline: the prompt asks the model
 to either return the bare-text-only content from its training corpus
 OR refuse with the exact string ``UNAVAILABLE``. We persist refusals
 as NULL section_text + the operator can see the count of refusals in
 the backfill summary.
 
 Both paths write a ``ModelRun`` row when LLM is involved (audit
-parity with every other Anthropic call in the system, per
+parity with every other OpenAI call in the system, per
 ``feedback_corpus_spend_audit``).
 """
 from __future__ import annotations
@@ -46,7 +46,7 @@ from caseops_api.services.llm import (
 logger = logging.getLogger(__name__)
 
 SOURCE_INDIACODE = "indiacode_scrape"
-SOURCE_HAIKU = "haiku_generated"
+SOURCE_MODEL_GENERATED = "model_generated"
 SOURCE_MANUAL = "manual"
 
 _SCRAPE_TIMEOUT_S = 15.0
@@ -83,7 +83,7 @@ def scrape_indiacode_section(
     located unambiguously, else None. The scraper is conservative: if
     the act page doesn't load, doesn't contain a recognizable heading
     pattern, or contains multiple matches for the same section number,
-    it returns None and lets the Haiku fallback take over.
+    it returns None and lets the model fallback take over.
 
     The 'unambiguous' rule prevents leaking text from the wrong section
     when an act page contains both a chapter title "Section 300 — Of
@@ -147,21 +147,21 @@ def scrape_indiacode_section(
             client.close()
 
 
-def haiku_generate_section_text(
+def model_generate_section_text(
     session: Session,
     statute: Statute,
     section: StatuteSection,
     *,
     company_id: str | None = None,
 ) -> tuple[str | None, str]:
-    """Ask Haiku for the bare-text content. Returns (text, status).
+    """Ask model for the bare-text content. Returns (text, status).
 
     The prompt enforces refusal-on-uncertainty by accepting either the
     bare-text content OR the literal string "UNAVAILABLE". We tolerate
     the model adding minor commentary; the matcher strips it.
 
     Writes a ``ModelRun`` row regardless of outcome so the audit ledger
-    matches every other Anthropic call in the system (see
+    matches every other OpenAI call in the system (see
     ``feedback_corpus_spend_audit``).
     """
     provider = build_provider(purpose=PURPOSE_METADATA_EXTRACT)
@@ -224,12 +224,12 @@ def haiku_generate_section_text(
     # padded its refusal failed the protocol and we treat it as a
     # refusal anyway.
     if re.fullmatch(r"['\"`]?UNAVAILABLE['\"`]?\.?", raw, re.IGNORECASE):
-        return None, "haiku_refused"
+        return None, "model_refused"
     if "UNAVAILABLE" in raw and len(raw) < 80:
-        return None, "haiku_refused_padded"
+        return None, "model_refused_padded"
     if len(raw) < 40:
-        return None, f"haiku_too_short:{len(raw)}"
-    return raw[:8000], "haiku_ok"
+        return None, f"model_too_short:{len(raw)}"
+    return raw[:8000], "model_ok"
 
 
 def _persist_model_run(
@@ -246,7 +246,7 @@ def _persist_model_run(
             company_id=context.tenant_id,
             matter_id=None,
             purpose=context.purpose,
-            provider=(completion.provider if completion else "anthropic"),
+            provider=(completion.provider if completion else "openai"),
             model=(completion.model if completion else "unknown"),
             prompt_tokens=(completion.prompt_tokens if completion else 0),
             completion_tokens=(completion.completion_tokens if completion else 0),
@@ -267,15 +267,15 @@ def enrich_section(
     *,
     statute: Statute | None = None,
     http_client: httpx.Client | None = None,
-    allow_haiku: bool = True,
+    allow_model_fallback: bool = True,
     company_id: str | None = None,
 ) -> EnrichmentResult:
     """Run the hybrid pipeline for one section.
 
     1. Try ``scrape_indiacode_section``. If it returns text, persist
        with source=indiacode_scrape, is_provisional=False.
-    2. Else try Haiku via ``haiku_generate_section_text``. If it
-       returns text, persist with source=haiku_generated,
+    2. Else try model via ``model_generate_section_text``. If it
+       returns text, persist with source=model_generated,
        is_provisional=True.
     3. Else leave section_text NULL and return a result with
        source=None, notes=<reason>.
@@ -331,17 +331,17 @@ def enrich_section(
             notes="indiacode_candidate_requires_review",
         )
 
-    if not allow_haiku:
+    if not allow_model_fallback:
         return EnrichmentResult(
             section_text=None, source=None, is_provisional=False,
-            notes="scrape_failed_haiku_disabled",
+            notes="scrape_failed_model_disabled",
         )
 
-    haiku_text, status = haiku_generate_section_text(
+    model_text, status = model_generate_section_text(
         session, statute, section, company_id=company_id,
     )
-    if haiku_text:
-        section.ai_explanation = haiku_text
+    if model_text:
+        section.ai_explanation = model_text
         section.source_status = "ai_generated"
         section.verification_status = "unverified"
         section.is_provisional = True
@@ -349,7 +349,7 @@ def enrich_section(
         session.commit()
         return EnrichmentResult(
             section_text=None,
-            source=SOURCE_HAIKU,
+            source=SOURCE_MODEL_GENERATED,
             is_provisional=True,
             notes=f"{status}_explanation_only",
         )

@@ -2,7 +2,7 @@
 # Build + deploy the durable ingest watchdog.
 #
 # Replaces the ephemeral CronCreate watchdog (which only lived for the
-# duration of a Claude session) with a Cloud Scheduler → Cloud Run Job
+# duration of an interactive agent session) with a Cloud Scheduler → Cloud Run Job
 # pair that runs every 15 minutes regardless of whether anyone is at
 # the keyboard.
 #

@@ -5,8 +5,8 @@ timeline, legal issues, statutes cited.
 
 Design choices:
 
-- Uses ``generate_structured`` with Haiku fallback (already wired in
-  ``services.recommendations``) so a Sonnet JSON malformation never
+- Uses ``generate_structured`` with OpenAI extraction model fallback (already wired in
+  ``services.recommendations``) so a OpenAI recommendations model JSON malformation never
   502s this endpoint.
 - Concatenates matter text from: matter title + description,
   attached-document text (first 4 k chars each, capped at 6 sources),
@@ -234,7 +234,7 @@ def generate_matter_summary(
     the cached summary from ``Matter.executive_summary_json`` when one
     is present. The POST ``…/regenerate`` route passes
     ``force_refresh=True`` to invalidate; GET / DOCX / PDF routes use
-    the cache. Uses Haiku by default for cost + JSON reliability. The
+    the cache. Uses OpenAI extraction model by default for cost + JSON reliability. The
     caller's matter must be tenant-scoped — ``_get_matter_model``
     raises 404 when the matter does not belong to the caller's
     company.

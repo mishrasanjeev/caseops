@@ -130,7 +130,7 @@ def test_concurrent_mode_rolls_back_triage_session_before_workers(
     try:
         mod._structured_pass(
             tracking, limit=None, dry_run=False, budget_usd=10.0,
-            force_tier="haiku", year_range=(1990, 2025), concurrency=2,
+            force_tier="standard", year_range=(1990, 2025), concurrency=2,
             english_only=True, forums=mod._DEFAULT_FORUMS,
         )
     finally:
@@ -174,7 +174,7 @@ def test_sequential_mode_does_not_rollback_triage_session(
     try:
         mod._structured_pass(
             tracking, limit=None, dry_run=False, budget_usd=10.0,
-            force_tier="haiku", year_range=(1990, 2025), concurrency=1,
+            force_tier="standard", year_range=(1990, 2025), concurrency=1,
             english_only=True, forums=mod._DEFAULT_FORUMS,
         )
     finally:
@@ -208,7 +208,7 @@ def test_concurrent_mode_uses_rollback_not_close(
     try:
         mod._structured_pass(
             tracking, limit=None, dry_run=False, budget_usd=10.0,
-            force_tier="haiku", year_range=(1990, 2025), concurrency=4,
+            force_tier="standard", year_range=(1990, 2025), concurrency=4,
             english_only=True, forums=mod._DEFAULT_FORUMS,
         )
         # Caller can still use the session after _structured_pass returns.
@@ -240,7 +240,7 @@ def test_triage_only_does_not_rollback_session(
     try:
         totals = mod._structured_pass(
             tracking, limit=None, dry_run=False, budget_usd=10.0,
-            force_tier="haiku", year_range=(1990, 2025), concurrency=4,
+            force_tier="standard", year_range=(1990, 2025), concurrency=4,
             english_only=True, forums=mod._DEFAULT_FORUMS,
             triage_only=True,
         )

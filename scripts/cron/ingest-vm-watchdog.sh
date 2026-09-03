@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Ingest-VM watchdog — pure bash, no Claude / no LLM cost per run.
+# Ingest-VM watchdog — pure bash, no LLM cost per run.
 #
 # Per user 2026-04-27 standing authorization:
 #   "you should keep checking ingestor VM status every 1 hour and

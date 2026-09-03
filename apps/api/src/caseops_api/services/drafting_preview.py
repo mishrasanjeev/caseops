@@ -1,4 +1,4 @@
-"""Sprint R4 — per-step Haiku preview for the drafting stepper.
+"""Sprint R4 — per-step OpenAI extraction model preview for the drafting stepper.
 
 The stepper collects facts field-by-field; after each step group
 (``facts``, ``grounds``, ``relief``, etc) the web POSTs what's been
@@ -7,9 +7,9 @@ draft for immediate feedback.
 
 Design notes:
 
-- Uses Haiku (``purpose="metadata_extract"`` provider) — fast + cheap.
+- Uses the OpenAI extraction model (``purpose="metadata_extract"``) — fast + cheap.
   A full-generation step still goes through the drafting service
-  with Sonnet / Opus; this is a preview, not the final draft.
+  with the configured drafting model; this is a preview, not the final draft.
 - Accepts partial ``facts`` — the Pydantic facts model's fields are
   declared as required, but the preview should not gate on that.
 - Returns plain text, not structured JSON — the preview is rendered
@@ -19,12 +19,12 @@ EG-006 (2026-04-23) hardening:
 
 - The call now flows through the same tenant-AI-policy gate the
   recommendations / drafting / hearing-pack services apply via
-  ``generate_structured``. A tenant whose admin has restricted Haiku
+  ``generate_structured``. A tenant whose admin has restricted OpenAI extraction model
   no longer leaks via the preview path.
 - Every successful call writes a ``ModelRun`` row so preview spend is
   auditable next to the rest of AI usage. Failed calls also persist a
   ``ModelRun`` with ``status="error"``.
-- Anthropic 402 ("credit balance is too low") triggers a hard cutover
+- hosted LLM 402 ("credit balance is too low") triggers a hard cutover
   to OpenAI ``gpt-5.1`` — same pattern as the other AI services.
 - The 502 response no longer interpolates the raw exception text into
   ``detail`` (Codex 2026-04-19 finding #6 — "no internal exception
@@ -254,7 +254,7 @@ def _prompt_hash(messages: list[LLMMessage]) -> str:
 
 
 def _default_preview_provider() -> LLMProvider:
-    """Pick Haiku by default. Callers can override by passing a
+    """Pick OpenAI extraction model by default. Callers can override by passing a
     ``provider`` to ``generate_step_preview`` — useful in tests."""
     try:
         return build_provider(purpose="metadata_extract")

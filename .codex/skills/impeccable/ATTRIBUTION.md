@@ -1,4 +1,4 @@
-# Attribution — `.claude/skills/impeccable/`
+# Attribution — `.codex/skills/impeccable/`
 
 The contents of this directory are a vendored copy of:
 
@@ -22,7 +22,7 @@ One deletion from `SKILL.md`, approved by the repository owner on 2026-08-22:
 
 - Removed the `<post-update-cleanup>` block (upstream v2.1.1). It instructed
   every invocation to run
-  `.claude/skills/impeccable/scripts/cleanup-deprecated.mjs` and then delete
+  `.codex/skills/impeccable/scripts/cleanup-deprecated.mjs` and then delete
   itself from `SKILL.md`. Neither half applies to a vendored copy: that script
   was never vendored (there is no `scripts/` directory here), and the
   deprecated skills it names - `arrange`, `normalize` - do not exist in this
@@ -38,11 +38,11 @@ One deletion from `SKILL.md`, approved by the repository owner on 2026-08-22:
 
 ## How it is wired
 
-- `CLAUDE.md` instructs the harness to read `.impeccable.md` and this
+- `CODEX.md` instructs the harness to read `.impeccable.md` and this
   skill's `SKILL.md` before any frontend task.
-- The skill lives at `.claude/skills/impeccable/SKILL.md` which is the
+- The skill lives at `.codex/skills/impeccable/SKILL.md` which is the
   standard Claude Code skill path.
-- `.claude/skills/` is explicitly allow-listed in `.gitignore` even though
+- `.codex/skills/` is explicitly allow-listed in `.gitignore` even though
   `.claude/` itself is ignored.
 
 ## Updates

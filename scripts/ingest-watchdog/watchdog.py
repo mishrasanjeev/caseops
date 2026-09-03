@@ -6,8 +6,8 @@ metadata, or title-chunk activity for longer than STALE_THRESHOLD_SEC
 cron can relaunch the screen sweeps.
 
 Runs as a Cloud Run Job, triggered by Cloud Scheduler every 15 min. This
-replaces the session-scoped CronCreate watchdog that vanished whenever the
-Claude session ended.
+replaces the session-scoped watchdog that vanished whenever an interactive
+agent session ended.
 """
 
 from __future__ import annotations

@@ -9,8 +9,8 @@ Three jobs:
    budget-aware triage router:
 
    - Route SC 1990-2025 English-only judgments (~2,100 docs) to
-     Sonnet 4.6 (premium tier, ~$0.07/doc).
-   - Route everything else (~11,800 docs) to Haiku 4.5 (budget tier,
+     Premium 4.6 (premium tier, ~$0.07/doc).
+   - Route everything else (~11,800 docs) to Standard 4.5 (budget tier,
      ~$0.023/doc).
    - Abort the run when cumulative USD spend crosses ``--budget-usd``.
 
@@ -21,11 +21,11 @@ Run modes::
     # Pure-code pass (no LLM cost) — title + date cleanup
     caseops-backfill-corpus-quality --stage clean
 
-    # Triage router — Sonnet on SC 1990+ EN, Haiku everywhere else
+    # Triage router — Premium on SC 1990+ EN, Standard everywhere else
     caseops-backfill-corpus-quality --stage structured --budget-usd 468
 
     # Force a single tier (debug / manual top-ups)
-    caseops-backfill-corpus-quality --stage structured --force-tier haiku
+    caseops-backfill-corpus-quality --stage structured --force-tier standard
 """
 from __future__ import annotations
 
@@ -51,8 +51,8 @@ from caseops_api.services.corpus_ingest import (
     _guess_decision_date,
 )
 from caseops_api.services.corpus_structured import (
-    HAIKU_VERSION,
-    SONNET_VERSION,
+    PREMIUM_VERSION,
+    STANDARD_VERSION,
     extract_and_persist_structured,
 )
 from caseops_api.services.llm import (
@@ -294,25 +294,25 @@ def _year_for_doc(doc: AuthorityDocument) -> int | None:
 
 
 def _tier_for_doc(doc: AuthorityDocument) -> str:
-    """Default-route every document to Haiku.
+    """Default-route every document to Standard.
 
-    The previous Sonnet-tier promotion (SC + English + 1980-2025) was
+    The previous Premium-tier promotion (SC + English + 1980-2025) was
     burning ~$120/day during sweeps and accounted for $855 of the
-    Apr 18-26 Anthropic bill — without a measurable retrieval-quality
-    delta in the eval probes. Haiku is now the default; pass
-    ``--force-tier sonnet`` to re-enable premium routing for an
+    Apr 18-26 hosted LLM bill — without a measurable retrieval-quality
+    delta in the eval probes. Standard is now the default; pass
+    ``--force-tier premium`` to re-enable premium routing for an
     explicit, time-boxed run.
     """
-    return "haiku"
+    return "standard"
 
 
 def _already_covered_at_tier(doc: AuthorityDocument, tier: str) -> bool:
     v = doc.structured_version
     if v is None:
         return False
-    if tier == "sonnet":
-        return v >= SONNET_VERSION
-    return v >= HAIKU_VERSION
+    if tier == "premium":
+        return v >= PREMIUM_VERSION
+    return v >= STANDARD_VERSION
 
 
 def _emit_budget_snapshot(totals: dict) -> None:
@@ -341,16 +341,16 @@ def _structured_pass(
 ) -> dict:
     """Triage router over every doc that still needs structured data.
 
-    Order: Sonnet-tier candidates first (they carry the most value per
-    dollar), then the Haiku tier. Within each tier, descending
+    Order: Premium-tier candidates first (they carry the most value per
+    dollar), then the Standard tier. Within each tier, descending
     chronological order so recent judgments are covered before older
     ones if the budget runs out.
 
     ``year_range`` (lo, hi inclusive): when set, BOTH tiers are
     filtered — only docs whose extracted year (per
     ``_year_and_source_for_doc``) falls in [lo, hi] are processed.
-    The 2026-05-02 fix corrected the prior Sonnet-only behaviour
-    that turned per-bucket haiku invocations into no-ops for ~9 days.
+    The 2026-05-02 fix corrected the prior Premium-only behaviour
+    that turned per-bucket standard invocations into no-ops for ~9 days.
     Use for per-bucket workflow, e.g. SC 2020-2025 first, audit,
     then SC 2015-2019, etc.
     """
@@ -359,10 +359,10 @@ def _structured_pass(
         select(AuthorityDocument)
         .where(
             (AuthorityDocument.structured_version.is_(None))
-            | (AuthorityDocument.structured_version < SONNET_VERSION)
+            | (AuthorityDocument.structured_version < PREMIUM_VERSION)
         )
         # Skip monster judgments whose structured-extraction output
-        # reliably exceeds Haiku / Sonnet max_tokens (16384) — they
+        # reliably exceeds Standard / Premium max_tokens (16384) — they
         # return malformed JSON on every attempt, burn tokens, and
         # never persist. 80,000 chars ≈ 20k input tokens + ~25 chunks,
         # which is the point where we see >90 % JSON-parse failures on
@@ -381,15 +381,15 @@ def _structured_pass(
         stmt = stmt.limit(limit)
     all_docs = session.scalars(stmt).all()
 
-    # Partition into buckets. Sonnet first — premium budget is the
+    # Partition into buckets. Premium first — premium budget is the
     # binding constraint, so we spend that ink deliberately and in
     # chronological-priority order. When `year_range` is set, the filter
-    # applies to BOTH tiers so per-bucket sweeps that route to haiku
+    # applies to BOTH tiers so per-bucket sweeps that route to standard
     # (the launcher's normal mode) actually process docs — the prior
-    # year-range-only-on-sonnet behavior turned every per-bucket Layer-2
+    # year-range-only-on-premium behavior turned every per-bucket Layer-2
     # invocation into a no-op for ~9 days (2026-04-23 → 2026-05-02).
-    sonnet_bucket: list[AuthorityDocument] = []
-    haiku_bucket: list[AuthorityDocument] = []
+    premium_bucket: list[AuthorityDocument] = []
+    standard_bucket: list[AuthorityDocument] = []
     forums_filter = forums if forums is not None else _DEFAULT_FORUMS
     skipped_non_en = 0
     skipped_forum = 0
@@ -420,10 +420,10 @@ def _structured_pass(
         if english_only and not _doc_appears_english(doc):
             skipped_non_en += 1
             continue
-        if tier == "sonnet":
-            sonnet_bucket.append(doc)
+        if tier == "premium":
+            premium_bucket.append(doc)
         else:
-            haiku_bucket.append(doc)
+            standard_bucket.append(doc)
     if english_only or forums_filter or year_range is not None:
         logger.info(
             "filter rejections: forum=%d  year=%d  non_english=%d",
@@ -442,19 +442,19 @@ def _structured_pass(
     # Sort each bucket by filename year DESC so newest lands before
     # oldest inside a multi-year bucket. NULL-dated docs without a
     # filename year drop to the end via -1.
-    sonnet_bucket.sort(key=lambda d: _year_for_doc(d) or -1, reverse=True)
-    haiku_bucket.sort(key=lambda d: _year_for_doc(d) or -1, reverse=True)
+    premium_bucket.sort(key=lambda d: _year_for_doc(d) or -1, reverse=True)
+    standard_bucket.sort(key=lambda d: _year_for_doc(d) or -1, reverse=True)
 
     if year_range is not None:
         logger.info(
-            "year-range %d-%d: %d sonnet, %d haiku candidates, budget=$%.2f",
+            "year-range %d-%d: %d premium, %d standard candidates, budget=$%.2f",
             year_range[0], year_range[1],
-            len(sonnet_bucket), len(haiku_bucket), budget_usd,
+            len(premium_bucket), len(standard_bucket), budget_usd,
         )
     else:
         logger.info(
-            "triage: %d sonnet candidates, %d haiku candidates, budget=$%.2f",
-            len(sonnet_bucket), len(haiku_bucket), budget_usd,
+            "triage: %d premium candidates, %d standard candidates, budget=$%.2f",
+            len(premium_bucket), len(standard_bucket), budget_usd,
         )
 
     if triage_only:
@@ -466,8 +466,8 @@ def _structured_pass(
             "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "budget_usd": budget_usd,
             "spent_usd": 0.0,
-            "sonnet": {"done": 0, "cost_usd": 0.0, "candidates": len(sonnet_bucket)},
-            "haiku": {"done": 0, "cost_usd": 0.0, "candidates": len(haiku_bucket)},
+            "premium": {"done": 0, "cost_usd": 0.0, "candidates": len(premium_bucket)},
+            "standard": {"done": 0, "cost_usd": 0.0, "candidates": len(standard_bucket)},
             "failures": 0,
             "quality_low": 0,
             "year_sources": dict(year_source_counts),
@@ -516,8 +516,8 @@ def _structured_pass(
         "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "budget_usd": budget_usd,
         "spent_usd": 0.0,
-        "sonnet": {"done": 0, "cost_usd": 0.0, "candidates": len(sonnet_bucket)},
-        "haiku": {"done": 0, "cost_usd": 0.0, "candidates": len(haiku_bucket)},
+        "premium": {"done": 0, "cost_usd": 0.0, "candidates": len(premium_bucket)},
+        "standard": {"done": 0, "cost_usd": 0.0, "candidates": len(standard_bucket)},
         "failures": 0,
         "quality_low": 0,
     }
@@ -743,10 +743,10 @@ def _structured_pass(
         return True
 
     finished = True
-    if sonnet_bucket:
-        finished = _run_bucket(sonnet_bucket, "sonnet")
-    if finished and haiku_bucket:
-        _run_bucket(haiku_bucket, "haiku")
+    if premium_bucket:
+        finished = _run_bucket(premium_bucket, "premium")
+    if finished and standard_bucket:
+        _run_bucket(standard_bucket, "standard")
 
     totals["finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
     _emit_budget_snapshot(totals)
@@ -808,8 +808,8 @@ def run(
                 ys = totals.get("year_sources", {})
                 sys.stdout.write(
                     "triage-only: "
-                    f"sonnet_candidates={totals['sonnet']['candidates']} "
-                    f"haiku_candidates={totals['haiku']['candidates']} "
+                    f"premium_candidates={totals['premium']['candidates']} "
+                    f"standard_candidates={totals['standard']['candidates']} "
                     f"skipped_forum={totals.get('skipped_forum', 0)} "
                     f"skipped_year={totals.get('skipped_year', 0)} "
                     f"skipped_non_english={totals.get('skipped_non_english', 0)} "
@@ -821,10 +821,11 @@ def run(
             else:
                 sys.stdout.write(
                     "structured-pass: "
-                    f"sonnet_done={totals['sonnet']['done']}/{totals['sonnet']['candidates']} "
-                    f"(${totals['sonnet']['cost_usd']:.2f}) "
-                    f"haiku_done={totals['haiku']['done']}/{totals['haiku']['candidates']} "
-                    f"(${totals['haiku']['cost_usd']:.2f}) "
+                    f"premium_done={totals['premium']['done']}/{totals['premium']['candidates']} "
+                    f"(${totals['premium']['cost_usd']:.2f}) "
+                    f"standard_done={totals['standard']['done']}/"
+                    f"{totals['standard']['candidates']} "
+                    f"(${totals['standard']['cost_usd']:.2f}) "
                     f"total=${totals['spent_usd']:.2f} "
                     f"failures={totals['failures']} quality_low={totals['quality_low']}\n"
                 )
@@ -856,7 +857,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         help="Hard USD ceiling for the structured pass (default $468).",
     )
     parser.add_argument(
-        "--force-tier", choices=["haiku", "sonnet"], default=None,
+        "--force-tier", choices=["standard", "premium"], default=None,
         help="Override the triage router and run every doc at this tier.",
     )
     parser.add_argument(

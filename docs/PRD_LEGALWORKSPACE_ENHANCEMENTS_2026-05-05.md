@@ -4,7 +4,7 @@ Status: Draft execution PRD addendum
 Date: 2026-05-05
 Audience: Codex CLI and CaseOps engineering
 Primary repository: `C:\Users\mishr\caseops`
-Canonical PRD anchor: `docs/PRD_CLAUDE_CODE_2026-04-23.md`
+Canonical PRD anchor: `docs/PRD_CODEX_2026-04-23.md`
 
 ## 1. Purpose
 
@@ -20,7 +20,7 @@ This PRD reconciles four classes of evidence:
    - `LegalWorkspace - Detailed Functional Flow (Based on Feedback).docx`
    - `LegalWorkspace - Employee Management & RBAC Module.docx`
 2. Canonical product source:
-   - `docs/PRD_CLAUDE_CODE_2026-04-23.md`
+   - `docs/PRD_CODEX_2026-04-23.md`
 3. Current gap and hardening ledgers:
    - `docs/WORK_TO_BE_DONE.md`
    - `docs/PRD_COVERAGE_MOD_TS_2026-04-20.md`
@@ -36,7 +36,7 @@ Before implementation, Codex CLI must read:
 
 1. `AGENTS.md`
 2. `.agents/skills/caseops-prd-execution/SKILL.md`
-3. `docs/PRD_CLAUDE_CODE_2026-04-23.md`
+3. `docs/PRD_CODEX_2026-04-23.md`
 4. This document
 5. Any target module files listed in the relevant implementation slice
 
@@ -2606,7 +2606,7 @@ These decisions should be resolved before or during the first affected slice.
 Use a prompt like this for the first implementation slice:
 
 ```text
-Read AGENTS.md, .agents/skills/caseops-prd-execution/SKILL.md, docs/PRD_CLAUDE_CODE_2026-04-23.md, and docs/PRD_LEGALWORKSPACE_ENHANCEMENTS_2026-05-05.md.
+Read AGENTS.md, .agents/skills/caseops-prd-execution/SKILL.md, docs/PRD_CODEX_2026-04-23.md, and docs/PRD_LEGALWORKSPACE_ENHANCEMENTS_2026-05-05.md.
 
 Implement Slice LW-S1 only: claim amount, server-side matter filters, matter tags, and bulk tag assignment.
 

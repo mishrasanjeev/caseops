@@ -25,7 +25,7 @@ GENERATED_ROOT = CONTROL_ROOT / "generated"
 ACTIVE_EXECUTION_DOCUMENTS = (
     REPO_ROOT / "docs" / "AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md",
     REPO_ROOT / "docs" / "BENCH_AWARE_APPEAL_DRAFTING_TASKLIST_2026-04-24.md",
-    REPO_ROOT / "docs" / "PRD_CLAUDE_CODE_2026-04-23.md",
+    REPO_ROOT / "docs" / "PRD_CODEX_2026-04-23.md",
     REPO_ROOT / "docs" / "STRICT_ENTERPRISE_GAP_TASKLIST.md",
     REPO_ROOT / "docs" / "WORK_TO_BE_DONE.md",
 )
@@ -181,7 +181,7 @@ def forbidden_work_assignment_matches(root: Path | None = None) -> list[str]:
     """Return active control lines that assign execution work to Claude.
 
     The matcher deliberately targets ownership and instruction grammar. Historical
-    attribution, compatibility paths such as ``.claude/skills``, migration names,
+    attribution, compatibility paths such as ``.codex/skills``, migration names,
     and provider/model references are outside that grammar and remain valid.
     """
 

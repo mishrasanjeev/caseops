@@ -2,7 +2,7 @@
 
 Shared by the HNSW probe (`scripts.eval_hnsw_recall`) and the
 placeholder-title re-extract pipeline (`services.corpus_title_reextract`).
-See `.claude/skills/corpus-ingest/SKILL.md` and
+See `.codex/skills/corpus-ingest/SKILL.md` and
 `memory/feedback_title_validation_legal_corpus.md` for the principle —
 "field non-empty is never enough: the predicate stage N+1 actually
 needs must be enforced at the write, or reasserted at the read".

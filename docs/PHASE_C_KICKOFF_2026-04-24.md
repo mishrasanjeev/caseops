@@ -130,7 +130,7 @@ Total: ~3 weeks of focused work, single engineer.
 ## 5. PRD addendum landing
 
 The PRD addendum (P8 + P9 personas, J17 + J18 journeys, MOD-TS-014/015/016)
-will land in `docs/PRD_CLAUDE_CODE_2026-04-23.md` once D1–D4 are confirmed.
+will land in `docs/PRD_CODEX_2026-04-23.md` once D1–D4 are confirmed.
 Drafting it before alignment risks rewriting it after a single decision flip.
 
 ## 6. What is NOT in this kickoff doc

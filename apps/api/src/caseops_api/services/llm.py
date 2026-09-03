@@ -5,9 +5,8 @@ Design decisions:
 - One ``LLMProvider`` Protocol. Callers never import a specific SDK.
 - ``MockProvider`` is the default so local dev, CI, and tests never need a live
   API key. Output is deterministic and structured so assertions are cheap.
-- ``AnthropicProvider`` and ``GeminiProvider`` are thin adapters guarded by
-  runtime imports: the SDK is pulled in only when the provider is selected,
-  keeping the base install light.
+- ``OpenAIProvider`` is the hosted production adapter. ``GeminiProvider`` is
+  retained only for explicit non-production evaluation; Anthropic is retired.
 - ``generate_structured`` coerces the model's response into a validated
   ``pydantic.BaseModel``. That is the shape CaseOps uses for recommendations,
   drafts, and briefs — arbitrary free text is not acceptable for the product.
@@ -624,127 +623,17 @@ def _extract_excerpts(text: str) -> list[str]:
     return excerpts
 
 
-class AnthropicProvider:
-    """Thin adapter around the Anthropic SDK.
-
-    Supports Anthropic's ephemeral prompt caching (``cache_control``)
-    on the system block when ``prompt_cache`` is True. Large CaseOps
-    system prompts (drafting ABSOLUTE RULES + statute guidance) are
-    ~2-3 KB of static text; reusing the same system prompt within the
-    5-minute TTL drops input-token billing on that block to ~10 %.
-    """
-
-    name = "anthropic"
-
-    def __init__(
-        self,
-        *,
-        model: str,
-        api_key: str,
-        prompt_cache: bool = True,
-        timeout_seconds: float = 60.0,
-        max_retries: int = 2,
-    ) -> None:
-        try:
-            import anthropic  # type: ignore[import-not-found]
-        except ImportError as exc:
-            raise LLMProviderError(
-                "The 'anthropic' package is not installed. Run "
-                "'uv add anthropic' and set CASEOPS_LLM_PROVIDER=anthropic.",
-            ) from exc
-        self._client = anthropic.Anthropic(
-            api_key=api_key,
-            timeout=timeout_seconds,
-            max_retries=max_retries,
-        )
-        self.model = model
-        self._prompt_cache = prompt_cache
-
-    # Model families that have deprecated the `temperature` parameter.
-    # Currently Opus 4.7 and its reasoning-model siblings. Add newer
-    # prefixes here as they ship; keeping the list explicit beats
-    # guessing from error strings at runtime.
-    _NO_TEMPERATURE_PREFIXES: tuple[str, ...] = ("claude-opus-4-7",)
-
-    def _model_rejects_temperature(self) -> bool:
-        name = (self.model or "").lower()
-        return any(name.startswith(p) for p in self._NO_TEMPERATURE_PREFIXES)
-
-    def generate(
-        self,
-        messages: list[LLMMessage],
-        *,
-        temperature: float = 0.2,
-        max_tokens: int = 1024,
-    ) -> LLMCompletion:
-        system_prompt, chat = _split_system_and_chat(messages)
-        started = time.perf_counter()
-        kwargs: dict = {
-            "model": self.model,
-            "messages": chat,
-            "max_tokens": max_tokens,
-        }
-        # Anthropic's reasoning models (Opus 4.7+) deprecated the
-        # `temperature` parameter. Including it surfaces a 400 at the
-        # wire, and the error message does not propagate cleanly into
-        # the structured-output path. Skip it for known-new models;
-        # keep it for Sonnet / Haiku where it still tunes output.
-        if not self._model_rejects_temperature():
-            kwargs["temperature"] = temperature
-        if system_prompt:
-            # Anthropic treats a list of system blocks with
-            # cache_control="ephemeral" as a 5-minute cache hint.
-            # We only cache when the prompt is large enough to matter —
-            # under ~500 tokens the minimum billable unit outweighs the
-            # savings.
-            if self._prompt_cache and len(system_prompt) >= 2000:
-                kwargs["system"] = [
-                    {
-                        "type": "text",
-                        "text": system_prompt,
-                        "cache_control": {"type": "ephemeral"},
-                    }
-                ]
-            else:
-                kwargs["system"] = system_prompt
-        try:
-            response = self._client.messages.create(**kwargs)
-        except Exception as exc:
-            if _is_quota_exhausted(exc):
-                raise LLMQuotaExhaustedError(
-                    f"Anthropic quota exhausted: {exc}",
-                ) from exc
-            raise LLMProviderError(f"Anthropic call failed: {exc}") from exc
-        elapsed_ms = max(1, int((time.perf_counter() - started) * 1000))
-        text = "".join(
-            block.text
-            for block in getattr(response, "content", [])
-            if getattr(block, "type", "") == "text"
-        )
-        usage = getattr(response, "usage", None)
-        return LLMCompletion(
-            text=text,
-            provider=self.name,
-            model=self.model,
-            prompt_tokens=int(getattr(usage, "input_tokens", 0) or 0),
-            completion_tokens=int(getattr(usage, "output_tokens", 0) or 0),
-            latency_ms=elapsed_ms,
-            raw=response,
-        )
-
-
 class OpenAIProvider:
-    """Thin adapter around the OpenAI Python SDK.
+    """Hosted production adapter around the OpenAI Python SDK.
 
-    Used as a hard cross-provider fallback when Anthropic returns 402
-    (credit balance too low). Defaults to ``gpt-5.1``.
+    Defaults to ``gpt-5.1`` and fails closed when its configured credentials
+    or model are unavailable; CaseOps does not silently cross providers.
 
     Two model-family quirks worth knowing:
 
     - ``gpt-5.x`` reasoning models reject any temperature other than
       the default. We omit the parameter entirely for ``gpt-5*`` so the
-      wire request never carries it, mirroring how
-      :class:`AnthropicProvider` treats Opus 4.7.
+      wire request never carries it.
     - The Chat Completions API now prefers ``max_completion_tokens``
       over the legacy ``max_tokens``. We send the new field; the SDK
       maps it correctly for older models too.
@@ -1031,9 +920,9 @@ def _messages_to_gemini(messages: list[LLMMessage]) -> list[dict[str, Any]]:
 
 # Purpose tags the drafting / recommendation / hearing-pack / eval
 # pipelines pass to build_provider so each workflow gets the model
-# best suited to it. Legal drafting wants Opus-class reasoning;
-# structured-output recommendations are fine on Sonnet; metadata
-# extraction at corpus scale stays on Haiku. A circular eval
+# best suited to it. Legal drafting uses the high-reliability OpenAI model;
+# structured recommendations and corpus metadata use the configured smaller
+# OpenAI models. A circular eval
 # (same-model judge and drafter) is worse than no eval, so the eval
 # purpose deliberately resolves to the strongest available model.
 Purpose = str
@@ -1094,6 +983,10 @@ def _build_inner_provider(settings: object, purpose: str | None) -> LLMProvider:
     model = _resolve_model_for_purpose(settings, purpose)
     if provider_name in {"mock", "noop", "off"}:
         return MockProvider(model=model)
+    if provider_name == "anthropic":
+        raise LLMProviderError(
+            "CASEOPS_LLM_PROVIDER='anthropic' is retired; use 'openai'.",
+        )
     if not settings.llm_api_key:
         raise LLMProviderError(
             f"CASEOPS_LLM_API_KEY must be set when CASEOPS_LLM_PROVIDER={provider_name!r}.",
@@ -1134,22 +1027,6 @@ def _build_inner_provider(settings: object, purpose: str | None) -> LLMProvider:
     # errors remain per-document failures and can be retried by a later run.
     if provider_name == "openai" and purpose == PURPOSE_METADATA_EXTRACT:
         retries_for_purpose = 0
-    if provider_name == "anthropic":
-        return AnthropicProvider(
-            # 2026-04-26 cost-discipline default: Haiku, not Opus.
-            # In prod every purpose sets a per-purpose model via env
-            # (CASEOPS_LLM_MODEL_DRAFTING=claude-opus-4-7, etc.), so
-            # this safety-net only fires when neither the per-purpose
-            # override nor the global CASEOPS_LLM_MODEL is set. Per
-            # `feedback_corpus_spend_audit`: prefer the cheap default;
-            # callers that genuinely need Opus already set it
-            # explicitly.
-            model=model or "claude-haiku-4-5-20251001",
-            api_key=settings.llm_api_key,
-            prompt_cache=bool(getattr(settings, "llm_prompt_cache_enabled", True)),
-            timeout_seconds=timeout_for_purpose,
-            max_retries=retries_for_purpose,
-        )
     if provider_name == "gemini":
         return GeminiProvider(
             model=model or "gemini-2.5-pro",
@@ -1164,7 +1041,7 @@ def _build_inner_provider(settings: object, purpose: str | None) -> LLMProvider:
         )
     raise LLMProviderError(
         f"Unknown CASEOPS_LLM_PROVIDER value: {provider_name!r}. "
-        "Use 'mock', 'anthropic', 'openai', or 'gemini'.",
+        "Use 'mock', 'openai', or 'gemini'.",
     )
 
 
@@ -1184,9 +1061,6 @@ def _is_quota_exhausted(exc: BaseException) -> bool:
     Sniffs both HTTP status (402 / 429-with-insufficient_quota) and
     the rendered error message. Provider SDKs surface this differently:
 
-    - Anthropic SDK: ``BadRequestError`` (400 wrapper) carrying the
-      message ``"Your credit balance is too low to access the
-      Anthropic API."``
     - OpenAI SDK: ``RateLimitError`` (429) with body
       ``{"error":{"code":"insufficient_quota", ...}}``
 
@@ -1415,13 +1289,12 @@ def _tolerant_json_loads(text: str) -> Any:
     """Load JSON emitted by an LLM, tolerating the three common
     failure modes:
 
-    1. **Trailing commas** inside objects / arrays — Sonnet emits them
-       on long structured outputs ~4 % of the time.
+    1. **Trailing commas** inside objects / arrays — model output can contain
+       them on long structured responses.
     2. **Preamble / postamble text** — the model writes "Here is the
        JSON you asked for:" before the block, or commentary after.
-       BUG-005: prod recommendations endpoint 502'd because both
-       Sonnet AND Haiku were sometimes wrapping the payload in
-       narration. Extract the first balanced ``{...}`` (or
+       BUG-005: prod recommendations endpoint 502'd because models can wrap
+       the payload in narration. Extract the first balanced ``{...}`` (or
        ``[...]``) block and retry.
     3. **Escaped single quotes / smart quotes** — not handled here;
        would need a proper tokenizer. Callers that still fail after
@@ -1533,7 +1406,6 @@ def _strip_code_fence(text: str) -> str:
 
 
 __all__ = [
-    "AnthropicProvider",
     "GeminiProvider",
     "LLMCallContext",
     "LLMCompletion",
