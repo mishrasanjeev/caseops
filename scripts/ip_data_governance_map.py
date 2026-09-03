@@ -774,7 +774,10 @@ def _non_sql_data_classes() -> list[dict[str, object]]:
             "implementation_refs": [
                 "apps/api/src/caseops_api/services/integrations.py",
                 "apps/api/src/caseops_api/services/case_tracking_providers.py",
+                "apps/api/src/caseops_api/services/indian_kanoon.py",
+                "apps/api/src/caseops_api/scripts/seed_indian_kanoon_costs.py",
                 "apps/api/src/caseops_api/services/pine_labs.py",
+                "infra/cloudrun/api-service.yaml",
             ],
         },
         {
