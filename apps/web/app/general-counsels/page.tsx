@@ -284,7 +284,7 @@ export default function GeneralCounselsPage() {
             <PitchCard
               icon={FileSearch}
               title="Clause extraction"
-              body="Haiku reads the contract and lifts parties, term, payment, confidentiality, IP, liability, indemnity, governing law, arbitration, force majeure, notices — ~12 structured clauses per contract."
+              body="The OpenAI extraction model reads the contract and lifts parties, term, payment, confidentiality, IP, liability, indemnity, governing law, arbitration, force majeure, notices — ~12 structured clauses per contract."
             />
             <PitchCard
               icon={ClipboardCheck}
@@ -294,7 +294,7 @@ export default function GeneralCounselsPage() {
             <PitchCard
               icon={BadgeCheck}
               title="Playbook compare"
-              body="15-rule default Indian commercial playbook seeds in one click. Sonnet compares each clause against the expected position and flags matched / missing / deviation with severity."
+              body="A 15-rule default Indian commercial playbook seeds in one click. The OpenAI review model compares each clause against the expected position and flags matched / missing / deviation with severity."
             />
           </div>
         </Slide>

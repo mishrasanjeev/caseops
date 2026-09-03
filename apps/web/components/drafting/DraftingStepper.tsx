@@ -669,7 +669,7 @@ function PreviewPane({
   templateType: DraftTemplateType;
   facts: Record<string, unknown>;
 }) {
-  // 800ms debounce on the facts blob to avoid flooding Haiku on every
+  // 800ms debounce on the facts blob to avoid flooding the provider on every
   // keystroke. The stepper pane already shows a spinner while the
   // mutation is in flight.
   const [debouncedFacts, setDebouncedFacts] = useState(facts);
