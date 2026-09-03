@@ -6,9 +6,9 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `549e7891ec2f334735be82f5d456bc69ce2efd2de694fbb6d450ee8408a7ce1a`
+- Canonical map SHA-256: `f806030383f2d75d64b368c8f948857faa5ae22ebf5ae7523db79d54125fa6e9`
 - SQL tables: `305`
-- SQL columns: `4953`
+- SQL columns: `4954`
 - ORM indexes: `1646`
 - Alembic/raw index declarations: `696`
 - Non-SQL data classes: `12`
@@ -125,7 +125,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `ethical_walls` | `security_identity_control` | 14 | `registry_fail_closed` |
 | `evaluation_cases` | `platform_operational_reference` | 11 | `registry_fail_closed` |
 | `evaluation_runs` | `platform_operational_reference` | 12 | `registry_fail_closed` |
-| `forum_catalog_entries` | `public_or_licensed_legal_reference` | 17 | `registry_fail_closed` |
+| `forum_catalog_entries` | `public_or_licensed_legal_reference` | 18 | `registry_fail_closed` |
 | `hearing_pack_items` | `platform_operational_reference` | 8 | `registry_fail_closed` |
 | `hearing_packs` | `platform_operational_reference` | 11 | `registry_fail_closed` |
 | `hearing_reminder_delivery_intents` | `platform_operational_reference` | 5 | `registry_fail_closed` |

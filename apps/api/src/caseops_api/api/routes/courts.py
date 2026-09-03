@@ -495,10 +495,37 @@ class ForumCatalogEntryRecord(BaseModel):
     source_url: str | None
     lineage: str
     display_order: int
+    aliases: list[str] = Field(default_factory=list)
 
 
 class ForumCatalogResponse(BaseModel):
     entries: list[ForumCatalogEntryRecord]
+
+
+def _forum_catalog_entry_record(entry: ForumCatalogEntry) -> ForumCatalogEntryRecord:
+    raw_aliases = entry.aliases_json
+    aliases = (
+        [alias.strip() for alias in raw_aliases if isinstance(alias, str) and alias.strip()]
+        if isinstance(raw_aliases, list)
+        else []
+    )
+    return ForumCatalogEntryRecord(
+        id=entry.id,
+        parent_id=entry.parent_id,
+        court_id=entry.court_id,
+        name=entry.name,
+        forum_type=entry.forum_type,
+        forum_level=entry.forum_level,
+        state=entry.state,
+        district=entry.district,
+        city=entry.city,
+        consumer_level=entry.consumer_level,
+        source_name=entry.source_name,
+        source_url=entry.source_url,
+        lineage=entry.lineage,
+        display_order=entry.display_order,
+        aliases=aliases,
+    )
 
 
 @router.get(
@@ -552,7 +579,7 @@ def list_forum_catalog(
         ForumCatalogEntry.name.asc(),
     )
     return ForumCatalogResponse(
-        entries=[ForumCatalogEntryRecord.model_validate(entry) for entry in session.scalars(stmt)]
+        entries=[_forum_catalog_entry_record(entry) for entry in session.scalars(stmt)]
     )
 
 

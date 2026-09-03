@@ -67,6 +67,7 @@ export default defineConfig({
     /hari-2026-07-02-bugs\.spec\.ts/,
     /hari-2026-07-03-bugs\.spec\.ts/,
     /hari-2026-07-07-bugs\.spec\.ts/,
+    /ram-2026-09-03-prod\.spec\.ts/,
     /notice-module\.spec\.ts/,
     /matter-outside-counsel\.spec\.ts/,
     /mobile-responsive\.spec\.ts/,

@@ -20134,6 +20134,8 @@ export interface components {
         };
         /** ForumCatalogEntryRecord */
         ForumCatalogEntryRecord: {
+            /** Aliases */
+            aliases?: string[];
             /** City */
             city: string | null;
             /** Consumer Level */

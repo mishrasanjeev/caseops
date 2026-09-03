@@ -9462,6 +9462,11 @@
       "policy_profile_id": "public_or_licensed_legal_reference",
       "disposition_handler_id": "registry_fail_closed",
       "columns": {
+        "aliases_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": false
+        },
         "city": {
           "category_id": "domain_attribute",
           "sql_type": "VARCHAR(120)",
@@ -28030,7 +28035,7 @@
       }
     }
   ],
-  "schema_fingerprint": "46346d1c8024fcdc6ad011b2dd0f14f974cf01b91ff46b6040d70c15f6c8b7e2",
+  "schema_fingerprint": "4df3b53df36b8010ec1e3c2c0a247061d2f90b70ff5b26b5145ceefc0d5464ae",
   "index_inventory": {
     "orm_index_count": 1646,
     "orm_index_fingerprint": "80c22783460246296dd168c1ec28f4c1f14cbe1a9a8c15ad87d375944ff31866",

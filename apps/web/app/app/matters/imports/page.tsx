@@ -263,6 +263,12 @@ export default function BulkMatterImportPage() {
                 Number is stored separately from Court.
               </p>
               <p>
+                Forum accepts either a hierarchy or a unique Exact Court/approved alias
+                from the active catalog. Exact-court values automatically fill the full
+                hierarchy; unknown, inactive, or ambiguous values are rejected rather
+                than guessed.
+              </p>
+              <p>
                 Quote fields that contain the selected CSV delimiter. Matter Code and
                 selected-table formula protections remain strict. A leading + is allowed
                 only for Client Contact Number; its main-number portion may use digits,

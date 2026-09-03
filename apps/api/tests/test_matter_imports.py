@@ -1189,6 +1189,12 @@ def test_bulk_matter_creation_template_preview_commit_history_and_notifications(
         forum_catalog_sheet = workbook.read("xl/worksheets/sheet3.xml")
         assert b"DRAT / DRT" in forum_catalog_sheet
         assert b"DRT-2" in forum_catalog_sheet
+        assert b"Approved Aliases" in forum_catalog_sheet
+        assert b"Dwarka_SWCF" in forum_catalog_sheet
+        reference_values_sheet = workbook.read("xl/worksheets/sheet2.xml")
+        assert b"Tis Hazari" in reference_values_sheet
+        assert b"ITO" in reference_values_sheet
+        assert b"Dwarka_SWCF" in reference_values_sheet
 
     csv_template = client.get(
         "/api/matters/imports/template?format=csv",
