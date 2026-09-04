@@ -127,8 +127,7 @@ def get_indian_kanoon_health(
     context: AuthoritySearcher,
     session: DbSession,
 ) -> IndianKanoonHealthResponse:
-    del context
-    return indian_kanoon_health(session)
+    return indian_kanoon_health(session, company_id=context.company.id)
 
 
 @router.post(

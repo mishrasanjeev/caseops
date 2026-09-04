@@ -147,6 +147,13 @@ class ExplodingLiveCaseTrackingProvider(FakeCaseTrackingProvider):
         raise AssertionError("a paid provider transport was reached")
 
 
+class RecordingLiveCaseTrackingProvider(FakeCaseTrackingProvider):
+    """A live-shaped adapter that records whether an unmarked user reaches it."""
+
+    base_url = "https://webapi.ecourtsindia.com"
+    transport = None
+
+
 def test_provider_source_text_is_format_preserving_and_bounded() -> None:
     normalized, truncated = _source_text("heading\r\n\r\nbody\x00")
     assert normalized == "heading\n\nbody"
@@ -227,7 +234,44 @@ def test_automated_browser_marker_blocks_live_paid_search_before_transport(
     assert body["code"] == "paid_provider_blocked_for_test"
     assert body["provider"] == "ecourtsindia"
     assert body["reason"] == "automated_test_request"
+    assert "paid search, retrieval, refresh, and download" in body["detail"]
+    assert "live-user requests remain available" in body["detail"]
     assert "no external request was made" in body["detail"]
+
+
+def test_unmarked_authenticated_live_user_reaches_enabled_provider_adapter(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_ENABLED", "true")
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_PROVIDER", "ecourtsindia")
+    monkeypatch.setenv(
+        "CASEOPS_ECOURTSINDIA_API_BASE_URL",
+        "https://webapi.ecourtsindia.com",
+    )
+    monkeypatch.setenv("CASEOPS_ECOURTSINDIA_API_TOKEN", "server-only-token")
+    monkeypatch.setenv(
+        "CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS",
+        "caseops-qa,caseops-ip-qa,test-legal",
+    )
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    get_settings.cache_clear()
+    provider = RecordingLiveCaseTrackingProvider()
+    monkeypatch.setattr(
+        "caseops_api.services.case_tracking.get_case_tracking_provider",
+        lambda: provider,
+    )
+    token = _bootstrap(client)
+
+    response = client.post(
+        "/api/case-tracking/search",
+        headers=auth_headers(token),
+        json={"cnr_number": "DLHC010012342026"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert len(provider.search_calls) == 1
+    assert provider.search_calls[0].cnr_number == "DLHC010012342026"
 
 
 def test_provider_wide_support_scope_is_fallback_not_exact_override(
