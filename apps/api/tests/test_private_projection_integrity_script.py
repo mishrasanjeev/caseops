@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from caseops_api.scripts import private_projection_integrity
 from caseops_api.services.private_retrieval import STALE_PRIVATE_PROJECTION_WRITER_DETAIL
 
@@ -22,6 +24,20 @@ class _WorkerSession:
 
     def rollback(self) -> None:
         self.rollback_count += 1
+
+
+class _PostgresFailure(Exception):
+    def __init__(self, sqlstate: str, detail: str = "database detail") -> None:
+        super().__init__(detail)
+        self.sqlstate = sqlstate
+
+
+def _operational_error(sqlstate: str, detail: str = "database detail"):
+    return private_projection_integrity.OperationalError(
+        "SELECT private value",
+        {"private": "tenant-secret"},
+        _PostgresFailure(sqlstate, detail),
+    )
 
 
 def test_maintenance_releases_projection_locks_after_each_event(monkeypatch) -> None:
@@ -174,6 +190,316 @@ def test_maintenance_isolates_one_tenant_failure_and_continues(monkeypatch) -> N
             "blockers_after": [],
         },
     ]
+
+
+@pytest.mark.parametrize(
+    ("sqlstate", "error_code"),
+    (
+        ("40P01", "database_deadlock_detected"),
+        ("55P03", "database_lock_timeout"),
+    ),
+)
+def test_maintenance_defers_only_bounded_postgres_concurrency_with_fresh_inspection(
+    monkeypatch,
+    sqlstate: str,
+    error_code: str,
+) -> None:
+    sessions: list[_WorkerSession] = []
+    inspect_calls = 0
+
+    def session_factory() -> _WorkerSession:
+        session = _WorkerSession()
+        sessions.append(session)
+        return session
+
+    repairable = SimpleNamespace(
+        active_generation_id="generation-1",
+        oldest_pending_lag_seconds=None,
+        oldest_repair_lag_seconds=12,
+        blockers=("active_generation_manifest_mismatch",),
+        release_blocked=True,
+        pending_event_count=0,
+        failed_event_count=0,
+    )
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "get_session_factory",
+        lambda: session_factory,
+    )
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "list_private_maintenance_companies",
+        lambda _session, *, limit: SimpleNamespace(
+            company_ids=("company-1",),
+            truncated=False,
+        ),
+    )
+
+    def inspect(_session, **_kwargs):
+        nonlocal inspect_calls
+        inspect_calls += 1
+        if inspect_calls == 1:
+            raise _operational_error(sqlstate, "tenant-secret-db-detail")
+        return repairable
+
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "inspect_private_index_integrity",
+        inspect,
+    )
+
+    result = private_projection_integrity._maintain(
+        max_companies=1,
+        max_rebuilds=1,
+        event_lag_slo_seconds=300,
+    )
+
+    assert result["status"] == "ok"
+    assert result["release_blocked"] is False
+    assert inspect_calls == 2
+    tenant = result["companies"][0]
+    assert tenant["error_code"] == error_code
+    assert tenant["repair_deferred"] is True
+    assert tenant["repair_deferred_reason"] == "concurrent_database_lock"
+    assert tenant["blockers_after"] == ["active_generation_manifest_mismatch"]
+    assert "tenant-secret" not in tenant["error_detail"]
+    assert len(sessions) == 3
+
+
+@pytest.mark.parametrize(
+    ("sqlstate", "report"),
+    (
+        (
+            "08006",
+            SimpleNamespace(
+                active_generation_id="generation-1",
+                oldest_pending_lag_seconds=None,
+                oldest_repair_lag_seconds=0,
+                blockers=("active_generation_manifest_mismatch",),
+                release_blocked=True,
+                pending_event_count=0,
+                failed_event_count=0,
+            ),
+        ),
+        (
+            "57014",
+            SimpleNamespace(
+                active_generation_id="generation-1",
+                oldest_pending_lag_seconds=None,
+                oldest_repair_lag_seconds=0,
+                blockers=("active_generation_manifest_mismatch",),
+                release_blocked=True,
+                pending_event_count=0,
+                failed_event_count=0,
+            ),
+        ),
+        (
+            "40P01",
+            SimpleNamespace(
+                active_generation_id="generation-1",
+                oldest_pending_lag_seconds=None,
+                oldest_repair_lag_seconds=301,
+                blockers=("active_generation_manifest_mismatch",),
+                release_blocked=True,
+                pending_event_count=0,
+                failed_event_count=0,
+            ),
+        ),
+        (
+            "40P01",
+            SimpleNamespace(
+                active_generation_id=None,
+                oldest_pending_lag_seconds=None,
+                oldest_repair_lag_seconds=None,
+                blockers=("missing_active_generation",),
+                release_blocked=True,
+                pending_event_count=0,
+                failed_event_count=0,
+            ),
+        ),
+        (
+            "55P03",
+            SimpleNamespace(
+                active_generation_id="generation-1",
+                oldest_pending_lag_seconds=None,
+                oldest_repair_lag_seconds=0,
+                blockers=("unsafe_tombstones",),
+                release_blocked=True,
+                pending_event_count=0,
+                failed_event_count=0,
+            ),
+        ),
+    ),
+)
+def test_maintenance_blocks_unknown_or_unsafe_database_failures(
+    monkeypatch,
+    sqlstate: str,
+    report,
+) -> None:
+    inspect_calls = 0
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "get_session_factory",
+        lambda: _WorkerSession,
+    )
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "list_private_maintenance_companies",
+        lambda _session, *, limit: SimpleNamespace(
+            company_ids=("company-1",),
+            truncated=False,
+        ),
+    )
+
+    def inspect(_session, **_kwargs):
+        nonlocal inspect_calls
+        inspect_calls += 1
+        if inspect_calls == 1:
+            raise _operational_error(sqlstate, "tenant-secret-db-detail")
+        return report
+
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "inspect_private_index_integrity",
+        inspect,
+    )
+
+    result = private_projection_integrity._maintain(
+        max_companies=1,
+        max_rebuilds=1,
+        event_lag_slo_seconds=300,
+    )
+
+    assert result["status"] == "blocked"
+    assert result["release_blocked"] is True
+    assert result["companies"][0]["error_code"] == "OperationalError"
+    assert result["companies"][0]["blockers_after"] == ["tenant_maintenance_error"]
+    assert "tenant-secret" not in result["companies"][0]["error_detail"]
+
+
+def test_maintenance_retries_one_database_lock_conflict_and_converges(monkeypatch) -> None:
+    repairable = SimpleNamespace(
+        active_generation_id="generation-1",
+        oldest_pending_lag_seconds=None,
+        oldest_repair_lag_seconds=12,
+        blockers=("active_generation_manifest_mismatch",),
+        release_blocked=True,
+        pending_event_count=0,
+        failed_event_count=0,
+    )
+    ready = SimpleNamespace(
+        active_generation_id="generation-2",
+        oldest_pending_lag_seconds=None,
+        oldest_repair_lag_seconds=None,
+        blockers=(),
+        release_blocked=False,
+        pending_event_count=0,
+        failed_event_count=0,
+    )
+    reports = iter((repairable, repairable, repairable, ready))
+    rebuild_calls = 0
+
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "get_session_factory",
+        lambda: _WorkerSession,
+    )
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "list_private_maintenance_companies",
+        lambda _session, *, limit: SimpleNamespace(
+            company_ids=("company-1",),
+            truncated=False,
+        ),
+    )
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "inspect_private_index_integrity",
+        lambda _session, **_kwargs: next(reports),
+    )
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "process_pending_private_projection_events",
+        lambda _session, **_kwargs: (),
+    )
+
+    def rebuild(_session, **_kwargs):
+        nonlocal rebuild_calls
+        rebuild_calls += 1
+        if rebuild_calls == 1:
+            raise _operational_error("40P01", "tenant-secret-db-detail")
+
+    monkeypatch.setattr(private_projection_integrity, "rebuild_private_index", rebuild)
+
+    result = private_projection_integrity._maintain(
+        max_companies=1,
+        max_rebuilds=1,
+        event_lag_slo_seconds=300,
+    )
+
+    assert result["status"] == "ok"
+    assert result["release_blocked"] is False
+    assert result["rebuild_count"] == 1
+    assert result["companies"][0]["rebuilt"] is True
+    assert rebuild_calls == 2
+
+
+def test_maintenance_defers_second_database_lock_conflict_only_within_slo(
+    monkeypatch,
+) -> None:
+    repairable = SimpleNamespace(
+        active_generation_id="generation-1",
+        oldest_pending_lag_seconds=None,
+        oldest_repair_lag_seconds=59,
+        blockers=("active_generation_manifest_mismatch",),
+        release_blocked=True,
+        pending_event_count=0,
+        failed_event_count=0,
+    )
+    rebuild_calls = 0
+
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "get_session_factory",
+        lambda: _WorkerSession,
+    )
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "list_private_maintenance_companies",
+        lambda _session, *, limit: SimpleNamespace(
+            company_ids=("company-1",),
+            truncated=False,
+        ),
+    )
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "inspect_private_index_integrity",
+        lambda _session, **_kwargs: repairable,
+    )
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "process_pending_private_projection_events",
+        lambda _session, **_kwargs: (),
+    )
+
+    def rebuild(_session, **_kwargs):
+        nonlocal rebuild_calls
+        rebuild_calls += 1
+        raise _operational_error("55P03", "tenant-secret-db-detail")
+
+    monkeypatch.setattr(private_projection_integrity, "rebuild_private_index", rebuild)
+
+    result = private_projection_integrity._maintain(
+        max_companies=1,
+        max_rebuilds=1,
+        event_lag_slo_seconds=300,
+    )
+
+    assert result["status"] == "ok"
+    assert result["release_blocked"] is False
+    assert result["companies"][0]["repair_deferred"] is True
+    assert result["companies"][0]["repair_deferred_reason"] == "concurrent_database_lock"
+    assert rebuild_calls == 2
 
 
 def test_maintenance_error_detail_redacts_unknown_exception_text() -> None:

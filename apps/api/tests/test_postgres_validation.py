@@ -10197,6 +10197,167 @@ def test_private_rebuild_releases_interactive_parent_locks_on_postgres(
     assert summary.projection_count == 3
 
 
+def test_private_rebuild_scope_batch_cannot_deadlock_lifecycle_epoch_writer_on_postgres(
+    pg_engine,
+) -> None:
+    """Scope FK parents are locked before the private generation fence.
+
+    The production failure held a shadow-generation row while PostgreSQL's
+    scope FK waited on a lifecycle-locked Matter; the lifecycle writer then
+    waited on that generation. This exact overlap must let the lifecycle epoch
+    commit first and reject the now-stale rebuild batch without deadlocking.
+    """
+
+    from caseops_api.db.models import (
+        Company,
+        Matter,
+        PrivateIndexGeneration,
+        PrivateIndexProjection,
+        PrivateIndexProjectionScope,
+    )
+    from caseops_api.services.private_retrieval import (
+        PrivateProjectionInput,
+        PrivateRetrievalConcurrencyError,
+        ProjectionScopeInput,
+        create_shadow_private_generation,
+        ensure_active_private_generation,
+        insert_private_projection_batch,
+    )
+
+    company_id = str(uuid4())
+    matter_id = str(uuid4())
+    with Session(pg_engine) as setup:
+        setup.add(
+            Company(
+                id=company_id,
+                name="PostgreSQL Private Scope Lock Order Firm",
+                slug=f"pg-private-lock-order-{company_id[:8]}",
+                company_type="law_firm",
+                tenant_key=company_id,
+            )
+        )
+        setup.add(
+            Matter(
+                id=matter_id,
+                company_id=company_id,
+                title="Lifecycle writer overlap",
+                matter_code=f"PG-LOCK-{matter_id[:8]}",
+                status="active",
+                practice_area="Intellectual Property",
+                forum_level="high_court",
+                is_active=True,
+                updated_at=datetime.now(UTC),
+            )
+        )
+        setup.flush()
+        ensure_active_private_generation(setup, company_id=company_id)
+        shadow = create_shadow_private_generation(setup, company_id=company_id)
+        shadow_id = str(shadow.id)
+        expected_access_epoch = int(shadow.access_policy_generation)
+        expected_tombstone_epoch = int(shadow.tombstone_generation)
+        setup.commit()
+
+    payload = PrivateProjectionInput(
+        source_type="matter",
+        source_id=matter_id,
+        source_version="lock-order-v1",
+        chunk_ordinal=0,
+        label="Lifecycle writer overlap",
+        content="A bounded private projection used to prove PostgreSQL lock order.",
+        scopes=(
+            ProjectionScopeInput(
+                scope_type="matter",
+                scope_id=matter_id,
+                access_policy_version=0,
+            ),
+        ),
+    )
+    worker_started = Event()
+    worker_pid: list[int] = []
+
+    def write_shadow_batch():
+        with Session(pg_engine) as worker:
+            worker.execute(text("SET LOCAL lock_timeout = '2s'"))
+            worker_pid.append(int(worker.scalar(text("SELECT pg_backend_pid()"))))
+            worker_started.set()
+            try:
+                insert_private_projection_batch(
+                    worker,
+                    company_id=company_id,
+                    generation_id=shadow_id,
+                    payloads=(payload,),
+                    expected_access_policy_generation=expected_access_epoch,
+                    expected_tombstone_generation=expected_tombstone_epoch,
+                )
+                worker.commit()
+            except Exception as exc:
+                worker.rollback()
+                return exc
+        return None
+
+    with Session(pg_engine) as lifecycle_writer:
+        lifecycle_writer.execute(text("SET LOCAL lock_timeout = '300ms'"))
+        lifecycle_writer.execute(
+            text("SELECT id FROM matters WHERE id = :id FOR UPDATE"),
+            {"id": matter_id},
+        )
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(write_shadow_batch)
+            assert worker_started.wait(timeout=2)
+            deadline = monotonic() + 2
+            worker_waits_on_parent = False
+            while monotonic() < deadline:
+                with Session(pg_engine) as observer:
+                    wait_type = observer.scalar(
+                        text(
+                            "SELECT wait_event_type FROM pg_stat_activity "
+                            "WHERE pid = :pid"
+                        ),
+                        {"pid": worker_pid[0]},
+                    )
+                if wait_type == "Lock":
+                    worker_waits_on_parent = True
+                    break
+                Event().wait(0.02)
+            assert worker_waits_on_parent is True
+
+            epoch_started = monotonic()
+            shadow = lifecycle_writer.scalar(
+                select(PrivateIndexGeneration)
+                .where(PrivateIndexGeneration.id == shadow_id)
+                .with_for_update()
+            )
+            assert shadow is not None
+            shadow.access_policy_generation += 1
+            lifecycle_writer.commit()
+            assert monotonic() - epoch_started < 0.3
+
+            worker_error = future.result(timeout=5)
+
+    assert isinstance(worker_error, PrivateRetrievalConcurrencyError)
+    assert "stale private projection writer" in str(worker_error).casefold()
+    with Session(pg_engine) as verify:
+        projection_count = int(
+            verify.scalar(
+                select(func.count(PrivateIndexProjection.id)).where(
+                    PrivateIndexProjection.generation_id == shadow_id,
+                    PrivateIndexProjection.company_id == company_id,
+                )
+            )
+            or 0
+        )
+        scope_count = int(
+            verify.scalar(
+                select(func.count(PrivateIndexProjectionScope.id)).where(
+                    PrivateIndexProjectionScope.company_id == company_id,
+                )
+            )
+            or 0
+        )
+    assert projection_count == 0
+    assert scope_count == 0
+
+
 def test_private_maintenance_defers_two_epoch_races_then_converges_on_postgres(
     pg_engine,
     monkeypatch,

@@ -620,6 +620,54 @@ def _projection_scope_rows(
     ]
 
 
+def _lock_projection_scope_parents(
+    session: Session,
+    *,
+    company_id: str,
+    payloads: Sequence[PrivateProjectionInput],
+) -> None:
+    """Take bounded FK parent locks before the generation write fence.
+
+    PostgreSQL validates each projection-scope foreign key with a ``KEY SHARE``
+    lock.  If the generation is locked first, an interactive lifecycle writer
+    that already owns the Matter/IP row can form a cycle while it advances the
+    private generation epoch.  Acquire the exact, bounded scope parents in a
+    stable order before touching the generation so the interactive writer can
+    always finish and the later epoch check can reject this stale batch.
+    """
+
+    scope_models = {
+        "client": Client,
+        "matter": Matter,
+        "ip_docket": IpDocketRecord,
+    }
+    for scope_type in ("client", "matter", "ip_docket"):
+        scope_ids = sorted(
+            {
+                scope.scope_id
+                for payload in payloads
+                for scope in payload.scopes
+                if scope.scope_type == scope_type
+            }
+        )
+        if not scope_ids:
+            continue
+        model = scope_models[scope_type]
+        locked_ids = tuple(
+            session.scalars(
+                select(model.id)
+                .where(
+                    model.company_id == company_id,
+                    model.id.in_(scope_ids),
+                )
+                .order_by(model.id)
+                .with_for_update(read=True, key_share=True)
+            ).all()
+        )
+        if locked_ids != tuple(scope_ids):
+            raise PrivateRetrievalConcurrencyError(STALE_PRIVATE_PROJECTION_WRITER_DETAIL)
+
+
 def insert_private_projection_batch(
     session: Session,
     *,
@@ -655,6 +703,11 @@ def insert_private_projection_batch(
             "A private projection rebuild batch contains duplicate source chunks."
         )
 
+    _lock_projection_scope_parents(
+        session,
+        company_id=company_id,
+        payloads=batch,
+    )
     generation = session.scalar(
         select(PrivateIndexGeneration)
         .where(

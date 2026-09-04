@@ -6,6 +6,8 @@ from collections.abc import Iterable
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from sqlalchemy.exc import OperationalError
+
 from caseops_api.db.session import get_session_factory
 from caseops_api.services.embeddings import build_provider
 from caseops_api.services.private_retrieval import (
@@ -25,6 +27,13 @@ from caseops_api.services.private_retrieval_jobs import (
 _REDACTED_ERROR_DETAIL = (
     "Unexpected private projection maintenance failure; inspect correlated service logs."
 )
+_TRANSIENT_DATABASE_CONCURRENCY_DETAIL = (
+    "A bounded database concurrency conflict deferred private projection maintenance."
+)
+_TRANSIENT_DATABASE_SQLSTATES = {
+    "40P01": "database_deadlock_detected",
+    "55P03": "database_lock_timeout",
+}
 
 
 def _safe_error_detail(exc: BaseException) -> str:
@@ -37,7 +46,19 @@ def _safe_error_detail(exc: BaseException) -> str:
 
 
 def _is_retryable_rebuild_conflict(exc: BaseException) -> bool:
-    return isinstance(exc, PrivateRetrievalConcurrencyError)
+    return isinstance(
+        exc,
+        PrivateRetrievalConcurrencyError,
+    ) or _transient_database_concurrency_code(exc) is not None
+
+
+def _transient_database_concurrency_code(exc: BaseException) -> str | None:
+    """Classify only PostgreSQL's deadlock and lock-unavailable SQLSTATEs."""
+
+    if not isinstance(exc, OperationalError):
+        return None
+    sqlstate = getattr(exc.orig, "sqlstate", None) or getattr(exc.orig, "pgcode", None)
+    return _TRANSIENT_DATABASE_SQLSTATES.get(str(sqlstate or ""))
 
 
 def _integrity_payload(report) -> dict[str, object]:
@@ -82,6 +103,10 @@ def _maintain(
         "stale_or_ineligible_sources",
     }
     for company_id in candidates.company_ids:
+        applied: tuple[str, ...] = ()
+        rebuilt = False
+        breached_before_recovery = False
+        oldest_pending_lag_seconds_before: int | None = None
         try:
             with session_factory() as session:
                 before = inspect_private_index_integrity(
@@ -93,6 +118,7 @@ def _maintain(
                     before.oldest_pending_lag_seconds is not None
                     and before.oldest_pending_lag_seconds > event_lag_slo_seconds
                 )
+                oldest_pending_lag_seconds_before = before.oldest_pending_lag_seconds
                 applied = process_pending_private_projection_events(
                     session,
                     company_id=company_id,
@@ -104,8 +130,8 @@ def _maintain(
                     company_id=company_id,
                     event_lag_slo_seconds=event_lag_slo_seconds,
                 )
-                rebuilt = False
                 repair_deferred = False
+                repair_deferred_reason: str | None = None
                 if (
                     after.blockers
                     and set(after.blockers) <= repairable_blockers
@@ -118,7 +144,7 @@ def _maintain(
                                 company_id=company_id,
                                 activate=True,
                             )
-                        except PrivateRetrievalInvariantError as exc:
+                        except Exception as exc:
                             if not _is_retryable_rebuild_conflict(exc):
                                 raise
                             # A concurrent rebuild or canonical mutation can win
@@ -150,6 +176,11 @@ def _maintain(
                                 # repair remains inside its bounded SLO. The
                                 # next cadence replans from canonical state.
                                 repair_deferred = True
+                                repair_deferred_reason = (
+                                    "concurrent_database_lock"
+                                    if _transient_database_concurrency_code(exc) is not None
+                                    else "concurrent_access_or_tombstone_change"
+                                )
                                 break
                             continue
                         session.commit()
@@ -187,19 +218,79 @@ def _maintain(
                         "applied_event_count": len(applied),
                         "rebuilt": rebuilt,
                         "lag_slo_breached_before_recovery": breached_before_recovery,
-                        "oldest_pending_lag_seconds_before": (before.oldest_pending_lag_seconds),
+                        "oldest_pending_lag_seconds_before": oldest_pending_lag_seconds_before,
                         "pending_event_count_after": after.pending_event_count,
                         "failed_event_count_after": after.failed_event_count,
                         "repair_deferred": repair_deferred,
-                        "repair_deferred_reason": (
-                            "concurrent_access_or_tombstone_change" if repair_deferred else None
-                        ),
+                        "repair_deferred_reason": repair_deferred_reason,
                         "oldest_repair_lag_seconds_after": oldest_repair_lag_seconds,
                         "repair_lag_slo_breached": repair_lag_slo_breached,
                         "blockers_after": list(after.blockers),
                     }
                 )
         except Exception as exc:
+            transient_code = _transient_database_concurrency_code(exc)
+            if transient_code is not None:
+                # The failed transaction is unusable. Re-inspect from a fresh
+                # session and defer only while the active generation remains
+                # intact, every blocker is machine-repairable, and neither
+                # event nor repair age has crossed the bounded SLO.
+                try:
+                    with session_factory() as recovery_session:
+                        after = inspect_private_index_integrity(
+                            recovery_session,
+                            company_id=company_id,
+                            event_lag_slo_seconds=event_lag_slo_seconds,
+                        )
+                except Exception:
+                    after = None
+                if after is not None:
+                    oldest_repair_lag_seconds = getattr(
+                        after,
+                        "oldest_repair_lag_seconds",
+                        None,
+                    )
+                    pending_lag_slo_breached = (
+                        after.oldest_pending_lag_seconds is not None
+                        and after.oldest_pending_lag_seconds > event_lag_slo_seconds
+                    )
+                    repair_lag_slo_breached = (
+                        oldest_repair_lag_seconds is not None
+                        and oldest_repair_lag_seconds > event_lag_slo_seconds
+                    )
+                    safe_to_defer = (
+                        not breached_before_recovery
+                        and getattr(after, "active_generation_id", None) is not None
+                        and after.pending_event_count == 0
+                        and after.failed_event_count == 0
+                        and set(after.blockers) <= repairable_blockers
+                        and not pending_lag_slo_breached
+                        and not repair_lag_slo_breached
+                    )
+                    if safe_to_defer:
+                        companies.append(
+                            {
+                                "company_id": company_id,
+                                "applied_event_count": len(applied),
+                                "rebuilt": rebuilt,
+                                "error_code": transient_code,
+                                "error_detail": _TRANSIENT_DATABASE_CONCURRENCY_DETAIL,
+                                "lag_slo_breached_before_recovery": False,
+                                "oldest_pending_lag_seconds_before": (
+                                    oldest_pending_lag_seconds_before
+                                ),
+                                "pending_event_count_after": after.pending_event_count,
+                                "failed_event_count_after": after.failed_event_count,
+                                "repair_deferred": True,
+                                "repair_deferred_reason": "concurrent_database_lock",
+                                "oldest_repair_lag_seconds_after": (
+                                    oldest_repair_lag_seconds
+                                ),
+                                "repair_lag_slo_breached": False,
+                                "blockers_after": list(after.blockers),
+                            }
+                        )
+                        continue
             # One corrupt or oversized tenant must not prevent unrelated
             # tenants from draining events. The job remains failed/alertable,
             # but deterministic Cloud Run task retries are disabled by the
