@@ -5,7 +5,12 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 from sqlalchemy import event, func, select
 
-from caseops_api.db.models import ForumCatalogEntry, Matter, MatterBulkImportRow
+from caseops_api.db.models import (
+    ForumCatalogAlias,
+    ForumCatalogEntry,
+    Matter,
+    MatterBulkImportRow,
+)
 from caseops_api.db.session import get_engine, get_session_factory
 from tests.test_auth_company import auth_headers, bootstrap_company
 
@@ -27,26 +32,43 @@ def test_exact_courts_and_alias_resolve_full_lineage_preview_commit_and_audit(
     job = _preview(
         client,
         token,
-        b"Matter Title,Matter Code,Practice Area,Forum,Court\n"
-        b"Tis Hazari exact,SEP03-TH,Commercial,Tis Hazari,\n"
-        b"ITO normalized,SEP03-ITO,Commercial,  iTo  ,\n"
-        b"Dwarka configured alias,SEP03-DW,Commercial,dwarka-swcf,\n",
+        b"Matter Title,Matter Code,Practice Area,Forum,Court,Forum District\n"
+        b"Tis Hazari exact,SEP03-TH,Commercial,Tis Hazari,,Central Delhi\n"
+        b"ITO normalized,SEP03-ITO,Commercial,  iTo  ,,\n"
+        b"Dwarka configured alias,SEP03-DW,Commercial,dwarka-swcf,,\n",
     )
 
     assert job["valid_rows"] == 3
     assert job["invalid_rows"] == 0
     expected = (
-        ("consumer:dcdrc:delhi:tis-hazari", "Tis Hazari"),
-        ("consumer:dcdrc:delhi:ito", "ITO"),
-        ("consumer:dcdrc:delhi:dwarka", "Dwarka"),
+        (
+            "district:india-gov:delhi:centraldelhi",
+            "Central District Court, Delhi",
+            "lower_court",
+            None,
+        ),
+        (
+            "consumer:dcdrc:delhi:ito",
+            "District Consumer Commission, ITO",
+            "tribunal",
+            "district",
+        ),
+        (
+            "consumer:dcdrc:delhi:dwarka",
+            "District Consumer Commission, Dwarka",
+            "tribunal",
+            "district",
+        ),
     )
-    for row, (entry_id, court_name) in zip(job["rows"], expected, strict=True):
+    for row, (entry_id, court_name, forum_level, consumer_level) in zip(
+        job["rows"], expected, strict=True
+    ):
         assert row["status"] == "valid", row["errors"]
         assert row["normalized"]["forum_catalog_entry_id"] == entry_id
-        assert row["normalized"]["forum_level"] == "tribunal"
+        assert row["normalized"]["forum_level"] == forum_level
         assert row["normalized"]["court_name"] == court_name
         assert row["normalized"]["forum_state"] == "Delhi"
-        assert row["normalized"]["forum_consumer_level"] == "district"
+        assert row["normalized"].get("forum_consumer_level") == consumer_level
 
     with get_session_factory()() as session:
         stored_rows = list(
@@ -83,7 +105,9 @@ def test_exact_courts_and_alias_resolve_full_lineage_preview_commit_and_audit(
         assert by_code["SEP03-ITO"].forum_catalog_entry_id == expected[1][0]
         assert by_code["SEP03-DW"].forum_catalog_entry_id == expected[2][0]
         assert all(matter.forum_state == "Delhi" for matter in matters)
-        assert all(matter.forum_consumer_level == "district" for matter in matters)
+        assert by_code["SEP03-TH"].forum_consumer_level is None
+        assert by_code["SEP03-ITO"].forum_consumer_level == "district"
+        assert by_code["SEP03-DW"].forum_consumer_level == "district"
 
 
 def test_alias_collision_is_rejected_at_its_row_and_never_guessed(
@@ -95,9 +119,17 @@ def test_alias_collision_is_rejected_at_its_row_and_never_guessed(
             "consumer:dcdrc:delhi:ito",
             "consumer:dcdrc:delhi:tis-hazari",
         ):
-            entry = session.get(ForumCatalogEntry, entry_id)
-            assert entry is not None
-            entry.aliases_json = ["Shared Delhi Alias"]
+            session.add(
+                ForumCatalogAlias(
+                    forum_catalog_entry_id=entry_id,
+                    alias="Shared Delhi Alias",
+                    normalized_alias="shareddelhialias",
+                    source_name="Regression fixture",
+                    source_url="https://example.test/forum-alias",
+                    verification_status="verified",
+                    is_active=True,
+                )
+            )
         session.commit()
 
     job = _preview(
@@ -114,6 +146,24 @@ def test_alias_collision_is_rejected_at_its_row_and_never_guessed(
     assert "multiple active Exact Court records" in message
     assert "will not guess" in message
     assert row["normalized"].get("forum_catalog_entry_id") is None
+
+
+def test_explicit_catalog_id_accepts_the_same_normalized_alias_as_manual_entry(
+    client: TestClient,
+) -> None:
+    token = str(bootstrap_company(client)["access_token"])
+    job = _preview(
+        client,
+        token,
+        b"Matter Title,Matter Code,Practice Area,Forum,Court,ForumCatalogEntryId\n"
+        b"Normalized explicit alias,SEP03-ID-ALIAS,Commercial,District Court,"
+        b"Tis Hazari Court,district:india-gov:delhi:centraldelhi\n",
+    )
+
+    assert job["valid_rows"] == 1, job["rows"][0]["errors"]
+    row = job["rows"][0]["normalized"]
+    assert row["forum_catalog_entry_id"] == "district:india-gov:delhi:centraldelhi"
+    assert row["court_name"] == "Central District Court, Delhi"
 
 
 def test_exact_court_conflict_unknown_inactive_and_existing_validation_fail_closed(
@@ -152,11 +202,12 @@ def test_exact_court_conflict_unknown_inactive_and_existing_validation_fail_clos
     )
     assert commit.status_code == 400
     with get_session_factory()() as session:
-        assert session.scalar(
-            select(func.count())
-            .select_from(Matter)
-            .where(Matter.matter_code.like("SEP03-%"))
-        ) == 0
+        assert (
+            session.scalar(
+                select(func.count()).select_from(Matter).where(Matter.matter_code.like("SEP03-%"))
+            )
+            == 0
+        )
 
 
 def test_forum_catalog_api_exposes_only_configured_aliases(client: TestClient) -> None:
@@ -164,8 +215,13 @@ def test_forum_catalog_api_exposes_only_configured_aliases(client: TestClient) -
     response = client.get("/api/courts/forum-catalog", headers=auth_headers(token))
     assert response.status_code == 200, response.text
     entries = {entry["id"]: entry for entry in response.json()["entries"]}
-    assert entries["consumer:dcdrc:delhi:dwarka"]["aliases"] == ["Dwarka_SWCF"]
-    assert entries["consumer:dcdrc:delhi:ito"]["aliases"] == []
+    assert sorted(entries["consumer:dcdrc:delhi:dwarka"]["aliases"]) == [
+        "Dwarka DCDRC",
+        "Dwarka_SWCF",
+    ]
+    assert entries["consumer:dcdrc:delhi:ito"]["aliases"] == ["ITO"]
+    assert entries["district:india-gov:delhi:centraldelhi"]["aliases"] == ["Tis Hazari"]
+    assert entries["district:india-gov:delhi:westdelhi"]["aliases"] == ["Tis Hazari"]
 
 
 def test_500_exact_court_rows_load_the_catalog_once(client: TestClient) -> None:

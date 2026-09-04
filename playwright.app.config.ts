@@ -42,6 +42,7 @@ export default defineConfig({
     /bulk-matter-creation\.spec\.ts/,
     /all-modules-regression\.spec\.ts/,
     /research\.spec\.ts/,
+    /provider-spend-forum-statute-2026-09-04\.spec\.ts/,
     /billing-payment\.spec\.ts/,
     /hari-ii-bugs\.spec\.ts/,
     // Dated tester batches must be discovered automatically. Manual entries

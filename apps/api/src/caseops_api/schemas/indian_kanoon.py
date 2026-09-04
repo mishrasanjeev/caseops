@@ -147,15 +147,16 @@ class IndianKanoonHealthResponse(BaseModel):
     health: Literal["ready", "blocked"]
     checked_at: datetime
     performs_external_probe: Literal[False] = False
-    balance_source: Literal["caseops_recorded_workspace_usage"] = (
-        "caseops_recorded_workspace_usage"
-    )
+    balance_source: Literal["caseops_recorded_workspace_usage"] = "caseops_recorded_workspace_usage"
     provider_prepaid_balance_checked: Literal[False] = False
     currency: Literal["INR"] = "INR"
     daily_spend_minor: int = Field(ge=0)
     daily_remaining_minor: int = Field(ge=0)
     monthly_spend_minor: int = Field(ge=0)
-    monthly_remaining_minor: int = Field(ge=0)
+    monthly_remaining_minor: int | None = Field(default=None, ge=0)
+    monthly_limit_minor: int | None = Field(default=None, ge=0)
+    monthly_limit_unlimited: bool = False
+    monthly_limit_policy_source: str
 
 
 class IndianKanoonImportRequest(BaseModel):

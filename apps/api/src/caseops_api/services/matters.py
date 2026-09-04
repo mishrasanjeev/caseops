@@ -22,6 +22,7 @@ from caseops_api.db.models import (
     DocumentProcessingJob,
     DocumentProcessingJobStatus,
     DocumentProcessingTargetType,
+    ForumCatalogAlias,
     ForumCatalogEntry,
     HearingReminder,
     HearingReminderStatus,
@@ -119,6 +120,10 @@ from caseops_api.services.document_storage import (
     persist_matter_attachment,
     resolve_storage_path,
     sanitize_filename,
+)
+from caseops_api.services.forum_catalog import (
+    forum_entry_identity_keys,
+    normalize_forum_catalog_value,
 )
 from caseops_api.services.matter_access import (
     _operational_ip_docket_role_membership_ids,
@@ -327,14 +332,18 @@ def _order_is_interim(order: MatterCourtOrder) -> bool:
 
 
 def _matter_record(matter: Matter) -> MatterRecord:
-    if matter.status == "closed":
-        matter.status = MatterStatus.DISPOSED.value
-    # Defensive read normalisation for legacy rows created before lifecycle
-    # state became server-owned. A disposed matter must never be presented as
-    # active, even if an old row retained is_active=true.
-    if matter.status == MatterStatus.DISPOSED.value:
-        matter.is_active = False
-    record = MatterRecord.model_validate(matter)
+    # Read serialization must never dirty lifecycle state. Legacy "closed"
+    # rows are projected as disposed and inactive without mutating the ORM row;
+    # only the lifecycle endpoint may persist a transition and its audit event.
+    projected_status = _status_value(matter.status)
+    projected_active = bool(matter.is_active) and projected_status != MatterStatus.DISPOSED.value
+    record_payload = {
+        field_name: getattr(matter, field_name)
+        for field_name in MatterRecord.model_fields
+        if hasattr(matter, field_name)
+    }
+    record_payload.update(status=projected_status, is_active=projected_active)
+    record = MatterRecord.model_validate(record_payload)
     assignments = list(getattr(matter, "tag_assignments", []) or [])
     record.tags = [
         MatterTagRecord.model_validate(assignment.tag)
@@ -530,6 +539,64 @@ def _resolve_forum_selection(
             "forum_city": clean_city or court.seat_city,
             "forum_consumer_level": clean_consumer_level,
         }
+
+    if clean_court_name:
+        normalized_court_name = normalize_forum_catalog_value(clean_court_name)
+        alias_candidates = [
+            candidate
+            for candidate in session.scalars(
+                select(ForumCatalogEntry)
+                .options(selectinload(ForumCatalogEntry.aliases))
+                .where(
+                    ForumCatalogEntry.is_active.is_(True),
+                    or_(
+                        ForumCatalogEntry.normalized_name == normalized_court_name,
+                        ForumCatalogEntry.id.in_(
+                            select(ForumCatalogAlias.forum_catalog_entry_id).where(
+                                ForumCatalogAlias.normalized_alias == normalized_court_name,
+                                ForumCatalogAlias.is_active.is_(True),
+                                ForumCatalogAlias.verification_status == "verified",
+                            )
+                        ),
+                    ),
+                )
+                .order_by(ForumCatalogEntry.display_order, ForumCatalogEntry.id)
+            )
+            if normalized_court_name in forum_entry_identity_keys(candidate)
+            and (not clean_forum_level or candidate.forum_level == clean_forum_level)
+            and (not clean_state or (candidate.state or "").casefold() == clean_state.casefold())
+            and (
+                not clean_district
+                or (candidate.district or "").casefold() == clean_district.casefold()
+            )
+            and (not clean_city or (candidate.city or "").casefold() == clean_city.casefold())
+            and (not clean_consumer_level or candidate.consumer_level == clean_consumer_level)
+        ]
+        if len(alias_candidates) == 1:
+            candidate = alias_candidates[0]
+            _validate_forum_metadata(candidate)
+            return {
+                "forum_level": candidate.forum_level,
+                "court_id": candidate.court_id,
+                "court_name": candidate.name,
+                "forum_catalog_entry_id": candidate.id,
+                "forum_state": candidate.state,
+                "forum_district": candidate.district,
+                "forum_city": candidate.city,
+                "forum_consumer_level": candidate.consumer_level,
+            }
+        if len(alias_candidates) > 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "forum_alias_ambiguous",
+                    "message": (
+                        "Court name or alias matches multiple active forum records. "
+                        "Select the exact catalog court; CaseOps will not guess."
+                    ),
+                    "candidate_ids": [candidate.id for candidate in alias_candidates],
+                },
+            )
 
     if clean_forum_level is None:
         raise HTTPException(
@@ -1132,8 +1199,7 @@ def _attachment_record_map(
 def _task_sort_key(task: MatterTask) -> tuple[int, date, datetime]:
     status_rank = (
         1
-        if task.status
-        in {MatterTaskStatus.COMPLETED.value, MatterTaskStatus.CANCELLED.value}
+        if task.status in {MatterTaskStatus.COMPLETED.value, MatterTaskStatus.CANCELLED.value}
         else 0
     )
     due_on = task.due_on or date.max
@@ -1520,12 +1586,7 @@ def _assert_active_locked_actor(
     required_capability: str,
 ) -> CompanyMembership:
     actor = memberships.get(context.membership.id)
-    if (
-        actor is None
-        or not actor.is_active
-        or actor.user is None
-        or not actor.user.is_active
-    ):
+    if actor is None or not actor.is_active or actor.user is None or not actor.user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="An active company membership is required for Matter changes.",
@@ -1580,9 +1641,7 @@ def _hearing_role_snapshot_from_values(
             str(value) for value in (attendee_membership_ids or []) if value
         ),
         reminder_recipient_membership_ids=tuple(
-            str(value)
-            for value in (policy.get("recipient_membership_ids") or [])
-            if value
+            str(value) for value in (policy.get("recipient_membership_ids") or []) if value
         ),
         escalation_membership_id=(
             str(policy["escalation_membership_id"])
@@ -1953,7 +2012,8 @@ def create_matter(
     team = None
     if payload.team_id:
         team = session.scalar(
-            select(Team).where(
+            select(Team)
+            .where(
                 Team.id == payload.team_id,
                 Team.company_id == context.company.id,
                 Team.is_active.is_(True),
@@ -1999,9 +2059,7 @@ def create_matter(
     matter = Matter(
         company_id=context.company.id,
         assignee_membership_id=assignee.id if assignee else None,
-        responsible_lawyer_membership_id=(
-            responsible_lawyer.id if responsible_lawyer else None
-        ),
+        responsible_lawyer_membership_id=(responsible_lawyer.id if responsible_lawyer else None),
         team_id=team.id if team else None,
         title=payload.title.strip(),
         matter_code=payload.matter_code.strip(),
@@ -2013,9 +2071,7 @@ def create_matter(
         ),
         client_email=str(payload.client_email).strip().lower() if payload.client_email else None,
         opposing_party=payload.opposing_party.strip() if payload.opposing_party else None,
-        opposing_counsel=(
-            payload.opposing_counsel.strip() if payload.opposing_counsel else None
-        ),
+        opposing_counsel=(payload.opposing_counsel.strip() if payload.opposing_counsel else None),
         case_number=normalized_case_number,
         filing_number=payload.filing_number.strip() if payload.filing_number else None,
         filing_date=payload.filing_date,
@@ -2414,10 +2470,14 @@ def update_matter(
         required_capability=MATTER_MUTATION_CAPABILITIES["update_matter"],
         team_ids_to_lock={matter_roles.team_id, resulting_team_id},
     )
-    if team_access_changing and _linked_docket_role_snapshot(
-        session,
-        dockets=linked_dockets,
-    ) != linked_role_snapshot:
+    if (
+        team_access_changing
+        and _linked_docket_role_snapshot(
+            session,
+            dockets=linked_dockets,
+        )
+        != linked_role_snapshot
+    ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -2473,19 +2533,15 @@ def update_matter(
             matter.assignee_membership_id = assignee.id
 
     responsible_membership_id = updates.pop("responsible_lawyer_membership_id", None)
-    responsible_changed = (
-        "responsible_lawyer_membership_id" in payload.model_dump(exclude_unset=True)
+    responsible_changed = "responsible_lawyer_membership_id" in payload.model_dump(
+        exclude_unset=True
     )
     if responsible_changed:
         if responsible_membership_id is None:
             matter.responsible_lawyer_membership_id = None
         else:
             responsible = assignment_memberships.get(responsible_membership_id)
-            if (
-                responsible is None
-                or not responsible.is_active
-                or not responsible.user.is_active
-            ):
+            if responsible is None or not responsible.is_active or not responsible.user.is_active:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Assignee membership was not found in the current company.",
@@ -2553,11 +2609,7 @@ def update_matter(
             }
         for membership_id in sorted(resulting_role_ids):
             membership = assignment_memberships.get(membership_id)
-            if (
-                membership is None
-                or not membership.is_active
-                or not membership.user.is_active
-            ):
+            if membership is None or not membership.is_active or not membership.user.is_active:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail={
@@ -2620,18 +2672,43 @@ def update_matter(
         matter.case_number = requested_case_number
 
     if FORUM_SELECTION_FIELDS & updates.keys():
+        forum_fields_provided = FORUM_SELECTION_FIELDS & provided_update_fields
+        catalog_entry_was_provided = "forum_catalog_entry_id" in forum_fields_provided
+        court_id_was_provided = "court_id" in forum_fields_provided
+        court_name_was_provided = "court_name" in forum_fields_provided
+
+        # A caller changing forum identity without resubmitting the catalog ID
+        # is choosing a new catalog/free-text resolution. Retaining the old ID
+        # would make the catalog branch silently discard the supplied court.
+        catalog_entry_id = updates.pop(
+            "forum_catalog_entry_id",
+            matter.forum_catalog_entry_id if catalog_entry_was_provided else None,
+        )
+        court_id = updates.pop(
+            "court_id",
+            matter.court_id
+            if court_id_was_provided or not court_name_was_provided
+            else None,
+        )
         forum_selection = _resolve_forum_selection(
             session,
             forum_level=updates.pop("forum_level", matter.forum_level),
-            court_id=updates.pop("court_id", matter.court_id),
+            court_id=court_id,
             court_name=updates.pop("court_name", matter.court_name),
-            forum_catalog_entry_id=updates.pop(
-                "forum_catalog_entry_id", matter.forum_catalog_entry_id
+            forum_catalog_entry_id=catalog_entry_id,
+            forum_state=updates.pop(
+                "forum_state", None if court_name_was_provided else matter.forum_state
             ),
-            forum_state=updates.pop("forum_state", matter.forum_state),
-            forum_district=updates.pop("forum_district", matter.forum_district),
-            forum_city=updates.pop("forum_city", matter.forum_city),
-            forum_consumer_level=updates.pop("forum_consumer_level", matter.forum_consumer_level),
+            forum_district=updates.pop(
+                "forum_district", None if court_name_was_provided else matter.forum_district
+            ),
+            forum_city=updates.pop(
+                "forum_city", None if court_name_was_provided else matter.forum_city
+            ),
+            forum_consumer_level=updates.pop(
+                "forum_consumer_level",
+                None if court_name_was_provided else matter.forum_consumer_level,
+            ),
         )
         _apply_forum_selection(matter, forum_selection)
 
@@ -2954,8 +3031,7 @@ def _neutralize_disposed_matter_operations(
             select(MatterNextHearingSuggestion).where(
                 MatterNextHearingSuggestion.company_id == context.company.id,
                 MatterNextHearingSuggestion.matter_id == matter.id,
-                MatterNextHearingSuggestion.status
-                == MatterNextHearingSuggestionStatus.PENDING,
+                MatterNextHearingSuggestion.status == MatterNextHearingSuggestionStatus.PENDING,
             )
         )
     )
@@ -3088,9 +3164,7 @@ def transition_matter_lifecycle_status(
     _lock_matter_mutation_actor(
         session,
         context=context,
-        required_capability=MATTER_MUTATION_CAPABILITIES[
-            "transition_matter_lifecycle_status"
-        ],
+        required_capability=MATTER_MUTATION_CAPABILITIES["transition_matter_lifecycle_status"],
     )
     matter = _get_matter_model(
         session,
@@ -3160,8 +3234,7 @@ def transition_matter_lifecycle_status(
         and target_status == MatterStatus.DISPOSED.value
     )
     reopening = (
-        current_status == MatterStatus.DISPOSED.value
-        and target_status == MatterStatus.INTAKE.value
+        current_status == MatterStatus.DISPOSED.value and target_status == MatterStatus.INTAKE.value
     )
     if not disposing and not reopening:
         record_from_context(
@@ -3507,9 +3580,7 @@ def list_matter_tasks(
     )
     if not include_completed:
         stmt = stmt.where(
-            MatterTask.status.notin_(
-                (MatterTaskStatus.COMPLETED, MatterTaskStatus.CANCELLED)
-            )
+            MatterTask.status.notin_((MatterTaskStatus.COMPLETED, MatterTaskStatus.CANCELLED))
         )
     tasks = list(session.scalars(stmt))
     if not tasks:
@@ -3557,9 +3628,7 @@ def update_matter_task(
         matter_id=matter_id,
         task_id=task_id,
     )
-    resulting_owner_id = requested_updates.get(
-        "owner_membership_id", candidate.owner_membership_id
-    )
+    resulting_owner_id = requested_updates.get("owner_membership_id", candidate.owner_membership_id)
     matter_roles = _discover_matter_role_snapshot(
         session,
         company_id=context.company.id,
@@ -3613,8 +3682,7 @@ def update_matter_task(
             detail={
                 "code": "matter_task_assignment_changed",
                 "message": (
-                    "Task responsibility, lifecycle, or state changed; reload "
-                    "before updating."
+                    "Task responsibility, lifecycle, or state changed; reload before updating."
                 ),
             },
         )
@@ -3781,9 +3849,8 @@ def update_matter_hearing(
     )
     _assert_matter_not_disposed(matter, operation="update a hearing")
     hearing = session.scalar(
-        select(MatterHearing).where(
-            MatterHearing.id == hearing_id, MatterHearing.matter_id == matter.id
-        )
+        select(MatterHearing)
+        .where(MatterHearing.id == hearing_id, MatterHearing.matter_id == matter.id)
         .with_for_update(of=MatterHearing)
         .execution_options(populate_existing=True)
     )
@@ -3932,9 +3999,7 @@ def update_matter_hearing(
     reminder_policy.update(
         {
             "timezone": hearing.timezone,
-            "schedule_basis": (
-                "exact_time" if hearing.time_status == "exact" else "date_boundary"
-            ),
+            "schedule_basis": ("exact_time" if hearing.time_status == "exact" else "date_boundary"),
             "confirmed_by_membership_id": context.membership.id,
             "confirmed_at": datetime.now(UTC).isoformat(),
         }
@@ -4432,9 +4497,7 @@ def create_matter_court_order(
     _lock_matter_mutation_actor(
         session,
         context=context,
-        required_capability=MATTER_MUTATION_CAPABILITIES[
-            "create_matter_court_order"
-        ],
+        required_capability=MATTER_MUTATION_CAPABILITIES["create_matter_court_order"],
     )
 
     matter = _get_matter_model(
@@ -4555,9 +4618,7 @@ def update_matter_court_order(
     _lock_matter_mutation_actor(
         session,
         context=context,
-        required_capability=MATTER_MUTATION_CAPABILITIES[
-            "update_matter_court_order"
-        ],
+        required_capability=MATTER_MUTATION_CAPABILITIES["update_matter_court_order"],
     )
     matter = _get_matter_model(
         session,
@@ -4737,9 +4798,7 @@ def create_matter_hearing(
             "timezone": payload.timezone,
             "escalation_membership_id": escalation_id,
             "critical": payload.notification_critical,
-            "schedule_basis": (
-                "exact_time" if payload.time_status == "exact" else "date_boundary"
-            ),
+            "schedule_basis": ("exact_time" if payload.time_status == "exact" else "date_boundary"),
             "date_reminder_local_time": "18:00",
             "confirmed_by_membership_id": context.membership.id,
             "confirmed_at": datetime.now(UTC).isoformat(),
@@ -4992,9 +5051,7 @@ def create_matter_court_sync_import(
     _lock_matter_mutation_actor(
         session,
         context=context,
-        required_capability=MATTER_MUTATION_CAPABILITIES[
-            "create_matter_court_sync_import"
-        ],
+        required_capability=MATTER_MUTATION_CAPABILITIES["create_matter_court_sync_import"],
     )
     matter = _get_matter_model(
         session,
@@ -5072,9 +5129,7 @@ def create_matter_attachment(
     _lock_matter_mutation_actor(
         session,
         context=context,
-        required_capability=MATTER_MUTATION_CAPABILITIES[
-            "create_matter_attachment"
-        ],
+        required_capability=MATTER_MUTATION_CAPABILITIES["create_matter_attachment"],
     )
     # Hold a shared lifecycle fence while deriving notice deadlines and
     # enqueueing document work. Independent uploads/processors may proceed
@@ -5318,9 +5373,7 @@ def update_matter_attachment_metadata(
     _lock_matter_mutation_actor(
         session,
         context=context,
-        required_capability=MATTER_MUTATION_CAPABILITIES[
-            "update_matter_attachment_metadata"
-        ],
+        required_capability=MATTER_MUTATION_CAPABILITIES["update_matter_attachment_metadata"],
     )
     matter = _get_matter_model(
         session,
@@ -5512,9 +5565,7 @@ def request_matter_attachment_processing(
     _lock_matter_mutation_actor(
         session,
         context=context,
-        required_capability=MATTER_MUTATION_CAPABILITIES[
-            "request_matter_attachment_processing"
-        ],
+        required_capability=MATTER_MUTATION_CAPABILITIES["request_matter_attachment_processing"],
     )
 
     matter = _get_matter_model(

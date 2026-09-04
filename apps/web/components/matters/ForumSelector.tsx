@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
@@ -33,6 +33,16 @@ export type ForumCategory =
   // Compatibility for an unsaved selection created by an older client.
   | "consumer_forum"
   | "legacy";
+
+function forumSearchKey(value: string | null | undefined): string {
+  const normalized = (value ?? "").trim().toLocaleLowerCase().replace(/[^a-z0-9]+/g, "");
+  for (const suffix of ["courtscomplex", "courtcomplex", "courts", "court"]) {
+    if (normalized.endsWith(suffix) && normalized.length > suffix.length) {
+      return normalized.slice(0, -suffix.length);
+    }
+  }
+  return normalized;
+}
 
 const CATEGORY_OPTIONS: Array<{ value: ForumCategory; label: string }> = [
   { value: "supreme_court", label: "Supreme Court" },
@@ -344,6 +354,7 @@ export function ForumSelector({
   statusMessage?: string | null;
   statusTone?: "info" | "warning" | "error";
 }) {
+  const [courtSearch, setCourtSearch] = useState("");
   const sortedEntries = useMemo(() => [...entries].sort(byOrder), [entries]);
   const selectedEntry = sortedEntries.find(
     (entry) => entry.id === value.forum_catalog_entry_id,
@@ -358,9 +369,26 @@ export function ForumSelector({
   const consumerForums = sortedEntries.filter(
     (entry) => entry.forum_type === "consumer_forum",
   );
+  const normalizedSearch = forumSearchKey(courtSearch);
+  const searchMatches = useMemo(
+    () =>
+      normalizedSearch.length < 2
+        ? []
+        : sortedEntries
+            .filter((entry) =>
+              [entry.name, ...(entry.aliases ?? [])].some((label) =>
+                forumSearchKey(label).includes(normalizedSearch),
+              ),
+            )
+            .slice(0, 8),
+    [normalizedSearch, sortedEntries],
+  );
 
   const chooseEntry = (entry: ForumCatalogEntry | undefined) => {
-    if (entry) onChange(forumSelectionFromEntry(entry));
+    if (entry) {
+      onChange(forumSelectionFromEntry(entry));
+      setCourtSearch("");
+    }
   };
 
   const chooseCategory = (next: ForumCategory) => {
@@ -493,6 +521,53 @@ export function ForumSelector({
           {statusMessage}
         </div>
       ) : null}
+
+      <div className="relative md:col-span-2">
+        <Label htmlFor={`${idPrefix}-court-search`}>Find exact court or approved alias</Label>
+        <Input
+          id={`${idPrefix}-court-search`}
+          className="mt-1.5"
+          value={courtSearch}
+          disabled={disabled}
+          onChange={(event) => setCourtSearch(event.target.value)}
+          placeholder="Search by court, complex, city, or approved alias"
+          autoComplete="off"
+          aria-expanded={normalizedSearch.length >= 2}
+          data-testid={`${idPrefix}-court-search`}
+        />
+        {normalizedSearch.length >= 2 ? (
+          <div
+            className="mt-1 max-h-56 overflow-y-auto rounded-md border border-[var(--color-line)] bg-white p-1 shadow-[var(--shadow-soft)]"
+            role="listbox"
+            aria-label="Matching courts"
+            data-testid={`${idPrefix}-court-search-results`}
+          >
+            {searchMatches.length ? (
+              searchMatches.map((entry) => (
+                <button
+                  key={entry.id}
+                  type="button"
+                  role="option"
+                  aria-selected={entry.id === selectedEntry?.id}
+                  className="block w-full px-2 py-2 text-left hover:bg-[var(--color-bg-2)]"
+                  onClick={() => chooseEntry(entry)}
+                >
+                  <span className="block text-sm font-medium text-[var(--color-ink)]">
+                    {entry.name}
+                  </span>
+                  <span className="block text-xs text-[var(--color-mute)]">
+                    {entry.lineage}
+                  </span>
+                </button>
+              ))
+            ) : (
+              <p className="px-2 py-3 text-sm text-[var(--color-mute)]">
+                No active catalog match.
+              </p>
+            )}
+          </div>
+        ) : null}
+      </div>
 
       <div>
         <Label htmlFor={`${idPrefix}-category`}>Forum hierarchy</Label>

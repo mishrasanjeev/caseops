@@ -3998,6 +3998,17 @@ export const billingUsageBreakdownRow = z.object({
   credits: z.number().int(),
 });
 
+export const billingProviderSpendRow = z.object({
+  provider_key: z.string(),
+  label: z.string(),
+  spent_minor: z.number().int().nonnegative(),
+  monthly_limit_minor: z.number().int().nonnegative().nullable(),
+  remaining_minor: z.number().int().nonnegative().nullable(),
+  unlimited: z.boolean(),
+  currency: z.string(),
+  policy_source: z.string(),
+});
+
 export const billingUsageReportResponse = z.object({
   period_start: z.string().nullable(),
   period_end: z.string().nullable(),
@@ -4007,6 +4018,7 @@ export const billingUsageReportResponse = z.object({
   by_matter: z.array(billingUsageBreakdownRow),
   by_tracked_case: z.array(billingUsageBreakdownRow),
   daily: z.array(billingUsageBreakdownRow),
+  by_provider: z.array(billingProviderSpendRow).default([]),
   blocked_events: z.array(billingUsageBreakdownRow).default([]),
 });
 
@@ -4123,6 +4135,7 @@ export type BillingCheckoutResponse = z.infer<typeof billingCheckoutResponse>;
 export type BillingCreditLedgerRecord = z.infer<typeof billingCreditLedgerRecord>;
 export type BillingCreditLedgerResponse = z.infer<typeof billingCreditLedgerResponse>;
 export type BillingUsageBreakdownRow = z.infer<typeof billingUsageBreakdownRow>;
+export type BillingProviderSpendRow = z.infer<typeof billingProviderSpendRow>;
 export type BillingUsageReportResponse = z.infer<typeof billingUsageReportResponse>;
 export type BillingInvoiceRecord = z.infer<typeof billingInvoiceRecord>;
 export type BillingInvoiceListResponse = z.infer<typeof billingInvoiceListResponse>;

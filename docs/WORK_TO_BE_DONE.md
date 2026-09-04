@@ -1032,6 +1032,60 @@ SCC Online  - corpus is sufficient for MVP.
 
 Re-order as founder priorities dictate. The critical insight today: **Sprint H (audit + ethical walls)** is the single biggest blocker for an enterprise pilot, and **Sprint G (full corpus)** is the single biggest retrieval-quality lift.
 
+### Ram 2026-09-04 provider access, legal catalog, and import reconciliation
+
+**Allocation:** extend the existing Indian Kanoon, case-tracking, SaaS billing,
+forum-catalog, matter-import, statute-governance, and lifecycle owners. Do not
+create a second provider registry, cost ledger, court master, importer, statute
+store, or reopen path.
+
+Implemented candidate scope:
+
+- default per-account monthly budgets of INR 1,000 independently for Indian
+  Kanoon and eCourts, with atomic tenant/provider reservations;
+- persisted unlimited policies for GBA Law Office and Pinelabs Pvt. Ltd. for
+  both providers, seeded only when the exact existing company is present;
+- tenant-visible provider spend, limit, remaining amount, currency, unlimited
+  state, and policy source in the existing billing report and provider status;
+- all successful credit-bearing provider paths attributed by provider, while
+  failed, cached, blocked, and automated paths do not add spend;
+- the explicit no-paid-provider header is authoritative in every runtime;
+  human access no longer depends on a test-looking slug, while scheduled test
+  tenants and pytest paid hosts remain blocked;
+- reviewed court aliases share one resolver between manual and bulk matter
+  creation. Multi-district Delhi complexes require district context and are
+  never guessed;
+- Act details list all catalogued sections and their source/trust state, while
+  downstream legal selection remains verified-only; and
+- matter read serialization no longer mutates lifecycle fields while projecting
+  legacy closed rows.
+
+Release gates:
+
+- [ ] fresh local Docker migration, PostgreSQL index, API, web, and dated
+  Playwright suite on the integrated source tree;
+- [ ] exact-main CI and security checks green;
+- [ ] migration applies to production and both named companies have two active
+  unlimited policy rows;
+- [ ] exact serving API/web revision and production nonbillable Playwright
+  proof, with spend unchanged before and after negative provider calls;
+- [ ] persisted lifecycle/audit inspection confirms whether the reported reopen
+  was an explicit audited transition or an unauthorized writer; and
+- [ ] final bug workbook records item verdicts and residual limitations.
+
+Honest residual scope:
+
+- All-India forum catalog rows exist, but reviewed aliases are not complete for
+  every court complex and local spelling. Add aliases only from an authoritative
+  source and collision review; do not add parser guesses.
+- Catalogued Bare Act sections are visible, but only verified provisions with
+  exact official text, hash, publisher, issuing body, source version, and
+  section link may be used as legal evidence. Remaining source verification is
+  a controlled data operation, not a UI shortcut.
+- Provider credentials, licensing, billing balance, support scope, and positive
+  verified INR prices must still pass at runtime. Configuration alone is not a
+  claim that a live paid result was returned.
+
 ---
 
 ## 16. Explicit non-goals for now

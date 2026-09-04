@@ -4122,12 +4122,15 @@
         "apps/api/tests/test_litigation_strategy.py",
         "apps/api/tests/test_ip_prd_slices.py",
         "apps/api/tests/test_drafting_studio.py",
+        "apps/web/app/app/statutes/[statute_id]/page.test.tsx",
         "apps/web/app/app/statutes/[statute_id]/sections/[section_number]/page.test.tsx",
         "tests/e2e/iplf-006c-statute-trust-2026-08-04.spec.ts",
-        "tests/e2e/ram-2026-08-05-prod.spec.ts"
+        "tests/e2e/ram-2026-08-05-prod.spec.ts",
+        "tests/e2e/provider-spend-forum-statute-2026-09-04.spec.ts"
       ],
       "evidence_refs": [
-        "docs/ip-implementation/evidence/m1/IPLF-006C/release-2026-08-04.md"
+        "docs/ip-implementation/evidence/m1/IPLF-006C/release-2026-08-04.md",
+        "docs/ip-implementation/evidence/release-2026-09-04-provider-forum-statute.md"
       ],
       "evidence_metadata": [
         {
@@ -4155,7 +4158,7 @@
           "evidence": "LEGAL-SRC-01..10 and TRUST-BA-01..12 ownership, trust contract, API/UI, migration/rollback, UJ-15/UJ-48 normal and exceptions, exact local tests, security controls, and honest pre-production state"
         }
       ],
-      "allocation_review": "Definition of Ready reviewed against PRD Sections 11.2, 15 UJ-15/UJ-48, 23, 25, and 26. Existing Statute/StatuteSection, source-action/report, AuthorityDocument, drafting, litigation-strategy, capability, and AuditEvent owners remain canonical; immutable source versions/conflicts add evidence without creating a second mutable legal-source owner.",
+      "allocation_review": "Definition of Ready reviewed against PRD Sections 11.2, 15 UJ-15/UJ-48, 23, 25, and 26. Existing Statute/StatuteSection, source-action/report, AuthorityDocument, drafting, litigation-strategy, capability, and AuditEvent owners remain canonical; immutable source versions/conflicts add evidence without creating a second mutable legal-source owner. 2026-09-04: Act details now expose every catalogued section and its honest trust state while the existing verified-source predicate remains the only legal-selection boundary; no duplicate catalog or source writer was added.",
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified"
@@ -13510,13 +13513,17 @@
         "apps/api/src/caseops_api/services/paid_provider_safety.py",
         "apps/api/src/caseops_api/services/ip_registry.py",
         "apps/api/src/caseops_api/services/indian_kanoon.py",
+        "apps/api/src/caseops_api/services/provider_spend.py",
         "apps/api/src/caseops_api/schemas/indian_kanoon.py",
+        "apps/api/src/caseops_api/services/case_tracking.py",
+        "apps/api/src/caseops_api/services/saas_billing.py",
         "apps/api/src/caseops_api/services/source_actions.py",
         "apps/api/src/caseops_api/services/production_safety.py",
         "apps/api/src/caseops_api/api/routes/calendar.py",
         "apps/api/src/caseops_api/api/routes/mailbox.py",
         "apps/api/src/caseops_api/api/routes/drive.py",
         "apps/web/app/app/admin/provider-operations/page.tsx",
+        "apps/web/app/app/admin/billing/usage/page.tsx",
         "apps/web/app/app/ip/page.tsx"
       ],
       "test_refs": [
@@ -13533,11 +13540,15 @@
         "apps/api/tests/test_ip_registry_reconciliation.py",
         "apps/api/tests/test_indian_kanoon.py",
         "apps/api/tests/test_case_tracking.py",
+        "apps/api/tests/test_20260904_provider_spend.py",
+        "apps/api/tests/test_20260904_provider_spend_forum_migration.py",
         "apps/api/tests/test_prod_verification_workflow.py",
         "apps/api/tests/test_google_calendar_sync.py",
         "apps/api/tests/test_gmail_sync.py",
         "apps/api/tests/test_google_drive_sync.py",
         "apps/web/app/app/admin/provider-operations/page.test.tsx",
+        "apps/web/app/app/admin/billing/usage/page.test.tsx",
+        "tests/e2e/provider-spend-forum-statute-2026-09-04.spec.ts",
         "tests/e2e/iplf-056b-provider-operations-2026-08-25-prod.spec.ts",
         "tests/e2e/provider-nonbillable-live-2026-09-04-prod.spec.ts"
       ],
@@ -13547,7 +13558,8 @@
         "docs/ip-implementation/evidence/m5/IPLF-051/local-2026-08-24.md",
         "docs/ip-implementation/evidence/m5/IPLF-054/release-2026-08-25.md",
         "docs/ip-implementation/evidence/m5/IPLF-056/local-056b-2026-08-25.md",
-        "docs/ip-implementation/evidence/m5/IPLF-057/release-056b-057a-2026-08-25.md"
+        "docs/ip-implementation/evidence/m5/IPLF-057/release-056b-057a-2026-08-25.md",
+        "docs/ip-implementation/evidence/release-2026-09-04-provider-forum-statute.md"
       ],
       "evidence_metadata": [
         {
@@ -13584,7 +13596,7 @@
         "Keep live-provider activation fail-closed while continuing independent IPLF-057B implementation."
       ],
       "data_impact": [
-        "No schema change. IP operation history remains immutable; source-report resolution, connector disconnect and credential evidence continue through their existing audited canonical writers."
+        "Add provider_key attribution columns plus tenant/provider spend-policy and expiring reservation tables. Existing billing usage, IP operation history, source-report resolution, connector disconnect, and credential evidence remain under their current audited canonical writers."
       ],
       "documentation_impact": [
         {
@@ -13612,7 +13624,7 @@
           "evidence": "Existing fail-closed provider and source claims remain accurate"
         }
       ],
-      "allocation_review": "2026-08-25 brutal duplicate-work review: IPLF-056B extends the shared provider control plane and composes IPLF-002/004/050/051/054 owners. No second source, registry, credential, health, cost, replay or dashboard owner was introduced. 2026-09-04: automated provider verification was narrowed to the existing readiness and billing owners; the removed paid canary was not replaced by a second provider health, balance, or cost owner.",
+      "allocation_review": "2026-08-25 brutal duplicate-work review: IPLF-056B extends the shared provider control plane and composes IPLF-002/004/050/051/054 owners. No second source, registry, credential, health, cost, replay or dashboard owner was introduced. 2026-09-04: automated provider verification was narrowed to the existing readiness and billing owners; the removed paid canary was not replaced by a second provider health, balance, or cost owner. The tenant/provider monthly policy, reservation, and provider-key attribution extend the existing SaaS billing report and provider status surfaces; no parallel cost ledger or admin dashboard was introduced.",
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified"

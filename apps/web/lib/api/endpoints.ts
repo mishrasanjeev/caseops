@@ -3568,7 +3568,11 @@ export type StatuteSectionCatalogListItem = {
   section_number: string;
   section_label: string | null;
   ordinal: number;
-  selection_state: "verified_selectable" | "verification_pending";
+  selection_state:
+    | "verified_selectable"
+    | "verification_pending"
+    | "quarantined"
+    | "retired";
 };
 
 export type StatuteSectionsListResponse = {
@@ -3987,6 +3991,14 @@ export type CaseTrackingProviderStatus = {
   provider: string;
   configured: boolean;
   reason: string | null;
+  performs_external_probe?: boolean;
+  provider_prepaid_balance_checked?: boolean;
+  workspace_monthly_spend_minor?: number;
+  workspace_monthly_limit_minor?: number | null;
+  workspace_monthly_remaining_minor?: number | null;
+  workspace_monthly_limit_unlimited?: boolean;
+  workspace_monthly_limit_currency?: string;
+  workspace_monthly_limit_policy_source?: string;
 };
 
 export type CaseTrackingSearchInput = {

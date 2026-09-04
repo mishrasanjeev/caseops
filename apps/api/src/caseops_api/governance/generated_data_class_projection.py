@@ -24,16 +24,16 @@ from caseops_api.governance.types import ReviewedDataClass
 PROJECTION_SCHEMA_VERSION = 1
 
 # Fingerprints of the exact artifacts this projection was rendered from.
-MAP_DOCUMENT_FINGERPRINT = "bad7f7926e57fd8750433c9cf0bb16337352f1a8de51e4f1f9bb6a198660d5ae"
-MAP_SCHEMA_FINGERPRINT = "1918fa00e0e7d53fd70bae5c36e22d7bc56909935e988cddddf42e394c8b5f53"
+MAP_DOCUMENT_FINGERPRINT = "dae459ee37c2687ac036785b5a69522cca7d3fd40c5df1bd83b434b644c0b054"
+MAP_SCHEMA_FINGERPRINT = "4def3ac2c8fcf3a45f73b05a6a01a52bc627d8669a4abe10c20255f410f33ec2"
 REGISTRY_028A_FINGERPRINT = "dd3c30cf69a9b498cea3820acb485a0368a72bf6d9348c2f0d430b5efa99802d"
 REGISTRY_027A_FINGERPRINT = "10b97a818b23d4fae8fe7f54b63edb50b0e04c16778cf0e646ef907f40e1ad96"
 # The ORM schema at render time. Compared against the live models at runtime, so
 # an image whose models moved after this file was rendered reports stale rather
 # than answering from a projection that no longer describes it.
-ORM_SCHEMA_FINGERPRINT = "106fe3f4da00141ab3b3a4a6be31fa6a71c5c60d8478f10dee92225b630ea4ee"
+ORM_SCHEMA_FINGERPRINT = "0d45a2f4591d7af17f0e056cd1240856fdcfd346d14194f71fad00a7c275a236"
 
-PROJECTION_ID = "35078aa24b5876ce67a0a73d6897b375e00b3a0bb6d19c2292708678a87d5aa5"
+PROJECTION_ID = "1727546dab74563bf9bfd77a4e7ebfdbcd563b0e8907e07bd9bbd029f9e443bc"
 
 # Every SQL table the repository-wide map inventories. Membership here is what
 # separates "inventoried but never reviewed" from "no such data class", which
@@ -111,6 +111,7 @@ INVENTORIED_SQL_TABLES = frozenset(
         "company_notice_ip_links",
         "company_notice_matter_links",
         "company_notices",
+        "company_provider_spend_policies",
         "connector_health_records",
         "connector_secret_rotation_evidence",
         "contract_activity",
@@ -144,6 +145,7 @@ INVENTORIED_SQL_TABLES = frozenset(
         "ethical_walls",
         "evaluation_cases",
         "evaluation_runs",
+        "forum_catalog_aliases",
         "forum_catalog_entries",
         "hearing_pack_items",
         "hearing_packs",
@@ -302,6 +304,7 @@ INVENTORIED_SQL_TABLES = frozenset(
         "production_billing_signoff_evidence",
         "production_billing_signoffs",
         "provider_cost_profiles",
+        "provider_spend_reservations",
         "recommendation_decisions",
         "recommendation_options",
         "recommendations",

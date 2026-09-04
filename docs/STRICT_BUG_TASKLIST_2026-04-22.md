@@ -1111,3 +1111,31 @@ bulk import stricter than the manual path it was meant to match. That rule is
 now annotated as superseded in place. Two structural guards close the class:
 `test_bulk_import_is_never_stricter_than_manual_creation` and
 `test_every_forum_the_template_offers_can_actually_be_imported`.
+
+## CaseOps BUG-007..009 - Ram 2026-09-04 providers and Bare Acts
+
+Source workbook: `C:\Users\mishr\Downloads\CaseOps_Bugs_Ram04Sep2026.xlsx`.
+Enhancement source:
+`C:\Users\mishr\Downloads\CaseOps_AI_Bulk_Upload04_Sep2026.docx`.
+
+The populated Bug Sheet contains three authoritative rows. Its Summary tab says
+four bugs with two High and two Medium; that copied summary is stale and must
+not be used as the issue count.
+
+| ID | Classification | Current verdict | Candidate correction |
+| --- | --- | --- | --- |
+| BUG-007 | Valid paid-provider access/accounting bug | `Inconclusive` pending deployed exact-release proof | eCourts human search, refresh, scheduled refresh, and source download use tenant/provider budget reservations and provider-keyed billing. The explicit automation marker blocks paid transport without using the tenant slug. |
+| BUG-008 | Valid Bare Act detail/coverage bug | `Inconclusive` pending deployed exact-release proof | Act details list every catalogued section with source and honest verified/pending/quarantined/retired state. Unverified text remains excluded from legal selection and AI grounding. |
+| BUG-009 | Valid paid-provider access/accounting bug | `Inconclusive` pending deployed exact-release proof | Licensed Indian Kanoon human retrieval uses the same account budget and billing report; automation reads readiness/balance only and cannot spend. |
+| ENH-FORUM-2026-09-04 | Valid court hierarchy and bulk-upload enhancement | `Partially fixed` | Manual and bulk flows now share reviewed aliases and contextual ambiguity handling for the supplied Delhi examples. All-India reviewed alias completeness remains open and is not replaced by guessed parser mappings. |
+| ADJ-LIFECYCLE-2026-09-04 | Reported matter reopening risk | `Inconclusive` pending persisted production audit | Read serialization no longer mutates a legacy closed row while projecting `disposed`; only the lifecycle endpoint may persist a reopen. Production state and audit events decide whether the report was an explicit transition or an unauthorized writer. |
+
+Required closure evidence:
+
+- one fresh local Docker run covering migration, PostgreSQL/index checks, API,
+  web, and the registered dated browser journey;
+- exact-main CI, security, and production deployment;
+- production nonbillable provider checks proving unchanged spend before/after;
+- production verification of both named companies' two active unlimited policy
+  rows; and
+- persisted lifecycle state plus audit evidence, not inference from UI labels.

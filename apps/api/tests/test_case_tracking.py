@@ -18,12 +18,16 @@ from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     AuditEvent,
     AuthorityDocument,
+    BillingAccount,
+    BillingSubscription,
+    BillingUsageEvent,
     CaseTrackingSupportMatrix,
     Company,
     CompanyMembership,
     Matter,
     MatterActivity,
     NotificationDeliveryIntent,
+    ProviderSpendReservation,
     TrackedCase,
     TrackedCaseBookmark,
     TrackedCaseProviderOperation,
@@ -154,6 +158,15 @@ class RecordingLiveCaseTrackingProvider(FakeCaseTrackingProvider):
     transport = None
 
 
+class PartiallyFailingBulkCaseTrackingProvider(FakeCaseTrackingProvider):
+    def refresh_cases(self, *, cnrs: list[str]) -> ProviderBulkRefreshResult:
+        self.bulk_refresh_calls.append(cnrs)
+        return ProviderBulkRefreshResult(
+            snapshots=[self.get_case_by_cnr(cnr=cnrs[0])],
+            errors={cnrs[1]: "temporary provider outage [provider_error]"},
+        )
+
+
 def test_provider_source_text_is_format_preserving_and_bounded() -> None:
     normalized, truncated = _source_text("heading\r\n\r\nbody\x00")
     assert normalized == "heading\n\nbody"
@@ -185,6 +198,11 @@ def test_case_tracking_provider_disabled_state_is_safe(client: TestClient) -> No
     status = client.get("/api/case-tracking/status", headers=auth_headers(token))
     assert status.status_code == 200, status.text
     assert status.json()["configured"] is False
+    assert status.json()["performs_external_probe"] is False
+    assert status.json()["provider_prepaid_balance_checked"] is False
+    assert status.json()["workspace_monthly_spend_minor"] == 0
+    assert status.json()["workspace_monthly_limit_minor"] == 100_000
+    assert status.json()["workspace_monthly_remaining_minor"] == 100_000
 
     search = client.post(
         "/api/case-tracking/search",
@@ -237,6 +255,9 @@ def test_automated_browser_marker_blocks_live_paid_search_before_transport(
     assert "paid search, retrieval, refresh, and download" in body["detail"]
     assert "live-user requests remain available" in body["detail"]
     assert "no external request was made" in body["detail"]
+    with get_session_factory()() as session:
+        assert session.scalar(select(func.count()).select_from(ProviderSpendReservation)) == 0
+        assert session.scalar(select(func.count()).select_from(BillingUsageEvent)) == 0
 
 
 def test_unmarked_authenticated_live_user_reaches_enabled_provider_adapter(
@@ -262,6 +283,11 @@ def test_unmarked_authenticated_live_user_reaches_enabled_provider_adapter(
         lambda: provider,
     )
     token = _bootstrap(client)
+    with get_session_factory()() as session:
+        company = session.scalar(select(Company))
+        assert company is not None
+        company.slug = "test-legal"
+        session.commit()
 
     response = client.post(
         "/api/case-tracking/search",
@@ -272,6 +298,63 @@ def test_unmarked_authenticated_live_user_reaches_enabled_provider_adapter(
     assert response.status_code == 200, response.text
     assert len(provider.search_calls) == 1
     assert provider.search_calls[0].cnr_number == "DLHC010012342026"
+    with get_session_factory()() as session:
+        usage = session.scalar(
+            select(BillingUsageEvent).where(BillingUsageEvent.provider_key == "ecourtsindia")
+        )
+        assert usage is not None
+        assert usage.usage_type == "case_tracking_search"
+        reservation = session.scalar(select(ProviderSpendReservation))
+        assert reservation is not None
+        assert reservation.status == "settled"
+
+
+def test_zero_cost_support_matrix_blocks_provider_before_transport(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_ENABLED", "true")
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_PROVIDER", "ecourtsindia")
+    monkeypatch.setenv("CASEOPS_ECOURTSINDIA_API_BASE_URL", "https://provider.example")
+    monkeypatch.setenv("CASEOPS_ECOURTSINDIA_API_TOKEN", "server-only-token")
+    get_settings.cache_clear()
+    provider = FakeCaseTrackingProvider()
+    monkeypatch.setattr(
+        "caseops_api.services.case_tracking.get_case_tracking_provider",
+        lambda: provider,
+    )
+    token = _bootstrap(client)
+    with get_session_factory()() as session:
+        session.add(
+            CaseTrackingSupportMatrix(
+                provider="ecourtsindia",
+                court="*",
+                bench_jurisdiction="All provider-published courts",
+                lookup_method="cnr_or_case_number",
+                refresh_cost_minor=0,
+                currency="INR",
+                legal_tos_status="approved",
+                enabled=True,
+                tenant_visible=True,
+            )
+        )
+        session.commit()
+
+    response = client.post(
+        "/api/case-tracking/search",
+        headers=auth_headers(token),
+        json={
+            "cnr_number": "DLHC010012342026",
+            "court_name": "Delhi High Court",
+        },
+    )
+
+    assert response.status_code == 503, response.text
+    assert response.json()["code"] == "provider_cost_policy"
+    assert provider.search_calls == []
+    with get_session_factory()() as session:
+        assert session.scalar(select(func.count()).select_from(ProviderSpendReservation)) == 0
+        assert session.scalar(select(func.count()).select_from(BillingUsageEvent)) == 0
 
 
 def test_provider_wide_support_scope_is_fallback_not_exact_override(
@@ -657,9 +740,7 @@ def test_ecourts_case_detail_round_trips_through_exact_case_number_search() -> N
                             "enumLookup": {
                                 "caseStatus": {"DISPOSED": "Disposed"},
                                 "courtCode": {
-                                    "2": (
-                                        "Chief Metropolitan Magistrate, New Delhi, PHC"
-                                    )
+                                    "2": ("Chief Metropolitan Magistrate, New Delhi, PHC")
                                 },
                             }
                         },
@@ -688,9 +769,7 @@ def test_ecourts_case_detail_round_trips_through_exact_case_number_search() -> N
                             "enumLookup": {
                                 "caseStatus": {"DISPOSED": "Disposed"},
                                 "courtCode": {
-                                    "DLND02": (
-                                        "Chief Metropolitan Magistrate, New Delhi, PHC"
-                                    )
+                                    "DLND02": ("Chief Metropolitan Magistrate, New Delhi, PHC")
                                 },
                             }
                         },
@@ -803,6 +882,11 @@ def test_payment_required_persists_recoverable_billing_provider_health(
         assert tracked_case.last_response_class == "billing"
         assert tracked_case.provider_freshness_status == "never_succeeded"
         assert "balance" not in (operation.error_redacted or "")
+        reservation = session.scalar(select(ProviderSpendReservation))
+        assert reservation is not None
+        assert reservation.status == "released"
+        assert session.scalar(select(func.count()).select_from(BillingAccount)) == 0
+        assert session.scalar(select(func.count()).select_from(BillingSubscription)) == 0
 
 
 def test_case_search_rejects_invented_court_code_before_provider_call(
@@ -1522,6 +1606,52 @@ def test_scheduler_skips_paid_provider_for_configured_test_tenant(
     assert qa_run.metadata["reason"] == "configured_test_tenant"
 
 
+def test_scheduler_settles_only_successful_case_costs_for_partial_batch(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    token = _bootstrap(client)
+    for index, cnr in enumerate(("DLHC010077772026", "DLHC010088882026"), start=1):
+        create = client.post(
+            "/api/case-tracking/bookmarks",
+            headers=auth_headers(token),
+            json={
+                "provider": "ecourtsindia",
+                "cnr_number": cnr,
+                "court_code": "DLHC",
+                "court_name": "Delhi High Court",
+                "case_title": f"Partial scheduler fixture {index}",
+            },
+        )
+        assert create.status_code == 201, create.text
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_ENABLED", "true")
+    get_settings.cache_clear()
+    try:
+        provider = PartiallyFailingBulkCaseTrackingProvider()
+        with get_session_factory()() as session:
+            run = poll_tracked_cases(session, provider=provider, force=True)[0]
+            assert run.status == "partial"
+            assert run.checked_count == 1
+            assert run.error_count == 1
+            assert run.metadata["charged_case_count"] == 1
+            assert run.metadata["charged_cost_minor"] == 15
+            usage_rows = list(
+                session.scalars(
+                    select(BillingUsageEvent).where(
+                        BillingUsageEvent.provider_key == "ecourtsindia"
+                    )
+                )
+            )
+            assert len(usage_rows) == 1
+            assert usage_rows[0].estimated_cost_minor == 15
+            reservation = session.scalar(select(ProviderSpendReservation))
+            assert reservation is not None
+            assert reservation.status == "settled"
+            assert reservation.amount_minor == 15
+    finally:
+        get_settings.cache_clear()
+
+
 def test_disposed_matter_blocks_case_tracking_refresh_before_provider_call(
     client: TestClient,
     monkeypatch,
@@ -1742,7 +1872,7 @@ def test_case_tracking_source_download_uses_server_side_provider_auth(
             stored = session.get(TrackedCaseUpdate, update["id"])
             assert stored is not None
             stored.source_text_sha256 = "0" * 64
-            session.flush()
+            session.commit()
             with pytest.raises(HTTPException) as corrupted:
                 download_case_tracking_source(
                     session,
@@ -1757,7 +1887,7 @@ def test_case_tracking_source_download_uses_server_side_provider_auth(
                 stored.source_text.encode("utf-8")
             ).hexdigest()
             stored.source_text_truncated = True
-            session.flush()
+            session.commit()
             with pytest.raises(HTTPException) as truncated:
                 download_case_tracking_source(
                     session,

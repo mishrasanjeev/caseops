@@ -20,6 +20,14 @@ class CaseTrackingProviderStatusResponse(BaseModel):
     provider: str
     configured: bool
     reason: str | None = None
+    performs_external_probe: bool = False
+    provider_prepaid_balance_checked: bool = False
+    workspace_monthly_spend_minor: int = 0
+    workspace_monthly_limit_minor: int | None = None
+    workspace_monthly_remaining_minor: int | None = None
+    workspace_monthly_limit_unlimited: bool = False
+    workspace_monthly_limit_currency: str = "INR"
+    workspace_monthly_limit_policy_source: str
 
 
 def _normalized_cnr(value: str | None) -> str | None:

@@ -3801,6 +3801,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/courts/forum-catalog/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Resolve an exact court name or reviewed alias */
+        get: operations["resolve_forum_catalog_entry_api_courts_forum_catalog_resolve_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/courts/judges/{judge_id}": {
         parameters: {
             query?: never;
@@ -14933,6 +14950,28 @@ export interface components {
             /** Tax Rate Bps */
             tax_rate_bps: number;
         };
+        /** BillingProviderSpendRow */
+        BillingProviderSpendRow: {
+            /**
+             * Currency
+             * @default INR
+             */
+            currency: string;
+            /** Label */
+            label: string;
+            /** Monthly Limit Minor */
+            monthly_limit_minor?: number | null;
+            /** Policy Source */
+            policy_source: string;
+            /** Provider Key */
+            provider_key: string;
+            /** Remaining Minor */
+            remaining_minor?: number | null;
+            /** Spent Minor */
+            spent_minor: number;
+            /** Unlimited */
+            unlimited: boolean;
+        };
         /** BillingSubscriptionRecord */
         BillingSubscriptionRecord: {
             /** Billing Interval */
@@ -14982,6 +15021,8 @@ export interface components {
             by_feature: components["schemas"]["BillingUsageBreakdownRow"][];
             /** By Matter */
             by_matter: components["schemas"]["BillingUsageBreakdownRow"][];
+            /** By Provider */
+            by_provider?: components["schemas"]["BillingProviderSpendRow"][];
             /** By Tracked Case */
             by_tracked_case: components["schemas"]["BillingUsageBreakdownRow"][];
             /** By User */
@@ -16194,10 +16235,41 @@ export interface components {
             configured: boolean;
             /** Enabled */
             enabled: boolean;
+            /**
+             * Performs External Probe
+             * @default false
+             */
+            performs_external_probe: boolean;
             /** Provider */
             provider: string;
+            /**
+             * Provider Prepaid Balance Checked
+             * @default false
+             */
+            provider_prepaid_balance_checked: boolean;
             /** Reason */
             reason?: string | null;
+            /**
+             * Workspace Monthly Limit Currency
+             * @default INR
+             */
+            workspace_monthly_limit_currency: string;
+            /** Workspace Monthly Limit Minor */
+            workspace_monthly_limit_minor?: number | null;
+            /** Workspace Monthly Limit Policy Source */
+            workspace_monthly_limit_policy_source: string;
+            /**
+             * Workspace Monthly Limit Unlimited
+             * @default false
+             */
+            workspace_monthly_limit_unlimited: boolean;
+            /** Workspace Monthly Remaining Minor */
+            workspace_monthly_remaining_minor?: number | null;
+            /**
+             * Workspace Monthly Spend Minor
+             * @default 0
+             */
+            workspace_monthly_spend_minor: number;
         };
         /** CaseTrackingRefreshResponse */
         CaseTrackingRefreshResponse: {
@@ -20165,6 +20237,19 @@ export interface components {
             /** State */
             state: string | null;
         };
+        /** ForumCatalogResolveResponse */
+        ForumCatalogResolveResponse: {
+            /** Candidates */
+            candidates?: components["schemas"]["ForumCatalogEntryRecord"][];
+            /** Normalized Query */
+            normalized_query: string;
+            resolved_entry?: components["schemas"]["ForumCatalogEntryRecord"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "resolved" | "ambiguous" | "not_found";
+        };
         /** ForumCatalogResponse */
         ForumCatalogResponse: {
             /** Entries */
@@ -21379,8 +21464,17 @@ export interface components {
              * @enum {string}
              */
             health: "ready" | "blocked";
+            /** Monthly Limit Minor */
+            monthly_limit_minor?: number | null;
+            /** Monthly Limit Policy Source */
+            monthly_limit_policy_source: string;
+            /**
+             * Monthly Limit Unlimited
+             * @default false
+             */
+            monthly_limit_unlimited: boolean;
             /** Monthly Remaining Minor */
-            monthly_remaining_minor: number;
+            monthly_remaining_minor?: number | null;
             /** Monthly Spend Minor */
             monthly_spend_minor: number;
             /**
@@ -50556,6 +50650,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ForumCatalogResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resolve_forum_catalog_entry_api_courts_forum_catalog_resolve_get: {
+        parameters: {
+            query: {
+                district?: string | null;
+                forum_type?: string | null;
+                query: string;
+                state?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForumCatalogResolveResponse"];
                 };
             };
             /** @description Validation Error */

@@ -287,6 +287,23 @@ U / V / W deferred.
 
 ---
 
+## Ram 2026-09-04 coverage reconciliation
+
+| Scope | Existing owner | Current candidate | Non-duplicate boundary | Residual |
+|---|---|---|---|---|
+| Bare Act listing/detail | `MOD-TS-017`, `IPLF-006B/006C`, `J05`, `M05` | Act detail lists every catalogued section with source and verification state; legal selection remains verified-only. | Extends the existing `Statute`/`StatuteSection` read surface and source-governance predicate. | Verified official section text is still incomplete and must be populated through controlled source ingestion. |
+| eCourts live use and spend | `J03`, `J08`, `M02`, `M08`, `IPLF-056B` | Authenticated human search, refresh, scheduled refresh, and source download use one provider budget reservation and usage ledger. | No second adapter, scheduler, support matrix, operation log, or health UI. | Runtime credentials, provider billing, support scope, and positive INR prices remain external readiness gates. |
+| Indian Kanoon live use and spend | `J05`, `M04`, `IPLF-054/056B` | Licensed human calls use the shared per-provider budget and billing report; automated requests remain nonbillable. | No scraper, second corpus, cache, source action, or provider dashboard. | A configured credential is not proof of a meaningful live result. |
+| Court hierarchy and aliases | `J02`, `J06`, `M02`, `M05`, Legal Workspace S4, existing matter import | Manual and bulk creation resolve the same active canonical catalog and reviewed aliases; ambiguous complexes require context. | Adds alias evidence to the existing forum catalog instead of parser branches or an alternative court master. | All-India reviewed alias coverage is partial. |
+| Matter reopening | `J03`, `M02`, existing lifecycle endpoint | Read serialization is side-effect free; lifecycle state remains controlled by the dedicated CAS route. | No new status writer or recovery route. | Production verdict requires persisted state and audit inspection on the exact release. |
+| Provider spend publication | `J11`, `J14`, `M10`, `M14`, existing billing usage report | Tenant admins see provider spend, limit, remaining amount, currency, unlimited state, and policy source. | Reuses billing usage events/attribution and the existing admin page. | Named unlimited policies must be verified against production company IDs after migration. |
+
+Acceptance IDs are `US-058..061`, `FT-083..091`, `NFT-022`, and
+`SEC-028..029` in `docs/PRD_CODEX_2026-04-23.md`. The dated executable browser
+owner is `tests/e2e/provider-spend-forum-statute-2026-09-04.spec.ts`; production
+automation uses `tests/e2e/provider-nonbillable-live-2026-09-04-prod.spec.ts`
+and must not perform a credit-bearing request.
+
 ## Execution log — 2026-04-21 (evening)
 
 Hari file II (`CaseOps Bugs list II_Hari21Apr2026.xlsx`), Pine Labs

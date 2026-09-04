@@ -19,7 +19,7 @@ from defusedxml.common import DefusedXmlException
 from fastapi import HTTPException, status
 from pydantic import ValidationError
 from sqlalchemy import func, select, update
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from caseops_api.db.models import (
     DEFAULT_MATTER_STATUS,
@@ -51,6 +51,11 @@ from caseops_api.schemas.matter_imports import (
 )
 from caseops_api.schemas.matters import MatterCreateRequest
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.forum_catalog import (
+    active_verified_aliases,
+    forum_entry_identity_keys,
+    normalize_forum_catalog_value,
+)
 from caseops_api.services.matter_access import visible_matters_filter
 from caseops_api.services.matters import create_matter
 from caseops_api.services.notification_delivery import enqueue_notification_delivery_intent
@@ -318,17 +323,17 @@ def _normalise_raw_row(raw: dict[str, str]) -> dict[str, str]:
 
 
 def _canonical_header_set(values: list[str]) -> set[str]:
-    return {
-        key for value in values if value and (key := _canonical_header(value)) is not None
-    }
+    return {key for value in values if value and (key := _canonical_header(value)) is not None}
 
 
 def _header_score(values: list[str]) -> int:
     canonical = _canonical_header_set(values)
     # Required identity columns distinguish the real import sheet from
     # instruction/reference sheets that may also mention status/forum names.
-    return len(canonical) + (10 if "title" in canonical else 0) + (
-        10 if "matter_code" in canonical else 0
+    return (
+        len(canonical)
+        + (10 if "title" in canonical else 0)
+        + (10 if "matter_code" in canonical else 0)
     )
 
 
@@ -399,9 +404,7 @@ def _detect_mapping_kind(
 
 def _parse_csv(content: bytes) -> list[ParsedMatterImportRow]:
     text = _decode_csv_text(content)
-    delimiter_candidates: list[
-        tuple[int, int, list[tuple[int, list[str], frozenset[int]]]]
-    ] = []
+    delimiter_candidates: list[tuple[int, int, list[tuple[int, list[str], frozenset[int]]]]] = []
     for delimiter_index, delimiter in enumerate((",", ";", "\t", "|")):
         try:
             candidate_rows: list[tuple[int, list[str], frozenset[int]]] = []
@@ -566,9 +569,7 @@ def _validate_xlsx_archive(archive: zipfile.ZipFile) -> None:
         if entry.flag_bits & 0x1:
             _raise_bad_request("Encrypted XLSX matter import files are not supported.")
         if entry.compress_type not in {zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED}:
-            _raise_bad_request(
-                "XLSX matter import uses an unsupported ZIP compression method."
-            )
+            _raise_bad_request("XLSX matter import uses an unsupported ZIP compression method.")
         if entry.file_size > MATTER_IMPORT_XLSX_MAX_ENTRY_BYTES:
             _raise_bad_request("XLSX matter import contains an oversized archive entry.")
         total_uncompressed += entry.file_size
@@ -655,21 +656,15 @@ def _xlsx_worksheet_paths(archive: zipfile.ZipFile) -> list[str]:
     except (KeyError, ElementTree.ParseError, DefusedXmlException):
         return fallback
 
-    relationship_namespace = {
-        "r": "http://schemas.openxmlformats.org/package/2006/relationships"
-    }
-    workbook_namespace = {
-        "m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
-    }
+    relationship_namespace = {"r": "http://schemas.openxmlformats.org/package/2006/relationships"}
+    workbook_namespace = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
     rels_by_id = {
         relation.attrib.get("Id", ""): relation.attrib.get("Target", "")
         for relation in relationships_root.findall(".//r:Relationship", relationship_namespace)
         if relation.attrib.get("Target")
     }
     ordered: list[str] = []
-    relationship_id_attr = (
-        "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
-    )
+    relationship_id_attr = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
     for sheet in workbook_root.findall(".//m:sheets/m:sheet", workbook_namespace):
         target = rels_by_id.get(sheet.attrib.get(relationship_id_attr, ""))
         if not target:
@@ -709,9 +704,7 @@ def _xlsx_shared_strings(
                         "XLSX matter import contains malformed nested shared strings."
                     )
                 if len(shared_strings) >= MATTER_IMPORT_XLSX_MAX_SHARED_STRINGS:
-                    _raise_bad_request(
-                        "XLSX matter import contains too many shared strings."
-                    )
+                    _raise_bad_request("XLSX matter import contains too many shared strings.")
                 current_pieces = []
                 current_text_chars = 0
             continue
@@ -720,9 +713,7 @@ def _xlsx_shared_strings(
             piece = item.text or ""
             current_text_chars += len(piece)
             if current_text_chars > MATTER_IMPORT_XLSX_MAX_SHARED_STRING_CHARS:
-                _raise_bad_request(
-                    "XLSX matter import contains an oversized shared string."
-                )
+                _raise_bad_request("XLSX matter import contains an oversized shared string.")
             current_pieces.append(piece)
         elif item.tag == item_tag:
             if current_pieces is None:
@@ -785,8 +776,7 @@ def _xlsx_rows(
         else:
             max_row_text = str(MATTER_IMPORT_XLSX_MAX_ROWS)
             if len(raw_row_number) > len(max_row_text) or (
-                len(raw_row_number) == len(max_row_text)
-                and raw_row_number > max_row_text
+                len(raw_row_number) == len(max_row_text) and raw_row_number > max_row_text
             ):
                 _raise_bad_request(
                     "XLSX matter import contains a row beyond the Excel safety limit."
@@ -855,10 +845,7 @@ def _parse_xlsx(content: bytes) -> list[ParsedMatterImportRow]:
                     -sheet_index,
                     sheet_rows,
                 )
-                if (
-                    selected_worksheet is None
-                    or candidate[:5] > selected_worksheet[:5]
-                ):
+                if selected_worksheet is None or candidate[:5] > selected_worksheet[:5]:
                     selected_worksheet = candidate
     except (
         KeyError,
@@ -890,11 +877,7 @@ def _parse_xlsx(content: bytes) -> list[ParsedMatterImportRow]:
         }
         if uses_1904_date_system:
             for header in headers:
-                if (
-                    header
-                    and _canonical_header(header) == "filing_date"
-                    and header in raw
-                ):
+                if header and _canonical_header(header) == "filing_date" and header in raw:
                     raw[header] = _normalise_1904_xlsx_date(raw[header])
         effective_unsafe_indices = set(header_unsafe_indices) | set(unsafe_indices)
         unsafe_headers: set[str] = set()
@@ -1134,9 +1117,7 @@ def _business_match_key(value: str | None) -> str:
     # Preserve symbols that carry meaning in names such as C++ and C#
     # instead of collapsing distinct practice areas or teams to "c".
     normalized = normalized.replace("+", " plus ").replace("#", " sharp ")
-    return " ".join(
-        "".join(char if char.isalnum() else " " for char in normalized).split()
-    )
+    return " ".join("".join(char if char.isalnum() else " " for char in normalized).split())
 
 
 def _exact_business_match_key(value: str | None) -> str:
@@ -1170,9 +1151,9 @@ def _add_unique_label_lookup(
         lookup[key] = label
         return
     existing = lookup[key]
-    if existing is not None and _exact_business_match_key(
-        existing
-    ) != _exact_business_match_key(label):
+    if existing is not None and _exact_business_match_key(existing) != _exact_business_match_key(
+        label
+    ):
         lookup[key] = None
 
 
@@ -1203,10 +1184,7 @@ def _resolve_business_label(
     if exact_key in exact_lookup and exact_lookup[exact_key] is not None:
         return exact_lookup[exact_key] or value
     normalized_key = _business_match_key(value)
-    if (
-        normalized_key in normalized_lookup
-        and normalized_lookup[normalized_key] is not None
-    ):
+    if normalized_key in normalized_lookup and normalized_lookup[normalized_key] is not None:
         return normalized_lookup[normalized_key] or value
     # A non-catalog or ambiguous presentation-equivalent label is valid
     # business data. Preserve it instead of silently choosing another label.
@@ -1394,22 +1372,11 @@ def _catalog_category(entry: ForumCatalogEntry) -> str:
 
 
 def _forum_entry_aliases(entry: ForumCatalogEntry) -> tuple[str, ...]:
-    raw = entry.aliases_json
-    if not isinstance(raw, list):
-        return ()
-    return tuple(
-        alias.strip()
-        for alias in raw
-        if isinstance(alias, str) and alias.strip()
-    )
+    return active_verified_aliases(entry)
 
 
 def _forum_entry_identity_keys(entry: ForumCatalogEntry) -> set[str]:
-    return {
-        _controlled_value_key(value)
-        for value in (entry.name, *_forum_entry_aliases(entry))
-        if value
-    }
+    return forum_entry_identity_keys(entry)
 
 
 def _forum_entry_match_keys(entry: ForumCatalogEntry) -> set[str]:
@@ -1422,7 +1389,7 @@ def _forum_entry_match_keys(entry: ForumCatalogEntry) -> set[str]:
         entry.city,
     }
     return {
-        *(_controlled_value_key(value) for value in values if value),
+        *(normalize_forum_catalog_value(value) for value in values if value),
         *_forum_entry_identity_keys(entry),
     }
 
@@ -1493,7 +1460,7 @@ def _exact_forum_candidate_matches_context(
     supplied_city: str,
     supplied_consumer_level: str,
 ) -> bool:
-    if supplied_court and _controlled_value_key(supplied_court) not in (
+    if supplied_court and normalize_forum_catalog_value(supplied_court) not in (
         _forum_entry_match_keys(entry)
     ):
         return False
@@ -1555,7 +1522,9 @@ def _resolve_import_forum(
                 court_name=court_text or None,
                 error="Forum level does not match the selected catalog entry.",
             )
-        if court_text and _controlled_value_key(court_text) not in _forum_entry_match_keys(entry):
+        if court_text and normalize_forum_catalog_value(court_text) not in (
+            _forum_entry_match_keys(entry)
+        ):
             return _ResolvedImportForum(
                 forum_level=None,
                 court_name=court_text,
@@ -1572,7 +1541,7 @@ def _resolve_import_forum(
     # interpreting the same text as a hierarchy/category. Only one active match
     # may populate the complete lineage; collisions always fail closed.
     identity_candidates = catalog.exact_courts_by_key.get(
-        _controlled_value_key(forum_text),
+        normalize_forum_catalog_value(forum_text),
         (),
     )
     forum_category = _FORUM_CATEGORY_ALIASES.get(_controlled_value_key(forum_text))
@@ -1657,7 +1626,7 @@ def _resolve_import_forum(
         )
 
     candidates = list(catalog.entries_by_category.get(category, ()))
-    match_key = _controlled_value_key(court_text)
+    match_key = normalize_forum_catalog_value(court_text)
     if match_key:
         exact = [entry for entry in candidates if match_key in _forum_entry_match_keys(entry)]
         if len(exact) == 1:
@@ -1668,9 +1637,7 @@ def _resolve_import_forum(
             supplied_tokens = _forum_match_tokens(court_text)
             if supplied_tokens:
                 subset = [
-                    entry
-                    for entry in candidates
-                    if supplied_tokens <= _forum_entry_tokens(entry)
+                    entry for entry in candidates if supplied_tokens <= _forum_entry_tokens(entry)
                 ]
                 if len(subset) == 1:
                     return _resolved_catalog_entry(subset[0])
@@ -1766,8 +1733,7 @@ def _directory_lookups(
         if membership.user is not None and membership.user.is_active
     ]
     members_by_email = {
-        membership.user.email.strip().lower(): membership
-        for membership in active_memberships
+        membership.user.email.strip().lower(): membership for membership in active_memberships
     }
     # Client-maintained files name people rather than quoting work emails, and
     # the header aliases already accept a bare "Matter Owner"/"Responsible
@@ -1912,6 +1878,7 @@ def dry_run_bulk_matter_import(
     forum_catalog_entries = list(
         session.scalars(
             select(ForumCatalogEntry)
+            .options(selectinload(ForumCatalogEntry.aliases))
             .where(ForumCatalogEntry.is_active.is_(True))
             .order_by(ForumCatalogEntry.display_order, ForumCatalogEntry.id)
         )
@@ -1929,8 +1896,7 @@ def dry_run_bulk_matter_import(
             for header, value in row.raw.items()
         }
         canonical_input = {
-            header: ("" if unsafe_by_header[header] else value)
-            for header, value in row.raw.items()
+            header: ("" if unsafe_by_header[header] else value) for header, value in row.raw.items()
         }
         canonical_rows.append(
             (
@@ -1987,9 +1953,7 @@ def dry_run_bulk_matter_import(
             else None
         )
         supplied_status = row.get("status", "").strip()
-        matter_status = (
-            _normalise_matter_status(supplied_status) or DEFAULT_MATTER_STATUS.value
-        )
+        matter_status = _normalise_matter_status(supplied_status) or DEFAULT_MATTER_STATUS.value
         description = row.get("description", "").strip() or None
         resolved_forum = _resolve_import_forum(
             catalog=forum_catalog,
@@ -2015,9 +1979,7 @@ def dry_run_bulk_matter_import(
         filing_date, filing_date_error = _parse_import_date(row.get("filing_date"))
         owner_email = row.get("owner_email", "").strip().lower() or None
         team_slug = row.get("team_slug", "").strip() or None
-        responsible_lawyer_email = (
-            row.get("responsible_lawyer_email", "").strip().lower() or None
-        )
+        responsible_lawyer_email = row.get("responsible_lawyer_email", "").strip().lower() or None
         # The stored value is casefolded for matching; error messages quote the
         # text the user actually typed so the row is findable in their file.
         owner_supplied = row.get("owner_email", "").strip() or None
@@ -2084,8 +2046,7 @@ def dry_run_bulk_matter_import(
                 )
         if team_lookup_ambiguous:
             errors.append(
-                "Assigned team matches more than one active team; use an exact team "
-                "name or slug."
+                "Assigned team matches more than one active team; use an exact team name or slug."
             )
         elif team_slug and team is None:
             errors.append("Assigned team must match an active team in this company.")
@@ -2321,10 +2282,10 @@ def dry_run_bulk_matter_import(
         summary=summary,
         rows=row_plans,
         limitations=[
-            "Dry-run only: no matters, attachments, storage objects, OCR, corpus jobs, " +
-            "or embeddings are created.",
-            "Commit execution, persistent import jobs, and Google Drive import are " +
-            "separate follow-up milestones.",
+            "Dry-run only: no matters, attachments, storage objects, OCR, corpus jobs, "
+            + "or embeddings are created.",
+            "Commit execution, persistent import jobs, and Google Drive import are "
+            + "separate follow-up milestones.",
         ],
     )
 
@@ -2468,9 +2429,7 @@ def _matter_template_xlsx_bytes(
             [
                 statuses[index] if index < len(statuses) else "",
                 forums[index] if index < len(forums) else "",
-                _DEFAULT_PRACTICE_AREAS[index]
-                if index < len(_DEFAULT_PRACTICE_AREAS)
-                else "",
+                _DEFAULT_PRACTICE_AREAS[index] if index < len(_DEFAULT_PRACTICE_AREAS) else "",
             ]
         )
     instruction_rows = [
@@ -2598,7 +2557,7 @@ def _matter_template_xlsx_bytes(
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
         + "".join(
-            '<Relationship '
+            "<Relationship "
             f'Id="rId{index}" Type="http://schemas.openxmlformats.org/'
             'officeDocument/2006/relationships/worksheet" '
             f'Target="worksheets/sheet{index}.xml"/>'
@@ -2647,6 +2606,7 @@ def matter_import_template(
         entries = list(
             session.scalars(
                 select(ForumCatalogEntry)
+                .options(selectinload(ForumCatalogEntry.aliases))
                 .where(ForumCatalogEntry.is_active.is_(True))
                 .order_by(ForumCatalogEntry.display_order, ForumCatalogEntry.id)
             )
@@ -2710,9 +2670,7 @@ def _load_job(
     job = session.scalar(
         select(MatterBulkImportJob)
         .options(
-            joinedload(MatterBulkImportJob.created_by_membership).joinedload(
-                CompanyMembership.user
-            )
+            joinedload(MatterBulkImportJob.created_by_membership).joinedload(CompanyMembership.user)
         )
         .where(
             MatterBulkImportJob.id == job_id,
@@ -2937,9 +2895,7 @@ def list_matter_imports(
     statement = (
         select(MatterBulkImportJob)
         .options(
-            joinedload(MatterBulkImportJob.created_by_membership).joinedload(
-                CompanyMembership.user
-            )
+            joinedload(MatterBulkImportJob.created_by_membership).joinedload(CompanyMembership.user)
         )
         .outerjoin(
             CompanyMembership,
@@ -3028,9 +2984,7 @@ def _payload_from_normalized(normalized: dict[str, object]) -> MatterCreateReque
             "filing_date": normalized.get("filing_date"),
             "assignee_membership_id": normalized.get("owner_membership_id"),
             "team_id": normalized.get("team_id"),
-            "responsible_lawyer_membership_id": normalized.get(
-                "responsible_lawyer_membership_id"
-            ),
+            "responsible_lawyer_membership_id": normalized.get("responsible_lawyer_membership_id"),
         }
     )
 

@@ -5099,6 +5099,11 @@
           "sql_type": "VARCHAR(36)",
           "nullable": true
         },
+        "provider_key": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(80)",
+          "nullable": true
+        },
         "provider_units": {
           "category_id": "external_or_provider_identifier",
           "sql_type": "INTEGER",
@@ -5161,6 +5166,11 @@
         "metadata_json": {
           "category_id": "domain_attribute",
           "sql_type": "JSON",
+          "nullable": true
+        },
+        "provider_key": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(80)",
           "nullable": true
         },
         "quantity": {
@@ -6626,6 +6636,65 @@
         "summary": {
           "category_id": "domain_attribute",
           "sql_type": "TEXT",
+          "nullable": true
+        },
+        "updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        }
+      }
+    },
+    {
+      "id": "company_provider_spend_policies",
+      "table_name": "company_provider_spend_policies",
+      "purpose": "Repository SQL persistence class `company_provider_spend_policies`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "billing_provider_evidence",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "currency": {
+          "category_id": "financial_or_payment_data",
+          "sql_type": "VARCHAR(8)",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "is_active": {
+          "category_id": "domain_attribute",
+          "sql_type": "BOOLEAN",
+          "nullable": false
+        },
+        "monthly_limit_minor": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": true
+        },
+        "policy_source": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(160)",
+          "nullable": false
+        },
+        "provider_key": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(80)",
+          "nullable": false
+        },
+        "reason": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(500)",
           "nullable": true
         },
         "updated_at": {
@@ -9463,6 +9532,70 @@
       }
     },
     {
+      "id": "forum_catalog_aliases",
+      "table_name": "forum_catalog_aliases",
+      "purpose": "Repository SQL persistence class `forum_catalog_aliases`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "public_or_licensed_legal_reference",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "alias": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(255)",
+          "nullable": false
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "forum_catalog_entry_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(120)",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "is_active": {
+          "category_id": "domain_attribute",
+          "sql_type": "BOOLEAN",
+          "nullable": false
+        },
+        "normalized_alias": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(255)",
+          "nullable": false
+        },
+        "reviewed_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "source_name": {
+          "category_id": "personal_or_contact_data",
+          "sql_type": "VARCHAR(160)",
+          "nullable": false
+        },
+        "source_url": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(500)",
+          "nullable": true
+        },
+        "updated_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "verification_status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(32)",
+          "nullable": false
+        }
+      }
+    },
+    {
       "id": "forum_catalog_entries",
       "table_name": "forum_catalog_entries",
       "purpose": "Repository SQL persistence class `forum_catalog_entries`; its exact column inventory is intentionally versioned below.",
@@ -9530,6 +9663,11 @@
           "nullable": false
         },
         "name": {
+          "category_id": "personal_or_contact_data",
+          "sql_type": "VARCHAR(255)",
+          "nullable": false
+        },
+        "normalized_name": {
           "category_id": "personal_or_contact_data",
           "sql_type": "VARCHAR(255)",
           "nullable": false
@@ -24205,6 +24343,75 @@
       }
     },
     {
+      "id": "provider_spend_reservations",
+      "table_name": "provider_spend_reservations",
+      "purpose": "Repository SQL persistence class `provider_spend_reservations`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "billing_provider_evidence",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "actor_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        },
+        "amount_minor": {
+          "category_id": "financial_or_payment_data",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "currency": {
+          "category_id": "financial_or_payment_data",
+          "sql_type": "VARCHAR(8)",
+          "nullable": false
+        },
+        "expires_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "operation_key": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(120)",
+          "nullable": false
+        },
+        "provider_key": {
+          "category_id": "external_or_provider_identifier",
+          "sql_type": "VARCHAR(80)",
+          "nullable": false
+        },
+        "released_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "settled_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(24)",
+          "nullable": false
+        }
+      }
+    },
+    {
       "id": "recommendation_decisions",
       "table_name": "recommendation_decisions",
       "purpose": "Repository SQL persistence class `recommendation_decisions`; its exact column inventory is intentionally versioned below.",
@@ -28042,12 +28249,12 @@
       }
     }
   ],
-  "schema_fingerprint": "1918fa00e0e7d53fd70bae5c36e22d7bc56909935e988cddddf42e394c8b5f53",
+  "schema_fingerprint": "4def3ac2c8fcf3a45f73b05a6a01a52bc627d8669a4abe10c20255f410f33ec2",
   "index_inventory": {
-    "orm_index_count": 1647,
-    "orm_index_fingerprint": "8f5dadf74574ea69c6a8673e16faf82e984122d303e8e245757eb9731bec9751",
-    "migration_index_count": 697,
-    "migration_index_fingerprint": "a4e79ee6d6c4bf5c3a9379f05e6719c9b924b903dec2b1c6ea17f9a6699c04ec",
+    "orm_index_count": 1663,
+    "orm_index_fingerprint": "cc2dde2530c54e1d6e3d01920b2ae47416cefffa1b8100ca3404cd3fbf2245cb",
+    "migration_index_count": 709,
+    "migration_index_fingerprint": "5f4f226e3520a2fded03ff8edac1a74058a9425143d56e3e42fd77a185c22ec8",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."
   }
 }

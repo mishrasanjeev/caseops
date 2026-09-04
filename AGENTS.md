@@ -298,3 +298,24 @@ requirements when using the fallback.
   checks use the API-owned `/api/build` route and the web-owned
   `/api/release-identity` route; never assume the services expose symmetric
   identity paths.
+- Every credit-bearing provider path must reserve against one persisted
+  tenant/provider monthly policy and publish the settled spend through the
+  existing billing owner. Human entitlement must not be inferred from a
+  test-looking slug; the explicit automation marker is authoritative, and
+  unlimited access must come from an active policy row rather than a company
+  name check in request code.
+- Provider entitlement and readiness reads must remain read-only before an
+  independent spend reservation. A helper that silently creates a subscription
+  or flushes unrelated state can deadlock SQLite tests and hold production
+  locks across provider I/O. Scheduled workflows that already own a writer
+  transaction may reserve in that transaction, commit, and only then call the
+  provider.
+- Shared court-complex labels are not unique legal identities. Resolve one
+  active canonical court or reviewed alias using state, district, level, and
+  category context; preserve the original input and reject zero or multiple
+  candidates. Never let a short consumer-forum name shadow district-court
+  aliases or encode location guesses in a spreadsheet parser.
+- Read serializers must not mutate lifecycle fields to make legacy state look
+  consistent. Project the response from an immutable payload, then diagnose any
+  reported reopening from persisted status, lifecycle version, and audit events.
+  Only the dedicated lifecycle command may persist a controlled reopen.

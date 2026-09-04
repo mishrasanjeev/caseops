@@ -14,7 +14,7 @@ from urllib.parse import urlsplit
 
 import httpx
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from caseops_api.core.settings import get_settings
@@ -23,7 +23,7 @@ from caseops_api.db.models import (
     AuthorityResearchReport,
     AuthorityResearchReportSource,
     BillingSubscription,
-    BillingUsageEvent,
+    Company,
     CompanyMembership,
     ProviderCostCategory,
 )
@@ -42,6 +42,13 @@ from caseops_api.schemas.indian_kanoon import (
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.paid_provider_safety import assert_paid_provider_call_allowed
 from caseops_api.services.provider_costs import verified_actual_cost_minor
+from caseops_api.services.provider_spend import (
+    provider_spend_minor,
+    release_provider_spend,
+    reserve_provider_spend,
+    resolve_provider_spend_policy,
+    settle_provider_spend,
+)
 from caseops_api.services.saas_billing import record_usage
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.source_actions import inspect_source_action, inspect_source_target_action
@@ -209,6 +216,18 @@ def indian_kanoon_health(
     month_start = day_start.replace(day=1)
     daily_spend = _period_cost(session, company_id=company_id, start=day_start)
     monthly_spend = _period_cost(session, company_id=company_id, start=month_start)
+    company = session.get(Company, company_id)
+    if company is None:
+        raise _problem(
+            http_status=status.HTTP_404_NOT_FOUND,
+            code="provider_configuration",
+            message="Workspace provider policy could not be resolved.",
+        )
+    policy = resolve_provider_spend_policy(
+        session,
+        company=company,
+        provider_key=PROVIDER_KEY,
+    )
     return IndianKanoonHealthResponse(
         readiness=readiness,
         health="ready" if readiness.external_calls_enabled else "blocked",
@@ -216,7 +235,14 @@ def indian_kanoon_health(
         daily_spend_minor=daily_spend,
         daily_remaining_minor=max(readiness.daily_budget_minor - daily_spend, 0),
         monthly_spend_minor=monthly_spend,
-        monthly_remaining_minor=max(readiness.monthly_budget_minor - monthly_spend, 0),
+        monthly_remaining_minor=(
+            None
+            if policy.unlimited
+            else max(int(policy.monthly_limit_minor or 0) - monthly_spend, 0)
+        ),
+        monthly_limit_minor=policy.monthly_limit_minor,
+        monthly_limit_unlimited=policy.unlimited,
+        monthly_limit_policy_source=policy.source,
     )
 
 
@@ -295,39 +321,12 @@ def _set_cache(key: str, payload: dict[str, Any]) -> None:
 
 
 def _period_cost(session: Session, *, company_id: str, start: datetime) -> int:
-    return int(
-        session.scalar(
-            select(func.coalesce(func.sum(BillingUsageEvent.estimated_cost_minor), 0)).where(
-                BillingUsageEvent.company_id == company_id,
-                BillingUsageEvent.usage_type.like("indian_kanoon_%"),
-                BillingUsageEvent.created_at >= start,
-            )
-        )
-        or 0
+    return provider_spend_minor(
+        session,
+        company_id=company_id,
+        provider_key=PROVIDER_KEY,
+        period_start=start,
     )
-
-
-def _assert_budget(
-    session: Session,
-    *,
-    context: SessionContext,
-    call_cost_minor: int,
-) -> None:
-    settings = get_settings()
-    now = _now()
-    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    month_start = day_start.replace(day=1)
-    daily = _period_cost(session, company_id=context.company.id, start=day_start)
-    monthly = _period_cost(session, company_id=context.company.id, start=month_start)
-    if (
-        daily + call_cost_minor > settings.indian_kanoon_daily_budget_minor
-        or monthly + call_cost_minor > settings.indian_kanoon_monthly_budget_minor
-    ):
-        raise _problem(
-            http_status=status.HTTP_429_TOO_MANY_REQUESTS,
-            code="provider_budget_exhausted",
-            message="The workspace Indian Kanoon cost budget is exhausted.",
-        )
 
 
 def _record_provider_usage(
@@ -350,6 +349,7 @@ def _record_provider_usage(
         subscription_id=subscription_id,
         usage_type=f"indian_kanoon_{category}",
         feature_key="licensed_legal_research",
+        provider_key=PROVIDER_KEY,
         quantity=1,
         unit="provider_call",
         actor_membership_id=context.membership.id,
@@ -406,11 +406,14 @@ def _call_provider(
     _assert_ready(session)
     settings = get_settings()
     unit_cost = verified_actual_cost_minor(session, category=category, provider=PROVIDER_KEY)
-    if unit_cost is None:
+    if unit_cost is None or unit_cost <= 0:
         raise _problem(
             http_status=status.HTTP_503_SERVICE_UNAVAILABLE,
             code="provider_cost_policy",
-            message="The provider cost category is not approved for external calls.",
+            message=(
+                "The provider cost category has no positive verified INR price for "
+                "external calls; no external request was made."
+            ),
         )
     key = _cache_key(path, params)
     cached = _get_cache(key)
@@ -429,7 +432,13 @@ def _call_provider(
         base_url=settings.indian_kanoon_api_base_url,
         transport_is_mocked=client is not None,
     )
-    _assert_budget(session, context=context, call_cost_minor=unit_cost)
+    reservation_id = reserve_provider_spend(
+        company_id=context.company.id,
+        actor_membership_id=context.membership.id,
+        provider_key=PROVIDER_KEY,
+        operation_key=f"indian_kanoon_{category}",
+        amount_minor=unit_cost,
+    )
 
     own_client = client is None
     if own_client:
@@ -452,6 +461,7 @@ def _call_provider(
             )
         except (httpx.TimeoutException, httpx.NetworkError) as exc:
             if cached and cached[1] <= STALE_CACHE_WINDOW_SECONDS:
+                release_provider_spend(reservation_id=reservation_id)
                 return cached[0], IndianKanoonCallMetadata(
                     cached=True,
                     stale=True,
@@ -498,6 +508,7 @@ def _call_provider(
             )
         if response.status_code >= 500:
             if cached and cached[1] <= STALE_CACHE_WINDOW_SECONDS:
+                release_provider_spend(reservation_id=reservation_id)
                 return cached[0], IndianKanoonCallMetadata(
                     cached=True,
                     stale=True,
@@ -531,6 +542,7 @@ def _call_provider(
             cost_minor=unit_cost,
             source_id=source_id,
         )
+        settle_provider_spend(session, reservation_id=reservation_id)
         return payload, IndianKanoonCallMetadata(
             cached=False,
             stale=False,
@@ -539,6 +551,9 @@ def _call_provider(
             cost_category=category,
             cost_basis="verified_actual",
         )
+    except Exception:
+        release_provider_spend(reservation_id=reservation_id)
+        raise
     finally:
         if own_client:
             client.close()
