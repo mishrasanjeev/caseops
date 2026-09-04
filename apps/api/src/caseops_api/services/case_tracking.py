@@ -517,6 +517,158 @@ def _record_operation_snapshot(
     )
 
 
+def _converge_snapshot_identity(
+    session: Session,
+    *,
+    context: SessionContext,
+    tracked_case: TrackedCase,
+    operation: TrackedCaseProviderOperation,
+    snapshot: ProviderCaseSnapshot,
+) -> TrackedCase:
+    """Converge a verified provider identity without violating uniqueness.
+
+    Case-number bookmarks can legitimately learn their CNR on the first
+    provider refresh. If the tenant already has the CNR-form tracked row, a
+    blind identity-key update violates ``uq_tracked_cases_provider_identity``
+    and poisons the poll transaction. Keep the older row as immutable lineage,
+    move its active consumers to the canonical CNR row, and continue the same
+    operation there. No user or administrator replay is required.
+    """
+
+    target_identity = _tracked_case_identity_key(
+        cnr_number=snapshot.cnr_number or tracked_case.cnr_number,
+        case_number=snapshot.case_number or tracked_case.case_number,
+        court_code=snapshot.court_code or tracked_case.court_code,
+        court_name=snapshot.court_name or tracked_case.court_name,
+    )
+    if target_identity == tracked_case.identity_key:
+        return tracked_case
+    canonical = session.scalar(
+        select(TrackedCase)
+        .options(selectinload(TrackedCase.bookmarks))
+        .where(
+            TrackedCase.company_id == context.company.id,
+            TrackedCase.provider == tracked_case.provider,
+            TrackedCase.identity_key == target_identity,
+            TrackedCase.id != tracked_case.id,
+        )
+        .with_for_update(of=TrackedCase)
+    )
+    if canonical is None:
+        return tracked_case
+
+    competing_operation = session.scalar(
+        select(TrackedCaseProviderOperation.id).where(
+            TrackedCaseProviderOperation.tracked_case_id == canonical.id,
+            TrackedCaseProviderOperation.status == "running",
+            TrackedCaseProviderOperation.id != operation.id,
+        )
+    )
+    if competing_operation is not None:
+        raise CaseTrackingProviderError(
+            "The canonical tracked case is already being refreshed.",
+            response_class="concurrent_refresh",
+        )
+
+    now = _now()
+    canonical_scopes = {
+        (bookmark.created_by_membership_id, bookmark.active_scope_key)
+        for bookmark in canonical.bookmarks
+        if bookmark.active_scope_key is not None
+    }
+    moved_bookmark_count = 0
+    archived_duplicate_count = 0
+    for bookmark in list(tracked_case.bookmarks):
+        scope = (bookmark.created_by_membership_id, bookmark.active_scope_key)
+        if bookmark.active_scope_key is not None and scope in canonical_scopes:
+            bookmark.is_archived = True
+            bookmark.active_scope_key = None
+            bookmark.archived_at = now
+            archived_duplicate_count += 1
+            session.add(bookmark)
+            continue
+        bookmark.tracked_case = canonical
+        bookmark.tracked_case_id = canonical.id
+        session.add(bookmark)
+        moved_bookmark_count += 1
+        if bookmark.active_scope_key is not None:
+            canonical_scopes.add(scope)
+
+    canonical_update_keys = set(
+        session.execute(
+            select(TrackedCaseUpdate.source_record_key, TrackedCaseUpdate.update_type).where(
+                TrackedCaseUpdate.tracked_case_id == canonical.id
+            )
+        ).all()
+    )
+    for update_row in list(tracked_case.updates):
+        key = (update_row.source_record_key, update_row.update_type)
+        if key not in canonical_update_keys:
+            update_row.tracked_case = canonical
+            update_row.tracked_case_id = canonical.id
+            session.add(update_row)
+            canonical_update_keys.add(key)
+
+    from caseops_api.db.models import BillingUsageAttribution, IpTrackedCaseLink
+
+    for attribution in session.scalars(
+        select(BillingUsageAttribution).where(
+            BillingUsageAttribution.tracked_case_id == tracked_case.id
+        )
+    ):
+        attribution.tracked_case_id = canonical.id
+        session.add(attribution)
+
+    canonical_ip_keys = set(
+        session.execute(
+            select(IpTrackedCaseLink.docket_id, IpTrackedCaseLink.proceeding_id).where(
+                IpTrackedCaseLink.tracked_case_id == canonical.id
+            )
+        ).all()
+    )
+    for link in session.scalars(
+        select(IpTrackedCaseLink).where(IpTrackedCaseLink.tracked_case_id == tracked_case.id)
+    ):
+        key = (link.docket_id, link.proceeding_id)
+        if key in canonical_ip_keys:
+            link.link_status = "retired"
+        else:
+            link.tracked_case_id = canonical.id
+            canonical_ip_keys.add(key)
+        session.add(link)
+
+    tracked_case.identity_key = f"merged:{tracked_case.id}"
+    tracked_case.metadata_json = {
+        **dict(tracked_case.metadata_json or {}),
+        "identity_state": "merged_into_canonical",
+        "canonical_tracked_case_id_sha256": _hash_value(canonical.id),
+        "identity_merged_at": now.isoformat(),
+    }
+    if tracked_case.last_operation_id == operation.id:
+        tracked_case.last_operation_id = None
+    operation.tracked_case = canonical
+    operation.tracked_case_id = canonical.id
+    canonical.last_operation_id = operation.id
+    canonical.last_provider_attempted_at = tracked_case.last_provider_attempted_at
+    canonical.next_provider_refresh_at = tracked_case.next_provider_refresh_at
+    session.add_all([tracked_case, canonical, operation])
+    session.flush()
+    record_from_context(
+        session,
+        context,
+        action="case_tracking.identity_converged",
+        target_type="tracked_case",
+        target_id=canonical.id,
+        metadata={
+            "retired_tracked_case_id_sha256": _hash_value(tracked_case.id),
+            "canonical_identity_sha256": _hash_value(target_identity),
+            "moved_bookmark_count": moved_bookmark_count,
+            "archived_duplicate_count": archived_duplicate_count,
+        },
+    )
+    return canonical
+
+
 def _complete_operation(
     session: Session,
     *,
@@ -2061,18 +2213,40 @@ def refresh_bookmark(
         if isinstance(exc, HTTPException):
             raise exc
         raise _safe_provider_error(exc) from exc
-    _record_operation_snapshot(
-        session,
-        tracked_case=tracked_case,
-        operation=operation,
-        snapshot=snapshot,
-    )
-    created = apply_snapshot(
-        session,
-        context=context,
-        tracked_case=tracked_case,
-        snapshot=snapshot,
-    )
+    original_tracked_case = tracked_case
+    try:
+        with session.begin_nested():
+            tracked_case = _converge_snapshot_identity(
+                session,
+                context=context,
+                tracked_case=tracked_case,
+                operation=operation,
+                snapshot=snapshot,
+            )
+            _record_operation_snapshot(
+                session,
+                tracked_case=tracked_case,
+                operation=operation,
+                snapshot=snapshot,
+            )
+            created = apply_snapshot(
+                session,
+                context=context,
+                tracked_case=tracked_case,
+                snapshot=snapshot,
+            )
+    except Exception as exc:
+        _fail_operation(
+            session,
+            context=context,
+            tracked_case=original_tracked_case,
+            operation=operation,
+            exc=exc,
+        )
+        session.commit()
+        if isinstance(exc, HTTPException):
+            raise exc
+        raise _safe_provider_error(exc) from exc
     _complete_operation(
         session,
         tracked_case=tracked_case,
@@ -3561,6 +3735,7 @@ def poll_tracked_cases(
                     + 1,
                 }
                 continue
+            original_tracked_case = tracked_case
             try:
                 if tracked_case.cnr_number:
                     normalized_cnr = normalize_cnr(tracked_case.cnr_number)
@@ -3595,18 +3770,26 @@ def poll_tracked_cases(
                         )
                     )
                     snapshot = _validated_sync_snapshot(tracked_case, results)
-                _record_operation_snapshot(
-                    session,
-                    tracked_case=tracked_case,
-                    operation=operation,
-                    snapshot=snapshot,
-                )
-                created = apply_snapshot(
-                    session,
-                    context=context,
-                    tracked_case=tracked_case,
-                    snapshot=snapshot,
-                )
+                with session.begin_nested():
+                    tracked_case = _converge_snapshot_identity(
+                        session,
+                        context=context,
+                        tracked_case=tracked_case,
+                        operation=operation,
+                        snapshot=snapshot,
+                    )
+                    _record_operation_snapshot(
+                        session,
+                        tracked_case=tracked_case,
+                        operation=operation,
+                        snapshot=snapshot,
+                    )
+                    created = apply_snapshot(
+                        session,
+                        context=context,
+                        tracked_case=tracked_case,
+                        snapshot=snapshot,
+                    )
                 run.checked_count += 1
                 run.update_count += len(created)
                 _complete_operation(
@@ -3619,7 +3802,7 @@ def poll_tracked_cases(
                 _fail_operation(
                     session,
                     context=context,
-                    tracked_case=tracked_case,
+                    tracked_case=original_tracked_case,
                     operation=operation,
                     exc=exc,
                 )

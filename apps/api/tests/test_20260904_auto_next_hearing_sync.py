@@ -214,6 +214,72 @@ def test_automatic_backfill_requires_an_approved_support_scope(
         get_settings.cache_clear()
 
 
+def test_case_number_refresh_converges_on_existing_cnr_row_without_manual_replay(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    boot = bootstrap_company(client)
+    token = str(boot["access_token"])
+    _enable_tracking(monkeypatch)
+    matter_id = _create_older_matter(
+        client,
+        token=token,
+        code="AUTO-NHD-IDENTITY-CONVERGE",
+        cnr=None,
+    )
+    upcoming = datetime.now(UTC).date() + timedelta(days=17)
+    provider = DatedSyncProvider(_future_snapshot(hearing_on=upcoming))
+
+    try:
+        with get_session_factory()() as session:
+            case_number_row = session.scalar(
+                select(TrackedCase).where(TrackedCase.case_number == "WP(C) 9123/2026")
+            )
+            assert case_number_row is not None
+            assert case_number_row.cnr_number is None
+            canonical = TrackedCase(
+                company_id=str(boot["company"]["id"]),
+                provider="ecourtsindia",
+                identity_key="cnr:DLHC010091232026",
+                cnr_number="DLHC010091232026",
+                normalized_cnr_number="DLHC010091232026",
+                case_number="WP(C) 9123/2026",
+                normalized_case_number="WPC91232026",
+                court_code="DLHC",
+                court_name="Delhi High Court",
+                case_title="Existing canonical CNR row",
+            )
+            session.add(canonical)
+            session.commit()
+
+            run = poll_tracked_cases(session, provider=provider, force=True)[0]
+            assert run.error_count == 0
+            assert run.checked_count == 1
+            bookmark = session.scalar(
+                select(TrackedCaseBookmark).where(
+                    TrackedCaseBookmark.matter_id == matter_id,
+                    TrackedCaseBookmark.is_archived.is_(False),
+                )
+            )
+            assert bookmark is not None
+            assert bookmark.tracked_case_id == canonical.id
+            retired = session.get(TrackedCase, case_number_row.id)
+            assert retired is not None
+            assert retired.identity_key == f"merged:{retired.id}"
+            assert retired.metadata_json["identity_state"] == "merged_into_canonical"
+            operation = session.scalar(select(TrackedCaseProviderOperation))
+            assert operation is not None
+            assert operation.tracked_case_id == canonical.id
+            matter = session.get(Matter, matter_id)
+            assert matter is not None
+            assert matter.next_hearing_on == upcoming
+            assert matter.status == "intake"
+            assert matter.lifecycle_version == 0
+            assert len(provider.search_calls) == 1
+    finally:
+        get_settings.cache_clear()
+
+
 def test_nearest_upcoming_date_wins_and_past_dates_are_never_applied() -> None:
     today = datetime.now(UTC).date()
     tracked = TrackedCase(

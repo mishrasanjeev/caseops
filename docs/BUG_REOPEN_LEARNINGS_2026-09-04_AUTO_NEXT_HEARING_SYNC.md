@@ -10,7 +10,7 @@ single Next hearing field. The requested automatic workflow was incomplete.
 
 ## Brutal root-cause analysis
 
-The prior implementation was shallow in five specific ways:
+The prior implementation was shallow in six specific ways:
 
 1. The product requirement and deployment contract had diverged. Production
    was scheduled for 16:30 IST while the requested time is 18:00 IST, and the
@@ -31,6 +31,12 @@ The prior implementation was shallow in five specific ways:
    while simultaneous scheduled and manual refreshes had no database-level
    single-writer invariant. That combined unnecessary approval friction with
    insufficient machine safety.
+6. A case-number row could learn a CNR already owned by another canonical row.
+   Snapshot application blindly changed the unique identity key, causing a
+   PostgreSQL uniqueness violation; the error handler then queried through the
+   failed transaction and crashed the entire multi-tenant poll. Focused SQLite
+   tests did not expose this identity-promotion collision. The full Docker
+   inventory did, which is why the first release candidate was rejected.
 
 ## Corrective design
 
@@ -55,6 +61,11 @@ The prior implementation was shallow in five specific ways:
 - A partial unique database index plus a PostgreSQL transaction advisory lock
   enforce one running refresh per tracked case. Repeated snapshots are
   idempotent and retain provider-operation, snapshot, history, and audit proof.
+- When a verified result promotes a case-number identity to an existing CNR,
+  active bookmarks and dependent references converge onto the locked canonical
+  row automatically. The retired row remains as hashed lineage. Each case
+  mutation runs in a database savepoint so an unexpected constraint error is a
+  typed per-case failure rather than a broken tenant or global poll.
 
 ## Why matters were reported as “reopening”
 
@@ -74,7 +85,8 @@ unique-match failure modes, CNR validation, nearest-upcoming selection,
 past-date rejection, confirmed absence, failure retention, manual-lock
 preservation, lifecycle non-reopening, idempotency, schedule alignment, and the
 single-running-operation invariant. Docker Playwright must exercise the user
-surface with the local provider emulator and the automated-test paid-provider
-block. Production can be marked complete only after the exact commit is on
+surface with the local provider emulator, including case-number-to-CNR identity
+convergence, and the automated-test paid-provider block. Production can be
+marked complete only after the exact commit is on
 `main`, the exact revision/digest serves traffic, the 18:00 scheduler is active,
 legacy schedules are paused, and the dated production Playwright proof passes.

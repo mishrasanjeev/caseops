@@ -30,6 +30,10 @@ Status legend:
   confirmed absence has separate semantics, manual locks remain machine-owned,
   and terminal lifecycle state is never changed. PostgreSQL advisory locking
   and partial unique indexes prevent duplicate same-matter running work.
+  Case-number identities that learn an existing canonical CNR converge their
+  active references automatically, retain a retired lineage row, and isolate
+  each mutation in a savepoint so one constraint failure cannot poison a
+  tenant or global poll.
 - **Scale/cost boundary:** provider batches, candidates, retries, deadlines, and
   cooldowns are bounded. Automated and persistent QA paths use an emulator or
   `X-CaseOps-Automated-Test: no-paid-providers`; a live paid probe is separate,

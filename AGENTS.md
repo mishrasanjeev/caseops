@@ -281,3 +281,9 @@ requirements when using the fallback.
   human approval queue. Machine-enforce identity, non-past evidence, tenant
   scope, manual locks, disposed-matter suppression, idempotency, and one running
   refresh per tracked case, then apply the update and retain audit history.
+- A provider refresh can promote a case-number identity to a CNR that already
+  has a canonical tracked row. Never blind-update the unique identity key or
+  let one tenant poison the whole scheduled poll transaction. Converge active
+  bookmarks and dependent references onto the canonical row under a lock,
+  retain the retired row as hashed lineage, and isolate each case mutation in a
+  savepoint so a database constraint failure becomes a typed per-case outcome.
