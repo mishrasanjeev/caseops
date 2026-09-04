@@ -115,14 +115,26 @@ def upgrade() -> None:
             )
         )
 
-    op.create_index(
-        "uq_tracking_operation_one_running",
-        "tracked_case_provider_operations",
-        ["tracked_case_id"],
-        unique=True,
-        postgresql_where=sa.text("status = 'running'"),
-        sqlite_where=sa.text("status = 'running'"),
-    )
+    if bind.dialect.name == "postgresql":
+        with op.get_context().autocommit_block():
+            op.create_index(
+                "uq_tracking_operation_one_running",
+                "tracked_case_provider_operations",
+                ["tracked_case_id"],
+                unique=True,
+                postgresql_concurrently=True,
+                postgresql_where=sa.text("status = 'running'"),
+            )
+    else:
+        # MIGRATION-LOCK-RISK: acknowledged: non-PostgreSQL paths are isolated
+        # development/test databases and never serve concurrent production writes.
+        op.create_index(
+            "uq_tracking_operation_one_running",
+            "tracked_case_provider_operations",
+            ["tracked_case_id"],
+            unique=True,
+            sqlite_where=sa.text("status = 'running'"),
+        )
     op.execute(
         sa.text(
             "UPDATE case_tracking_support_matrix "
@@ -136,10 +148,19 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index(
-        "uq_tracking_operation_one_running",
-        table_name="tracked_case_provider_operations",
-    )
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        with op.get_context().autocommit_block():
+            op.drop_index(
+                "uq_tracking_operation_one_running",
+                table_name="tracked_case_provider_operations",
+                postgresql_concurrently=True,
+            )
+    else:
+        op.drop_index(
+            "uq_tracking_operation_one_running",
+            table_name="tracked_case_provider_operations",
+        )
     op.execute(
         sa.text(
             "UPDATE case_tracking_support_matrix "
