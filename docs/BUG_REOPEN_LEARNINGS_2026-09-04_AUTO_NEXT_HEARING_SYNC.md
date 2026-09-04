@@ -37,6 +37,12 @@ The prior implementation was shallow in six specific ways:
    failed transaction and crashed the entire multi-tenant poll. Focused SQLite
    tests did not expose this identity-promotion collision. The full Docker
    inventory did, which is why the first release candidate was rejected.
+7. The first post-deploy verification exposed two test-harness assumptions:
+   an API login token was treated as a browser session, and the API identity
+   route was guessed to mirror the web route. The product checks passed up to
+   those assertions, but the evidence was still invalid. The corrected tests
+   now establish the browser session context explicitly and use `/api/build`
+   for API identity plus `/api/release-identity` for web identity.
 
 ## Corrective design
 
@@ -90,3 +96,6 @@ convergence, and the automated-test paid-provider block. Production can be
 marked complete only after the exact commit is on
 `main`, the exact revision/digest serves traffic, the 18:00 scheduler is active,
 legacy schedules are paused, and the dated production Playwright proof passes.
+An API-token-only login is never browser proof: production UI checks must seed
+the browser session context or complete the visible sign-in flow, and release
+identity checks must use the service-owned canonical routes.

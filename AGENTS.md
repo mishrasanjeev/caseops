@@ -292,3 +292,9 @@ requirements when using the fallback.
   bookmarks and dependent references onto the canonical row under a lock,
   retain the retired row as hashed lineage, and isolate each case mutation in a
   savepoint so a database constraint failure becomes a typed per-case outcome.
+- An API login token is not browser-session evidence. A production Playwright
+  test that opens authenticated UI after an API login must establish the
+  client session context or complete the visible sign-in flow. Exact-release
+  checks use the API-owned `/api/build` route and the web-owned
+  `/api/release-identity` route; never assume the services expose symmetric
+  identity paths.
