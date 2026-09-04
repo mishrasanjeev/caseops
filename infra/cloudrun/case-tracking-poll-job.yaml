@@ -47,9 +47,9 @@ spec:
                 - name: CASEOPS_CASE_TRACKING_PROVIDER
                   value: "ecourtsindia"
                 - name: CASEOPS_CASE_TRACKING_DAILY_WINDOW_START
-                  value: "16:00"
-                - name: CASEOPS_CASE_TRACKING_DAILY_WINDOW_END
                   value: "18:00"
+                - name: CASEOPS_CASE_TRACKING_DAILY_WINDOW_END
+                  value: "20:00"
                 - name: CASEOPS_CASE_TRACKING_DAILY_TIMEZONE
                   value: "Asia/Kolkata"
                 - name: CASEOPS_ECOURTSINDIA_API_BASE_URL
@@ -62,6 +62,8 @@ spec:
                 - name: CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS
                   value: "caseops-qa;caseops-ip-qa;test-legal"
                 - name: CASEOPS_CASE_TRACKING_POLL_LIMIT
+                  value: "50"
+                - name: CASEOPS_CASE_TRACKING_AUTO_LINK_LIMIT
                   value: "50"
               resources:
                 limits:

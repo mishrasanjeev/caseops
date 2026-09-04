@@ -4911,6 +4911,13 @@ class TrackedCaseProviderOperation(Base):
     __tablename__ = "tracked_case_provider_operations"
     __table_args__ = (
         UniqueConstraint("company_id", "correlation_id", name="uq_tracking_operation_correlation"),
+        Index(
+            "uq_tracking_operation_one_running",
+            "tracked_case_id",
+            unique=True,
+            postgresql_where=text("status = 'running'"),
+            sqlite_where=text("status = 'running'"),
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))

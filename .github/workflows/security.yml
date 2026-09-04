@@ -36,7 +36,10 @@ jobs:
   npm-audit:
     name: npm audit (high+critical)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Registry-backed install and advisory reads have exceeded ten minutes on
+    # otherwise healthy GitHub runners. Keep the gate bounded, but give the
+    # strict audit enough time to return a real pass/fail verdict.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -44,10 +47,26 @@ jobs:
           node-version: "22"
           cache: "npm"
           cache-dependency-path: package-lock.json
-      - run: npm ci --ignore-scripts
-      # --audit-level high blocks high + critical; moderate findings
-      # surface in the log for triage but don't fail the build.
-      - run: npm audit --audit-level=high
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      # npm 10 still calls the retiring quick-audit endpoint, which rejects
+      # modern optional-platform trees with HTTP 400. Pin npm 11 so the gate
+      # uses the supported bulk-advisory endpoint. High + critical findings
+      # still fail; moderate findings remain visible for triage. Retry only
+      # inside a short network budget; three non-zero verdicts fail the job.
+      - name: Run strict npm audit
+        run: |
+          for attempt in 1 2 3; do
+            if npx --yes --prefer-offline npm@11.6.2 audit \
+              --audit-level=high \
+              --fetch-timeout=120000 \
+              --fetch-retries=1; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            sleep $((attempt * 10))
+          done
 
   pip-audit:
     name: pip-audit (high+critical)
@@ -96,7 +115,9 @@ jobs:
   license-allowlist:
     name: License allow-list
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # The allow-list remains fail-closed; this budget covers a slow npm
+    # registry without cancelling the scanner before it emits its verdict.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -104,14 +125,15 @@ jobs:
           node-version: "22"
           cache: "npm"
           cache-dependency-path: package-lock.json
-      - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts --no-audit --no-fund
       # license-checker enumerates every transitive package's license.
       # CaseOps's CODEX.md allow-list: MIT, Apache-2.0, BSD-2-Clause,
       # BSD-3-Clause, ISC, PostgreSQL, Python-2.0, Unlicense, CC0-1.0,
       # 0BSD, BlueOak-1.0.0. AGPL/SSPL/BSL/BUSL block.
       - name: Check JS licenses
         run: |
-          npx --yes license-checker --production --json --excludePrivatePackages \
+          npx --yes --prefer-offline license-checker@25.0.1 \
+            --production --json --excludePrivatePackages \
             --onlyAllow "MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;PostgreSQL;Python-2.0;Unlicense;CC0-1.0;0BSD;BlueOak-1.0.0;CC-BY-4.0;CC-BY-3.0;Apache 2.0" \
             > license-report.json
       - uses: actions/upload-artifact@v4

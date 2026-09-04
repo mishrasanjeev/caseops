@@ -269,3 +269,26 @@ requirements when using the fallback.
   production regression runs must assert the rejection without spending.
   Provider-paid operation is established through authenticated human use and
   provider account evidence, never by an automated credit-bearing canary.
+- An automatic next-hearing sync is an identity-and-evidence workflow, not a
+  blind field copy. Prefer normalized CNR; otherwise require one exact
+  case-number-plus-court match. Zero, multiple, or mismatched results must write
+  no matter data and must retain a distinct machine-readable response class.
+- Scheduled hearing sync must cover bounded batches of both newly linked and
+  pre-existing eligible matters without N+1 provider calls. Resolve the nearest
+  evidenced non-past date, distinguish confirmed absence from unavailable or
+  malformed provider data, retain the last valid date on failure, respect an
+  explicit manual lock, and never mutate matter lifecycle state.
+- A daily job's product time, Cloud Scheduler cron, timezone, runtime window,
+  support-matrix SLA, and checked-in inventory are one contract. Test the exact
+  18:00 Asia/Kolkata boundary and pause every superseded scheduler name; a job
+  deployed with a window that excludes its own cron is not complete.
+- Provider-authoritative, uniquely verified hearing updates do not require a
+  human approval queue. Machine-enforce identity, non-past evidence, tenant
+  scope, manual locks, disposed-matter suppression, idempotency, and one running
+  refresh per tracked case, then apply the update and retain audit history.
+- A provider refresh can promote a case-number identity to a CNR that already
+  has a canonical tracked row. Never blind-update the unique identity key or
+  let one tenant poison the whole scheduled poll transaction. Converge active
+  bookmarks and dependent references onto the canonical row under a lock,
+  retain the retired row as hashed lineage, and isolate each case mutation in a
+  savepoint so a database constraint failure becomes a typed per-case outcome.

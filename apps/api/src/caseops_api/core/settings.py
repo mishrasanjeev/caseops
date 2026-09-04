@@ -298,13 +298,14 @@ class Settings(BaseSettings):
     # protects persistent QA workspaces from background schedulers.
     paid_provider_blocked_company_slugs: str = Field(default="caseops-qa,caseops-ip-qa,test-legal")
     case_tracking_poll_limit: int = Field(default=50, ge=1, le=500)
+    case_tracking_auto_link_limit: int = Field(default=50, ge=1, le=500)
     case_tracking_default_poll_interval_hours: int = Field(default=24, ge=1, le=168)
     case_tracking_daily_window_start: str = Field(
-        default="16:00",
+        default="18:00",
         pattern=r"^\d{2}:\d{2}$",
     )
     case_tracking_daily_window_end: str = Field(
-        default="18:00",
+        default="20:00",
         pattern=r"^\d{2}:\d{2}$",
     )
     case_tracking_daily_timezone: str = Field(default="Asia/Kolkata")

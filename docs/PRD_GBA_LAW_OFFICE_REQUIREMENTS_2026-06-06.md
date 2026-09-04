@@ -361,7 +361,7 @@ Refresh window:
 
 Recommended implementation:
 
-- Configure Cloud Scheduler to invoke the case-tracking poll job at 4:30 PM
+- Configure Cloud Scheduler to invoke the case-tracking poll job at 6:00 PM
   Asia/Kolkata daily.
 - Add settings to make the window explicit:
   - `CASEOPS_CASE_TRACKING_DAILY_WINDOW_START=16:00`
@@ -376,7 +376,7 @@ Recommended implementation:
 Runtime rules:
 
 - Cloud Scheduler/Cloud Run should start the job inside the configured window,
-  preferably at 4:30 PM Asia/Kolkata.
+  at 6:00 PM Asia/Kolkata.
 - Scheduled production runs must not start any new provider call after
   6:00 PM Asia/Kolkata unless `--force` or an explicit local/test override is
   supplied.
@@ -1479,7 +1479,7 @@ Hard rules:
 
 Implementation order:
 1. Matter status `disposed` migration and UI terminology.
-2. Daily case-tracking refresh window between 4 PM and 6 PM Asia/Kolkata.
+2. Daily case-tracking refresh starts at 6 PM inside the 6 PM to 8 PM Asia/Kolkata window.
 3. Compliance extraction data model and deterministic bridge.
 4. AI compliance extraction with ModelRun, dedupe, tasks/deadlines, notifications.
 5. Auto-fetched and manual-upload order triggers.

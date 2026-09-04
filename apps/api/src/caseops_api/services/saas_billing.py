@@ -1577,21 +1577,34 @@ def assert_matter_limit(session: Session, *, context: SessionContext) -> None:
         )
 
 
-def assert_tracked_case_limit(session: Session, *, context: SessionContext) -> None:
+def tracked_case_remaining_capacity(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> int | None:
+    """Return remaining tracked-case capacity, or ``None`` when unlimited."""
+
     subscription = _subscription_for_gate(session, context.company)
     if subscription is None:
-        return
+        return None
     entitlements = resolve_entitlements(session, subscription)
     limit = _coerce_int(entitlements.get("tracked_cases_limit"))
+    if limit is None:
+        return None
     used = _tracked_case_count(session, context.company.id)
-    if limit is not None and used + 1 > limit:
+    return max(0, limit - used)
+
+
+def assert_tracked_case_limit(session: Session, *, context: SessionContext) -> None:
+    remaining = tracked_case_remaining_capacity(session, context=context)
+    if remaining is not None and remaining < 1:
         record_from_context(
             session,
             context,
             action="billing_limit.tracked_case_blocked",
             target_type="tracked_case",
             result=AuditResult.DENIED,
-            metadata={"used": used, "limit": limit},
+            metadata={"remaining": remaining},
         )
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,

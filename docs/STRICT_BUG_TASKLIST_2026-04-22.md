@@ -19,6 +19,35 @@ Current evidence from 2026-04-22 verification:
 - Not fixed
 - Inconclusive
 
+## CaseOps automatic next-hearing sync - Ram 2026-09-04
+
+Source document:
+`C:\Users\mishr\Downloads\CaseOps_AI_Auto_Next_Hearing_Date_Sync.docx`.
+Permanent learning record:
+`docs/BUG_REOPEN_LEARNINGS_2026-09-04_AUTO_NEXT_HEARING_SYNC.md`.
+
+| ID | Classification | Formal verdict | Evidence / action |
+| --- | --- | --- | --- |
+| ENH-001 | Valid CaseOps enhancement; the source contains one requirements brief, not a populated bug list | `Inconclusive` until exact-main production proof | Implements bounded 18:00 IST automatic sync for eligible old and new matters, with the existing next-hearing field as the only write target and Sync Now using the same service. Dated regression: `tests/e2e/ram-2026-09-04-bugs.spec.ts`. |
+| ADJ-MATCH-001 | Valid systemic correctness defect | `Partially fixed` pending exact-main production proof | First-result acceptance is replaced by exact unique CNR or exact case-number-plus-court validation; not-found, ambiguity, mismatch, invented identifiers, and past dates cannot update a matter. |
+| ADJ-STATE-001 | Valid systemic state defect | `Partially fixed` pending exact-main production proof | Provider failure now retains the last valid date; confirmed absence is distinct and may clear only an unlocked provider-managed date. Disposed matters remain excluded and lifecycle fields are unchanged. |
+| ADJ-CONCURRENCY-001 | Valid systemic concurrency defect | `Partially fixed` pending exact-main production proof | Tenant/matter advisory locking plus partial unique database indexes prevent duplicate bookmarks and duplicate running operations; repeated/concurrent refresh is typed and idempotent. |
+| ADJ-IDENTITY-001 | Valid PostgreSQL identity-convergence defect found by full Docker acceptance | `Partially fixed` pending exact-main production proof | A case-number row that learns an already-canonical CNR previously violated the tracked-case unique key and left the poll session rollback-only. Active references now converge onto the locked canonical row, the retired row remains hashed lineage, and a per-case savepoint prevents one constraint failure from crashing the multi-tenant run. |
+| ADJ-GATE-001 | Valid unnecessary workflow gate | `Partially fixed` pending exact-main production proof | A verified authoritative provider result writes directly under machine rules. No human/Claude approval route is introduced; a manual date lock remains a fail-closed data-ownership boundary, not an approval gate. |
+
+Reopen analysis: no evidence shows that this feature automatically reopened a
+persisted Matter. The prior weakness was presentational and operational: a
+loose or stale next-hearing update could make a terminal or old matter appear
+current. The fix does not weaken the dedicated, audited `Disposed -> Intake`
+lifecycle transition. It excludes terminal matters and asserts status,
+`is_active`, lifecycle version, and final reloaded state around refreshes.
+
+Closure requires the final commit to pass PostgreSQL migration/concurrency
+tests, the complete Docker inventory, the dated local Playwright journey,
+canonical CI, exact deployed API/web release identities, and the dated
+production surface test. These rows deliberately remain below `Properly fixed`
+until the deployed proof exists.
+
 ## Forbidden Claim Patterns
 
 - Claiming "fixed" because copy improved.

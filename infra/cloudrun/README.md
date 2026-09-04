@@ -76,7 +76,7 @@ Before deploying, replace these placeholders:
 
 - The worker job runs `caseops-document-worker --once`, which lets Cloud Run Jobs act as the queue drainer without needing a permanently running non-HTTP process.
 - The legal update sync job runs `caseops-sync-legal-updates` at midnight IST by default.
-- The case tracking poll job runs `caseops-poll-tracked-cases` at 4:30 PM IST by default, inside the configured 4:00 PM to 6:00 PM Asia/Kolkata refresh window. Production/cloud runs refuse to start new provider calls outside that window unless an operator uses `--force`; any unfinished backlog remains visible in provider operations and resumes on the next scheduled run.
+- The case tracking poll job runs `caseops-poll-tracked-cases` at 6:00 PM IST by default, inside the configured 6:00 PM to 8:00 PM Asia/Kolkata refresh window. Production/cloud runs refuse to start new provider calls outside that window unless an operator uses `--force`; any unfinished backlog remains visible in provider operations and resumes on the next scheduled run.
 - The hearing reminders job runs `caseops-send-hearing-reminders` on the
   `caseops-reminders-cadence` scheduler. Verify it after image deploys
   and database secret rotations because stale literal database URLs will

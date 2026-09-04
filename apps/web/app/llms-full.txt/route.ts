@@ -72,11 +72,11 @@ Every public claim is classified as one of: live, review-first, provider-gated, 
 
 ### 2. Tracked case refresh
 
-- Scheduled production refresh is opt-in by default: only explicitly tracked/bookmarked cases are refreshed
-- Eligible matters with CNR or case numbers are not automatically refreshed unless a tenant admin enables auto-tracking later
-- Default settings: CASEOPS_CASE_TRACKING_DAILY_WINDOW_START=16:00, CASEOPS_CASE_TRACKING_DAILY_WINDOW_END=18:00, CASEOPS_CASE_TRACKING_DAILY_TIMEZONE=Asia/Kolkata
-- The scheduled job should start in the 4 PM-6 PM IST window, preferably around 4:30 PM IST
-- No new provider calls start after 6 PM IST unless an operator uses an explicit force/local override
+- Scheduled production refresh covers explicitly bookmarked cases and bounded batches of active matters with a reliable CNR or case-number-plus-court identity
+- Closed, Disposed, ambiguous, mismatched, and unsupported matters are not updated
+- Default settings: CASEOPS_CASE_TRACKING_DAILY_WINDOW_START=18:00, CASEOPS_CASE_TRACKING_DAILY_WINDOW_END=20:00, CASEOPS_CASE_TRACKING_DAILY_TIMEZONE=Asia/Kolkata
+- The scheduled job starts at 6 PM IST inside the 6 PM-8 PM execution window
+- No new provider calls start after 8 PM IST unless an operator uses an explicit force/local override
 - Unfinished backlog persists and resumes on the next run
 - Per-tenant batching prevents one tenant consuming the whole window
 - Disabled or misconfigured providers make no external calls and record safe skipped/blocked state

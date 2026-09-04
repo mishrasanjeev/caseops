@@ -39760,7 +39760,7 @@ export interface components {
              * @default unknown
              * @enum {string}
              */
-            response_class: "success" | "no_change" | "verified_cached" | "timeout" | "authentication" | "rate_limit" | "parse_error" | "provider_outage" | "url_failure" | "removed_document" | "changed_content" | "unsupported_access" | "configuration" | "policy" | "unknown";
+            response_class: "success" | "no_change" | "verified_cached" | "timeout" | "authentication" | "case_not_found" | "ambiguous_match" | "match_validation_failed" | "concurrent_refresh" | "rate_limit" | "parse_error" | "provider_outage" | "url_failure" | "removed_document" | "changed_content" | "unsupported_access" | "configuration" | "policy" | "unknown";
             /**
              * Retryable
              * @default false

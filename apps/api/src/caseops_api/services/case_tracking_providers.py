@@ -39,6 +39,8 @@ def _http_error_response_class(exc: httpx.HTTPError) -> str:
             return "authentication"
         if exc.response.status_code == 402:
             return "billing"
+        if exc.response.status_code == 404:
+            return "case_not_found"
         if exc.response.status_code == 429:
             return "rate_limit"
     return "provider_error"
@@ -99,6 +101,7 @@ class ProviderCaseSnapshot:
 class ProviderBulkRefreshResult:
     snapshots: list[ProviderCaseSnapshot]
     errors: dict[str, str] = field(default_factory=dict)
+    provider_call_count: int = 1
 
 
 class CaseTrackingProvider(Protocol):
@@ -443,6 +446,36 @@ def _snapshot_from_payload(
         not provider_court_code or provider_court_code.isdigit()
     ):
         provider_court_code = cnr[:6].upper()
+    next_hearing_fields = (
+        "next_hearing_on",
+        "next_hearing_date",
+        "nextHearingDate",
+    )
+    direct_next_present = any(field in case for field in next_hearing_fields) or (
+        "nextDateOfHearing" in entity_info
+    )
+    direct_next_raw = next(
+        (case[field] for field in next_hearing_fields if field in case),
+        entity_info.get("nextDateOfHearing"),
+    )
+    direct_next_parsed = _parse_date(direct_next_raw)
+    hearing_fields = (
+        "hearings",
+        "hearing_history",
+        "historyOfCaseHearings",
+        "businessOnDateEntries",
+    )
+    hearing_collection_present = any(field in case for field in hearing_fields)
+    raw_hearings = next((case[field] for field in hearing_fields if field in case), None)
+    hearings = _events(raw_hearings, prefix="hearing")
+    if direct_next_present and direct_next_raw not in (None, "") and direct_next_parsed is None:
+        next_hearing_evidence_state = "unparseable"
+    elif direct_next_parsed is not None:
+        next_hearing_evidence_state = "dated"
+    elif direct_next_present or hearing_collection_present:
+        next_hearing_evidence_state = "confirmed_absent"
+    else:
+        next_hearing_evidence_state = "unavailable"
     return ProviderCaseSnapshot(
         provider=provider,
         cnr_number=cnr,
@@ -466,26 +499,21 @@ def _snapshot_from_payload(
             case.get("current_stage") or case.get("stage") or case.get("purpose"),
             limit=160,
         ),
-        next_hearing_on=_parse_date(
-            case.get("next_hearing_on")
-            or case.get("next_hearing_date")
-            or case.get("nextHearingDate")
-            or entity_info.get("nextDateOfHearing")
-        ),
+        next_hearing_on=direct_next_parsed,
         orders=orders,
         judgments=judgments,
-        hearings=_events(
-            case.get("hearings")
-            or case.get("hearing_history")
-            or case.get("historyOfCaseHearings")
-            or case.get("businessOnDateEntries"),
-            prefix="hearing",
-        ),
+        hearings=hearings,
         source_url=_compact(case.get("source_url") or case.get("case_url"), limit=800),
         metadata={
             "provenance": "provider_normalized",
             "has_orders": bool(orders),
             "has_judgments": bool(judgments),
+            "next_hearing_evidence": {
+                "state": next_hearing_evidence_state,
+                "direct_field_present": direct_next_present,
+                "hearing_collection_present": hearing_collection_present,
+                "hearing_event_count": len(hearings),
+            },
         },
     )
 
@@ -604,9 +632,11 @@ class EcourtsIndiaApiProvider:
         snapshots: list[ProviderCaseSnapshot] = []
         errors: dict[str, str] = {}
         unique_cnrs = list(dict.fromkeys(cnrs))
+        provider_call_count = 0
         if unique_cnrs:
             try:
                 with self._client() as client:
+                    provider_call_count += 1
                     response = client.post(
                         self._url("/case/bulk-refresh"),
                         json={"cnrs": unique_cnrs},
@@ -617,13 +647,22 @@ class EcourtsIndiaApiProvider:
                 response_class = _http_error_response_class(exc)
                 for cnr in unique_cnrs:
                     errors[cnr] = f"Case tracking provider bulk refresh failed. [{response_class}]"
-                return ProviderBulkRefreshResult(snapshots=snapshots, errors=errors)
+                return ProviderBulkRefreshResult(
+                    snapshots=snapshots,
+                    errors=errors,
+                    provider_call_count=provider_call_count,
+                )
         for cnr in unique_cnrs:
             try:
+                provider_call_count += 1
                 snapshots.append(self.get_case_by_cnr(cnr=cnr))
             except CaseTrackingProviderError as exc:
                 errors[cnr] = f"{exc} [{exc.response_class}]"
-        return ProviderBulkRefreshResult(snapshots=snapshots, errors=errors)
+        return ProviderBulkRefreshResult(
+            snapshots=snapshots,
+            errors=errors,
+            provider_call_count=provider_call_count,
+        )
 
 
 def provider_status() -> tuple[bool, str, bool, str | None]:

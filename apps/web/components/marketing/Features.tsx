@@ -65,7 +65,7 @@ const features = [
   {
     icon: ListTodo,
     title: "Case Tracking & Ops",
-    body: "Refresh explicitly tracked cases in the 4-6 PM IST window, surface skipped/blocked/provider-disabled states, and resume backlog fairly by tenant.",
+    body: "Refresh eligible and explicitly tracked cases from 6 PM IST, surface skipped/blocked/provider-disabled states, and resume bounded backlog fairly by tenant.",
   },
   {
     icon: IndianRupee,
@@ -101,7 +101,9 @@ export function Features() {
               <h3 className="mt-5 text-lg font-semibold tracking-tight text-[var(--color-ink)]">
                 {feature.title}
               </h3>
-              <p className="mt-2 text-sm leading-relaxed text-[var(--color-mute)]">{feature.body}</p>
+              <p className="mt-2 text-sm leading-relaxed text-[var(--color-mute)]">
+                {feature.body}
+              </p>
             </article>
           ))}
         </div>
