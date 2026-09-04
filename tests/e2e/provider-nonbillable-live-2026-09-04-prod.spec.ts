@@ -44,7 +44,23 @@ async function signIn(page: Page): Promise<string> {
     },
   });
   await expectStatus(login, 200, "production tester sign-in");
-  return (await login.json()).access_token;
+  const session = await login.json();
+  await page.goto(`${BASE_URL}/`);
+  await page.evaluate(
+    (context) => {
+      window.localStorage.setItem(
+        "caseops.session.context",
+        JSON.stringify(context),
+      );
+    },
+    {
+      company: session.company,
+      user: session.user,
+      membership: session.membership,
+      capabilities: session.capabilities,
+    },
+  );
+  return session.access_token;
 }
 
 test("automation checks readiness and budget balance without provider spend", async ({
