@@ -334,23 +334,64 @@ export async function recordForeignAssociateTransaction(
   await expectStatus(docketResponse, 200, `${kind} docket`);
   const workspace = (await workspaceResponse.json()) as Json;
   const docket = (await docketResponse.json()) as Json;
-  const response = await api.post(
-    `${apiBase}/api/ip/foreign-associate-instructions/${instruction.id}/transactions`,
-    {
-      headers,
-      data: {
-        expected_version: workspace.instruction.row_version,
-        expected_lifecycle_version: docket.lifecycle_version,
-        transaction_kind: kind,
-        effective_at: new Date().toISOString(),
-        responsible_membership_id: fixture.membershipId,
-        reason: `IPLF-059B ${kind} reviewed in the dated acceptance journey.`,
-        ...input,
+  const expectedVersion = workspace.instruction.row_version as number;
+  const reason = `IPLF-059B ${kind} reviewed in the dated acceptance journey.`;
+  try {
+    const response = await api.post(
+      `${apiBase}/api/ip/foreign-associate-instructions/${instruction.id}/transactions`,
+      {
+        headers,
+        data: {
+          expected_version: expectedVersion,
+          expected_lifecycle_version: docket.lifecycle_version,
+          transaction_kind: kind,
+          effective_at: new Date().toISOString(),
+          responsible_membership_id: fixture.membershipId,
+          reason,
+          ...input,
+        },
       },
-    },
-  );
-  await expectStatus(response, 201, `foreign-associate ${kind}`);
-  return (await response.json()) as Json;
+    );
+    await expectStatus(response, 201, `foreign-associate ${kind}`);
+    return (await response.json()) as Json;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/ECONNRESET|socket hang up/i.test(message)) throw error;
+
+    // A response can be lost after the server commits. Never replay this
+    // mutation: reconcile the exact versioned event from authoritative state.
+    const recoveryResponse = await api.get(
+      `${apiBase}/api/ip/foreign-associate-instructions/${instruction.id}/workspace`,
+      { headers },
+    );
+    await expectStatus(recoveryResponse, 200, `reconcile foreign-associate ${kind}`);
+    const recovered = (await recoveryResponse.json()) as Json;
+    const matchingEvents = (recovered.transactions as Json[]).filter((event) =>
+      event.event_kind === "foreign_associate_instruction_transaction"
+      && event.reason === reason
+      && event.payload_json?.transaction_kind === kind
+      && event.payload_json?.row_version_before === expectedVersion
+      && event.payload_json?.row_version_after === expectedVersion + 1
+    );
+    expect(matchingEvents, `ambiguous ${kind} response must reconcile exactly once`).toHaveLength(1);
+    expect(recovered.instruction.row_version).toBeGreaterThanOrEqual(expectedVersion + 1);
+
+    let successor = null;
+    const successorId = matchingEvents[0].payload_json?.successor_instruction_id;
+    if (typeof successorId === "string" && successorId) {
+      const successorResponse = await api.get(
+        `${apiBase}/api/ip/foreign-associate-instructions/${successorId}`,
+        { headers },
+      );
+      await expectStatus(successorResponse, 200, `reconcile foreign-associate ${kind} successor`);
+      successor = (await successorResponse.json()) as Json;
+    }
+    return {
+      instruction: recovered.instruction,
+      event: matchingEvents[0],
+      successor,
+    };
+  }
 }
 
 export async function exerciseForeignAssociateJourney(

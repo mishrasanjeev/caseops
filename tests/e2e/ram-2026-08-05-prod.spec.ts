@@ -160,6 +160,16 @@ test.describe("Ram 2026-08-05 deployed statute trust", () => {
     expect(sectionsResponse.status(), await sectionsResponse.text()).toBe(200);
     const sectionsPayload = (await sectionsResponse.json()) as {
       sections: SectionSummary[];
+      catalog_sections: Array<{
+        id: string;
+        section_number: string;
+        section_label: string | null;
+        selection_state:
+          | "verified_selectable"
+          | "verification_pending"
+          | "quarantined"
+          | "retired";
+      }>;
     };
     expect(sectionsPayload.sections).toHaveLength(statute.section_count);
     for (const section of sectionsPayload.sections) {
@@ -195,9 +205,16 @@ test.describe("Ram 2026-08-05 deployed statute trust", () => {
       `${PROD_BASE_URL}/app/statutes/${encodeURIComponent(statute.id)}`,
     );
     if (sectionsPayload.sections.length === 0) {
-      await expect(
-        page.getByRole("heading", { name: "No verified sections available" }),
-      ).toBeVisible();
+      expect(sectionsPayload.catalog_sections.length).toBeGreaterThan(0);
+      const catalogSection = sectionsPayload.catalog_sections[0]!;
+      await expect(page.getByRole("heading", { name: "Sections" })).toBeVisible();
+      const row = page.getByTestId(`statute-section-${catalogSection.id}`);
+      await expect(row).toContainText(catalogSection.section_number);
+      await expect(row).toContainText(
+        catalogSection.selection_state === "verification_pending"
+          ? "Verification pending"
+          : /Quarantined|Retired/,
+      );
     } else {
       const section = sectionsPayload.sections[0];
       const detailResponse = await page.request.get(

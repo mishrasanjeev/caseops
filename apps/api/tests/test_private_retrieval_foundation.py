@@ -22,6 +22,7 @@ from caseops_api.db.session import get_session_factory
 from caseops_api.services.private_retrieval import (
     PRIVATE_PROJECTION_EVENT_KEY_MAX_LENGTH,
     PrivateProjectionInput,
+    PrivateRetrievalConcurrencyError,
     PrivateRetrievalInvariantError,
     ProjectionScopeInput,
     build_private_projection_event_key,
@@ -406,7 +407,7 @@ def test_acl_prefilter_hydration_revocation_and_cross_tenant_are_fail_closed(
         assert event.affected_projection_count >= 1
 
 
-def test_shadow_generation_receives_tombstones_before_atomic_activation(
+def test_event_tombstones_active_generation_and_invalidates_shadow_writer(
     client: TestClient,
 ) -> None:
     bootstrap = bootstrap_company(client)
@@ -423,6 +424,14 @@ def test_shadow_generation_receives_tombstones_before_atomic_activation(
         stale_access_generation = shadow.access_policy_generation
         stale_tombstone_generation = shadow.tombstone_generation
         event_key = "-".join(("shadow", "revocation", "1"))
+        active_projection = upsert_private_projection(
+            session,
+            company_id=company_id,
+            generation_id=active.id,
+            expected_access_policy_generation=active.access_policy_generation,
+            expected_tombstone_generation=active.tombstone_generation,
+            payload=_projection_payload(matter_row, text="Active generation private text."),
+        )
         shadow_projection = upsert_private_projection(
             session,
             company_id=company_id,
@@ -454,7 +463,10 @@ def test_shadow_generation_receives_tombstones_before_atomic_activation(
             reason_code="source_revoked",
         )
         assert duplicate.id == event.id
-        assert session.get(PrivateIndexProjection, shadow_projection.id).is_tombstoned
+        assert session.get(PrivateIndexProjection, active_projection.id).is_tombstoned
+        assert not session.get(PrivateIndexProjection, shadow_projection.id).is_tombstoned
+        session.refresh(shadow)
+        assert shadow.tombstone_generation > stale_tombstone_generation
         with pytest.raises(
             PrivateRetrievalInvariantError,
             match="stale private projection writer",
@@ -485,24 +497,19 @@ def test_shadow_generation_receives_tombstones_before_atomic_activation(
                 target_version=None,
                 reason_code="different_operation",
             )
-        mark_private_generation_ready(
-            session,
-            company_id=company_id,
-            generation_id=shadow.id,
-            expected_projection_count=0,
-        )
-        # The event has already neutralized the shadow.  It cannot resurrect
-        # the revoked row when the generation later becomes active.
-        from caseops_api.services.private_retrieval import activate_private_generation
-
-        activated = activate_private_generation(
-            session,
-            company_id=company_id,
-            generation_id=shadow.id,
-            expected_active_generation_id=active.id,
-        )
+        with pytest.raises(
+            PrivateRetrievalConcurrencyError,
+            match="stale private rebuild cannot verify",
+        ):
+            mark_private_generation_ready(
+                session,
+                company_id=company_id,
+                generation_id=shadow.id,
+                expected_projection_count=1,
+                expected_access_policy_generation=stale_access_generation,
+                expected_tombstone_generation=stale_tombstone_generation,
+            )
         session.commit()
-        assert activated.state == "active"
         context = _context(session, company_id=company_id, membership_id=membership_id)
         assert (
             retrieve_private_content(
@@ -512,6 +519,59 @@ def test_shadow_generation_receives_tombstones_before_atomic_activation(
             )
             == ()
         )
+
+
+def test_tenant_disposition_neutralizes_active_and_shadow_generations(
+    client: TestClient,
+) -> None:
+    bootstrap = bootstrap_company(client)
+    company_id = str(bootstrap["company"]["id"])
+    membership_id = str(bootstrap["membership"]["id"])
+    token = str(bootstrap["access_token"])
+    matter = _matter(client, token, "IPLF-066A-TENANT-DISPOSITION")
+
+    with get_session_factory()() as session:
+        matter_row = session.get(Matter, str(matter["id"]))
+        assert matter_row is not None
+        active = ensure_active_private_generation(session, company_id=company_id)
+        shadow = create_shadow_private_generation(session, company_id=company_id)
+        for generation, text in (
+            (active, "Active tenant disposition text."),
+            (shadow, "Shadow tenant disposition text."),
+        ):
+            upsert_private_projection(
+                session,
+                company_id=company_id,
+                generation_id=generation.id,
+                expected_access_policy_generation=generation.access_policy_generation,
+                expected_tombstone_generation=generation.tombstone_generation,
+                payload=_projection_payload(matter_row, text=text),
+            )
+
+        event = propagate_private_projection_change(
+            session,
+            company_id=company_id,
+            actor_membership_id=membership_id,
+            idempotency_key="tenant-disposition-all-generations",
+            event_type="tombstoned",
+            target_type="tenant",
+            target_id=company_id,
+            target_version="manifest-v1",
+            reason_code="approved_tenant_data_disposition",
+        )
+        session.commit()
+        projections = list(
+            session.scalars(
+                select(PrivateIndexProjection).where(
+                    PrivateIndexProjection.company_id == company_id,
+                )
+            ).all()
+        )
+
+    assert event.affected_projection_count == 2
+    assert len(projections) == 2
+    assert all(row.is_tombstoned for row in projections)
+    assert all(row.content_text == "" and row.embedding_json is None for row in projections)
 
 
 def test_authoritative_matter_disposal_and_reopen_never_resurrect_projection(

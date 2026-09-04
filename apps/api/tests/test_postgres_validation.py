@@ -60,7 +60,7 @@ from time import monotonic
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine, event, func, inspect, select, text
+from sqlalchemy import create_engine, delete, event, func, inspect, select, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
@@ -9700,6 +9700,230 @@ def test_private_generation_readiness_and_lifecycle_event_share_tenant_first_loc
         )
     assert sum(row.state == "active" for row in generations) == 1
     assert next(row for row in generations if row.state == "active").id == shadow_generation_id
+
+
+def test_matter_disposal_survives_concurrent_failed_shadow_cleanup_on_postgres(
+    pg_engine,
+) -> None:
+    """A failed-shadow cleanup cannot roll back an authoritative disposal.
+
+    Production verification on 2026-09-04 caught event application loading a
+    building-shadow projection, maintenance deleting that unreadable shadow,
+    and the later ORM flush raising StaleDataError. The event owns only the
+    active generation captured at enqueue; shadow safety is enforced by the
+    generation epoch fence.
+    """
+
+    from caseops_api.db.models import (
+        Company,
+        CompanyMembership,
+        Matter,
+        PrivateIndexGeneration,
+        PrivateIndexProjection,
+        PrivateProjectionEvent,
+        User,
+    )
+    from caseops_api.schemas.matters import MatterLifecycleStatusRequest
+    from caseops_api.services.matters import transition_matter_lifecycle_status
+    from caseops_api.services.private_retrieval import (
+        PrivateProjectionInput,
+        ProjectionScopeInput,
+        create_shadow_private_generation,
+        ensure_active_private_generation,
+        private_source_version,
+        upsert_private_projection,
+    )
+    from caseops_api.services.session_context import SessionContext
+
+    company_id = str(uuid4())
+    user_id = str(uuid4())
+    membership_id = str(uuid4())
+    matter_id = str(uuid4())
+    now = datetime.now(UTC)
+    with Session(pg_engine) as setup:
+        setup.add_all(
+            [
+                Company(
+                    id=company_id,
+                    name="PostgreSQL Shadow Cleanup Lifecycle Firm",
+                    slug=f"pg-shadow-cleanup-{company_id[:8]}",
+                    company_type="law_firm",
+                    tenant_key=company_id,
+                ),
+                User(
+                    id=user_id,
+                    email=f"pg-shadow-cleanup-{user_id[:8]}@example.com",
+                    full_name="PostgreSQL Lifecycle Owner",
+                    password_hash="not-used",
+                ),
+            ]
+        )
+        setup.commit()
+        matter = Matter(
+            id=matter_id,
+            company_id=company_id,
+            title="Shadow cleanup lifecycle overlap",
+            matter_code=f"PG-SHADOW-{matter_id[:8]}",
+            status="active",
+            practice_area="Intellectual Property",
+            forum_level="high_court",
+            is_active=True,
+            updated_at=now,
+        )
+        setup.add_all(
+            [
+                CompanyMembership(
+                    id=membership_id,
+                    company_id=company_id,
+                    user_id=user_id,
+                    role="owner",
+                ),
+                matter,
+            ]
+        )
+        setup.commit()
+        active = ensure_active_private_generation(setup, company_id=company_id)
+        shadow = create_shadow_private_generation(setup, company_id=company_id)
+        active_generation_id = str(active.id)
+        shadow_generation_id = str(shadow.id)
+        projection_input = PrivateProjectionInput(
+            source_type="matter",
+            source_id=matter_id,
+            source_version=private_source_version(matter),
+            chunk_ordinal=0,
+            label="Lifecycle overlap projection",
+            content="Private content that must disappear when the Matter is disposed.",
+            scopes=(
+                ProjectionScopeInput(
+                    scope_type="matter",
+                    scope_id=matter_id,
+                    access_policy_version=matter.access_policy_version,
+                ),
+            ),
+        )
+        active_projection = upsert_private_projection(
+            setup,
+            company_id=company_id,
+            generation_id=active_generation_id,
+            expected_access_policy_generation=active.access_policy_generation,
+            expected_tombstone_generation=active.tombstone_generation,
+            payload=projection_input,
+        )
+        upsert_private_projection(
+            setup,
+            company_id=company_id,
+            generation_id=shadow_generation_id,
+            expected_access_policy_generation=shadow.access_policy_generation,
+            expected_tombstone_generation=shadow.tombstone_generation,
+            payload=projection_input,
+        )
+        active_projection_id = str(active_projection.id)
+        expected_updated_at = matter.updated_at
+        setup.commit()
+
+    active_projection_loaded = Event()
+    shadow_cleanup_committed = Event()
+
+    def dispose_matter() -> str:
+        with Session(pg_engine) as lifecycle:
+            lifecycle.execute(text("SET LOCAL lock_timeout = '5s'"))
+            lifecycle.execute(text("SET LOCAL statement_timeout = '10s'"))
+            context = SessionContext(
+                company=lifecycle.get(Company, company_id),
+                membership=lifecycle.get(CompanyMembership, membership_id),
+                user=lifecycle.get(User, user_id),
+            )
+            assert context.company is not None
+            assert context.membership is not None
+            assert context.user is not None
+
+            def pause_after_active_projection_load(_session, instance) -> None:
+                if (
+                    isinstance(instance, PrivateIndexProjection)
+                    and instance.generation_id == active_generation_id
+                ):
+                    active_projection_loaded.set()
+                    if not shadow_cleanup_committed.wait(timeout=5):
+                        raise TimeoutError("Failed-shadow cleanup did not commit in time.")
+
+            event.listen(lifecycle, "loaded_as_persistent", pause_after_active_projection_load)
+            try:
+                result = transition_matter_lifecycle_status(
+                    lifecycle,
+                    context=context,
+                    matter_id=matter_id,
+                    payload=MatterLifecycleStatusRequest(
+                        to_status="disposed",
+                        expected_from_status="active",
+                        expected_updated_at=expected_updated_at,
+                        reason="The engagement ended and must leave every operational view.",
+                    ),
+                )
+            finally:
+                event.remove(lifecycle, "loaded_as_persistent", pause_after_active_projection_load)
+            return str(result.status)
+
+    def delete_failed_shadow() -> str:
+        if not active_projection_loaded.wait(timeout=5):
+            raise TimeoutError("Lifecycle writer did not load its active projection.")
+        try:
+            with Session(pg_engine) as maintenance:
+                maintenance.execute(text("SET LOCAL lock_timeout = '5s'"))
+                shadow = maintenance.scalar(
+                    select(PrivateIndexGeneration)
+                    .where(
+                        PrivateIndexGeneration.id == shadow_generation_id,
+                        PrivateIndexGeneration.company_id == company_id,
+                    )
+                    .with_for_update()
+                )
+                assert shadow is not None
+                maintenance.execute(
+                    delete(PrivateIndexProjection).where(
+                        PrivateIndexProjection.generation_id == shadow_generation_id,
+                        PrivateIndexProjection.company_id == company_id,
+                    )
+                )
+                shadow.state = "failed"
+                shadow.failure_code = "ForcedShadowCleanupRegression"
+                maintenance.commit()
+                return shadow_generation_id
+        finally:
+            shadow_cleanup_committed.set()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        disposal = executor.submit(dispose_matter)
+        cleanup = executor.submit(delete_failed_shadow)
+        assert cleanup.result(timeout=10) == shadow_generation_id
+        assert disposal.result(timeout=10) == "disposed"
+
+    with Session(pg_engine) as verify:
+        persisted_matter = verify.get(Matter, matter_id)
+        persisted_projection = verify.get(PrivateIndexProjection, active_projection_id)
+        applied_event = verify.scalar(
+            select(PrivateProjectionEvent).where(
+                PrivateProjectionEvent.company_id == company_id,
+                PrivateProjectionEvent.generation_id == active_generation_id,
+                PrivateProjectionEvent.target_type == "matter",
+                PrivateProjectionEvent.target_id == matter_id,
+                PrivateProjectionEvent.status == "applied",
+            )
+        )
+        shadow_projection_count = int(
+            verify.scalar(
+                select(func.count(PrivateIndexProjection.id)).where(
+                    PrivateIndexProjection.company_id == company_id,
+                    PrivateIndexProjection.generation_id == shadow_generation_id,
+                )
+            )
+            or 0
+        )
+    assert persisted_matter is not None
+    assert str(persisted_matter.status) == "disposed"
+    assert persisted_matter.is_active is False
+    assert persisted_projection is not None and persisted_projection.is_tombstoned
+    assert applied_event is not None and applied_event.affected_projection_count == 1
+    assert shadow_projection_count == 0
 
 
 def test_private_retrieval_prefilters_before_bounded_rank_on_postgres(

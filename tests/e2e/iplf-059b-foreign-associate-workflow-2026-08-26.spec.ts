@@ -10,6 +10,7 @@ import { expectStatus } from "./support/iplf058b";
 import {
   createForeignAssociateFixture,
   exerciseForeignAssociateJourney,
+  recordForeignAssociateTransaction,
 } from "./support/iplf059b";
 
 const PASSWORD = "ForeignAssociateWorkflow2026!";
@@ -170,4 +171,64 @@ test("IPLF-059B completes every UJ-37 path and exposes responsive evidence queue
   await page.goto("/law-firms");
   await expect(page.getByRole("heading", { name: "Foreign-associate filing control" })).toBeVisible();
   await api.dispose();
+});
+
+test("IPLF-059B reconciles a committed transaction after a lost response without replay", async () => {
+  let postCount = 0;
+  let workspaceReadCount = 0;
+  const expectedVersion = 4;
+  const instructionId = "instruction-transport-recovery";
+  const api = {
+    get: async (url: string) => {
+      if (url.endsWith("/workspace")) {
+        workspaceReadCount += 1;
+        const committed = workspaceReadCount > 1;
+        return {
+          status: () => 200,
+          text: async () => "",
+          json: async () => committed
+            ? {
+                instruction: { id: instructionId, row_version: expectedVersion + 1, status: "approved" },
+                transactions: [{
+                  id: "event-committed-on-server",
+                  event_kind: "foreign_associate_instruction_transaction",
+                  reason: "IPLF-059B approve reviewed in the dated acceptance journey.",
+                  payload_json: {
+                    transaction_kind: "approve",
+                    row_version_before: expectedVersion,
+                    row_version_after: expectedVersion + 1,
+                  },
+                }],
+              }
+            : {
+                instruction: { id: instructionId, row_version: expectedVersion, status: "draft" },
+                transactions: [],
+              },
+        };
+      }
+      return {
+        status: () => 200,
+        text: async () => "",
+        json: async () => ({ lifecycle_version: 2 }),
+      };
+    },
+    post: async () => {
+      postCount += 1;
+      throw new Error("apiRequestContext.post: read ECONNRESET");
+    },
+  } as unknown as APIRequestContext;
+
+  const result = await recordForeignAssociateTransaction(
+    api,
+    "https://api.example.test",
+    { Authorization: "Bearer test" },
+    { docket: { id: "docket-1" }, membershipId: "membership-1" },
+    { id: instructionId },
+    "approve",
+  );
+
+  expect(postCount).toBe(1);
+  expect(workspaceReadCount).toBe(2);
+  expect(result.instruction.status).toBe("approved");
+  expect(result.event.id).toBe("event-committed-on-server");
 });
