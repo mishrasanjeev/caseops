@@ -62,10 +62,13 @@ the CaseOps corpus available.
    dated terms metadata, permitted uses, retention, budgets and enabled runtime
    switch through the canonical release script.
 8. Verify readiness has no missing configuration, invalid terms, missing cost
-   categories, or approval keys. Use fixture-backed tests for every endpoint and
-   only one INR 0.50 live search canary for credential/provider verification.
-   Check the official logo, billing usage, cache state, source opening, content
-   hash, and audit records without repeating paid requests.
+   categories, or approval keys. Use fixture-backed tests for every endpoint.
+   Automated production checks may read readiness and the CaseOps-recorded
+   workspace budget balance only; they retain the no-paid-provider marker and
+   never issue search, document, fragment, or metadata calls. Human users on a
+   funded live tenant exercise the provider under the same readiness and budget
+   gates. Check the official logo, billing usage, cache state, source opening,
+   content hash, and audit records without creating automated provider spend.
 
 The API account, prepaid balance and accepted provider terms are configuration
 facts, not approval gates. Once supplied, Codex-owned release automation seeds
@@ -119,5 +122,7 @@ Playwright tests; regenerate OpenAPI and the data-governance map. After merge,
 deploy the exact main SHA with the canonical migration-before-traffic pipeline,
 verify API/web image digests and revisions, then run the dated production
 acceptance. Production automation uses fixture responses and the no-paid-provider
-marker; a single separately recorded live search is the activation canary and
-must not be repeated by regression runs.
+marker. It checks only readiness and the CaseOps-recorded workspace budget
+balance. It does not claim to read Indian Kanoon's prepaid account balance,
+because the licensed API does not publish a non-billable balance endpoint.
+Paid operation belongs to authenticated human use, not regression automation.

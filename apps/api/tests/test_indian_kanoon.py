@@ -480,5 +480,42 @@ def test_automated_browser_marker_blocks_indian_kanoon_before_spend(
     assert response.status_code == 409, response.text
     assert response.json()["code"] == "paid_provider_blocked_for_test"
     assert response.json()["reason"] == "automated_test_request"
+    assert "budget balances" in response.json()["detail"]
     with get_session_factory()() as session:
         assert session.scalar(select(func.count(BillingUsageEvent.id))) == 0
+
+
+def test_health_reports_workspace_budget_balance_without_external_probe(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    boot = bootstrap_company(client)
+    monkeypatch.setattr(ik, "get_settings", _settings)
+    with get_session_factory()() as session:
+        _configure_costs(session)
+        session.add(
+            BillingUsageEvent(
+                company_id=str(boot["company"]["id"]),
+                usage_type="indian_kanoon_legal_source_search",
+                quantity=1,
+                unit="provider_call",
+                estimated_cost_minor=75,
+                currency="INR",
+            )
+        )
+        session.commit()
+
+    response = client.get(
+        "/api/authorities/providers/indian-kanoon/health",
+        headers=auth_headers(str(boot["access_token"])),
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["performs_external_probe"] is False
+    assert body["provider_prepaid_balance_checked"] is False
+    assert body["balance_source"] == "caseops_recorded_workspace_usage"
+    assert body["daily_spend_minor"] == 75
+    assert body["daily_remaining_minor"] == 9_925
+    assert body["monthly_spend_minor"] == 75
+    assert body["monthly_remaining_minor"] == 99_925

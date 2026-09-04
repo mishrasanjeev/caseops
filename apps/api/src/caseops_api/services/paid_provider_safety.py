@@ -100,8 +100,11 @@ def assert_paid_provider_call_allowed(
         detail={
             "code": "paid_provider_blocked_for_test",
             "message": (
-                "Paid provider calls are disabled for automated tests and test tenants. "
-                "Use the deterministic provider fixture; no external request was made."
+                "Automated verification may read provider readiness and CaseOps budget "
+                "balances, but paid search, retrieval, refresh, and download calls are "
+                "disabled. Normal authenticated live-user requests remain available when "
+                "applicable readiness, tenant, and budget gates pass; no external request "
+                "was made."
             ),
             "provider": provider,
             "reason": reason,

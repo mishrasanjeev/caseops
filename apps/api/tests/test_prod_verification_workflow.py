@@ -13,13 +13,11 @@ def test_every_playwright_config_blocks_paid_provider_requests() -> None:
         "playwright.app.self-hosted.config.ts",
         "playwright.docker.config.ts",
     }
-    explicitly_paid = {"playwright.paid-provider-live.config.ts"}
+    explicitly_nonbillable = {"playwright.provider-nonbillable-live.config.ts"}
     configs = sorted(REPO_ROOT.glob("playwright*.config.ts"))
-    assert {path.name for path in configs} >= inherited | explicitly_paid
+    assert {path.name for path in configs} >= inherited | explicitly_nonbillable
     for config_path in configs:
         config = config_path.read_text(encoding="utf-8")
-        if config_path.name in explicitly_paid:
-            continue
         if config_path.name in inherited:
             assert 'from "./playwright.app.config"' in config
             assert "...appConfig" in config
@@ -28,17 +26,27 @@ def test_every_playwright_config_blocks_paid_provider_requests() -> None:
         assert "extraHTTPHeaders: noPaidProviderHeaders" in config
 
 
-def test_live_paid_provider_config_is_unique_bounded_and_explicitly_opted_in() -> None:
-    config = (REPO_ROOT / "playwright.paid-provider-live.config.ts").read_text(
+def test_live_provider_config_is_nonbillable_bounded_and_explicitly_opted_in() -> None:
+    config = (REPO_ROOT / "playwright.provider-nonbillable-live.config.ts").read_text(
         encoding="utf-8"
     )
+    spec = (
+        REPO_ROOT / "tests/e2e/provider-nonbillable-live-2026-09-04-prod.spec.ts"
+    ).read_text(encoding="utf-8")
 
-    assert 'CASEOPS_ALLOW_LIVE_PAID_PROVIDER_TESTS !== "true"' in config
-    assert "paid-provider-live-2026-09-03-prod\\.spec\\.ts" in config
+    assert 'CASEOPS_ALLOW_LIVE_PROVIDER_READONLY_TESTS !== "true"' in config
+    assert "provider-nonbillable-live-2026-09-04-prod\\.spec\\.ts" in config
     assert "fullyParallel: false" in config
     assert "workers: 1" in config
-    assert "noPaidProviderHeaders" not in config
-    assert "extraHTTPHeaders" not in config
+    assert "noPaidProviderHeaders" in config
+    assert "extraHTTPHeaders: noPaidProviderHeaders" in config
+    assert 'required("CASEOPS_EXPECTED_RELEASE_SHA")' in spec
+    assert "`${API_BASE_URL}/api/build`" in spec
+    assert "`${BASE_URL}/api/release-identity`" in spec
+    assert "/api/admin/provider-operations/readiness" in spec
+    assert "/api/authorities/providers/indian-kanoon/health" in spec
+    assert "paid_provider_blocked_for_test" in spec
+    assert "max_results" not in spec
 
 
 def test_exact_release_case_tracking_uses_only_stored_evidence() -> None:
