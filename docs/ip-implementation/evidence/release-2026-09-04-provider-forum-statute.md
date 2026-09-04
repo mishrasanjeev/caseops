@@ -30,6 +30,11 @@ catalog, or lifecycle writer.
   access does not depend on a test-looking slug.
 - Shared active canonical forum/alias resolution for manual and bulk matter
   creation, with contextual ambiguity for multi-district Delhi complexes.
+- Governed platform alias administration with dedicated capability and recent
+  step-up, source-backed review state, activity, actor attribution, optimistic
+  versioning, typed failures, audit reason, and no code release for new reviewed
+  labels. Ambiguous bulk rows now expose structured canonical candidates and
+  hierarchy in preview and error export.
 - Full catalog-section visibility on Act details with honest trust state and
   source navigation; downstream legal use remains verified-only.
 - Side-effect-free Matter read projection for legacy closed records.
@@ -39,11 +44,13 @@ catalog, or lifecycle writer.
 - `apps/api/tests/test_20260904_provider_spend.py`
 - `apps/api/tests/test_20260904_provider_spend_forum_migration.py`
 - `apps/api/tests/test_20260904_forum_alias_resolution.py`
+- `apps/api/tests/test_20260904_forum_alias_admin.py`
 - provider regressions in `apps/api/tests/test_case_tracking.py` and
   `apps/api/tests/test_indian_kanoon.py`
 - lifecycle regression in `apps/api/tests/test_matter_lifecycle.py`
 - web tests for billing usage, statutes, and `ForumSelector`
 - `tests/e2e/provider-spend-forum-statute-2026-09-04.spec.ts`
+- `tests/e2e/forum-alias-admin-2026-09-04.spec.ts`
 - `tests/e2e/provider-nonbillable-live-2026-09-04-prod.spec.ts`
 
 ## Candidate evidence
@@ -65,26 +72,40 @@ catalog, or lifecycle writer.
 - Ruff check and format-check passed for every changed Python file. The
   canonical program manifest validated with 436 requirements, 50 families, 68
   journeys, and 317 atomic paths.
-- The complete API regression passed from the API project root with 3,905
-  passed and 144 intentional skips. The complete web regression passed 821 of
-  821 tests; TypeScript typecheck and the production Next.js build also passed.
-- After fast-forwarding the candidate onto canonical `main` at `633d2375`, the
-  governance map, generated data-class projection, ownership ledger, ARCH-OPS
-  contract, and program manifest all validated without drift.
-- A fresh Docker pre-commit build validated source fingerprint
-  `93678e367ef7c61cd8c472c7a22b9bfbb6f18722ba92138c939b5270276aba67`.
-  PostgreSQL schema `20260904_0002` had zero missing or invalid indexes, zero
-  foreign-key index gaps, and zero sequential-scan warnings. All 117
-  PostgreSQL/pgvector tests passed. Desktop Playwright passed 185 tests with
-  five intentional provider/release-identity skips; mobile Playwright passed
-  all four tests. The harness then removed its containers, network, and data
-  volumes.
-- The Docker browser proof includes the three dated 2026-09-04 journeys for
-  provider budgets without an external probe, full catalogued Bare Act section
-  browsing, and contextual forum-alias resolution. It also includes the deep
-  Matter lifecycle regression proving disposal, stale-write rejection,
-  background/operational suppression, controlled reopen to Intake, and reload
-  persistence.
+- The post-review governed-alias increment passed 15 focused API tests, six web
+  component/page tests, Ruff, TypeScript, and OpenAPI regeneration before the
+  private-projection hotfix was integrated. Exact integrated Docker evidence is
+  still required below and supersedes these focused counts for release.
+- Interfering task `01a02a6c-5e05-74d1-b174-d8c780ffd6ea` was constrained to
+  private-projection PR #453. It confirmed a clean worktree and no merge,
+  `main`, deployment, paid-provider, or production mutation; this release owns
+  integration and all remaining gates.
+- The complete host-native API regression on the current working tree passed
+  with 3,922 tests, 146 intentional environment skips, and zero failures in
+  5,286.21 seconds. Ruff passed before pytest. The skipped PostgreSQL-only
+  coverage remains mandatory in the exact-candidate Docker pre-commit run.
+- The complete host-native web regression passed all 824 tests in 158 files;
+  TypeScript typecheck also passed. This was a clean isolated rerun after a
+  concurrent backend/web attempt exposed unrelated timing-sensitive tests.
+- The branch is based on canonical `origin/main` at `67b89bdf`, which includes
+  the merged private-projection deadlock fix from PR #453. The governance map,
+  generated data-class projection, ownership ledger, ARCH-OPS contract, and
+  program manifest validate without drift on this integrated tree.
+- The clean exact-candidate Docker pre-commit gate passed at source fingerprint
+  `63a3967318372e01a0266becbbfc7abcd5ab737cbe99bf584532475e2199d13c`.
+  PostgreSQL/pgvector passed all 119 tests. Desktop Playwright passed 185
+  journeys with five intentional environment/provider skips (94 passed and one
+  skipped in shard one; 91 passed and four skipped in shard two), and mobile
+  Playwright passed all four journeys. The harness removed its containers,
+  network, and volumes and exited zero. This evidence-file update is release
+  bookkeeping after that gate and does not change runtime or test inputs.
+- The exact-candidate Docker browser proof covered provider budgets without an
+  external probe, full catalogued Bare Act section browsing, contextual
+  forum-alias resolution, manual/bulk use of the same exact forum catalog, and
+  the deep Matter lifecycle regression for disposal, stale-write rejection,
+  operational suppression, controlled reopen to Intake, and reload
+  persistence. The Product Guide journey also passed after replacing its stale
+  hard-coded version assertion with the canonical generated catalog version.
 - CI, exact deployment, policy-row, production acceptance, and persisted
   production lifecycle evidence remain pending at this checkpoint. No
   `Properly fixed` verdict is derived from this file until those gates are
@@ -109,8 +130,9 @@ catalog, or lifecycle writer.
 ## Honest residuals
 
 - All-India reviewed alias coverage is not complete. The supplied Delhi
-  examples are implemented with official district context; ambiguous complex
-  names stay unresolved without context.
+  examples are implemented with official district context, the governed master
+  accepts reviewed additions for every active catalog jurisdiction, and
+  ambiguous complex names stay unresolved without context.
 - Catalogued statute sections can be browsed, but legal selection still requires
   exact official text, hash, publisher, issuing body, source version, and a
   checked section-level link.

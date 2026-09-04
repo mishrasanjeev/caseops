@@ -14,7 +14,7 @@ vi.mock("@/lib/api/product-guide", () => ({
 
 import { ProductGuideSearch } from "@/components/guide/ProductGuideSearch";
 
-const CURRENT_VERSION = "2026.08.27.2";
+const CURRENT_VERSION = "2026.09.04.1";
 
 describe("ProductGuideSearch", () => {
   beforeEach(() => {

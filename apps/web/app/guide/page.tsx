@@ -1479,9 +1479,10 @@ export default function GuidePage() {
                     </li>
                     <li>
                       <strong>Workspace provider budget.</strong> Live human searches,
-                      refreshes, and source downloads use the workspace&apos;s eCourts monthly
-                      budget. The default is INR 1,000 per month; Admin &gt; Billing &gt; Usage
-                      shows spend, limit, remaining amount, and any explicit unlimited policy.
+                      refreshes, and source downloads count toward one shared Indian Kanoon and
+                      eCourts account budget. The default is INR 1,000 per month; Admin &gt;
+                      Billing &gt; Usage separates provider contribution from total budget use,
+                      limit, remaining amount, and any explicit unlimited policy.
                     </li>
                     <li>
                       <strong>Manual fallback.</strong> Manual refresh is rate-limited,
@@ -1823,10 +1824,10 @@ export default function GuidePage() {
                       <strong>Licensed source.</strong> Indian Kanoon is available to
                       authenticated human users when contract, terms, server-only credentials,
                       permitted uses, retention, legal coverage, and a positive verified INR
-                      cost profile all pass. The default workspace limit is INR 1,000 per month
-                      for this provider, independently of eCourts; Billing &gt; Usage publishes
-                      current spend and remaining budget. CaseOps never scrapes Indian Kanoon
-                      public pages.
+                      cost profile all pass. By default, Indian Kanoon and eCourts share one INR
+                      1,000 monthly account limit; Billing &gt; Usage publishes each provider&apos;s
+                      contribution, total budget use, and remaining budget. CaseOps never scrapes
+                      Indian Kanoon public pages.
                     </li>
                     <li>
                       <strong>Automation is nonbillable.</strong> Automated verification may

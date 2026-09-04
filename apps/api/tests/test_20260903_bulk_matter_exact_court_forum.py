@@ -190,6 +190,21 @@ def test_exact_court_conflict_unknown_inactive_and_existing_validation_fail_clos
     conflict, inactive, unknown, owner = job["rows"]
     assert "Row 2" in " ".join(conflict["errors"])
     assert "conflicts with the supplied" in " ".join(conflict["errors"])
+    assert {
+        candidate["forum_catalog_entry_id"]
+        for candidate in conflict["normalized"]["forum_candidates"]
+    } == {
+        "district:india-gov:delhi:centraldelhi",
+        "district:india-gov:delhi:westdelhi",
+    }
+    assert all(candidate["lineage"] for candidate in conflict["normalized"]["forum_candidates"])
+    error_report = client.get(
+        f"/api/matters/imports/{job['id']}/errors",
+        headers=auth_headers(token),
+    )
+    assert error_report.status_code == 200, error_report.text
+    assert "Forum Candidates" in error_report.text
+    assert "District Court > Delhi > Central Delhi" in error_report.text
     assert "Dwarka_SWCF" in " ".join(inactive["errors"])
     assert "did not match an active configured Exact Court" in " ".join(inactive["errors"])
     assert "Imaginary Court" in " ".join(unknown["errors"])

@@ -352,6 +352,59 @@ export const forumCatalogResponse = z.object({
   entries: z.array(forumCatalogEntry),
 });
 
+export const forumCatalogAliasType = z.enum([
+  "court_complex",
+  "abbreviation",
+  "legacy_name",
+  "local_name",
+  "spelling_variant",
+  "provider_label",
+  "other",
+]);
+
+export const forumCatalogAliasVerificationStatus = z.enum([
+  "pending",
+  "verified",
+  "rejected",
+]);
+
+export const forumCatalogAliasRecord = z
+  .object({
+    id: z.string(),
+    forum_catalog_entry_id: z.string(),
+    canonical_name: z.string(),
+    forum_type: z.string(),
+    forum_level: z.string(),
+    state: z.string().nullable(),
+    district: z.string().nullable(),
+    city: z.string().nullable(),
+    lineage: z.string(),
+    alias: z.string(),
+    normalized_alias: z.string(),
+    alias_type: forumCatalogAliasType,
+    source_name: z.string(),
+    source_url: z.string().nullable(),
+    verification_status: forumCatalogAliasVerificationStatus,
+    is_active: z.boolean(),
+    reviewed_at: z.string().nullable(),
+    record_version: z.number().int().nonnegative(),
+    created_by_platform_admin_id: z.string().nullable(),
+    reviewed_by_platform_admin_id: z.string().nullable(),
+    updated_by_platform_admin_id: z.string().nullable(),
+    created_at: z.string(),
+    updated_at: z.string(),
+  })
+  .strict();
+
+export const forumCatalogAliasListResponse = z
+  .object({
+    aliases: z.array(forumCatalogAliasRecord),
+    returned_count: z.number().int().nonnegative(),
+    limit: z.number().int().positive(),
+    has_more: z.boolean(),
+  })
+  .strict();
+
 export type CompanySummary = z.infer<typeof companySummary>;
 export type UserSummary = z.infer<typeof userSummary>;
 export type MembershipSummary = z.infer<typeof membershipSummary>;
@@ -375,6 +428,12 @@ export type MatterTag = z.infer<typeof matterTag>;
 export type MatterTagsList = z.infer<typeof matterTagsList>;
 export type ForumCatalogEntry = z.infer<typeof forumCatalogEntry>;
 export type ForumCatalogResponse = z.infer<typeof forumCatalogResponse>;
+export type ForumCatalogAliasType = z.infer<typeof forumCatalogAliasType>;
+export type ForumCatalogAliasVerificationStatus = z.infer<
+  typeof forumCatalogAliasVerificationStatus
+>;
+export type ForumCatalogAliasRecord = z.infer<typeof forumCatalogAliasRecord>;
+export type ForumCatalogAliasListResponse = z.infer<typeof forumCatalogAliasListResponse>;
 
 export const matterTimelineItem = z.object({
   id: z.string(),

@@ -366,17 +366,50 @@ def upgrade() -> None:
         sa.Column("forum_catalog_entry_id", sa.String(length=120), nullable=False),
         sa.Column("alias", sa.String(length=255), nullable=False),
         sa.Column("normalized_alias", sa.String(length=255), nullable=False),
+        sa.Column("alias_type", sa.String(length=32), nullable=False),
         sa.Column("source_name", sa.String(length=160), nullable=False),
         sa.Column("source_url", sa.String(length=500), nullable=True),
         sa.Column("verification_status", sa.String(length=32), nullable=False),
         sa.Column("is_active", sa.Boolean(), nullable=False),
         sa.Column("reviewed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("record_version", sa.Integer(), nullable=False),
+        sa.Column("created_by_platform_admin_id", sa.String(length=36), nullable=True),
+        sa.Column("reviewed_by_platform_admin_id", sa.String(length=36), nullable=True),
+        sa.Column("updated_by_platform_admin_id", sa.String(length=36), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.CheckConstraint(
+            "alias_type IN ('court_complex', 'abbreviation', 'legacy_name', "
+            "'local_name', 'spelling_variant', 'provider_label', 'other')",
+            name="ck_forum_catalog_alias_type",
+        ),
+        sa.CheckConstraint(
+            "verification_status IN ('pending', 'verified', 'rejected')",
+            name="ck_forum_catalog_alias_verification_status",
+        ),
+        sa.CheckConstraint(
+            "record_version >= 0",
+            name="ck_forum_catalog_alias_record_version",
+        ),
+        sa.ForeignKeyConstraint(
+            ["created_by_platform_admin_id"],
+            ["platform_admin_memberships.id"],
+            ondelete="SET NULL",
+        ),
         sa.ForeignKeyConstraint(
             ["forum_catalog_entry_id"],
             ["forum_catalog_entries.id"],
             ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["reviewed_by_platform_admin_id"],
+            ["platform_admin_memberships.id"],
+            ondelete="SET NULL",
+        ),
+        sa.ForeignKeyConstraint(
+            ["updated_by_platform_admin_id"],
+            ["platform_admin_memberships.id"],
+            ondelete="SET NULL",
         ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
@@ -405,6 +438,16 @@ def upgrade() -> None:
         "forum_catalog_aliases",
         ["normalized_alias", "is_active", "verification_status"],
     )
+    for actor_column in (
+        "created_by_platform_admin_id",
+        "reviewed_by_platform_admin_id",
+        "updated_by_platform_admin_id",
+    ):
+        op.create_index(
+            f"ix_forum_catalog_aliases_{actor_column}",
+            "forum_catalog_aliases",
+            [actor_column],
+        )
 
     forum_entries = sa.table(
         "forum_catalog_entries",
@@ -433,11 +476,16 @@ def upgrade() -> None:
         sa.column("forum_catalog_entry_id", sa.String()),
         sa.column("alias", sa.String()),
         sa.column("normalized_alias", sa.String()),
+        sa.column("alias_type", sa.String()),
         sa.column("source_name", sa.String()),
         sa.column("source_url", sa.String()),
         sa.column("verification_status", sa.String()),
         sa.column("is_active", sa.Boolean()),
         sa.column("reviewed_at", sa.DateTime(timezone=True)),
+        sa.column("record_version", sa.Integer()),
+        sa.column("created_by_platform_admin_id", sa.String()),
+        sa.column("reviewed_by_platform_admin_id", sa.String()),
+        sa.column("updated_by_platform_admin_id", sa.String()),
         sa.column("created_at", sa.DateTime(timezone=True)),
         sa.column("updated_at", sa.DateTime(timezone=True)),
     )
@@ -449,11 +497,16 @@ def upgrade() -> None:
                 "forum_catalog_entry_id": entry_id,
                 "alias": alias,
                 "normalized_alias": normalized,
+                "alias_type": "court_complex",
                 "source_name": _ALIAS_SOURCE_NAME,
                 "source_url": source_url,
                 "verification_status": "verified",
                 "is_active": True,
                 "reviewed_at": now,
+                "record_version": 0,
+                "created_by_platform_admin_id": None,
+                "reviewed_by_platform_admin_id": None,
+                "updated_by_platform_admin_id": None,
                 "created_at": now,
                 "updated_at": now,
             }
@@ -475,6 +528,15 @@ def downgrade() -> None:
             forum_entries.update()
             .where(forum_entries.c.id == entry_id)
             .values(name=location, lineage=f"District Commission > Delhi > {location}")
+        )
+    for actor_column in (
+        "updated_by_platform_admin_id",
+        "reviewed_by_platform_admin_id",
+        "created_by_platform_admin_id",
+    ):
+        op.drop_index(
+            f"ix_forum_catalog_aliases_{actor_column}",
+            table_name="forum_catalog_aliases",
         )
     op.drop_index(
         "ix_forum_catalog_aliases_normalized_active_verified",

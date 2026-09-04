@@ -34,10 +34,7 @@ def test_existing_billing_indexes_use_postgres_concurrent_builds() -> None:
     assert "with op.get_context().autocommit_block():" in migration_source
     assert "postgresql_concurrently=True" in migration_source
     assert 'batch.create_index("ix_billing_usage_events_provider_key"' not in migration_source
-    assert (
-        'batch.create_index("ix_billing_usage_attribution_provider_key"'
-        not in migration_source
-    )
+    assert 'batch.create_index("ix_billing_usage_attribution_provider_key"' not in migration_source
 
 
 def test_provider_spend_and_forum_alias_migration_round_trip(
@@ -109,6 +106,24 @@ def test_provider_spend_and_forum_alias_migration_round_trip(
         assert inspector.has_table("company_provider_spend_policies")
         assert inspector.has_table("provider_spend_reservations")
         assert inspector.has_table("forum_catalog_aliases")
+        alias_columns = {
+            str(column["name"]) for column in inspector.get_columns("forum_catalog_aliases")
+        }
+        assert {
+            "alias_type",
+            "record_version",
+            "created_by_platform_admin_id",
+            "reviewed_by_platform_admin_id",
+            "updated_by_platform_admin_id",
+        }.issubset(alias_columns)
+        alias_indexes = {
+            str(index["name"]) for index in inspector.get_indexes("forum_catalog_aliases")
+        }
+        assert {
+            "ix_forum_catalog_aliases_created_by_platform_admin_id",
+            "ix_forum_catalog_aliases_reviewed_by_platform_admin_id",
+            "ix_forum_catalog_aliases_updated_by_platform_admin_id",
+        }.issubset(alias_indexes)
         assert "normalized_name" in {
             str(column["name"]) for column in inspector.get_columns("forum_catalog_entries")
         }
@@ -165,6 +180,15 @@ def test_provider_spend_and_forum_alias_migration_round_trip(
                 "district:india-gov:delhi:centraldelhi",
                 "district:india-gov:delhi:westdelhi",
             }
+            assert (
+                connection.scalar(
+                    text(
+                        "SELECT alias_type FROM forum_catalog_aliases "
+                        "WHERE normalized_alias = 'saket' LIMIT 1"
+                    )
+                )
+                == "court_complex"
+            )
             assert (
                 connection.scalar(
                     text(

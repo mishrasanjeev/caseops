@@ -1054,8 +1054,10 @@ Implemented candidate scope:
   human access no longer depends on a test-looking slug, while scheduled test
   tenants and pytest paid hosts remain blocked;
 - reviewed court aliases share one resolver between manual and bulk matter
-  creation. Multi-district Delhi complexes require district context and are
-  never guessed;
+  creation. A governed platform registry manages alias type, source, review,
+  active state, actors, optimistic version, and audit history; ambiguous upload
+  rows return canonical candidates with lineage. Multi-district Delhi complexes
+  require district context and are never guessed;
 - Act details list all catalogued sections and their source/trust state, while
   downstream legal selection remains verified-only; and
 - matter read serialization no longer mutates lifecycle fields while projecting
@@ -1063,8 +1065,11 @@ Implemented candidate scope:
 
 Release gates:
 
-- [ ] fresh local Docker migration, PostgreSQL index, API, web, and dated
-  Playwright suite on the integrated source tree;
+- [x] fresh local Docker migration, PostgreSQL index, API, web, and dated
+  Playwright suite on the integrated source tree (fingerprint
+  `63a3967318372e01a0266becbbfc7abcd5ab737cbe99bf584532475e2199d13c`;
+  119 PostgreSQL/pgvector, 185 desktop Playwright, and four mobile Playwright
+  tests passed; five provider/environment tests intentionally skipped);
 - [ ] exact-main CI and security checks green;
 - [ ] migration applies to production and both named companies have two active
   unlimited policy rows;

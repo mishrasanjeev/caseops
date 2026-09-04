@@ -48,6 +48,10 @@ import {
   type EmailTemplateListResponse,
   type EmailTemplateRecord,
   type EmailTemplateVariable,
+  type ForumCatalogAliasListResponse,
+  type ForumCatalogAliasRecord,
+  type ForumCatalogAliasType,
+  type ForumCatalogAliasVerificationStatus,
   type ForumCatalogResponse,
   type HearingCoachReportResponse,
   type HearingCoachStatusResponse,
@@ -184,6 +188,8 @@ import {
   emailRenderResponse,
   emailTemplateListResponse,
   emailTemplateRecord,
+  forumCatalogAliasListResponse,
+  forumCatalogAliasRecord,
   forumCatalogResponse,
   hearingCoachReportResponse,
   hearingCoachStatusResponse,
@@ -377,6 +383,66 @@ export async function fetchForumCatalog(): Promise<ForumCatalogResponse> {
   return forumCatalogResponse.parse(data);
 }
 
+export type PlatformForumAliasCreateInput = {
+  forum_catalog_entry_id: string;
+  alias: string;
+  alias_type: ForumCatalogAliasType;
+  source_name: string;
+  source_url: string | null;
+  verification_status: ForumCatalogAliasVerificationStatus;
+  is_active: boolean;
+  reason: string;
+};
+
+export type PlatformForumAliasUpdateInput = Partial<
+  Omit<PlatformForumAliasCreateInput, "forum_catalog_entry_id" | "reason">
+> & {
+  expected_record_version: number;
+  reason: string;
+};
+
+export async function fetchPlatformForumAliases(input?: {
+  q?: string;
+  verification_status?: ForumCatalogAliasVerificationStatus;
+  is_active?: boolean;
+  limit?: number;
+}): Promise<ForumCatalogAliasListResponse> {
+  const query = new URLSearchParams();
+  if (input?.q) query.set("q", input.q);
+  if (input?.verification_status) {
+    query.set("verification_status", input.verification_status);
+  }
+  if (input?.is_active !== undefined) {
+    query.set("is_active", String(input.is_active));
+  }
+  query.set("limit", String(input?.limit ?? 100));
+  const data = await apiRequest<unknown>(
+    `/api/platform-admin/forum-aliases?${query}`,
+  );
+  return forumCatalogAliasListResponse.parse(data);
+}
+
+export async function createPlatformForumAlias(
+  input: PlatformForumAliasCreateInput,
+): Promise<ForumCatalogAliasRecord> {
+  const data = await apiRequest<unknown>("/api/platform-admin/forum-aliases", {
+    method: "POST",
+    body: input,
+  });
+  return forumCatalogAliasRecord.parse(data);
+}
+
+export async function updatePlatformForumAlias(
+  aliasId: string,
+  input: PlatformForumAliasUpdateInput,
+): Promise<ForumCatalogAliasRecord> {
+  const data = await apiRequest<unknown>(
+    `/api/platform-admin/forum-aliases/${encodeURIComponent(aliasId)}`,
+    { method: "PATCH", body: input },
+  );
+  return forumCatalogAliasRecord.parse(data);
+}
+
 export type MatterListParams = {
   limit?: number;
   cursor?: string | null;
@@ -411,11 +477,22 @@ export type MatterImportJobStatus =
   | "failed"
   | "expired";
 
+export type MatterImportForumCandidate = {
+  forum_catalog_entry_id: string;
+  name: string;
+  state: string | null;
+  district: string | null;
+  city: string | null;
+  lineage: string;
+};
+
 export type MatterImportRow = {
   id: string;
   row_number: number;
   status: MatterImportRowStatus;
-  normalized: Record<string, unknown>;
+  normalized: Record<string, unknown> & {
+    forum_candidates?: MatterImportForumCandidate[];
+  };
   errors: string[];
   created_matter_id: string | null;
 };

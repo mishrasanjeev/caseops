@@ -6,10 +6,10 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `dae459ee37c2687ac036785b5a69522cca7d3fd40c5df1bd83b434b644c0b054`
+- Canonical map SHA-256: `3ebbbb602345a3f9692c19a808fe1f05cbb4c3c44cccfa595f555f5a4d459b48`
 - SQL tables: `308`
-- SQL columns: `4990`
-- ORM indexes: `1663`
+- SQL columns: `4995`
+- ORM indexes: `1666`
 - Alembic/raw index declarations: `709`
 - Non-SQL data classes: `12`
 
@@ -126,7 +126,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `ethical_walls` | `security_identity_control` | 14 | `registry_fail_closed` |
 | `evaluation_cases` | `platform_operational_reference` | 11 | `registry_fail_closed` |
 | `evaluation_runs` | `platform_operational_reference` | 12 | `registry_fail_closed` |
-| `forum_catalog_aliases` | `public_or_licensed_legal_reference` | 11 | `registry_fail_closed` |
+| `forum_catalog_aliases` | `public_or_licensed_legal_reference` | 16 | `registry_fail_closed` |
 | `forum_catalog_entries` | `public_or_licensed_legal_reference` | 19 | `registry_fail_closed` |
 | `hearing_pack_items` | `platform_operational_reference` | 8 | `registry_fail_closed` |
 | `hearing_packs` | `platform_operational_reference` | 11 | `registry_fail_closed` |

@@ -8,6 +8,7 @@ import {
   CreditCard,
   Loader2,
   ShieldCheck,
+  Languages,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -113,6 +114,10 @@ export default function PlatformAdminPage() {
             </Button>
             <Button href="/app/platform-admin/provider-events" variant="outline">
               Provider events
+            </Button>
+            <Button href="/app/platform-admin/forum-aliases" variant="outline">
+              <Languages className="h-4 w-4" aria-hidden />
+              Forum aliases
             </Button>
           </div>
         }

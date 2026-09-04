@@ -10869,6 +10869,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/platform-admin/forum-aliases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Platform Forum Aliases */
+        get: operations["get_platform_forum_aliases_api_platform_admin_forum_aliases_get"];
+        put?: never;
+        /** Post Platform Forum Alias */
+        post: operations["post_platform_forum_alias_api_platform_admin_forum_aliases_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/platform-admin/forum-aliases/{alias_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Platform Forum Alias */
+        patch: operations["patch_platform_forum_alias_api_platform_admin_forum_aliases__alias_id__patch"];
+        trace?: never;
+    };
     "/api/platform-admin/integrations": {
         parameters: {
             query?: never;
@@ -15463,6 +15498,21 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** BulkMatterImportForumCandidate */
+        BulkMatterImportForumCandidate: {
+            /** City */
+            city?: string | null;
+            /** District */
+            district?: string | null;
+            /** Forum Catalog Entry Id */
+            forum_catalog_entry_id: string;
+            /** Lineage */
+            lineage: string;
+            /** Name */
+            name: string;
+            /** State */
+            state?: string | null;
+        };
         /** BulkMatterImportRowPlan */
         BulkMatterImportRowPlan: {
             /** Case Number */
@@ -15491,6 +15541,8 @@ export interface components {
             filing_date?: string | null;
             /** Filing Number */
             filing_number?: string | null;
+            /** Forum Candidates */
+            forum_candidates?: components["schemas"]["BulkMatterImportForumCandidate"][];
             /** Forum Catalog Entry Id */
             forum_catalog_entry_id?: string | null;
             /** Forum City */
@@ -20215,6 +20267,126 @@ export interface components {
             used_bytes: number;
             /** Warning Threshold Percent */
             warning_threshold_percent: number;
+        };
+        /** ForumCatalogAliasCreateRequest */
+        ForumCatalogAliasCreateRequest: {
+            /** Alias */
+            alias: string;
+            /**
+             * Alias Type
+             * @enum {string}
+             */
+            alias_type: "court_complex" | "abbreviation" | "legacy_name" | "local_name" | "spelling_variant" | "provider_label" | "other";
+            /** Forum Catalog Entry Id */
+            forum_catalog_entry_id: string;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Reason */
+            reason: string;
+            /** Source Name */
+            source_name: string;
+            /** Source Url */
+            source_url?: string | null;
+            /**
+             * Verification Status
+             * @default pending
+             * @enum {string}
+             */
+            verification_status: "pending" | "verified" | "rejected";
+        };
+        /** ForumCatalogAliasListResponse */
+        ForumCatalogAliasListResponse: {
+            /** Aliases */
+            aliases: components["schemas"]["ForumCatalogAliasRecord"][];
+            /** Has More */
+            has_more: boolean;
+            /** Limit */
+            limit: number;
+            /** Returned Count */
+            returned_count: number;
+        };
+        /** ForumCatalogAliasRecord */
+        ForumCatalogAliasRecord: {
+            /** Alias */
+            alias: string;
+            /**
+             * Alias Type
+             * @enum {string}
+             */
+            alias_type: "court_complex" | "abbreviation" | "legacy_name" | "local_name" | "spelling_variant" | "provider_label" | "other";
+            /** Canonical Name */
+            canonical_name: string;
+            /** City */
+            city: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By Platform Admin Id */
+            created_by_platform_admin_id: string | null;
+            /** District */
+            district: string | null;
+            /** Forum Catalog Entry Id */
+            forum_catalog_entry_id: string;
+            /** Forum Level */
+            forum_level: string;
+            /** Forum Type */
+            forum_type: string;
+            /** Id */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Lineage */
+            lineage: string;
+            /** Normalized Alias */
+            normalized_alias: string;
+            /** Record Version */
+            record_version: number;
+            /** Reviewed At */
+            reviewed_at: string | null;
+            /** Reviewed By Platform Admin Id */
+            reviewed_by_platform_admin_id: string | null;
+            /** Source Name */
+            source_name: string;
+            /** Source Url */
+            source_url: string | null;
+            /** State */
+            state: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Updated By Platform Admin Id */
+            updated_by_platform_admin_id: string | null;
+            /**
+             * Verification Status
+             * @enum {string}
+             */
+            verification_status: "pending" | "verified" | "rejected";
+        };
+        /** ForumCatalogAliasUpdateRequest */
+        ForumCatalogAliasUpdateRequest: {
+            /** Alias */
+            alias?: string | null;
+            /** Alias Type */
+            alias_type?: ("court_complex" | "abbreviation" | "legacy_name" | "local_name" | "spelling_variant" | "provider_label" | "other") | null;
+            /** Expected Record Version */
+            expected_record_version: number;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Reason */
+            reason: string;
+            /** Source Name */
+            source_name?: string | null;
+            /** Source Url */
+            source_url?: string | null;
+            /** Verification Status */
+            verification_status?: ("pending" | "verified" | "rejected") | null;
         };
         /** ForumCatalogEntryRecord */
         ForumCatalogEntryRecord: {
@@ -65459,6 +65631,108 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_platform_forum_aliases_api_platform_admin_forum_aliases_get: {
+        parameters: {
+            query?: {
+                is_active?: boolean | null;
+                limit?: number;
+                q?: string | null;
+                verification_status?: ("pending" | "verified" | "rejected") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForumCatalogAliasListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_platform_forum_alias_api_platform_admin_forum_aliases_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ForumCatalogAliasCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForumCatalogAliasRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_platform_forum_alias_api_platform_admin_forum_aliases__alias_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alias_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ForumCatalogAliasUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForumCatalogAliasRecord"];
                 };
             };
             /** @description Validation Error */

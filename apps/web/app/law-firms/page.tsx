@@ -450,7 +450,7 @@ export default function LawFirmPitchPage() {
               <PitchCard
                 icon={BookOpen}
                 title="Licensed-source controls"
-                body="Licensed Indian Kanoon research and eCourts case tracking are available to authenticated human users only after provider, terms, credential, support, and verified-cost gates pass. Each provider has an independent INR 1,000 monthly workspace limit by default, with spend and remaining budget visible in Billing; automated tests cannot consume credits."
+                body="Licensed Indian Kanoon research and eCourts case tracking are available to authenticated human users only after provider, terms, credential, support, and verified-cost gates pass. Both providers count toward one shared INR 1,000 monthly account limit by default, with provider contribution, total budget use, and remaining budget visible in Billing; automated tests cannot consume credits."
               />
               <PitchCard
                 icon={Lock}

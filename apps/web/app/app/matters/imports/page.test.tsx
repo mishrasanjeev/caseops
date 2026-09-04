@@ -100,6 +100,24 @@ const validatedJob = {
       normalized: {
         matter_code: "BULK/2#",
         title: "Invalid matter",
+        forum_candidates: [
+          {
+            forum_catalog_entry_id: "forum-1",
+            name: "District and Sessions Court, Ernakulam",
+            state: "Kerala",
+            district: "Ernakulam",
+            city: "Kochi",
+            lineage: "District Courts > Kerala > Ernakulam > District and Sessions Court, Ernakulam",
+          },
+          {
+            forum_catalog_entry_id: "forum-2",
+            name: "Commercial Court, Ernakulam",
+            state: "Kerala",
+            district: "Ernakulam",
+            city: "Kochi",
+            lineage: "District Courts > Kerala > Ernakulam > Commercial Court, Ernakulam",
+          },
+        ],
       },
       errors: ["Matter code may contain only letters, numbers, and hyphens."],
       created_matter_id: null,
@@ -156,6 +174,15 @@ describe("BulkMatterImportPage", () => {
     expect(screen.getByText("BULK-1")).toBeInTheDocument();
     expect(screen.getByText("BULK/2#")).toBeInTheDocument();
     expect(screen.getByText("Court #7 / Bench-A")).toBeInTheDocument();
+    expect(screen.getByText("Possible canonical courts")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "District Courts > Kerala > Ernakulam > District and Sessions Court, Ernakulam",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("District Courts > Kerala > Ernakulam > Commercial Court, Ernakulam"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Validation errors").parentElement).toHaveTextContent("2");
 
     fireEvent.click(screen.getByTestId("matter-import-confirm"));

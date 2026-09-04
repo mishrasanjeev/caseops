@@ -12244,6 +12244,19 @@ class ForumCatalogAlias(Base):
             "is_active",
             "verification_status",
         ),
+        CheckConstraint(
+            "alias_type IN ('court_complex', 'abbreviation', 'legacy_name', "
+            "'local_name', 'spelling_variant', 'provider_label', 'other')",
+            name="ck_forum_catalog_alias_type",
+        ),
+        CheckConstraint(
+            "verification_status IN ('pending', 'verified', 'rejected')",
+            name="ck_forum_catalog_alias_verification_status",
+        ),
+        CheckConstraint(
+            "record_version >= 0",
+            name="ck_forum_catalog_alias_record_version",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -12254,11 +12267,30 @@ class ForumCatalogAlias(Base):
     )
     alias: Mapped[str] = mapped_column(String(255), nullable=False)
     normalized_alias: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    alias_type: Mapped[str] = mapped_column(String(32), nullable=False, default="court_complex")
     source_name: Mapped[str] = mapped_column(String(160), nullable=False)
     source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     verification_status: Mapped[str] = mapped_column(String(32), nullable=False, default="verified")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    record_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    created_by_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    reviewed_by_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    updated_by_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
@@ -12267,6 +12299,15 @@ class ForumCatalogAlias(Base):
     )
 
     entry: Mapped[ForumCatalogEntry] = relationship(back_populates="aliases")
+    created_by_platform_admin: Mapped[PlatformAdminMembership | None] = relationship(
+        foreign_keys=[created_by_platform_admin_id]
+    )
+    reviewed_by_platform_admin: Mapped[PlatformAdminMembership | None] = relationship(
+        foreign_keys=[reviewed_by_platform_admin_id]
+    )
+    updated_by_platform_admin: Mapped[PlatformAdminMembership | None] = relationship(
+        foreign_keys=[updated_by_platform_admin_id]
+    )
 
 
 class Bench(Base):

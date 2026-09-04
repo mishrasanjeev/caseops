@@ -303,8 +303,8 @@ requirements when using the fallback.
   billing owner. When the product promise is a per-account limit, aggregate
   every provider in that shared scope; do not multiply the allowance by
   treating each provider as an independent default budget. Human entitlement
-  must not be inferred from a
-  test-looking slug; the explicit automation marker is authoritative, and
+  must not be inferred from a test-looking slug; the explicit automation
+  marker is authoritative, and
   unlimited access must come from an active policy row rather than a company
   name check in request code.
 - Provider entitlement and readiness reads must remain read-only before an
@@ -318,6 +318,20 @@ requirements when using the fallback.
   category context; preserve the original input and reject zero or multiple
   candidates. Never let a short consumer-forum name shadow district-court
   aliases or encode location guesses in a spreadsheet parser.
+- A legal alias master is not complete when aliases exist only as migration
+  seeds. Provide governed platform configuration for canonical target, alias
+  type, source evidence, review state, activity, actor attribution, optimistic
+  version, and audit reason. Pending and rejected rows must never resolve;
+  ambiguous bulk rows must return bounded canonical candidates with lineage.
+- Governed catalog mutations must reject explicit null or no-op updates at the
+  request boundary and lock the canonical parent before the alias row in one
+  stable order. Do not use eager outer joins in a PostgreSQL `FOR UPDATE`
+  query; prove create and update behavior on real PostgreSQL as well as SQLite.
+- Public product copy, operator guidance, API status, and billing projections
+  must describe the same provider budget scope enforced by reservations. After
+  changing per-provider to shared-account semantics, search every user-visible
+  and governance surface for stale wording and regress provider contribution
+  separately from total budget use.
 - Read serializers must not mutate lifecycle fields to make legacy state look
   consistent. Project the response from an immutable payload, then diagnose any
   reported reopening from persisted status, lifecycle version, and audit events.

@@ -1568,16 +1568,19 @@ is which.
   pending.
 - **PRD owners:** `J05`, `J08`, `J11`, `J14`, `M04`, `M08`, `M10`, `M14`,
   `IPLF-054`, and `IPLF-056B`.
-- **Gap:** Provider readiness and global cost controls did not provide an atomic
-  monthly limit independently per provider and tenant. A test-looking company
-  slug also blocked authenticated human calls, while successful eCourts calls
-  were not consistently provider-attributed in the tenant billing report.
+- **Gap:** Provider readiness and global cost controls did not provide one
+  atomic account-wide monthly limit across the paid-provider scope. A
+  test-looking company slug also blocked authenticated human calls, while
+  successful eCourts calls were not consistently provider-attributed in the
+  tenant billing report.
 - **Control:** `company_provider_spend_policies` stores explicit provider policy;
-  absent policy means INR 1,000 per calendar month per provider. Unexpired
-  reservations and settled usage are counted under the tenant lock before
-  transport. `billing_usage_events` and tenant-visible attribution carry the
-  provider key. The existing billing usage page publishes spend, limit,
-  remaining amount, currency, unlimited state, and policy source.
+  when neither provider has an explicit policy, both share one INR 1,000 limit
+  per calendar month per account. Unexpired reservations and settled usage for
+  every provider in the effective scope are counted under the tenant lock
+  before transport. `billing_usage_events` and tenant-visible attribution carry
+  the provider key. The existing billing usage page publishes provider
+  contribution, total budget use, limit, remaining amount, currency, unlimited
+  state, and policy source.
 - **Exceptions:** GBA Law Office and Pinelabs Pvt. Ltd. receive persisted active
   unlimited rows for Indian Kanoon and eCourts. Runtime name matching is not an
   entitlement boundary; production migration evidence must show two policy rows
@@ -1603,12 +1606,18 @@ is which.
 - **PRD owners:** `J02`, `J05`, `J06`, `M02`, `M05`, Legal Workspace S4,
   `MOD-TS-017`, and `IPLF-006B/006C`.
 - **Implemented:** Manual and bulk matter entry share the active forum catalog
-  and reviewed aliases. Delhi complex aliases are sourced and multi-district
-  names require context. Act details show every catalogued section with source
-  and trust state; unverified sections remain unavailable for legal selection.
+  and reviewed aliases. A capability- and step-up-protected platform registry
+  manages alias type, source evidence, review state, activity, actor attribution,
+  optimistic version, and audit history without code changes. Ambiguous import
+  rows expose bounded canonical candidates with lineage. Delhi complex aliases
+  are sourced and multi-district names require context. Act details show every
+  catalogued section with source and trust state; unverified sections remain
+  unavailable for legal selection.
 - **Not claimed:** reviewed aliases for every All-India local spelling or
   verified official text for every catalogued provision. Those are controlled
   data operations with source and collision review, not parser or UI defaults.
 - **Evidence:** `apps/api/tests/test_20260904_forum_alias_resolution.py`,
+  `apps/api/tests/test_20260904_forum_alias_admin.py`,
   `apps/api/tests/test_20260903_bulk_matter_exact_court_forum.py`, statute page
-  tests, and the dated local browser journey.
+  tests, `tests/e2e/provider-spend-forum-statute-2026-09-04.spec.ts`, and
+  `tests/e2e/forum-alias-admin-2026-09-04.spec.ts`.

@@ -9543,10 +9543,20 @@
           "sql_type": "VARCHAR(255)",
           "nullable": false
         },
+        "alias_type": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(32)",
+          "nullable": false
+        },
         "created_at": {
           "category_id": "temporal_or_version_metadata",
           "sql_type": "DATETIME",
           "nullable": false
+        },
+        "created_by_platform_admin_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
         },
         "forum_catalog_entry_id": {
           "category_id": "tenant_or_access_identifier",
@@ -9568,9 +9578,19 @@
           "sql_type": "VARCHAR(255)",
           "nullable": false
         },
+        "record_version": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
         "reviewed_at": {
           "category_id": "temporal_or_version_metadata",
           "sql_type": "DATETIME",
+          "nullable": true
+        },
+        "reviewed_by_platform_admin_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
           "nullable": true
         },
         "source_name": {
@@ -9587,6 +9607,11 @@
           "category_id": "temporal_or_version_metadata",
           "sql_type": "DATETIME",
           "nullable": false
+        },
+        "updated_by_platform_admin_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
         },
         "verification_status": {
           "category_id": "configuration_or_state_metadata",
@@ -28249,10 +28274,10 @@
       }
     }
   ],
-  "schema_fingerprint": "4def3ac2c8fcf3a45f73b05a6a01a52bc627d8669a4abe10c20255f410f33ec2",
+  "schema_fingerprint": "32176bccd598c470ca8f9972dee5a7099ddf04272f426cb9f8dbab02896b2f59",
   "index_inventory": {
-    "orm_index_count": 1663,
-    "orm_index_fingerprint": "cc2dde2530c54e1d6e3d01920b2ae47416cefffa1b8100ca3404cd3fbf2245cb",
+    "orm_index_count": 1666,
+    "orm_index_fingerprint": "3d2ffe9fd9792e031ec3309a501c62ddc9f1242352ca7fc7cc76ebeddbbfb6b9",
     "migration_index_count": 709,
     "migration_index_fingerprint": "5f4f226e3520a2fded03ff8edac1a74058a9425143d56e3e42fd77a185c22ec8",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."
