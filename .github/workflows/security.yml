@@ -45,9 +45,11 @@ jobs:
           cache: "npm"
           cache-dependency-path: package-lock.json
       - run: npm ci --ignore-scripts
-      # --audit-level high blocks high + critical; moderate findings
-      # surface in the log for triage but don't fail the build.
-      - run: npm audit --audit-level=high
+      # npm 10 still calls the retiring quick-audit endpoint, which rejects
+      # modern optional-platform trees with HTTP 400. Pin npm 11 so the gate
+      # uses the supported bulk-advisory endpoint. High + critical findings
+      # still fail; moderate findings remain visible for triage.
+      - run: npx --yes npm@11.6.2 audit --audit-level=high
 
   pip-audit:
     name: pip-audit (high+critical)
