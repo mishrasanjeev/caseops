@@ -52,21 +52,43 @@ jobs:
       # modern optional-platform trees with HTTP 400. Pin npm 11 so the gate
       # uses the supported bulk-advisory endpoint. High + critical findings
       # still fail; moderate findings remain visible for triage. Retry only
-      # inside a short network budget; three non-zero verdicts fail the job.
+      # recognized transport failures inside a short network budget. If the
+      # npm advisory service remains unreachable, a digest-pinned official
+      # OSV Scanner must return a clean package-lock scan; vulnerability and
+      # all other npm failures remain immediately release-blocking.
       - name: Run strict npm audit
         run: |
           for attempt in 1 2 3; do
-            if npx --yes --prefer-offline npm@11.6.2 audit \
+            set +e
+            npx --yes --prefer-offline npm@11.6.2 audit \
               --audit-level=high \
               --fetch-timeout=120000 \
-              --fetch-retries=1; then
+              --fetch-retries=1 2>&1 | tee npm-audit.log
+            audit_status=${PIPESTATUS[0]}
+            set -e
+
+            if [ "$audit_status" -eq 0 ]; then
               exit 0
             fi
+
+            if ! grep -Eqi \
+              'audit endpoint returned an error|network timeout|ECONNRESET|ECONNREFUSED|EAI_AGAIN|ENETUNREACH|ETIMEDOUT' \
+              npm-audit.log; then
+              echo "npm audit returned a non-network failure; refusing fallback."
+              exit "$audit_status"
+            fi
+
             if [ "$attempt" -eq 3 ]; then
-              exit 1
+              break
             fi
             sleep $((attempt * 10))
           done
+
+          echo "npm advisory transport unavailable; running strict OSV lockfile fallback."
+          docker run --rm \
+            -v "$PWD:/src" \
+            ghcr.io/google/osv-scanner:v2.5.0@sha256:5b8b38e45bb2c5c4976f0f1f07860551ea6e1f235f642cf215f74d266fec2c1b \
+            scan source --lockfile=/src/package-lock.json
 
   pip-audit:
     name: pip-audit (high+critical)
