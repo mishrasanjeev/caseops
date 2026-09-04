@@ -1,5 +1,28 @@
 # CaseOps  - Work To Be Done
 
+## Automatic Next-Hearing Sync Ledger - 2026-09-04
+
+- **Scope:** `J08`, `M08`, `US-057`, `FT-078..082`, `NFT-021`, and `SEC-027`
+  in the unified PRD.
+- **Repository status:** implemented in the release candidate. The scheduler is
+  exactly 18:00 IST; bounded backfill covers eligible old and new matters; CNR
+  is preferred and case-number-plus-court is the exact fallback; only one
+  approved provider/catalog match can write the existing next-hearing field.
+- **Fail-closed behavior:** ambiguity, mismatch, not-found, invalid identifiers,
+  and past dates do not update a matter. Provider failure retains the last valid
+  date. Confirmed absence is distinct and cannot clear a manual lock. Terminal
+  matters remain terminal and are never reopened by this workflow.
+- **Concurrency and cost:** one tenant/matter refresh can run at a time;
+  bookmarks and running operations are database-constrained; regular, bulk,
+  Docker, and production regression tests use the no-paid-provider boundary or
+  the local emulator. Any live provider check is a separate one-case,
+  budget-capped release canary.
+- **Closure gate:** the final commit must pass the complete PostgreSQL and
+  Docker acceptance inventory, the dated Playwright journey, canonical CI, an
+  exact-main production deployment, and the same production surface test.
+  Until that chain is green, this ledger is implementation evidence, not a
+  production-complete claim.
+
 ## Current Billing And Provider-Automation Ledger - 2026-06-02
 
 - Pricing, SaaS billing, tenant billing pages/downloads, and founder-only

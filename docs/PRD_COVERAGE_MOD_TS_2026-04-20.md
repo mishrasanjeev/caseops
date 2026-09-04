@@ -4,6 +4,17 @@ Source: `C:\Users\mishr\Downloads\CaseOps_Session1_Missing_Modules.xlsx`
 (13 modules flagged "missing" on 2026-04-20)
 Audit date: 2026-04-20. **Last refresh: 2026-04-21 evening.**
 
+## 2026-09-04 hearing-sync reconciliation
+
+The historical percentages below are retained as their dated snapshot; they
+must not be read as current release truth. The `MOD-TS-006` automatic
+next-hearing slice is now implemented and mapped to `J08`, `M08`, `US-057`,
+`FT-078..082`, `NFT-021`, and `SEC-027` in the unified PRD. It provides bounded
+18:00 IST sync, exact verified matching, nearest non-past date selection,
+idempotent Sync Now parity, lifecycle protection, and paid-test isolation.
+This does **not** close the whole Calendar module: the broader week/month UX and
+notification-channel depth remain `Partial`.
+
 This document maps each MOD-TS module to:
 
 1. What ships in the CaseOps repo today (file paths).

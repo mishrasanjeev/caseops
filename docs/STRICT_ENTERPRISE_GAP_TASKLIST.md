@@ -12,6 +12,33 @@ Status legend:
 - `Missing`
 - `Stale-doc`
 
+## 2026-09-04 Automatic Next-Hearing Hardening
+
+### EH-HEARING-01 - Verified bounded provider refresh
+
+- **Status:** Implemented in the release candidate; exact-main production
+  verification remains the closure condition.
+- **Gap found:** the prior case-tracking path depended on explicit bookmarks,
+  trusted the first provider result, treated provider failure like confirmed
+  absence, permitted weak non-CNR identity collisions, and ran at a schedule
+  different from the requested 18:00 IST contract. The authoritative provider
+  result could also be diverted into an unnecessary human suggestion gate.
+- **Control:** bounded backfill now covers eligible old and new matters; CNR is
+  preferred and the fallback is exact case-number-plus-court; one active
+  approved support-matrix row and one exact provider match are mandatory; only
+  the nearest non-past date is written. Failure retains the prior valid date,
+  confirmed absence has separate semantics, manual locks remain machine-owned,
+  and terminal lifecycle state is never changed. PostgreSQL advisory locking
+  and partial unique indexes prevent duplicate same-matter running work.
+- **Scale/cost boundary:** provider batches, candidates, retries, deadlines, and
+  cooldowns are bounded. Automated and persistent QA paths use an emulator or
+  `X-CaseOps-Automated-Test: no-paid-providers`; a live paid probe is separate,
+  opt-in, and one-case budget capped.
+- **Evidence required for closure:** migration/index health, PostgreSQL
+  concurrency coverage, dated Docker Playwright, all-module regression,
+  canonical CI, exact deployed release identities, and the production dated
+  surface test. No local-only result upgrades the production verdict.
+
 ## Current Provider And Billing Ledger - 2026-06-02
 
 - Billing/pricing/platform-admin code is `Implemented` and deployed. Manual
