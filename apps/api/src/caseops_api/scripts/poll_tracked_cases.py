@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Poll explicitly tracked/bookmarked court cases.",
+        description="Backfill eligible matters and poll tracked/bookmarked court cases.",
     )
     parser.add_argument(
         "--force",

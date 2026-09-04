@@ -6,7 +6,7 @@ const flows = [
     persona: "Litigation partner",
     headline: "From tracked update to reviewed compliance in an afternoon.",
     bullets: [
-      "Tracked/bookmarked cases refresh in the 4-6 PM IST window with blocked/skipped reasons visible to admins.",
+      "Eligible and explicitly tracked cases refresh from 6 PM IST with blocked/skipped reasons visible to admins.",
       "Court orders create source-backed, review-required compliance items before tasks or deadlines become active.",
       "Received notices create a reply queue and linked deadlines; replies and supporting files stay attached to the matter.",
     ],

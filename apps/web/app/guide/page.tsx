@@ -571,9 +571,9 @@ export default function GuidePage() {
                     <li>
                       <strong>Next hearing.</strong> The header shows the date plus its
                       source: manual, case tracking, court sync, proceeding intelligence,
-                      cause list, or unknown. Manual lock prevents automatic overwrite;
-                      conflicting provider dates become review suggestions with accept and
-                      reject actions.
+                      cause list, or unknown. A manually locked date is never overwritten.
+                      An exact, verified provider match updates an unlocked date directly;
+                      ambiguous or mismatched provider results are rejected.
                     </li>
                     <li>
                       <strong>History.</strong> Every next-hearing change records old date,
@@ -1431,9 +1431,9 @@ export default function GuidePage() {
                   </ul>
                   <Callout title="Cause-list and tracking sources">
                     Cause-list entries land in <code>matter_cause_list_entries</code>{" "}
-                    via manual entry, import, or configured lawful adapters. Only matters
-                    explicitly tracked or bookmarked are included in the scheduled refresh
-                    by default. The bench resolver normalises free-text rosters like
+                    via manual entry, import, or configured lawful adapters. Active matters
+                    with a reliable CNR or exact case-number-plus-court identity are linked
+                    in bounded batches; explicit bookmarks remain supported. The bench resolver normalises free-text rosters like
                     &quot;Justice X &amp; Justice Y&quot; into clickable judge profiles using the
                     high-quality confidence floor - no silent guesses. Per-court source
                     adapters ship only after lawful access and source-quality proof.
@@ -1442,18 +1442,18 @@ export default function GuidePage() {
 
                 <Section id="case-tracking" title="12 · Case tracking refresh">
                   <p>
-                    Case tracking is opt-in by default. A matter with a CNR or case number
-                    is eligible, but the daily job refreshes only cases that a user has
-                    explicitly tracked or bookmarked. Tenant admins may later enable
-                    auto-tracking for eligible matters after reviewing source coverage and
-                    operational risk.
+                    Case tracking uses the configured, approved provider. Active matters
+                    with a reliable CNR or exact case-number-plus-court identity are linked
+                    in a bounded backfill, while user-created bookmarks remain supported.
+                    Closed, Disposed, ambiguous, mismatched, and unsupported records are
+                    not updated.
                   </p>
                   <ul className="mt-3 space-y-2 text-[15px]">
                     <li>
-                      <strong>Daily window.</strong> Scheduled production runs are intended
-                      to start between <strong>4 PM and 6 PM IST</strong>, with the default
-                      scheduler at about 4:30 PM IST. No new provider calls start after 6 PM
-                      IST unless an operator uses an explicit force or local override.
+                      <strong>Daily window.</strong> Scheduled production runs start at
+                      <strong> 6 PM IST</strong>, inside the 6 PM–8 PM execution window. No
+                      new provider calls start after 8 PM IST unless an operator uses an
+                      explicit force or local override.
                     </li>
                     <li>
                       <strong>Backlog.</strong> Unfinished work persists and resumes on the
@@ -2115,7 +2115,7 @@ export default function GuidePage() {
                   </h3>
                   <p>
                     Open provider operations. Skipped and blocked runs show the reason:
-                    outside the 4 PM-6 PM IST window, provider disabled, missing
+                    outside the 6 PM-8 PM IST window, provider disabled, missing
                     configuration, source blocked, tenant batch limit, or backlog carried
                     forward. Disabled providers make no external calls. A configured
                     connector with no recent successful check is shown as unhealthy, never
@@ -2232,9 +2232,9 @@ export default function GuidePage() {
                     <div>
                       <dt className="font-semibold text-[var(--color-ink)]">Tracked case</dt>
                       <dd className="text-[var(--color-ink-2)]">
-                        A matter-linked case a user explicitly bookmarked for scheduled
-                        refresh. Eligible CNR or case-number matters are not refreshed by
-                        default unless tracked or a tenant admin enables auto-tracking.
+                        A matter-linked or explicitly bookmarked case eligible for the
+                        bounded 6 PM IST refresh. Automatic links require a reliable CNR or
+                        exact case-number-plus-court identity.
                       </dd>
                     </div>
                     <div>
@@ -2251,9 +2251,9 @@ export default function GuidePage() {
                         Next-hearing suggestion
                       </dt>
                       <dd className="text-[var(--color-ink-2)]">
-                        A provider or intelligence-derived date that conflicts with the
-                        current matter header or a manual lock. It must be accepted before
-                        replacing the displayed next hearing.
+                        A non-authoritative intelligence-derived date that conflicts with
+                        the current matter header. It must be accepted before replacing the
+                        displayed next hearing.
                       </dd>
                     </div>
                     <div>

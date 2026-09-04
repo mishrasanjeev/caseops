@@ -57,16 +57,15 @@ Case tracking is intentionally opt-in by default.
 Production defaults:
 
 ```text
-CASEOPS_CASE_TRACKING_DAILY_WINDOW_START=16:00
-CASEOPS_CASE_TRACKING_DAILY_WINDOW_END=18:00
+CASEOPS_CASE_TRACKING_DAILY_WINDOW_START=18:00
+CASEOPS_CASE_TRACKING_DAILY_WINDOW_END=20:00
 CASEOPS_CASE_TRACKING_DAILY_TIMEZONE=Asia/Kolkata
 ```
 
 Runtime rules:
 
-- Scheduled production jobs should start inside the 4 PM-6 PM IST window,
-  preferably around 4:30 PM IST.
-- No new provider calls should start after 6 PM IST unless an explicit
+- Scheduled production jobs start at 6 PM IST inside the 6 PM-8 PM window.
+- No new provider calls should start after 8 PM IST unless an explicit
   force/local override is used by an operator.
 - Unfinished backlog persists and resumes on the next run.
 - Batching is fair across tenants so one tenant cannot consume the full window.

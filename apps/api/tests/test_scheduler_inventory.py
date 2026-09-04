@@ -91,7 +91,10 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
         for job in inventory["jobs"]
         if job not in (authority_job, mapping_job)
     )
-    assert inventory["legacy_schedulers_to_pause"] == ["caseops-case-tracking-poll-midnight"]
+    assert inventory["legacy_schedulers_to_pause"] == [
+        "caseops-case-tracking-poll-midnight",
+        "caseops-case-tracking-poll-1630-ist",
+    ]
     tracking_job = next(
         job for job in inventory["jobs"] if job["run_job_name"] == "caseops-case-tracking-poll"
     )
@@ -99,6 +102,12 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
         tracking_job["bootstrap"]["environment"]["CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS"]
         == "caseops-qa;caseops-ip-qa;test-legal"
     )
+    assert tracking_job["scheduler_name"] == "caseops-case-tracking-poll-1800-ist"
+    assert tracking_job["schedule"] == "0 18 * * *"
+    assert tracking_job["time_zone"] == "Asia/Kolkata"
+    environment = tracking_job["bootstrap"]["environment"]
+    assert environment["CASEOPS_CASE_TRACKING_DAILY_WINDOW_START"] == "18:00"
+    assert environment["CASEOPS_CASE_TRACKING_DAILY_WINDOW_END"] == "20:00"
 
 
 def test_release_hold_pauses_only_the_named_effective_scheduler() -> None:

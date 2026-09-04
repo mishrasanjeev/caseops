@@ -257,6 +257,7 @@ def apply_next_hearing_update(
     confidence_label: str = "high",
     manual_lock: bool = False,
     force: bool = False,
+    authoritative_automatic: bool = False,
 ) -> NextHearingApplyResult:
     source_value = str(source.value if isinstance(source, MatterNextHearingSource) else source)
     is_manual = source_value == MatterNextHearingSource.MANUAL
@@ -264,6 +265,11 @@ def apply_next_hearing_update(
         return NextHearingApplyResult(applied=False, reason="unchanged")
 
     today = _today()
+    if authoritative_automatic and not is_manual and not force:
+        if matter.next_hearing_manual_lock:
+            return NextHearingApplyResult(applied=False, reason="manual_lock_conflict")
+        if new_date < today:
+            return NextHearingApplyResult(applied=False, reason="past_date_rejected")
     cautious_reason: str | None = None
     if not is_manual and not force:
         if matter.next_hearing_manual_lock:
@@ -278,6 +284,7 @@ def apply_next_hearing_update(
             matter.next_hearing_on is not None
             and matter.next_hearing_on >= today
             and matter.next_hearing_on != new_date
+            and not authoritative_automatic
         ):
             cautious_reason = "future_date_conflict"
 
@@ -357,10 +364,13 @@ def clear_next_hearing(
     source_ref_id: str | None = None,
     reason: str | None = None,
     manual_lock: bool = False,
+    respect_manual_lock: bool = False,
 ) -> NextHearingApplyResult:
     source_value = str(source.value if isinstance(source, MatterNextHearingSource) else source)
     if matter.next_hearing_on is None:
         return NextHearingApplyResult(applied=False, reason="unchanged")
+    if respect_manual_lock and matter.next_hearing_manual_lock:
+        return NextHearingApplyResult(applied=False, reason="manual_lock_conflict")
 
     old_date = matter.next_hearing_on
     matter.next_hearing_on = None

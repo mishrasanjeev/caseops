@@ -36,9 +36,9 @@
       }
     },
     {
-      "scheduler_name": "caseops-case-tracking-poll-1630-ist",
+      "scheduler_name": "caseops-case-tracking-poll-1800-ist",
       "run_job_name": "caseops-case-tracking-poll",
-      "schedule": "30 16 * * *",
+      "schedule": "0 18 * * *",
       "time_zone": "Asia/Kolkata",
       "desired_state": "ENABLED",
       "task_timeout_seconds": 1800,
@@ -52,9 +52,13 @@
           "CASEOPS_AUTO_MIGRATE": "false",
           "CASEOPS_CASE_TRACKING_ENABLED": "true",
           "CASEOPS_CASE_TRACKING_PROVIDER": "ecourtsindia",
+          "CASEOPS_CASE_TRACKING_DAILY_WINDOW_START": "18:00",
+          "CASEOPS_CASE_TRACKING_DAILY_WINDOW_END": "20:00",
+          "CASEOPS_CASE_TRACKING_DAILY_TIMEZONE": "Asia/Kolkata",
           "CASEOPS_ECOURTSINDIA_API_BASE_URL": "https://webapi.ecourtsindia.com",
           "CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS": "caseops-qa;caseops-ip-qa;test-legal",
-          "CASEOPS_CASE_TRACKING_POLL_LIMIT": "50"
+          "CASEOPS_CASE_TRACKING_POLL_LIMIT": "50",
+          "CASEOPS_CASE_TRACKING_AUTO_LINK_LIMIT": "50"
         },
         "secrets": {
           "CASEOPS_DATABASE_URL": "caseops-database-url:latest",
@@ -296,5 +300,8 @@
       }
     }
   ],
-  "legacy_schedulers_to_pause": ["caseops-case-tracking-poll-midnight"]
+  "legacy_schedulers_to_pause": [
+    "caseops-case-tracking-poll-midnight",
+    "caseops-case-tracking-poll-1630-ist"
+  ]
 }

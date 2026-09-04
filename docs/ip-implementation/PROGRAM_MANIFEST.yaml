@@ -2852,7 +2852,7 @@
           "component": "Cloud Scheduler and Cloud Run recurring-job deployment control",
           "canonical_writer": "infra/cloudrun/scheduler-inventory.json interpreted by scripts/scheduler_inventory.py and invoked by scripts/deploy-prod.sh",
           "compatibility_path": "Existing Cloud Run job command, environment, secrets, resources, and runtime service account are preserved while image, scheduler, and invoker IAM drift converge.",
-          "retirement_gate": "The superseded midnight case-tracking scheduler is paused only after the 16:30 replacement passes live configuration verification; rollback is resume-old/pause-new."
+          "retirement_gate": "The superseded midnight and 16:30 case-tracking schedulers are paused only after the 18:00 replacement passes live configuration verification; rollback is resume-old/pause-new."
         }
       ],
       "dependencies": [

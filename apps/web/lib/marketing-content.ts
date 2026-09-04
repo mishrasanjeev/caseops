@@ -17,7 +17,7 @@ export const marketingFaqs = [
   },
   {
     q: "How does case tracking work?",
-    a: "Production scheduled refresh is opt-in by default: only explicitly tracked or bookmarked matters refresh. The daily job is configured for the 4 PM to 6 PM IST window, keeps backlog for the next run, batches fairly across tenants, and records attempted, refreshed, changed, skipped, blocked, provider-call, error, partial, and backlog metrics. CaseOps does not bypass captcha, login, or session-gated court sources.",
+    a: "Production scheduled refresh starts at 6 PM IST for explicitly bookmarked cases and bounded batches of active matters with a reliable CNR or exact case-number-plus-court identity. It keeps backlog for the next run, batches fairly across tenants, and records attempted, refreshed, changed, skipped, blocked, provider-call, error, partial, and backlog metrics. CaseOps does not bypass captcha, login, or session-gated court sources.",
   },
   {
     q: "How does court-order compliance extraction work?",
