@@ -20,6 +20,26 @@ def _config() -> Config:
     return config
 
 
+def test_existing_billing_indexes_use_postgres_concurrent_builds() -> None:
+    migration_path = (
+        Path(__file__).resolve().parents[1]
+        / "alembic"
+        / "versions"
+        / "20260904_0002_provider_spend_and_forum_aliases.py"
+    )
+    migration_source = migration_path.read_text(encoding="utf-8")
+
+    assert "existing_table_indexes = (" in migration_source
+    assert 'if bind.dialect.name == "postgresql":' in migration_source
+    assert "with op.get_context().autocommit_block():" in migration_source
+    assert "postgresql_concurrently=True" in migration_source
+    assert 'batch.create_index("ix_billing_usage_events_provider_key"' not in migration_source
+    assert (
+        'batch.create_index("ix_billing_usage_attribution_provider_key"'
+        not in migration_source
+    )
+
+
 def test_provider_spend_and_forum_alias_migration_round_trip(
     tmp_path: Path,
     monkeypatch,
