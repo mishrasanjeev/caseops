@@ -18,6 +18,7 @@ from caseops_api.db.models import (
     BillingUsageEvent,
     Company,
     CompanyMembership,
+    CompanyProviderSpendPolicy,
     ProviderCostCategory,
     ProviderCostProfile,
     User,
@@ -89,7 +90,20 @@ def _configure_costs(session) -> None:
                 approved_at=None,
             )
         )
-    session.flush()
+    session.commit()
+
+
+def _configure_zero_search_cost(session) -> None:
+    _configure_costs(session)
+    row = session.scalar(
+        select(ProviderCostProfile).where(
+            ProviderCostProfile.category == ProviderCostCategory.LEGAL_SOURCE_SEARCH,
+            ProviderCostProfile.provider == ik.PROVIDER_KEY,
+        )
+    )
+    assert row is not None
+    row.unit_amount_minor = 0
+    session.commit()
 
 
 def _search_transport(calls: list[httpx.Request]) -> httpx.MockTransport:
@@ -213,6 +227,33 @@ def test_search_uses_only_licensed_api_attributes_cost_once_and_caches(
     assert "server-only-test-token" not in first.model_dump_json()
 
 
+def test_zero_verified_price_blocks_indian_kanoon_before_transport(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    boot = bootstrap_company(client)
+    calls: list[httpx.Request] = []
+    provider = httpx.Client(transport=_search_transport(calls))
+    ik.clear_indian_kanoon_cache()
+    monkeypatch.setattr(ik, "get_settings", _settings)
+    with get_session_factory()() as session:
+        _configure_zero_search_cost(session)
+        with pytest.raises(HTTPException) as caught:
+            ik.search_indian_kanoon(
+                session,
+                context=_context(session, boot),
+                query="zero price must not call provider",
+                page_number=0,
+                max_results=10,
+                client=provider,
+            )
+
+        assert caught.value.status_code == 503
+        assert caught.value.detail["code"] == "provider_cost_policy"
+        assert calls == []
+        assert session.scalar(select(func.count(BillingUsageEvent.id))) == 0
+
+
 @pytest.mark.parametrize(
     ("provider_status", "expected_status", "code"),
     [
@@ -260,14 +301,21 @@ def test_budget_is_checked_before_external_call(
 ) -> None:
     boot = bootstrap_company(client)
     calls: list[httpx.Request] = []
-    monkeypatch.setattr(
-        ik,
-        "get_settings",
-        lambda: _settings(indian_kanoon_daily_budget_minor=49),
-    )
+    monkeypatch.setattr(ik, "get_settings", _settings)
     provider = httpx.Client(transport=_search_transport(calls))
     with get_session_factory()() as session:
         _configure_costs(session)
+        session.add(
+            CompanyProviderSpendPolicy(
+                company_id=str(boot["company"]["id"]),
+                provider_key="indian-kanoon",
+                monthly_limit_minor=49,
+                currency="INR",
+                is_active=True,
+                policy_source="test_explicit_policy",
+            )
+        )
+        session.commit()
         with pytest.raises(HTTPException) as caught:
             ik.search_indian_kanoon(
                 session,
@@ -497,9 +545,21 @@ def test_health_reports_workspace_budget_balance_without_external_probe(
             BillingUsageEvent(
                 company_id=str(boot["company"]["id"]),
                 usage_type="indian_kanoon_legal_source_search",
+                provider_key="indian-kanoon",
                 quantity=1,
                 unit="provider_call",
                 estimated_cost_minor=75,
+                currency="INR",
+            )
+        )
+        session.add(
+            BillingUsageEvent(
+                company_id=str(boot["company"]["id"]),
+                usage_type="case_tracking_search",
+                provider_key="ecourtsindia",
+                quantity=1,
+                unit="provider_call",
+                estimated_cost_minor=25,
                 currency="INR",
             )
         )
@@ -517,5 +577,6 @@ def test_health_reports_workspace_budget_balance_without_external_probe(
     assert body["balance_source"] == "caseops_recorded_workspace_usage"
     assert body["daily_spend_minor"] == 75
     assert body["daily_remaining_minor"] == 9_925
-    assert body["monthly_spend_minor"] == 75
-    assert body["monthly_remaining_minor"] == 99_925
+    assert body["monthly_spend_minor"] == 100
+    assert body["monthly_remaining_minor"] == 99_900
+    assert body["monthly_budget_scope"] == "account"

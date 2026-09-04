@@ -85,6 +85,8 @@ test("IPLF-UJ-66 revocation hides indexed document answers, citations, cache and
       "text=os.environ['CASEOPS_E2E_PRIVATE_TEXT']",
       "digest=hashlib.sha256(text.encode()).hexdigest()",
       "sub=s.scalar(select(BillingSubscription).where(BillingSubscription.company_id==os.environ['CASEOPS_E2E_COMPANY_ID']))",
+      "sub=sub or BillingSubscription(company_id=os.environ['CASEOPS_E2E_COMPANY_ID'],status='manual_active',segment='law_firm',source='iplf-066b-e2e',externally_billable=False,entitlement_overrides_json={})",
+      "s.add(sub)",
       "sub.entitlement_overrides_json={**(sub.entitlement_overrides_json or {}),'ip_workspace':True}",
       "a=MatterAttachment(matter_id=os.environ['CASEOPS_E2E_MATTER_ID'],uploaded_by_membership_id=os.environ['CASEOPS_E2E_MEMBERSHIP_ID'],original_filename='066B evidence.txt',storage_key='iplf-066b/'+digest,content_type='text/plain',size_bytes=len(text.encode()),sha256_hex=digest,processing_status='indexed',extracted_char_count=len(text),extracted_text=text)",
       "s.add(a);s.flush()",

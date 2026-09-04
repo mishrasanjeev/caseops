@@ -22,8 +22,16 @@ import {
   fetchBillingSpendReport,
   fetchBillingUsage,
 } from "@/lib/api/endpoints";
-import type { BillingUsageBreakdownRow } from "@/lib/api/schemas";
-import { formatBytes, formatLimit, ratioPercent } from "@/lib/billing-format";
+import type {
+  BillingProviderSpendRow,
+  BillingUsageBreakdownRow,
+} from "@/lib/api/schemas";
+import {
+  formatBytes,
+  formatLimit,
+  formatMoneyMinor,
+  ratioPercent,
+} from "@/lib/billing-format";
 
 function quotaLabel(percent: number): string {
   if (percent >= 95) return "95% limit warning";
@@ -109,6 +117,60 @@ function BillingUsageLoading() {
   );
 }
 
+function ProviderSpendTable({ rows }: { rows: BillingProviderSpendRow[] }) {
+  return (
+    <Card data-testid="provider-spend-by-account">
+      <CardHeader>
+        <CardTitle as="h2">Paid legal-data providers</CardTitle>
+        <CardDescription>
+          Each provider contribution counts toward one shared ₹1,000 monthly account budget
+          unless an explicit provider policy applies. Cached results do not add spend.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead className="border-b border-[var(--color-line)] text-xs uppercase text-[var(--color-mute)]">
+              <tr>
+                <th className="py-2 pr-4">Provider</th>
+                <th className="py-2 pr-4">Provider spend</th>
+                <th className="py-2 pr-4">Budget scope</th>
+                <th className="py-2 pr-4">Budget used</th>
+                <th className="py-2 pr-4">Monthly limit</th>
+                <th className="py-2">Remaining</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.provider_key} className="border-b border-[var(--color-line-2)]">
+                  <td className="py-3 pr-4 font-medium text-[var(--color-ink)]">{row.label}</td>
+                  <td className="py-3 pr-4">{formatMoneyMinor(row.spent_minor, row.currency)}</td>
+                  <td className="py-3 pr-4">
+                    {row.budget_scope === "account" ? "Shared account" : "Provider"}
+                  </td>
+                  <td className="py-3 pr-4">
+                    {formatMoneyMinor(row.budget_spent_minor, row.currency)}
+                  </td>
+                  <td className="py-3 pr-4">
+                    {row.unlimited
+                      ? "Unlimited"
+                      : formatMoneyMinor(row.monthly_limit_minor, row.currency)}
+                  </td>
+                  <td className="py-3">
+                    {row.unlimited
+                      ? "Unlimited"
+                      : formatMoneyMinor(row.remaining_minor, row.currency)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function TenantBillingUsagePage() {
   const [downloading, setDownloading] = useState(false);
   const usageQuery = useQuery({
@@ -170,7 +232,7 @@ export default function TenantBillingUsagePage() {
       <PageHeader
         eyebrow="Tenant usage"
         title="Usage and spend report"
-        description="This tenant-facing report shows quantities, credits, and storage usage only."
+        description="This tenant-facing report publishes provider spend, quantities, credits, and storage usage for this workspace."
         actions={
           <div className="flex gap-2">
             <Button href="/app/admin/billing" variant="outline">
@@ -259,6 +321,8 @@ export default function TenantBillingUsagePage() {
           </CardContent>
         </Card>
       ) : null}
+
+      {report ? <ProviderSpendTable rows={report.by_provider} /> : null}
 
       {report ? (
         <div className="grid gap-6 xl:grid-cols-2">

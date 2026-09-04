@@ -83,3 +83,34 @@ remained intact.
   must be deployed, the production maintenance job must run once to repair if
   needed, and a later cadence after writers stop must report no blockers and
   `rebuild_count=0` before this incident is marked fixed.
+
+## Production closure evidence
+
+The correction was merged and deployed on 2026-09-04 as exact `origin/main`
+commit `67b89bdf57ef95df3a671fb2dc2290de5a100046`. The maintenance job was pinned
+to API image digest
+`sha256:ea73a6a831e93cde7abe449241c743c846305444e983c951c12f50366e62bf7c`.
+Before routing production, the clean hotfix tree passed the canonical Docker
+verification: PostgreSQL/pgvector `118 passed`, desktop Playwright `182 passed`
+with five intentional production-only skips, mobile Playwright `4 passed`,
+database migration/index health, and the lifecycle non-reopening regressions.
+
+The scheduler was paused during controlled verification. Manual execution
+`caseops-private-projection-maintenance-zbx8z` rebuilt the tenant from the
+16:01Z alert and safely deferred a different tenant while exact-release
+Playwright was changing its source manifest. It reported `status=ok` and
+`release_blocked=false`; this was the expected access fence, not a bypass.
+GitHub production verification run `33899032098` then passed all 116 sequential
+RAM/IP browser tests, cost acceptance, notice workflow, and public-claims
+checks against the exact release.
+
+After those writers stopped, manual execution
+`caseops-private-projection-maintenance-5lpjb` cleared every blocker and pending
+or failed event. Immediate follow-up execution
+`caseops-private-projection-maintenance-p998j` reported all four tenants clean,
+`rebuild_count=0`, `status=ok`, and `release_blocked=false`. The scheduler was
+then re-enabled at `*/5` in `Asia/Kolkata`; its first automatic execution,
+`caseops-private-projection-maintenance-stllv`, repeated the same clean
+no-rebuild result. Cloud SQL logs for every verification window contained no
+`40P01`, `55P03`, deadlock, or lock-timeout record. This satisfies the release
+boundary above and closes the production incident as properly fixed.

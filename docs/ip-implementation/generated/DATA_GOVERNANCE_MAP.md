@@ -6,11 +6,11 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `bad7f7926e57fd8750433c9cf0bb16337352f1a8de51e4f1f9bb6a198660d5ae`
-- SQL tables: `305`
-- SQL columns: `4954`
-- ORM indexes: `1647`
-- Alembic/raw index declarations: `697`
+- Canonical map SHA-256: `3ebbbb602345a3f9692c19a808fe1f05cbb4c3c44cccfa595f555f5a4d459b48`
+- SQL tables: `308`
+- SQL columns: `4995`
+- ORM indexes: `1666`
+- Alembic/raw index declarations: `709`
 - Non-SQL data classes: `12`
 
 ## Boundary
@@ -75,8 +75,8 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `billing_subscription_items` | `billing_provider_evidence` | 13 | `registry_fail_closed` |
 | `billing_subscriptions` | `billing_provider_evidence` | 24 | `registry_fail_closed` |
 | `billing_tds_reconciliation_rows` | `billing_provider_evidence` | 19 | `registry_fail_closed` |
-| `billing_usage_attribution` | `billing_provider_evidence` | 15 | `registry_fail_closed` |
-| `billing_usage_events` | `billing_provider_evidence` | 12 | `registry_fail_closed` |
+| `billing_usage_attribution` | `billing_provider_evidence` | 16 | `registry_fail_closed` |
+| `billing_usage_events` | `billing_provider_evidence` | 13 | `registry_fail_closed` |
 | `billing_usage_rollups` | `billing_provider_evidence` | 11 | `registry_fail_closed` |
 | `bulk_import_jobs` | `tenant_operational_record` | 20 | `registry_fail_closed` |
 | `calendar_event_candidates` | `tenant_operational_record` | 25 | `registry_fail_closed` |
@@ -92,6 +92,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `company_notice_ip_links` | `tenant_restricted_legal_content` | 8 | `registry_fail_closed` |
 | `company_notice_matter_links` | `tenant_restricted_legal_content` | 5 | `registry_fail_closed` |
 | `company_notices` | `tenant_restricted_legal_content` | 35 | `registry_fail_closed` |
+| `company_provider_spend_policies` | `billing_provider_evidence` | 10 | `registry_fail_closed` |
 | `connector_health_records` | `tenant_operational_record` | 24 | `registry_fail_closed` |
 | `connector_secret_rotation_evidence` | `security_identity_control` | 15 | `registry_fail_closed` |
 | `contract_activity` | `tenant_restricted_legal_content` | 7 | `registry_fail_closed` |
@@ -125,7 +126,8 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `ethical_walls` | `security_identity_control` | 14 | `registry_fail_closed` |
 | `evaluation_cases` | `platform_operational_reference` | 11 | `registry_fail_closed` |
 | `evaluation_runs` | `platform_operational_reference` | 12 | `registry_fail_closed` |
-| `forum_catalog_entries` | `public_or_licensed_legal_reference` | 18 | `registry_fail_closed` |
+| `forum_catalog_aliases` | `public_or_licensed_legal_reference` | 16 | `registry_fail_closed` |
+| `forum_catalog_entries` | `public_or_licensed_legal_reference` | 19 | `registry_fail_closed` |
 | `hearing_pack_items` | `platform_operational_reference` | 8 | `registry_fail_closed` |
 | `hearing_packs` | `platform_operational_reference` | 11 | `registry_fail_closed` |
 | `hearing_reminder_delivery_intents` | `platform_operational_reference` | 5 | `registry_fail_closed` |
@@ -283,6 +285,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `production_billing_signoff_evidence` | `billing_provider_evidence` | 11 | `registry_fail_closed` |
 | `production_billing_signoffs` | `billing_provider_evidence` | 7 | `registry_fail_closed` |
 | `provider_cost_profiles` | `platform_operational_reference` | 22 | `registry_fail_closed` |
+| `provider_spend_reservations` | `billing_provider_evidence` | 12 | `registry_fail_closed` |
 | `recommendation_decisions` | `tenant_restricted_legal_content` | 7 | `registry_fail_closed` |
 | `recommendation_options` | `tenant_restricted_legal_content` | 8 | `registry_fail_closed` |
 | `recommendations` | `tenant_restricted_legal_content` | 35 | `registry_fail_closed` |

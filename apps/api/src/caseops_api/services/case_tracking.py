@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from caseops_api.core.settings import get_settings, is_non_local_env
 from caseops_api.db.models import (
     AuthorityDocument,
+    BillingSubscription,
     CaseTrackingSupportMatrix,
     Company,
     CompanyMembership,
@@ -83,6 +84,14 @@ from caseops_api.services.notification_delivery import (
 from caseops_api.services.paid_provider_safety import (
     assert_paid_provider_call_allowed,
     paid_provider_block_reason,
+)
+from caseops_api.services.provider_spend import (
+    provider_spend_rows,
+    release_provider_spend,
+    release_provider_spend_in_session,
+    reserve_provider_spend,
+    reserve_provider_spend_in_session,
+    settle_provider_spend,
 )
 from caseops_api.services.session_context import SessionContext
 
@@ -313,25 +322,94 @@ def _release_legacy_transient_quarantine(tracked_case: TrackedCase) -> None:
     )
 
 
-def _manual_refresh_cost(session: Session, tracked_case: TrackedCase) -> tuple[int, str]:
+def _case_tracking_call_cost(
+    session: Session,
+    *,
+    provider: str,
+    court_code: str | None,
+    court_name: str | None,
+) -> tuple[int, str]:
     from caseops_api.services.production_safety import support_matrix_match
 
     row = support_matrix_match(
+        session,
+        provider=provider,
+        court_code=court_code,
+        court_name=court_name,
+    )
+    if row is not None:
+        amount, currency = int(row.refresh_cost_minor), row.currency
+    else:
+        from caseops_api.services.provider_costs import effective_cost_minor
+
+        amount, _ = effective_cost_minor(
+            session,
+            category="case_refresh",
+            provider=provider,
+        )
+        currency = "INR"
+    if amount <= 0 or currency != "INR":
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "provider_cost_policy",
+                "message": (
+                    "The eCourts provider call price is unavailable or is not denominated "
+                    "in INR; no external request was made."
+                ),
+                "provider": provider,
+            },
+        )
+    return amount, currency
+
+
+def _manual_refresh_cost(session: Session, tracked_case: TrackedCase) -> tuple[int, str]:
+    return _case_tracking_call_cost(
         session,
         provider=tracked_case.provider,
         court_code=tracked_case.court_code,
         court_name=tracked_case.court_name,
     )
-    if row is not None:
-        return int(row.refresh_cost_minor), row.currency
-    from caseops_api.services.provider_costs import effective_cost_minor
 
-    amount, _ = effective_cost_minor(
-        session,
-        category="case_refresh",
-        provider=tracked_case.provider,
+
+def _record_case_tracking_provider_usage(
+    session: Session,
+    *,
+    context: SessionContext,
+    provider_key: str,
+    usage_type: str,
+    feature_key: str,
+    display_label: str,
+    cost_minor: int,
+    tracked_case_id: str | None = None,
+    source_type: str | None = None,
+    source_id: str | None = None,
+) -> None:
+    from caseops_api.services.saas_billing import record_usage
+
+    subscription_id = session.scalar(
+        select(BillingSubscription.id)
+        .where(BillingSubscription.company_id == context.company.id)
+        .order_by(BillingSubscription.created_at.desc())
+        .limit(1)
     )
-    return amount, "INR"
+    record_usage(
+        session,
+        company_id=context.company.id,
+        subscription_id=subscription_id,
+        usage_type=usage_type,
+        feature_key=feature_key,
+        provider_key=provider_key,
+        quantity=1,
+        unit="provider_call",
+        actor_membership_id=context.membership.id,
+        tracked_case_id=tracked_case_id,
+        estimated_cost_minor=cost_minor,
+        display_label=display_label,
+        source_type=source_type,
+        source_id=source_id,
+        metadata={"provider": provider_key},
+    )
 
 
 def _new_operation(
@@ -925,13 +1003,29 @@ def _bookmark_scope_key(matter: Matter | None) -> str:
     return matter.id if matter else "company"
 
 
-def provider_status_response() -> CaseTrackingProviderStatusResponse:
+def provider_status_response(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> CaseTrackingProviderStatusResponse:
     enabled, provider, configured, reason = provider_status()
+    spend = next(
+        row
+        for row in provider_spend_rows(session, company=context.company)
+        if row.provider_key == "ecourtsindia"
+    )
     return CaseTrackingProviderStatusResponse(
         enabled=enabled,
         provider=provider,
         configured=configured,
         reason=reason,
+        workspace_monthly_spend_minor=spend.budget_spent_minor,
+        workspace_monthly_limit_minor=spend.monthly_limit_minor,
+        workspace_monthly_remaining_minor=spend.remaining_minor,
+        workspace_monthly_limit_unlimited=spend.unlimited,
+        workspace_monthly_budget_scope=spend.budget_scope,
+        workspace_monthly_limit_currency=spend.currency,
+        workspace_monthly_limit_policy_source=spend.policy_source,
     )
 
 
@@ -1030,6 +1124,7 @@ def search_cases(
         state=payload.state,
         court_name=payload.court_name,
     )
+    reservation_id: str | None = None
     try:
         active_provider = provider or get_case_tracking_provider()
         from caseops_api.services.production_safety import assert_case_tracking_supported
@@ -1046,9 +1141,37 @@ def search_cases(
             base_url=getattr(active_provider, "base_url", None),
             transport_is_mocked=getattr(active_provider, "transport", None) is not None,
         )
+        cost_minor, _currency = _case_tracking_call_cost(
+            session,
+            provider=active_provider.provider_key,
+            court_code=payload.court_code,
+            court_name=payload.court_name,
+        )
+        reservation_id = reserve_provider_spend(
+            company_id=context.company.id,
+            actor_membership_id=context.membership.id,
+            provider_key=active_provider.provider_key,
+            operation_key="case_tracking_search",
+            amount_minor=cost_minor,
+        )
         snapshots = active_provider.search_cases(query=query)
-    except (CaseTrackingProviderUnavailable, CaseTrackingProviderError) as exc:
+    except (CaseTrackingProviderUnavailable, CaseTrackingProviderError, HTTPException) as exc:
+        release_provider_spend(reservation_id=reservation_id)
+        if isinstance(exc, HTTPException):
+            raise exc
         raise _safe_provider_error(exc) from exc
+    _record_case_tracking_provider_usage(
+        session,
+        context=context,
+        provider_key=active_provider.provider_key,
+        usage_type="case_tracking_search",
+        feature_key="case_tracking_search",
+        display_label="eCourts case search",
+        cost_minor=cost_minor,
+        source_type="case_tracking_provider",
+        source_id=active_provider.provider_key,
+    )
+    settle_provider_spend(session, reservation_id=reservation_id)
     record_from_context(
         session,
         context,
@@ -2159,18 +2282,7 @@ def refresh_bookmark(
             context=context,
             tracked_case_id=tracked_case.id,
         )
-    tracked_case.last_provider_refresh_requested_at = _now()
-    try:
-        operation = _new_operation(
-            session,
-            context=context,
-            tracked_case=tracked_case,
-            operation_type=operation_type,
-            correlation_id=correlation_id,
-        )
-    except CaseTrackingProviderError as exc:
-        session.rollback()
-        raise _safe_provider_error(exc) from exc
+    reservation_id: str | None = None
     try:
         active_provider = provider or get_case_tracking_provider()
         from caseops_api.services.production_safety import assert_case_tracking_supported
@@ -2187,6 +2299,33 @@ def refresh_bookmark(
             base_url=getattr(active_provider, "base_url", None),
             transport_is_mocked=getattr(active_provider, "transport", None) is not None,
         )
+        cost_minor, _currency = _manual_refresh_cost(session, tracked_case)
+        reservation_id = reserve_provider_spend(
+            company_id=context.company.id,
+            actor_membership_id=context.membership.id,
+            provider_key=active_provider.provider_key,
+            operation_key=f"case_tracking_{operation_type}_refresh",
+            amount_minor=cost_minor,
+        )
+    except (CaseTrackingProviderUnavailable, CaseTrackingProviderError, HTTPException) as exc:
+        release_provider_spend(reservation_id=reservation_id)
+        if isinstance(exc, HTTPException):
+            raise exc
+        raise _safe_provider_error(exc) from exc
+    tracked_case.last_provider_refresh_requested_at = _now()
+    try:
+        operation = _new_operation(
+            session,
+            context=context,
+            tracked_case=tracked_case,
+            operation_type=operation_type,
+            correlation_id=correlation_id,
+        )
+    except CaseTrackingProviderError as exc:
+        session.rollback()
+        release_provider_spend(reservation_id=reservation_id)
+        raise _safe_provider_error(exc) from exc
+    try:
         if tracked_case.cnr_number:
             snapshot = _validated_sync_snapshot(
                 tracked_case,
@@ -2202,6 +2341,7 @@ def refresh_bookmark(
             )
             snapshot = _validated_sync_snapshot(tracked_case, results)
     except (CaseTrackingProviderUnavailable, CaseTrackingProviderError, HTTPException) as exc:
+        release_provider_spend_in_session(session, reservation_id=reservation_id)
         _fail_operation(
             session,
             context=context,
@@ -2271,14 +2411,21 @@ def refresh_bookmark(
             "currency": operation.currency,
         },
     )
-    if enforce_manual_limit:
-        from caseops_api.services.saas_billing import record_manual_refresh_usage
-
-        record_manual_refresh_usage(
-            session,
-            context=context,
-            tracked_case_id=tracked_case.id,
-        )
+    _record_case_tracking_provider_usage(
+        session,
+        context=context,
+        provider_key=active_provider.provider_key,
+        usage_type="case_refresh",
+        feature_key=(
+            "case_tracking_manual_refresh" if enforce_manual_limit else "case_tracking_refresh"
+        ),
+        display_label=("Manual case refresh" if enforce_manual_limit else "Case tracking refresh"),
+        cost_minor=cost_minor,
+        tracked_case_id=tracked_case.id,
+        source_type="tracked_case",
+        source_id=tracked_case.id,
+    )
+    settle_provider_spend(session, reservation_id=reservation_id)
     session.commit()
     return CaseTrackingRefreshResponse(
         bookmark=_bookmark_record(session, bookmark),
@@ -3094,6 +3241,14 @@ def download_case_tracking_source(
             filename=_safe_markdown_filename(update),
             source_format="provider-markdown",
         )
+    download_cost_minor, _currency = _manual_refresh_cost(session, bookmark.tracked_case)
+    reservation_id = reserve_provider_spend(
+        company_id=context.company.id,
+        actor_membership_id=context.membership.id,
+        provider_key=provider,
+        operation_key="case_tracking_source_download",
+        amount_minor=download_cost_minor,
+    )
     try:
         with httpx.Client(
             timeout=30,
@@ -3110,6 +3265,7 @@ def download_case_tracking_source(
                 },
             )
     except httpx.HTTPError as exc:
+        release_provider_spend(reservation_id=reservation_id)
         if _provider_payment_required(exc):
             cached_source = _verified_cached_source(update)
             if cached_source is not None:
@@ -3151,10 +3307,24 @@ def download_case_tracking_source(
         ) from exc
     content_type = response.headers.get("content-type") or "application/octet-stream"
     if "application/json" in content_type.lower():
+        release_provider_spend(reservation_id=reservation_id)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Case tracking provider returned an error instead of a source document.",
         )
+    _record_case_tracking_provider_usage(
+        session,
+        context=context,
+        provider_key=provider,
+        usage_type="case_tracking_source_download",
+        feature_key="case_tracking_source_download",
+        display_label="eCourts source download",
+        cost_minor=download_cost_minor,
+        tracked_case_id=bookmark.tracked_case_id,
+        source_type="tracked_case_update",
+        source_id=update.id,
+    )
+    settle_provider_spend(session, reservation_id=reservation_id)
     record_from_context(
         session,
         context,
@@ -3221,9 +3391,7 @@ def _support_row_for_matter(
 ) -> CaseTrackingSupportMatrix | None:
     normalized_court = (court_name or "").strip().lower()
     exact = [
-        row
-        for row in rows
-        if normalized_court and row.court.strip().lower() == normalized_court
+        row for row in rows if normalized_court and row.court.strip().lower() == normalized_court
     ]
     wildcard = [row for row in rows if row.court.strip() == "*"]
     selected = exact or wildcard
@@ -3578,9 +3746,7 @@ def poll_tracked_cases(
                 context=context,
                 provider_key=active_provider.provider_key,
             )
-            backfill_metadata: dict[str, object] = {
-                "auto_link_backfill": backfill.metadata()
-            }
+            backfill_metadata: dict[str, object] = {"auto_link_backfill": backfill.metadata()}
         except Exception as exc:
             backfill_metadata = {
                 "auto_link_backfill": {
@@ -3593,6 +3759,7 @@ def poll_tracked_cases(
             provider=active_provider.provider_key,
             base_url=getattr(active_provider, "base_url", None),
             transport_is_mocked=getattr(active_provider, "transport", None) is not None,
+            scheduled_tenant_filter=True,
         )
         if provider_block is not None:
             runs.append(
@@ -3609,22 +3776,6 @@ def poll_tracked_cases(
             )
             continue
         total_eligible = _eligible_tracked_case_count(session, company_id=context.company.id)
-        run = TrackedCasePollRun(
-            company_id=context.company.id,
-            status="completed",
-            started_at=_now(),
-            metadata_json={
-                "provider": active_provider.provider_key,
-                "tracked_count": total_eligible,
-                "attempted_count": 0,
-                "eligibility": "active_matter_links_and_explicit_bookmarks",
-                "force": force,
-                "window": window.metadata(),
-                **backfill_metadata,
-            },
-        )
-        session.add(run)
-        session.flush()
         cases = list(
             session.scalars(
                 select(TrackedCase)
@@ -3650,6 +3801,50 @@ def poll_tracked_cases(
                 .limit(settings.case_tracking_poll_limit)
             )
         )
+        scheduled_costs = {
+            tracked_case.id: _manual_refresh_cost(session, tracked_case)[0]
+            for tracked_case in cases
+        }
+        try:
+            provider_reservation_id = reserve_provider_spend_in_session(
+                session,
+                company_id=context.company.id,
+                actor_membership_id=None,
+                provider_key=active_provider.provider_key,
+                operation_key="case_tracking_scheduled_poll",
+                amount_minor=sum(scheduled_costs.values()),
+            )
+            session.commit()
+        except HTTPException as exc:
+            detail = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}
+            runs.append(
+                _record_safe_poll_run(
+                    session,
+                    context=context,
+                    status_value="blocked",
+                    reason=str(detail.get("code") or "provider_budget_exhausted"),
+                    window=window,
+                    provider_key=active_provider.provider_key,
+                    force=force,
+                )
+            )
+            continue
+        run = TrackedCasePollRun(
+            company_id=context.company.id,
+            status="completed",
+            started_at=_now(),
+            metadata_json={
+                "provider": active_provider.provider_key,
+                "tracked_count": total_eligible,
+                "attempted_count": 0,
+                "eligibility": "active_matter_links_and_explicit_bookmarks",
+                "force": force,
+                "window": window.metadata(),
+                **backfill_metadata,
+            },
+        )
+        session.add(run)
+        session.flush()
         run.metadata_json = {
             **dict(run.metadata_json or {}),
             "attempted_count": len(cases),
@@ -3658,6 +3853,8 @@ def poll_tracked_cases(
         run.skipped_count = run.backlog_remaining_count
         bulk_snapshots: dict[str, list[ProviderCaseSnapshot]] = {}
         bulk_errors: dict[str, str] = {}
+        charged_case_count = 0
+        charged_cost_minor = 0
         cnrs = list(
             dict.fromkeys(
                 normalized
@@ -3736,6 +3933,7 @@ def poll_tracked_cases(
                 }
                 continue
             original_tracked_case = tracked_case
+            scheduled_cost_minor = scheduled_costs[tracked_case.id]
             try:
                 if tracked_case.cnr_number:
                     normalized_cnr = normalize_cnr(tracked_case.cnr_number)
@@ -3756,9 +3954,7 @@ def poll_tracked_cases(
                     )
                     if not snapshots:
                         run.provider_call_count += 1
-                        snapshots = [
-                            active_provider.get_case_by_cnr(cnr=tracked_case.cnr_number)
-                        ]
+                        snapshots = [active_provider.get_case_by_cnr(cnr=tracked_case.cnr_number)]
                     snapshot = _validated_sync_snapshot(tracked_case, snapshots)
                 else:
                     run.provider_call_count += 1
@@ -3798,6 +3994,20 @@ def poll_tracked_cases(
                     operation=operation,
                     created_update_count=len(created),
                 )
+                _record_case_tracking_provider_usage(
+                    session,
+                    context=context,
+                    provider_key=active_provider.provider_key,
+                    usage_type="case_refresh",
+                    feature_key="case_tracking_scheduled_refresh",
+                    display_label="Scheduled case refresh",
+                    cost_minor=scheduled_cost_minor,
+                    tracked_case_id=tracked_case.id,
+                    source_type="tracked_case_poll_run",
+                    source_id=run.id,
+                )
+                charged_case_count += 1
+                charged_cost_minor += scheduled_cost_minor
             except Exception as exc:
                 _fail_operation(
                     session,
@@ -3823,7 +4033,20 @@ def poll_tracked_cases(
             "provider_call_count": run.provider_call_count,
             "backlog_remaining_count": run.backlog_remaining_count,
             "bulk_cnr_count": len(cnrs),
+            "charged_case_count": charged_case_count,
+            "charged_cost_minor": charged_cost_minor,
         }
+        if charged_case_count:
+            settle_provider_spend(
+                session,
+                reservation_id=provider_reservation_id,
+                amount_minor=charged_cost_minor,
+            )
+        else:
+            release_provider_spend_in_session(
+                session,
+                reservation_id=provider_reservation_id,
+            )
         session.add(run)
         record_from_context(
             session,

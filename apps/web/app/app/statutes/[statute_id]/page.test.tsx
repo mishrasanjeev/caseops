@@ -101,4 +101,41 @@ describe("StatuteDetailPage", () => {
       await screen.findByText(/Could not load this Act/i),
     ).toBeInTheDocument();
   });
+
+  it("lists catalogued sections while keeping unverified text visibly gated", async () => {
+    listStatuteSectionsMock.mockResolvedValue({
+      statute: {
+        id: "crpc-1973",
+        short_name: "CrPC",
+        long_name: "Code of Criminal Procedure, 1973",
+        enacted_year: 1973,
+        jurisdiction: "india",
+        source_url: "https://www.indiacode.nic.in/handle/123456789/15272",
+      },
+      sections: [],
+      catalog_sections: [
+        {
+          id: "sec-pending",
+          statute_id: "crpc-1973",
+          section_number: "Section 1",
+          section_label: "Short title",
+          ordinal: 1,
+          selection_state: "verification_pending",
+        },
+      ],
+      verified_section_count: 0,
+      catalog_section_count: 1,
+      coverage_label: "Verified statutory text only",
+    });
+
+    render(withClient(<StatuteDetailPage />));
+
+    expect(await screen.findByText("Section 1")).toBeInTheDocument();
+    expect(screen.getByText("Verification pending")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Section 1.*Short title/i })).toHaveAttribute(
+      "href",
+      "/app/statutes/crpc-1973/sections/Section%201",
+    );
+    expect(screen.queryByText("No verified sections available")).not.toBeInTheDocument();
+  });
 });

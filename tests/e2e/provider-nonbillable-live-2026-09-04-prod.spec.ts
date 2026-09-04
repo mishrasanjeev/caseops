@@ -63,6 +63,24 @@ async function signIn(page: Page): Promise<string> {
   return session.access_token;
 }
 
+type ProviderSpendRow = {
+  provider_key: string;
+  spent_minor: number;
+  monthly_limit_minor: number | null;
+  remaining_minor: number | null;
+  unlimited: boolean;
+  currency: string;
+};
+
+async function providerSpend(page: Page, token: string): Promise<Map<string, ProviderSpendRow>> {
+  const response = await page.request.get(`${API_BASE_URL}/api/billing/usage`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  await expectStatus(response, 200, "workspace provider-spend report");
+  const payload = (await response.json()) as { by_provider: ProviderSpendRow[] };
+  return new Map(payload.by_provider.map((row) => [row.provider_key, row]));
+}
+
 test("automation checks readiness and budget balance without provider spend", async ({
   page,
 }) => {
@@ -79,6 +97,18 @@ test("automation checks readiness and budget balance without provider spend", as
 
   const token = await signIn(page);
   const headers = { Authorization: `Bearer ${token}` };
+  const beforeSpend = await providerSpend(page, token);
+  expect([...beforeSpend.keys()].sort()).toEqual([
+    "ecourtsindia",
+    "indian-kanoon",
+  ]);
+  for (const row of beforeSpend.values()) {
+    expect(row.currency).toBe("INR");
+    expect(row.spent_minor).toBeGreaterThanOrEqual(0);
+    expect(row.monthly_limit_minor).toBe(100_000);
+    expect(row.unlimited).toBe(false);
+    expect(row.remaining_minor).toBeGreaterThanOrEqual(0);
+  }
 
   const providerReadiness = await page.request.get(
     `${API_BASE_URL}/api/admin/provider-operations/readiness`,
@@ -113,6 +143,13 @@ test("automation checks readiness and budget balance without provider spend", as
       enabled: true,
       provider: "ecourtsindia",
       configured: true,
+      performs_external_probe: false,
+      provider_prepaid_balance_checked: false,
+      workspace_monthly_spend_minor:
+        beforeSpend.get("ecourtsindia")!.spent_minor,
+      workspace_monthly_limit_minor: 100_000,
+      workspace_monthly_limit_unlimited: false,
+      workspace_monthly_limit_currency: "INR",
     }),
   );
 
@@ -129,6 +166,9 @@ test("automation checks readiness and budget balance without provider spend", as
       provider_prepaid_balance_checked: false,
       balance_source: "caseops_recorded_workspace_usage",
       currency: "INR",
+      monthly_spend_minor: beforeSpend.get("indian-kanoon")!.spent_minor,
+      monthly_limit_minor: 100_000,
+      monthly_limit_unlimited: false,
     }),
   );
   expect(healthBody.daily_spend_minor).toBeGreaterThanOrEqual(0);
@@ -166,6 +206,19 @@ test("automation checks readiness and budget balance without provider spend", as
       reason: "automated_test_request",
     }),
   );
+
+  const afterSpend = await providerSpend(page, token);
+  for (const providerName of ["ecourtsindia", "indian-kanoon"]) {
+    expect(afterSpend.get(providerName)?.spent_minor).toBe(
+      beforeSpend.get(providerName)?.spent_minor,
+    );
+  }
+
+  await page.goto(`${BASE_URL}/app/admin/billing/usage`);
+  const spendTable = page.getByTestId("provider-spend-by-account");
+  await expect(spendTable).toContainText("eCourtsIndia");
+  await expect(spendTable).toContainText("Indian Kanoon");
+  await expect(spendTable).toContainText("1,000");
 
   await page.goto(`${BASE_URL}/app/research`);
   await page.getByTestId("research-source-indian-kanoon").click();

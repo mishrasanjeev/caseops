@@ -37,6 +37,15 @@ class BulkMatterImportDocumentReference(BaseModel):
     status: BulkMatterImportDocumentReferenceStatus
 
 
+class BulkMatterImportForumCandidate(BaseModel):
+    forum_catalog_entry_id: str
+    name: str
+    state: str | None = None
+    district: str | None = None
+    city: str | None = None
+    lineage: str
+
+
 class BulkMatterImportRowPlan(BaseModel):
     row_number: int
     status: Literal["valid", "invalid", "duplicate"]
@@ -75,6 +84,7 @@ class BulkMatterImportRowPlan(BaseModel):
     duplicate_candidates: list[BulkMatterImportDuplicateCandidate] = Field(
         default_factory=list,
     )
+    forum_candidates: list[BulkMatterImportForumCandidate] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
 
 

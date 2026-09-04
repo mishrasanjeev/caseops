@@ -388,12 +388,12 @@ test.describe.serial("Ram 2026-09-03 Bulk Matter Exact Court mapping", () => {
     const clientName = `Ram Sep03 client ${RUN_ID}`.slice(0, 120);
     const rows = [
       [
-        "Tis Hazari exact",
+        "Tis Hazari consumer alias",
         code("TH"),
         "Commercial",
         "active",
         clientName,
-        "Tis Hazari",
+        "Tis Hazari DCDRC",
         "",
       ],
       [
@@ -492,9 +492,18 @@ test.describe.serial("Ram 2026-09-03 Bulk Matter Exact Court mapping", () => {
     committed.created_matter_ids.forEach((id) => createdMatterIds.add(id));
 
     const expected = new Map([
-      [code("TH"), ["consumer:dcdrc:delhi:tis-hazari", "Tis Hazari"]],
-      [code("ITO"), ["consumer:dcdrc:delhi:ito", "ITO"]],
-      [code("DW"), ["consumer:dcdrc:delhi:dwarka", "Dwarka"]],
+      [
+        code("TH"),
+        [
+          "consumer:dcdrc:delhi:tis-hazari",
+          "District Consumer Commission, Tis Hazari",
+        ],
+      ],
+      [code("ITO"), ["consumer:dcdrc:delhi:ito", "District Consumer Commission, ITO"]],
+      [
+        code("DW"),
+        ["consumer:dcdrc:delhi:dwarka", "District Consumer Commission, Dwarka"],
+      ],
     ]);
     for (const matterId of committed.created_matter_ids) {
       const response = await page.request.get(

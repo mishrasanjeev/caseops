@@ -10818,3 +10818,96 @@ def test_private_rebuild_lease_timeout_is_bounded_and_does_not_leak(pg_engine) -
             wait_seconds=0.2,
         ):
             pass
+
+
+def test_shared_provider_budget_serializes_cross_provider_reservations_on_postgres(
+    pg_engine,
+) -> None:
+    """Concurrent provider requests cannot overspend the shared account budget."""
+
+    from fastapi import HTTPException
+
+    from caseops_api.db.models import ProviderSpendReservation
+    from caseops_api.services.provider_spend import reserve_provider_spend_in_session
+
+    with Session(pg_engine) as setup:
+        company_id = _seed_company(setup)
+        setup.commit()
+
+    contender_started = Event()
+    contender_pid: list[int] = []
+
+    def reserve_ecourts_after_indian_kanoon():
+        with Session(pg_engine) as contender:
+            contender.execute(text("SET LOCAL lock_timeout = '2s'"))
+            contender_pid.append(int(contender.scalar(text("SELECT pg_backend_pid()"))))
+            contender_started.set()
+            try:
+                reserve_provider_spend_in_session(
+                    contender,
+                    company_id=company_id,
+                    actor_membership_id=None,
+                    provider_key="ecourtsindia",
+                    operation_key="postgres-concurrent-ecourts-search",
+                    amount_minor=60_000,
+                )
+                contender.commit()
+            except Exception as exc:
+                contender.rollback()
+                return exc
+        return None
+
+    with Session(pg_engine) as first:
+        indian_kanoon_reservation_id = reserve_provider_spend_in_session(
+            first,
+            company_id=company_id,
+            actor_membership_id=None,
+            provider_key="indian-kanoon",
+            operation_key="postgres-concurrent-indian-kanoon-search",
+            amount_minor=60_000,
+        )
+        assert indian_kanoon_reservation_id is not None
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(reserve_ecourts_after_indian_kanoon)
+            assert contender_started.wait(timeout=2)
+            deadline = monotonic() + 2
+            contender_waits_on_company = False
+            while monotonic() < deadline:
+                with Session(pg_engine) as observer:
+                    wait_type = observer.scalar(
+                        text(
+                            "SELECT wait_event_type FROM pg_stat_activity "
+                            "WHERE pid = :pid"
+                        ),
+                        {"pid": contender_pid[0]},
+                    )
+                if wait_type == "Lock":
+                    contender_waits_on_company = True
+                    break
+                Event().wait(0.02)
+            assert contender_waits_on_company is True
+
+            first.commit()
+            contender_error = future.result(timeout=5)
+
+    assert isinstance(contender_error, HTTPException)
+    assert contender_error.status_code == 429
+    assert contender_error.detail["code"] == "provider_budget_exhausted"
+    assert contender_error.detail["provider"] == "ecourtsindia"
+    assert contender_error.detail["budget_scope"] == "account"
+    assert contender_error.detail["reserved_minor"] == 60_000
+    assert contender_error.detail["monthly_limit_minor"] == 100_000
+
+    with Session(pg_engine) as verify:
+        reservations = list(
+            verify.scalars(
+                select(ProviderSpendReservation).where(
+                    ProviderSpendReservation.company_id == company_id
+                )
+            )
+        )
+    assert len(reservations) == 1
+    assert reservations[0].provider_key == "indian-kanoon"
+    assert reservations[0].status == "reserved"
+    assert reservations[0].amount_minor == 60_000

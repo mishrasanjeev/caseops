@@ -1478,6 +1478,13 @@ export default function GuidePage() {
                       lawyer and AI review.
                     </li>
                     <li>
+                      <strong>Workspace provider budget.</strong> Live human searches,
+                      refreshes, and source downloads count toward one shared Indian Kanoon and
+                      eCourts account budget. The default is INR 1,000 per month; Admin &gt;
+                      Billing &gt; Usage separates provider contribution from total budget use,
+                      limit, remaining amount, and any explicit unlimited policy.
+                    </li>
+                    <li>
                       <strong>Manual fallback.</strong> Manual refresh is rate-limited,
                       cost-attributed, and disabled when provider health is red or the row
                       is quarantined. Existing evidence remains available and the page
@@ -1736,6 +1743,12 @@ export default function GuidePage() {
                       BNSS&quot; (bail) is never confused with &quot;Section 483
                       BNS&quot;.
                     </li>
+                    <li>
+                      <strong>Complete catalog visibility.</strong> An Act page lists every
+                      catalogued section, including pending, quarantined, and retired rows,
+                      with its available source and trust state. Only fully verified sections
+                      can be attached or used for drafting and AI grounding.
+                    </li>
                   </ul>
                   <Callout title="Bare text indexing">
                     Section number + label + source URL ship with the catalog
@@ -1808,11 +1821,19 @@ export default function GuidePage() {
                       blocked until legal-hold-aware retention is implemented.
                     </li>
                     <li>
-                      <strong>Licensed source.</strong> Indian Kanoon access is disabled by
-                      default. Contract and terms approval, server-only credentials,
-                      permitted uses, retention, legal coverage, approved actual cost
-                      profiles, and daily/monthly budgets must all pass before CaseOps makes
-                      a request. CaseOps never scrapes Indian Kanoon public pages.
+                      <strong>Licensed source.</strong> Indian Kanoon is available to
+                      authenticated human users when contract, terms, server-only credentials,
+                      permitted uses, retention, legal coverage, and a positive verified INR
+                      cost profile all pass. By default, Indian Kanoon and eCourts share one INR
+                      1,000 monthly account limit; Billing &gt; Usage publishes each provider&apos;s
+                      contribution, total budget use, and remaining budget. CaseOps never scrapes
+                      Indian Kanoon public pages.
+                    </li>
+                    <li>
+                      <strong>Automation is nonbillable.</strong> Automated verification may
+                      read CaseOps readiness and recorded balances, but it cannot execute a
+                      paid search, detail, refresh, retrieval, or download request. A
+                      test-looking workspace name does not block a normal human request.
                     </li>
                   </ul>
                   <Callout title="No result, unavailable, and changed sources">
@@ -1999,6 +2020,11 @@ export default function GuidePage() {
                       window, and per-tenant batching metrics. Replayable rows require a
                       short-lived scope-and-cost preview before an audited confirmation;
                       enrolled MFA also requires recent step-up.
+                    </li>
+                    <li>
+                      <strong>Provider spend.</strong> Billing &gt; Usage publishes this
+                      workspace&apos;s Indian Kanoon and eCourts spend independently, including
+                      the monthly limit, remaining amount, currency, and unlimited state.
                     </li>
                     <li>
                       <strong>Matter billing.</strong> Manage billing profiles, rate cards,

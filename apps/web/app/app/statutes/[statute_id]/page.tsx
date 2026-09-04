@@ -29,6 +29,14 @@ import {
   listStatuteSections,
 } from "@/lib/api/endpoints";
 
+function sectionStateLabel(state: string): string {
+  if (state === "verified_selectable") return "Verified text";
+  if (state === "verification_pending") return "Verification pending";
+  if (state === "quarantined") return "Quarantined";
+  if (state === "retired") return "Retired";
+  return "Unavailable";
+}
+
 export default function StatuteDetailPage() {
   const params = useParams<{ statute_id: string }>();
   const statuteId = params.statute_id;
@@ -65,6 +73,14 @@ export default function StatuteDetailPage() {
   const data = query.data;
   if (!data) return null;
   const { statute, sections } = data;
+  const catalogSections = data.catalog_sections?.length
+    ? data.catalog_sections
+    : sections.map((section) => ({
+        ...section,
+        selection_state: "verified_selectable" as const,
+      }));
+  const verifiedCount = data.verified_section_count ?? sections.length;
+  const catalogCount = data.catalog_section_count ?? catalogSections.length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -81,8 +97,8 @@ export default function StatuteDetailPage() {
         title={statute.long_name}
         description={
           statute.enacted_year
-            ? `Enacted ${statute.enacted_year} · ${sections.length} independently verified sections available`
-            : `${sections.length} independently verified sections available`
+            ? `Enacted ${statute.enacted_year} · ${verifiedCount} of ${catalogCount} catalogued sections independently verified`
+            : `${verifiedCount} of ${catalogCount} catalogued sections independently verified`
         }
         actions={
           statute.source_url ? (
@@ -163,22 +179,22 @@ export default function StatuteDetailPage() {
         <CardHeader>
           <CardTitle>Sections</CardTitle>
           <CardDescription>
-            Click a section for the bare text (when indexed) and recent
-            authorities interpreting it.
+            Browse every catalogued provision. Exact bare text and citation
+            remain available only after source verification.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {sections.length === 0 ? (
+          {catalogSections.length === 0 ? (
             <EmptyState
-              title="No verified sections available"
-              description="Catalog entries remain hidden until exact source provenance and independent legal review are complete."
+              title="No sections catalogued"
+              description="This Act has no indexed section metadata yet. Use the Act source while cataloguing is completed."
             />
           ) : (
             <ul
               className="divide-y divide-[var(--color-line-2)]"
               data-testid="statute-sections-list"
             >
-              {sections.map((s) => (
+              {catalogSections.map((s) => (
                 <li
                   key={s.id}
                   className="py-2.5"
@@ -186,16 +202,23 @@ export default function StatuteDetailPage() {
                 >
                   <Link
                     href={`/app/statutes/${statute.id}/sections/${encodeURIComponent(s.section_number)}`}
-                    className="block hover:text-[var(--color-brand-600)]"
+                    className="flex min-w-0 items-start justify-between gap-3 hover:text-[var(--color-brand-600)]"
                   >
-                    <div className="text-sm font-mono font-semibold text-[var(--color-ink)]">
-                      {s.section_number}
-                    </div>
-                    {s.section_label ? (
-                      <div className="text-xs text-[var(--color-mute)]">
-                        {s.section_label}
+                    <div className="min-w-0">
+                      <div className="text-sm font-mono font-semibold text-[var(--color-ink)]">
+                        {s.section_number}
                       </div>
-                    ) : null}
+                      {s.section_label ? (
+                        <div className="text-xs text-[var(--color-mute)]">
+                          {s.section_label}
+                        </div>
+                      ) : null}
+                    </div>
+                    <Badge
+                      tone={s.selection_state === "verified_selectable" ? "success" : "warning"}
+                    >
+                      {sectionStateLabel(s.selection_state)}
+                    </Badge>
                   </Link>
                 </li>
               ))}

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ComponentType, ReactNode } from "react";
 import {
   BadgeCheck,
+  BarChart3,
   BookOpen,
   Briefcase,
   Building2,
@@ -449,7 +450,7 @@ export default function LawFirmPitchPage() {
               <PitchCard
                 icon={BookOpen}
                 title="Licensed-source controls"
-                body="The optional Indian Kanoon API adapter is disabled until contract, terms, credentials, permitted-use, retention, legal-coverage, cost and budget gates pass. When active, research shows attribution, freshness, source links and review state; CaseOps never scrapes its public pages."
+                body="Licensed Indian Kanoon research and eCourts case tracking are available to authenticated human users only after provider, terms, credential, support, and verified-cost gates pass. Both providers count toward one shared INR 1,000 monthly account limit by default, with provider contribution, total budget use, and remaining budget visible in Billing; automated tests cannot consume credits."
               />
               <PitchCard
                 icon={Lock}
@@ -571,6 +572,12 @@ export default function LawFirmPitchPage() {
                 icon={Wallet}
                 title="Collections visibility"
                 body="Payment state, partial recovery and write-off posture are visible without leaving the platform."
+                inverse
+              />
+              <PitchCard
+                icon={BarChart3}
+                title="Provider spend by workspace"
+                body="Indian Kanoon and eCourts usage is attributed separately against one shared monthly account budget, with spend, remaining budget, and explicit unlimited status visible to the workspace."
                 inverse
               />
             </div>

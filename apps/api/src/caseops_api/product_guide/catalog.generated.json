@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "corpus_id": "caseops-product-guide",
-  "content_version": "2026.08.27.2",
+  "content_version": "2026.09.04.1",
   "display_version": "v4",
   "language": "en-IN",
   "canonical_path": "/guide",
-  "updated_on": "2026-08-27",
+  "updated_on": "2026-09-04",
   "navigation_groups": {
     "overview": "Overview",
     "schedule": "Schedule",
@@ -1111,6 +1111,23 @@
       ],
       "required_capabilities": [
         "platform:admin"
+      ]
+    },
+    {
+      "id": "platform-forum-aliases",
+      "label": "Forum aliases",
+      "href": "/app/platform-admin/forum-aliases",
+      "icon": "Languages",
+      "group": "admin",
+      "summary": "Maintain source-backed aliases against the canonical forum catalog.",
+      "keywords": [
+        "court complex",
+        "forum alias",
+        "court mapping",
+        "registry label"
+      ],
+      "required_capabilities": [
+        "platform:catalog_manage"
       ]
     },
     {

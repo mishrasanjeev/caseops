@@ -25,6 +25,7 @@ PLATFORM_SUPER_ADMIN_CAPABILITIES = [
     "platform:plan_manage",
     "platform:usage_view",
     "platform:manual_override",
+    "platform:catalog_manage",
 ]
 
 

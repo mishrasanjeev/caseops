@@ -75,6 +75,7 @@ const ENTRIES: ForumCatalogEntry[] = [
     source_url: null,
     lineage: "District Court > Delhi > Central & West > Tis Hazari",
     display_order: 100,
+    aliases: ["Tis Hazari"],
   },
   {
     id: "district:delhi:new-delhi",
@@ -306,6 +307,23 @@ function Harness({ initial }: { initial?: ForumSelection }) {
 }
 
 describe("ForumSelector", () => {
+  it("finds a reviewed alias and selects its canonical court lineage", async () => {
+    const user = userEvent.setup();
+    render(<Harness initial={EMPTY_FORUM_SELECTION} />);
+
+    await user.type(screen.getByTestId("test-forum-court-search"), "tis-hazari court");
+    const result = screen.getByRole("option", {
+      name: /Tis Hazari Courts Complex.*District Court > Delhi/i,
+    });
+    await user.click(result);
+
+    expect(screen.getByTestId("test-forum-category")).toHaveValue("district_court");
+    expect(screen.getByTestId("test-forum-district")).toHaveValue(
+      "district:delhi:central",
+    );
+    expect(screen.getByTestId("test-forum-court-search")).toHaveValue("");
+  });
+
   it("does not require state for Supreme Court selection", async () => {
     const user = userEvent.setup();
     render(<Harness />);

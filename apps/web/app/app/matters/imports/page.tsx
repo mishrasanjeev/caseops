@@ -30,6 +30,7 @@ import {
   getMatterImport,
   listMatterImports,
   previewMatterImport,
+  type MatterImportForumCandidate,
   type MatterImportJob,
   type MatterImportJobStatus,
   type MatterImportRow,
@@ -75,6 +76,24 @@ function Metric({
 function normalizedText(row: MatterImportRow, key: string): string {
   const value = row.normalized[key];
   return value === null || value === undefined ? "—" : String(value);
+}
+
+function forumCandidates(row: MatterImportRow): MatterImportForumCandidate[] {
+  const value = row.normalized.forum_candidates;
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (candidate): candidate is MatterImportForumCandidate =>
+      Boolean(candidate) &&
+      typeof candidate === "object" &&
+      typeof (candidate as { forum_catalog_entry_id?: unknown }).forum_catalog_entry_id ===
+        "string" &&
+      typeof (candidate as { name?: unknown }).name === "string" &&
+      typeof (candidate as { lineage?: unknown }).lineage === "string" &&
+      ["state", "district", "city"].every((key) => {
+        const field = (candidate as unknown as Record<string, unknown>)[key];
+        return field === null || typeof field === "string";
+      }),
+  );
 }
 
 function statusTone(status: string): "success" | "warning" | "neutral" {
@@ -417,9 +436,23 @@ export default function BulkMatterImportPage() {
                               </ul>
                             </div>
                           ) : row.errors.length ? (
-                            <ul className="space-y-1 text-xs text-[var(--color-danger-700)]">
-                              {row.errors.map((error) => <li key={error}>• {error}</li>)}
-                            </ul>
+                            <div className="space-y-2 text-xs text-[var(--color-danger-700)]">
+                              <ul className="space-y-1">
+                                {row.errors.map((error) => <li key={error}>• {error}</li>)}
+                              </ul>
+                              {forumCandidates(row).length ? (
+                                <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-amber-950">
+                                  <div className="font-semibold">Possible canonical courts</div>
+                                  <ul className="mt-1 space-y-1">
+                                    {forumCandidates(row).map((candidate) => (
+                                      <li key={candidate.forum_catalog_entry_id}>
+                                        {candidate.lineage}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              ) : null}
+                            </div>
                           ) : (
                             <span className="inline-flex items-center gap-1 text-xs text-[var(--color-success-600)]">
                               <CheckCircle2 className="h-3.5 w-3.5" /> Ready

@@ -260,6 +260,32 @@ export const usageReport = {
   by_matter: [{ key: "matter-1", label: "EXT-001", quantity: 2, credits: 2 }],
   by_tracked_case: [{ key: "cnr-1", label: "CNR123", quantity: 1, credits: 0 }],
   daily: [{ key: "2026-05-31", label: "2026-05-31", quantity: 3, credits: 3 }],
+  by_provider: [
+    {
+      provider_key: "ecourtsindia",
+      label: "eCourtsIndia",
+      spent_minor: 2500,
+      budget_spent_minor: 2500,
+      budget_scope: "account",
+      monthly_limit_minor: 100000,
+      remaining_minor: 97500,
+      unlimited: false,
+      currency: "INR",
+      policy_source: "caseops_default_shared_account_budget_2026_09_04",
+    },
+    {
+      provider_key: "indian-kanoon",
+      label: "Indian Kanoon",
+      spent_minor: 5000,
+      budget_spent_minor: 5000,
+      budget_scope: "provider",
+      monthly_limit_minor: null,
+      remaining_minor: null,
+      unlimited: true,
+      currency: "INR",
+      policy_source: "user_authorized_named_exception_2026_09_04",
+    },
+  ],
   blocked_events: [{ key: "ai_credit_exhausted", label: "AI credit exhausted", quantity: 1, credits: 0 }],
 };
 

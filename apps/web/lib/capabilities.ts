@@ -138,7 +138,8 @@ export type Capability =
   | "platform:usage_view"
   | "platform:payment_reconcile"
   | "platform:plan_manage"
-  | "platform:manual_override";
+  | "platform:manual_override"
+  | "platform:catalog_manage";
 
 // Baseline caps for a fee-earner (owner / admin / partner / member).
 // Paralegals inherit most of these but lose a small, explicit set.

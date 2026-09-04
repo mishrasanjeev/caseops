@@ -56,6 +56,7 @@ def paid_provider_block_reason(
     provider: str,
     base_url: str | None,
     transport_is_mocked: bool = False,
+    scheduled_tenant_filter: bool = False,
 ) -> str | None:
     """Return a stable reason before a paid network request can be attempted."""
 
@@ -64,15 +65,19 @@ def paid_provider_block_reason(
     hostname = urlsplit((base_url or "").strip()).hostname
     if (hostname or "").lower() not in _PAID_PROVIDER_HOSTS:
         return None
-    tenant_reason = paid_provider_test_tenant_reason(context)
     # The explicit automation marker is authoritative in every environment.
     # Production Playwright uses the real tenant, so coupling this boundary to
     # the runtime environment or a test-looking slug would allow routine
     # verification to spend provider credits as soon as the tenant is enabled.
     if paid_providers_blocked_for_request():
         return "automated_test_request"
-    if tenant_reason is not None:
-        return tenant_reason
+    # A test-looking tenant name is not proof that the current request is
+    # automated. Human users of long-lived QA workspaces must retain paid
+    # access. Only unattended scheduled polling uses the static tenant filter.
+    if scheduled_tenant_filter:
+        tenant_reason = paid_provider_test_tenant_reason(context)
+        if tenant_reason is not None:
+            return tenant_reason
     # A leaked live provider configuration must not turn a local pytest run
     # into a bill. Injected MockTransport clients remain fully testable.
     if os.environ.get("PYTEST_CURRENT_TEST"):

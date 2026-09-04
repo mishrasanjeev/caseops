@@ -87,6 +87,7 @@ from caseops_api.services.provider_costs import (
     estimate_payment_gateway_cost_minor,
     margin_readiness,
 )
+from caseops_api.services.provider_spend import provider_spend_rows
 from caseops_api.services.session_context import SessionContext
 
 CATALOG_VERSION = "2026.05.v1"
@@ -357,12 +358,9 @@ def ensure_grandfathered_subscription(session: Session, company: Company) -> Bil
 
 
 def _subscription_for_gate(session: Session, company: Company) -> BillingSubscription | None:
-    try:
-        return ensure_grandfathered_subscription(session, company)
-    except HTTPException as exc:
-        if exc.status_code == status.HTTP_404_NOT_FOUND:
-            return None
-        raise
+    """Resolve existing entitlements without creating billing state on a gate read."""
+
+    return _latest_subscription(session, company.id)
 
 
 def resolve_entitlements(session: Session, subscription: BillingSubscription) -> dict[str, Any]:
@@ -1337,6 +1335,7 @@ def record_usage(
     subscription_id: str | None,
     usage_type: str,
     feature_key: str,
+    provider_key: str | None = None,
     quantity: int,
     unit: str,
     actor_membership_id: str | None = None,
@@ -1355,6 +1354,7 @@ def record_usage(
         company_id=company_id,
         subscription_id=subscription_id,
         usage_type=usage_type,
+        provider_key=provider_key,
         quantity=quantity,
         unit=unit,
         estimated_cost_minor=estimated_cost_minor,
@@ -1372,6 +1372,7 @@ def record_usage(
         matter_id=matter_id,
         tracked_case_id=tracked_case_id,
         feature_key=feature_key,
+        provider_key=provider_key,
         purpose=purpose,
         display_label=display_label,
         credits_debited=credits_debited,
@@ -1647,8 +1648,6 @@ def record_manual_refresh_usage(
     tracked_case_id: str | None,
 ) -> None:
     subscription = _subscription_for_gate(session, context.company)
-    if subscription is None:
-        return
     case_refresh_cost_minor, _ = effective_cost_minor(
         session,
         category="case_refresh",
@@ -1657,9 +1656,10 @@ def record_manual_refresh_usage(
     record_usage(
         session,
         company_id=context.company.id,
-        subscription_id=subscription.id,
+        subscription_id=subscription.id if subscription is not None else None,
         usage_type="case_refresh",
         feature_key="case_tracking_manual_refresh",
+        provider_key="ecourtsindia",
         quantity=1,
         unit="refresh",
         actor_membership_id=context.membership.id,
@@ -1787,6 +1787,10 @@ def usage_report(
         by_matter=_breakdown_rows(by_matter),
         by_tracked_case=_breakdown_rows(by_case),
         daily=_breakdown_rows(daily),
+        by_provider=provider_spend_rows(
+            session,
+            company=context.company,
+        ),
     )
 
 

@@ -149,6 +149,19 @@ class BillingUsageBreakdownRow(BaseModel):
     credits: int
 
 
+class BillingProviderSpendRow(BaseModel):
+    provider_key: str
+    label: str
+    spent_minor: int = Field(ge=0)
+    budget_spent_minor: int = Field(ge=0)
+    budget_scope: Literal["account", "provider"]
+    monthly_limit_minor: int | None = Field(default=None, ge=0)
+    remaining_minor: int | None = Field(default=None, ge=0)
+    unlimited: bool
+    currency: str = "INR"
+    policy_source: str
+
+
 class BillingUsageReportResponse(BaseModel):
     period_start: datetime | None
     period_end: datetime | None
@@ -158,6 +171,7 @@ class BillingUsageReportResponse(BaseModel):
     by_matter: list[BillingUsageBreakdownRow]
     by_tracked_case: list[BillingUsageBreakdownRow]
     daily: list[BillingUsageBreakdownRow]
+    by_provider: list[BillingProviderSpendRow] = Field(default_factory=list)
     blocked_events: list[BillingUsageBreakdownRow] = []
 
 

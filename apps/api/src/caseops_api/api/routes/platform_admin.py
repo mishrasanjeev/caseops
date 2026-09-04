@@ -1,14 +1,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Annotated
+from typing import Annotated, NoReturn
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 
 from caseops_api.api.dependencies import DbSession, get_current_context
+from caseops_api.core.problem_details import ProblemHTTPException
 from caseops_api.db.models import BillingEnrollment, PlatformAdminMembership
+from caseops_api.schemas.forum_catalog import (
+    ForumAliasVerificationStatus,
+    ForumCatalogAliasCreateRequest,
+    ForumCatalogAliasListResponse,
+    ForumCatalogAliasRecord,
+    ForumCatalogAliasUpdateRequest,
+)
 from caseops_api.schemas.integrations import (
     ConnectorHealthListResponse,
     ConnectorRegistryResponse,
@@ -54,6 +62,12 @@ from caseops_api.schemas.saas_billing import (
     PlatformSubscriptionMutation,
 )
 from caseops_api.services.connector_health import list_platform_connector_health
+from caseops_api.services.forum_catalog import (
+    ForumCatalogAliasError,
+    create_forum_catalog_alias,
+    list_forum_catalog_aliases,
+    update_forum_catalog_alias,
+)
 from caseops_api.services.integrations import connector_registry
 from caseops_api.services.platform_admin import require_platform_admin
 from caseops_api.services.platform_audit import record_platform_audit
@@ -151,6 +165,10 @@ PlatformUsageViewer = Annotated[
     PlatformRouteContext,
     Depends(require_platform_capability("platform:usage_view")),
 ]
+PlatformCatalogManager = Annotated[
+    PlatformRouteContext,
+    Depends(require_platform_capability("platform:catalog_manage")),
+]
 
 
 def _download_response(content: bytes, *, filename: str) -> StreamingResponse:
@@ -159,6 +177,145 @@ def _download_response(content: bytes, *, filename: str) -> StreamingResponse:
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+def _raise_forum_alias_error(exc: ForumCatalogAliasError) -> NoReturn:
+    raise ProblemHTTPException(
+        status_code=exc.status_code,
+        problem_type=exc.code,
+        detail=str(exc),
+        extras={"code": exc.code},
+    ) from exc
+
+
+@router.get("/forum-aliases", response_model=ForumCatalogAliasListResponse)
+def get_platform_forum_aliases(
+    route_context: PlatformCatalogManager,
+    session: DbSession,
+    q: Annotated[str | None, Query(max_length=120)] = None,
+    verification_status: ForumAliasVerificationStatus | None = None,
+    is_active: bool | None = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+) -> ForumCatalogAliasListResponse:
+    aliases, has_more = list_forum_catalog_aliases(
+        session,
+        q=q,
+        verification_status=verification_status,
+        is_active=is_active,
+        limit=limit,
+    )
+    record_platform_audit(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        action="platform.forum_aliases.viewed",
+        target_type="forum_catalog_alias",
+        metadata={
+            "returned_count": len(aliases),
+            "verification_status": verification_status,
+            "is_active": is_active,
+        },
+    )
+    session.commit()
+    return ForumCatalogAliasListResponse(
+        aliases=aliases,
+        returned_count=len(aliases),
+        limit=limit,
+        has_more=has_more,
+    )
+
+
+@router.post("/forum-aliases", response_model=ForumCatalogAliasRecord)
+def post_platform_forum_alias(
+    payload: ForumCatalogAliasCreateRequest,
+    route_context: PlatformCatalogManager,
+    session: DbSession,
+) -> ForumCatalogAliasRecord:
+    require_recent_step_up(
+        session,
+        context=route_context.context,
+        purpose="step_up",
+        platform_admin=route_context.platform_admin,
+    )
+    try:
+        record = create_forum_catalog_alias(
+            session,
+            platform_admin=route_context.platform_admin,
+            forum_catalog_entry_id=payload.forum_catalog_entry_id,
+            alias=payload.alias,
+            alias_type=payload.alias_type,
+            source_name=payload.source_name,
+            source_url=str(payload.source_url) if payload.source_url else None,
+            verification_status=payload.verification_status,
+            is_active=payload.is_active,
+        )
+    except ForumCatalogAliasError as exc:
+        _raise_forum_alias_error(exc)
+    record_platform_audit(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        action="platform.forum_alias.created",
+        target_type="forum_catalog_alias",
+        target_id=record.id,
+        reason=payload.reason,
+        metadata={
+            "forum_catalog_entry_id": record.forum_catalog_entry_id,
+            "alias_type": record.alias_type,
+            "verification_status": record.verification_status,
+            "is_active": record.is_active,
+        },
+    )
+    session.commit()
+    return record
+
+
+@router.patch("/forum-aliases/{alias_id}", response_model=ForumCatalogAliasRecord)
+def patch_platform_forum_alias(
+    alias_id: str,
+    payload: ForumCatalogAliasUpdateRequest,
+    route_context: PlatformCatalogManager,
+    session: DbSession,
+) -> ForumCatalogAliasRecord:
+    require_recent_step_up(
+        session,
+        context=route_context.context,
+        purpose="step_up",
+        platform_admin=route_context.platform_admin,
+    )
+    update_fields = payload.model_dump(
+        exclude={"expected_record_version", "reason"},
+        exclude_unset=True,
+    )
+    if "source_url" in update_fields and update_fields["source_url"] is not None:
+        update_fields["source_url"] = str(update_fields["source_url"])
+    try:
+        record = update_forum_catalog_alias(
+            session,
+            alias_id=alias_id,
+            platform_admin=route_context.platform_admin,
+            expected_record_version=payload.expected_record_version,
+            updates=update_fields,
+        )
+    except ForumCatalogAliasError as exc:
+        _raise_forum_alias_error(exc)
+    record_platform_audit(
+        session,
+        context=route_context.context,
+        platform_admin=route_context.platform_admin,
+        action="platform.forum_alias.updated",
+        target_type="forum_catalog_alias",
+        target_id=record.id,
+        reason=payload.reason,
+        metadata={
+            "changed_fields": sorted(update_fields),
+            "record_version": record.record_version,
+            "verification_status": record.verification_status,
+            "is_active": record.is_active,
+        },
+    )
+    session.commit()
+    return record
 
 
 @router.get("/overview", response_model=PlatformOverviewResponse)

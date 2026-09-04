@@ -39,6 +39,7 @@ from caseops_api.services.calendar_projection_safety import (
 from caseops_api.services.matters import (
     _assert_matter_not_disposed,
     _matter_lock_statement,
+    _matter_record,
 )
 from tests.test_auth_company import auth_headers, bootstrap_company
 
@@ -385,9 +386,7 @@ def test_lifecycle_transition_matrix_reason_audit_and_disposed_immutability(
             )
         )
         assert audit is not None
-        assert json.loads(audit.metadata_json or "{}")["reason"].startswith(
-            "New instructions"
-        )
+        assert json.loads(audit.metadata_json or "{}")["reason"].startswith("New instructions")
         assert activity is not None
         assert activity.detail == "New instructions require reopening this engagement"
         denied = list(
@@ -398,10 +397,7 @@ def test_lifecycle_transition_matrix_reason_audit_and_disposed_immutability(
                 )
             )
         )
-        reasons = {
-            json.loads(event.metadata_json or "{}").get("reason")
-            for event in denied
-        }
+        reasons = {json.loads(event.metadata_json or "{}").get("reason") for event in denied}
         assert {"invalid_transition", "expected_status_mismatch"} <= reasons
         assert all(event.result == AuditResult.DENIED for event in denied)
 
@@ -503,9 +499,7 @@ def test_dispose_atomically_clears_operational_state_and_blocks_new_work(
         )
         if reminder is None:
             membership_id = session.scalar(
-                select(CompanyMembership.id).where(
-                    CompanyMembership.company_id == company_id
-                )
+                select(CompanyMembership.id).where(CompanyMembership.company_id == company_id)
             )
             session.add(
                 HearingReminder(
@@ -542,8 +536,7 @@ def test_dispose_atomically_clears_operational_state_and_blocks_new_work(
             select(DocumentProcessingJob)
             .where(
                 DocumentProcessingJob.attachment_id == attachment_id,
-                DocumentProcessingJob.target_type
-                == DocumentProcessingTargetType.MATTER_ATTACHMENT,
+                DocumentProcessingJob.target_type == DocumentProcessingTargetType.MATTER_ATTACHMENT,
             )
             .order_by(DocumentProcessingJob.queued_at.desc())
         )
@@ -555,9 +548,7 @@ def test_dispose_atomically_clears_operational_state_and_blocks_new_work(
         document_job_id = document_job.id
         session.commit()
 
-    current = client.get(
-        f"/api/matters/{matter['id']}", headers=auth_headers(token)
-    ).json()
+    current = client.get(f"/api/matters/{matter['id']}", headers=auth_headers(token)).json()
     disposed_response = _lifecycle(client, token, current, to_status="disposed")
     assert disposed_response.status_code == 200, disposed_response.text
     disposed = disposed_response.json()
@@ -583,9 +574,7 @@ def test_dispose_atomically_clears_operational_state_and_blocks_new_work(
             select(HearingReminder).where(HearingReminder.hearing_id == hearing_id)
         )
         job = session.scalar(
-            select(MatterCourtSyncJob).where(
-                MatterCourtSyncJob.matter_id == matter["id"]
-            )
+            select(MatterCourtSyncJob).where(MatterCourtSyncJob.matter_id == matter["id"])
         )
         document_job = session.get(DocumentProcessingJob, document_job_id)
         assert hearing is not None and hearing.status == "cancelled"
@@ -764,13 +753,9 @@ def test_reopen_keeps_prior_conflict_check_historical_without_gating_activation(
     assert len(listed_checks.json()["checks"]) == 1
     historical_check = listed_checks.json()["checks"][0]
     assert historical_check["id"] == first_check.json()["id"]
+    assert historical_check["matter_lifecycle_version"] == matter["lifecycle_version"]
     assert (
-        historical_check["matter_lifecycle_version"]
-        == matter["lifecycle_version"]
-    )
-    assert (
-        historical_check["matter_lifecycle_version"]
-        < reopened_response.json()["lifecycle_version"]
+        historical_check["matter_lifecycle_version"] < reopened_response.json()["lifecycle_version"]
     )
 
     reactivated = client.patch(
@@ -783,10 +768,7 @@ def test_reopen_keeps_prior_conflict_check_historical_without_gating_activation(
     )
     assert reactivated.status_code == 200, reactivated.text
     assert reactivated.json()["status"] == "active"
-    assert (
-        reactivated.json()["lifecycle_version"]
-        == reopened_response.json()["lifecycle_version"]
-    )
+    assert reactivated.json()["lifecycle_version"] == reopened_response.json()["lifecycle_version"]
 
 
 def test_reopen_neutralizes_open_children_on_legacy_disposed_row(
@@ -825,9 +807,7 @@ def test_reopen_neutralizes_open_children_on_legacy_disposed_row(
         row = session.get(Matter, matter["id"])
         assert row is not None
         membership_id = session.scalar(
-            select(CompanyMembership.id).where(
-                CompanyMembership.company_id == row.company_id
-            )
+            select(CompanyMembership.id).where(CompanyMembership.company_id == row.company_id)
         )
         assert membership_id is not None
         migrated_task_row = session.get(MatterTask, migrated_task["id"])
@@ -949,9 +929,7 @@ def test_matter_disposal_preserves_live_calendar_claims_and_materializes_expired
         row = session.get(Matter, matter["id"])
         assert row is not None
         membership_id = session.scalar(
-            select(CompanyMembership.id).where(
-                CompanyMembership.company_id == row.company_id
-            )
+            select(CompanyMembership.id).where(CompanyMembership.company_id == row.company_id)
         )
         assert membership_id is not None
         google = UserCalendarConnection(
@@ -1043,8 +1021,7 @@ def test_matter_disposal_preserves_live_calendar_claims_and_materializes_expired
     def assert_calendar_claim_states() -> None:
         with get_session_factory()() as session:
             stored = {
-                name: session.get(CalendarEventSync, sync_id)
-                for name, sync_id in sync_ids.items()
+                name: session.get(CalendarEventSync, sync_id) for name, sync_id in sync_ids.items()
             }
             assert all(value is not None for value in stored.values())
             for name, marker, attempts, last_error in (
@@ -1160,21 +1137,30 @@ def test_reopen_allows_resuming_manually_cancelled_children(client: TestClient) 
     )
     assert reopened.status_code == 200, reopened.text
 
-    assert client.patch(
-        f"/api/matters/{matter['id']}/tasks/{task['id']}",
-        headers=auth_headers(token),
-        json={"status": "todo"},
-    ).status_code == 200
-    assert client.patch(
-        f"/api/matters/{matter['id']}/deadlines/{deadline['id']}",
-        headers=auth_headers(token),
-        json={"status": "open"},
-    ).status_code == 200
-    assert client.patch(
-        f"/api/matters/{matter['id']}/hearings/{hearing['id']}",
-        headers=auth_headers(token),
-        json={"status": "scheduled"},
-    ).status_code == 200
+    assert (
+        client.patch(
+            f"/api/matters/{matter['id']}/tasks/{task['id']}",
+            headers=auth_headers(token),
+            json={"status": "todo"},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.patch(
+            f"/api/matters/{matter['id']}/deadlines/{deadline['id']}",
+            headers=auth_headers(token),
+            json={"status": "open"},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.patch(
+            f"/api/matters/{matter['id']}/hearings/{hearing['id']}",
+            headers=auth_headers(token),
+            json={"status": "scheduled"},
+        ).status_code
+        == 200
+    )
 
 
 def test_legacy_closed_normalizes_to_inactive_disposed(client: TestClient) -> None:
@@ -1187,6 +1173,9 @@ def test_legacy_closed_normalizes_to_inactive_disposed(client: TestClient) -> No
         legacy.is_active = False
         session.add(legacy)
         session.commit()
+        record = _matter_record(legacy)
+        assert (record.status, record.is_active) == ("disposed", False)
+        assert not session.dirty
 
     response = client.get(f"/api/matters/{matter['id']}", headers=auth_headers(token))
     assert response.status_code == 200, response.text

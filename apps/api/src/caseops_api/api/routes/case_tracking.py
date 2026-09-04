@@ -57,8 +57,7 @@ def get_case_tracking_status(
     context: CaseTrackingUser,
     session: DbSession,
 ) -> CaseTrackingProviderStatusResponse:
-    _ = (context, session)
-    return provider_status_response()
+    return provider_status_response(session, context=context)
 
 
 @router.get(

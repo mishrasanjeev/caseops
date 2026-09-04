@@ -147,7 +147,10 @@ def test_lw_s4_forum_catalog_returns_public_hierarchy(
     assert entries["consumer:dcdrc:11070077"]["state"] == "Delhi"
     assert entries["consumer:dcdrc:11070077"]["district"] == "Central Delhi"
     assert entries["consumer:dcdrc:11070077"]["parent_id"] == "consumer:scdrc:11070000"
-    assert entries["consumer:dcdrc:delhi:dwarka"]["name"] == "Dwarka"
+    assert (
+        entries["consumer:dcdrc:delhi:dwarka"]["name"]
+        == "District Consumer Commission, Dwarka"
+    )
     assert entries["consumer:dcdrc:delhi:tis-hazari"]["lineage"] == (
         "District Commission > Delhi > Tis Hazari"
     )

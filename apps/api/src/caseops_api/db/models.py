@@ -7617,6 +7617,14 @@ class BillingCreditLedger(Base):
 
 class BillingUsageEvent(Base):
     __tablename__ = "billing_usage_events"
+    __table_args__ = (
+        Index(
+            "ix_billing_usage_events_company_provider_created",
+            "company_id",
+            "provider_key",
+            "created_at",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     company_id: Mapped[str] = mapped_column(
@@ -7630,6 +7638,7 @@ class BillingUsageEvent(Base):
         index=True,
     )
     usage_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    provider_key: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     unit: Mapped[str] = mapped_column(String(40), nullable=False)
     estimated_cost_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -7677,12 +7686,93 @@ class BillingUsageAttribution(Base):
         index=True,
     )
     feature_key: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    provider_key: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
     purpose: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     display_label: Mapped[str | None] = mapped_column(String(255), nullable=True)
     credits_debited: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     provider_units: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     estimated_internal_cost_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     tenant_visible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class CompanyProviderSpendPolicy(Base):
+    __tablename__ = "company_provider_spend_policies"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "provider_key",
+            name="uq_company_provider_spend_policy",
+        ),
+        CheckConstraint(
+            "monthly_limit_minor IS NULL OR monthly_limit_minor >= 0",
+            name="ck_company_provider_spend_policy_limit",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    provider_key: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    monthly_limit_minor: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR")
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    policy_source: Mapped[str] = mapped_column(String(160), nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+
+class ProviderSpendReservation(Base):
+    __tablename__ = "provider_spend_reservations"
+    __table_args__ = (
+        CheckConstraint(
+            "amount_minor >= 0",
+            name="ck_provider_spend_reservation_amount",
+        ),
+        CheckConstraint(
+            "status IN ('reserved', 'settled', 'released')",
+            name="ck_provider_spend_reservation_status",
+        ),
+        Index(
+            "ix_provider_spend_reservations_company_provider_status_expiry",
+            "company_id",
+            "provider_key",
+            "status",
+            "expires_at",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    provider_key: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    actor_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    operation_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    amount_minor: Mapped[int] = mapped_column(Integer, nullable=False)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR")
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="reserved", index=True)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    settled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
@@ -12102,6 +12192,7 @@ class ForumCatalogEntry(Base):
         index=True,
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    normalized_name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     forum_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     forum_level: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     state: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
@@ -12131,6 +12222,92 @@ class ForumCatalogEntry(Base):
         foreign_keys=[parent_id],
     )
     court: Mapped[Court | None] = relationship(foreign_keys=[court_id])
+    aliases: Mapped[list[ForumCatalogAlias]] = relationship(
+        back_populates="entry",
+        cascade="all, delete-orphan",
+    )
+
+
+class ForumCatalogAlias(Base):
+    """Reviewed alternate label for one canonical forum catalog entry."""
+
+    __tablename__ = "forum_catalog_aliases"
+    __table_args__ = (
+        UniqueConstraint(
+            "forum_catalog_entry_id",
+            "normalized_alias",
+            name="uq_forum_catalog_alias_entry_normalized",
+        ),
+        Index(
+            "ix_forum_catalog_aliases_normalized_active_verified",
+            "normalized_alias",
+            "is_active",
+            "verification_status",
+        ),
+        CheckConstraint(
+            "alias_type IN ('court_complex', 'abbreviation', 'legacy_name', "
+            "'local_name', 'spelling_variant', 'provider_label', 'other')",
+            name="ck_forum_catalog_alias_type",
+        ),
+        CheckConstraint(
+            "verification_status IN ('pending', 'verified', 'rejected')",
+            name="ck_forum_catalog_alias_verification_status",
+        ),
+        CheckConstraint(
+            "record_version >= 0",
+            name="ck_forum_catalog_alias_record_version",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    forum_catalog_entry_id: Mapped[str] = mapped_column(
+        ForeignKey("forum_catalog_entries.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    alias: Mapped[str] = mapped_column(String(255), nullable=False)
+    normalized_alias: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    alias_type: Mapped[str] = mapped_column(String(32), nullable=False, default="court_complex")
+    source_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    verification_status: Mapped[str] = mapped_column(String(32), nullable=False, default="verified")
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    record_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    created_by_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    reviewed_by_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    updated_by_platform_admin_id: Mapped[str | None] = mapped_column(
+        ForeignKey("platform_admin_memberships.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
+    )
+
+    entry: Mapped[ForumCatalogEntry] = relationship(back_populates="aliases")
+    created_by_platform_admin: Mapped[PlatformAdminMembership | None] = relationship(
+        foreign_keys=[created_by_platform_admin_id]
+    )
+    reviewed_by_platform_admin: Mapped[PlatformAdminMembership | None] = relationship(
+        foreign_keys=[reviewed_by_platform_admin_id]
+    )
+    updated_by_platform_admin: Mapped[PlatformAdminMembership | None] = relationship(
+        foreign_keys=[updated_by_platform_admin_id]
+    )
 
 
 class Bench(Base):
@@ -18066,8 +18243,7 @@ class IpCostItemCorrection(Base):
             name="ck_ip_cost_correction_replacement",
         ),
         CheckConstraint(
-            "replacement_cost_item_id IS NULL OR "
-            "replacement_cost_item_id <> source_cost_item_id",
+            "replacement_cost_item_id IS NULL OR replacement_cost_item_id <> source_cost_item_id",
             name="ck_ip_cost_correction_not_self",
         ),
         UniqueConstraint(

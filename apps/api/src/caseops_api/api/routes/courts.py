@@ -19,12 +19,14 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy.orm import selectinload
 
 from caseops_api.api.dependencies import DbSession, get_current_context
 from caseops_api.db.models import (
     AuthorityDocument,
     AuthorityDocumentChunk,
     Court,
+    ForumCatalogAlias,
     ForumCatalogEntry,
     Judge,
     JudgeAlias,
@@ -33,6 +35,10 @@ from caseops_api.db.models import (
     Matter,
 )
 from caseops_api.schemas.source_actions import SourceActionRecord
+from caseops_api.services.forum_catalog import (
+    active_verified_aliases,
+    normalize_forum_catalog_value,
+)
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.source_actions import (
     authority_source_verified,
@@ -498,17 +504,19 @@ class ForumCatalogEntryRecord(BaseModel):
     aliases: list[str] = Field(default_factory=list)
 
 
+class ForumCatalogResolveResponse(BaseModel):
+    status: Literal["resolved", "ambiguous", "not_found"]
+    normalized_query: str
+    resolved_entry: ForumCatalogEntryRecord | None = None
+    candidates: list[ForumCatalogEntryRecord] = Field(default_factory=list)
+
+
 class ForumCatalogResponse(BaseModel):
     entries: list[ForumCatalogEntryRecord]
 
 
 def _forum_catalog_entry_record(entry: ForumCatalogEntry) -> ForumCatalogEntryRecord:
-    raw_aliases = entry.aliases_json
-    aliases = (
-        [alias.strip() for alias in raw_aliases if isinstance(alias, str) and alias.strip()]
-        if isinstance(raw_aliases, list)
-        else []
-    )
+    aliases = list(active_verified_aliases(entry))
     return ForumCatalogEntryRecord(
         id=entry.id,
         parent_id=entry.parent_id,
@@ -567,7 +575,11 @@ def list_forum_catalog(
     # metadata only. No company_id, matter count, or tenant-derived field is
     # selected here.
     _ = context
-    stmt = select(ForumCatalogEntry).where(ForumCatalogEntry.is_active.is_(True))
+    stmt = (
+        select(ForumCatalogEntry)
+        .options(selectinload(ForumCatalogEntry.aliases))
+        .where(ForumCatalogEntry.is_active.is_(True))
+    )
     if forum_type:
         stmt = stmt.where(ForumCatalogEntry.forum_type == forum_type)
     if state:
@@ -580,6 +592,61 @@ def list_forum_catalog(
     )
     return ForumCatalogResponse(
         entries=[_forum_catalog_entry_record(entry) for entry in session.scalars(stmt)]
+    )
+
+
+@router.get(
+    "/forum-catalog/resolve",
+    response_model=ForumCatalogResolveResponse,
+    summary="Resolve an exact court name or reviewed alias",
+)
+def resolve_forum_catalog_entry(
+    context: CurrentContext,
+    session: DbSession,
+    query: str = Query(min_length=2, max_length=255),
+    forum_type: str | None = Query(default=None, max_length=40),
+    state: str | None = Query(default=None, max_length=120),
+    district: str | None = Query(default=None, max_length=120),
+) -> ForumCatalogResolveResponse:
+    _ = context
+    normalized = normalize_forum_catalog_value(query)
+    stmt = (
+        select(ForumCatalogEntry)
+        .options(selectinload(ForumCatalogEntry.aliases))
+        .where(
+            ForumCatalogEntry.is_active.is_(True),
+            or_(
+                ForumCatalogEntry.normalized_name == normalized,
+                ForumCatalogEntry.id.in_(
+                    select(ForumCatalogAlias.forum_catalog_entry_id).where(
+                        ForumCatalogAlias.normalized_alias == normalized,
+                        ForumCatalogAlias.is_active.is_(True),
+                        ForumCatalogAlias.verification_status == "verified",
+                    )
+                ),
+            ),
+        )
+        .order_by(ForumCatalogEntry.display_order, ForumCatalogEntry.id)
+    )
+    if forum_type:
+        stmt = stmt.where(ForumCatalogEntry.forum_type == forum_type)
+    if state:
+        stmt = stmt.where(func.lower(ForumCatalogEntry.state) == state.strip().casefold())
+    if district:
+        stmt = stmt.where(func.lower(ForumCatalogEntry.district) == district.strip().casefold())
+    candidates = list(session.scalars(stmt))
+    records = [_forum_catalog_entry_record(entry) for entry in candidates]
+    if len(records) == 1:
+        return ForumCatalogResolveResponse(
+            status="resolved",
+            normalized_query=normalized,
+            resolved_entry=records[0],
+            candidates=records,
+        )
+    return ForumCatalogResolveResponse(
+        status="ambiguous" if records else "not_found",
+        normalized_query=normalized,
+        candidates=records,
     )
 
 
