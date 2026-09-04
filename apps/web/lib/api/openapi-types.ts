@@ -21354,21 +21354,47 @@ export interface components {
         /** IndianKanoonHealthResponse */
         IndianKanoonHealthResponse: {
             /**
+             * Balance Source
+             * @default caseops_recorded_workspace_usage
+             * @constant
+             */
+            balance_source: "caseops_recorded_workspace_usage";
+            /**
              * Checked At
              * Format: date-time
              */
             checked_at: string;
             /**
+             * Currency
+             * @default INR
+             * @constant
+             */
+            currency: "INR";
+            /** Daily Remaining Minor */
+            daily_remaining_minor: number;
+            /** Daily Spend Minor */
+            daily_spend_minor: number;
+            /**
              * Health
              * @enum {string}
              */
             health: "ready" | "blocked";
+            /** Monthly Remaining Minor */
+            monthly_remaining_minor: number;
+            /** Monthly Spend Minor */
+            monthly_spend_minor: number;
             /**
              * Performs External Probe
              * @default false
              * @constant
              */
             performs_external_probe: false;
+            /**
+             * Provider Prepaid Balance Checked
+             * @default false
+             * @constant
+             */
+            provider_prepaid_balance_checked: false;
             readiness: components["schemas"]["IndianKanoonReadinessResponse"];
         };
         /** IndianKanoonImportRequest */

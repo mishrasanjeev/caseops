@@ -225,18 +225,22 @@ requirements when using the fallback.
   SDK retries must not multiply a per-attempt timeout past Cloud Run's limit;
   after a provider timeout, regression acceptance must also prove an unrelated
   endpoint remains responsive before a single bounded user-level retry.
-- Automated suites and persistent QA/test tenants must never call paid external
-  APIs. Playwright sends `X-CaseOps-Automated-Test: no-paid-providers`; local
-  and Docker tests use deterministic provider emulators; scheduled provider
-  polling excludes configured test tenants; and exact-release verification
-  consumes stored, hash-verified evidence only. A deliberate live-provider
-  check is a separately budgeted operational action, never part of bulk or
-  regular regression testing.
+- Automated suites and persistent QA/test tenants must never call billable
+  external APIs. Playwright sends `X-CaseOps-Automated-Test: no-paid-providers`;
+  local and Docker tests use deterministic provider emulators; scheduled
+  provider polling excludes configured test tenants; and exact-release
+  verification consumes stored, hash-verified evidence only. Automated live
+  verification may read CaseOps readiness and recorded budget balances, but it
+  must not omit the marker or execute search, detail, refresh, retrieval, PDF,
+  or other credit-bearing calls. Normal authenticated human use remains
+  available for funded live tenants under readiness and budget gates.
 - The explicit no-paid-provider request marker is authoritative in every
   runtime, including production and real tenants. Do not make it depend on a
   test-looking tenant slug. Keep funded production tenants out of the static
   test-tenant blocklist, seed provider-wide support from the reviewed provider
-  contract, and validate activation with one opt-in, budget-capped live probe.
+  contract, and validate machine readiness without an automated credit-bearing
+  probe. Provider-paid operation belongs to authenticated human use and
+  provider account evidence.
 - Tenant document naming must not copy corpus-scale filename history into a
   request DTO. Serialize allocations under the tenant lock, probe a fixed
   number of exact candidates, and retain a regression with more than 500
@@ -262,5 +266,6 @@ requirements when using the fallback.
   selectable legal catalog.
 - A no-paid-provider rejection is successful test isolation, not evidence that
   the configured provider is unavailable. Regular, bulk, Docker, and
-  production regression runs must assert the rejection without spending; only
-  a separate opt-in budget-capped canary may establish live paid operation.
+  production regression runs must assert the rejection without spending.
+  Provider-paid operation is established through authenticated human use and
+  provider account evidence, never by an automated credit-bearing canary.

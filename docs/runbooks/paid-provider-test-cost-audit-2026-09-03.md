@@ -1,5 +1,13 @@
 # Paid provider test-cost audit — 2026-09-03
 
+> **Superseded 2026-09-04:** the one-credit-bearing automated canary described
+> below has been retired. Automated verification may read CaseOps provider
+> readiness and the tenant's CaseOps-recorded budget balance, and it must retain
+> `X-CaseOps-Automated-Test: no-paid-providers`. Search, detail, refresh,
+> retrieval, and download calls remain blocked before transport. Funded live
+> tenants continue to use providers through authenticated human workflows under
+> the normal readiness and budget controls.
+
 ## Decision
 
 Bulk, regular, scheduled, and release-verification tests must make zero paid
@@ -56,8 +64,9 @@ not called a test loss because ₹448.50 has operational tenant evidence.
    `caseops-ip-qa`, `test-legal`, and the tester workspace `legal`.
 4. Release smoke never creates a fixture, refreshes a case, or downloads a paid
    PDF. Missing verified cache is a controlled failure.
-5. Real integration checks, if ever required, are isolated, explicitly
-   budgeted, and are not bulk or recurring tests.
+5. Automated integration checks are read-only and non-billable. Paid-provider
+   operation is evidenced through authenticated human use and provider account
+   records, not an automated credit-bearing call.
 
 ## Zero-cost live connectivity check
 
@@ -65,3 +74,8 @@ The authenticated partner court-structure endpoint
 `GET /api/partner/causelist/court-structure/states` returned HTTP 200 with 38
 records on 2026-09-03. The provider documents this metadata endpoint as free;
 no search, detail, refresh, cause-list search, or PDF endpoint was called.
+
+Indian Kanoon does not publish a non-billable authenticated balance endpoint.
+CaseOps therefore reports only its own tenant-scoped recorded spend and
+remaining configured daily/monthly budget. It labels that source explicitly and
+never presents it as the provider's prepaid account balance.

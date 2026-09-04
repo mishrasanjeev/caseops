@@ -1,14 +1,17 @@
 /**
- * Explicitly opt-in production verification for funded provider accounts.
- * This config intentionally does not install the no-paid-provider header.
+ * Explicitly opt-in production verification for provider readiness and the
+ * CaseOps-recorded workspace budget balance. Billable provider calls remain
+ * blocked by the automation marker.
  */
 import fs from "node:fs";
 
 import { defineConfig, devices } from "@playwright/test";
 
-if (process.env.CASEOPS_ALLOW_LIVE_PAID_PROVIDER_TESTS !== "true") {
+import { noPaidProviderHeaders } from "./tests/e2e/support/cost-controls";
+
+if (process.env.CASEOPS_ALLOW_LIVE_PROVIDER_READONLY_TESTS !== "true") {
   throw new Error(
-    "Set CASEOPS_ALLOW_LIVE_PAID_PROVIDER_TESTS=true for the bounded live-provider probe.",
+    "Set CASEOPS_ALLOW_LIVE_PROVIDER_READONLY_TESTS=true for the non-billable provider check.",
   );
 }
 
@@ -19,7 +22,7 @@ const browserExecutablePath = [
 
 export default defineConfig({
   testDir: "tests/e2e",
-  testMatch: /paid-provider-live-2026-09-03-prod\.spec\.ts$/,
+  testMatch: /provider-nonbillable-live-2026-09-04-prod\.spec\.ts$/,
   timeout: 120_000,
   expect: { timeout: 15_000 },
   fullyParallel: false,
@@ -27,13 +30,14 @@ export default defineConfig({
   reporter: "list",
   use: {
     baseURL: process.env.PROD_BASE_URL ?? "https://caseops.ai",
+    extraHTTPHeaders: noPaidProviderHeaders,
     trace: "off",
     screenshot: "off",
     video: "off",
   },
   projects: [
     {
-      name: "paid-provider-live-chromium",
+      name: "provider-nonbillable-live-chromium",
       use: {
         ...devices["Desktop Chrome"],
         storageState: { cookies: [], origins: [] },

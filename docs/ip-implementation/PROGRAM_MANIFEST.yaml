@@ -13507,8 +13507,10 @@
       "implementation_refs": [
         "apps/api/src/caseops_api/services/provider_operations.py",
         "apps/api/src/caseops_api/services/provider_adapter_catalog.py",
+        "apps/api/src/caseops_api/services/paid_provider_safety.py",
         "apps/api/src/caseops_api/services/ip_registry.py",
         "apps/api/src/caseops_api/services/indian_kanoon.py",
+        "apps/api/src/caseops_api/schemas/indian_kanoon.py",
         "apps/api/src/caseops_api/services/source_actions.py",
         "apps/api/src/caseops_api/services/production_safety.py",
         "apps/api/src/caseops_api/api/routes/calendar.py",
@@ -13530,11 +13532,14 @@
         "IPLF-UJ-68-EXC-05:apps/web/app/app/ip/page.test.tsx::keeps manual docketing available while a provider automation is disabled",
         "apps/api/tests/test_ip_registry_reconciliation.py",
         "apps/api/tests/test_indian_kanoon.py",
+        "apps/api/tests/test_case_tracking.py",
+        "apps/api/tests/test_prod_verification_workflow.py",
         "apps/api/tests/test_google_calendar_sync.py",
         "apps/api/tests/test_gmail_sync.py",
         "apps/api/tests/test_google_drive_sync.py",
         "apps/web/app/app/admin/provider-operations/page.test.tsx",
-        "tests/e2e/iplf-056b-provider-operations-2026-08-25-prod.spec.ts"
+        "tests/e2e/iplf-056b-provider-operations-2026-08-25-prod.spec.ts",
+        "tests/e2e/provider-nonbillable-live-2026-09-04-prod.spec.ts"
       ],
       "evidence_refs": [
         "docs/ip-implementation/evidence/m1/IPLF-002B/release-2026-08-02.md",
@@ -13589,6 +13594,12 @@
           "evidence": "Duplicate-work reconciliation, UJ-25/UJ-68 acceptance coverage, local gates, and the external-activation boundary"
         },
         {
+          "artifact": "docs/runbooks/paid-provider-test-cost-audit-2026-09-03.md",
+          "disposition": "superseded-in-place",
+          "owner": "Provider cost-safety control plane",
+          "evidence": "The 2026-09-04 policy retires automated credit-bearing canaries, preserves live human access, and limits automation to readiness and CaseOps-recorded budget balance checks."
+        },
+        {
           "artifact": "apps/web/app/guide/page.tsx",
           "disposition": "reviewed-no-change",
           "owner": "In-product user guide",
@@ -13601,7 +13612,7 @@
           "evidence": "Existing fail-closed provider and source claims remain accurate"
         }
       ],
-      "allocation_review": "2026-08-25 brutal duplicate-work review: IPLF-056B extends the shared provider control plane and composes IPLF-002/004/050/051/054 owners. No second source, registry, credential, health, cost, replay or dashboard owner was introduced.",
+      "allocation_review": "2026-08-25 brutal duplicate-work review: IPLF-056B extends the shared provider control plane and composes IPLF-002/004/050/051/054 owners. No second source, registry, credential, health, cost, replay or dashboard owner was introduced. 2026-09-04: automated provider verification was narrowed to the existing readiness and billing owners; the removed paid canary was not replaced by a second provider health, balance, or cost owner.",
       "implementation_status": "implemented",
       "verification_status": "passed",
       "release_status": "deployment_verified"

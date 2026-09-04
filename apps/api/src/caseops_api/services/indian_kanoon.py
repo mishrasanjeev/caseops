@@ -198,12 +198,25 @@ def indian_kanoon_readiness(session: Session | None = None) -> IndianKanoonReadi
     )
 
 
-def indian_kanoon_health(session: Session) -> IndianKanoonHealthResponse:
+def indian_kanoon_health(
+    session: Session,
+    *,
+    company_id: str,
+) -> IndianKanoonHealthResponse:
     readiness = indian_kanoon_readiness(session)
+    now = _now()
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    month_start = day_start.replace(day=1)
+    daily_spend = _period_cost(session, company_id=company_id, start=day_start)
+    monthly_spend = _period_cost(session, company_id=company_id, start=month_start)
     return IndianKanoonHealthResponse(
         readiness=readiness,
         health="ready" if readiness.external_calls_enabled else "blocked",
-        checked_at=_now(),
+        checked_at=now,
+        daily_spend_minor=daily_spend,
+        daily_remaining_minor=max(readiness.daily_budget_minor - daily_spend, 0),
+        monthly_spend_minor=monthly_spend,
+        monthly_remaining_minor=max(readiness.monthly_budget_minor - monthly_spend, 0),
     )
 
 

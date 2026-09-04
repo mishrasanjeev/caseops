@@ -203,15 +203,23 @@ def test_production_manifests_block_paid_providers_for_test_tenants() -> None:
     assert 'env.get("CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS")' in deploy
 
 
-def test_live_paid_provider_probe_is_explicit_and_excluded_from_regular_e2e() -> None:
-    config = _read_repo_text("playwright.paid-provider-live.config.ts")
+def test_live_provider_probe_is_nonbillable_and_excluded_from_regular_e2e() -> None:
+    config = _read_repo_text("playwright.provider-nonbillable-live.config.ts")
     regular_config = _read_repo_text("playwright.config.ts")
-    spec = _read_repo_text("tests/e2e/paid-provider-live-2026-09-03-prod.spec.ts")
+    spec = _read_repo_text(
+        "tests/e2e/provider-nonbillable-live-2026-09-04-prod.spec.ts"
+    )
 
-    assert "CASEOPS_ALLOW_LIVE_PAID_PROVIDER_TESTS" in config
-    assert "noPaidProviderHeaders" not in config
-    assert "paid-provider-live-2026-09-03-prod" in regular_config
-    assert "max_results: 1" in spec
+    assert "CASEOPS_ALLOW_LIVE_PROVIDER_READONLY_TESTS" in config
+    assert "extraHTTPHeaders: noPaidProviderHeaders" in config
+    assert "provider-nonbillable-live-2026-09-04-prod" in regular_config
+    assert 'required("CASEOPS_EXPECTED_RELEASE_SHA")' in spec
+    assert "`${API_BASE_URL}/api/build`" in spec
+    assert "`${BASE_URL}/api/release-identity`" in spec
+    assert "/api/admin/provider-operations/readiness" in spec
+    assert "/api/authorities/providers/indian-kanoon/health" in spec
+    assert "paid_provider_blocked_for_test" in spec
+    assert "max_results" not in spec
     assert "bulk-refresh" not in spec
 
 

@@ -23,9 +23,10 @@ current system.
 - Product correction: provider-wide eCourts scope is tenant-visible, exact CNR
   and case-number searches share the same adapter contract, and provider
   readiness is exposed without a human approval gate.
-- Acceptance: ordinary regression asserts readiness, support scope, and the
-  no-paid boundary. A separate, single-result, opt-in canary is the only paid
-  live check.
+- Acceptance: ordinary regression asserts readiness, support scope, the
+  no-paid boundary, and an unchanged CaseOps-recorded budget balance. The
+  former automated paid canary was retired on 2026-09-04; paid operation is a
+  funded authenticated human workflow.
 
 ### BUG-005 — Act and section completeness
 
@@ -50,9 +51,11 @@ current system.
 - Product correction: the adapter reads the configured secret, publishes
   tenant-safe readiness, supports licensed search and attribution, and has no
   manual approval dependency.
-- Acceptance: regular regression proves configuration/readiness and blocks
-  paid calls. One budget-capped canary proves a real result and attribution
-  after the exact release is deployed.
+- Acceptance: regular regression proves configuration/readiness, exposes the
+  CaseOps-recorded workspace budget balance, and blocks paid calls before
+  transport. Provider prepaid balance is not inferred where no non-billable
+  provider endpoint exists. Real results and attribution remain available to
+  authenticated humans on funded live tenants.
 
 ## Why issues were reopened
 
