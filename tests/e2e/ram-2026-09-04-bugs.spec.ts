@@ -305,7 +305,7 @@ test.describe.serial("Ram 2026-09-04 automatic next-hearing sync", () => {
     expect((await blocked.json()).code).toBe("paid_provider_blocked_for_test");
 
     const apiRelease = await page.request.get(
-      `${API_BASE_URL}/api/release-identity`,
+      `${API_BASE_URL}/api/build`,
     );
     const webRelease = await page.request.get(
       `${BASE_URL}/api/release-identity`,
