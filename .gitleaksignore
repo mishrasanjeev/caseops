@@ -90,3 +90,28 @@ ba2a7d068db8a4aff797f523704c18f7254a812a:apps/api/tests/test_private_retrieval_w
 ba2a7d068db8a4aff797f523704c18f7254a812a:apps/api/tests/test_private_retrieval_workflow.py:generic-api-key:680
 ba2a7d068db8a4aff797f523704c18f7254a812a:apps/api/tests/test_private_retrieval_workflow.py:generic-api-key:687
 ba2a7d068db8a4aff797f523704c18f7254a812a:apps/api/tests/test_private_retrieval_workflow.py:generic-api-key:698
+
+# 2026-09-04 scheduled history scan: exact false positives on deterministic
+# matter and idempotency values used only by the private-projection fencing,
+# tombstone, and saved-answer tests. Every suppression is bound to the
+# reviewed historical commit, file, rule, and line; newly introduced findings
+# remain release-blocking.
+82c241370321d7a87183703352c2af0054d0e0f7:apps/api/tests/test_private_retrieval_workflow.py:generic-api-key:1403
+6aba51fbd27fca4609bd370d42c53a51d6def725:apps/api/tests/test_private_retrieval_foundation.py:generic-api-key:306
+6aba51fbd27fca4609bd370d42c53a51d6def725:apps/api/tests/test_private_retrieval_foundation.py:generic-api-key:323
+6aba51fbd27fca4609bd370d42c53a51d6def725:apps/api/tests/test_private_retrieval_foundation.py:generic-api-key:334
+6aba51fbd27fca4609bd370d42c53a51d6def725:apps/api/tests/test_private_retrieval_foundation.py:generic-api-key:465
+
+# The same full-history scan also found earlier versions of already-reviewed
+# fixture categories: private-projection matter codes, a rule-governance key,
+# synthetic holiday-calendar labels, and a public Cloud Build execution ID.
+# These remain exact historical fingerprints rather than path/rule exclusions.
+6d3c919282cde0b4a86b1795ebc55bac39fdd302:apps/api/tests/test_private_retrieval_workflow.py:generic-api-key:755
+6d3c919282cde0b4a86b1795ebc55bac39fdd302:apps/api/tests/test_private_retrieval_workflow.py:generic-api-key:756
+6d3c919282cde0b4a86b1795ebc55bac39fdd302:apps/api/tests/test_private_retrieval_workflow.py:generic-api-key:1095
+6d3c919282cde0b4a86b1795ebc55bac39fdd302:apps/api/tests/test_private_retrieval_workflow.py:generic-api-key:1157
+82984068b352ad37b13eac6be8da2f0f0e19be9d:docs/ip-implementation/evidence/m3/IPLF-039C/guard-first-production-acceptance-2026-08-17.log.txt:generic-api-key:6
+e2c2051b24f17d63a2905d4a014e6bb2553a0477:apps/api/tests/test_ip_rule_governance.py:generic-api-key:157
+08ae3ecd0a8eedd3d5f2bc2e994b48732fddfaf1:tests/e2e/ram-2026-08-01-bugs.spec.ts:generic-api-key:59
+ac941c0eeede3599f39417c6606ce22fe870a6ff:apps/web/app/app/ip/page.test.tsx:generic-api-key:200
+ac941c0eeede3599f39417c6606ce22fe870a6ff:apps/api/tests/test_ip_workspace_configuration.py:generic-api-key:24
