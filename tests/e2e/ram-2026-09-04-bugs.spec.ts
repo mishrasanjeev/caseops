@@ -21,6 +21,10 @@ const BASE_URL = envOr(
 const IS_LOCAL = ["127.0.0.1", "localhost"].includes(
   new URL(BASE_URL).hostname,
 );
+const HAS_DOCKER_POLL = Boolean(
+  envOr("CASEOPS_E2E_DOCKER_PROJECT", "") &&
+    envOr("CASEOPS_E2E_DOCKER_COMPOSE_FILE", ""),
+);
 const API_BASE_URL = envOr(
   "PROD_API_BASE_URL",
   IS_LOCAL
@@ -162,8 +166,8 @@ test.describe.serial("Ram 2026-09-04 automatic next-hearing sync", () => {
     page,
   }) => {
     test.skip(
-      !IS_LOCAL,
-      "The paid-call-free behavioral proof uses the Docker provider emulator.",
+      !HAS_DOCKER_POLL,
+      "The paid-call-free behavioral proof requires the Docker provider emulator.",
     );
     const matterCode = `NHD-${RUN_ID}`.toUpperCase().slice(0, 78);
     const create = await api.post(`${API_BASE_URL}/api/matters/`, {
