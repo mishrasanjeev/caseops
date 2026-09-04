@@ -25,6 +25,8 @@ const OWNER_PASSWORD = "RamSep04Local!";
 type ProviderSpendRow = {
   provider_key: string;
   spent_minor: number;
+  budget_spent_minor: number;
+  budget_scope: "account" | "provider";
   monthly_limit_minor: number | null;
   remaining_minor: number | null;
   unlimited: boolean;
@@ -132,12 +134,14 @@ test.describe.serial("Ram 2026-09-04 provider, statute, and forum acceptance", (
       expect(before.get(provider)).toEqual({
         provider_key: provider,
         spent_minor: 0,
+        budget_spent_minor: 0,
+        budget_scope: "account",
         monthly_limit_minor: 100_000,
         remaining_minor: 100_000,
         unlimited: false,
         currency: "INR",
         label: provider === "ecourtsindia" ? "eCourtsIndia" : "Indian Kanoon",
-        policy_source: "caseops_default_provider_budget_2026_09_04",
+        policy_source: "caseops_default_shared_account_budget_2026_09_04",
       });
     }
 
@@ -153,6 +157,7 @@ test.describe.serial("Ram 2026-09-04 provider, statute, and forum acceptance", (
         workspace_monthly_limit_minor: 100_000,
         workspace_monthly_remaining_minor: 100_000,
         workspace_monthly_limit_unlimited: false,
+        workspace_monthly_budget_scope: "account",
         workspace_monthly_limit_currency: "INR",
       }),
     );
@@ -171,6 +176,7 @@ test.describe.serial("Ram 2026-09-04 provider, statute, and forum acceptance", (
         monthly_limit_minor: 100_000,
         monthly_remaining_minor: 100_000,
         monthly_limit_unlimited: false,
+        monthly_budget_scope: "account",
       }),
     );
 
@@ -180,6 +186,7 @@ test.describe.serial("Ram 2026-09-04 provider, statute, and forum acceptance", (
     await expect(table).toContainText("eCourtsIndia");
     await expect(table).toContainText("Indian Kanoon");
     await expect(table).toContainText("1,000");
+    await expect(table).toContainText("Shared account");
     expect(await usageRows()).toEqual(before);
   });
 

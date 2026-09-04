@@ -156,6 +156,7 @@ class IndianKanoonHealthResponse(BaseModel):
     monthly_remaining_minor: int | None = Field(default=None, ge=0)
     monthly_limit_minor: int | None = Field(default=None, ge=0)
     monthly_limit_unlimited: bool = False
+    monthly_budget_scope: Literal["account", "provider"]
     monthly_limit_policy_source: str
 
 

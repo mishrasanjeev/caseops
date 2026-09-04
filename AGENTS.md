@@ -298,9 +298,12 @@ requirements when using the fallback.
   checks use the API-owned `/api/build` route and the web-owned
   `/api/release-identity` route; never assume the services expose symmetric
   identity paths.
-- Every credit-bearing provider path must reserve against one persisted
-  tenant/provider monthly policy and publish the settled spend through the
-  existing billing owner. Human entitlement must not be inferred from a
+- Every credit-bearing provider path must reserve against its effective
+  monthly budget scope and publish the settled spend through the existing
+  billing owner. When the product promise is a per-account limit, aggregate
+  every provider in that shared scope; do not multiply the allowance by
+  treating each provider as an independent default budget. Human entitlement
+  must not be inferred from a
   test-looking slug; the explicit automation marker is authoritative, and
   unlimited access must come from an active policy row rather than a company
   name check in request code.

@@ -552,6 +552,17 @@ def test_health_reports_workspace_budget_balance_without_external_probe(
                 currency="INR",
             )
         )
+        session.add(
+            BillingUsageEvent(
+                company_id=str(boot["company"]["id"]),
+                usage_type="case_tracking_search",
+                provider_key="ecourtsindia",
+                quantity=1,
+                unit="provider_call",
+                estimated_cost_minor=25,
+                currency="INR",
+            )
+        )
         session.commit()
 
     response = client.get(
@@ -566,5 +577,6 @@ def test_health_reports_workspace_budget_balance_without_external_probe(
     assert body["balance_source"] == "caseops_recorded_workspace_usage"
     assert body["daily_spend_minor"] == 75
     assert body["daily_remaining_minor"] == 9_925
-    assert body["monthly_spend_minor"] == 75
-    assert body["monthly_remaining_minor"] == 99_925
+    assert body["monthly_spend_minor"] == 100
+    assert body["monthly_remaining_minor"] == 99_900
+    assert body["monthly_budget_scope"] == "account"

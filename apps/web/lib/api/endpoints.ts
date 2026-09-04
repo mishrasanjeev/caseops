@@ -3997,6 +3997,7 @@ export type CaseTrackingProviderStatus = {
   workspace_monthly_limit_minor?: number | null;
   workspace_monthly_remaining_minor?: number | null;
   workspace_monthly_limit_unlimited?: boolean;
+  workspace_monthly_budget_scope?: "account" | "provider";
   workspace_monthly_limit_currency?: string;
   workspace_monthly_limit_policy_source?: string;
 };

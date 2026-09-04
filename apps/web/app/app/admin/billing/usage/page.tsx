@@ -123,7 +123,8 @@ function ProviderSpendTable({ rows }: { rows: BillingProviderSpendRow[] }) {
       <CardHeader>
         <CardTitle as="h2">Paid legal-data providers</CardTitle>
         <CardDescription>
-          Current workspace spend and monthly access limits. Cached results do not add spend.
+          Each provider contribution counts toward one shared ₹1,000 monthly account budget
+          unless an explicit provider policy applies. Cached results do not add spend.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -132,7 +133,9 @@ function ProviderSpendTable({ rows }: { rows: BillingProviderSpendRow[] }) {
             <thead className="border-b border-[var(--color-line)] text-xs uppercase text-[var(--color-mute)]">
               <tr>
                 <th className="py-2 pr-4">Provider</th>
-                <th className="py-2 pr-4">Spent</th>
+                <th className="py-2 pr-4">Provider spend</th>
+                <th className="py-2 pr-4">Budget scope</th>
+                <th className="py-2 pr-4">Budget used</th>
                 <th className="py-2 pr-4">Monthly limit</th>
                 <th className="py-2">Remaining</th>
               </tr>
@@ -142,6 +145,12 @@ function ProviderSpendTable({ rows }: { rows: BillingProviderSpendRow[] }) {
                 <tr key={row.provider_key} className="border-b border-[var(--color-line-2)]">
                   <td className="py-3 pr-4 font-medium text-[var(--color-ink)]">{row.label}</td>
                   <td className="py-3 pr-4">{formatMoneyMinor(row.spent_minor, row.currency)}</td>
+                  <td className="py-3 pr-4">
+                    {row.budget_scope === "account" ? "Shared account" : "Provider"}
+                  </td>
+                  <td className="py-3 pr-4">
+                    {formatMoneyMinor(row.budget_spent_minor, row.currency)}
+                  </td>
                   <td className="py-3 pr-4">
                     {row.unlimited
                       ? "Unlimited"

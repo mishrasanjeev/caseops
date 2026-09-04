@@ -1041,12 +1041,13 @@ store, or reopen path.
 
 Implemented candidate scope:
 
-- default per-account monthly budgets of INR 1,000 independently for Indian
-  Kanoon and eCourts, with atomic tenant/provider reservations;
+- one default per-account monthly budget of INR 1,000 shared across Indian
+  Kanoon and eCourts, with atomic tenant/scope reservations;
 - persisted unlimited policies for GBA Law Office and Pinelabs Pvt. Ltd. for
   both providers, seeded only when the exact existing company is present;
-- tenant-visible provider spend, limit, remaining amount, currency, unlimited
-  state, and policy source in the existing billing report and provider status;
+- tenant-visible provider contribution, shared or provider-specific budget
+  scope, used amount, limit, remaining amount, currency, unlimited state, and
+  policy source in the existing billing report and provider status;
 - all successful credit-bearing provider paths attributed by provider, while
   failed, cached, blocked, and automated paths do not add spend;
 - the explicit no-paid-provider header is authoritative in every runtime;

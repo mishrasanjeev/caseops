@@ -14953,6 +14953,13 @@ export interface components {
         /** BillingProviderSpendRow */
         BillingProviderSpendRow: {
             /**
+             * Budget Scope
+             * @enum {string}
+             */
+            budget_scope: "account" | "provider";
+            /** Budget Spent Minor */
+            budget_spent_minor: number;
+            /**
              * Currency
              * @default INR
              */
@@ -16249,6 +16256,11 @@ export interface components {
             provider_prepaid_balance_checked: boolean;
             /** Reason */
             reason?: string | null;
+            /**
+             * Workspace Monthly Budget Scope
+             * @enum {string}
+             */
+            workspace_monthly_budget_scope: "account" | "provider";
             /**
              * Workspace Monthly Limit Currency
              * @default INR
@@ -21464,6 +21476,11 @@ export interface components {
              * @enum {string}
              */
             health: "ready" | "blocked";
+            /**
+             * Monthly Budget Scope
+             * @enum {string}
+             */
+            monthly_budget_scope: "account" | "provider";
             /** Monthly Limit Minor */
             monthly_limit_minor?: number | null;
             /** Monthly Limit Policy Source */

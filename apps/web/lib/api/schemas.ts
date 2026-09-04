@@ -4002,6 +4002,8 @@ export const billingProviderSpendRow = z.object({
   provider_key: z.string(),
   label: z.string(),
   spent_minor: z.number().int().nonnegative(),
+  budget_spent_minor: z.number().int().nonnegative(),
+  budget_scope: z.enum(["account", "provider"]),
   monthly_limit_minor: z.number().int().nonnegative().nullable(),
   remaining_minor: z.number().int().nonnegative().nullable(),
   unlimited: z.boolean(),

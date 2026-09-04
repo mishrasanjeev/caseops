@@ -203,6 +203,7 @@ def test_case_tracking_provider_disabled_state_is_safe(client: TestClient) -> No
     assert status.json()["workspace_monthly_spend_minor"] == 0
     assert status.json()["workspace_monthly_limit_minor"] == 100_000
     assert status.json()["workspace_monthly_remaining_minor"] == 100_000
+    assert status.json()["workspace_monthly_budget_scope"] == "account"
 
     search = client.post(
         "/api/case-tracking/search",

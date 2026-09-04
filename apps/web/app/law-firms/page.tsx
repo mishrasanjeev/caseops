@@ -577,7 +577,7 @@ export default function LawFirmPitchPage() {
               <PitchCard
                 icon={BarChart3}
                 title="Provider spend by workspace"
-                body="Indian Kanoon and eCourts usage is attributed separately, with current spend, monthly limit, remaining budget, and explicit unlimited status visible to the workspace."
+                body="Indian Kanoon and eCourts usage is attributed separately against one shared monthly account budget, with spend, remaining budget, and explicit unlimited status visible to the workspace."
                 inverse
               />
             </div>

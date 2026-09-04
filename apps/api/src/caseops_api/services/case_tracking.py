@@ -1019,10 +1019,11 @@ def provider_status_response(
         provider=provider,
         configured=configured,
         reason=reason,
-        workspace_monthly_spend_minor=spend.spent_minor,
+        workspace_monthly_spend_minor=spend.budget_spent_minor,
         workspace_monthly_limit_minor=spend.monthly_limit_minor,
         workspace_monthly_remaining_minor=spend.remaining_minor,
         workspace_monthly_limit_unlimited=spend.unlimited,
+        workspace_monthly_budget_scope=spend.budget_scope,
         workspace_monthly_limit_currency=spend.currency,
         workspace_monthly_limit_policy_source=spend.policy_source,
     )

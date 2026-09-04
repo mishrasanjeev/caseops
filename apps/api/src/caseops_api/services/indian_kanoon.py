@@ -44,9 +44,9 @@ from caseops_api.services.paid_provider_safety import assert_paid_provider_call_
 from caseops_api.services.provider_costs import verified_actual_cost_minor
 from caseops_api.services.provider_spend import (
     provider_spend_minor,
+    provider_spend_rows,
     release_provider_spend,
     reserve_provider_spend,
-    resolve_provider_spend_policy,
     settle_provider_spend,
 )
 from caseops_api.services.saas_billing import record_usage
@@ -215,7 +215,6 @@ def indian_kanoon_health(
     day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     month_start = day_start.replace(day=1)
     daily_spend = _period_cost(session, company_id=company_id, start=day_start)
-    monthly_spend = _period_cost(session, company_id=company_id, start=month_start)
     company = session.get(Company, company_id)
     if company is None:
         raise _problem(
@@ -223,10 +222,10 @@ def indian_kanoon_health(
             code="provider_configuration",
             message="Workspace provider policy could not be resolved.",
         )
-    policy = resolve_provider_spend_policy(
-        session,
-        company=company,
-        provider_key=PROVIDER_KEY,
+    spend = next(
+        row
+        for row in provider_spend_rows(session, company=company, period_start=month_start)
+        if row.provider_key == PROVIDER_KEY
     )
     return IndianKanoonHealthResponse(
         readiness=readiness,
@@ -234,15 +233,12 @@ def indian_kanoon_health(
         checked_at=now,
         daily_spend_minor=daily_spend,
         daily_remaining_minor=max(readiness.daily_budget_minor - daily_spend, 0),
-        monthly_spend_minor=monthly_spend,
-        monthly_remaining_minor=(
-            None
-            if policy.unlimited
-            else max(int(policy.monthly_limit_minor or 0) - monthly_spend, 0)
-        ),
-        monthly_limit_minor=policy.monthly_limit_minor,
-        monthly_limit_unlimited=policy.unlimited,
-        monthly_limit_policy_source=policy.source,
+        monthly_spend_minor=spend.budget_spent_minor,
+        monthly_remaining_minor=spend.remaining_minor,
+        monthly_limit_minor=spend.monthly_limit_minor,
+        monthly_limit_unlimited=spend.unlimited,
+        monthly_budget_scope=spend.budget_scope,
+        monthly_limit_policy_source=spend.policy_source,
     )
 
 

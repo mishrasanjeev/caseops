@@ -57,7 +57,8 @@ describe("TenantBillingUsagePage", () => {
     const providerTable = screen.getByTestId("provider-spend-by-account");
     expect(within(providerTable).getByText("eCourtsIndia")).toBeInTheDocument();
     expect(within(providerTable).getByText("Indian Kanoon")).toBeInTheDocument();
-    expect(within(providerTable).getByText("₹25")).toBeInTheDocument();
+    expect(within(providerTable).getAllByText("₹25")).toHaveLength(2);
+    expect(within(providerTable).getByText("Shared account")).toBeInTheDocument();
     expect(within(providerTable).getAllByText("Unlimited")).toHaveLength(2);
     expect(screen.queryByText(/gross profit/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/provider cost/i)).not.toBeInTheDocument();

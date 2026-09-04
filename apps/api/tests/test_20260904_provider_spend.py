@@ -39,6 +39,8 @@ def test_default_budget_is_machine_resolved_without_mutable_name_bypass(
         )
         assert default.monthly_limit_minor == DEFAULT_MONTHLY_LIMIT_MINOR
         assert default.unlimited is False
+        assert default.budget_scope == "account"
+        assert set(default.scope_provider_keys) == {"ecourtsindia", "indian-kanoon"}
 
         company.name = "GBA Law Office"
         still_default = resolve_provider_spend_policy(
@@ -48,6 +50,45 @@ def test_default_budget_is_machine_resolved_without_mutable_name_bypass(
         )
         assert still_default.unlimited is False
         assert still_default.monthly_limit_minor == DEFAULT_MONTHLY_LIMIT_MINOR
+        assert still_default.budget_scope == "account"
+
+
+def test_default_budget_is_shared_across_both_paid_providers(
+    client: TestClient,
+) -> None:
+    boot = bootstrap_company(client)
+    company_id = str(boot["company"]["id"])
+    membership_id = str(boot["membership"]["id"])
+    with get_session_factory()() as session:
+        record_usage(
+            session,
+            company_id=company_id,
+            subscription_id=None,
+            usage_type="indian_kanoon_legal_source_search",
+            feature_key="licensed_legal_research",
+            provider_key="indian-kanoon",
+            quantity=1,
+            unit="provider_call",
+            actor_membership_id=membership_id,
+            estimated_cost_minor=99_995,
+            display_label="Indian Kanoon search",
+        )
+        session.commit()
+
+    with pytest.raises(HTTPException) as blocked:
+        reserve_provider_spend(
+            company_id=company_id,
+            actor_membership_id=membership_id,
+            provider_key="ecourtsindia",
+            operation_key="cross_provider_cap",
+            amount_minor=10,
+        )
+
+    assert blocked.value.status_code == 429
+    assert blocked.value.detail["budget_scope"] == "account"
+    assert blocked.value.detail["spent_minor"] == 99_995
+    with get_session_factory()() as session:
+        assert session.scalar(select(ProviderSpendReservation.id)) is None
 
 
 def test_atomic_reservations_prevent_parallel_requests_exceeding_the_cap(
@@ -144,13 +185,17 @@ def test_workspace_usage_report_publishes_spend_and_remaining_by_provider(
         "provider_key": "ecourtsindia",
         "label": "eCourtsIndia",
         "spent_minor": 15,
+        "budget_spent_minor": 15,
+        "budget_scope": "account",
         "monthly_limit_minor": 100_000,
         "remaining_minor": 99_985,
         "unlimited": False,
         "currency": "INR",
-        "policy_source": "caseops_default_provider_budget_2026_09_04",
+        "policy_source": "caseops_default_shared_account_budget_2026_09_04",
     }
     assert by_provider["indian-kanoon"]["spent_minor"] == 0
+    assert by_provider["indian-kanoon"]["budget_spent_minor"] == 15
+    assert by_provider["indian-kanoon"]["budget_scope"] == "account"
     assert datetime.fromisoformat(response.json()["period_start"]).tzinfo is not None
     with get_session_factory()() as session:
         event = session.scalar(select(BillingUsageEvent))

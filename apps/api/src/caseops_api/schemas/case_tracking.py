@@ -26,6 +26,7 @@ class CaseTrackingProviderStatusResponse(BaseModel):
     workspace_monthly_limit_minor: int | None = None
     workspace_monthly_remaining_minor: int | None = None
     workspace_monthly_limit_unlimited: bool = False
+    workspace_monthly_budget_scope: Literal["account", "provider"]
     workspace_monthly_limit_currency: str = "INR"
     workspace_monthly_limit_policy_source: str
 

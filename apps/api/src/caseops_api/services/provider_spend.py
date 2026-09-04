@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
@@ -32,6 +33,8 @@ class ResolvedProviderSpendPolicy:
     monthly_limit_minor: int | None
     currency: str
     source: str
+    budget_scope: Literal["account", "provider"]
+    scope_provider_keys: tuple[str, ...]
 
     @property
     def unlimited(self) -> bool:
@@ -64,11 +67,23 @@ def resolve_provider_spend_policy(
             monthly_limit_minor=row.monthly_limit_minor,
             currency=row.currency,
             source=row.policy_source,
+            budget_scope="provider",
+            scope_provider_keys=(provider_key,),
         )
+    explicitly_configured = set(
+        session.scalars(
+            select(CompanyProviderSpendPolicy.provider_key).where(
+                CompanyProviderSpendPolicy.company_id == company.id,
+                CompanyProviderSpendPolicy.is_active.is_(True),
+            )
+        )
+    )
     return ResolvedProviderSpendPolicy(
         monthly_limit_minor=DEFAULT_MONTHLY_LIMIT_MINOR,
         currency="INR",
-        source="caseops_default_provider_budget_2026_09_04",
+        source="caseops_default_shared_account_budget_2026_09_04",
+        budget_scope="account",
+        scope_provider_keys=tuple(key for key in PROVIDER_KEYS if key not in explicitly_configured),
     )
 
 
@@ -84,6 +99,27 @@ def provider_spend_minor(
             select(func.coalesce(func.sum(BillingUsageEvent.estimated_cost_minor), 0)).where(
                 BillingUsageEvent.company_id == company_id,
                 BillingUsageEvent.provider_key == provider_key,
+                BillingUsageEvent.created_at >= period_start,
+            )
+        )
+        or 0
+    )
+
+
+def _provider_scope_spend_minor(
+    session: Session,
+    *,
+    company_id: str,
+    provider_keys: tuple[str, ...],
+    period_start: datetime,
+) -> int:
+    if not provider_keys:
+        return 0
+    return int(
+        session.scalar(
+            select(func.coalesce(func.sum(BillingUsageEvent.estimated_cost_minor), 0)).where(
+                BillingUsageEvent.company_id == company_id,
+                BillingUsageEvent.provider_key.in_(provider_keys),
                 BillingUsageEvent.created_at >= period_start,
             )
         )
@@ -111,14 +147,24 @@ def provider_spend_rows(
             provider_key=provider_key,
             period_start=period_start,
         )
+        budget_spent = _provider_scope_spend_minor(
+            session,
+            company_id=company.id,
+            provider_keys=policy.scope_provider_keys,
+            period_start=period_start,
+        )
         remaining = (
-            None if policy.unlimited else max(int(policy.monthly_limit_minor or 0) - spent, 0)
+            None
+            if policy.unlimited
+            else max(int(policy.monthly_limit_minor or 0) - budget_spent, 0)
         )
         rows.append(
             BillingProviderSpendRow(
                 provider_key=provider_key,
                 label=PROVIDER_LABELS[provider_key],
                 spent_minor=spent,
+                budget_spent_minor=budget_spent,
+                budget_scope=policy.budget_scope,
                 monthly_limit_minor=policy.monthly_limit_minor,
                 remaining_minor=remaining,
                 unlimited=policy.unlimited,
@@ -151,17 +197,17 @@ def _reserve_provider_spend(
         company=company,
         provider_key=provider_key,
     )
-    spent = provider_spend_minor(
+    spent = _provider_scope_spend_minor(
         session,
         company_id=company.id,
-        provider_key=provider_key,
+        provider_keys=policy.scope_provider_keys,
         period_start=_month_start(now),
     )
     reserved = int(
         session.scalar(
             select(func.coalesce(func.sum(ProviderSpendReservation.amount_minor), 0)).where(
                 ProviderSpendReservation.company_id == company.id,
-                ProviderSpendReservation.provider_key == provider_key,
+                ProviderSpendReservation.provider_key.in_(policy.scope_provider_keys),
                 ProviderSpendReservation.status == "reserved",
                 ProviderSpendReservation.expires_at > now,
             )
@@ -177,10 +223,11 @@ def _reserve_provider_spend(
             detail={
                 "code": "provider_budget_exhausted",
                 "message": (
-                    f"The workspace {PROVIDER_LABELS[provider_key]} monthly budget "
+                    "The workspace paid-provider monthly budget "
                     "is exhausted; no external request was made."
                 ),
                 "provider": provider_key,
+                "budget_scope": policy.budget_scope,
                 "spent_minor": spent,
                 "reserved_minor": reserved,
                 "monthly_limit_minor": policy.monthly_limit_minor,

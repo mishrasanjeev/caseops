@@ -18,12 +18,14 @@ catalog, or lifecycle writer.
 
 ## Implemented candidate
 
-- Provider-keyed usage, an INR 1,000 default monthly limit independently for
-  Indian Kanoon and eCourts, and tenant-locked expiring reservations.
+- Provider-keyed usage, one INR 1,000 default monthly account limit shared
+  across Indian Kanoon and eCourts, and tenant-locked expiring reservations
+  that include every provider in the effective budget scope.
 - Explicit persisted unlimited policies for the two founder-authorized account
   names when those companies exist at migration time.
-- Tenant billing and provider status projections for spend, limit, remaining,
-  currency, policy source, and unlimited state without an external probe.
+- Tenant billing and provider status projections for provider contribution,
+  budget-scope spend, limit, remaining, currency, policy source, and unlimited
+  state without an external probe.
 - Explicit automation-marker enforcement before paid transport, while human
   access does not depend on a test-looking slug.
 - Shared active canonical forum/alias resolution for manual and bulk matter
