@@ -4,6 +4,17 @@ Revision ID: 20260904_0002
 Revises: 20260904_0001
 
 DATA-GOVERNANCE-MAP: updated
+
+MIGRATION-LOCK-RISK: acknowledged: PostgreSQL builds every index on the two
+existing billing tables concurrently after the bounded provider-key backfill.
+The remaining indexes are created on new empty tables. The only existing-table
+constraint scan is the server-owned forum catalog, which is bounded below
+1,000 rows by its seed contract.
+
+MIGRATION-ROLLBACK: restore-forward: once provider policies, spend evidence, or
+reviewed aliases exist, rollback must restore or roll forward rather than drop
+those records. The destructive downgrade is for pre-release schema validation
+only and must not be used after this revision serves traffic.
 """
 
 from __future__ import annotations
@@ -136,16 +147,11 @@ def _normalize_forum_value(value: str) -> str:
 
 def upgrade() -> None:
     now = datetime.now(UTC)
+    bind = op.get_bind()
     with op.batch_alter_table("billing_usage_events") as batch:
         batch.add_column(sa.Column("provider_key", sa.String(length=80), nullable=True))
-        batch.create_index("ix_billing_usage_events_provider_key", ["provider_key"])
-        batch.create_index(
-            "ix_billing_usage_events_company_provider_created",
-            ["company_id", "provider_key", "created_at"],
-        )
     with op.batch_alter_table("billing_usage_attribution") as batch:
         batch.add_column(sa.Column("provider_key", sa.String(length=80), nullable=True))
-        batch.create_index("ix_billing_usage_attribution_provider_key", ["provider_key"])
 
     op.execute(
         "UPDATE billing_usage_events SET provider_key = 'indian-kanoon' "
@@ -161,6 +167,36 @@ def upgrade() -> None:
         "WHERE billing_usage_events.id = billing_usage_attribution.billing_usage_event_id"
         ") WHERE billing_usage_event_id IS NOT NULL"
     )
+
+    existing_table_indexes = (
+        (
+            "ix_billing_usage_events_provider_key",
+            "billing_usage_events",
+            ["provider_key"],
+        ),
+        (
+            "ix_billing_usage_events_company_provider_created",
+            "billing_usage_events",
+            ["company_id", "provider_key", "created_at"],
+        ),
+        (
+            "ix_billing_usage_attribution_provider_key",
+            "billing_usage_attribution",
+            ["provider_key"],
+        ),
+    )
+    if bind.dialect.name == "postgresql":
+        with op.get_context().autocommit_block():
+            for index_name, table_name, columns in existing_table_indexes:
+                op.create_index(
+                    index_name,
+                    table_name,
+                    columns,
+                    postgresql_concurrently=True,
+                )
+    else:
+        for index_name, table_name, columns in existing_table_indexes:
+            op.create_index(index_name, table_name, columns)
 
     op.create_table(
         "company_provider_spend_policies",
