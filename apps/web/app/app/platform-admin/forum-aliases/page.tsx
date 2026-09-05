@@ -436,7 +436,7 @@ export default function PlatformForumAliasesPage() {
             onRetry={() => aliasesQuery.refetch()}
           />
         ) : aliasesQuery.data?.aliases.length ? (
-          <div className="overflow-x-auto border-y border-[var(--color-line)]">
+          <div className="relative overflow-x-auto border-y border-[var(--color-line)]">
             <table className="w-full min-w-[980px] text-left text-sm" data-testid="forum-alias-registry">
               <thead className="bg-[var(--color-bg-2)] text-xs uppercase text-[var(--color-mute)]">
                 <tr>

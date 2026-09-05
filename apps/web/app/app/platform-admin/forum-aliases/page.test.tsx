@@ -155,6 +155,13 @@ describe("PlatformForumAliasesPage", () => {
     );
   });
 
+  it("contains the accessible action heading inside the horizontal table scroller", async () => {
+    render(withClient(<PlatformForumAliasesPage />));
+    const table = await screen.findByTestId("forum-alias-registry");
+    expect(table.parentElement).toHaveClass("relative", "overflow-x-auto");
+    expect(within(table).getByRole("columnheader", { name: "Actions" })).toBeInTheDocument();
+  });
+
   it("updates and deactivates through optimistic concurrency", async () => {
     const user = userEvent.setup();
     render(withClient(<PlatformForumAliasesPage />));

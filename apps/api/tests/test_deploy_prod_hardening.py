@@ -180,7 +180,7 @@ def test_production_deploy_pins_openai_and_verifies_runtime_readback() -> None:
     assert '"CASEOPS_LLM_MODEL": "gpt-5.1"' in deploy
     assert '"CASEOPS_LLM_MODEL_RECOMMENDATIONS": "gpt-5-mini"' in deploy
     assert 'name: CASEOPS_LLM_PROVIDER\n              value: "openai"' in manifest
-    assert 'name: CASEOPS_LLM_API_KEY' in manifest
+    assert "name: CASEOPS_LLM_API_KEY" in manifest
     assert 'name: "caseops-openai-api-key"' in manifest
     assert "CASEOPS_OPENAI_API_KEY" not in manifest
 
@@ -206,9 +206,7 @@ def test_production_manifests_block_paid_providers_for_test_tenants() -> None:
 def test_live_provider_probe_is_nonbillable_and_excluded_from_regular_e2e() -> None:
     config = _read_repo_text("playwright.provider-nonbillable-live.config.ts")
     regular_config = _read_repo_text("playwright.config.ts")
-    spec = _read_repo_text(
-        "tests/e2e/provider-nonbillable-live-2026-09-04-prod.spec.ts"
-    )
+    spec = _read_repo_text("tests/e2e/provider-nonbillable-live-2026-09-04-prod.spec.ts")
 
     assert "CASEOPS_ALLOW_LIVE_PROVIDER_READONLY_TESTS" in config
     assert "extraHTTPHeaders: noPaidProviderHeaders" in config
@@ -614,6 +612,21 @@ def test_workstation_docker_gate_is_migration_first_and_exact_release() -> None:
     assert "CASEOPS_E2E_DOCKER_PROJECT" in e2e_helpers
     assert '"caseops-document-worker"' in e2e_helpers
     assert '"--skip-migrations"' in e2e_helpers
+
+
+def test_forum_alias_journey_is_discovered_with_an_isolated_docker_founder() -> None:
+    app_config = _read_repo_text("playwright.app.config.ts")
+    compose = _read_repo_text("docker-compose.yml")
+    docker_script = _read_repo_text("scripts/verify-docker.ps1")
+    spec = _read_repo_text("tests/e2e/forum-alias-admin-2026-09-04.spec.ts")
+
+    assert "/forum-alias-admin-2026-09-04\\.spec\\.ts/" in app_config
+    assert "CASEOPS_PLATFORM_SUPER_ADMIN_EMAIL: ${CASEOPS_PLATFORM_SUPER_ADMIN_EMAIL:-}" in compose
+    assert 'CASEOPS_PLATFORM_SUPER_ADMIN_EMAIL = "platform-admin-e2e@example.com"' in docker_script
+    assert 'page.goto("/sign-in")' in spec
+    assert 'page.goto("/app/platform-admin/forum-aliases")' in spec
+    assert "test.info().project.use.baseURL" in spec
+    assert "localhost" in spec
 
 
 @pytest.mark.parametrize("dockerfile", ["apps/api/Dockerfile", "apps/web/Dockerfile"])

@@ -18,6 +18,17 @@ requirements when using the fallback.
 
 ## Permanent regression learnings
 
+- A horizontally scrolling table must contain absolutely positioned accessible
+  labels as well as visible cells. Give its scroller a positioning context;
+  otherwise an offscreen `sr-only` heading can escape clipping and enlarge the
+  page. Assert document width and usable controls before, at, and after layout
+  breakpoints while preserving the accessible heading and horizontal scrolling.
+
+- A committed browser spec is not regression coverage until the standard suite
+  discovers and runs it. Check the resolved Playwright inventory, propagate
+  required fixture configuration into Docker, use the configured browser base
+  URL, and keep synthetic global-catalog writes strictly loopback-only.
+
 - A green source-tree test is not a deployed fix. Build the current source,
   verify the exact image/revision serving production, and rerun the same dated
   Playwright spec against production before marking an item fixed. Never use a

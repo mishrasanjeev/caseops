@@ -221,3 +221,41 @@ the app suite started. The superseding PR and main runs must also pass.
 - Repository readiness does not prove provider authentication, account balance,
   or a meaningful live result. Paid-path operational acceptance belongs to an
   authenticated human action under budget, not automated regression.
+
+## Final acceptance-discovery audit
+
+The alias-administration spec was committed but not selected by the normal app
+config inherited by Docker acceptance. Earlier desktop counts must not be
+attributed to that CRUD journey. Adding it exposed a reserved-domain email
+fixture rejected at bootstrap. The follow-up uses one schema-valid local
+founder identity in host and Docker acceptance, relative browser URLs, explicit
+cleanup assertions, mobile deactivation and reload, and ordinary-tenant denial
+through both API and UI. Synthetic global alias writes are guarded to loopback
+before bootstrap. Audit-event correctness is asserted separately in
+`apps/api/tests/test_20260904_forum_alias_admin.py`.
+
+The Docker gate's default founder configuration remains empty outside the
+isolated acceptance harness. Production administrator privileges and legal
+catalog contents are not changed by this test fix. Final full Docker results,
+PR/main checks, and the exact serving release must be recorded before closure.
+
+The newly executed browser journey then reproduced a real mobile layout defect:
+the absolute `sr-only` Actions heading escaped the unpositioned table scroller,
+making document width 914 px on a 360 px viewport. A direct Docker browser
+experiment measured 360 px after positioning the scroller. The source fix
+preserves horizontal table scrolling and the accessible heading. The dated
+journey now checks 360, 767, 768, 769, 1024, and 1280 px widths plus usable search
+width, and a component test protects the positioned scroller. Adjacent `sr-only`
+uses in IP, billing, notices, contracts, and Matter documents were inspected;
+they are loading/form labels, not offscreen table headings with this defect.
+
+The final clean Docker gate passed on source fingerprint
+`f80dc83d2c7d031ba73c91abf6356eaea01121b95806fe88ecf7f7929dff1256`:
+120 PostgreSQL/pgvector tests, 190 desktop journeys (97 plus 93 in disjoint
+shards), and all four mobile journeys. The five explicit skips comprise the
+credential-gated payment-link test and four production-only identity checks;
+none counts as a passed flow. The newly discovered alias-admin create/resolve/
+deactivate/reload journey and ordinary-owner denial both passed. All 825 web
+unit tests across 158 files and all 67 deployment-hardening contracts passed.
+This evidence-only append changes no tested runtime or browser input. Final
+PR/main CI and exact production deployment remain required.

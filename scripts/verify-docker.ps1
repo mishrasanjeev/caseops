@@ -180,6 +180,7 @@ $AcceptanceEnvironment = @{
     CASEOPS_DOCKER_PUBLIC_APP_URL = "http://127.0.0.1:$WebPort"
     CASEOPS_DOCKER_CORS_ORIGINS = "[`"http://127.0.0.1:$WebPort`",`"http://localhost:$WebPort`"]"
     CASEOPS_AUTH_RATE_LIMIT_ENABLED = "false"
+    CASEOPS_PLATFORM_SUPER_ADMIN_EMAIL = "platform-admin-e2e@example.com"
     CASEOPS_CASE_TRACKING_ENABLED = "true"
     CASEOPS_IP_WORKSPACE_ENABLED = "true"
     CASEOPS_IP_RULE_GOVERNANCE_ENABLED = "true"
