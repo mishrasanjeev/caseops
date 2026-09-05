@@ -348,3 +348,8 @@ requirements when using the fallback.
   immutable result reference; continue only when that evidence proves the original
   request committed exactly once. Otherwise fail visibly and require operator
   reconciliation.
+- GitHub-hosted Playwright jobs must not run `playwright install-deps` or an apt
+  transaction. Install the pinned browser independently, then launch it against a
+  local smoke page to prove the actual shared-library/runtime contract before the
+  suite. This keeps optional font-mirror stalls from consuming the browser-test
+  budget while still failing closed when Chromium genuinely cannot start.

@@ -395,39 +395,40 @@ jobs:
         working-directory: apps/api
         run: uv sync --all-extras --dev
 
-      # Split deliberately. `--with-deps` does two unrelated things: fetch the
-      # browser from Playwright's CDN, and apt-get system libraries from the
-      # Ubuntu mirror. Only the second has ever hung here - three times in two
-      # days, always on azure.archive.ubuntu.com - and bundling them meant a
-      # slow package mirror blocked the browser download too.
+      # Keep the browser download separate from runtime verification. The
+      # latter must be deterministic and must not mutate the hosted runner.
       - name: Install Chromium browser for Playwright
         timeout-minutes: 5
         run: npx playwright install chromium
 
-      # ubuntu-latest already ships most of these libraries, so this usually
-      # completes in seconds; it is the apt round-trip that stalls. One retry
-      # covers a transient mirror, and a second failure is a real failure - the
-      # step is NOT allowed to pass silently, because a missing library shows up
-      # later as an unexplained browser launch error.
-      - name: Install Playwright system dependencies
-        timeout-minutes: 6
+      # GitHub's hosted Ubuntu image already carries Chromium's runtime
+      # libraries. Do not call `playwright install-deps` here: it performs a
+      # mutable apt transaction and has repeatedly stalled on optional font
+      # downloads before any test could run. Prove the actual browser/runtime
+      # contract directly and fail with Chromium's launch diagnostic when the
+      # runner image is ever missing a required shared library.
+      - name: Verify Playwright Chromium runtime
+        timeout-minutes: 2
         run: |
-          # install-deps needs apt, so the mirror cannot be avoided here - but
-          # the failing one can. azure.archive.ubuntu.com intermittently
-          # blackholes; apt then spends minutes retrying before falling back to
-          # archive.ubuntu.com, which is what actually blows the step timeout.
-          # Point at the fallback up front. Best-effort: a runner image that
-          # stores sources differently is left as it was.
-          sudo sed -i 's|azure.archive.ubuntu.com|archive.ubuntu.com|g'             /etc/apt/sources.list /etc/apt/sources.list.d/*.list             /etc/apt/sources.list.d/*.sources 2>/dev/null || true
-          for attempt in 1 2; do
-            if npx playwright install-deps chromium; then
-              exit 0
-            fi
-            echo "install-deps attempt ${attempt} failed; retrying"
-            sleep 10
-          done
-          echo "::error::playwright install-deps failed twice"
-          exit 1
+          node <<'NODE'
+          const { chromium } = require("@playwright/test");
+
+          (async () => {
+            const browser = await chromium.launch({ headless: true });
+            try {
+              const page = await browser.newPage();
+              await page.setContent("<title>CaseOps CI browser check</title>");
+              if ((await page.title()) !== "CaseOps CI browser check") {
+                throw new Error("Playwright Chromium did not execute the smoke page");
+              }
+            } finally {
+              await browser.close();
+            }
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
 
       - name: Next build (reused by `next start` in playwright webServer)
         timeout-minutes: 15

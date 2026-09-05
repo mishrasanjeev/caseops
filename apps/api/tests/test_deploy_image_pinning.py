@@ -74,6 +74,22 @@ def test_api_ci_shards_disable_network_backed_ocr() -> None:
     assert "CASEOPS_OCR_PROVIDER: none" in shard_job
 
 
+def test_playwright_ci_verifies_chromium_without_apt_network_dependency() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(
+        encoding="utf-8"
+    )
+    e2e_job = workflow.split("  e2e:", maxsplit=1)[1].split(
+        "\n  deploy-staging:", maxsplit=1
+    )[0]
+
+    assert "npx playwright install chromium" in e2e_job
+    assert "Verify Playwright Chromium runtime" in e2e_job
+    assert 'chromium.launch({ headless: true })' in e2e_job
+    assert "npx playwright install-deps" not in e2e_job
+    assert "sudo apt-get" not in e2e_job
+    assert "/etc/apt/" not in e2e_job
+
+
 def test_production_deploy_converges_clamav_startup_probe() -> None:
     script = (REPO_ROOT / "scripts" / "deploy-prod.sh").read_text(encoding="utf-8")
 
