@@ -185,13 +185,15 @@ test("IPLF-063B production proves the exact UJ-18 release", async ({
   expect(contraryId, "production contrary fixture").toBeTruthy();
   expect(inaccessibleId, "production inaccessible fixture").toBeTruthy();
   const releaseKey = expectedSha.slice(0, 12).toLowerCase();
-  const matterCodePrefix = `IPLF-066B-${releaseKey.toUpperCase()}`;
+  const matterCodePrefix = "IPLF-063B-REVIEW";
   const docketTitle = `IPLF-063B exact-release review ${releaseKey}`;
 
   // IPLF-066B makes private source capture fail closed. A target created after
   // the release bootstrap is intentionally not current until the bounded
   // maintenance path materializes a new verified generation. UJ-18 acceptance
-  // therefore selects existing synthetic projections from the public,
+  // uses its persistent review Matter, never the destructive revocation
+  // canary retired by IPLF-066B. Both targets are projected by bootstrap.
+  // Select existing synthetic projections from the public,
   // authorization-filtered private search surface instead of racing that
   // independent maintenance boundary.
   const matterTarget = await currentPrivateTarget(

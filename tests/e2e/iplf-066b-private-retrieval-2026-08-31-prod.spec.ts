@@ -3,6 +3,10 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 
 import { expectStatus } from "./support/iplf058b";
+import {
+  selectPrivateReleaseFixture,
+  verifyRetainedPrivateRevocation,
+} from "./support/private-release-fixtures";
 
 const WEB = (process.env.PROD_BASE_URL ?? "https://caseops.ai").trim();
 const API = (process.env.PROD_API_BASE_URL ?? "https://api.caseops.ai").trim();
@@ -179,15 +183,17 @@ test("IPLF-066B production revokes private answers, citations and retrieval", as
     200,
     "find exact private retrieval fixture",
   );
-  const matching = (
-    (await mattersResponse.json()).matters as MatterRecord[]
-  ).filter(
-    (matter) =>
-      matter.matter_code === matterCodePrefix ||
-      matter.matter_code.startsWith(`${matterCodePrefix}-R`),
-  );
-  expect(matching).toHaveLength(1);
-  const matter = matching[0];
+  let candidates = (await mattersResponse.json()).matters as MatterRecord[];
+  if (candidates.length === 0) {
+    const retired = await page.request.get(`${API}/api/matters/`, {
+      headers,
+      params: { q: matterCodePrefix, status: "disposed", limit: 100 },
+    });
+    await expectStatus(retired, 200, "find retired exact-release fixture");
+    candidates = (await retired.json()).matters as MatterRecord[];
+    expect(candidates.length, "fixture scan must remain bounded").toBeLessThan(100);
+  }
+  const matter = selectPrivateReleaseFixture(candidates, matterCodePrefix);
   const fixtureKey = matter.matter_code
     .slice("IPLF-066B-".length)
     .toLowerCase();
@@ -224,6 +230,24 @@ test("IPLF-066B production revokes private answers, citations and retrieval", as
   const enabledPolicy: TenantPolicy = await enabledResponse.json();
   cleanupState = { headers, matter, originalPolicy, enabledPolicy };
 
+  await page.goto(WEB);
+  await page.evaluate(
+    (context) => window.localStorage.setItem("caseops.session.context", JSON.stringify(context)),
+    {
+      company: identity.company,
+      user: identity.user,
+      membership: identity.membership,
+      capabilities: identity.capabilities,
+    },
+  );
+  if (matter.status === "disposed") {
+    await verifyRetainedPrivateRevocation(page, {
+      api: API, web: WEB, headers, matter, filename, evidenceToken,
+    });
+    console.log("[IPLF-066B] verified retained revocation without reopening the terminal fixture.");
+    return;
+  }
+
   const before = await page.request.post(
     `${API}/api/private-retrieval/search`,
     {
@@ -246,20 +270,6 @@ test("IPLF-066B production revokes private answers, citations and retrieval", as
   expect(beforeItems[0].label).toBe(filename);
   expect(beforeItems[0].content).toContain(evidenceToken);
 
-  await page.goto(WEB);
-  await page.evaluate(
-    (context) =>
-      window.localStorage.setItem(
-        "caseops.session.context",
-        JSON.stringify(context),
-      ),
-    {
-      company: identity.company,
-      user: identity.user,
-      membership: identity.membership,
-      capabilities: identity.capabilities,
-    },
-  );
   await page.goto(`${WEB}/app/assistant`);
   await page
     .getByRole("textbox", { name: "Find workspace records" })
@@ -282,7 +292,7 @@ test("IPLF-066B production revokes private answers, citations and retrieval", as
   await disposeFixture(page.request, cleanupState);
   await page.reload();
   await page
-    .getByRole("button", { name: new RegExp(`Ask.*${releaseKey}`, "i") })
+    .getByRole("button", { name: `Ask \u00b7 ${filename}`, exact: true })
     .click();
   await expect(page.getByTestId("assistant-turns")).toContainText(
     "This answer is hidden because access to one or more cited workspace records changed.",
