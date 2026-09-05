@@ -1072,12 +1072,13 @@ Release gates:
   tests passed; five provider/release-gated tests intentionally skipped; the
   complete API inventory passed 3,923 tests across 13 disjoint file shards
   with 147 explicit environment-gated skips, and 824 web unit tests passed);
-- [ ] exact-main CI and security checks green;
-- [ ] migration applies to production and both named companies have two active
+- [x] exact-main CI and security checks green (CI `33932463982`, Security
+  `33932463979`, CodeQL `33932463969` on merge `c0d3874e`);
+- [x] migration applies to production and both named companies have two active
   unlimited policy rows;
-- [ ] exact serving API/web revision and production nonbillable Playwright
+- [x] exact serving API/web revision and production nonbillable Playwright
   proof, with spend unchanged before and after negative provider calls;
-- [ ] persisted lifecycle/audit inspection confirms whether the reported reopen
+- [x] persisted lifecycle/audit inspection confirms whether the reported reopen
   was an explicit audited transition or an unauthorized writer; and
 - [ ] final bug workbook records item verdicts and residual limitations.
 
@@ -1091,6 +1092,17 @@ captured active generation, preserves a set-based all-generation tenant
 disposition, fences shadows by epoch, and reconciles ambiguous committed
 mutation responses without replay. The unchecked gates above apply to that
 follow-up candidate and must not inherit the earlier candidate's evidence.
+
+The follow-up merged through PR #454 as `c0d3874e`. Fresh exact-main CI,
+Security, and CodeQL passed. The canonical deployment routed API revision
+`caseops-api-00442-n4p` and web revision `caseops-web-00419-r76`; exact-release
+production workflow `33934998564` passed 110 browser journeys plus its cost and
+notice gates. A separate no-paid-provider production run proved both
+provider-specific and shared-account spend unchanged. Read-only production
+audit execution `caseops-provider-policy-audit-c0d3874-qs5mf` proved the four
+named unlimited rows and was removed. Private-projection execution `hjblt`
+repaired the alerted tenant, while `n8chm`, `j2q6v`, and `nc7fr` proved clean
+steady state with no blockers, no pending or failed events, and no rebuild.
 
 Honest residual scope:
 

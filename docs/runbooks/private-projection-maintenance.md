@@ -51,10 +51,10 @@ inventory remains `ENABLED`. Resume the canonical cadence manually only after th
 exact release, production browser and controlled maintenance proofs are clean.
 
 ```bash
-python scripts/scheduler_inventory.py inspect-live \
+python scripts/scheduler_inventory.py verify \
   --project perfect-period-305406 \
   --region asia-south1 \
-  --expected-image "${API_IMMUTABLE_IMAGE}"
+  --image "${API_IMMUTABLE_IMAGE}"
 ```
 
 ## Alert Meaning

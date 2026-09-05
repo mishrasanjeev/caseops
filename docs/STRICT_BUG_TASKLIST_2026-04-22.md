@@ -1124,11 +1124,11 @@ not be used as the issue count.
 
 | ID | Classification | Current verdict | Candidate correction |
 | --- | --- | --- | --- |
-| BUG-007 | Valid paid-provider access/accounting bug | `Inconclusive` pending deployed exact-release proof | eCourts human search, refresh, scheduled refresh, and source download use tenant/provider budget reservations and provider-keyed billing. The explicit automation marker blocks paid transport without using the tenant slug. |
-| BUG-008 | Valid Bare Act detail/coverage bug | `Inconclusive` pending deployed exact-release proof | Act details list every catalogued section with source and honest verified/pending/quarantined/retired state. Unverified text remains excluded from legal selection and AI grounding. |
-| BUG-009 | Valid paid-provider access/accounting bug | `Inconclusive` pending deployed exact-release proof | Licensed Indian Kanoon human retrieval uses the same account budget and billing report; automation reads readiness/balance only and cannot spend. |
+| BUG-007 | Valid paid-provider access/accounting bug | `Properly fixed` | eCourts human search, refresh, scheduled refresh, and source download use tenant/provider budget reservations and provider-keyed billing. Exact-release production proved readiness, the explicit automation boundary, provider contribution versus shared-account spend, and unchanged spend after blocked automation calls. |
+| BUG-008 | Valid Bare Act detail/coverage bug | `Partially fixed` | Every catalogued section now opens a truthful detail and Act-source surface, and verified provisions remain selectable. Exact official section text is still unavailable for unverified catalog rows; completing that governed source-verification data is not honestly a closed content-completeness claim. |
+| BUG-009 | Valid paid-provider access/accounting bug | `Properly fixed` | Licensed Indian Kanoon human retrieval uses the same shared account budget and billing report. Exact-release production proved provider readiness and balance reads without an external probe, blocked automation transport, and unchanged provider and account spend. |
 | ENH-FORUM-2026-09-04 | Valid court hierarchy and bulk-upload enhancement | `Partially fixed` | Manual and bulk flows now share reviewed aliases and contextual ambiguity handling for the supplied Delhi examples. All-India reviewed alias completeness remains open and is not replaced by guessed parser mappings. |
-| ADJ-LIFECYCLE-2026-09-04 | Reported matter reopening risk | `Inconclusive` pending persisted production audit | Read serialization no longer mutates a legacy closed row while projecting `disposed`; only the lifecycle endpoint may persist a reopen. Production state and audit events decide whether the report was an explicit transition or an unauthorized writer. |
+| ADJ-LIFECYCLE-2026-09-04 | Reported matter reopening risk plus valid adjacent disposal defect | `Properly fixed; no unauthorized reopen reproduced` | Production persisted disposal/reopen state and audit events prove that only the lifecycle endpoint performs `Disposed -> Intake`. The real adjacent defect was a disposal rollback during concurrent failed-shadow cleanup; generation-scoped projection mutation and the PostgreSQL race regression now prevent it. |
 
 Required closure evidence:
 
@@ -1162,3 +1162,33 @@ Follow-up release evidence on 2026-09-05:
   skips, and all 824 web unit tests passed. Current exact-main CI,
   redeployment, production Playwright, and two quiescent private-projection
   maintenance cadences remain required.
+
+Final closure evidence on 2026-09-05:
+
+- PR #454 passed all required checks and merged as
+  `c0d3874e55ba00d35cf498f6eb9c9393f2e404b0`; fresh push CI run
+  `33932463982` completed with 19 successful jobs, while Security
+  `33932463979` and CodeQL `33932463969` also passed;
+- the canonical deploy built immutable API digest
+  `sha256:2d48717660938c7e7cf17e4ce093bde10f942a549a8564a461765a7fac9f8469`,
+  applied migration execution `caseops-migrate-job-5rbs6`, passed index-health
+  execution `caseops-db-index-health-npz9x`, and routed API revision
+  `caseops-api-00442-n4p` plus web revision `caseops-web-00419-r76` at 100%
+  latest-only traffic;
+- exact-release production workflow `33934998564` passed 110 canonical browser
+  journeys, the dedicated cost acceptance, and two notice journeys. It included
+  persisted lifecycle/audit reads, the Matter disposal path, statute trust,
+  provider readiness, and foreign-associate response reconciliation;
+- the separately opted-in no-paid-provider production spec passed against the
+  supplied test tenant. It compared provider contribution and shared-account
+  budget spend independently and proved both stayed unchanged after eCourts and
+  Indian Kanoon automation calls were rejected before transport;
+- read-only execution `caseops-provider-policy-audit-c0d3874-qs5mf` proved four
+  active unlimited rows: both providers for GBA Law Office and both providers
+  for Pinelabs Pvt. Ltd. The disposable audit job was deleted afterward; and
+- quiescent maintenance execution
+  `caseops-private-projection-maintenance-hjblt` rebuilt the alerted tenant with
+  zero blockers and `release_blocked=false`. Execution
+  `caseops-private-projection-maintenance-n8chm` and resumed scheduler executions
+  `j2q6v` and `nc7fr` were clean steady-state cadences with `rebuild_count=0`,
+  no pending or failed events, and `release_blocked=false` for all four tenants.

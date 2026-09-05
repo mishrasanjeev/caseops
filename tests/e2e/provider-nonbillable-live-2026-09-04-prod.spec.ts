@@ -66,6 +66,7 @@ async function signIn(page: Page): Promise<string> {
 type ProviderSpendRow = {
   provider_key: string;
   spent_minor: number;
+  budget_spent_minor: number;
   monthly_limit_minor: number | null;
   remaining_minor: number | null;
   unlimited: boolean;
@@ -146,7 +147,7 @@ test("automation checks readiness and budget balance without provider spend", as
       performs_external_probe: false,
       provider_prepaid_balance_checked: false,
       workspace_monthly_spend_minor:
-        beforeSpend.get("ecourtsindia")!.spent_minor,
+        beforeSpend.get("ecourtsindia")!.budget_spent_minor,
       workspace_monthly_limit_minor: 100_000,
       workspace_monthly_limit_unlimited: false,
       workspace_monthly_limit_currency: "INR",
@@ -166,7 +167,8 @@ test("automation checks readiness and budget balance without provider spend", as
       provider_prepaid_balance_checked: false,
       balance_source: "caseops_recorded_workspace_usage",
       currency: "INR",
-      monthly_spend_minor: beforeSpend.get("indian-kanoon")!.spent_minor,
+      monthly_spend_minor:
+        beforeSpend.get("indian-kanoon")!.budget_spent_minor,
       monthly_limit_minor: 100_000,
       monthly_limit_unlimited: false,
     }),
@@ -211,6 +213,9 @@ test("automation checks readiness and budget balance without provider spend", as
   for (const providerName of ["ecourtsindia", "indian-kanoon"]) {
     expect(afterSpend.get(providerName)?.spent_minor).toBe(
       beforeSpend.get(providerName)?.spent_minor,
+    );
+    expect(afterSpend.get(providerName)?.budget_spent_minor).toBe(
+      beforeSpend.get(providerName)?.budget_spent_minor,
     );
   }
 

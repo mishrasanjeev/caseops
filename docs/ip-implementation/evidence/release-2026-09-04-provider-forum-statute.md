@@ -132,6 +132,59 @@ catalog, or lifecycle writer.
   tests passed. CI, redeployment, production Playwright, and two quiescent
   maintenance cadences remain required.
 
+## Final exact-release closure
+
+- PR #454 passed the complete pull-request gate and merged as
+  `c0d3874e55ba00d35cf498f6eb9c9393f2e404b0`. Fresh push CI run
+  `33932463982` completed with 19 successful jobs; Security run `33932463979`
+  and CodeQL run `33932463969` passed on the same merge.
+- The canonical release built API digest
+  `sha256:2d48717660938c7e7cf17e4ce093bde10f942a549a8564a461765a7fac9f8469`
+  and web digest
+  `sha256:a07df7b319255e7f7710bf52f22e1a60dd08c7be57263d0b348a2f69ba2d6baa`.
+  Migration execution `caseops-migrate-job-5rbs6`, statute seed `qxnzj`, Indian
+  Kanoon cost seed `xxsqt`, and database-index execution
+  `caseops-db-index-health-npz9x` all completed before routing.
+- Production API revision `caseops-api-00442-n4p` and web revision
+  `caseops-web-00419-r76` served `c0d3874e` at 100% latest-only traffic with an
+  OK health response. Production QA bootstrap `caseops-ip-qa-bootstrap-pj2jk`
+  completed on the exact API image.
+- Exact-release workflow `33934998564` passed 110 canonical production browser
+  journeys in 21 minutes, one dedicated cost journey, and two notice journeys.
+  The run exercised persisted Matter lifecycle/audit state, disposal and
+  controlled reopen, statute trust, provider readiness, and foreign-associate
+  response reconciliation.
+- The separate opt-in no-paid-provider production spec passed against the
+  supplied test tenant. It found the account had INR 0.52 total shared-budget
+  spend, correctly distinguished that from each provider's contribution,
+  rejected both paid automation calls before transport, and proved provider
+  contribution plus shared-account spend remained unchanged.
+- Read-only execution `caseops-provider-policy-audit-c0d3874-qs5mf` asserted and
+  printed exactly four active `INR` unlimited policies with source
+  `user_authorized_named_exception_2026_09_04`: eCourts and Indian Kanoon for
+  GBA Law Office, and both providers for Pinelabs Pvt. Ltd. The disposable job
+  was deleted after evidence capture.
+- With the scheduler paused, maintenance execution
+  `caseops-private-projection-maintenance-hjblt` rebuilt tenants
+  `3af2e297-06cd-450d-bdc6-8ebc174b20a9` and the alerted
+  `6d610b43-83df-49b8-b73a-c0f181d034e6`; every tenant finished with zero
+  blockers and `release_blocked=false`. The required second execution `n8chm`
+  had `rebuild_count=0`. After scheduler resume, executions `j2q6v` and `nc7fr`
+  repeated the same clean no-rebuild state. Live scheduler inventory verified
+  against the exact immutable API digest.
+- The operator runbook's obsolete `inspect-live --expected-image` example was
+  corrected to the executable `verify --image` interface. The dedicated
+  provider test now asserts provider contribution and account-scope spend as
+  separate values, preventing the false failure discovered during this release.
+
+Final verdicts: BUG-007 and BUG-009 are properly fixed. BUG-008 is partially
+fixed because every catalogued section now opens a truthful detail/source
+surface, while unverified official section text remains a governed data gap.
+The forum enhancement remains partial until reviewed all-India alias coverage
+is complete. No unauthorized Matter reopen was reproduced; the adjacent real
+disposal-rollback race is fixed and covered by PostgreSQL plus production
+lifecycle regression.
+
 ## Required production assertions
 
 1. The Alembic chain has one head and applies `20260904_0001` followed by
