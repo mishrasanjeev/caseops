@@ -110,6 +110,27 @@ catalog, or lifecycle writer.
   production lifecycle evidence remain pending at this checkpoint. No
   `Properly fixed` verdict is derived from this file until those gates are
   appended.
+- Candidate `7734ec35` passed canonical CI, security, deployment, policy-row,
+  live human provider, and persisted lifecycle audits, but exact-release
+  production run `33923480806` remained red. It found one stale dated statute
+  assertion, one ambiguous foreign-associate response loss after the server had
+  committed HTTP 201, and one real Matter-disposal rollback caused by
+  `StaleDataError` during concurrent failed-shadow cleanup. This is a stop-ship
+  follow-up; earlier green evidence does not close the release.
+- The follow-up PostgreSQL regression deliberately reproduced the disposal race
+  with the old all-generations query (`expected to update 2 row(s); 1 were
+  matched`) and passed after event mutation was scoped to its captured active
+  generation. Separate tests retain tenant-wide all-generation disposition and
+  prove lost mutation responses are reconciled from one exact versioned event
+  without replay.
+- Full clean Docker validation passed on source fingerprint
+  `7711f0f2478379a69f0b48b0cbd3615bbe5bdcd9c23b5127ade88cae1ffca370`:
+  120 PostgreSQL/pgvector tests, 186 desktop Playwright tests, and four mobile
+  Playwright tests passed; five provider/release-gated tests were intentionally
+  skipped. The complete API inventory passed 3,923 tests across 13 disjoint
+  file shards with 147 explicit environment-gated skips, and all 824 web unit
+  tests passed. CI, redeployment, production Playwright, and two quiescent
+  maintenance cadences remain required.
 
 ## Required production assertions
 

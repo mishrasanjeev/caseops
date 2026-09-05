@@ -336,3 +336,15 @@ requirements when using the fallback.
   consistent. Project the response from an immutable payload, then diagnose any
   reported reopening from persisted status, lifecycle version, and audit events.
   Only the dedicated lifecycle command may persist a controlled reopen.
+- A private projection event may ORM-mutate only the active generation captured
+  on that event. Building and ready shadows are unreadable and must be fenced by
+  epoch advancement, not loaded into a lifecycle transaction where failed-shadow
+  cleanup can delete them and cause `StaleDataError`. Tenant-wide disposition is
+  the exception: neutralize every generation with a set-based update that tolerates
+  concurrent shadow deletion, then prove zero retained live content. Regress the
+  exact cleanup overlap on PostgreSQL and assert the lifecycle commit persists.
+- Never automatically retry a mutation after an ambiguous transport failure. Read
+  authoritative state and reconcile one exact versioned event, operation key, or
+  immutable result reference; continue only when that evidence proves the original
+  request committed exactly once. Otherwise fail visibly and require operator
+  reconciliation.

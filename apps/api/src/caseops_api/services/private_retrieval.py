@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
-from sqlalchemy import and_, delete, exists, func, not_, or_, select
+from sqlalchemy import and_, delete, exists, func, not_, or_, select, update
 from sqlalchemy.orm import Session
 
 from caseops_api.core.settings import Settings, get_settings
@@ -1971,6 +1971,7 @@ def _affected_projection_statement(event: PrivateProjectionEvent):
     target = True if event.target_type == "tenant" else or_(direct, scoped)
     return select(PrivateIndexProjection).where(
         PrivateIndexProjection.company_id == event.company_id,
+        PrivateIndexProjection.generation_id == event.generation_id,
         PrivateIndexProjection.is_tombstoned.is_(False),
         target,
     )
@@ -1987,17 +1988,48 @@ def apply_private_projection_event(session: Session, *, event_id: str) -> Privat
     if event.status == "applied":
         return event
     now = datetime.now(UTC)
-    affected = list(session.scalars(_affected_projection_statement(event)).all())
-    affected_sources = {(row.source_type, row.source_id) for row in affected}
-    for row in affected:
-        row.content_text = ""
-        row.embedding_json = None
-        row.embedding_dimensions = None
-        row.is_tombstoned = True
-        row.tombstoned_at = now
-        row.tombstone_reason = event.reason_code
-        row.tombstone_generation = event.tombstone_generation
-        row.updated_at = now
+    if event.target_type == "tenant":
+        # Tenant disposition must neutralize active, retired, and unreadable
+        # shadow generations. A set-based update tolerates a concurrent failed-
+        # shadow delete without retaining ORM instances that later go stale.
+        result = session.execute(
+            update(PrivateIndexProjection)
+            .where(
+                PrivateIndexProjection.company_id == event.company_id,
+                or_(
+                    PrivateIndexProjection.is_tombstoned.is_(False),
+                    PrivateIndexProjection.content_text != "",
+                    PrivateIndexProjection.embedding_json.is_not(None),
+                ),
+            )
+            .values(
+                content_text="",
+                embedding_json=None,
+                embedding_dimensions=None,
+                is_tombstoned=True,
+                tombstoned_at=now,
+                tombstone_reason=event.reason_code,
+                tombstone_generation=event.tombstone_generation,
+                updated_at=now,
+            )
+            .execution_options(synchronize_session="fetch")
+        )
+        affected: list[PrivateIndexProjection] = []
+        affected_sources: set[tuple[str, str]] = set()
+        affected_projection_count = max(int(result.rowcount or 0), 0)
+    else:
+        affected = list(session.scalars(_affected_projection_statement(event)).all())
+        affected_sources = {(row.source_type, row.source_id) for row in affected}
+        affected_projection_count = len(affected)
+        for row in affected:
+            row.content_text = ""
+            row.embedding_json = None
+            row.embedding_dimensions = None
+            row.is_tombstoned = True
+            row.tombstoned_at = now
+            row.tombstone_reason = event.reason_code
+            row.tombstone_generation = event.tombstone_generation
+            row.updated_at = now
 
     if event.event_type in {"source_changed", "reindex"} and not affected:
         # A newly created source has no old projection to tombstone. Explicitly
@@ -2082,7 +2114,7 @@ def apply_private_projection_event(session: Session, *, event_id: str) -> Privat
             generation.verified_projection_count = None
             generation.verification_sha256 = None
             generation.verified_at = None
-    event.affected_projection_count = len(affected)
+    event.affected_projection_count = affected_projection_count
     event.affected_saved_output_count = len(outputs)
     event.status = "applied"
     event.applied_at = now

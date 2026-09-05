@@ -1066,10 +1066,12 @@ Implemented candidate scope:
 Release gates:
 
 - [x] fresh local Docker migration, PostgreSQL index, API, web, and dated
-  Playwright suite on the integrated source tree (fingerprint
-  `63a3967318372e01a0266becbbfc7abcd5ab737cbe99bf584532475e2199d13c`;
-  119 PostgreSQL/pgvector, 185 desktop Playwright, and four mobile Playwright
-  tests passed; five provider/environment tests intentionally skipped);
+  Playwright suite on the follow-up integrated source tree (fingerprint
+  `7711f0f2478379a69f0b48b0cbd3615bbe5bdcd9c23b5127ade88cae1ffca370`;
+  120 PostgreSQL/pgvector, 186 desktop Playwright, and four mobile Playwright
+  tests passed; five provider/release-gated tests intentionally skipped; the
+  complete API inventory passed 3,923 tests across 13 disjoint file shards
+  with 147 explicit environment-gated skips, and 824 web unit tests passed);
 - [ ] exact-main CI and security checks green;
 - [ ] migration applies to production and both named companies have two active
   unlimited policy rows;
@@ -1078,6 +1080,17 @@ Release gates:
 - [ ] persisted lifecycle/audit inspection confirms whether the reported reopen
   was an explicit audited transition or an unauthorized writer; and
 - [ ] final bug workbook records item verdicts and residual limitations.
+
+The earlier deployed candidate `7734ec35` passed CI, security, migration,
+provider-policy, live-provider, and persisted lifecycle audits, but did not
+close the release because exact-release production workflow `33923480806`
+failed. Its real Matter-disposal failure was a concurrent failed-shadow cleanup
+race that rolled the lifecycle transaction back with SQLAlchemy
+`StaleDataError`. The 2026-09-05 follow-up scopes ordinary event mutation to the
+captured active generation, preserves a set-based all-generation tenant
+disposition, fences shadows by epoch, and reconciles ambiguous committed
+mutation responses without replay. The unchecked gates above apply to that
+follow-up candidate and must not inherit the earlier candidate's evidence.
 
 Honest residual scope:
 

@@ -1139,3 +1139,26 @@ Required closure evidence:
 - production verification of both named companies' two active unlimited policy
   rows; and
 - persisted lifecycle state plus audit evidence, not inference from UI labels.
+
+Follow-up release evidence on 2026-09-05:
+
+- deployed candidate `7734ec35` passed canonical CI, security, provider-policy,
+  live-provider, and persisted lifecycle audits, but exact-release production
+  workflow `33923480806` remained red and therefore did not close these rows;
+- the production Matter-disposal 500 was a valid adjacent defect: concurrent
+  failed-shadow cleanup deleted a shadow projection already loaded by the
+  lifecycle ORM session, and the resulting `StaleDataError` rolled back the
+  authoritative disposal;
+- the correction limits ordinary event mutation to the event's captured active
+  generation, retains all-generation tenant disposition as a set-based wipe,
+  fences shadows by epoch, and reconciles ambiguous mutation response loss
+  without replay; and
+- clean local Docker validation passed on source fingerprint
+  `7711f0f2478379a69f0b48b0cbd3615bbe5bdcd9c23b5127ade88cae1ffca370`:
+  120 PostgreSQL/pgvector tests, 186 desktop Playwright tests, and four mobile
+  Playwright tests passed; five provider/release-gated tests were intentionally
+  skipped. The complete network-independent API inventory also passed 3,923
+  tests across 13 disjoint file shards with 147 explicit environment-gated
+  skips, and all 824 web unit tests passed. Current exact-main CI,
+  redeployment, production Playwright, and two quiescent private-projection
+  maintenance cadences remain required.
