@@ -6,6 +6,7 @@ import { expect, test } from "@playwright/test";
 
 import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
 import { expectStatus } from "./support/iplf058b";
+import { verifyRetainedPrivateRevocation } from "./support/private-release-fixtures";
 
 function pythonExecutable(): string {
   return process.env.CASEOPS_E2E_PYTHON?.trim() ||
@@ -157,6 +158,26 @@ test("IPLF-UJ-66 revocation hides indexed document answers, citations, cache and
   );
   await expect(page.locator('[data-turn-role="assistant"]').last()).not.toContainText(secret);
   await expect(page.getByRole("link", { name: "066B evidence.txt" })).toHaveCount(0);
+
+  const currentResponse = await page.request.get(`${apiBaseUrl}/api/matters/${matterRecord.id}`, { headers });
+  await expectStatus(currentResponse, 200, "read lifecycle before recurring proof");
+  const current = await currentResponse.json();
+  const disposedResponse = await page.request.patch(`${apiBaseUrl}/api/matters/${matterRecord.id}/lifecycle/status`, {
+    headers,
+    data: {
+      to_status: "disposed", expected_from_status: current.status,
+      expected_updated_at: current.updated_at, reason: "Exercise repeated retained private revocation.",
+    },
+  });
+  await expectStatus(disposedResponse, 200, "dispose local recurring fixture");
+  const disposed = await disposedResponse.json();
+  for (let run = 0; run < 2; run += 1) {
+    await verifyRetainedPrivateRevocation(page, {
+      api: apiBaseUrl, web: new URL(page.url()).origin, headers,
+      matter: disposed, filename: "066B evidence.txt", evidenceToken: secret,
+    });
+  }
+  await page.getByRole("button", { name: /Ask \u00b7 066B evidence\.txt/ }).click();
 
   await page
     .getByRole("textbox", { name: "Ask this workspace" })

@@ -1114,6 +1114,24 @@ now annotated as superseded in place. Two structural guards close the class:
 
 ## CaseOps BUG-007..009 - Ram 2026-09-04 providers and Bare Acts
 
+### Recurring verification follow-up on 2026-09-05
+
+Scheduled production run `33941782162` passed 108 tests but failed two private
+QA journeys after the first release run had correctly disposed their shared
+canary. This is a valid verification-lifecycle defect. The follow-up uses the
+persistent Intelligent Review target and adds affirmative retained-revocation
+proof for later runs. The initial release still exercises the complete private
+answer-and-dispose workflow. Clean Docker fingerprint
+`22566e7821eeecfa6cefef122a3ec2399999fca5abaf8b838329cdbcd6295441`
+passed 120 PostgreSQL tests, 188 desktop journeys and four mobile journeys,
+with five explicit provider/release skips. Retained revocation ran twice through
+the real local endpoints. Both repaired production journeys then passed against
+serving release `c0d3874e55ba00d35cf498f6eb9c9393f2e404b0`, without reopening
+the terminal fixture. All 11 browser-workflow contract tests also passed.
+This evidence-only addition changes no tested runtime or browser input.
+Verdict remains `Inconclusive` until final PR/main CI and exact-release first-run
+plus repeated-run deployment proof pass; the final release record must name both.
+
 Source workbook: `C:\Users\mishr\Downloads\CaseOps_Bugs_Ram04Sep2026.xlsx`.
 Enhancement source:
 `C:\Users\mishr\Downloads\CaseOps_AI_Bulk_Upload04_Sep2026.docx`.

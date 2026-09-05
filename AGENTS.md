@@ -1,5 +1,12 @@
 # CaseOps agent instructions
 
+- Recurring production verification must survive its own destructive canary.
+  Keep Intelligent Review on its persistent projected QA target. A first
+  release run proves private answer creation and disposal; later runs must
+  prove retained answers, exports, citations, actions, search, autocomplete,
+  counts and scope discovery remain revoked, without reopening the fixture.
+  Missing retained evidence is a failure, never a skip or empty success.
+
 ## User-approved spreadsheet fallback
 
 For standalone spreadsheet creation or editing in this repository, prefer the
