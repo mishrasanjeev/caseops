@@ -2,9 +2,8 @@ import { expect, request, test, type APIRequestContext, type APIResponse, type P
 
 import { apiBaseUrl } from "./support/env";
 
-const WEB_BASE_URL = process.env.CASEOPS_WEB_BASE_URL?.trim() || "http://127.0.0.1:3000";
 const COMPANY_SLUG = "platform-admin-e2e";
-const OWNER_EMAIL = "platform-admin@caseops-e2e.test";
+const OWNER_EMAIL = "platform-admin-e2e@example.com";
 const OWNER_PASSWORD = "PlatformAdminE2E!";
 const RUN_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 
@@ -26,7 +25,11 @@ let api: APIRequestContext;
 let token = "";
 let createdAlias: AliasRecord | null = null;
 
-async function expectStatus(response: APIResponse, expected: number, label: string) {
+async function expectStatus(
+  response: Pick<APIResponse, "status" | "text">,
+  expected: number,
+  label: string,
+) {
   if (response.status() !== expected) {
     throw new Error(
       `${label}: expected ${expected}, received ${response.status()} ${(await response.text()).slice(0, 500)}`,
@@ -60,19 +63,23 @@ async function bootstrapOrLogin(): Promise<string> {
   return ((await login.json()) as { access_token: string }).access_token;
 }
 
-async function signIn(page: Page): Promise<void> {
-  await page.goto(`${WEB_BASE_URL}/sign-in`);
-  await page.locator("#company-slug").fill(COMPANY_SLUG);
-  await page.locator("#email").fill(OWNER_EMAIL);
+async function signIn(page: Page, slug = COMPANY_SLUG, email = OWNER_EMAIL): Promise<void> {
+  await page.goto("/sign-in");
+  await page.locator("#company-slug").fill(slug);
+  await page.locator("#email").fill(email);
   await page.locator("#password").fill(OWNER_PASSWORD);
   await page.getByRole("button", { name: /^Sign in$/ }).click();
   await page.waitForURL(/\/app(?:[/?]|$)/);
 }
 
-test.describe.serial("2026-09-04 governed forum alias registry", () => {
+test.describe("2026-09-04 governed forum alias registry", () => {
   test.setTimeout(180_000);
 
   test.beforeAll(async () => {
+    // This test creates synthetic shared-catalog data, never production law data.
+    for (const url of [apiBaseUrl, String(test.info().project.use.baseURL)]) {
+      expect(new URL(url).hostname).toMatch(/^(127\.0\.0\.1|localhost)$/);
+    }
     api = await request.newContext({
       extraHTTPHeaders: { "X-CaseOps-Automated-Test": "no-paid-providers" },
     });
@@ -81,7 +88,7 @@ test.describe.serial("2026-09-04 governed forum alias registry", () => {
 
   test.afterAll(async () => {
     if (createdAlias?.is_active) {
-      await api.patch(`${apiBaseUrl}/api/platform-admin/forum-aliases/${createdAlias.id}`, {
+      const response = await api.patch(`${apiBaseUrl}/api/platform-admin/forum-aliases/${createdAlias.id}`, {
         headers: { Authorization: `Bearer ${token}` },
         data: {
           is_active: false,
@@ -89,11 +96,12 @@ test.describe.serial("2026-09-04 governed forum alias registry", () => {
           reason: "Clean up the dated Playwright forum alias fixture.",
         },
       });
+      await expectStatus(response, 200, "deactivate leftover local alias");
     }
-    await api.dispose();
+    await api?.dispose();
   });
 
-  test("creates, resolves, audits, and deactivates a source-backed alias", async ({ page }) => {
+  test("creates, resolves, deactivates, and reloads a source-backed alias at desktop and mobile widths", async ({ page }) => {
     const headers = { Authorization: `Bearer ${token}` };
     const catalogResponse = await api.get(`${apiBaseUrl}/api/courts/forum-catalog`, {
       headers,
@@ -105,10 +113,10 @@ test.describe.serial("2026-09-04 governed forum alias registry", () => {
     const alias = `E2E registry label ${RUN_ID}`;
 
     await signIn(page);
-    await page.goto(`${WEB_BASE_URL}/app/platform-admin/forum-aliases`);
+    await page.goto("/app/platform-admin/forum-aliases");
     await expect(page.getByRole("heading", { name: "Forum aliases" })).toBeVisible();
     await page.getByLabel("Find canonical forum").fill(entry!.name);
-    await page.getByLabel("Canonical forum").selectOption(entry!.id);
+    await page.getByLabel("Canonical forum", { exact: true }).selectOption(entry!.id);
     await page.getByLabel("Alias", { exact: true }).fill(alias);
     await page.getByLabel("Alias type").selectOption("provider_label");
     await page.getByLabel("Verification", { exact: true }).selectOption("verified");
@@ -141,6 +149,9 @@ test.describe.serial("2026-09-04 governed forum alias registry", () => {
     await expectStatus(resolved, 200, "resolve newly curated alias");
     expect((await resolved.json()).resolved_entry.id).toBe(entry!.id);
 
+    await page.setViewportSize({ width: 360, height: 800 });
+    await expect(page.getByLabel("Find canonical forum")).toBeVisible();
+    expect((await page.getByLabel("Find canonical forum").boundingBox())!.width).toBeGreaterThan(160);
     await row.getByRole("button", { name: "Edit" }).click();
     await page.getByLabel("Active registry row").uncheck();
     await page
@@ -155,8 +166,10 @@ test.describe.serial("2026-09-04 governed forum alias registry", () => {
     await page.getByRole("button", { name: "Save alias" }).click();
     const updatedResponse = await updateResponse;
     await expectStatus(updatedResponse, 200, "deactivate forum alias through UI");
+    const previousVersion = createdAlias.record_version;
     createdAlias = (await updatedResponse.json()) as AliasRecord;
     expect(createdAlias.is_active).toBe(false);
+    expect(createdAlias.record_version).toBe(previousVersion + 1);
 
     const unresolved = await api.get(`${apiBaseUrl}/api/courts/forum-catalog/resolve`, {
       headers,
@@ -164,5 +177,57 @@ test.describe.serial("2026-09-04 governed forum alias registry", () => {
     });
     await expectStatus(unresolved, 200, "deactivated alias resolution");
     expect((await unresolved.json()).status).toBe("not_found");
+    await page.reload();
+    await expect(page.getByTestId(`forum-alias-row-${createdAlias.id}`)).toContainText("inactive");
+    for (const viewportWidth of [360, 767, 768, 769, 1024, 1280]) {
+      await page.setViewportSize({ width: viewportWidth, height: 800 });
+      const layout = await page.evaluate(() => {
+        const width = document.documentElement.clientWidth;
+        const overflowing = Array.from(document.querySelectorAll("body *"))
+          .filter((element) => {
+            const rect = element.getBoundingClientRect();
+            return rect.right > width + 1 && rect.width > 0;
+          })
+          .slice(0, 20)
+          .map((element) => ({
+            tag: element.tagName,
+            className: element.className,
+            right: element.getBoundingClientRect().right,
+            text: element.textContent?.slice(0, 100),
+          }));
+        return { width, scrollWidth: document.documentElement.scrollWidth, overflowing };
+      });
+      expect(layout.scrollWidth, JSON.stringify(layout)).toBeLessThanOrEqual(layout.width + 1);
+      const search = page.getByLabel("Find canonical forum");
+      await expect(search).toBeVisible();
+      expect((await search.boundingBox())!.width).toBeGreaterThan(160);
+    }
+  });
+
+  test("denies ordinary tenant owners global catalog administration through API and mobile UI", async ({ page }) => {
+    const slug = `forum-ordinary-${RUN_ID}`;
+    const email = `forum-${RUN_ID}@example.com`;
+    const bootstrap = await api.post(`${apiBaseUrl}/api/bootstrap/company`, {
+      data: {
+        company_name: "Local forum permission fixture",
+        company_slug: slug,
+        company_type: "law_firm",
+        owner_full_name: "Ordinary Tenant Owner",
+        owner_email: email,
+        owner_password: OWNER_PASSWORD,
+      },
+    });
+    await expectStatus(bootstrap, 200, "ordinary tenant bootstrap");
+    const ordinaryToken = ((await bootstrap.json()) as { access_token: string }).access_token;
+    const denied = await api.get(`${apiBaseUrl}/api/platform-admin/forum-aliases`, {
+      headers: { Authorization: `Bearer ${ordinaryToken}` },
+    });
+    await expectStatus(denied, 403, "ordinary tenant catalog administration");
+    await page.setViewportSize({ width: 360, height: 800 });
+    await signIn(page, slug, email);
+    await page.goto("/app/platform-admin/forum-aliases");
+    await expect(page.getByText("Catalog curator access required", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Add alias" })).toHaveCount(0);
+    await expect(page.getByLabel("Canonical forum", { exact: true })).toHaveCount(0);
   });
 });

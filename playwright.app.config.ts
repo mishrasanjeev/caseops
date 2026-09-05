@@ -43,6 +43,7 @@ export default defineConfig({
     /all-modules-regression\.spec\.ts/,
     /research\.spec\.ts/,
     /provider-spend-forum-statute-2026-09-04\.spec\.ts/,
+    /forum-alias-admin-2026-09-04\.spec\.ts/,
     /billing-payment\.spec\.ts/,
     /hari-ii-bugs\.spec\.ts/,
     // Dated tester batches must be discovered automatically. Manual entries

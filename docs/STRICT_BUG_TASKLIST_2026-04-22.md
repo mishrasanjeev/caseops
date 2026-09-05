@@ -1114,6 +1114,39 @@ now annotated as superseded in place. Two structural guards close the class:
 
 ## CaseOps BUG-007..009 - Ram 2026-09-04 providers and Bare Acts
 
+### Alias administration discovery follow-up on 2026-09-05
+
+The final evidence audit found that the committed forum-alias administration
+spec was absent from the app config inherited by Docker acceptance. Earlier
+green runs prove ordinary alias resolution, not administration CRUD. Explicit
+discovery exposed an invalid reserved-domain fixture email before the browser
+could reach the feature. The correction aligns the host and isolated Docker
+founder identity, uses the configured browser base URL, and adds mobile
+deactivation/reload plus ordinary-owner API/UI denial. A contract regression
+protects discovery and Docker fixture propagation. Synthetic global catalog
+writes are loopback-only; production must not acquire invented legal aliases
+for test convenience. Existing API coverage independently checks audit events.
+Verdict: `Inconclusive` until the corrected dated test and complete clean Docker
+inventory pass. Final release evidence must distinguish local admin CRUD from
+production resolution using existing reviewed catalog data.
+
+The executed journey also found a real mobile overflow: an absolute accessible
+Actions heading escaped its table's clipping ancestor (914 px document width
+at a 360 px viewport). Positioning the scroller restored 360 px in a direct
+Docker browser experiment. The permanent regression preserves the column's
+accessible name and checks six viewport/breakpoint widths. This layout fix
+remains below production closure until the exact release is verified.
+
+Final local acceptance passed at fingerprint
+`f80dc83d2c7d031ba73c91abf6356eaea01121b95806fe88ecf7f7929dff1256`:
+120 PostgreSQL tests, 190 desktop journeys, four mobile journeys, 825 web unit
+tests, and 67 deployment contracts. Five explicit local provider/release skips
+are excluded from pass counts. Both alias-admin journeys passed, including all
+six viewport widths. This append is documentation only. Production curator
+CRUD is not inferred from local synthetic aliases or ordinary production
+resolution; exact-main CI, deployment and production verification still gate
+the final release.
+
 ### Recurring verification follow-up on 2026-09-05
 
 Scheduled production run `33941782162` passed 108 tests but failed two private

@@ -41,7 +41,7 @@ export const e2eEnv: Record<string, string> = {
   CASEOPS_DOCUMENT_STORAGE_PATH: toPosixPath(documentStoragePath),
   CASEOPS_DOCUMENT_STORAGE_CACHE_PATH: toPosixPath(documentCachePath),
   CASEOPS_AUTH_RATE_LIMIT_ENABLED: "false",
-  CASEOPS_PLATFORM_SUPER_ADMIN_EMAIL: "platform-admin@caseops-e2e.test",
+  CASEOPS_PLATFORM_SUPER_ADMIN_EMAIL: "platform-admin-e2e@example.com",
   CASEOPS_CASE_TRACKING_ENABLED: "true",
   // Synthetic E2E companies receive an explicit fixture entitlement in the
   // dated IP suite. Keep the independent rollout dimension explicit too;
