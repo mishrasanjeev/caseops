@@ -1,5 +1,8 @@
 from pathlib import Path
 
+import pytest
+import yaml
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -39,9 +42,7 @@ def test_api_image_preloads_production_embedding_tokenizer() -> None:
 def test_api_image_forces_runtime_model_resolution_offline_after_preloads() -> None:
     dockerfile = (REPO_ROOT / "apps" / "api" / "Dockerfile").read_text(encoding="utf-8")
 
-    tokenizer_preload = dockerfile.index(
-        "Tokenizer.from_pretrained('voyageai/voyage-4-large')"
-    )
+    tokenizer_preload = dockerfile.index("Tokenizer.from_pretrained('voyageai/voyage-4-large')")
     reranker_preload = dockerfile.index(
         "TextCrossEncoder(model_name='jinaai/jina-reranker-v1-tiny-en')"
     )
@@ -53,9 +54,7 @@ def test_api_image_forces_runtime_model_resolution_offline_after_preloads() -> N
 
 
 def test_api_image_uses_baked_tesseract_without_runtime_model_downloads() -> None:
-    dockerfile = (REPO_ROOT / "apps" / "api" / "Dockerfile").read_text(
-        encoding="utf-8"
-    )
+    dockerfile = (REPO_ROOT / "apps" / "api" / "Dockerfile").read_text(encoding="utf-8")
 
     tesseract_install = dockerfile.index("tesseract-ocr")
     provider_default = dockerfile.index("CASEOPS_OCR_PROVIDER=tesseract")
@@ -64,30 +63,40 @@ def test_api_image_uses_baked_tesseract_without_runtime_model_downloads() -> Non
 
 
 def test_api_ci_shards_disable_network_backed_ocr() -> None:
-    workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(
-        encoding="utf-8"
-    )
-    shard_job = workflow.split("  api-test-shards:", maxsplit=1)[1].split(
-        "\n  api:", maxsplit=1
-    )[0]
+    workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    shard_job = workflow.split("  api-test-shards:", maxsplit=1)[1].split("\n  api:", maxsplit=1)[0]
 
     assert "CASEOPS_OCR_PROVIDER: none" in shard_job
 
 
-def test_playwright_ci_verifies_chromium_without_apt_network_dependency() -> None:
-    workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(
-        encoding="utf-8"
-    )
-    e2e_job = workflow.split("  e2e:", maxsplit=1)[1].split(
-        "\n  deploy-staging:", maxsplit=1
-    )[0]
+@pytest.mark.parametrize(
+    ("workflow_name", "job_name"),
+    [
+        ("ci.yml", "e2e"),
+        ("prod-verify.yml", "prod-playwright"),
+        ("release-verify.yml", "release-playwright"),
+    ],
+)
+def test_playwright_ci_verifies_chromium_without_apt_network_dependency(
+    workflow_name: str, job_name: str
+) -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / workflow_name).read_text(encoding="utf-8")
+    steps = yaml.safe_load(workflow)["jobs"][job_name]["steps"]
+    commands = "\n".join(str(step.get("run", "")) for step in steps)
+    install = next(step for step in steps if step.get("run") == "npx playwright install chromium")
+    smoke = next(step for step in steps if step.get("name") == "Verify Playwright Chromium runtime")
 
-    assert "npx playwright install chromium" in e2e_job
-    assert "Verify Playwright Chromium runtime" in e2e_job
-    assert 'chromium.launch({ headless: true })' in e2e_job
-    assert "npx playwright install-deps" not in e2e_job
-    assert "sudo apt-get" not in e2e_job
-    assert "/etc/apt/" not in e2e_job
+    assert install["timeout-minutes"] <= 5
+    assert smoke["timeout-minutes"] <= 2
+    assert steps.index(install) < steps.index(smoke)
+    assert "chromium.launch({ headless: true })" in smoke["run"]
+    assert "await page.title()" in smoke["run"]
+    assert "await browser.close()" in smoke["run"]
+    assert "process.exit(1)" in smoke["run"]
+    assert "install-deps" not in commands
+    assert "--with-deps" not in commands
+    assert "apt-get" not in commands
+    assert "/etc/apt/" not in commands
 
 
 def test_production_deploy_converges_clamav_startup_probe() -> None:

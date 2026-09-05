@@ -187,6 +187,14 @@ lifecycle regression.
 
 ## Required production assertions
 
+The follow-up CI timeout repair covers all three GitHub-hosted browser jobs:
+app CI, production verification, and release verification. Browser download has
+a five-minute bound, followed by a two-minute real Chromium launch/content
+check. Optional apt font downloads no longer precede those tests. A shared
+parameterized workflow regression checks all three paths. PR CI run
+`33940135057` proved the new runtime check completed in two seconds before
+the app suite started. The superseding PR and main runs must also pass.
+
 1. The Alembic chain has one head and applies `20260904_0001` followed by
    `20260904_0002` on PostgreSQL.
 2. Both named existing companies resolve to two active unlimited provider
