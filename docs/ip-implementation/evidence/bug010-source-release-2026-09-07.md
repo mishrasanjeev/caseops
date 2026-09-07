@@ -2,8 +2,9 @@
 
 Current checkpoint, 2026-09-08 IST: **NO-GO** until final PR/main CI and
 exact-production acceptance finish. Complete rebuilt local acceptance passes. PR
-#458 contains the earlier locally validated work; its review follow-up is not
-yet committed. Production remains unchanged. The current runtime is
+#458 contains the locally validated terminal replay fix in `88146527`; its
+CI-launcher follow-up has separate local proof. Production remains unchanged.
+The current runtime is
 `19a33de2b82f6253d42ba6ba5a7ae63dcf6a5d6e`, an explicitly pre-commit source
 fingerprint, not a released Git SHA. See the post-review evidence below.
 
@@ -256,6 +257,23 @@ every provision for current applicability.
 ## Remaining Release Gates
 
 ### September 08 Post-Review Local Evidence
+
+The published `88146527` CI run (`34158541486`) exposed a launcher-only
+regression in all four PostgreSQL shards. Every job log independently shows
+`No module named 'tests'` before collection; the aggregate correctly refused
+missing artifacts. CI used the `pytest` console script, while Docker used
+`python -m pytest`; early `-p` plugin imports occur before ordinary root-path
+setup. No database test ran in those failed jobs. The CI command now matches
+Docker's module entry point. A new subprocess regression reads the workflow's
+actual command/options, removes inherited PYTHONPATH and runs all four shards
+in an isolated package, then reconciles the reports and excludes an unmarked
+failure sentinel. It reproduced the import error in
+`api-full-bug010-ci-launcher-repro.xml`; both complete shard/deploy modules pass
+all 87 tests in `api-full-bug010-ci-launcher-fixed.xml` (25.77 seconds).
+This single new test supplements the 4,367-node full API snapshot; 86 overlaps
+are not added twice. Application, seed and dependency bytes are unchanged.
+The committed `88146527` contract replay also passed every gate, recorded in
+`bug010-terminal-contracts-committed.log`. Fresh CI is still required.
 
 The P1 review on PR #458 correctly identified creation replays that returned
 historical patent records before checking whether the original mutation target

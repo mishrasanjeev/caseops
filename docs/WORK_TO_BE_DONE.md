@@ -13,7 +13,8 @@ Complete API coverage passes 4,173 tests and all thresholds. Every one of its
 194 skipped identities has an exact passing supplement. All 23 production-shaped
 patent/domain journeys and all 43 source-data batches also pass locally.
 Final PR/main CI and exact-production acceptance remain separate pending gates;
-production is unchanged and the terminal replay follow-up is not yet committed.
+production is unchanged. The terminal replay fix is published in PR #458;
+its later CI-launcher guard passes separately without changing application bytes.
 See `ip-implementation/evidence/bug010-source-release-2026-09-07.md` for the
 authoritative scoped checkpoint and retained failures. Older dated statuses
 below are historical, not the result of this candidate. Wider catalog coverage

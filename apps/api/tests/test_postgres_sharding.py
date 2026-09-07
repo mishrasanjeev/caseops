@@ -1,11 +1,55 @@
 from __future__ import annotations
 
 import json
+import os
+import shlex
+import shutil
+import subprocess
+import sys
+from pathlib import Path
 from xml.etree import ElementTree
 
 import pytest
+import yaml
 
 from tests.postgres_sharding import _junit_identity, partition, verify_reports
+
+
+def test_ci_postgres_launcher_collects_and_executes_without_inherited_pythonpath(tmp_path):
+    root = Path(__file__).resolve().parents[3]
+    workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["postgres-validation-shards"]["steps"]
+    step = next(item for item in steps if item.get("name") == "Pytest -m postgres")
+    command = shlex.split(step["run"])
+    assert command[:2] == ["uv", "run"]
+    command = command[2:]
+    command[0] = sys.executable if command[0] == "python" else shutil.which(command[0])
+    assert command[0], "The workflow's Python entry point must be installed"
+    tests = tmp_path / "tests"
+    tests.mkdir()
+    (tests / "__init__.py").write_text("")
+    shutil.copyfile(
+        Path(__file__).with_name("postgres_sharding.py"), tests / "postgres_sharding.py"
+    )
+    (tests / "test_sample.py").write_text(
+        "import pytest\n@pytest.mark.postgres\n@pytest.mark.parametrize('item', range(8))\n"
+        "def test_marked(item):\n    assert item >= 0\n"
+        "def test_unmarked():\n    raise AssertionError('Non-PostgreSQL test selected')\n"
+    )
+    (tmp_path / "pytest.ini").write_text("[pytest]\nmarkers = postgres: PostgreSQL acceptance\n")
+    environment = {key: value for key, value in os.environ.items()
+                   if key not in {"PYTHONPATH", "PYTEST_ADDOPTS", "COVERAGE_PROCESS_START"}}
+    environment["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
+    for shard in range(1, 5):
+        environment["PYTEST_ADDOPTS"] = step["env"]["PYTEST_ADDOPTS"].replace(
+            "${{ matrix.shard }}", str(shard)
+        )
+        result = subprocess.run(command, cwd=tmp_path, env=environment, capture_output=True,
+                                text=True, timeout=30, check=False)
+        assert result.returncode == 0, result.stdout + result.stderr
+    assert verify_reports(tmp_path, 4) == {
+        "status": "passed", "shards": 4, "collected": 8, "skipped": 0
+    }
 
 
 def test_postgres_partition_is_complete_disjoint_and_order_independent():

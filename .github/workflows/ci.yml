@@ -330,7 +330,7 @@ jobs:
             -p tests.postgres_sharding --postgres-shard=${{ matrix.shard }} --postgres-shards=4
             --postgres-inventory=postgres-shard-${{ matrix.shard }}.json
             --junitxml=postgres-shard-${{ matrix.shard }}.xml
-        run: uv run pytest -q -m postgres
+        run: uv run python -m pytest -q -m postgres
 
       - name: Upload exact PostgreSQL collection and results
         if: always()

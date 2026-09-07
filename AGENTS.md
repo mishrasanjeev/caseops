@@ -710,3 +710,8 @@ requirements when using the fallback.
   in-memory UTC timestamp differently from SQLite's reloaded value. Preserve
   full field equality, including timestamps, between the two database reads;
   do not omit timestamps or normalize away real retained-record changes.
+- A pytest plugin loaded with `-p` is imported before normal root-path setup.
+  Keep CI and Docker on the same `python -m pytest` entry point. Exercise the
+  workflow's actual launcher and options in a clean subprocess with no inherited
+  PYTHONPATH, then reconcile all four real reports; an in-process partition test
+  cannot prove that the CI executable can import the plugin.
