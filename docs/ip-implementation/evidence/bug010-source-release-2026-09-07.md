@@ -1,6 +1,13 @@
 # BUG-010 Official Source Release
 
-Pre-release checkpoint, 2026-09-07 IST: Inconclusive for overall ticket closure.
+Current checkpoint, 2026-09-08 IST: **NO-GO** until final PR/main CI and
+exact-production acceptance finish. Complete rebuilt local acceptance passes. PR
+#458 contains the earlier locally validated work; its review follow-up is not
+yet committed. Production remains unchanged. The current runtime is
+`19a33de2b82f6253d42ba6ba5a7ae63dcf6a5d6e`, an explicitly pre-commit source
+fingerprint, not a released Git SHA. See the post-review evidence below.
+
+Historical pre-release checkpoint, 2026-09-07 IST: Inconclusive for overall ticket closure.
 The five named Acts have positive current-image browser evidence, but the
 complete browser replay and exact-production acceptance are still pending.
 No Git publication or production mutation at this checkpoint. This dated
@@ -247,6 +254,107 @@ and source-discrepancy inspection, not a claim that a lawyer manually reviewed
 every provision for current applicability.
 
 ## Remaining Release Gates
+
+### September 08 Post-Review Local Evidence
+
+The P1 review on PR #458 correctly identified creation replays that returned
+historical patent records before checking whether the original mutation target
+was still operational. Four complete HTTP failures reproduced party replay
+after family/application closure and priority replay after child/parent closure
+(`api-full-bug010-terminal-replay-repro.xml`). All returned 201 instead of 404;
+these are actual product reproductions, unlike the independent CI setup errors.
+
+Both services now revalidate the original source and locked mutation targets
+before returning a saved result. An unchanged historical priority parent remains
+a read-only reference for correction replay; its child must still be operational.
+Retained GETs, sources, immutable relationships and audit rows stay readable and
+unchanged. PostgreSQL additionally proves a different actor's closure wins over
+an in-flight successful-key replay without restoring or generating child rows.
+
+| Evidence | Current result |
+| --- | --- |
+| `bug010-terminal-candidate.json` | Fresh API/web/worker build, 194 migrations, normal and 512 MiB index checks passed; no missing or invalid indexes. |
+| `bug010-terminal-frozen-file-hashes.json` | 2,271 source paths frozen; every one of the 680 API source/migration files matches the running API image. |
+| `bug010-terminal-postgres-03/postgres-shard-{1..4}.{json,xml}` | 192 passed, zero skipped. All four complete inventories and actual JUnit identities reconcile exactly; each independent database started empty. Shard durations: 382.45, 416.75, 450.56 and 360.77 seconds. |
+| `bug010-terminal-source.tar` | All four PostgreSQL shards and complete API coverage use archive SHA256 `af96c4119e1a56065df0bdfdabe5e88fa6c8631d55e33fc8761b2662f745d51c`. |
+| `api-full-bug010-terminal-api-focused.xml` | 112 passed, zero skipped; complete party, priority, shard-reconciliation and deploy-hardening modules. |
+| `bug010-terminal-patent-focused-02.xml` | Ten complete dated browser journeys passed at 393/768/1280px, including actual UI-command replay, terminal rejection, retained histories and source downloads. |
+| `current-19a33de2b82f-tester/local-all-data-evidence.json` | Original 496 rows replayed: 391 created, 97 invalid, eight duplicate; all 10,416 original cells and 28 persisted fields per created Matter checked. Zero production mutations. |
+| `bug010-terminal-full-browser.xml` | Complete 279-test selection: 274 passed, zero failed, five intentional skips; 29.7 minutes. All five skipped identities match the earlier complete inventory exactly, not merely its count. All 1,689 source records and the mobile/desktop named-Act attachment journeys passed. |
+| `bug010-terminal-browser-source-{before,after}.json` | All 2,271 paths reconcile. Runtime files remain frozen; the exact source-scope test overlay is unchanged before and after the complete run. |
+| `bug010-terminal-web-reuse-proof.json` | All 449 frontend, test, dependency and configuration paths match the previous 968-test complete coverage snapshot. No changed frontend path is claimed covered by old bytes. |
+| `bug010-terminal-contracts-03.log` | All 216 native/Docker changed paths reconciled; ten changed migrations with zero findings; statute compiler, governance, offline AI-safety and canonical Ruff checks passed. Final documentation changes require one more contract replay. |
+| `bug010-existing-qa-patent-terminal.xml` | All 23 production-configured patent/domain journeys passed on the rebuilt local runtime, zero skips; 4.5 minutes. Prior terminal and document fixtures remain retained. |
+| `bug010-existing-qa-statutes-terminal.xml` | All 43 production-configured source batches passed, zero skips; 42.9 seconds. Exactly four worker authentications, every one of 1,689 records, zero configuration or fixture writes. |
+| `bug010-terminal-post-browser-index-health.log` | Schema `20260907_0002`; no missing, invalid, mismatched or uncovered FK indexes, no sequential-scan warnings in this current local report. |
+| `api-full-bug010-terminal-api-coverage.xml` | Complete current snapshot: 4,173 passed, zero failed, 194 skipped; 5,129.84 seconds. All 4,367 collected identities are reconciled, and every skipped identity has an exact passing PostgreSQL/native/Windows supplement. |
+| `bug010-terminal-api-coverage-gate.log` | All nine per-file, five package and two total gates passed. Statements 75,022/84,032 (89.2779%); branches 14,889/21,226 (70.1451%); combined 85.4196%. No threshold was lowered. |
+| `bug010-terminal-contracts-04.log` | Final 216-path native/Docker candidate inventory and all governance/ownership/guide/scheduler contracts passed after the complete-suite checkpoint updates. Ten changed migrations have zero findings; compiler reproduces all 1,689 rows; all eight offline AI-safety cases and canonical Ruff pass. Legal fixture approval remains zero. |
+
+The exact API image seeded 23 Acts and 4,336 sections before browser testing.
+Complete API coverage and both production-shaped local rehearsals pass.
+The full browser run is complete, not a targeted
+substitute. The BUG-010 Arbitration mobile and Companies desktop screenshots
+were inspected: text, source metadata and guarded source controls are readable.
+The long publisher footnotes remain explicitly labelled shared page context.
+The API run retained four workers and eight GiB memory. Its CPU allowance was
+increased from four to eight only after PostgreSQL shards finished; no timeout,
+assertion or test selection changed.
+
+The previous PR CI run `34150026329` contains two independent failures:
+
+- Seven PostgreSQL setup errors queried `forum_catalog_aliases` before its base
+  migration fixture ran; the same monolithic job exhausted its twelve-minute
+  budget. Every error was inspected. Explicit fixture dependency and four
+  disjoint shards now pass locally without `TEST_PREPARE_POSTGRES`. The CI
+  aggregate requires every successful artifact before browser acceptance; no
+  timeout was raised and no marked test was excluded.
+- Its browser suite completed 271 passes, seven skips and one failed source-scope
+  assertion. Only `created_at` and `finalized_at` differed by SQLite's removed
+  UTC suffix between the creation response and reloaded record. The dated test
+  now captures a persisted GET before the patent operation and compares the
+  entire retained particulars after it, including both timestamps. No timestamp
+  field is omitted or normalized away. The exact test-only overlay is recorded
+  in `bug010-terminal-browser-source-before.json` and passed in the ten-journey
+  run on the unchanged application image.
+
+All setup attempts remain retained: the PowerShell 5 native-stderr wrappers
+collected no successful tests; their four owned orphan runners were stopped
+and their isolated database containers retained. The corrected runner requires
+PowerShell 7, preserves the attempt label and validates complete inventories.
+An initial focused API attempt had 111 passes and one missing-test-import
+`NameError`; all 112 pass after the import repair. The initial focused browser
+launch parsed an unquoted reporter argument incorrectly and collected no tests;
+its correctly quoted replacement passed all ten. None is counted as a product
+reproduction or silently erased.
+
+The first contract replay used app-relative paths with a repository-root tar
+operation and failed before validation. The second passed the full governance
+inventory but invoked the compiler outside its pinned tool environment. Both
+logs are retained. The third used explicit root paths and the baked compiler
+interpreter and passed all gates. An exploratory whole-directory Ruff command
+also found 133 legacy migration lint findings outside CI's `src tests` selector;
+these were not silently repaired or represented as a clean migration lint scan.
+
+CodeQL also emitted maintainability notes for explicit catalog re-exports and
+function-local reciprocal imports. The catalog export is consumed by the meta
+and IP routes. The evidence reader imports the existing machine verifier lazily;
+the ingest path calls the independent domain evaluator, not that reader. Patent
+correction lazily calls the priority validator after both modules are loaded.
+These notes remain recorded, not dismissed as completed refactors; the scoped
+repair preserves public imports and canonical ownership. CodeQL's prior run
+passed, but the final follow-up still requires its own green CI.
+
+**Post-review release hold:** PR review reproduced four terminal creation-replay
+gaps in party/priority writes. The two application services now revalidate locked
+mutation targets before returning retained results. The earlier complete runtime
+certificate below does not certify these changed bytes; fresh local acceptance
+and exact-production verification remain required. Dated browser journeys now
+capture and replay actual UI commands after closure. The expanded PostgreSQL CI
+run also exposed seven missing-base-catalog fixture errors and its twelve-minute
+job limit. Those results are retained in `bug010-pr-ci-postgres-02.log`; they are
+not seven product reproductions. Explicit fixture migration dependencies and
+four isolated, exact-identity-reconciled shards require their own local proof.
 
 The first PR #458 CI run (`34149626146`) exposed an additional release-tooling
 defect: the committed-diff governance CLI decoded unrelated PDF evidence as

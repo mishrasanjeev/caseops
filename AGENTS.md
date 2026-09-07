@@ -693,3 +693,20 @@ requirements when using the fallback.
   binary evidence, but unreadable governed source must still fail closed with a
   bounded diagnostic. Regress binary evidence beside real provider and migration
   changes so a parsing repair cannot bypass the map or migration-marker checks.
+- A successful idempotency record does not authorize a terminal patent write.
+  Creation replays must revalidate and lock their original operational targets
+  and source access before returning retained evidence. A correction's unchanged
+  historical parent can remain read-only, but its child cannot be terminal.
+  Capture and replay actual browser commands after closure, preserve historical
+  reads, and prove a different actor's concurrent closure wins on PostgreSQL.
+- A shared PostgreSQL fixture must explicitly depend on base migrations before
+  reading its catalog snapshot; importing it from another module cannot rely on
+  that module's autouse order. Partition the complete marked collection across
+  isolated databases when it outgrows one runner, then reconcile every selected
+  identity with successful JUnit evidence. Missing artifacts and skipped nodes
+  remain failures; do not extend timeouts to conceal setup errors.
+- A retained-record immutability journey must compare authoritative persisted
+  reads before and after the operation. A creation response can serialize an
+  in-memory UTC timestamp differently from SQLite's reloaded value. Preserve
+  full field equality, including timestamps, between the two database reads;
+  do not omit timestamps or normalize away real retained-record changes.

@@ -42,6 +42,13 @@ pytestmark = pytest.mark.postgres
 
 
 @pytest.mark.parametrize("kind", ["family", "application"])
+def test_patent_party_terminal_creation_replay_on_postgres(isolated_postgres_client, kind):
+    journeys.test_patent_party_creation_replay_requires_operational_target(
+        isolated_postgres_client, kind
+    )
+
+
+@pytest.mark.parametrize("kind", ["family", "application"])
 def test_patent_party_roles_on_postgres(isolated_postgres_client, kind):
     journeys.test_all_patent_party_roles_preserve_canonical_facts_and_sourced_replacement(
         isolated_postgres_client, kind
@@ -107,8 +114,9 @@ def test_concurrent_patent_party_commands_cannot_share_a_collection_sequence(
 
 
 @pytest.mark.parametrize("kind", ["family", "application"])
+@pytest.mark.parametrize("replay", [False, True])
 def test_closure_wins_over_a_different_actors_waiting_patent_party_command(
-    isolated_postgres_client, kind,
+    isolated_postgres_client, kind, replay,
 ):
     bootstrap, _, _, record, _, raw = journeys._fixture(isolated_postgres_client, kind)
     engine = get_session_factory().kw["bind"]
@@ -129,6 +137,13 @@ def test_closure_wins_over_a_different_actors_waiting_patent_party_command(
         session.commit()
     name = f"patent-party-close-{uuid4().hex[:12]}"
     payload = PatentPartyCreateRequest.model_validate(raw)
+    command_key = str(uuid4())
+    if replay:
+        with Session(engine) as session:
+            create_patent_party(
+                session, context=_context(session, bootstrap, other_actor),
+                docket_id=record["docket_id"], payload=payload, idempotency_key=command_key,
+            )
 
     def waiting_writer():
         with Session(engine) as session:
@@ -142,7 +157,7 @@ def test_closure_wins_over_a_different_actors_waiting_patent_party_command(
                     context=_context(session, bootstrap, other_actor),
                     docket_id=record["docket_id"],
                     payload=payload,
-                    idempotency_key=str(uuid4()),
+                    idempotency_key=command_key,
                 )
             except HTTPException as exc:
                 session.rollback()
@@ -178,8 +193,8 @@ def test_closure_wins_over_a_different_actors_waiting_patent_party_command(
             winner.rollback()
     with Session(engine) as session:
         assert not session.get(IpDocketRecord, record["docket_id"]).is_active
-        assert session.scalar(select(func.count()).select_from(IpPatentPartyDetail)) == 0
-        assert session.scalar(select(func.count()).select_from(IpPartyAndRole)) == 0
+        assert session.scalar(select(func.count()).select_from(IpPatentPartyDetail)) == int(replay)
+        assert session.scalar(select(func.count()).select_from(IpPartyAndRole)) == int(replay)
 
 
 def _alembic():

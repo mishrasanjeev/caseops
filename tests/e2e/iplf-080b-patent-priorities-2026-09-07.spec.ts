@@ -67,6 +67,7 @@ for (const width of [393, 768, 1280]) {
     await signInPatentTenant(page, tenant);
     await page.setViewportSize({ width, height: 900 });
     const saved: PatentPriority[] = [];
+    let originalCommand: { key: string; data: unknown } | undefined;
     for (const item of children) {
       await page.goto(`/app/ip/patents/applications/${item.record.id}`);
       await expect(page.getByRole("heading", { level: 1, name: item.record.facts.title, exact: true })).toBeVisible();
@@ -90,7 +91,20 @@ for (const width of [393, 768, 1280]) {
       await form.getByLabel("Relationship source version", { exact: true }).selectOption(source.document_version_id);
       await form.getByLabel("Relationship change reason", { exact: true }).fill(`Record exact ${item.relation} source facts.`);
       await assertPatentControlsFit(page);
+      const endpoint = `${apiBaseUrl}/api/ip/patents/applications/${item.record.id}/priorities`;
+      const saving = page.waitForResponse((response) => response.url() === endpoint && response.request().method() === "POST");
       await form.getByRole("button", { name: "Save relationship", exact: true }).click();
+      const savedResponse = await saving;
+      expect(savedResponse.status(), await savedResponse.text()).toBe(201);
+      if (saved.length === 0) {
+        const request = savedResponse.request();
+        const key = request.headers()["idempotency-key"];
+        expect(key).toBeTruthy();
+        originalCommand = { key, data: request.postDataJSON() };
+        const replay = await page.request.post(endpoint, { headers: { ...headers, "Idempotency-Key": key }, data: originalCommand.data });
+        expect(replay.status(), await replay.text()).toBe(201);
+        expect(await replay.json()).toEqual(await savedResponse.json());
+      }
       const list = page.getByRole("list", { name: "Recorded patent relationships", exact: true });
       await expect(list.getByRole("link", { name: item.parent.facts.title, exact: true })).toBeVisible();
       await assertPatentControlsFit(page);
@@ -135,6 +149,12 @@ for (const width of [393, 768, 1280]) {
     await page.getByLabel("I confirm this lifecycle change and its recorded impacts.").check();
     await page.getByRole("button", { name: "Confirm lifecycle change" }).click();
     await expect(page.getByRole("list", { name: "Lifecycle events" })).toContainText("local-fixture:priority-parent-close");
+    if (!originalCommand) throw new Error("The original browser relationship command was not captured.");
+    const childEndpoint = `${apiBaseUrl}/api/ip/patents/applications/${child.id}/priorities`;
+    const closedParentReplay = await page.request.post(childEndpoint, {
+      headers: { ...headers, "Idempotency-Key": originalCommand.key }, data: originalCommand.data,
+    });
+    expect(closedParentReplay.status(), await closedParentReplay.text()).toBe(404);
 
     await page.goto(`/app/ip/patents/applications/${child.id}`);
     await page.getByRole("tab", { name: "Priorities", exact: true }).click();
@@ -166,7 +186,19 @@ for (const width of [393, 768, 1280]) {
       await page.setViewportSize({ width, height: 900 });
     }
     await patentScreenshot(page, testInfo, `priority-correction-${width}.png`);
+    const correcting = page.waitForResponse((response) => response.url() === childEndpoint && response.request().method() === "POST");
     await correction.getByRole("button", { name: "Save relationship", exact: true }).click();
+    const correctedResponse = await correcting;
+    expect(correctedResponse.status(), await correctedResponse.text()).toBe(201);
+    const correctedRequest = correctedResponse.request();
+    const correctionKey = correctedRequest.headers()["idempotency-key"];
+    expect(correctionKey).toBeTruthy();
+    const correctionData = correctedRequest.postDataJSON();
+    const correctedReplay = await page.request.post(childEndpoint, {
+      headers: { ...headers, "Idempotency-Key": correctionKey }, data: correctionData,
+    });
+    expect(correctedReplay.status(), await correctedReplay.text()).toBe(201);
+    expect(await correctedReplay.json()).toEqual(await correctedResponse.json());
     await expect(correction).toHaveCount(0);
     const correctedList = await page.request.get(`${apiBaseUrl}/api/ip/patents/applications/${child.id}/priorities`, { headers });
     expect(correctedList.status(), await correctedList.text()).toBe(200);
@@ -209,5 +241,23 @@ for (const width of [393, 768, 1280]) {
       const response = await page.request.get(`${apiBaseUrl}/api/ip/patents/families/${unchanged.id}`, { headers });
       expect(await response.json()).toEqual(unchanged);
     }
+    await page.getByRole("tab", { name: "Lifecycle", exact: true }).click();
+    await page.getByLabel("Effective date and time", { exact: true }).fill("2026-09-07T10:00");
+    await page.getByLabel("Reason", { exact: true }).fill("Close the child and reject retained creation replays.");
+    await page.getByLabel("Outcome", { exact: true }).fill("closed");
+    await page.getByLabel("Instruction or evidence reference", { exact: true }).fill("local-fixture:priority-child-close");
+    await page.getByRole("button", { name: "Preview lifecycle change" }).click();
+    await page.getByLabel("I confirm this lifecycle change and its recorded impacts.").check();
+    await page.getByRole("button", { name: "Confirm lifecycle change" }).click();
+    await expect(page.getByRole("list", { name: "Lifecycle events" })).toContainText("local-fixture:priority-child-close");
+    const closedChildReplay = await page.request.post(childEndpoint, {
+      headers: { ...headers, "Idempotency-Key": correctionKey }, data: correctionData,
+    });
+    expect(closedChildReplay.status(), await closedChildReplay.text()).toBe(404);
+    await page.reload();
+    await page.getByRole("tab", { name: "Priorities", exact: true }).click();
+    await page.getByLabel("Include relationship history", { exact: true }).check();
+    await expect(list.getByRole("listitem")).toHaveCount(3);
+    await expect(page.getByRole("button", { name: "Add relationship", exact: true })).toHaveCount(0);
   });
 }

@@ -51,6 +51,13 @@ from tests.test_postgres_validation import (
 pytestmark = pytest.mark.postgres
 
 
+@pytest.mark.parametrize("closed_target", ["child", "parent"])
+def test_priority_terminal_creation_replay_on_postgres(isolated_postgres_client, closed_target):
+    journeys.test_priority_creation_replay_requires_operational_targets(
+        isolated_postgres_client, closed_target
+    )
+
+
 @pytest.mark.parametrize(
     "journey",
     [

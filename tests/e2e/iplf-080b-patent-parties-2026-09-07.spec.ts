@@ -76,6 +76,7 @@ for (const kind of ["family", "application"] as const) {
       await page.getByRole("tab", { name: "Parties", exact: true }).click();
       const roles = ["inventor", "applicant", "proprietor", "agent", "licensee"];
       let original: PatentParty | undefined;
+      let originalCommand: { key: string; data: unknown } | undefined;
       for (const [index, role] of roles.entries()) {
         await page.getByRole("button", { name: "Add party", exact: true }).click();
         const form = page.getByRole("form", { name: "Add patent party", exact: true });
@@ -91,7 +92,19 @@ for (const kind of ["family", "application"] as const) {
         await form.getByLabel("Party source version", { exact: true }).selectOption(source.document_version_id);
         await form.getByLabel("Party change reason", { exact: true }).fill("Record exact signed party source facts.");
         await assertPatentControlsFit(page);
+        const saving = page.waitForResponse((response) => response.url() === endpoint && response.request().method() === "POST");
         await form.getByRole("button", { name: "Save party facts", exact: true }).click();
+        const savedResponse = await saving;
+        expect(savedResponse.status(), await savedResponse.text()).toBe(201);
+        if (index === 0) {
+          const request = savedResponse.request();
+          const key = request.headers()["idempotency-key"];
+          expect(key).toBeTruthy();
+          originalCommand = { key, data: request.postDataJSON() };
+          const replay = await page.request.post(endpoint, { headers: { ...headers, "Idempotency-Key": key }, data: originalCommand.data });
+          expect(replay.status(), await replay.text()).toBe(201);
+          expect(await replay.json()).toEqual(await savedResponse.json());
+        }
         await expect(page.getByRole("heading", { name: `Recorded ${role}`, exact: true })).toBeVisible();
         const stored = await page.request.get(endpoint, { headers });
         expect(stored.status(), await stored.text()).toBe(200);
@@ -171,6 +184,14 @@ for (const kind of ["family", "application"] as const) {
         fact: original.fact, reason: "A closed record may not accept party mutations.",
       } });
       expect(closedWrite.status(), await closedWrite.text()).toBe(404);
+      if (!originalCommand) throw new Error("The original browser creation command was not captured.");
+      const closedReplay = await page.request.post(endpoint, {
+        headers: { ...headers, "Idempotency-Key": originalCommand.key }, data: originalCommand.data,
+      });
+      expect(closedReplay.status(), await closedReplay.text()).toBe(404);
+      const retainedAfterReplay = await page.request.get(`${endpoint}/${original.id}`, { headers });
+      expect(retainedAfterReplay.status(), await retainedAfterReplay.text()).toBe(200);
+      expect(await retainedAfterReplay.json()).toEqual({ ...original, is_current: false });
       await page.getByLabel("Include superseded facts", { exact: true }).check();
       await expect(page.getByRole("list", { name: "Recorded patent parties" }).getByRole("listitem")).toHaveCount(6);
       await assertPatentControlsFit(page);

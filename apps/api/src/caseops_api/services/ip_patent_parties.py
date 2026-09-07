@@ -243,6 +243,7 @@ def create_patent_party(
             raise _error(
                 "patent_party_replay_integrity", "The saved party result cannot be resolved."
             )
+        _lock_sources_and_dockets(session, context, [payload.fact.source], {docket_id})
         return get_patent_party(
             session, context=context, docket_id=docket_id, party_id=claim.record.result_id
         )

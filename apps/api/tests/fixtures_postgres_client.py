@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from caseops_api.core.settings import get_settings
 from caseops_api.db.session import clear_engine_cache
 from caseops_api.main import create_application
-from tests.test_postgres_validation import migration_pg_engine  # noqa: F401
+from tests.test_postgres_validation import _ensure_migrations, migration_pg_engine  # noqa: F401
 
 
 @pytest.fixture

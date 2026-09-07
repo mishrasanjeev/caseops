@@ -14,6 +14,7 @@ from functools import cache
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -640,6 +641,22 @@ def test_all_postgres_marked_modules_are_selected_locally_and_in_ci() -> None:
         assert len(commands) == 1, path
         assert commands[0].endswith("pytest -q -m postgres"), path
         assert "test_postgres_validation.py" not in commands[0], path
+
+
+def test_postgres_ci_requires_complete_disjoint_shard_results_before_browser_acceptance() -> None:
+    workflow = yaml.safe_load(_read_repo_text(".github/workflows/ci.yml"))
+    shards = workflow["jobs"]["postgres-validation-shards"]
+    assert shards["strategy"]["matrix"]["shard"] == [1, 2, 3, 4]
+    assert shards["strategy"]["fail-fast"] is False
+    assert shards["timeout-minutes"] == 12
+    step = next(item for item in shards["steps"] if item.get("name") == "Pytest -m postgres")
+    assert "-p tests.postgres_sharding" in step["env"]["PYTEST_ADDOPTS"]
+    assert "--postgres-shards=4" in step["env"]["PYTEST_ADDOPTS"]
+    aggregate = workflow["jobs"]["postgres-validation"]
+    assert aggregate["needs"] == ["postgres-validation-shards"]
+    assert any("tests.postgres_sharding postgres-evidence --total 4" in item.get("run", "")
+               for item in aggregate["steps"])
+    assert "postgres-validation" in workflow["jobs"]["e2e"]["needs"]
 
 
 def test_forum_alias_journey_is_discovered_with_an_isolated_docker_founder() -> None:

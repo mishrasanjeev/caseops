@@ -433,7 +433,7 @@ def _wait_for_postgres_lock_wait(pg_engine, *, application_name: str) -> None:
 
 
 @pytest.fixture
-def migration_pg_engine(pg_engine, monkeypatch: pytest.MonkeyPatch):
+def migration_pg_engine(pg_engine, _ensure_migrations, monkeypatch: pytest.MonkeyPatch):
     """Own a disposable database; destructive probes never reset the app database."""
     from alembic.config import Config
 

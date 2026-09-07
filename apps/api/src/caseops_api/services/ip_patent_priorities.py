@@ -439,18 +439,13 @@ def create_patent_priority(
             {"application_id": application_id, **payload.model_dump(mode="json")}
         ),
     )
-    if claim.outcome == IdempotencyClaimOutcome.REPLAY:
+    replay = claim.outcome == IdempotencyClaimOutcome.REPLAY
+    if replay:
         if claim.record.result_type != "ip_patent_priority" or not claim.record.result_id:
             raise _error(
                 "patent_priority_replay_integrity", "The saved relationship cannot be resolved."
             )
-        return get_patent_priority(
-            session,
-            context=context,
-            application_id=application_id,
-            priority_id=claim.record.result_id,
-        )
-    if claim.outcome != IdempotencyClaimOutcome.CLAIMED:
+    elif claim.outcome != IdempotencyClaimOutcome.CLAIMED:
         raise _error("patent_priority_idempotency_conflict", "This command key is already in use.")
     child_row = _application(session, context, application_id)
     parent_row = _application(session, context, str(payload.parent_application_id))
@@ -463,7 +458,7 @@ def create_patent_priority(
             statement.where(
                 IpPatentPriorityDetail.id == str(payload.supersedes_priority_id),
                 IpPatentPriorityDetail.source_docket_id == child_row.docket_id,
-                ~replaced,
+                True if replay else ~replaced,
             )
         ).first()
         if previous is None:
@@ -500,6 +495,15 @@ def create_patent_priority(
         targets,
         read_only_reference_docket_ids=references,
     )
+    if replay:
+        # Replay retains the command's original target/reference distinction.
+        # Only an unchanged historical parent may remain a read-only reference.
+        return get_patent_priority(
+            session,
+            context=context,
+            application_id=application_id,
+            priority_id=claim.record.result_id,
+        )
     child_docket, parent_docket = dockets[child_row.docket_id], dockets[parent_row.docket_id]
     if (
         child_docket.current_version != payload.expected_application_version

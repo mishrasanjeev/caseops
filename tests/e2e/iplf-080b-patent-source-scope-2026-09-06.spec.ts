@@ -35,6 +35,10 @@ test("IPLF-080 source pin creates its governed document scope without changing t
   });
   expect(trademarkResponse.status(), await trademarkResponse.text()).toBe(201);
   const trademark = await trademarkResponse.json();
+  const original = await page.request.get(`${apiBaseUrl}/api/ip/dockets/${trademark.id}`, { headers });
+  expect(original.status(), await original.text()).toBe(200);
+  const originalParticulars = (await original.json()).current_particulars;
+  expect(originalParticulars).toBeTruthy();
   const taxonomy = await page.request.post(`${apiBaseUrl}/api/ip/document-taxonomy/seed`, { headers });
   expect(taxonomy.status(), await taxonomy.text()).toBe(200);
   const upload = await page.request.post(`${apiBaseUrl}/api/ip/documents/upload`, {
@@ -77,8 +81,7 @@ test("IPLF-080 source pin creates its governed document scope without changing t
   expect(links.some((link: { target_id: string }) => link.target_id === trademark.id)).toBe(true);
   const retained = await page.request.get(`${apiBaseUrl}/api/ip/dockets/${trademark.id}`, { headers });
   expect(retained.status(), await retained.text()).toBe(200);
-  expect(trademark.current_particulars).toBeTruthy();
-  expect((await retained.json()).current_particulars).toEqual(trademark.current_particulars);
+  expect((await retained.json()).current_particulars).toEqual(originalParticulars);
   await signInPatentTenant(page, tenant);
   await page.setViewportSize({ width: 393, height: 900 });
   await page.goto(`/app/ip/patents/${family.id}`);

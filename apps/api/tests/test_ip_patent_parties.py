@@ -53,6 +53,28 @@ def _post(client, base, headers, payload, key=None):
 
 
 @pytest.mark.parametrize("kind", ["family", "application"])
+def test_patent_party_creation_replay_requires_operational_target(client, kind):
+    _, headers, _, record, base, payload = _fixture(client, kind)
+    key = str(uuid4())
+    created = _post(client, base, headers, payload, key)
+    assert created.status_code == 201, created.text
+    saved = created.json()
+    replay = _post(client, base, headers, payload, key)
+    assert replay.status_code == 201 and replay.json() == saved
+    _closed(client, headers, record["docket_id"])
+    denied = _post(client, base, headers, payload, key)
+    assert denied.status_code == 404, denied.text
+    retained = client.get(f"{base}/{saved['id']}", headers=headers)
+    assert retained.status_code == 200 and retained.json() == saved
+    assert client.get(base, headers=headers).json()["parties"] == [saved]
+    with get_session_factory()() as session:
+        assert session.scalar(select(func.count()).select_from(IpPatentPartyDetail)) == 1
+        assert session.scalar(
+            select(func.count()).select_from(AuditEvent).where(AuditEvent.target_id == saved["id"])
+        ) == 1
+
+
+@pytest.mark.parametrize("kind", ["family", "application"])
 def test_all_patent_party_roles_preserve_canonical_facts_and_sourced_replacement(client, kind):
     _, headers, family, record, base, payload = _fixture(client, kind)
     originals = []

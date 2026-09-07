@@ -1,12 +1,19 @@
 # Strict Repo Quality Audit - 2026-04-24
 
-September 07 pre-release update: current Docker API coverage (4,149 passes),
-complete PostgreSQL (186 passes), frontend coverage (968 passes), and the full
-Docker browser replay (274 passed, zero failed, five intentional skips) have
-positive evidence. All 188 API skips have exact passing supplements. The
-496-row original import, all 1,689 source records and 23 existing-QA patent/domain
-journeys also pass locally. Git/CI and exact-production acceptance remain
-separate pending gates; no deployment is claimed by this pre-release record.
+September 08 post-review checkpoint: PR #458 is open. The current rebuilt
+Docker runtime is `19a33de2b82f6253d42ba6ba5a7ae63dcf6a5d6e`, a source
+fingerprint, not a released commit. Its complete browser suite passes 274 tests
+with zero failures and five explicitly reconciled skips. All 192 PostgreSQL
+tests pass across four independent fresh databases with exact collection/result
+reconciliation. The 112 focused API checks and ten dated replay/history browser
+journeys pass. The unchanged frontend retains its 968-test coverage proof,
+verified against all 449 frontend/configuration hashes. The original 496-row
+import and all 1,689 named-Act source records pass on this new runtime.
+Complete API coverage passes 4,173 tests and all thresholds. Every one of its
+194 skipped identities has an exact passing supplement. All 23 production-shaped
+patent/domain journeys and all 43 source-data batches also pass locally.
+Final PR/main CI and exact-production acceptance remain separate pending gates;
+production is unchanged and the terminal replay follow-up is not yet committed.
 See `ip-implementation/evidence/bug010-source-release-2026-09-07.md` for the
 authoritative scoped checkpoint and retained failures. Older dated statuses
 below are historical, not the result of this candidate. Wider catalog coverage

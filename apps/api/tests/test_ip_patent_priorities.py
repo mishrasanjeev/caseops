@@ -58,6 +58,31 @@ def _list(client, headers, application, **params):
     return response.json()
 
 
+@pytest.mark.parametrize("closed_target", ["child", "parent"])
+def test_priority_creation_replay_requires_operational_targets(client, closed_target):
+    _, headers, _, parent, child, payload = _fixture(client)
+    key = str(uuid4())
+    created = _post(client, headers, child, payload, key)
+    assert created.status_code == 201, created.text
+    saved = created.json()
+    replay = _post(client, headers, child, payload, key)
+    assert replay.status_code == 201 and replay.json() == saved
+    terminal = child if closed_target == "child" else parent
+    _closed(client, headers, terminal["docket_id"])
+    denied = _post(client, headers, child, payload, key)
+    assert denied.status_code == 404, denied.text
+    retained = client.get(
+        f"/api/ip/patents/applications/{child['id']}/priorities/{saved['id']}", headers=headers
+    )
+    assert retained.status_code == 200, retained.text
+    assert retained.json()["source"] == saved["source"]
+    assert retained.json()["canonical_relationship_id"] == saved["canonical_relationship_id"]
+    assert len(_list(client, headers, child, history=True)["priorities"]) == 1
+    with get_session_factory()() as session:
+        assert session.scalar(select(func.count()).select_from(IpPatentPriorityDetail)) == 1
+        assert session.scalar(select(func.count()).select_from(IpRelationship)) == 1
+
+
 @pytest.mark.parametrize(
     "kind,child_kind,parent_kind",
     [
@@ -247,8 +272,12 @@ def test_priority_closed_historical_parent_is_read_only_but_new_link_and_closed_
     }
     new_link = _post(client, headers, child, {**current, "priority_date": "2026-09-04"})
     assert new_link.status_code == 404, new_link.text
-    correction = _post(client, headers, child, {**current, "supersedes_priority_id": saved["id"]})
+    correction_key = str(uuid4())
+    correction_payload = {**current, "supersedes_priority_id": saved["id"]}
+    correction = _post(client, headers, child, correction_payload, correction_key)
     assert correction.status_code == 201, correction.text
+    replay = _post(client, headers, child, correction_payload, correction_key)
+    assert replay.status_code == 201 and replay.json() == correction.json()
     assert (
         client.get(f"/api/ip/patents/applications/{parent['id']}", headers=headers).json()[
             "is_active"
@@ -256,6 +285,8 @@ def test_priority_closed_historical_parent_is_read_only_but_new_link_and_closed_
         is False
     )
     _closed(client, headers, child["docket_id"])
+    replay = _post(client, headers, child, correction_payload, correction_key)
+    assert replay.status_code == 404, replay.text
     denied = _post(
         client,
         headers,
