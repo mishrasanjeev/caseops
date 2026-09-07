@@ -41,9 +41,10 @@ function apiPython(): { command: string; args: string[] } {
   };
 }
 
-function seedScreenshotGarbledAuthority(): string {
+function seedScreenshotGarbledAuthority(): { authorityId: string; courtName: string } {
   const python = apiPython();
   const code = String.raw`
+import json
 from datetime import date
 from uuid import uuid4
 
@@ -56,6 +57,7 @@ from caseops_api.db.models import (
 from caseops_api.db.session import get_session_factory
 
 suffix = uuid4().hex[:10]
+court_name = f"Supreme Court of India - E2E H702 {suffix}"
 garbled_title = "[2003] 3 -- f.t 'II'. 178"
 garbled_chunk = (
     "[2003] 3 -- f.t 'II'. 178, ; 3ffillllll mi aRT 'A III' 1Tfffi "
@@ -71,7 +73,7 @@ with get_session_factory()() as session:
     document = AuthorityDocument(
         source="e2e_hari_2026_07_02_garbled",
         adapter_name="caseops-e2e-hari-2026-07-02",
-        court_name="Supreme Court of India",
+        court_name=court_name,
         forum_level=MatterForumLevel.SUPREME_COURT,
         document_type=AuthorityDocumentType.JUDGMENT,
         title=garbled_title,
@@ -90,7 +92,7 @@ with get_session_factory()() as session:
     ]
     session.add(document)
     session.flush()
-    print(document.id)
+    print(json.dumps({"authorityId": document.id, "courtName": court_name}))
     session.commit()
 `;
   const result = spawnSync(python.command, [...python.args, "-c", code], {
@@ -99,7 +101,7 @@ with get_session_factory()() as session:
     encoding: "utf8",
   });
   expect(result.status, result.stderr || result.stdout).toBe(0);
-  return result.stdout.trim().split(/\s+/).at(-1) ?? "";
+  return JSON.parse(result.stdout.trim());
 }
 
 async function bootstrap(
@@ -156,8 +158,8 @@ test.describe("Hari 2026-07-02 bugs", () => {
   test("BUG-001: Context Research omits corrupted authority content from real API results", async ({
     page,
   }) => {
-    const authorityId = seedScreenshotGarbledAuthority();
-    expect(authorityId).toBeTruthy();
+    const fixture = seedScreenshotGarbledAuthority();
+    expect(fixture.authorityId).toBeTruthy();
 
     const api = await request.newContext();
     const slug = unique("h70201");
@@ -168,9 +170,29 @@ test.describe("Hari 2026-07-02 bugs", () => {
     await page.goto("/app/research");
     await page.getByTestId("research-mode-contextual").click();
     await page.getByTestId("research-query-input").fill(CHEQUE_QUERY);
+    // Keep other suites' retained corpus rows out of this quality-filter probe.
+    await page.getByRole("textbox", { name: "Court name contains" }).fill(fixture.courtName);
+    const searched = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === "/api/authorities/search" &&
+      response.request().method() === "POST");
     await page.getByTestId("research-query-submit").click();
+    const response = await searched;
+    expect(response.status(), await response.text()).toBe(200);
+    expect(response.request().postDataJSON()).toMatchObject({
+      query: CHEQUE_QUERY, court_name: fixture.courtName,
+    });
+    const payload = await response.json();
+    expect(payload.outcome).toBe("unreadable_filtered");
+    expect(payload.diagnostics.raw_candidate_count).toBe(1);
+    expect(payload.diagnostics.unreadable_omitted_count).toBe(1);
+    expect(payload.results).toEqual([]);
 
-    await expect(page.getByText(/not readable enough to preview/i)).toBeVisible();
+    await expect(page.getByRole("heading", {
+      level: 3, name: "Matching documents are unreadable", exact: true,
+    })).toBeVisible();
+    expect(payload.coverage_notice).toEqual(expect.any(String));
+    expect(payload.coverage_notice.length).toBeGreaterThan(0);
+    await expect(page.getByText(payload.coverage_notice, { exact: true })).toBeVisible();
     await expect(page.getByText(/\[2003\] 3 -- f\.t/i)).toHaveCount(0);
     await expect(page.getByTestId("research-result-garbled")).toHaveCount(0);
   });

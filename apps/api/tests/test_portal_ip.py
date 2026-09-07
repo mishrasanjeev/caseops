@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import event, select
 
@@ -268,8 +269,10 @@ def test_report_publication_rejects_stale_preview_and_withholds_stale_targets(
     assert response.json()["summary"] is None
 
 
+@pytest.mark.parametrize("invalidation", ["privileged", "patent_link", "patent_domain"])
 def test_document_publication_allows_only_granted_approved_nonprivileged_version(
     client: TestClient,
+    invalidation: str,
 ) -> None:
     headers, docket, _application = _rich_portfolio_fixture(client)
     invitation, debug_token = _invite_ip_client(
@@ -365,8 +368,30 @@ def test_document_publication_allows_only_granted_approved_nonprivileged_version
     with get_session_factory()() as session:
         document = session.get(IpDocument, document_ids[0][0])
         assert document is not None
-        document.is_privileged = True
+        if invalidation == "privileged":
+            document.is_privileged = True
+        elif invalidation == "patent_domain":
+            docket_row = session.get(IpDocketRecord, docket["id"])
+            docket_row.record_type = "patent"
+        else:
+            invention = IpDocketRecord(
+                company_id=company_id, record_type="patent", title="Unpublished invention",
+                status="draft", restricted=True, created_by_membership_id=membership_id,
+            )
+            session.add(invention)
+            session.flush()
+            session.add(IpDocumentLink(
+                company_id=company_id, document_id=document.id,
+                target_type="docket", target_id=invention.id, docket_id=invention.id,
+                created_by_membership_id=membership_id,
+            ))
         session.commit()
+    rejected_share = client.post(
+        "/api/ip/portal/document-publications",
+        headers=headers,
+        json={**payload, "document_id": document_ids[0][0]},
+    )
+    assert rejected_share.status_code in {404, 409}, rejected_share.text
     hidden = client.get(f"/api/portal/publications/{shared.json()['id']}")
     assert hidden.status_code == 200, hidden.text
     assert hidden.json()["access_state"] == "review_required"
@@ -390,6 +415,8 @@ def test_document_publication_allows_only_granted_approved_nonprivileged_version
                 )
             )
         )
+        from caseops_api.services.notification_delivery import _recipient_still_permitted
+
         portal_intents = [
             intent for intent in intents if intent.recipient_portal_user_id is not None
         ]
@@ -397,6 +424,8 @@ def test_document_publication_allows_only_granted_approved_nonprivileged_version
             intent for intent in intents if intent.recipient_membership_id is not None
         ]
         assert len(portal_intents) == 1
+        assert portal_intents[0].source_id == shared.json()["id"]
+        assert not _recipient_still_permitted(session, portal_intents[0])
         assert len(escalation_intents) == 1
         assert portal_intents[0].recipient_snapshot_json["destination"] == "client-ip@example.com"
 

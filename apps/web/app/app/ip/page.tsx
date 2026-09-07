@@ -18,6 +18,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/Button";
 import { IpAccessWorkspace } from "@/components/ip/IpAccessWorkspace";
+import { IpDomainAvailability } from "@/components/ip/IpDomainAvailability";
 import { IpDocumentWorkspace } from "@/components/ip/IpDocumentWorkspace";
 import { IpOppositionWorkspace } from "@/components/ip/IpOppositionWorkspace";
 import { IpPostRegistrationWorkspace } from "@/components/ip/IpPostRegistrationWorkspace";
@@ -230,6 +231,7 @@ export default function IpDocketPage() {
 
   if (!readiness.data.workspace_available) {
     return (
+      <div className="flex min-w-0 flex-col gap-6">
       <IpReadinessGate
         features={readiness.data.features}
         timezone={readiness.data.timezone}
@@ -240,6 +242,8 @@ export default function IpDocketPage() {
           await queryClient.invalidateQueries({ queryKey: ["ip", "readiness"] });
         }}
       />
+      <IpDomainAvailability domains={readiness.data.domains} />
+      </div>
     );
   }
 
@@ -257,6 +261,8 @@ export default function IpDocketPage() {
           ) : null
         }
       />
+
+      <Link href="/app/ip/patents" className="w-fit text-sm text-brand-700 underline">Patent disclosures</Link>
 
       {readiness.data.features.some((feature) => !feature.available) ? (
         <IpAutomationReadiness features={readiness.data.features} />
@@ -276,7 +282,11 @@ export default function IpDocketPage() {
         <TabsList className="h-auto w-full min-w-0 flex-wrap sm:w-auto" aria-label="IP workspace areas">
           <TabsTrigger value="docket">Docket</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
+          <TabsTrigger value="availability">Domain availability</TabsTrigger>
         </TabsList>
+        <TabsContent value="availability">
+          <IpDomainAvailability domains={readiness.data.domains} />
+        </TabsContent>
         <TabsContent value="documents">
           <IpDocumentWorkspace
             dockets={portfolioDockets}

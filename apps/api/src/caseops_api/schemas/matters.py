@@ -156,6 +156,7 @@ class MatterCreateRequest(BaseModel):
     opposing_party: str | None = Field(default=None, min_length=2, max_length=255)
     opposing_counsel: str | None = Field(default=None, max_length=255)
     case_number: str | None = Field(default=None, max_length=120)
+    temporary_e_case_number: str | None = Field(default=None, max_length=120)
     filing_number: str | None = Field(default=None, max_length=120)
     filing_date: date | None = None
     cnr_number: str | None = Field(default=None, max_length=32)
@@ -201,6 +202,7 @@ class MatterCreateRequest(BaseModel):
 
     @field_validator(
         "case_number",
+        "temporary_e_case_number",
         "cnr_number",
         "filing_number",
         "court_forum_number",
@@ -262,6 +264,7 @@ class MatterUpdateRequest(BaseModel):
     opposing_party: str | None = Field(default=None, min_length=2, max_length=255)
     opposing_counsel: str | None = Field(default=None, max_length=255)
     case_number: str | None = Field(default=None, max_length=120)
+    temporary_e_case_number: str | None = Field(default=None, max_length=120)
     filing_number: str | None = Field(default=None, max_length=120)
     filing_date: date | None = None
     cnr_number: str | None = Field(default=None, max_length=32)
@@ -318,6 +321,7 @@ class MatterUpdateRequest(BaseModel):
 
     @field_validator(
         "case_number",
+        "temporary_e_case_number",
         "cnr_number",
         "filing_number",
         "court_forum_number",
@@ -442,6 +446,7 @@ class MatterRecord(BaseModel):
     forum_consumer_level: str | None = None
     judge_name: str | None
     case_number: str | None = None
+    temporary_e_case_number: str | None = None
     filing_number: str | None = None
     filing_date: date | None = None
     cnr_number: str | None = None

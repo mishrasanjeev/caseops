@@ -14,16 +14,12 @@ from caseops_api.db.models import (
     Company,
     DocumentProcessingAction,
     DocumentProcessingTargetType,
-    IpDeadline,
-    IpDocketEvent,
     IpDocketRecord,
     IpDocument,
     IpDocumentLink,
     IpDocumentTaxonomyAlias,
     IpDocumentTaxonomyEntry,
     IpDocumentVersion,
-    IpProceeding,
-    TrademarkApplication,
     utcnow,
 )
 from caseops_api.schemas.ip_documents import (
@@ -68,6 +64,10 @@ from caseops_api.services.ip_documents import (
     _normalize_alias,
     preview_ip_document_name,
 )
+from caseops_api.services.ip_domain_policy import (
+    IP_DOCUMENT_CHILD_TARGET_MODELS,
+    disclosable_ip_document_ids,
+)
 from caseops_api.services.ip_operations import _docket_or_404
 from caseops_api.services.matter_access import visible_ip_dockets_filter
 from caseops_api.services.session_context import SessionContext
@@ -80,9 +80,7 @@ def _propagate_private_document_change(
     *,
     context: SessionContext,
     document: IpDocument,
-    event_type: Literal[
-        "source_changed", "access_changed", "revoked", "tombstoned", "reindex"
-    ],
+    event_type: Literal["source_changed", "access_changed", "revoked", "tombstoned", "reindex"],
     reason_code: str,
     idempotency_key: str,
 ) -> None:
@@ -104,12 +102,7 @@ def _propagate_private_document_change(
 
 
 LOW_OCR_QUALITY_THRESHOLD = 0.65
-_TARGET_MODELS = {
-    "application": TrademarkApplication,
-    "proceeding": IpProceeding,
-    "event": IpDocketEvent,
-    "deadline": IpDeadline,
-}
+_TARGET_MODELS = IP_DOCUMENT_CHILD_TARGET_MODELS
 _ALLOWED_TRANSITIONS: dict[str, set[str]] = {
     "draft": {"review", "rejected"},
     "review": {"draft", "approved", "rejected"},
@@ -156,6 +149,7 @@ def _document_or_404(
     context: SessionContext,
     document_id: str,
     for_update: bool = False,
+    allow_patent_history: bool = False,
 ) -> IpDocument:
     stmt = select(IpDocument).where(
         IpDocument.id == document_id,
@@ -166,7 +160,12 @@ def _document_or_404(
     document = session.scalar(stmt)
     if document is None:
         raise HTTPException(status_code=404, detail="IP document not found.")
-    _assert_document_targets_accessible(session, context=context, document_id=document.id)
+    _assert_document_targets_accessible(
+        session,
+        context=context,
+        document_id=document.id,
+        allow_patent_history=allow_patent_history and not for_update,
+    )
     return document
 
 
@@ -212,8 +211,18 @@ def _validate_target(
     *,
     context: SessionContext,
     target: IpDocumentLinkTarget,
+    allow_patent_history: bool = False,
 ) -> None:
     docket_id = _target_docket_id(session, company_id=context.company.id, target=target)
+    if allow_patent_history:
+        from caseops_api.services.ip_lifecycle import _authorized_lifecycle_docket
+
+        docket = _authorized_lifecycle_docket(
+            session, context=context, docket_id=docket_id, for_update=False
+        )
+        # Read-only patent history does not change trademark or mutation policy.
+        if docket.record_type in {"patent_family", "patent_application"} and docket.restricted:
+            return
     _docket_or_404(session, context=context, docket_id=docket_id)
 
 
@@ -222,6 +231,7 @@ def _assert_document_targets_accessible(
     *,
     context: SessionContext,
     document_id: str,
+    allow_patent_history: bool = False,
 ) -> None:
     links = list(
         session.scalars(
@@ -236,6 +246,7 @@ def _assert_document_targets_accessible(
             session,
             context=context,
             target=IpDocumentLinkTarget(target_type=row.target_type, target_id=row.target_id),
+            allow_patent_history=allow_patent_history,
         )
 
 
@@ -265,8 +276,8 @@ def get_accessible_ip_document_ids(
     existing_ids = set(
         session.scalars(
             select(IpDocument.id).where(
-            IpDocument.company_id == context.company.id,
-            IpDocument.id.in_(document_ids),
+                IpDocument.company_id == context.company.id,
+                IpDocument.id.in_(document_ids),
             )
         )
     )
@@ -297,10 +308,7 @@ def get_accessible_ip_document_ids(
             )
         ).all()
         target_dockets.update(
-            {
-                (target_type, str(target_id)): str(docket_id)
-                for target_id, docket_id in target_rows
-            }
+            {(target_type, str(target_id)): str(docket_id) for target_id, docket_id in target_rows}
         )
 
     docket_ids: set[str] = set()
@@ -368,14 +376,26 @@ def get_ip_document_policies(
             IpDocument.id.in_(accessible_ids),
         )
     ).all()
+    disclosable_ids = disclosable_ip_document_ids(
+        session, company_id=context.company.id, document_ids=accessible_ids
+    )
     return {
-        document.id: _policy(document, version)
+        document.id: _policy(
+            document, version, domain_disclosure_allowed=document.id in disclosable_ids
+        )
         for document, version in rows
     }
 
 
-def _policy(document: IpDocument, version: IpDocumentVersion) -> IpDocumentPolicyResponse:
+def _policy(
+    document: IpDocument,
+    version: IpDocumentVersion,
+    *,
+    domain_disclosure_allowed: bool,
+) -> IpDocumentPolicyResponse:
     reasons: list[str] = []
+    if not domain_disclosure_allowed:
+        reasons.append("This IP domain has no enabled general disclosure workflow.")
     if document.is_privileged:
         reasons.append(
             "Attorney-client privileged documents are restricted from AI, portal, "
@@ -393,7 +413,11 @@ def _policy(document: IpDocument, version: IpDocumentVersion) -> IpDocumentPolic
         reasons.append("OCR/extraction quality is below the legal-use threshold.")
     if version.processing_status != "indexed":
         reasons.append("Document processing is not complete and indexed.")
-    disclosure_allowed = not document.is_privileged and document.confidentiality == "internal"
+    disclosure_allowed = (
+        domain_disclosure_allowed
+        and not document.is_privileged
+        and document.confidentiality == "internal"
+    )
     return IpDocumentPolicyResponse(
         ai_retrieval_allowed=(
             disclosure_allowed and version.processing_status == "indexed" and not low_quality
@@ -408,6 +432,7 @@ def _policy(document: IpDocument, version: IpDocumentVersion) -> IpDocumentPolic
 def _serialize_document(
     session: Session,
     *,
+    context: SessionContext,
     document: IpDocument,
 ) -> IpDocumentRecord:
     taxonomy = session.get(IpDocumentTaxonomyEntry, document.taxonomy_entry_id)
@@ -439,8 +464,11 @@ def _serialize_document(
         ).all()
     )
     version_records: list[IpDocumentVersionRecord] = []
+    disclosable = document.id in disclosable_ip_document_ids(
+        session, company_id=context.company.id, document_ids={document.id}
+    )
     for row in versions:
-        policy = _policy(document, row)
+        policy = _policy(document, row, domain_disclosure_allowed=disclosable)
         version_records.append(
             IpDocumentVersionRecord(
                 id=row.id,
@@ -513,7 +541,7 @@ def list_ip_documents(
             if exc.status_code == 404:
                 continue
             raise
-        visible.append(_serialize_document(session, document=row))
+        visible.append(_serialize_document(session, context=context, document=row))
     return IpDocumentListResponse(items=visible, total=len(visible))
 
 
@@ -528,13 +556,11 @@ def list_linked_ip_documents(
 ) -> list[IpDocumentRecord]:
     """Return a bounded set of documents linked to one accessible workflow aggregate."""
     target_filters = [
-        (IpDocumentLink.target_type == "docket")
-        & (IpDocumentLink.target_id == docket_id)
+        (IpDocumentLink.target_type == "docket") & (IpDocumentLink.target_id == docket_id)
     ]
     if event_ids:
         target_filters.append(
-            (IpDocumentLink.target_type == "event")
-            & (IpDocumentLink.target_id.in_(event_ids))
+            (IpDocumentLink.target_type == "event") & (IpDocumentLink.target_id.in_(event_ids))
         )
     if deadline_ids:
         target_filters.append(
@@ -561,12 +587,14 @@ def list_linked_ip_documents(
     visible: list[IpDocumentRecord] = []
     for row in rows:
         try:
-            _assert_document_targets_accessible(session, context=context, document_id=row.id)
+            _assert_document_targets_accessible(
+                session, context=context, document_id=row.id, allow_patent_history=True
+            )
         except HTTPException as exc:
             if exc.status_code == 404:
                 continue
             raise
-        visible.append(_serialize_document(session, document=row))
+        visible.append(_serialize_document(session, context=context, document=row))
     return visible
 
 
@@ -576,8 +604,10 @@ def get_ip_document(
     context: SessionContext,
     document_id: str,
 ) -> IpDocumentRecord:
-    document = _document_or_404(session, context=context, document_id=document_id, for_update=False)
-    return _serialize_document(session, document=document)
+    document = _document_or_404(
+        session, context=context, document_id=document_id, allow_patent_history=True
+    )
+    return _serialize_document(session, context=context, document=document)
 
 
 def get_ip_document_policy(
@@ -588,7 +618,10 @@ def get_ip_document_policy(
 ) -> IpDocumentPolicyResponse:
     document = _document_or_404(session, context=context, document_id=document_id)
     version = _version_or_404(session, document=document, version=document.current_version)
-    return _policy(document, version)
+    disclosable = document.id in disclosable_ip_document_ids(
+        session, company_id=context.company.id, document_ids={document.id}
+    )
+    return _policy(document, version, domain_disclosure_allowed=disclosable)
 
 
 def authorize_ip_document_action(
@@ -629,7 +662,9 @@ def get_ip_document_version_for_download(
     document_id: str,
     version_number: int,
 ) -> IpDocumentVersion:
-    document = _document_or_404(session, context=context, document_id=document_id)
+    document = _document_or_404(
+        session, context=context, document_id=document_id, allow_patent_history=True
+    )
     return _version_or_404(session, document=document, version=version_number)
 
 
@@ -730,9 +765,7 @@ def upload_ip_document(
     content_type: str | None,
     stream: BinaryIO,
 ) -> tuple[IpDocumentUploadResponse, str | None]:
-    _require_document_capability(
-        session, context=context, capability="documents:upload"
-    )
+    _require_document_capability(session, context=context, capability="documents:upload")
     verify_upload(filename=filename, content_type=content_type, stream=stream)
     _lock_document_name_allocator(session, company_id=context.company.id)
     taxonomy = _taxonomy_or_404(session, company_id=context.company.id, key=metadata.taxonomy_key)
@@ -884,7 +917,7 @@ def upload_ip_document(
         return (
             IpDocumentUploadResponse(
                 outcome="created",
-                document=_serialize_document(session, document=document),
+                document=_serialize_document(session, context=context, document=document),
                 processing_job=load_latest_processing_jobs(
                     session,
                     target_type=DocumentProcessingTargetType.IP_DOCUMENT_VERSION,
@@ -910,9 +943,7 @@ def upload_ip_document_version(
     content_type: str | None,
     stream: BinaryIO,
 ) -> tuple[IpDocumentUploadResponse, str | None]:
-    _require_document_capability(
-        session, context=context, capability="documents:upload"
-    )
+    _require_document_capability(session, context=context, capability="documents:upload")
     verify_upload(filename=filename, content_type=content_type, stream=stream)
     _lock_document_name_allocator(session, company_id=context.company.id)
     document = _document_or_404(session, context=context, document_id=document_id, for_update=True)
@@ -1077,7 +1108,7 @@ def upload_ip_document_version(
         return (
             IpDocumentUploadResponse(
                 outcome="created",
-                document=_serialize_document(session, document=document),
+                document=_serialize_document(session, context=context, document=document),
                 processing_job=load_latest_processing_jobs(
                     session,
                     target_type=DocumentProcessingTargetType.IP_DOCUMENT_VERSION,
@@ -1125,9 +1156,7 @@ def add_ip_document_links(
     document_id: str,
     payload: IpDocumentAddLinksRequest,
 ) -> IpDocumentRecord:
-    _require_document_capability(
-        session, context=context, capability="documents:manage"
-    )
+    _require_document_capability(session, context=context, capability="documents:manage")
     document = _document_or_404(session, context=context, document_id=document_id, for_update=True)
     if document.current_version != payload.expected_current_version:
         raise HTTPException(
@@ -1177,7 +1206,7 @@ def add_ip_document_links(
         metadata={"link_ids": created, "version_id": payload.version_id},
     )
     session.commit()
-    return _serialize_document(session, document=document)
+    return _serialize_document(session, context=context, document=document)
 
 
 def transition_ip_document_state(
@@ -1188,9 +1217,7 @@ def transition_ip_document_state(
     version_number: int,
     payload: IpDocumentStateTransitionRequest,
 ) -> IpDocumentRecord:
-    _require_document_capability(
-        session, context=context, capability="documents:manage"
-    )
+    _require_document_capability(session, context=context, capability="documents:manage")
     document = _document_or_404(session, context=context, document_id=document_id, for_update=True)
     version = _version_or_404(session, document=document, version=version_number, for_update=True)
     if (
@@ -1253,7 +1280,7 @@ def transition_ip_document_state(
         },
     )
     session.commit()
-    return _serialize_document(session, document=document)
+    return _serialize_document(session, context=context, document=document)
 
 
 def _bulk_material(
@@ -1347,9 +1374,7 @@ def preview_ip_document_bulk_update(
     context: SessionContext,
     payload: IpDocumentBulkPreviewRequest,
 ) -> IpDocumentBulkPreviewResponse:
-    _require_document_capability(
-        session, context=context, capability="documents:manage"
-    )
+    _require_document_capability(session, context=context, capability="documents:manage")
     previews, token = _bulk_material(session, context=context, items=payload.items, lock=False)
     return IpDocumentBulkPreviewResponse(
         preview_token=token,
@@ -1364,9 +1389,7 @@ def apply_ip_document_bulk_update(
     context: SessionContext,
     payload: IpDocumentBulkApplyRequest,
 ) -> IpDocumentListResponse:
-    _require_document_capability(
-        session, context=context, capability="documents:manage"
-    )
+    _require_document_capability(session, context=context, capability="documents:manage")
     previews, token = _bulk_material(session, context=context, items=payload.items, lock=True)
     if token != payload.preview_token:
         session.rollback()

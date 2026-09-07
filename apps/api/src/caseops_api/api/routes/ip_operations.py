@@ -23,6 +23,7 @@ from caseops_api.api.dependencies import (
     require_all_capabilities,
     require_capability,
 )
+from caseops_api.api.routes.ip_patents import router as patent_router
 from caseops_api.core.settings import get_settings
 from caseops_api.schemas.audit import IpDocketAuditListResponse
 from caseops_api.schemas.drafts import (
@@ -279,7 +280,7 @@ from caseops_api.services.drafting import (
     validate_ip_draft,
 )
 from caseops_api.services.ip_audit import list_ip_docket_audit_events
-from caseops_api.services.ip_capability_catalog import ip_workspace_readiness
+from caseops_api.services.ip_capability_catalog import domain_catalogue, ip_workspace_readiness
 from caseops_api.services.ip_deadline_workflow import (
     activate_calendar_version,
     activate_rule_version,
@@ -488,6 +489,7 @@ from caseops_api.services.shared_work import (
 )
 
 router = APIRouter()
+router.include_router(patent_router)
 IpViewer = Annotated[SessionContext, Depends(require_capability("ip:read"))]
 IpWriter = Annotated[SessionContext, Depends(require_capability("ip:write"))]
 IpApprover = Annotated[SessionContext, Depends(require_capability("ip:approve"))]
@@ -1474,6 +1476,7 @@ async def get_ip_workspace_readiness(
         manual_docketing_available=bool(by_id["manual_docketing"]["available"]),
         configuration_status=configuration_status,
         features=features,
+        domains=domain_catalogue(session).domains,
     )
 
 

@@ -232,11 +232,14 @@ def test_forum_catalog_api_exposes_only_configured_aliases(client: TestClient) -
     entries = {entry["id"]: entry for entry in response.json()["entries"]}
     assert sorted(entries["consumer:dcdrc:delhi:dwarka"]["aliases"]) == [
         "Dwarka DCDRC",
+        "Dwarka-Consumer Forum",
         "Dwarka_SWCF",
     ]
     assert entries["consumer:dcdrc:delhi:ito"]["aliases"] == ["ITO"]
     assert entries["district:india-gov:delhi:centraldelhi"]["aliases"] == ["Tis Hazari"]
-    assert entries["district:india-gov:delhi:westdelhi"]["aliases"] == ["Tis Hazari"]
+    assert sorted(entries["district:india-gov:delhi:westdelhi"]["aliases"]) == [
+        "Tis Hazari", "Tis Hazari (West)",
+    ]
 
 
 def test_500_exact_court_rows_load_the_catalog_once(client: TestClient) -> None:

@@ -1,8 +1,11 @@
 /* Sprint: Codex gap audit #6 */
-import { expect, request, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import type { APIRequestContext, ConsoleMessage } from "@playwright/test";
 
 import { apiBaseUrl } from "./support/env";
+import { noPaidProviderHeaders } from "./support/cost-controls";
+
+test.use({ extraHTTPHeaders: noPaidProviderHeaders });
 
 const PASSWORD = "ResearchPass123!";
 
@@ -34,9 +37,8 @@ test.describe("Research page (§4.2)", () => {
   test.setTimeout(90_000);
 
   test("search query renders result cards or the empty-state", async ({
-    page,
+    page, request: api,
   }) => {
-    const api = await request.newContext();
     const slug = unique("rs");
     await bootstrap(api, slug);
 
@@ -62,29 +64,26 @@ test.describe("Research page (§4.2)", () => {
       page.getByRole("heading", { name: /Grounded legal research/i }),
     ).toBeVisible({ timeout: 15_000 });
 
-    // Fill search. Use the canonical testid first; fall back to
-    // placeholder-based lookup if the selector renames.
     const input = page.getByTestId("research-query-input");
     await expect(input).toBeVisible();
-    await input.fill("bail BNSS 483 triple test");
-    await input.press("Enter");
-
-    // Wait up to 30 s for a result card OR the empty-state to render.
-    // Local SQLite has no corpus, so empty-state is the expected pass.
-    const results = page.getByTestId("research-results");
-    const emptyState = page.getByText(
-      /No matching documents|Corpus unavailable|Index stale/i,
+    const query = "bail BNSS 483 triple test";
+    await input.fill(query);
+    const responsePromise = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === "/api/authorities/search"
+      && response.request().method() === "POST"
+      && response.request().postDataJSON()?.query === query,
     );
-    await Promise.race([
-      results.waitFor({ state: "visible", timeout: 30_000 }).catch(() => null),
-      emptyState
-        .waitFor({ state: "visible", timeout: 30_000 })
-        .catch(() => null),
-    ]);
+    await input.press("Enter");
+    const response = await responsePromise;
+    expect(response.status(), await response.text()).toBe(200);
+    expect(await response.json()).toMatchObject({ query, results: expect.any(Array) });
 
-    const resultsVisible = await results.isVisible().catch(() => false);
-    const emptyVisible = await emptyState.isVisible().catch(() => false);
-    expect(resultsVisible || emptyVisible).toBe(true);
+    // The corpus banner can repeat the outcome; only the result heading owns it.
+    const results = page.getByTestId("research-results");
+    const emptyState = page.getByRole("heading", {
+      level: 3, name: /^(No matching documents|Corpus unavailable|Index stale)$/i,
+    });
+    await expect(results.or(emptyState)).toBeVisible({ timeout: 30_000 });
 
     // Negative assertions: no `invalid_token` rendered, no console errors.
     await expect(page.getByText(/invalid_token/i)).toHaveCount(0);

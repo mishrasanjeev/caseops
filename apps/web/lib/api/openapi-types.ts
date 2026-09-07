@@ -4288,6 +4288,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip-domains": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * IP domain availability
+         * @description Public release claims only; no tenant data, permissions or entitlements.
+         */
+        get: operations["ip_domain_availability_api_ip_domains_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/access/foundation-contract": {
         parameters: {
             query?: never;
@@ -6847,6 +6867,265 @@ export interface paths {
         put?: never;
         /** Post Ip Covered Deadline Terminalization */
         post: operations["post_ip_covered_deadline_terminalization_api_ip_operational_deadlines__deadline_id__terminalize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/patents/applications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Applications */
+        get: operations["get_applications_api_ip_patents_applications_get"];
+        put?: never;
+        /** Post Application */
+        post: operations["post_application_api_ip_patents_applications_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/patents/applications/{application_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Application */
+        get: operations["get_application_api_ip_patents_applications__application_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/patents/applications/{application_id}/corrections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Application Correction */
+        post: operations["post_application_correction_api_ip_patents_applications__application_id__corrections_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/patents/applications/{application_id}/lifecycle-history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Application Lifecycle History */
+        get: operations["get_application_lifecycle_history_api_ip_patents_applications__application_id__lifecycle_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/patents/applications/{application_id}/priorities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Priorities */
+        get: operations["get_priorities_api_ip_patents_applications__application_id__priorities_get"];
+        put?: never;
+        /** Post Priority */
+        post: operations["post_priority_api_ip_patents_applications__application_id__priorities_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/patents/applications/{application_id}/priorities/{priority_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Priority */
+        get: operations["get_priority_api_ip_patents_applications__application_id__priorities__priority_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/patents/applications/{application_id}/versions/{version}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Application Version */
+        get: operations["get_application_version_api_ip_patents_applications__application_id__versions__version__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/patents/dockets/{docket_id}/parties": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Parties */
+        get: operations["get_parties_api_ip_patents_dockets__docket_id__parties_get"];
+        put?: never;
+        /** Post Party */
+        post: operations["post_party_api_ip_patents_dockets__docket_id__parties_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/patents/dockets/{docket_id}/parties/{party_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Party */
+        get: operations["get_party_api_ip_patents_dockets__docket_id__parties__party_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/patents/families": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Families */
+        get: operations["get_families_api_ip_patents_families_get"];
+        put?: never;
+        /** Post Family */
+        post: operations["post_family_api_ip_patents_families_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/patents/families/{family_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Family */
+        get: operations["get_family_api_ip_patents_families__family_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/patents/families/{family_id}/corrections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Family Correction */
+        post: operations["post_family_correction_api_ip_patents_families__family_id__corrections_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/patents/families/{family_id}/graph": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Family Graph */
+        get: operations["get_family_graph_api_ip_patents_families__family_id__graph_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/patents/families/{family_id}/lifecycle-history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Family Lifecycle History */
+        get: operations["get_family_lifecycle_history_api_ip_patents_families__family_id__lifecycle_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/patents/families/{family_id}/versions/{version}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Family Version */
+        get: operations["get_family_version_api_ip_patents_families__family_id__versions__version__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -15525,6 +15804,8 @@ export interface components {
             client_email?: string | null;
             /** Client Name */
             client_name?: string | null;
+            /** Cnr Number */
+            cnr_number?: string | null;
             /** Court Forum Number */
             court_forum_number?: string | null;
             /** Court Name */
@@ -15586,6 +15867,8 @@ export interface components {
             team_id?: string | null;
             /** Team Slug */
             team_slug?: string | null;
+            /** Temporary E Case Number */
+            temporary_e_case_number?: string | null;
             /** Title */
             title?: string | null;
         };
@@ -25443,6 +25726,39 @@ export interface components {
             /** Version */
             version: number;
         };
+        /** IpDomainCapability */
+        IpDomainCapability: {
+            /** Authoritative Automation Available */
+            authoritative_automation_available: boolean;
+            /** Blockers */
+            blockers: string[];
+            /** Contract Version */
+            contract_version: string;
+            /** Domain */
+            domain: string;
+            /** Intake Available */
+            intake_available: boolean;
+            /** Jurisdictions */
+            jurisdictions: string[];
+            /** Label */
+            label: string;
+            /** Offices */
+            offices: string[];
+            /** Required Journeys */
+            required_journeys: string[];
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "unavailable" | "intake_only" | "beta" | "ga";
+        };
+        /** IpDomainCatalogue */
+        IpDomainCatalogue: {
+            /** Catalogue Version */
+            catalogue_version: string;
+            /** Domains */
+            domains: components["schemas"]["IpDomainCapability"][];
+        };
         /** IpDraftLifecycleRequest */
         IpDraftLifecycleRequest: {
             /** Method */
@@ -26638,7 +26954,7 @@ export interface components {
              * Impact Kind
              * @enum {string}
              */
-            impact_kind: "coverage" | "obligation" | "deadline" | "incident" | "proceeding" | "recordal" | "matter" | "successor";
+            impact_kind: "coverage" | "obligation" | "deadline" | "incident" | "proceeding" | "recordal" | "matter" | "successor" | "lifecycle_event";
             /** Proposed Outcome */
             proposed_outcome: string;
             /** Record Id */
@@ -31302,6 +31618,8 @@ export interface components {
         /** IpWorkspaceReadinessResponse */
         IpWorkspaceReadinessResponse: {
             configuration_status: components["schemas"]["IpWorkspaceConfigurationStatusResponse"];
+            /** Domains */
+            domains?: components["schemas"]["IpDomainCapability"][];
             /** Features */
             features: components["schemas"]["IpFeatureReadinessRecord"][];
             /** Manual Docketing Available */
@@ -34464,6 +34782,8 @@ export interface components {
             status: "intake" | "active" | "on_hold" | "disposed" | "closed";
             /** Team Id */
             team_id?: string | null;
+            /** Temporary E Case Number */
+            temporary_e_case_number?: string | null;
             /** Title */
             title: string;
         };
@@ -35395,6 +35715,8 @@ export interface components {
             tags?: components["schemas"]["MatterTagRecord"][];
             /** Team Id */
             team_id?: string | null;
+            /** Temporary E Case Number */
+            temporary_e_case_number?: string | null;
             /** Title */
             title: string;
             /**
@@ -35928,6 +36250,8 @@ export interface components {
             status?: ("intake" | "active" | "on_hold" | "disposed" | "closed") | null;
             /** Team Id */
             team_id?: string | null;
+            /** Temporary E Case Number */
+            temporary_e_case_number?: string | null;
             /** Title */
             title?: string | null;
         };
@@ -38017,6 +38341,539 @@ export interface components {
              * @default true
              */
             delivered: boolean;
+        };
+        /** PatentAddressSnapshot */
+        PatentAddressSnapshot: {
+            /** Address Lines */
+            address_lines: string[];
+            /** City */
+            city: string;
+            /** Country Code */
+            country_code: string;
+            /** Postal Code */
+            postal_code?: string | null;
+            /** Region */
+            region?: string | null;
+        };
+        /** PatentApplicationCorrectionRequest */
+        PatentApplicationCorrectionRequest: {
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version: number;
+            /** Expected Version */
+            expected_version: number;
+            facts: components["schemas"]["PatentApplicationFacts"];
+            /** Reason */
+            reason: string;
+        };
+        /** PatentApplicationCreateRequest */
+        PatentApplicationCreateRequest: {
+            /** Expected Family Lifecycle Version */
+            expected_family_lifecycle_version: number;
+            /** Expected Family Version */
+            expected_family_version: number;
+            facts: components["schemas"]["PatentApplicationFacts"];
+            /**
+             * Family Id
+             * Format: uuid
+             */
+            family_id: string;
+        };
+        /** PatentApplicationFacts */
+        PatentApplicationFacts: {
+            /**
+             * Application Kind
+             * @enum {string}
+             */
+            application_kind: "provisional" | "complete" | "convention" | "pct_international" | "national_phase" | "divisional" | "patent_of_addition";
+            /** Filing Date */
+            filing_date?: string | null;
+            /**
+             * Identifiers
+             * @default []
+             */
+            identifiers: components["schemas"]["PatentIdentifierFact"][];
+            /** Jurisdiction */
+            jurisdiction: string;
+            /** Office */
+            office: string;
+            /** Publication Date */
+            publication_date?: string | null;
+            /** Source */
+            source: components["schemas"]["PatentDocumentSource"] | components["schemas"]["PatentRegistrySource"];
+            /**
+             * Source Pending Identifier Allocation
+             * @default false
+             */
+            source_pending_identifier_allocation: boolean;
+            /** Title */
+            title: string;
+        };
+        /** PatentApplicationListResponse */
+        PatentApplicationListResponse: {
+            /** Applications */
+            applications: components["schemas"]["PatentApplicationRecord"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** PatentApplicationRecord */
+        PatentApplicationRecord: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Docket Id
+             * Format: uuid
+             */
+            docket_id: string;
+            facts: components["schemas"]["PatentApplicationFacts"];
+            /**
+             * Family Id
+             * Format: uuid
+             */
+            family_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Lifecycle Status */
+            lifecycle_status: string;
+            /** Lifecycle Version */
+            lifecycle_version: number;
+            /**
+             * Prosecution Phase
+             * @enum {string}
+             */
+            prosecution_phase: "disclosure" | "filing_preparation" | "filed" | "published" | "examination_requested" | "examination" | "response_filed" | "hearing" | "granted" | "refused" | "withdrawn" | "abandoned" | "closed";
+            /**
+             * Record Kind
+             * @default patent_application
+             * @constant
+             */
+            record_kind: "patent_application";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version */
+            version: number;
+        };
+        /** PatentDocumentSource */
+        PatentDocumentSource: {
+            /** Content Sha256 */
+            content_sha256: string;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /**
+             * Document Version Id
+             * Format: uuid
+             */
+            document_version_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "document_version";
+        };
+        /** PatentFamilyCorrectionRequest */
+        PatentFamilyCorrectionRequest: {
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version: number;
+            /** Expected Version */
+            expected_version: number;
+            facts: components["schemas"]["PatentFamilyFacts"];
+            /** Reason */
+            reason: string;
+        };
+        /** PatentFamilyCreateRequest */
+        PatentFamilyCreateRequest: {
+            /**
+             * Client Id
+             * Format: uuid
+             */
+            client_id: string;
+            /**
+             * Confidentiality
+             * @default restricted
+             * @constant
+             */
+            confidentiality: "restricted";
+            /**
+             * Disclosure Date
+             * Format: date
+             */
+            disclosure_date: string;
+            /** Disclosure Narrative */
+            disclosure_narrative: string;
+            /** Source */
+            source?: (components["schemas"]["PatentDocumentSource"] | components["schemas"]["PatentRegistrySource"]) | null;
+            /** Title */
+            title: string;
+        };
+        /** PatentFamilyFacts */
+        PatentFamilyFacts: {
+            /**
+             * Client Id
+             * Format: uuid
+             */
+            client_id: string;
+            /**
+             * Confidentiality
+             * @default restricted
+             * @constant
+             */
+            confidentiality: "restricted";
+            /**
+             * Disclosure Date
+             * Format: date
+             */
+            disclosure_date: string;
+            /** Disclosure Narrative */
+            disclosure_narrative: string;
+            /** Source */
+            source?: (components["schemas"]["PatentDocumentSource"] | components["schemas"]["PatentRegistrySource"]) | null;
+            /** Title */
+            title: string;
+        };
+        /** PatentFamilyGraphResponse */
+        PatentFamilyGraphResponse: {
+            /** Applications */
+            applications: components["schemas"]["PatentApplicationRecord"][];
+            /** Applications Next Cursor */
+            applications_next_cursor?: string | null;
+            /**
+             * Family Id
+             * Format: uuid
+             */
+            family_id: string;
+            /** Has More Applications */
+            has_more_applications: boolean;
+            /** Has More Relationships */
+            has_more_relationships: boolean;
+            /** Priorities */
+            priorities: components["schemas"]["PatentPriorityRecord"][];
+            /** Priorities Next Cursor */
+            priorities_next_cursor?: string | null;
+        };
+        /** PatentFamilyLifecycleEvent */
+        PatentFamilyLifecycleEvent: {
+            /**
+             * Effective At
+             * Format: date-time
+             */
+            effective_at: string;
+            /**
+             * Entered At
+             * Format: date-time
+             */
+            entered_at: string;
+            /** Evidence Refs */
+            evidence_refs: string[];
+            /** From Status */
+            from_status: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Reason */
+            reason: string | null;
+            /** Sequence */
+            sequence: number;
+            /** To Status */
+            to_status: string | null;
+        };
+        /** PatentFamilyLifecycleHistory */
+        PatentFamilyLifecycleHistory: {
+            /** Events */
+            events: components["schemas"]["PatentFamilyLifecycleEvent"][];
+            /** Next Cursor */
+            next_cursor: number | null;
+        };
+        /** PatentFamilyListResponse */
+        PatentFamilyListResponse: {
+            /** Families */
+            families: components["schemas"]["PatentFamilyRecord"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** PatentFamilyRecord */
+        PatentFamilyRecord: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Docket Id
+             * Format: uuid
+             */
+            docket_id: string;
+            facts: components["schemas"]["PatentFamilyFacts"];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Lifecycle Status */
+            lifecycle_status: string;
+            /** Lifecycle Version */
+            lifecycle_version: number;
+            /**
+             * Record Kind
+             * @default patent_family
+             * @constant
+             */
+            record_kind: "patent_family";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version */
+            version: number;
+        };
+        /** PatentIdentifierFact */
+        PatentIdentifierFact: {
+            /**
+             * Identifier Kind
+             * @enum {string}
+             */
+            identifier_kind: "application" | "publication" | "grant";
+            /** Raw Value */
+            raw_value: string;
+            /** Source */
+            source: components["schemas"]["PatentDocumentSource"] | components["schemas"]["PatentRegistrySource"];
+        };
+        /** PatentPartyCreateRequest */
+        PatentPartyCreateRequest: {
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version: number;
+            /** Expected Party Sequence */
+            expected_party_sequence: number;
+            /** Expected Version */
+            expected_version: number;
+            fact: components["schemas"]["PatentPartyFact"];
+            /** Reason */
+            reason: string;
+            /** Supersedes Party Id */
+            supersedes_party_id?: string | null;
+        };
+        /** PatentPartyFact */
+        PatentPartyFact: {
+            address: components["schemas"]["PatentAddressSnapshot"];
+            /** Client Id */
+            client_id?: string | null;
+            /**
+             * Effective From
+             * Format: date
+             */
+            effective_from: string;
+            /** Effective Until */
+            effective_until?: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "inventor" | "applicant" | "proprietor" | "agent" | "licensee";
+            /** Source */
+            source: components["schemas"]["PatentDocumentSource"] | components["schemas"]["PatentRegistrySource"];
+        };
+        /** PatentPartyListResponse */
+        PatentPartyListResponse: {
+            /** Collection Sequence */
+            collection_sequence: number;
+            /**
+             * Docket Id
+             * Format: uuid
+             */
+            docket_id: string;
+            /** Next Cursor */
+            next_cursor?: number | null;
+            /** Parties */
+            parties: components["schemas"]["PatentPartyRecord"][];
+        };
+        /** PatentPartyRecord */
+        PatentPartyRecord: {
+            /** Anchor Version */
+            anchor_version: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Docket Id
+             * Format: uuid
+             */
+            docket_id: string;
+            fact: components["schemas"]["PatentPartyFact"];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Current */
+            is_current: boolean;
+            /** Lifecycle Version */
+            lifecycle_version: number;
+            /** Reason */
+            reason: string;
+            /** Sequence */
+            sequence: number;
+            /** Supersedes Party Id */
+            supersedes_party_id?: string | null;
+        };
+        /** PatentPriorityCreateRequest */
+        PatentPriorityCreateRequest: {
+            /** Expected Application Version */
+            expected_application_version: number;
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version: number;
+            /** Expected Parent Lifecycle Version */
+            expected_parent_lifecycle_version: number;
+            /** Expected Parent Version */
+            expected_parent_version: number;
+            /** Expected Priority Sequence */
+            expected_priority_sequence: number;
+            /**
+             * Parent Application Id
+             * Format: uuid
+             */
+            parent_application_id: string;
+            /**
+             * Priority Date
+             * Format: date
+             */
+            priority_date: string;
+            /** Reason */
+            reason: string;
+            /**
+             * Relation Kind
+             * @enum {string}
+             */
+            relation_kind: "priority" | "divisional_parent" | "addition_parent" | "national_phase_parent";
+            /** Source */
+            source: components["schemas"]["PatentDocumentSource"] | components["schemas"]["PatentRegistrySource"];
+            /** Supersedes Priority Id */
+            supersedes_priority_id?: string | null;
+            /**
+             * Withdrawn
+             * @default false
+             */
+            withdrawn: boolean;
+        };
+        /** PatentPriorityListResponse */
+        PatentPriorityListResponse: {
+            /**
+             * Application Id
+             * Format: uuid
+             */
+            application_id: string;
+            /** Collection Sequence */
+            collection_sequence: number;
+            /** Next Cursor */
+            next_cursor?: number | null;
+            /** Priorities */
+            priorities: components["schemas"]["PatentPriorityRecord"][];
+        };
+        /** PatentPriorityRecord */
+        PatentPriorityRecord: {
+            /**
+             * Application Id
+             * Format: uuid
+             */
+            application_id: string;
+            /** Application Version */
+            application_version: number;
+            /**
+             * Canonical Relationship Id
+             * Format: uuid
+             */
+            canonical_relationship_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Current Application Title */
+            current_application_title: string;
+            /** Current Parent Title */
+            current_parent_title: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Current */
+            is_current: boolean;
+            /** Lifecycle Version */
+            lifecycle_version: number;
+            /**
+             * Parent Application Id
+             * Format: uuid
+             */
+            parent_application_id: string;
+            /** Parent Lifecycle Version */
+            parent_lifecycle_version: number;
+            /** Parent Version */
+            parent_version: number;
+            /**
+             * Priority Date
+             * Format: date
+             */
+            priority_date: string;
+            /** Reason */
+            reason: string;
+            /**
+             * Relation Kind
+             * @enum {string}
+             */
+            relation_kind: "priority" | "divisional_parent" | "addition_parent" | "national_phase_parent";
+            /** Review Flags */
+            review_flags: ("office_names_differ" | "jurisdictions_differ" | "filing_dates_incomplete" | "priority_date_precedes_parent_filing")[];
+            /** Sequence */
+            sequence: number;
+            /** Source */
+            source: components["schemas"]["PatentDocumentSource"] | components["schemas"]["PatentRegistrySource"];
+            /** Supersedes Priority Id */
+            supersedes_priority_id?: string | null;
+            /** Withdrawn */
+            withdrawn: boolean;
+        };
+        /** PatentRegistrySource */
+        PatentRegistrySource: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "registry_snapshot";
+            /** Normalized Sha256 */
+            normalized_sha256: string;
+            /** Raw Sha256 */
+            raw_sha256: string;
+            /**
+             * Snapshot Id
+             * Format: uuid
+             */
+            snapshot_id: string;
         };
         /**
          * PaymentConfigResponse
@@ -51738,6 +52595,26 @@ export interface operations {
             };
         };
     };
+    ip_domain_availability_api_ip_domains_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IpDomainCatalogue"];
+                };
+            };
+        };
+    };
     get_record_access_foundation_contract_api_ip_access_foundation_contract_get: {
         parameters: {
             query?: never;
@@ -57200,6 +58077,655 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IpOperationalDeadlineRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_applications_api_ip_patents_applications_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                family_id?: string | null;
+                limit?: number;
+                q?: string | null;
+                status_scope?: "active" | "terminal" | "all";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentApplicationListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_application_api_ip_patents_applications_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatentApplicationCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentApplicationRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_application_api_ip_patents_applications__application_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentApplicationRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_application_correction_api_ip_patents_applications__application_id__corrections_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatentApplicationCorrectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentApplicationRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_application_lifecycle_history_api_ip_patents_applications__application_id__lifecycle_history_get: {
+        parameters: {
+            query?: {
+                cursor?: number | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                application_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentFamilyLifecycleHistory"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_priorities_api_ip_patents_applications__application_id__priorities_get: {
+        parameters: {
+            query?: {
+                cursor?: number | null;
+                history?: boolean;
+                limit?: number;
+                snapshot_sequence?: number | null;
+            };
+            header?: never;
+            path: {
+                application_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentPriorityListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_priority_api_ip_patents_applications__application_id__priorities_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path: {
+                application_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatentPriorityCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentPriorityRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_priority_api_ip_patents_applications__application_id__priorities__priority_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: string;
+                priority_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentPriorityRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_application_version_api_ip_patents_applications__application_id__versions__version__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: string;
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentApplicationRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_parties_api_ip_patents_dockets__docket_id__parties_get: {
+        parameters: {
+            query?: {
+                cursor?: number | null;
+                history?: boolean;
+                limit?: number;
+                snapshot_sequence?: number | null;
+            };
+            header?: never;
+            path: {
+                docket_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentPartyListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_party_api_ip_patents_dockets__docket_id__parties_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path: {
+                docket_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatentPartyCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentPartyRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_party_api_ip_patents_dockets__docket_id__parties__party_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                docket_id: string;
+                party_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentPartyRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_families_api_ip_patents_families_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+                q?: string | null;
+                status_scope?: "active" | "terminal" | "all";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentFamilyListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_family_api_ip_patents_families_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatentFamilyCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentFamilyRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_family_api_ip_patents_families__family_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                family_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentFamilyRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_family_correction_api_ip_patents_families__family_id__corrections_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                family_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatentFamilyCorrectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentFamilyRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_family_graph_api_ip_patents_families__family_id__graph_get: {
+        parameters: {
+            query?: {
+                application_limit?: number;
+                applications_cursor?: string | null;
+                priorities_cursor?: string | null;
+                priority_limit?: number;
+            };
+            header?: never;
+            path: {
+                family_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentFamilyGraphResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_family_lifecycle_history_api_ip_patents_families__family_id__lifecycle_history_get: {
+        parameters: {
+            query?: {
+                cursor?: number | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                family_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentFamilyLifecycleHistory"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_family_version_api_ip_patents_families__family_id__versions__version__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                family_id: string;
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentFamilyRecord"];
                 };
             };
             /** @description Validation Error */

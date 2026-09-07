@@ -23,6 +23,7 @@ from caseops_api.db.models import (
     TrademarkRepresentation,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.ip_domain_policy import assert_trademark_docket
 from caseops_api.services.ip_identifier_rules import normalize_ip_identifier
 from caseops_api.services.session_context import SessionContext
 
@@ -156,12 +157,14 @@ def _docket(
     # cannot invent a second authorization or terminal-state policy.
     from caseops_api.services.ip_operations import _docket_or_404
 
-    return _docket_or_404(
+    docket = _docket_or_404(
         session,
         context=context,
         docket_id=docket_id,
         for_update=for_update,
     )
+    assert_trademark_docket(docket)
+    return docket
 
 
 def _duplicate_identifiers(

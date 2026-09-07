@@ -1,6 +1,37 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("Marketing site", () => {
+  for (const path of ["/general-counsels", "/solo-lawyers"]) {
+    for (const width of [393, 768, 1280]) {
+      test(`research claims are qualified and fit their surfaces: ${path} at ${width}px`, async ({ page }, testInfo) => {
+        await page.setViewportSize({ width, height: 900 });
+        const response = await page.goto(path);
+        expect(response?.status()).toBe(200);
+        const content = await page.locator("main").innerText();
+        expect(content).not.toMatch(/108k|96\.7%|5,714|5,700|mean rank 1\.03|<\s*60s|30-minute quality probe|91 sections live|clauses in 30 seconds/);
+        const section = page.locator(path === "/general-counsels" ? "#proof" : "#research");
+        await section.scrollIntoViewIfNeeded();
+        await expect(section.getByText("Not certified", { exact: true })).toBeVisible();
+        await expect(section.getByText("No representative legal-retrieval rating is claimed here.", { exact: true })).toBeVisible();
+        const metrics = section.getByTestId("marketing-metric");
+        await expect(metrics).toHaveCount(4);
+        expect(await metrics.evaluateAll((cards) => cards.flatMap((card) => {
+          const box = card.getBoundingClientRect();
+          return Array.from(card.querySelectorAll("div")).flatMap((child) => {
+            const range = document.createRange(); range.selectNodeContents(child);
+            const overflow = Array.from(range.getClientRects()).some((rect) => rect.left < box.left || rect.right > box.right);
+            return overflow || child.scrollWidth > child.clientWidth ? [child.textContent] : [];
+          });
+        }))).toEqual([]);
+        await section.screenshot({ path: testInfo.outputPath(`qualified-research-${width}.png`) });
+        if (path === "/solo-lawyers") {
+          await expect(page.locator("#appeals")).toContainText("catalog coverage remains incomplete");
+          await expect(page.locator("#appeals")).not.toContainText("Section 482 BNSS is quoted verbatim");
+        }
+      });
+    }
+  }
+
   test("landing page renders primary copy, navigation, and SEO surface", async ({ page }) => {
     const response = await page.goto("/");
     expect(response?.status()).toBe(200);

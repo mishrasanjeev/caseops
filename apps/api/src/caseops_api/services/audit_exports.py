@@ -50,6 +50,7 @@ from caseops_api.services.document_storage import (
     persist_workspace_attachment,
     resolve_storage_path,
 )
+from caseops_api.services.ip_domain_policy import general_ip_disclosure_filter
 from caseops_api.services.matter_access import visible_ip_dockets_filter
 from caseops_api.services.notification_delivery import redact_provider_error
 from caseops_api.services.session_context import SessionContext
@@ -329,6 +330,7 @@ def run_export_job(job_id: str) -> None:
             )
             visible_docket_ids = select(IpDocketRecord.id).where(
                 IpDocketRecord.company_id == company.id,
+                general_ip_disclosure_filter(),
                 visible_ip_dockets_filter(session, context=context),
             )
             stmt = (

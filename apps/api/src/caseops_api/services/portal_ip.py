@@ -55,6 +55,11 @@ from caseops_api.schemas.portal_ip import (
     PortalReportPublicationCreate,
 )
 from caseops_api.services.audit import record_audit, record_from_context
+from caseops_api.services.ip_domain_policy import (
+    disclosable_ip_document_ids,
+    general_ip_disclosure_allowed,
+    general_ip_disclosure_filter,
+)
 from caseops_api.services.ip_reports import preview_ip_report
 from caseops_api.services.matter_access import can_access_ip_docket
 from caseops_api.services.notification_delivery import (
@@ -158,6 +163,7 @@ def _portal_grant(
         select(IpDocketRecord).where(
             IpDocketRecord.id == docket_id,
             IpDocketRecord.company_id == portal_user.company_id,
+            general_ip_disclosure_filter(),
             IpDocketRecord.is_active.is_(True),
             IpDocketRecord.archived_by_matter_disposal.is_(False),
         )
@@ -176,6 +182,7 @@ def list_admin_ip_grants(session: Session, *, context: SessionContext) -> Portal
             MatterPortalGrant.company_id == context.company.id,
             PortalUser.company_id == context.company.id,
             IpDocketRecord.company_id == context.company.id,
+            general_ip_disclosure_filter(),
         )
         .order_by(MatterPortalGrant.granted_at.desc(), MatterPortalGrant.id)
         .limit(500)
@@ -502,6 +509,7 @@ def list_portal_ip_records(
         .where(
             MatterPortalGrant.company_id == portal_user.company_id,
             IpDocketRecord.company_id == portal_user.company_id,
+            general_ip_disclosure_filter(),
             IpDocketRecord.is_active.is_(True),
             IpDocketRecord.archived_by_matter_disposal.is_(False),
         )
@@ -548,6 +556,7 @@ def _publication_grants(
                 MatterPortalGrant.expires_at > _now(),
             ),
             IpDocketRecord.company_id == context.company.id,
+            general_ip_disclosure_filter(),
             IpDocketRecord.is_active.is_(True),
             IpDocketRecord.archived_by_matter_disposal.is_(False),
         )
@@ -851,6 +860,9 @@ def publish_document_to_portal(
     if (
         document.is_privileged
         or document.confidentiality != "internal"
+        or document.id not in disclosable_ip_document_ids(
+            session, company_id=context.company.id, document_ids={document.id}
+        )
         or version.state not in {"approved", "filed", "served", "accepted"}
     ):
         raise _conflict(
@@ -949,9 +961,12 @@ def _publication_targets(
     return [
         PortalPublicationTargetRecord(
             ip_docket_record_id=docket.id,
-            docket_title=docket.title,
+            docket_title=(
+                docket.title if general_ip_disclosure_allowed(docket) else "Restricted IP record"
+            ),
             current=bool(
                 _grant_is_active(grant, now=now)
+                and general_ip_disclosure_allowed(docket)
                 and docket.is_active
                 and not docket.archived_by_matter_disposal
                 and docket.current_version == target.docket_version
@@ -992,9 +1007,14 @@ def _publication_targets_for_ids(
         grouped[target.publication_id].append(
             PortalPublicationTargetRecord(
                 ip_docket_record_id=docket.id,
-                docket_title=docket.title,
+                docket_title=(
+                    docket.title
+                    if general_ip_disclosure_allowed(docket)
+                    else "Restricted IP record"
+                ),
                 current=bool(
                     _grant_is_active(grant, now=now)
+                    and general_ip_disclosure_allowed(docket)
                     and docket.is_active
                     and not docket.archived_by_matter_disposal
                     and docket.current_version == target.docket_version
@@ -1017,6 +1037,7 @@ def _publication_record(
     loaded_artifact: ReportArtifact | None = None,
     loaded_version: IpDocumentVersion | None = None,
     loaded_document: IpDocument | None = None,
+    loaded_disclosable_document_ids: set[str] | None = None,
     loaded_intent: NotificationDeliveryIntent | None = None,
 ) -> PortalPublicationRecord:
     if publication.portal_user_id != portal_user.id:
@@ -1063,6 +1084,15 @@ def _publication_record(
     # the canonical document policy/version on every list, open and download so
     # a later privilege, confidentiality, lifecycle or purge/provider cleanup
     # cannot leave the old portal copy readable.
+    disclosable_document_ids = (
+        (loaded_disclosable_document_ids or set())
+        if dependencies_loaded
+        else disclosable_ip_document_ids(
+            session,
+            company_id=portal_user.company_id,
+            document_ids={document.id} if document is not None else set(),
+        )
+    )
     document_current = bool(
         publication.document_version_id is None
         or (
@@ -1074,6 +1104,7 @@ def _publication_record(
             and version.version == document.current_version
             and not document.is_privileged
             and document.confidentiality == "internal"
+            and document.id in disclosable_document_ids
             and version.state in {"approved", "filed", "served", "accepted"}
         )
     )
@@ -1137,6 +1168,19 @@ def _publication_record(
     )
 
 
+def portal_publication_is_available(
+    session: Session, *, portal_user: PortalUser, publication_id: str
+) -> bool:
+    publication = session.scalar(select(PortalPublication).where(
+        PortalPublication.id == publication_id,
+        PortalPublication.company_id == portal_user.company_id,
+        PortalPublication.portal_user_id == portal_user.id,
+    ))
+    return publication is not None and _publication_record(
+        session, publication=publication, portal_user=portal_user, record_access=False
+    ).access_state == "available"
+
+
 def list_portal_publications(
     session: Session, *, portal_user: PortalUser
 ) -> PortalPublicationListResponse:
@@ -1180,6 +1224,9 @@ def list_portal_publications(
     ).all()
     versions = {version.id: version for version, _document in version_document_rows}
     documents = {document.id: document for _version, document in version_document_rows}
+    disclosable_document_ids = disclosable_ip_document_ids(
+        session, company_id=portal_user.company_id, document_ids=set(documents)
+    )
     intent_ids = [row.delivery_intent_id for row in rows if row.delivery_intent_id]
     intents = {
         row.id: row
@@ -1206,6 +1253,7 @@ def list_portal_publications(
                     else None
                 ),
                 loaded_intent=intents.get(row.delivery_intent_id),
+                loaded_disclosable_document_ids=disclosable_document_ids,
             )
             for row in rows
         ]

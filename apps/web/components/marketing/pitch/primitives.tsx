@@ -182,8 +182,8 @@ export function MetricCard({
   const valueCls = inverse ? "text-white" : "text-[var(--color-ink)]";
   const noteCls = inverse ? "text-white/60" : "text-[var(--color-mute)]";
   return (
-    <div className={cn("rounded-2xl border p-5", base)}>
-      <div className={cn("font-mono text-3xl font-medium leading-none tabular-nums", valueCls)}>
+    <div data-testid="marketing-metric" className={cn("min-w-0 rounded-2xl border p-5", base)}>
+      <div className={cn("min-w-0 font-mono font-medium leading-tight tracking-normal [overflow-wrap:anywhere]", /[a-z]/i.test(value) ? "text-xl" : "text-3xl tabular-nums", valueCls)}>
         {value}
       </div>
       <div

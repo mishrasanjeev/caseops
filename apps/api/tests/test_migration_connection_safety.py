@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,23 @@ from caseops_api.core.settings import get_settings
 from caseops_api.db.connection_safety import migration_connect_args
 
 API_ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_downgrades_cannot_commit_before_later_restore_forward_refusals() -> None:
+    offenders = []
+    for path in sorted((API_ROOT / "alembic" / "versions").glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for function in tree.body:
+            if not isinstance(function, ast.FunctionDef) or function.name != "downgrade":
+                continue
+            for node in ast.walk(function):
+                if (
+                    isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr in {"autocommit_block", "commit"}
+                ):
+                    offenders.append(f"{path.name}:{node.lineno}")
+    assert offenders == []
 
 
 def test_postgres_migration_connect_args_are_server_enforced() -> None:

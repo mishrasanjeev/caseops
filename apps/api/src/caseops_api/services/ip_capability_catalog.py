@@ -16,6 +16,12 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from caseops_api.core.settings import Settings, get_settings
+from caseops_api.services.ip_domain_catalog import (
+    assert_domain_operation as assert_domain_operation,
+)
+from caseops_api.services.ip_domain_catalog import (
+    domain_catalogue as domain_catalogue,
+)
 from caseops_api.services.session_context import SessionContext
 
 

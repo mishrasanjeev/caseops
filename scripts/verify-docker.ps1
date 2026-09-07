@@ -101,7 +101,7 @@ function Get-AvailablePortBase {
     throw "No available five-port Docker acceptance block exists between 20000 and 49999."
 }
 
-$SourceFingerprint = if ($PreCommit) { Get-WorkingTreeFingerprint } else { $null }
+$SourceFingerprint = Get-WorkingTreeFingerprint
 $ReleaseSha = if ($PreCommit) {
     # Runtime release endpoints deliberately accept only exact Git-shaped revisions.
     $SourceFingerprint.Substring(0, 40)
@@ -131,6 +131,20 @@ if ($DirtyContext -and -not $PreCommit) {
     throw "Docker acceptance requires a committed, clean build context. Commit the candidate first.`n$DirtyContext"
 }
 
+function Assert-CandidateSourceUnchanged {
+    param([Parameter(Mandatory=$true)][string]$Stage)
+
+    if ((Get-WorkingTreeFingerprint) -ne $SourceFingerprint) {
+        throw "Candidate source changed $Stage. Rebuild and rerun acceptance for the new source; this run cannot certify it."
+    }
+    if (-not $PreCommit) {
+        $CurrentHead = ((& git -C $RepoRoot rev-parse HEAD | Out-String).Trim())
+        if ($LASTEXITCODE -ne 0 -or $CurrentHead -ne $ReleaseSha) {
+            throw "Candidate commit changed $Stage. Rebuild the current canonical candidate."
+        }
+    }
+}
+
 function Get-ComposeServiceState {
     param(
         [Parameter(Mandatory=$true)]
@@ -156,7 +170,11 @@ function Get-ComposeServiceState {
 }
 
 $PinnedNodeVersion = ((Get-Content -LiteralPath (Join-Path $RepoRoot ".nvmrc") -Raw).Trim() -replace "^v", "")
+& (Join-Path $RepoRoot "tests\docker-candidate-source-guard.ps1")
 $NodePath = (Get-Command node -ErrorAction Stop).Source
+Write-Host "[docker-acceptance] validating local proxy cancellation and transport semantics"
+& $NodePath --test (Join-Path $RepoRoot "scripts\docker-acceptance-api-proxy.test.mjs")
+if ($LASTEXITCODE -ne 0) { throw "Docker acceptance proxy regression tests failed." }
 $ActualNodeVersion = (((& $NodePath --version) | Out-String).Trim() -replace "^v", "")
 if ($ActualNodeVersion -ne $PinnedNodeVersion) {
     throw (
@@ -224,6 +242,9 @@ try {
     Write-Host "[docker-acceptance] preparing frozen host test dependencies"
     & $NpmPath ci --no-audit --no-fund
     if ($LASTEXITCODE -ne 0) { throw "Host Node dependency sync failed." }
+    Write-Host "[docker-acceptance] type-checking browser tests and configurations"
+    & $NpmPath run typecheck:e2e
+    if ($LASTEXITCODE -ne 0) { throw "Browser test or configuration typecheck failed." }
     & uv sync --project $ApiDir --frozen
     if ($LASTEXITCODE -ne 0) { throw "Host API dependency sync failed." }
     & $ApiPython -c "import caseops_api, psycopg, sqlalchemy"
@@ -239,6 +260,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Docker image build failed." }
     }
 
+    Assert-CandidateSourceUnchanged -Stage "after image build"
     Write-Host "[docker-acceptance] starting migration-first stack"
     & docker compose --project-name $ComposeProject --file $ComposeFile up --detach --wait --wait-timeout 300
     if ($LASTEXITCODE -ne 0) { throw "Docker stack did not become healthy." }
@@ -310,12 +332,21 @@ try {
     Write-Host "[docker-acceptance] running the complete PostgreSQL + pgvector validation suite"
     Push-Location $ApiDir
     try {
-        & $ApiPython -m pytest -q -m postgres tests/test_postgres_validation.py
+        & $ApiPython -m pytest -q -m postgres
         if ($LASTEXITCODE -ne 0) { throw "PostgreSQL + pgvector validation failed." }
     }
     finally {
         Pop-Location
     }
+
+    Write-Host "[docker-acceptance] rechecking schema and index health after rollback rehearsals"
+    & docker compose --project-name $ComposeProject --file $ComposeFile exec --no-TTY api caseops-db-index-health
+    if ($LASTEXITCODE -ne 0) { throw "PostgreSQL post-rehearsal index health gate failed." }
+    # Database rollback tests may clear catalog rows. Match the production
+    # release seed after those tests, using the exact inspected API image.
+    Write-Host "[docker-acceptance] seeding the release statute catalog"
+    & docker compose --project-name $ComposeProject --file $ComposeFile exec --no-TTY api python -m caseops_api.scripts.seed_statutes
+    if ($LASTEXITCODE -ne 0) { throw "Release statute catalog seed failed." }
     Write-Host "[docker-acceptance] restarting the document worker at the restored schema head"
     & docker compose --project-name $ComposeProject --file $ComposeFile start worker
     if ($LASTEXITCODE -ne 0) { throw "Could not restart the document worker after PostgreSQL validation." }
@@ -328,6 +359,7 @@ try {
         throw "Document worker was $WorkerStateAfterRestart after PostgreSQL validation."
     }
 
+    Assert-CandidateSourceUnchanged -Stage "before browser acceptance"
     Write-Host "[docker-acceptance] running Playwright against Docker + PostgreSQL"
     $TestApiProxyStdout = [IO.Path]::GetTempFileName()
     $TestApiProxyStderr = [IO.Path]::GetTempFileName()
@@ -385,6 +417,7 @@ try {
     }
     $PostTestHealth = Invoke-RestMethod "http://127.0.0.1:$ApiPort/api/health"
     if ($PostTestHealth.status -ne "ok") { throw "API became unhealthy after Playwright." }
+    Assert-CandidateSourceUnchanged -Stage "before acceptance certification"
     $Succeeded = $true
     Write-Host "[docker-acceptance] PASS $ReleaseSha"
 }

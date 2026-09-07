@@ -17,6 +17,7 @@ export type WorkspaceMatter = {
   forum_consumer_level?: string | null;
   judge_name?: string | null;
   case_number?: string | null;
+  temporary_e_case_number?: string | null;
   cnr_number?: string | null;
   client_name?: string | null;
   opposing_party?: string | null;

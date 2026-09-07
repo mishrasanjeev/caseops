@@ -72,6 +72,7 @@ type MatterEditDraft = {
   clientName: string;
   opposingParty: string;
   caseNumber: string;
+  temporaryECaseNumber: string;
   cnrNumber: string;
   status: "intake" | "active" | "on_hold" | "disposed";
   practiceArea: string;
@@ -113,6 +114,7 @@ function draftFromMatter(matter: Matter): MatterEditDraft {
     clientName: matter.client_name ?? "",
     opposingParty: matter.opposing_party ?? "",
     caseNumber: matter.case_number ?? "",
+    temporaryECaseNumber: matter.temporary_e_case_number ?? "",
     cnrNumber: matter.cnr_number ?? "",
     status: matter.status as MatterEditDraft["status"],
     practiceArea: matter.practice_area ?? "",
@@ -150,6 +152,7 @@ function buildMatterUpdateInput(
   const clientName = blankToNull(draft.clientName);
   const opposingParty = blankToNull(draft.opposingParty);
   const caseNumber = blankToNull(draft.caseNumber);
+  const temporaryECaseNumber = blankToNull(draft.temporaryECaseNumber);
   const cnrNumber = blankToNull(draft.cnrNumber);
   const courtName = blankToNull(draft.courtName);
   const courtForumNumber = blankToNull(draft.courtForumNumber);
@@ -166,6 +169,8 @@ function buildMatterUpdateInput(
   }
   if (caseNumber !== (matter.case_number ?? null))
     input.case_number = caseNumber;
+  if (temporaryECaseNumber !== (matter.temporary_e_case_number ?? null))
+    input.temporary_e_case_number = temporaryECaseNumber;
   if (cnrNumber !== (matter.cnr_number ?? null)) input.cnr_number = cnrNumber;
   if (practiceArea !== (matter.practice_area ?? "")) {
     input.practice_area = practiceArea;
@@ -209,7 +214,9 @@ function MatterDetail({
       <div className="text-xs font-medium uppercase tracking-[0.06em] text-[var(--color-mute)]">
         {label}
       </div>
-      <div className="mt-1 text-sm text-[var(--color-ink)]">{value || "-"}</div>
+      <div className="mt-1 break-words text-sm text-[var(--color-ink)]">
+        {value || "-"}
+      </div>
     </div>
   );
 }
@@ -235,7 +242,9 @@ export default function MatterOverviewPage() {
       setSupportSequence((current) => ({
         matterId,
         stage:
-          current.matterId === matterId ? Math.max(current.stage, stage) : stage,
+          current.matterId === matterId
+            ? Math.max(current.stage, stage)
+            : stage,
       }));
     },
     [params.id],
@@ -510,6 +519,23 @@ export default function MatterOverviewPage() {
                 />
               </div>
               <div>
+                <Label htmlFor="matter-edit-temporary-e-case-number">
+                  Temporary E-Case number
+                </Label>
+                <Input
+                  id="matter-edit-temporary-e-case-number"
+                  className="mt-1.5"
+                  value={matterDraft.temporaryECaseNumber}
+                  maxLength={120}
+                  onChange={(event) =>
+                    updateMatterDraft({
+                      temporaryECaseNumber: event.target.value,
+                    })
+                  }
+                  data-testid="matter-edit-temporary-e-case-number"
+                />
+              </div>
+              <div>
                 <Label htmlFor="matter-edit-case-number">Case number</Label>
                 <Input
                   id="matter-edit-case-number"
@@ -659,6 +685,10 @@ export default function MatterOverviewPage() {
                 <MatterDetail
                   label="Case number"
                   value={data.matter.case_number}
+                />
+                <MatterDetail
+                  label="Temporary E-Case number"
+                  value={data.matter.temporary_e_case_number}
                 />
                 <MatterDetail
                   label="CNR number"

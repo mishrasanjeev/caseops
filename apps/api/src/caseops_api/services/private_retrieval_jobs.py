@@ -23,13 +23,10 @@ from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
     Client,
-    IpDeadline,
-    IpDocketEvent,
     IpDocketRecord,
     IpDocument,
     IpDocumentLink,
     IpDocumentVersion,
-    IpProceeding,
     Matter,
     MatterAttachment,
     MatterAttachmentChunk,
@@ -37,9 +34,13 @@ from caseops_api.db.models import (
     PrivateIndexProjection,
     PrivateIndexProjectionScope,
     PrivateProjectionEvent,
-    TrademarkApplication,
 )
 from caseops_api.services.embeddings import EmbeddingProvider
+from caseops_api.services.ip_domain_policy import (
+    IP_DOCUMENT_CHILD_TARGET_MODELS,
+    general_ip_disclosure_filter,
+    general_ip_document_disclosure_filter,
+)
 from caseops_api.services.private_retrieval import (
     PrivateProjectionInput,
     PrivateRetrievalConcurrencyError,
@@ -329,6 +330,7 @@ def _private_projection_inputs(
         select(IpDocketRecord)
         .where(
             IpDocketRecord.company_id == company_id,
+            general_ip_disclosure_filter(),
             IpDocketRecord.is_active.is_(True),
         )
         .order_by(IpDocketRecord.id)
@@ -370,6 +372,7 @@ def _private_projection_inputs(
         )
         .where(
             IpDocument.company_id == company_id,
+            general_ip_document_disclosure_filter(),
             IpDocument.confidentiality == "internal",
             IpDocument.is_privileged.is_(False),
             IpDocumentVersion.processing_status == "indexed",
@@ -389,12 +392,7 @@ def _private_projection_inputs(
             IpDocumentLink.document_id.in_(document_ids),
         )
     ).all()
-    target_models = {
-        "application": TrademarkApplication,
-        "proceeding": IpProceeding,
-        "event": IpDocketEvent,
-        "deadline": IpDeadline,
-    }
+    target_models = IP_DOCUMENT_CHILD_TARGET_MODELS
     targets: dict[tuple[str, str], str] = {}
     grouped_targets: dict[str, set[str]] = defaultdict(set)
     links_by_document: dict[str, list[IpDocumentLink]] = defaultdict(list)
@@ -422,6 +420,7 @@ def _private_projection_inputs(
             select(IpDocketRecord).where(
                 IpDocketRecord.company_id == company_id,
                 IpDocketRecord.id.in_(docket_ids),
+                general_ip_disclosure_filter(),
                 IpDocketRecord.is_active.is_(True),
             )
         ).all()

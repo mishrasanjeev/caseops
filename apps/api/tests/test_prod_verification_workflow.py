@@ -84,7 +84,9 @@ def test_prod_verification_runs_notice_suite_after_ram_failure() -> None:
 def test_prod_verification_preserves_each_suite_failure_artifact() -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / "prod-verify.yml").read_text(encoding="utf-8")
 
-    for output_directory in ("ram", "ip-a0", "ip-renewal", "ip-cost", "notice"):
+    for output_directory in (
+        "ram", "ip-a0", "ip-renewal", "ip-cost", "notice", "patent", "statute-sources"
+    ):
         assert f"--output=test-results/{output_directory}" in workflow
     upload_step = workflow.split("- name: Upload Playwright report on failure", 1)[1]
     assert "test-results/" in upload_step
@@ -150,3 +152,60 @@ def test_exact_release_dispatch_records_only_the_claim_proven_by_the_suite() -> 
     assert "--operational public_claims_reviewed=pass" in writer
     assert "--billing" not in writer
     assert "--pine" not in writer
+
+
+def test_patent_and_statute_production_phases_are_release_owned_and_bounded() -> None:
+    import yaml
+
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
+    steps = workflow["jobs"]["prod-playwright"]["steps"]
+    by_name = {step.get("name"): step for step in steps}
+    check = by_name["Check release-owned patent and statute acceptance"]
+    assert "-f tests/e2e/support/patent-acceptance.ts" in check["run"]
+    assert "test -f tests/e2e/ram-2026-09-07-statute-source-data.spec.ts" in check["run"]
+    patent = by_name["Run exact-release patent and domain journeys"]
+    statutes = by_name["Verify every release-owned statute source record"]
+    for step in (patent, statutes):
+        assert "always() && !cancelled()" in step["if"]
+        assert "steps.patent-statute-prerequisites.outputs.ready == 'true'" in step["if"]
+        assert "--retries=0" in step["run"]
+        assert "CASEOPS_EXPECTED_RELEASE_SHA" in step["env"]
+    assert "--project=patent-prod-chromium --workers=1" in patent["run"]
+    assert "--project=statute-source-prod-chromium --workers=4" in statutes["run"]
+    broad = by_name["Run prod-Playwright suite (ram-batch)"]["run"]
+    assert "--project=prod-chromium --project=tester-prod-chromium" in broad
+    assert steps.index(by_name["Run prod-Playwright suite (notice module)"]) < steps.index(check)
+    assert steps.index(check) < steps.index(patent) < steps.index(statutes)
+    writer = by_name["Record exact-release public-claims evidence"]
+    assert steps.index(statutes) < steps.index(writer)
+
+
+def test_existing_patent_qa_helper_does_not_rewrite_live_configuration() -> None:
+    helper = (REPO_ROOT / "tests/e2e/support/patent-acceptance.ts").read_text()
+    assert 'required("CASEOPS_EXPECTED_RELEASE_SHA")' in helper
+    assert "`${apiBaseUrl}/api/build`" in helper
+    assert '/api/release-identity`' in helper
+    assert 'expect(session.company.slug).toBe(slug)' in helper
+    assert 'other ? "caseops-qa" : "caseops-ip-qa"' in helper
+    assert 'if (!existingQa) return bootstrapIntelligentReviewTenant(api)' in helper
+    assert 'if (!existingQa) return enableIntelligentReviewIpWorkspace(api, tenant)' in helper
+    assert 'api.get(`${apiBaseUrl}/api/ip/workspace/configuration`' in helper
+    for forbidden in (
+        "spawnSync", "DATABASE_URL", "api.put(",
+        "/api/bootstrap/company", "/api/ip/workspace/enable",
+    ):
+        assert forbidden not in helper
+    assert "noPaidProviderHeaders" in helper
+    assert "patentScreenshot" in helper
+    assert 'new URL(apiBaseUrl).hostname' in helper
+
+
+def test_parallel_statute_source_audit_authenticates_once_per_worker() -> None:
+    spec = (REPO_ROOT / "tests/e2e/ram-2026-09-07-statute-source-data.spec.ts").read_text()
+    assert 'scope: "worker"' in spec
+    assert "async ({ sourceApi: api })" in spec
+    assert "test.beforeAll" not in spec
+    assert "await use(api)" in spec
+    assert "await api?.dispose()" in spec
+    assert "await setup.dispose()" in spec
+    assert "noPaidProviderHeaders" in spec

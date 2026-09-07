@@ -206,6 +206,7 @@ class IpLifecycleImpactRow(BaseModel):
         "recordal",
         "matter",
         "successor",
+        "lifecycle_event",
     ]
     record_id: str
     current_state: str

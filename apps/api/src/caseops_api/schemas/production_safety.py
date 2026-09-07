@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from caseops_api.schemas.ip_domains import IpDomainReleaseEvidence
+
 EvidenceStatusLiteral = Literal["pending", "pass", "fail", "blocked", "not_applicable"]
 ReadinessClassificationLiteral = Literal[
     "live",
@@ -59,6 +61,7 @@ MachineReadinessEvidenceKind = Literal[
     "billing_check",
     "operational_gate",
     "pine_labs_uat",
+    "ip_domain_release",
 ]
 MachineReadinessConclusion = Literal["pass", "fail", "blocked"]
 
@@ -69,6 +72,7 @@ class MachineReadinessEvidenceItem(BaseModel):
     conclusion: MachineReadinessConclusion
     evidence_ref: str = Field(min_length=3, max_length=500)
     target_run_id: str | None = Field(default=None, min_length=3, max_length=80)
+    domain_evidence: IpDomainReleaseEvidence | None = None
 
     @model_validator(mode="after")
     def _target_run_only_for_pine(self) -> MachineReadinessEvidenceItem:
@@ -76,6 +80,11 @@ class MachineReadinessEvidenceItem(BaseModel):
             raise ValueError("pine_labs_uat evidence requires target_run_id")
         if self.kind != "pine_labs_uat" and self.target_run_id is not None:
             raise ValueError("target_run_id is valid only for pine_labs_uat evidence")
+        if self.kind == "ip_domain_release":
+            if self.domain_evidence is None or self.domain_evidence.domain != self.subject:
+                raise ValueError("IP domain evidence must match its subject")
+        elif self.domain_evidence is not None:
+            raise ValueError("domain_evidence is valid only for ip_domain_release")
         return self
 
 

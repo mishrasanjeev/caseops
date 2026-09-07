@@ -3190,7 +3190,7 @@ def test_postgres_matter_grant_revocation_wins_before_calendar_claim(
 
 @pytest.mark.postgres
 def test_postgres_legacy_and_intent_workers_emit_one_hearing_email(
-    pg_engine,
+    migration_pg_engine,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Concurrent compatibility projection cannot race a second provider send."""
@@ -3200,6 +3200,7 @@ def test_postgres_legacy_and_intent_workers_emit_one_hearing_email(
     from alembic import command
     from tests.test_postgres_validation import _seed_ip_coverage_lifecycle_fixture
 
+    pg_engine = migration_pg_engine
     postgres_url = os.environ["CASEOPS_TEST_POSTGRES_URL"].strip()
     project_root = Path(__file__).resolve().parents[1]
     alembic_config = Config(str(project_root / "alembic.ini"))

@@ -4,15 +4,12 @@ import hashlib
 import json
 import re
 import unicodedata
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
-CATALOG_PATH = (
-    Path(__file__).resolve().parents[1]
-    / "product_guide"
-    / "catalog.generated.json"
-)
+CATALOG_PATH = Path(__file__).resolve().parents[1] / "product_guide" / "catalog.generated.json"
 MAX_RESULTS = 10
 MAX_QUERY_CHARS = 160
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
@@ -63,32 +60,52 @@ def _normalize(value: str) -> str:
     return " ".join(_TOKEN_RE.findall(ascii_value))
 
 
-def _score(query: str, *, title: str, keywords: list[str], aliases: list[str], summary: str) -> int:
-    normalized_query = _normalize(query)
-    tokens = tuple(
-        token
-        for token in dict.fromkeys(_TOKEN_RE.findall(normalized_query))
-        if len(token) >= 2 and token not in _SEARCH_STOPWORDS
-    )
-    normalized_title = _normalize(title)
-    normalized_keywords = [_normalize(value) for value in keywords]
-    normalized_aliases = [_normalize(value) for value in aliases]
-    normalized_summary = _normalize(summary)
-    indexed = " ".join([normalized_title, *normalized_keywords, *normalized_aliases])
-    indexed_tokens = set(_TOKEN_RE.findall(indexed))
-    summary_tokens = set(_TOKEN_RE.findall(normalized_summary))
+@dataclass(frozen=True, slots=True)
+class _SearchText:
+    title: str
+    phrases: frozenset[str]
+    indexed_tokens: frozenset[str]
+    summary_tokens: frozenset[str]
 
-    if normalized_query == normalized_title:
+
+@lru_cache(maxsize=512)
+def _indexed_text(
+    title: str, keywords: tuple[str, ...], aliases: tuple[str, ...], summary: str
+) -> _SearchText:
+    # Cache only public catalog text by content, never a user's results or grants.
+    normalized_title = _normalize(title)
+    phrases = frozenset(_normalize(value) for value in (*keywords, *aliases))
+    normalized_summary = _normalize(summary)
+    indexed = " ".join([normalized_title, *phrases])
+    return _SearchText(
+        title=normalized_title,
+        phrases=phrases,
+        indexed_tokens=frozenset(indexed.split()),
+        summary_tokens=frozenset(normalized_summary.split()),
+    )
+
+
+def _score(
+    normalized_query: str,
+    tokens: tuple[str, ...],
+    *,
+    title: str,
+    keywords: list[str],
+    aliases: list[str],
+    summary: str,
+) -> int:
+    indexed = _indexed_text(title, tuple(keywords), tuple(aliases), summary)
+    if normalized_query == indexed.title:
         return 180
     score = 0
-    if tokens and f" {normalized_query} " in f" {normalized_title} ":
+    if tokens and f" {normalized_query} " in f" {indexed.title} ":
         score += 120
-    if normalized_query in normalized_keywords or normalized_query in normalized_aliases:
+    if normalized_query in indexed.phrases:
         score += 110
     if not tokens:
         return score
-    indexed_matches = sum(token in indexed_tokens for token in tokens)
-    summary_matches = sum(token in summary_tokens for token in tokens)
+    indexed_matches = sum(token in indexed.indexed_tokens for token in tokens)
+    summary_matches = sum(token in indexed.summary_tokens for token in tokens)
     if indexed_matches == len(tokens):
         score += 80 + indexed_matches
     elif indexed_matches:
@@ -110,7 +127,8 @@ def search_product_guide(
     catalog = load_product_guide_catalog()
     bounded_limit = max(1, min(limit, MAX_RESULTS))
     query = query.strip()[:MAX_QUERY_CHARS]
-    if not _normalize(query):
+    normalized_query = _normalize(query)
+    if not normalized_query:
         return {
             "status": "no_match",
             "version_status": (
@@ -127,10 +145,16 @@ def search_product_guide(
         }
     matches: list[tuple[int, int, dict[str, Any]]] = []
     denied: list[tuple[int, tuple[str, ...]]] = []
+    tokens = tuple(
+        token
+        for token in dict.fromkeys(normalized_query.split())
+        if len(token) >= 2 and token not in _SEARCH_STOPWORDS
+    )
 
     for section in catalog["sections"]:
         score = _score(
-            query,
+            normalized_query,
+            tokens,
             title=section["title"],
             keywords=section["keywords"],
             aliases=section["aliases"],
@@ -154,7 +178,8 @@ def search_product_guide(
 
     for command in catalog["commands"]:
         score = _score(
-            query,
+            normalized_query,
+            tokens,
             title=command["label"],
             keywords=command["keywords"],
             aliases=[],

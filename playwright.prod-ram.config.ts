@@ -19,6 +19,10 @@ import fs from "node:fs";
 
 import { noPaidProviderHeaders } from "./tests/e2e/support/cost-controls";
 
+process.env.PROD_BASE_URL ||= "https://caseops.ai";
+process.env.PROD_API_BASE_URL ||= "https://api.caseops.ai";
+const PATENT_PROD_SPECS = /iplf-(?:079b-domain-availability|080[ab]-patent-(?:family|application|parties|priorities|source-scope))-2026-09-0[67]\.spec\.ts$/;
+
 const candidates = [
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
   "C:/Program Files/Google/Chrome/Application/chrome.exe",
@@ -36,8 +40,12 @@ const TESTER_AUTH_PROD_SPECS =
 
 export default defineConfig({
   testDir: "tests/e2e",
-  testMatch:
+  testMatch: [
     /(ram-batch-2026-04-26-prod\.spec\.ts|recommendations-grounding-2026-04-29-prod\.spec\.ts|ram-batch-2026-05-01-prod\.spec\.ts|pg-004-today-cockpit-2026-05-01-prod\.spec\.ts|hari-2026-05-09-prod\.spec\.ts|hari-2026-05-09-bug-033-prod\.spec\.ts|hari-2026-05-09-outlook-sync-prod\.spec\.ts|hari-2026-05-09-bug-032-prod\.spec\.ts|hari-2026-07-02-prod\.spec\.ts|(?:hari|ram)-\d{4}-\d{2}-\d{2}-prod\.spec\.ts|ram-2026-08-(?:11|24)-bugs\.spec\.ts|ram-2026-09-(?:02|04)-bugs\.spec\.ts|iplf-05(?:4b-indian-kanoon|6b-provider-operations|7b-madrid-workflow|8b-recordal-workflow)-2026-08-25-prod\.spec\.ts|iplf-0(?:59b-foreign-associate|60b-judge)-workflow-2026-08-26-prod\.spec\.ts|iplf-061a-product-guide-foundation-2026-08-26-prod\.spec\.ts|iplf-061b-product-guide-workflow-2026-08-27-prod\.spec\.ts|iplf-062b-workspace-assistant-2026-08-27-prod\.spec\.ts|iplf-063b-intelligent-review-2026-08-28-prod\.spec\.ts|iplf-064b-assistant-actions-2026-08-29-prod\.spec\.ts|iplf-065b-ai-safety-feedback-2026-08-30-prod\.spec\.ts|iplf-066b-private-retrieval-2026-08-31-prod\.spec\.ts|product-ownership-2026-08-29\.spec\.ts|qa-auth\.setup\.ts)$/,
+    /ram-2026-09-05-bugs\.spec\.ts$/,
+    /ram-2026-09-07-statute-source-data\.spec\.ts$/,
+    PATENT_PROD_SPECS,
+  ],
   timeout: 120_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,
@@ -77,7 +85,7 @@ export default defineConfig({
     },
     {
       name: "tester-prod-chromium",
-      testMatch: TESTER_AUTH_PROD_SPECS,
+      testMatch: [TESTER_AUTH_PROD_SPECS, /ram-2026-09-05-bugs\.spec\.ts$/],
       use: {
         ...devices["Desktop Chrome"],
         storageState: { cookies: [], origins: [] },
@@ -85,6 +93,21 @@ export default defineConfig({
           ? { executablePath: browserExecutablePath }
           : undefined,
       },
+    },
+    {
+      name: "patent-prod-chromium",
+      testMatch: PATENT_PROD_SPECS,
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: { cookies: [], origins: [] },
+        launchOptions: browserExecutablePath ? { executablePath: browserExecutablePath } : undefined,
+      },
+    },
+    {
+      name: "statute-source-prod-chromium",
+      testMatch: /ram-2026-09-07-statute-source-data\.spec\.ts$/,
+      fullyParallel: true,
+      use: { storageState: { cookies: [], origins: [] } },
     },
   ],
 });

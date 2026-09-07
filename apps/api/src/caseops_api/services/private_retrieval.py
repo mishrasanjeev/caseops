@@ -48,6 +48,7 @@ from caseops_api.services.ip_capability_catalog import (
     evaluate_ip_feature,
 )
 from caseops_api.services.ip_document_workflow import get_ip_document_policies
+from caseops_api.services.ip_domain_policy import general_ip_disclosure_filter
 from caseops_api.services.matter_access import (
     visible_ip_dockets_filter,
     visible_matters_filter,
@@ -256,12 +257,18 @@ def _active_generation_statement(company_id: str):
 
 
 def _lock_private_company(session: Session, *, company_id: str) -> Company:
-    """Serialize generation/event authority changes on one stable tenant row."""
+    """Serialize authority changes without blocking tenant foreign-key checks.
+
+    Idempotency claims can hold Company KEY SHARE while waiting for a source
+    parent. A lifecycle writer owns that parent before advancing private epochs;
+    FOR UPDATE here would deadlock those two otherwise ordered transactions.
+    NO KEY UPDATE remains exclusive against authority writers and deletion.
+    """
 
     company = session.scalar(
         select(Company)
         .where(Company.id == company_id)
-        .with_for_update()
+        .with_for_update(of=Company, key_share=True)
         .execution_options(populate_existing=True)
     )
     if company is None:
@@ -283,14 +290,7 @@ def ensure_active_private_generation(
         raise PrivateRetrievalInvariantError("More than one private index generation is active.")
     if rows:
         return rows[0]
-    company = session.scalar(
-        select(Company)
-        .where(Company.id == company_id)
-        .with_for_update()
-        .execution_options(populate_existing=True)
-    )
-    if company is None:
-        raise PrivateRetrievalInvariantError("Private index company does not exist.")
+    _lock_private_company(session, company_id=company_id)
     row = session.scalar(
         _active_generation_statement(company_id).execution_options(populate_existing=True)
     )
@@ -893,6 +893,7 @@ def _authorized_projection_ids_statement(
     )
     visible_docket_ids = select(IpDocketRecord.id).where(
         IpDocketRecord.company_id == context.company.id,
+        general_ip_disclosure_filter(),
         IpDocketRecord.is_active.is_(True),
         visible_ip_dockets_filter(session, context=context),
     )
@@ -1239,6 +1240,7 @@ def _source_versions_still_current(
                 IpDocketRecord.company_id == context.company.id,
                 IpDocketRecord.id.in_(docket_ids),
                 IpDocketRecord.is_active.is_(True),
+                general_ip_disclosure_filter(),
                 visible_ip_dockets_filter(session, context=context),
             )
         ).all():

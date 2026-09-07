@@ -64,7 +64,7 @@ function requiredPassword(): string {
 }
 
 async function expectStatus(
-  response: APIResponse,
+  response: Pick<APIResponse, "status" | "text">,
   expected: number,
   label: string,
 ): Promise<void> {

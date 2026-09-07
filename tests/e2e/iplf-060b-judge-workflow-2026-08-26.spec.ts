@@ -79,19 +79,43 @@ test("IPLF-060B completes UJ-20 normal and exception paths", async ({ page }) =>
   await judgeForm
     .getByLabel("Canonical judge", { exact: true })
     .selectOption(fixture.judgeId);
-  await judgeForm.getByLabel("Alias").fill(`Curator Alias ${Date.now()}`);
+  const alias = `Curator Alias ${Date.now()}`;
+  await judgeForm.getByLabel("Alias").fill(alias);
   await judgeForm
     .getByLabel("Official source URL")
     .fill("https://delhihighcourt.nic.in/web/Judges");
+  const aliasSaved = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === `/api/judge-mapping/judges/${fixture.judgeId}/aliases`
+      && response.request().method() === "POST");
   await judgeForm.getByRole("button", { name: /add judge alias/i }).click();
-  await expect(page.getByText(/Curator Alias/).last()).toBeVisible();
+  const aliasResponse = await aliasSaved;
+  expect(aliasResponse.status(), await aliasResponse.text()).toBe(200);
+  expect(await aliasResponse.json()).toMatchObject({ alias_text: alias, is_active: true });
+  await expect(page.getByText(alias, { exact: true })).toBeVisible();
 
   await page.getByRole("tab", { name: "Merge duplicates" }).click();
   await page.getByLabel("Duplicate identity").selectOption(fixture.duplicateJudgeId);
   await page.getByLabel("Canonical destination").selectOption(fixture.judgeId);
+  // A new alias advances this fixture's identity from v0 to v1.
+  await expect(page.getByLabel("Canonical destination")
+    .locator(`option[value="${fixture.judgeId}"]`)).toHaveText(/v1$/);
   await page.getByLabel("Merge reason").fill("Official roster confirms a duplicate canonical identity.");
+  const merged = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === `/api/judge-mapping/judges/${fixture.duplicateJudgeId}/merge`
+      && response.request().method() === "POST");
   await page.getByRole("button", { name: /merge identities/i }).click();
+  const mergeResponse = await merged;
+  expect(mergeResponse.status(), await mergeResponse.text()).toBe(200);
+  expect(mergeResponse.request().postDataJSON()).toMatchObject({
+    destination_judge_id: fixture.judgeId,
+    expected_source_version: 0,
+    expected_destination_version: 1,
+  });
+  expect(await mergeResponse.json()).toMatchObject({
+    id: fixture.judgeId, record_version: 2, is_active: true,
+  });
   await expect(page.getByText("Duplicate judge identities merged.")).toBeVisible();
+  await expect(page.getByText("Judge identity changed; reload and retry.")).toHaveCount(0);
 
   await page.getByRole("tab", { name: "Reprocess" }).click();
   await page.getByLabel("Authority document ID").fill(fixture.reviewAuthorityId);

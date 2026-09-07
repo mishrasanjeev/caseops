@@ -70,8 +70,8 @@ export default function GeneralCounselsPage() {
           <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
             <div className="grid gap-3 sm:grid-cols-3">
               <MetricCard inverse value="1" label="Portfolio view" note="Every matter, counsel and spend line on one surface." />
-              <MetricCard inverse value="< 60s" label="Board-ready extract" note="Audit trail export for any date range." />
-              <MetricCard inverse value="0" label="Cross-tenant spillover" note="Isolation at the storage and query layer." />
+              <MetricCard inverse value="Audit export" label="Board preparation" note="Date-scoped records and retained activity history." />
+              <MetricCard inverse value="Tenant-scoped" label="Access controls" note="Authorization is checked against the firm's records and permissions." />
             </div>
             <div className="flex flex-col gap-3 lg:items-end">
               <PersonaSwitch active="gcs" />
@@ -246,27 +246,27 @@ export default function GeneralCounselsPage() {
             <PitchCard
               icon={BookOpenText}
               title="Statutes attached to the matter"
-              body="Mark which BNSS / BNS / CrPC / IPC / Constitution sections the matter relies on; the appeal-memorandum draft receives the bare text and quotes verbatim instead of paraphrasing. 91 sections live across 7 central acts."
+              body="Attach available source-verified provisions to the matter and inspect their exact source version. Catalog coverage remains incomplete; unverified entries are not selectable as verified references."
             />
           </div>
           <div className="mt-8 grid gap-4 rounded-2xl border border-[var(--color-line)] bg-white p-6 md:grid-cols-[1fr_1fr] md:p-8">
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-brand-600)]">
-                What a GC gets to say in the board meeting
+                Board reporting
               </div>
               <p className="mt-3 text-[15px] leading-relaxed text-[var(--color-ink-2)]">
-                "We briefed 14 matters to 6 outside counsel this quarter. Realisation against
-                budget is 92%. Two firms came in under; one is trending over — we moved the
-                next brief away from them."
+                Review assigned matters, outside-counsel fees and budget use from the
+                recorded portfolio. Keep the underlying invoices and activity history
+                available for reconciliation.
               </p>
             </div>
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-brand-600)]">
-                Instead of
+                Evidence limits
               </div>
               <p className="mt-3 text-[15px] leading-relaxed text-[var(--color-mute)]">
-                "Let me come back to you with those numbers next week." — a sentence that
-                quietly loses a GC their seat at the table.
+                Reports reflect the data entered and reconciled in the workspace.
+                Missing invoices or activity records are not evidence of lower legal spend.
               </p>
             </div>
           </div>
@@ -278,13 +278,13 @@ export default function GeneralCounselsPage() {
           tone="brand"
           eyebrow="Contracts and obligations"
           title="Pull duties out of contracts. Track them where they live."
-          description="Contract storage, LLM-powered clause extraction, obligation tracker, and playbook comparison — all shipped. Upload a vendor MSA, get structured clauses in 30 seconds and a deviation report against the default Indian commercial playbook."
+          description="Store contracts, review AI-extracted clauses, track obligations and compare against a playbook. Extraction depends on document quality and provider availability; review the source contract before relying on the result."
         >
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
             <PitchCard
               icon={FileSearch}
               title="Clause extraction"
-              body="The OpenAI extraction model reads the contract and lifts parties, term, payment, confidentiality, IP, liability, indemnity, governing law, arbitration, force majeure, notices — ~12 structured clauses per contract."
+              body="Review extracted parties, term, payment, confidentiality, IP, liability and other available clauses alongside the source contract. Missing or uncertain clauses require review."
             />
             <PitchCard
               icon={ClipboardCheck}
@@ -355,15 +355,15 @@ export default function GeneralCounselsPage() {
           id="proof"
           index="08"
           tone="light"
-          eyebrow="Proof plane"
-          title="Numbers, not testimonials."
-          description="We publish the retrieval metrics. We instrument the product. A 30-minute quality probe runs against the live corpus around the clock."
+          eyebrow="Research evidence"
+          title="Sources you can inspect."
+          description="Review the cited source and its available coverage. Corpus size and retrieval quality are different measures; a self-recall probe is not a guarantee of legal relevance."
         >
           <div className="grid gap-4 md:grid-cols-4">
-            <MetricCard value="5,714" label="Judgments indexed" note="Supreme Court + high courts, post-clean corpus." />
-            <MetricCard value="108k" label="Embedded chunks" note="voyage-4-large · 1024-dim · HNSW cosine." />
-            <MetricCard value="96.7%" label="Recall@10" note="30-query self-recall probe on the live corpus, with cross-encoder rerank." />
-            <MetricCard value="0.95" label="MRR" note="Correct hit almost always at rank 1 — mean rank 1.03." />
+            <MetricCard value="Source-linked" label="Judgment references" note="Open the cited authority and inspect its provenance." />
+            <MetricCard value="Voyage" label="Embedding pipeline" note="Production retrieval uses voyage-4-large embeddings." />
+            <MetricCard value="Reranked" label="Research results" note="Cross-encoder ranking supports source-based review." />
+            <MetricCard value="Not certified" label="Corpus quality score" note="No representative legal-retrieval rating is claimed here." />
           </div>
           <div className="mt-8 grid gap-5 md:grid-cols-2">
             <PitchCard
@@ -373,8 +373,8 @@ export default function GeneralCounselsPage() {
             />
             <PitchCard
               icon={FileSearch}
-              title="Grounded, not generated"
-              body="Every substantive answer cites a named judgment, statute or internal precedent. Refusal beats fabrication."
+              title="Source-aware legal review"
+              body="Inspect citations, source coverage and limitation notes before relying on generated work. Legal review remains necessary."
             />
           </div>
         </Slide>

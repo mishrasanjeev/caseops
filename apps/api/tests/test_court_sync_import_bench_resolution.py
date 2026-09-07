@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
@@ -202,8 +203,9 @@ def test_court_sync_import_resolves_judges_when_court_id_falls_back_to_forum_nam
     assert judge_full_name in row[0] or judge_id in row[0]
 
 
+@pytest.mark.postgres
 def test_bench_strategy_reads_dict_shaped_judges_json_after_inline_resolution(
-    client: TestClient,
+    isolated_postgres_client: TestClient,
 ) -> None:
     """End-to-end: lawyer creates matter → imports listing with known
     judge → GET /bench-strategy returns populated bench_judge_ids.
@@ -214,13 +216,10 @@ def test_bench_strategy_reads_dict_shaped_judges_json_after_inline_resolution(
     were skipped → bench_judge_ids stayed [] → panel showed
     'insufficient' even after the inline resolver fired.
 
-    Skipped on SQLite — build_bench_strategy uses Postgres-only ANY()
-    in the judge_decision_index count + L-B/L-C aggregate queries."""
+    Runs on an isolated migrated PostgreSQL database because the strategy uses
+    ANY() in the judge_decision_index count and L-B/L-C aggregate queries."""
+    client = isolated_postgres_client
     session_factory = get_session_factory()
-    with session_factory() as session:
-        if session.bind.dialect.name != "postgresql":
-            import pytest
-            pytest.skip("build_bench_strategy uses Postgres-only ANY() syntax")
     forum_name = "Test High Court Endto"
     judge_full_name = "Endto TestJudge"
     with session_factory() as session:

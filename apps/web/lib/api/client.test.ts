@@ -4,6 +4,7 @@ import { ApiError } from "./config";
 import {
   apiBlobRequest,
   apiRequest,
+  fetchJsonWithTimeout,
   fetchWithTimeout,
   getCsrfHeaders,
 } from "./client";
@@ -275,5 +276,45 @@ describe("apiRequest", () => {
     caller.abort(new DOMException("Cancelled by caller.", "AbortError"));
 
     await expect(result).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  it("keeps the JSON body under the original deadline after headers arrive", async () => {
+    vi.useFakeTimers();
+    vi.mocked(fetch).mockImplementation(async (_input, init) => ({
+      ok: true, status: 200,
+      json: () => new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+      }),
+    } as Response));
+    const result = fetchJsonWithTimeout("/api/stalled-body", {}, 2_000);
+    const assertion = expect(result).rejects.toMatchObject({ name: "NetworkError" });
+    await vi.advanceTimersByTimeAsync(2_000);
+    await assertion;
+    expect(vi.getTimerCount()).toBe(0);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("forwards caller cancellation while consuming JSON without a false timeout", async () => {
+    const caller = new AbortController();
+    let bodyStarted!: () => void;
+    const consuming = new Promise<void>((resolve) => { bodyStarted = resolve; });
+    vi.mocked(fetch).mockImplementation(async (_input, init) => ({
+      ok: true, status: 200,
+      json: () => new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+        bodyStarted();
+      }),
+    } as Response));
+    const result = fetchJsonWithTimeout("/api/cancelled-body", { signal: caller.signal }, 5_000);
+    await consuming;
+    caller.abort(new DOMException("Caller left the page.", "AbortError"));
+    await expect(result).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  it("retains HTTP status and parses JSON without changing request credentials", async () => {
+    vi.mocked(fetch).mockResolvedValue(response({ reason: "unavailable" }, 503));
+    await expect(fetchJsonWithTimeout("/api/public", { credentials: "omit" }, 5_000))
+      .resolves.toEqual({ ok: false, status: 503, data: { reason: "unavailable" } });
+    expect(fetch).toHaveBeenCalledWith("/api/public", expect.objectContaining({ credentials: "omit" }));
   });
 });

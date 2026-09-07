@@ -170,7 +170,7 @@ jobs:
           CASEOPS_EXPECTED_RELEASE_SHA: ${{ steps.deployed-release.outputs.release_sha }}
           CASEOPS_QA_TRACKED_CASE_BOOKMARK_ID: ${{ vars.CASEOPS_QA_TRACKED_CASE_BOOKMARK_ID }}
           CASEOPS_QA_TRACKED_CASE_CNR: ${{ vars.CASEOPS_QA_TRACKED_CASE_CNR }}
-        run: npx playwright test --config=playwright.prod-ram.config.ts --reporter=list --output=test-results/ram
+        run: npx playwright test --config=playwright.prod-ram.config.ts --project=prod-chromium --project=tester-prod-chromium --reporter=list --output=test-results/ram
 
       - name: Run IPLF-027B A0 quiescence acceptance
         # This is immutable historical rollout evidence tied to one exact
@@ -297,6 +297,40 @@ jobs:
           CASEOPS_QA_EMAIL: ${{ vars.CASEOPS_QA_EMAIL }}
           CASEOPS_QA_SLUG: ${{ vars.CASEOPS_QA_SLUG }}
         run: npx playwright test --config=playwright.notice-prod.config.ts --reporter=list --output=test-results/notice
+
+      - name: Check release-owned patent and statute acceptance
+        id: patent-statute-prerequisites
+        if: always() && !cancelled() && steps.prod-playwright-prerequisites.outputs.ready == 'true'
+        run: |
+          if [[ -f tests/e2e/support/patent-acceptance.ts ]]; then
+            test -f tests/e2e/ram-2026-09-07-statute-source-data.spec.ts
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::The exact serving release predates the patent/statute acceptance projects; newer test code will not run against it."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run exact-release patent and domain journeys
+        if: always() && !cancelled() && steps.patent-statute-prerequisites.outputs.ready == 'true'
+        env:
+          PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
+          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
+          CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
+          CASEOPS_IP_QA_PASSWORD: ${{ secrets.CASEOPS_IP_QA_PASSWORD }}
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ steps.deployed-release.outputs.release_sha }}
+        run: npx playwright test --config=playwright.prod-ram.config.ts --project=patent-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/patent
+
+      - name: Verify every release-owned statute source record
+        if: always() && !cancelled() && steps.patent-statute-prerequisites.outputs.ready == 'true'
+        env:
+          PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
+          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
+          CASEOPS_RAM_PROD_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
+          CASEOPS_RAM_PROD_EMAIL: qa-bot@caseops.ai
+          CASEOPS_RAM_PROD_SLUG: caseops-qa
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ steps.deployed-release.outputs.release_sha }}
+        # Read-only batches use bounded parallelism after all mutation phases.
+        run: npx playwright test --config=playwright.prod-ram.config.ts --project=statute-source-prod-chromium --workers=4 --retries=0 --reporter=list --output=test-results/statute-sources
 
       - name: Record exact-release public-claims evidence
         if: success() && github.event_name == 'workflow_dispatch'

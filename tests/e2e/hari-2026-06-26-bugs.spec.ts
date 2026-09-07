@@ -68,9 +68,9 @@ test.describe("Hari 2026-06-26 bugs", () => {
     }
     await signIn(page, slug, ownerEmail);
 
-    let searchPayload: Record<string, unknown> | null = null;
+    const searchPayload: { current: Record<string, unknown> | null } = { current: null };
     await page.route("**/api/authorities/search", async (route) => {
-      searchPayload = route.request().postDataJSON() as Record<string, unknown>;
+      searchPayload.current = route.request().postDataJSON() as Record<string, unknown>;
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -157,8 +157,8 @@ test.describe("Hari 2026-06-26 bugs", () => {
     ).toHaveCount(0);
     await expect(page.getByTestId("research-result-garbled")).toHaveCount(0);
     await expect(page.getByText(/\$O \?J/)).toHaveCount(0);
-    expect(searchPayload?.mode).toBe("contextual");
-    expect(searchPayload?.query).toBe(CHEQUE_QUERY);
+    expect(searchPayload.current?.mode).toBe("contextual");
+    expect(searchPayload.current?.query).toBe(CHEQUE_QUERY);
   });
 
   test("BUG-002: New Matter rejects invalid matter code before API submission", async ({

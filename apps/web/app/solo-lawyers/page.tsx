@@ -71,7 +71,7 @@ export default function SoloLawyersPage() {
           <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
             <div className="grid gap-3 sm:grid-cols-3">
               <MetricCard inverse value="1" label="Workspace" note="Replaces case diary, research, drafting and billing." />
-              <MetricCard inverse value="< 60s" label="Hearing pack" note="Compiled from the matter record when you open it." />
+              <MetricCard inverse value="Matter-linked" label="Hearing pack" note="Compiled from the available matter record." />
               <MetricCard inverse value="UAT gated" label="Payments" note="Invoice PDFs and payment tracking are live; Pine Labs is disabled until UAT." />
             </div>
             <div className="flex flex-col gap-3 lg:items-end">
@@ -252,25 +252,25 @@ export default function SoloLawyersPage() {
           index="06"
           tone="light"
           eyebrow="Appeals + bench-aware drafting"
-          title="The appeal cites the bench that's actually hearing it."
-          description="When the matter has an upcoming listing, the appeal-memorandum draft pulls authorities authored by that bench (not just the court at large) and prefers ones that match the practice area. Section 482 BNSS is quoted verbatim from the bare-acts catalog. Argument completeness is flagged per ground with source context, not outcome forecasting."
+          title="Bench-aware appeal preparation."
+          description="When the listing's bench is resolved and relevant decisions are indexed, appeal preparation can use that source context. Limited coverage stays visible. Only source-verified statute provisions are available for attachment; catalog coverage remains incomplete."
         >
           <div className="grid gap-4 md:grid-cols-4">
-            <MetricCard value="63" label="Judges live" note="31 SC + 32 Delhi HC sitting bench, with career history and indexed authorities." />
-            <MetricCard value="91" label="Statute sections" note="BNSS, BNS, BSA, CrPC, IPC, Constitution, NI Act — bare text + clickable indiacode.nic.in source." />
-            <MetricCard value="269" label="Judge aliases" note="Tolerant matcher resolves 'A.K. Sikri' to the canonical judge row, no ILIKE fragility." />
+            <MetricCard value="Source-based" label="Judge references" note="Use available indexed decisions; missing history is not inferred." />
+            <MetricCard value="Verified only" label="Statute citations" note="Unverified catalog entries cannot be attached as verified legal evidence." />
+            <MetricCard value="Alias-aware" label="Bench matching" note="Known aliases resolve to canonical judge records; unresolved names stay visible." />
             <MetricCard value="0" label="Outcome forecasts" note="Bench-aware drafting stays on citation selection, source context, and limitation notes." />
           </div>
           <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
             <PitchCard
               icon={Gavel}
               title="Bench-specific authorities"
-              body="When the next listing's bench is resolved, BAAD injects up to 5 authorities authored by that bench, picked to support the matter's practice area. Limitation note when the bench can't be resolved — never silent."
+              body="When the next listing's bench is resolved, drafting can use indexed authorities from that bench. Missing or weak history is disclosed as a limitation."
             />
             <PitchCard
               icon={BookOpenText}
-              title="Statute model with verbatim quoting"
-              body="7 central acts catalogued. Attach sections to a matter as 'cited' / 'opposing' / 'context'; the prompt receives the bare text so the LLM quotes verbatim instead of paraphrasing."
+              title="Verified statute references"
+              body="Attach available verified provisions as cited, opposing or contextual references. Inspect the exact source version; catalogued does not mean verified."
             />
             <PitchCard
               icon={BadgeCheck}
@@ -285,20 +285,20 @@ export default function SoloLawyersPage() {
           index="07"
           tone="brand"
           eyebrow="Research"
-          title="The same corpus the big firms are retrieving against."
-          description="Over 5,700 judgments from the Supreme Court and high courts, embedded and indexed. Hybrid retrieval: phrase the issue, not a keyword. Results come back with cosine-strength so you can judge at a glance."
+          title="Judgment research."
+          description="Search indexed authorities by legal issue and inspect the returned sources. Ranking supports research; it does not establish that a decision applies to your matter."
         >
           <div className="grid gap-4 md:grid-cols-4">
-            <MetricCard value="5,714" label="Judgments indexed" note="Supreme Court + high courts." />
-            <MetricCard value="108k" label="Chunks" note="voyage-4-large embeddings · 1024-dim." />
-            <MetricCard value="96.7%" label="Recall@10" note="Live self-recall probe with cross-encoder rerank." />
-            <MetricCard value="0.95" label="MRR" note="Correct hit almost always rank 1 — mean rank 1.03." />
+            <MetricCard value="Source-linked" label="Judgment references" note="Inspect citations and available provenance." />
+            <MetricCard value="Voyage" label="Embedding pipeline" note="Production retrieval uses voyage-4-large embeddings." />
+            <MetricCard value="Reranked" label="Research results" note="Cross-encoder ranking supports source-based review." />
+            <MetricCard value="Not certified" label="Corpus quality score" note="No representative legal-retrieval rating is claimed here." />
           </div>
           <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
             <PitchCard
               icon={Search}
               title="Phrase the issue"
-              body="'triple test for anticipatory bail under BNSS s.482' works. Keyword-only tools can't."
+              body="Search with issue phrases or keywords, then inspect the authority, jurisdiction and source context of each result."
             />
             <PitchCard
               icon={Briefcase}

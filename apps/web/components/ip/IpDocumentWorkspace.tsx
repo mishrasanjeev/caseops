@@ -15,6 +15,7 @@ import {
   applyIpDocumentBulk,
   downloadApiFile,
   fetchIpDocuments,
+  fetchIpDocumentsForDocket,
   fetchIpDocumentTaxonomy,
   importIpDocumentAliases,
   previewIpDocumentName,
@@ -47,8 +48,12 @@ export function IpDocumentWorkspace({
   canManage,
   canReview,
   canConfigure,
+  assetType = "Trademark",
+  scopeDocketId,
 }: {
-  dockets: IpDocket[];
+  dockets: Pick<IpDocket, "id" | "title">[];
+  assetType?: "Trademark" | "Patent";
+  scopeDocketId?: string;
   canUpload: boolean;
   canManage: boolean;
   canReview: boolean;
@@ -68,7 +73,7 @@ export function IpDocumentWorkspace({
   const [docketId, setDocketId] = useState(dockets[0]?.id ?? "");
   const [confidentiality, setConfidentiality] = useState<
     "internal" | "confidential" | "restricted"
-  >("internal");
+  >(assetType === "Patent" ? "restricted" : "internal");
   const [isPrivileged, setIsPrivileged] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkTaxonomy, setBulkTaxonomy] = useState("correspondence");
@@ -85,7 +90,10 @@ export function IpDocumentWorkspace({
     displayName: string;
   } | null>(null);
 
-  const documents = useQuery({ queryKey: ["ip", "documents"], queryFn: fetchIpDocuments });
+  const documents = useQuery({
+    queryKey: scopeDocketId ? ["ip", "documents", scopeDocketId] : ["ip", "documents"],
+    queryFn: () => scopeDocketId ? fetchIpDocumentsForDocket(scopeDocketId) : fetchIpDocuments(),
+  });
   const taxonomy = useQuery({
     queryKey: ["ip", "document-taxonomy"],
     queryFn: fetchIpDocumentTaxonomy,
@@ -102,6 +110,7 @@ export function IpDocumentWorkspace({
     [documents.data],
   );
   const currentPreviewKey = JSON.stringify([
+    assetType,
     file?.name ?? "",
     file?.size ?? 0,
     file?.lastModified ?? 0,
@@ -133,6 +142,7 @@ export function IpDocumentWorkspace({
       if (!file || !docketId) throw new Error("Choose a file and linked docket.");
       if (!hasCurrentPreview) throw new Error("Preview the controlled name before upload.");
       return uploadIpDocument({
+        assetType,
         file,
         taxonomyKey,
         title,
@@ -171,6 +181,7 @@ export function IpDocumentWorkspace({
       if (!file) throw new Error("Choose a file before previewing its controlled name.");
       const extension = file.name.includes(".") ? (file.name.split(".").pop() ?? "") : "";
       const result = await previewIpDocumentName({
+        assetType,
         clientCode,
         mark,
         jurisdiction,
@@ -219,6 +230,7 @@ export function IpDocumentWorkspace({
   const newVersion = useMutation({
     mutationFn: (input: { document: IpDocument; file: File }) =>
       uploadIpDocumentVersion({
+        assetType,
         documentId: input.document.id,
         expectedCurrentVersion: input.document.current_version,
         file: input.file,
@@ -273,7 +285,7 @@ export function IpDocumentWorkspace({
         taxonomy_key: bulkTaxonomy,
         naming: {
           client_code: clientCode || null,
-          asset_type: "Trademark",
+          asset_type: assetType,
           document_type: bulkTaxonomy,
           document_date: new Date().toISOString().slice(0, 10),
           version: row.current_version,
@@ -341,7 +353,7 @@ export function IpDocumentWorkspace({
               />
             </div>
             <div className="min-w-0">
-              <Label htmlFor="ip-document-mark">Mark</Label>
+              <Label htmlFor="ip-document-mark">{assetType === "Patent" ? "Invention" : "Mark"}</Label>
               <Input id="ip-document-mark" value={mark} onChange={(e) => setMark(e.target.value)} />
             </div>
             <div className="min-w-0">

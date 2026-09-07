@@ -1252,6 +1252,18 @@ def _validate_ip_access_change(
     grants: list[MatterAccessGrant],
     walls: list[EthicalWall],
 ) -> tuple[MatterAccessGrant | None, EthicalWall | None]:
+    if (
+        docket.record_type in {"patent", "patent_family", "patent_application"}
+        and payload.action == "set_restricted"
+        and payload.restricted is False
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "patent_disclosure_restriction_required",
+                "message": "Patent disclosures require explicit access grants and ethical walls.",
+            },
+        )
     if docket.access_policy_version != payload.expected_access_policy_version:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

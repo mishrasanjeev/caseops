@@ -27,7 +27,8 @@ test("IPLF-061A serves one versioned guide index and permission-aware command co
   await expectStatus(catalogResponse, 200, "public Product Guide catalog");
   const catalog = await catalogResponse.json();
   expect(catalog.content_version).toBe(productGuideCatalog.content_version);
-  expect(catalog.sections).toHaveLength(27);
+  expect(catalog.sections).toHaveLength(28);
+  expect(catalog.sections.at(-1)?.id).toBe("patents");
   expect(catalog.sections.some((section: { id: string }) => section.id === "judge-mapping")).toBe(
     true,
   );

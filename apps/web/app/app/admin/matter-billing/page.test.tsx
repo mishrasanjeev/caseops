@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -40,11 +40,20 @@ vi.mock("sonner", () => ({
 
 import AdminMatterBillingPage from "./page";
 
-function withClient(node: ReactNode): ReactNode {
-  const client = new QueryClient({
+function makeClient() {
+  return new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
+}
+
+function withClient(node: ReactNode, client = makeClient()): ReactNode {
   return <QueryClientProvider client={client}>{node}</QueryClientProvider>;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
 }
 
 const defaultProfile = {
@@ -137,14 +146,16 @@ describe("AdminMatterBillingPage", () => {
     const user = userEvent.setup();
     render(withClient(<AdminMatterBillingPage />));
 
+    const save = screen.getByRole("button", { name: /Save default profile/i });
+    await waitFor(() => expect(save).toBeEnabled());
     await user.clear(screen.getByLabelText("GSTIN"));
-    await user.type(screen.getByLabelText("GSTIN"), "07ABCDE1234F1Z5");
+    await user.type(screen.getByLabelText("GSTIN"), "07XYZDE1234F1Z5");
     await user.clear(screen.getByLabelText("PAN"));
-    await user.type(screen.getByLabelText("PAN"), "ABCDE1234F");
+    await user.type(screen.getByLabelText("PAN"), "XYZDE1234F");
     await user.clear(screen.getByLabelText("Place of supply"));
-    await user.type(screen.getByLabelText("Place of supply"), "Delhi");
+    await user.type(screen.getByLabelText("Place of supply"), "New Delhi");
     await user.clear(screen.getByLabelText("Default SAC/HSN"));
-    await user.type(screen.getByLabelText("Default SAC/HSN"), "9982");
+    await user.type(screen.getByLabelText("Default SAC/HSN"), "9983");
     await screen.findByText("GBA-0007");
     await user.click(screen.getByRole("button", { name: /Save default profile/i }));
 
@@ -153,13 +164,10 @@ describe("AdminMatterBillingPage", () => {
     expect(updateMatterBillingProfileMock).toHaveBeenCalledWith({
       profileId: "profile-1",
       body: expect.objectContaining({
-        currency: "INR",
-        firm_gstin: "07ABCDE1234F1Z5",
-        firm_pan: "ABCDE1234F",
-        default_place_of_supply: "Delhi",
-        default_sac_hsn: "9982",
-        gst_applicable: true,
-        retainer_adjustments_enabled: true,
+        firm_gstin: "07XYZDE1234F1Z5",
+        firm_pan: "XYZDE1234F",
+        default_place_of_supply: "New Delhi",
+        default_sac_hsn: "9983",
       }),
     });
     expect(updateMatterBillingProfileMock.mock.calls[0][0].body).not.toHaveProperty(
@@ -172,17 +180,114 @@ describe("AdminMatterBillingPage", () => {
     fetchMatterBillingProfilesMock.mockResolvedValue({ profiles: [] });
     render(withClient(<AdminMatterBillingPage />));
 
+    await screen.findByText("No billing profiles");
     await user.click(screen.getByRole("button", { name: /Save default profile/i }));
 
     await waitFor(() => expect(createMatterBillingProfileMock).toHaveBeenCalledTimes(1));
     expect(updateMatterBillingProfileMock).not.toHaveBeenCalled();
     expect(createMatterBillingProfileMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: "GBA Law Office",
+        name: "Default",
         is_default: true,
         currency: "INR",
       }),
     );
+  });
+
+  it("waits for initial profiles and updates the discovered default instead of creating a duplicate", async () => {
+    const initial = deferred<{ profiles: typeof defaultProfile[] }>();
+    fetchMatterBillingProfilesMock.mockReturnValueOnce(initial.promise);
+    const user = userEvent.setup();
+    render(withClient(<AdminMatterBillingPage />));
+    const save = screen.getByRole("button", { name: /Save default profile/i });
+    expect(save).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent("Loading billing profiles");
+    expect(screen.queryByText("No billing profiles")).not.toBeInTheDocument();
+    await user.click(save);
+    expect(createMatterBillingProfileMock).not.toHaveBeenCalled();
+    await act(async () => initial.resolve({ profiles: [defaultProfile] }));
+    await waitFor(() => expect(save).toBeEnabled());
+    await user.click(save);
+    await waitFor(() => expect(updateMatterBillingProfileMock).toHaveBeenCalledTimes(1));
+    expect(createMatterBillingProfileMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps writes disabled after a failed initial load and recovers through retry", async () => {
+    fetchMatterBillingProfilesMock.mockRejectedValueOnce(new Error("Network unavailable"));
+    const user = userEvent.setup();
+    render(withClient(<AdminMatterBillingPage />));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Save default profile/i })).toBeDisabled();
+    expect(screen.queryByText("No billing profiles")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Retry loading profiles" }));
+    await screen.findByText("07ABCDE1234F1Z5");
+    expect(screen.getByRole("button", { name: /Save default profile/i })).toBeEnabled();
+    expect(createMatterBillingProfileMock).not.toHaveBeenCalled();
+  });
+
+  it.each(["profile", "rate"])("does not let a stale background read erase a saved %s", async (kind) => {
+    const stale = deferred<{ profiles: typeof defaultProfile[] }>();
+    const fresh = deferred<{ profiles: typeof defaultProfile[] }>();
+    const client = makeClient();
+    const user = userEvent.setup();
+    render(withClient(<AdminMatterBillingPage />, client));
+    await screen.findByText("07ABCDE1234F1Z5");
+    fetchMatterBillingProfilesMock.mockReturnValueOnce(stale.promise).mockReturnValueOnce(fresh.promise);
+    let background!: Promise<void>;
+    act(() => {
+      background = client.invalidateQueries({ queryKey: ["admin", "matter-billing"], exact: true });
+    });
+    await waitFor(() => expect(fetchMatterBillingProfilesMock).toHaveBeenCalledTimes(2));
+    if (kind === "profile") {
+      updateMatterBillingProfileMock.mockResolvedValueOnce({ ...defaultProfile, firm_gstin: "07SAVED1234F1Z5" });
+      await user.click(screen.getByRole("button", { name: /Save default profile/i }));
+      await screen.findByText("07SAVED1234F1Z5");
+    } else {
+      await user.type(screen.getByLabelText("Rate INR/hr"), "3000");
+      await user.click(screen.getByRole("button", { name: /Add rate/i }));
+      await waitFor(() => expect(client.getQueryData<{ profiles: { rates: unknown[] }[] }>(["admin", "matter-billing"])?.profiles[0].rates).toHaveLength(1));
+    }
+    await waitFor(() => expect(fetchMatterBillingProfilesMock).toHaveBeenCalledTimes(3));
+    const committed = client.getQueryData<{ profiles: typeof defaultProfile[] }>(["admin", "matter-billing"])!;
+    await act(async () => {
+      stale.resolve({ profiles: [] });
+      await background;
+    });
+    expect(screen.queryByText("No billing profiles")).not.toBeInTheDocument();
+    expect(client.getQueryData(["admin", "matter-billing"])).toEqual(committed);
+    await act(async () => fresh.resolve(committed));
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalled());
+    expect(client.getQueryData(["admin", "matter-billing"])).toEqual(committed);
+  });
+
+  it("hydrates saved fields and sends only the edited field without resetting billing policy", async () => {
+    const profile = { ...defaultProfile, name: "Client Firm", firm_legal_name: "Client Firm LLP", invoice_prefix: "CLIENT", billing_mode: "mixed", payment_terms_days: 90, gst_applicable: false };
+    fetchMatterBillingProfilesMock.mockResolvedValue({ profiles: [profile] });
+    updateMatterBillingProfileMock.mockResolvedValue({ ...profile, firm_address: "New address" });
+    const client = makeClient();
+    const user = userEvent.setup();
+    render(withClient(<AdminMatterBillingPage />, client));
+    await waitFor(() => expect(screen.getByLabelText("Firm legal name")).toHaveValue("Client Firm LLP"));
+    expect(screen.getByLabelText("Profile name")).toHaveValue("Client Firm");
+    expect(screen.getByLabelText("Invoice prefix")).toHaveValue("CLIENT");
+    expect(screen.getByLabelText("Firm address")).toHaveValue("Delhi");
+    await user.clear(screen.getByLabelText("Firm address"));
+    await user.type(screen.getByLabelText("Firm address"), "New address");
+    await act(async () => client.invalidateQueries({ queryKey: ["admin", "matter-billing"], exact: true }));
+    expect(screen.getByLabelText("Firm address")).toHaveValue("New address");
+    await user.click(screen.getByRole("button", { name: /Save default profile/i }));
+    await waitFor(() => expect(updateMatterBillingProfileMock).toHaveBeenCalledWith({
+      profileId: "profile-1", body: { firm_address: "New address" },
+    }));
+  });
+
+  it("does not invent a firm identity for a new tenant", async () => {
+    fetchMatterBillingProfilesMock.mockResolvedValue({ profiles: [] });
+    render(withClient(<AdminMatterBillingPage />));
+    await screen.findByText("No billing profiles");
+    expect(screen.getByLabelText("Profile name")).toHaveValue("Default");
+    expect(screen.getByLabelText("Firm legal name")).toHaveValue("");
+    expect(screen.getByLabelText("Invoice prefix")).toHaveValue("INV");
   });
 
   it("adds a rate rule to the selected profile", async () => {

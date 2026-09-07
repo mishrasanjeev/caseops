@@ -60,6 +60,10 @@ const schema = z.object({
   client_name: z.string().optional(),
   opposing_party: z.string().optional(),
   case_number: z.string().max(120, "Case number is too long.").optional(),
+  temporary_e_case_number: z
+    .string()
+    .max(120, "Temporary E-Case number is too long.")
+    .optional(),
   cnr_number: z.string().max(32, "CNR number is too long.").optional(),
   status: z.enum(["intake", "active", "on_hold"]),
   description: z.string().max(2000).optional(),
@@ -75,8 +79,9 @@ const STATUSES: { value: FormValues["status"]; label: string }[] = [
 
 export function NewMatterDialog() {
   const [open, setOpen] = useState(false);
-  const [forumSelection, setForumSelection] =
-    useState<ForumSelection>(EMPTY_FORUM_SELECTION);
+  const [forumSelection, setForumSelection] = useState<ForumSelection>(
+    EMPTY_FORUM_SELECTION,
+  );
   const queryClient = useQueryClient();
   const forumCatalogQuery = useQuery({
     queryKey: ["courts", "forum-catalog"],
@@ -91,6 +96,7 @@ export function NewMatterDialog() {
       client_name: "",
       opposing_party: "",
       case_number: "",
+      temporary_e_case_number: "",
       cnr_number: "",
       practice_area: "",
       status: "active",
@@ -109,10 +115,12 @@ export function NewMatterDialog() {
     !forumSelection.court_name?.trim();
   const districtFallbackIncomplete =
     isDistrictFallbackForumSelection(forumSelection) &&
-    (!forumSelection.forum_district?.trim() || !forumSelection.court_name?.trim());
+    (!forumSelection.forum_district?.trim() ||
+      !forumSelection.court_name?.trim());
   const consumerDistrictFallbackIncomplete =
     isConsumerDistrictFallbackForumSelection(forumSelection) &&
-    (!forumSelection.forum_district?.trim() || !forumSelection.court_name?.trim());
+    (!forumSelection.forum_district?.trim() ||
+      !forumSelection.court_name?.trim());
   const forumSubmissionBlocked =
     forumCatalogQuery.isPending ||
     (forumCatalogUnavailable && !legacyFallbackSelected) ||
@@ -160,6 +168,8 @@ export function NewMatterDialog() {
         client_name: values.client_name?.trim() || undefined,
         opposing_party: values.opposing_party?.trim() || undefined,
         case_number: values.case_number?.trim() || undefined,
+        temporary_e_case_number:
+          values.temporary_e_case_number?.trim() || undefined,
         cnr_number: values.cnr_number?.trim() || undefined,
         practice_area: values.practice_area?.trim() || undefined,
         description: values.description?.trim() || undefined,
@@ -197,8 +207,8 @@ export function NewMatterDialog() {
         <DialogHeader>
           <DialogTitle>New matter</DialogTitle>
           <DialogDescription>
-            Create the matter shell now — details like parties, hearings, and documents can be
-            added from the cockpit.
+            Create the matter shell now — details like parties, hearings, and
+            documents can be added from the cockpit.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -206,7 +216,11 @@ export function NewMatterDialog() {
           onSubmit={form.handleSubmit((values) => mutation.mutate(values))}
           noValidate
         >
-          <Field label="Title" error={form.formState.errors.title?.message} className="md:col-span-2">
+          <Field
+            label="Title"
+            error={form.formState.errors.title?.message}
+            className="md:col-span-2"
+          >
             {({ fieldId, errorId, invalid }) => (
               <Input
                 id={fieldId}
@@ -218,7 +232,10 @@ export function NewMatterDialog() {
               />
             )}
           </Field>
-          <Field label="Matter code" error={form.formState.errors.matter_code?.message}>
+          <Field
+            label="Matter code"
+            error={form.formState.errors.matter_code?.message}
+          >
             {({ fieldId, errorId, invalid }) => (
               <Input
                 id={fieldId}
@@ -229,7 +246,10 @@ export function NewMatterDialog() {
               />
             )}
           </Field>
-          <Field label="Practice area" error={form.formState.errors.practice_area?.message}>
+          <Field
+            label="Practice area"
+            error={form.formState.errors.practice_area?.message}
+          >
             {({ fieldId, errorId, invalid }) => (
               <Input
                 id={fieldId}
@@ -240,7 +260,10 @@ export function NewMatterDialog() {
               />
             )}
           </Field>
-          <Field label="Client name" error={form.formState.errors.client_name?.message}>
+          <Field
+            label="Client name"
+            error={form.formState.errors.client_name?.message}
+          >
             {({ fieldId, errorId, invalid }) => (
               <Input
                 id={fieldId}
@@ -251,7 +274,10 @@ export function NewMatterDialog() {
               />
             )}
           </Field>
-          <Field label="Opposing party" error={form.formState.errors.opposing_party?.message}>
+          <Field
+            label="Opposing party"
+            error={form.formState.errors.opposing_party?.message}
+          >
             {({ fieldId, errorId, invalid }) => (
               <Input
                 id={fieldId}
@@ -262,7 +288,26 @@ export function NewMatterDialog() {
               />
             )}
           </Field>
-          <Field label="Case number" error={form.formState.errors.case_number?.message}>
+          <Field
+            label="Temporary E-Case number"
+            error={form.formState.errors.temporary_e_case_number?.message}
+          >
+            {({ fieldId, errorId, invalid }) => (
+              <Input
+                id={fieldId}
+                aria-describedby={errorId}
+                aria-invalid={invalid}
+                maxLength={120}
+                placeholder="TEMP/2026/00125"
+                data-testid="new-matter-temporary-e-case-number"
+                {...form.register("temporary_e_case_number")}
+              />
+            )}
+          </Field>
+          <Field
+            label="Case number"
+            error={form.formState.errors.case_number?.message}
+          >
             {({ fieldId, errorId, invalid }) => (
               <Input
                 id={fieldId}
@@ -273,7 +318,10 @@ export function NewMatterDialog() {
               />
             )}
           </Field>
-          <Field label="CNR number" error={form.formState.errors.cnr_number?.message}>
+          <Field
+            label="CNR number"
+            error={form.formState.errors.cnr_number?.message}
+          >
             {({ fieldId, errorId, invalid }) => (
               <Input
                 id={fieldId}
@@ -300,7 +348,9 @@ export function NewMatterDialog() {
               <div className="space-y-1.5">
                 <Select
                   value={form.watch("status")}
-                  onValueChange={(v) => form.setValue("status", v as FormValues["status"])}
+                  onValueChange={(v) =>
+                    form.setValue("status", v as FormValues["status"])
+                  }
                 >
                   <SelectTrigger id={fieldId} data-testid="new-matter-status">
                     <SelectValue />
@@ -314,8 +364,8 @@ export function NewMatterDialog() {
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-[var(--color-mute)]">
-                  New matters start Active by default. Conflict checks remain available but are
-                  not an intake gate.
+                  New matters start Active by default. Conflict checks remain
+                  available but are not an intake gate.
                 </p>
               </div>
             )}
@@ -347,7 +397,10 @@ export function NewMatterDialog() {
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={mutation.isPending || forumSubmissionBlocked}>
+            <Button
+              type="submit"
+              disabled={mutation.isPending || forumSubmissionBlocked}
+            >
               {mutation.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" /> Creating…

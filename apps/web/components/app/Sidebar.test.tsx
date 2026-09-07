@@ -13,7 +13,7 @@ vi.mock("@/lib/capabilities", () => ({
   useRole: () => roleMock(),
 }));
 
-import { SidebarBody } from "@/components/app/Sidebar";
+import { APP_NAV, SidebarBody } from "@/components/app/Sidebar";
 
 describe("SidebarBody resolved capability navigation", () => {
   beforeEach(() => {
@@ -140,5 +140,57 @@ describe("SidebarBody resolved capability navigation", () => {
       "aria-current",
       "page",
     );
+  });
+
+  it.each(APP_NAV.map(({ href, label }) => [href, label]))(
+    "marks only the exact destination active at %s",
+    (pathname, label) => {
+      roleMock.mockReturnValue("owner");
+      resolvedMock.mockReturnValue(null);
+      canMock.mockReturnValue(true);
+
+      render(<SidebarBody pathname={pathname} />);
+
+      expect(screen.getAllByRole("link", { current: "page" })).toHaveLength(1);
+      expect(screen.getByRole("link", { current: "page" })).toHaveAccessibleName(label);
+    },
+  );
+
+  it.each([
+    ["/app/ip/patents/applications/record-id", "Patent intake"],
+    ["/app/ip/dockets/record-id", "IP docket"],
+    ["/app/admin/billing/invoices/record-id", "Billing"],
+    ["/app/matters/record-id/documents", "Matters"],
+  ])("keeps one active owner for nested path %s", (pathname, label) => {
+    roleMock.mockReturnValue("owner");
+    resolvedMock.mockReturnValue(null);
+    canMock.mockReturnValue(true);
+
+    render(<SidebarBody pathname={pathname} />);
+
+    expect(screen.getAllByRole("link", { current: "page" })).toHaveLength(1);
+    expect(screen.getByRole("link", { current: "page" })).toHaveAccessibleName(label);
+  });
+
+  it("does not match a sibling path just because its prefix is shared", () => {
+    roleMock.mockReturnValue("owner");
+    resolvedMock.mockReturnValue(null);
+    canMock.mockReturnValue(true);
+
+    render(<SidebarBody pathname="/app/ip/patents-unrelated" />);
+
+    expect(screen.getByRole("link", { current: "page" })).toHaveAccessibleName("IP docket");
+    expect(screen.getByRole("link", { name: "Patent intake" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("does not select a destination hidden by the current capabilities", () => {
+    roleMock.mockReturnValue("owner");
+    resolvedMock.mockReturnValue([]);
+    canMock.mockReturnValue(true);
+
+    render(<SidebarBody pathname="/app/ip/patents/applications/private-record" />);
+
+    expect(screen.queryByRole("link", { name: "Patent intake" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { current: "page" })).not.toBeInTheDocument();
   });
 });

@@ -25,8 +25,10 @@ GENERATED_ROOT = CONTROL_ROOT / "generated"
 ACTIVE_EXECUTION_DOCUMENTS = (
     REPO_ROOT / "docs" / "AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md",
     REPO_ROOT / "docs" / "BENCH_AWARE_APPEAL_DRAFTING_TASKLIST_2026-04-24.md",
+    REPO_ROOT / "docs" / "BUG_REOPEN_LEARNINGS_2026-05-09.md",
     REPO_ROOT / "docs" / "PRD_CODEX_2026-04-23.md",
     REPO_ROOT / "docs" / "STRICT_ENTERPRISE_GAP_TASKLIST.md",
+    REPO_ROOT / "docs" / "STRICT_REPO_QUALITY_AUDIT_2026-04-24.md",
     REPO_ROOT / "docs" / "WORK_TO_BE_DONE.md",
 )
 
@@ -38,24 +40,25 @@ EXPECTED_EXECUTION_POLICY = (
     "automated check and exact-release verification batch at the end"
 )
 FORBIDDEN_WORK_ASSIGNMENT_PATTERNS = tuple(
-    re.compile(pattern, re.IGNORECASE)
+    re.compile(pattern.format(executor=r"(?:claude(?:\s+code)?|anthropic)"), re.IGNORECASE)
     for pattern in (
-        r"\b(?:assigned|assignment)\s+(?:to\s+)?claude(?:\s+code)?\b",
-        r"\bclaude(?:\s+code)?\s+(?:remains\s+)?assigned\b",
-        r"\bclaude(?:\s+code)?[- ]owned\s+"
+        r"\b(?:assigned|assignment)\s+(?:to\s+)?{executor}\b",
+        r"\b{executor}\s+(?:remains\s+)?assigned\b",
+        r"\b{executor}[- ]owned\s+"
         r"(?:lane|work(?:stream)?|task|queue|slice|implementation|execution|track|assignment)\b",
-        r"\bclaude(?:\s+code)?\s+half\b",
-        r"\bclaude(?:\s+code)?\s+must\b",
+        r"\b{executor}\s+half\b",
+        r"\b{executor}\)?\s+must\b",
         r"\b(?:(?:work|execution|implementation|assigned)\s+)?owner"
-        r"(?:\s+target)?\s*(?::|=|\bis\b)\s*[^\n]*\bclaude(?:\s+code)?\b",
-        r"\bclaude(?:\s+code)?\s+(?:is\s+)?(?:the\s+)?"
+        r"(?:\s+target)?\s*(?::|=|\bis\b)\s*[^\n]*\b{executor}\b",
+        r"\b{executor}\s+(?:is\s+)?(?:the\s+)?"
         r"(?:work|execution|implementation)\s+owner\b",
-        r"\b(?:execution\s+(?:baseline|contract)|source\s+of\s+truth)"
-        r"[^\n]*\bclaude(?:\s+code)?\b",
-        r"\bclaude(?:\s+code)?\s+execution\s+(?:baseline|contract)\b",
-        r"\bfor\s+claude\s+code\s+execution\b",
-        r"\bprd\s+for\s+claude\s+code\b",
-        r"\bclaude(?:\s+code)?\s+(?:fix\s+order|work)\b",
+        r"\b(?:execution\s+(?:baseline|contract|brief)|source\s+of\s+truth)"
+        r"[^\n]*\b{executor}\b",
+        r"\b{executor}\s+execution\s+(?:baseline|contract|brief)\b",
+        r"\bfor\s+{executor}\s+execution\b",
+        r"\bprd\s+for\s+{executor}\b",
+        r"\b{executor}\s+(?:fix\s+order|work)\b",
+        r"\b(?:work_to_be_done|backlog)\s+(?:belongs\s+to|for)\s+{executor}\b",
     )
 )
 GENERATED_DERIVED_PHASES = {
@@ -178,7 +181,7 @@ def sha256_text(value: str) -> str:
 
 
 def forbidden_work_assignment_matches(root: Path | None = None) -> list[str]:
-    """Return active control lines that assign execution work to Claude.
+    """Return active control lines that assign work outside the Codex queue.
 
     The matcher deliberately targets ownership and instruction grammar. Historical
     attribution, compatibility paths such as ``.codex/skills``, migration names,
@@ -807,7 +810,7 @@ def validate(manifest: dict[str, Any]) -> list[str]:
     if program.get("execution_policy") != EXPECTED_EXECUTION_POLICY:
         errors.append("manifest simplified execution_policy is missing or changed")
     for match in forbidden_work_assignment_matches():
-        errors.append(f"active IP evidence assigns work to Claude: {match}")
+        errors.append(f"active IP evidence assigns work to a retired executor: {match}")
     if program.get("prd_sha256") != sha256_text(prd):
         errors.append("manifest PRD hash is stale")
     for collection in ("epics", "slices"):

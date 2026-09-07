@@ -220,3 +220,64 @@ def test_change_gate_ignores_provider_words_in_program_documentation() -> None:
         )
         == []
     )
+
+
+def test_committed_change_gate_ignores_binary_evidence_but_checks_governed_source(
+    tmp_path: Path, monkeypatch
+) -> None:
+    evidence = "tests/fixtures/statutes/official/source.pdf"
+    migration = "apps/api/alembic/versions/new_data.py"
+    provider = "apps/api/src/caseops_api/services/new_provider.py"
+    for name, content in (
+        (evidence, b"%PDF-1.7\n%\xb5\xb5\xb5\xb5\n"),
+        (migration, b"def upgrade(): pass\n"),
+        (provider, b"from google.cloud import storage\n"),
+    ):
+        target = tmp_path / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+    monkeypatch.setattr(ip_data_governance_map, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(
+        ip_data_governance_map, "MAP_PATH",
+        tmp_path / "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml",
+    )
+    monkeypatch.setattr(
+        ip_data_governance_map, "_git_output", lambda *args: "\n".join(
+            (evidence, migration, provider)
+        )
+    )
+
+    errors = ip_data_governance_map.check_change("origin/main")
+    assert len(errors) == 2
+    assert "DATA_GOVERNANCE_MAP.yaml update" in errors[0]
+    assert migration in errors[0] and provider in errors[0]
+    assert "missing required marker" in errors[1]
+
+    (tmp_path / migration).write_text(
+        f"# {ip_data_governance_map.MIGRATION_MARKER}\ndef upgrade(): pass\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        ip_data_governance_map, "_git_output", lambda *args: "\n".join(
+            (evidence, migration, provider, "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml")
+        )
+    )
+    assert ip_data_governance_map.check_change("origin/main") == []
+
+
+def test_committed_change_gate_rejects_unreadable_governed_source(
+    tmp_path: Path, monkeypatch
+) -> None:
+    source = "apps/api/src/caseops_api/services/new_provider.py"
+    target = tmp_path / source
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"\xff")
+    monkeypatch.setattr(ip_data_governance_map, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(
+        ip_data_governance_map, "MAP_PATH",
+        tmp_path / "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml",
+    )
+    monkeypatch.setattr(ip_data_governance_map, "_git_output", lambda *args: source)
+
+    errors = ip_data_governance_map.check_change("origin/main")
+    assert errors == [f"cannot read governed source {source}: UnicodeDecodeError"]

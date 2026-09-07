@@ -1,5 +1,32 @@
 # Strict Enterprise Gap Tasklist
 
+September 08 post-review checkpoint: PR #458 is open. The current rebuilt
+Docker runtime is `19a33de2b82f6253d42ba6ba5a7ae63dcf6a5d6e`, a source
+fingerprint, not a released commit. Its complete browser suite passes 274 tests
+with zero failures and five explicitly reconciled skips. All 192 PostgreSQL
+tests pass across four independent fresh databases with exact collection/result
+reconciliation. The 112 focused API checks and ten dated replay/history browser
+journeys pass. The unchanged frontend retains its 968-test coverage proof,
+verified against all 449 frontend/configuration hashes. The original 496-row
+import and all 1,689 named-Act source records pass on this new runtime.
+Complete API coverage passes 4,173 tests and all thresholds. Every one of its
+194 skipped identities has an exact passing supplement. All 23 production-shaped
+patent/domain journeys and all 43 source-data batches also pass locally.
+Final PR/main CI and exact-production acceptance remain separate pending gates;
+production is unchanged. The terminal replay fix is published in PR #458;
+its later CI-launcher guard passes separately without changing application bytes.
+See `ip-implementation/evidence/bug010-source-release-2026-09-07.md` for the
+authoritative scoped checkpoint and retained failures. Older dated statuses
+below are historical, not the result of this candidate. Wider catalog coverage
+and all 25 unfinished IP slices remain open.
+
+September 07 scoped-release checkpoint: BUG-010 source admission and history
+are implemented, not yet deployment-verified. Complete official inventories,
+withheld provisions, source hashes and actual Docker results are recorded in
+`ip-implementation/evidence/bug010-source-release-2026-09-07.md`. Keep the 25
+unfinished IP slices open; the user's narrower release request still requires
+all applicable regression, security, compatibility and deployment gates.
+
 This is the fail-closed enterprise hardening ledger for CaseOps.
 `docs/WORK_TO_BE_DONE.md` is planning input only. Codex must cross-check
 backlog claims against code, tests, and deploy manifests before changing any
@@ -11,6 +38,182 @@ Status legend:
 - `Partially implemented`
 - `Missing`
 - `Stale-doc`
+
+## 2026-09-07 Runtime License Inventory Recheck
+
+`Partially implemented`, baseline tooling gap, not a BUG-010 dependency waiver.
+The root-workspace `license-checker@25.0.1 --production` command returned an
+empty object while a fresh isolated lockfile install exposed 151 metadata rows
+(including two private roots). It therefore cannot prove transitive license
+coverage. Unchanged fontsource OFL-1.1, nodemailer MIT-0 and sharp/libvips
+LGPL-containing metadata also require an explicit reviewed policy, not silent
+addition to the old allowlist. Repair workspace enumeration, require a nonempty
+inventory reconciled to installed packages, and regress omitted workspaces and
+unknown licenses before calling this gate complete. Evidence and unchanged
+dependency boundaries are in `ip-implementation/evidence/bug010-source-release-2026-09-07.md`.
+The initially proposed AGPL PDF build tool was rejected and replaced with the
+MIT compiler before publication; application dependency locks did not change.
+
+## 2026-09-06 IP Domain And Disclosure Controls
+
+Production-request follow-up: Partially implemented. Real PostgreSQL tests
+reproduce missing dense-edge, retained-history and traversal-depth budgets in
+the original ancestry query. The source now charges raw versions before
+current-edge filtering and caps both rows and query count. Six corrected
+PostgreSQL/HTTP boundaries, 145 affected API checks and the fresh b525 priority
+journeys pass. Exact-identity reconciliation yields 16 unique PostgreSQL passes
+across the affected reports, not an inflated sum of replays. The local verifier
+now restores the exact release statute seed after database rehearsals. Its
+seeded browser replay remains nine passed / one BUG-010 failure. The 7ec22
+runtime is historical evidence, not proof for this newer service. No production
+change has run; BUG-010 and whole-program acceptance remain open.
+
+September 07 priority checkpoint is Partially implemented: canonical sourced
+relationships, immutable correction/withdrawal history and bounded family graph
+now have three passing fresh-Docker browser journeys and 178 passing PostgreSQL
+checks. The corrected 7ec22 runtime also passes 968 frontend checks and four
+mobile journeys; responsive title/navigation acceptance passed in the guarded
+replay. E2E specs/configurations now have an offline-Docker type gate before
+builds and in CI. The exact desktop inventory retains BUG-010 and five skips;
+the full API report retains its original deadline failure with a 29-test passing
+correction and exact source reconciliation. The 10,000-edge star fixture alone
+did not prove the ancestry-work bound; the newer PRIO-15 proof above closes that
+specific local gap. Do not describe either
+partial evidence or the zero-approved legal fixtures as full acceptance. See
+`ip-implementation/evidence/local-patent-priorities-2026-09-07.md`.
+P2-P6 and the whole-program release remain incomplete; no production change ran.
+
+September 07 continuation: applications passed 155 PostgreSQL checks and seven
+dated family/application/source journeys against freshly built images; the
+takeover record preserves the original locator failure and replay-wrapper caveat.
+The next sourced-party vertical extends the existing party owner and has 62 API,
+48 frontend, 14 corrected PostgreSQL and two dedicated tenant-fence passing
+checks. The current complete PostgreSQL selection passes all 168 tests and the
+corrected complete patent browser selection passes all 13 journeys. Full
+frontend 899 and corrected API replay 121 pass; the 4,286-node API evidence
+reconciliation retains the original failed inventory check and supplements.
+The whole desktop browser regression finished at 222 passed, one BUG-010
+failure and five skips. The separate mobile project passed four tests; exact evidence
+and limitations are in `ip-implementation/evidence/local-patent-parties-2026-09-07.md`.
+A real different-actor
+closure deadlock was corrected by allowing implicit tenant FK checks through
+the exclusive private-authority fence. Authority serialization, deletion blocking,
+terminal immutability and epoch/tombstone fences remain enforced. Priorities,
+graph and P2-P6 are incomplete. No production verification or release is claimed.
+
+Latest continuation remains NO-GO. Shared same-day close/reopen/reclose and
+backdate controls passed 106 focused offline Docker tests; a new PostgreSQL
+wrapper's duplicate bootstrap setup failed and is corrected with independent
+fixtures. All 145 PostgreSQL tests now pass inside Docker with clean post-test
+index health. Image 2b53 passed 12 identity-checked family/source/domain/Madrid
+journeys and six qualified-marketing checks; the original-input replay again
+verified 391 Matters, all 28 fields each and 10,416 retained source cells.
+The offline full API run recorded 4,076
+passes, 145 skips and two failures. Bounded immutable guide-search indexing and
+an explicit environment test fixed those findings in an 82-test focused run;
+the next run retained 4,085 passes, 146 skips and one Temporal cache failure.
+The corrected test-only tools layer retains and verifies its binary outside
+/tmp. The complete offline rerun now passes 4,093 tests with zero failures and
+147 skips, all matched by exact node identity to separate passing PostgreSQL,
+native-reranker and Windows evidence. The real Temporal workflow and adjacent
+gates passed in a 106-test offline run. Fresh image f2f21af176f9 includes the
+guide optimization and passed all 145 PostgreSQL tests and index health.
+Its full desktop Playwright result is 213 passed, one failed (BUG-010), five
+skipped; all four mobile tests passed separately. The original 496-row import
+again preserved all 10,416 cells and every mapped field on 391 created Matters.
+Deployment fakes now fail before shell
+launch on noexec storage, which previously allowed PATH fallback to real git;
+network-disabled Docker prevented external calls. No production mutation or
+whole-program completion is implied. The five browser skips remain unverified,
+and 25 program slices remain incomplete. See the takeover record for every run.
+
+Status: Partially implemented. Owner: Codex. No production closure.
+IPLF-079/080 now shares a fail-closed server domain catalogue, exact-release
+machine-evidence validation and public/workspace availability views. Unsupported
+domain records cannot be interpreted or mutated as trademarks. All current
+document links govern AI, portal, export and notification-content disclosure;
+saved publications and queued delivery revalidate those links. Authorized
+internal downloads and existing Madrid subtypes remain supported.
+
+Fresh Docker evidence now includes 135 PostgreSQL tests and 15 domain/patent/
+source-scope/Madrid/mobile
+browser journeys. Restricted family disclosure has canonical persistence,
+versioned corrections, document pins and dedicated pages. The 10,000-family
+listing admits the authorized page before loading exact current versions and
+has a five-second query bound. Shared access controls reject publication by
+removing the patent restriction; migration-installed append-only guards protect
+historical versions. See `ip-implementation/codex-takeover-2026-09-06.md` for
+exact candidate identities and the final rerun after those last guards. The
+full 216-test browser run was not green: 209 passed, two failed and five skipped.
+The corrected 15-test slice passes; BUG-010 remains open. The complete API
+baseline passed 4,076 tests with 144 skips, followed by separate final query,
+index and governance delta runs. These overlapping counts are not additive.
+Application acceptance, party/priority persistence and full P1-P6 workflows remain incomplete.
+The public status is limited to intake, never beta/GA. Catalogue evidence collection,
+complete cross-surface claims and exact-production acceptance remain pending.
+There is no separate former-executor backlog; Codex owns all 25 incomplete
+program slices without treating their counts as effort estimates.
+
+September 06 follow-up: the complete Docker frontend run passed 856 tests.
+The API run exposed a bypass of the shared HTTP helper; the public catalogue
+now retains the shared JSON deadline through body consumption with timeout,
+cancellation and explicit-retry regressions. Local Docker and CI PostgreSQL
+selection now includes every marked module instead of omitting nine nodes.
+Original failed runs, corrected focused proof and unverified skips are retained
+in the takeover record. Broader release readiness remains NO-GO.
+
+Rollback acceptance also exposed a stop-ship defect: independent index-drop
+commits survived a later retained-evidence refusal. Five downgrade paths are
+corrected locally to remain transactional; upgrades still use concurrent builds.
+The regression now requires two refused downgrades to preserve exact head,
+columns, indexes and evidence, and local acceptance checks index health after
+rehearsals. Fresh and retained-state full marked PostgreSQL runs passed; release
+verification remains pending and no production cause is inferred.
+
+Further source-scope review found that a patent document-version pin must also
+create the canonical restricted document link. Both family writers now reuse
+the existing document capability, locking, audit and private-invalidation owners;
+historical links survive later corrections. Permission denial rolls back the
+entire creation rather than leaving a partial family. Exact Docker acceptance
+is recorded in the takeover evidence, not inferred from the foreign key alone.
+
+Migration rehearsal isolation is also part of release integrity. A previous
+shared `TRUNCATE ... CASCADE` erased reviewed global court aliases and caused
+two later browser import failures despite green schema/index checks. Destructive
+probes now own disposable databases and assert exact shared-catalogue retention.
+FK inventory now inspects complete constraint prefixes in the actual migrated
+schema, with a deliberately removed-index negative test. No production closure
+or complete Bare Acts catalogue is claimed by these verification repairs.
+
+The initial page-before-history query still timed out under a fresh 10,000-row
+PostgreSQL workload. The final tenant cursor index and correlated bounded ACL
+lookup pass with hash/merge joins disabled and the original five-second budget.
+The failed run and later fast EXPLAIN remain separate evidence; no timeout was
+raised. Final governance fingerprints were regenerated before image builds.
+All 496 original import identities, 10,416 original cells and 391 records with
+28 mapped fields passed another local browser/API replay on final images.
+The expanded PostgreSQL inventory now passes all 142 nodes, including seven
+formerly SQLite-skipped bench checks. Global-worker and fixed-tenant API
+fixtures run in disposable databases to make retained-state repetition valid.
+Exact-image post-test index health passes at 512 MiB; all original import data
+was freshly re-exported and verified again. These are local verification
+repairs, not a production-complete or all-feature-complete claim.
+
+## 2026-09-05 Matter Import And Identifier Controls
+
+Status: Partially implemented. Owner: Codex. Release: NO-GO.
+See `bugfix-ram05sep-2026.md` for the row-level evidence and remaining gates.
+Local corrections preserve invalid-row isolation, canonical court lineage,
+temporary/final identifier coexistence, tenant ACLs and terminal-state fences.
+90 focused Docker API, 122 Docker PostgreSQL and 831 Docker frontend tests
+passed. Final fresh browser run: 196 passed, BUG-010 failed, five skipped.
+Full API closure: 3,966 passed, zero failed, 140 skipped. The separate 122-test
+PostgreSQL run does not imply every dialect/native skipped node executed.
+All 391 valid original-source
+Matters and all 10,416 raw source cells passed local retention checks. No production fix
+is claimed. Statute completeness remains Missing:
+production API and Playwright show only one selectable Act of 23. Exact
+official section text/version evidence is required, not a verification toggle.
 
 ## 2026-09-04 Automatic Next-Hearing Hardening
 

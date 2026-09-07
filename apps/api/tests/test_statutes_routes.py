@@ -167,10 +167,13 @@ def test_ft_s2_1_list_statutes_returns_seeded_acts(client: TestClient) -> None:
     } <= short_names
     assert body["total_section_count"] >= 1
     assert body["total_catalog_section_count"] > 0
-    # Catalog coverage is truthful: unreviewed seed text is not counted as verified.
+    # Complete pinned BNSS text is verified; unrelated legacy text is still not.
     bnss = next(a for a in body["statutes"] if a["short_name"] == "BNSS")
-    assert bnss["section_count"] == 0
-    assert bnss["catalog_section_count"] >= 17
+    assert bnss["section_count"] == 531
+    assert bnss["catalog_section_count"] == 531
+    bsa = next(a for a in body["statutes"] if a["short_name"] == "BSA")
+    assert bsa["section_count"] == 0
+    assert bsa["catalog_section_count"] > 0
     constitution = next(a for a in body["statutes"] if a["short_name"] == "Constitution")
     assert constitution["section_count"] >= 1
 

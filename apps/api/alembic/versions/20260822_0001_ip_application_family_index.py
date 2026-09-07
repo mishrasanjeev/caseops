@@ -9,7 +9,8 @@ and introduces no new record owner or retention surface.
 
 MIGRATION-LOCK-RISK: PostgreSQL builds the index concurrently so normal writes
 remain available; other test/development dialects use their ordinary index DDL.
-MIGRATION-ROLLBACK: safe; dropping the index changes performance only.
+MIGRATION-ROLLBACK: safe; transactional index removal is rolled back if any
+later revision refuses the downgrade. Existing migration lock budgets apply.
 """
 
 from __future__ import annotations
@@ -45,16 +46,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    bind = op.get_bind()
-    if bind.dialect.name == "postgresql":
-        with op.get_context().autocommit_block():
-            op.drop_index(
-                "ix_tm_applications_company_asset",
-                table_name="trademark_applications",
-                postgresql_concurrently=True,
-            )
-    else:
-        op.drop_index(
-            "ix_tm_applications_company_asset",
-            table_name="trademark_applications",
-        )
+    op.drop_index(
+        "ix_tm_applications_company_asset",
+        table_name="trademark_applications",
+    )

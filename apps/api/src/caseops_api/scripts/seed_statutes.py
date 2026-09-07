@@ -1,11 +1,8 @@
-"""Slice S1 — load statutes + statute_sections from
-``seed_data/statutes.json``. 7 central acts in v1: BNSS 2023, BNS
-2023, BSA 2023, CrPC 1973, IPC 1860, Constitution of India, NI Act
-1881. ~80 sections total; the most-litigated per Act.
+"""Load the catalog and pinned official provision bundles through one owner.
 
-Idempotent on the unique constraints. Section text is left NULL —
-Slice S3 backfill (or a future enrich script) populates it on
-demand.
+The legacy catalog is not legal-source evidence. BUG-010's five complete
+numbered-section inventories come from retained India Code editions; omitted
+and disputed entries remain unavailable for attachment. No runtime scraping.
 
 CLI: ``python -m caseops_api.scripts.seed_statutes``
 
@@ -22,14 +19,16 @@ import logging
 import re
 import sys
 from datetime import UTC, date, datetime
+from difflib import unified_diff
 from pathlib import Path
 from urllib.parse import urlparse
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from caseops_api.db.models import Statute, StatuteSection
+from caseops_api.db.models import Statute, StatuteSection, StatuteSourceVersion
 from caseops_api.db.session import get_session_factory
+from caseops_api.scripts.official_statute_release import load_release_bundle
 
 logger = logging.getLogger("seed_statutes")
 
@@ -81,44 +80,101 @@ def _apply_verified_release_source(
     source: dict[str, object],
     *,
     now: datetime,
-) -> None:
-    if row.verification_status in {"quarantined", "retired"}:
-        return
+) -> bool:
+    if row.verification_status in {
+        "verified_official",
+        "verified_licensed",
+        "quarantined",
+        "retired",
+    }:
+        # A seed rerun is not a new source review or a new network link check.
+        # Preserve all independently reviewed provenance, not only its text.
+        return False
     expected_hash = str(source["source_sha256"])
-    if row.verification_status in {"verified_official", "verified_licensed"} and (
-        row.source_sha256 != expected_hash
-    ):
-        # Never replace a distinct provision that passed the controlled source
-        # workflow. The release manifest may upgrade only unverified seed data
-        # or reconcile the same official hash.
-        return
     prior_hash = row.source_sha256
+    retrieved_at = (
+        datetime.fromisoformat(str(source["source_retrieved_at"]))
+        if source.get("source_retrieved_at")
+        else now
+    )
     row.section_label = str(source["section_label"])
     row.section_text = str(source["section_text"])
     row.section_text_source = str(source["section_text_source"])
-    row.section_text_fetched_at = now
+    row.section_text_fetched_at = retrieved_at
+    row.source_retrieved_at = retrieved_at
     row.is_provisional = False
-    row.verification_status = "verified_official"
+    row.verification_status = str(source.get("verification_status", "verified_official"))
     row.source_sha256 = expected_hash
     row.source_publisher = str(source["source_publisher"])
     row.issuing_body = str(source["issuing_body"])
     row.source_category = str(source["source_category"])
     row.source_status = str(source["source_status"])
     row.legal_status = str(source["legal_status"])
-    row.effective_from = date.fromisoformat(str(source["effective_from"]))
+    row.effective_from = (
+        date.fromisoformat(str(source["effective_from"])) if source.get("effective_from") else None
+    )
     row.exact_source_version = str(source["exact_source_version"])
     row.source_locator_type = str(source["source_locator_type"])
     row.source_policy_json = dict(source["source_policy"])
+    if source.get("editorial_notes"):
+        row.editorial_notes = str(source["editorial_notes"])
     row.link_health_status = str(source["link_health_status"])
-    row.link_last_checked_at = now
+    row.link_last_checked_at = retrieved_at
     row.link_last_error = None
     row.section_url = str(source["source_url"])
     row.source_version = (row.source_version or 1) + int(
         bool(prior_hash and prior_hash != expected_hash)
     )
-    row.verified_at = now
-    row.quarantined_at = None
-    row.quarantine_reason = None
+    row.verified_at = now if row.verification_status == "verified_official" else None
+    row.quarantined_at = now if row.verification_status == "quarantined" else None
+    row.quarantine_reason = source.get("quarantine_reason")
+    return True
+
+
+def _record_release_version(
+    session: Session,
+    row: StatuteSection,
+    prior_text: str,
+    highest_version: int,
+    *,
+    now: datetime,
+) -> None:
+    row.source_version = max(row.source_version or 1, highest_version + 1)
+    session.add(
+        StatuteSourceVersion(
+            section_id=row.id,
+            proposed_source_version=row.source_version,
+            candidate_text=row.section_text,
+            candidate_sha256=row.source_sha256,
+            source_url=row.section_url,
+            source_publisher=row.source_publisher,
+            issuing_body=row.issuing_body,
+            source_category=row.source_category,
+            source_status=row.source_status,
+            legal_status=row.legal_status,
+            source_locator_type=row.source_locator_type,
+            exact_source_version=row.exact_source_version,
+            retrieved_at=row.source_retrieved_at,
+            effective_from=row.effective_from,
+            source_policy_json=dict(row.source_policy_json),
+            diff_unified="".join(
+                unified_diff(
+                    prior_text.splitlines(keepends=True),
+                    row.section_text.splitlines(keepends=True),
+                    fromfile="retained-catalog",
+                    tofile="pinned-official-edition",
+                    n=3,
+                )
+            )[:50_000],
+            status="approved" if row.verification_status == "verified_official" else "rejected",
+            proposed_by_membership_id=None,
+            reviewed_by_membership_id=None,
+            proposed_at=now,
+            reviewed_at=now,
+            review_reason="Release-owned pinned source reconciliation; no human reviewer. "
+            + (row.quarantine_reason or row.verification_status),
+        )
+    )
 
 
 def _seed(session: Session) -> tuple[int, int, int, int]:
@@ -133,6 +189,20 @@ def _seed(session: Session) -> tuple[int, int, int, int]:
 
     now = datetime.now(UTC)
     verified_sources = _verified_release_sources()
+    documents, official_sources = load_release_bundle()
+    verified_sources.update(official_sources)
+    for act in seeds:
+        if act["id"] not in documents:
+            continue
+        official_sections = [
+            source for (act_id, _), source in official_sources.items() if act_id == act["id"]
+        ]
+        if not {section["section_number"] for section in act["sections"]}.issubset(
+            {section["section_number"] for section in official_sections}
+        ):
+            raise ValueError("Official inventory would orphan a seeded provision identity")
+        act["sections"] = official_sections
+        act["source_url"] = documents[act["id"]]["act_url"]
     applied_verified_keys: set[tuple[str, str]] = set()
     s_ins = s_upd = sec_ins = sec_upd = 0
 
@@ -166,9 +236,21 @@ def _seed(session: Session) -> tuple[int, int, int, int]:
         existing = {
             row.section_number: row
             for row in session.scalars(
-                select(StatuteSection).where(StatuteSection.statute_id == act_id)
+                select(StatuteSection).where(StatuteSection.statute_id == act_id).with_for_update()
             ).all()
         }
+        highest_versions = dict(
+            session.execute(
+                select(
+                    StatuteSourceVersion.section_id,
+                    func.max(StatuteSourceVersion.proposed_source_version),
+                )
+                .join(StatuteSection, StatuteSection.id == StatuteSourceVersion.section_id)
+                .where(StatuteSection.statute_id == act_id)
+                .group_by(StatuteSourceVersion.section_id)
+            ).all()
+        )
+        admitted: list[tuple[StatuteSection, str]] = []
         for ordinal, sec in enumerate(act.get("sections", []), start=1):
             num = sec["section_number"]
             verified_source = verified_sources.get((act_id, num))
@@ -202,18 +284,20 @@ def _seed(session: Session) -> tuple[int, int, int, int]:
                     updated_at=now,
                 )
                 if verified_source is not None:
-                    _apply_verified_release_source(row, verified_source, now=now)
+                    if _apply_verified_release_source(row, verified_source, now=now):
+                        admitted.append((row, ""))
                     applied_verified_keys.add((act_id, num))
                 session.add(row)
                 sec_ins += 1
             else:
-                row.section_label = sec.get("section_label") or row.section_label
+                prior_text = row.section_text or ""
                 if row.verification_status not in {
                     "verified_official",
                     "verified_licensed",
                     "quarantined",
                     "retired",
                 }:
+                    row.section_label = sec.get("section_label") or row.section_label
                     row.section_url = sec.get("section_url") or row.section_url
                 row.ordinal = ordinal
                 # Bake-in pattern (2026-04-26): when the seed JSON has
@@ -237,10 +321,16 @@ def _seed(session: Session) -> tuple[int, int, int, int]:
                         "section_deep_link" if sec.get("section_url") else "act_landing_page"
                     )
                 if verified_source is not None:
-                    _apply_verified_release_source(row, verified_source, now=now)
+                    if _apply_verified_release_source(row, verified_source, now=now):
+                        admitted.append((row, prior_text))
                     applied_verified_keys.add((act_id, num))
                 row.updated_at = now
                 sec_upd += 1
+        session.flush()
+        for row, prior_text in admitted:
+            _record_release_version(
+                session, row, prior_text, highest_versions.get(row.id, 0), now=now
+            )
 
     missing_verified_keys = set(verified_sources) - applied_verified_keys
     if missing_verified_keys:

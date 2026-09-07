@@ -1,8 +1,74 @@
 # MOD-TS modules ↔ PRD coverage + planned changes
 
+September 08 post-review checkpoint: PR #458 is open. The current rebuilt
+Docker runtime is `19a33de2b82f6253d42ba6ba5a7ae63dcf6a5d6e`, a source
+fingerprint, not a released commit. Its complete browser suite passes 274 tests
+with zero failures and five explicitly reconciled skips. All 192 PostgreSQL
+tests pass across four independent fresh databases with exact collection/result
+reconciliation. The 112 focused API checks and ten dated replay/history browser
+journeys pass. The unchanged frontend retains its 968-test coverage proof,
+verified against all 449 frontend/configuration hashes. The original 496-row
+import and all 1,689 named-Act source records pass on this new runtime.
+Complete API coverage passes 4,173 tests and all thresholds. Every one of its
+194 skipped identities has an exact passing supplement. All 23 production-shaped
+patent/domain journeys and all 43 source-data batches also pass locally.
+Final PR/main CI and exact-production acceptance remain separate pending gates;
+production is unchanged. The terminal replay fix is published in PR #458;
+its later CI-launcher guard passes separately without changing application bytes.
+See `ip-implementation/evidence/bug010-source-release-2026-09-07.md` for the
+authoritative scoped checkpoint and retained failures. Older dated statuses
+below are historical, not the result of this candidate. Wider catalog coverage
+and all 25 unfinished IP slices remain open.
+
 Source: `C:\Users\mishr\Downloads\CaseOps_Session1_Missing_Modules.xlsx`
 (13 modules flagged "missing" on 2026-04-20)
 Audit date: 2026-04-20. **Last refresh: 2026-04-21 evening.**
+
+## 2026-09-06 IP Ownership And Domain Boundaries
+
+September 07 MOD-TS-017 / RAM05-STATUTES checkpoint: BUG-010 now has a pinned
+five-edition numbered-section bundle, corrected Act identities and retained
+source history through the canonical statute owner. All 1,689 source rows have
+targeted Docker evidence; fresh browser and full production acceptance remain
+pending. See `ip-implementation/evidence/bug010-source-release-2026-09-07.md`.
+This source-text release does not certify current legal applicability or finish
+the remaining IP program slices.
+
+September 07 priority continuation: canonical relationship evidence, correction,
+withdrawal and graph UI now exist with focused API/PostgreSQL/scale/frontend
+proof. The newer b525 runtime also bounds ancestry rows and query count, with
+six PostgreSQL/HTTP boundary passes and all three priority widths passing;
+the whole-program release is still blocked and nothing has been deployed. The precise
+current boundary is `ip-implementation/evidence/local-patent-priorities-2026-09-07.md`;
+the older party checkpoint below remains historical proof, not this new image.
+
+Owner: Codex. IPLF-079/080 remains Partially implemented. The shared domain
+catalogue now controls the local public/workspace availability surfaces;
+unpublished-domain discovery, linked-document disclosure and legacy trademark
+write boundaries have Docker PostgreSQL and dated Playwright evidence. Madrid
+registration/designation compatibility remains tested. PAT-01..04 and
+UJ-29/39/40 are not delivered by these controls. Family disclosure persistence,
+correction history and source-pinned pages now have fresh-image PostgreSQL and
+mobile/desktop browser acceptance. Final database immutability, canonical source
+scope, bounded pagination and catalogue changes have the exact Docker reruns
+recorded in the checkpoint. Independent application and sourced-party
+persistence now have local PostgreSQL and complete dated browser proof; see
+`ip-implementation/evidence/local-patent-parties-2026-09-07.md`. Production
+priority/graph acceptance, whole-program scale acceptance, prosecution,
+maintenance, BUG-010 and full
+release acceptance remain pending. Local PRIO-15 ancestry proof is recorded
+above and is not an unimplemented duplicate task. Follow
+`ip-implementation/codex-takeover-2026-09-06.md`, not the historical module
+percentages, for current ownership, exact tests and the 25 incomplete slices.
+
+## 2026-09-05 Matter And Statute Reconciliation
+
+`J02/J03`, `M02`, `US-004/005`, `FT-093`: local implementation adds retained
+temporary E-Case identifiers and repairs template, duplicate-claim and catalog
+context paths. `J05/J07`, `M05`, `MOD-TS-017`, `US-046A/B/C/D`, `FT-S1..S4`
+and `FT-095` remain incomplete for statutory content: 22 of 23 production Acts
+have zero selectable verified sections. Refer to `bugfix-ram05sep-2026.md`;
+neither source code nor a positive Article 14 fixture closes this gap.
 
 ## 2026-09-04 hearing-sync reconciliation
 

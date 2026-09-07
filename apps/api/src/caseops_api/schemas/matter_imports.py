@@ -70,6 +70,8 @@ class BulkMatterImportRowPlan(BaseModel):
     forum_consumer_level: str | None = None
     court_forum_number: str | None = None
     case_number: str | None = None
+    temporary_e_case_number: str | None = None
+    cnr_number: str | None = None
     filing_number: str | None = None
     filing_date: date | None = None
     owner_email: str | None = None

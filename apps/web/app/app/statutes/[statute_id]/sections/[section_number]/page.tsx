@@ -82,7 +82,7 @@ function ContentPanel({ title, label, text }: { title: string; label: string; te
         <CardDescription>{label}</CardDescription>
       </CardHeader>
       <CardContent>
-        <p className="whitespace-pre-wrap text-sm text-[var(--color-ink-2)]">{text}</p>
+        <p className="whitespace-pre-wrap break-words text-sm text-[var(--color-ink-2)]">{text}</p>
       </CardContent>
     </Card>
   );
@@ -285,7 +285,7 @@ export default function StatuteSectionDetailPage() {
             {section.verification_status === "quarantined" || section.verification_status === "retired"
               ? `Quarantined: ${section.quarantine_reason ?? "curator verification required"}. The text is withheld.`
               : section.verification_status === "verified_official" || section.verification_status === "verified_licensed"
-                ? `${section.source_publisher ?? "Verified publisher"}; curator-verified source version ${section.source_version}${section.source_sha256 ? ` (SHA-256 ${section.source_sha256.slice(0, 12)}...)` : ""}.`
+                ? `${section.source_publisher ?? "Verified publisher"}; verified published source version ${section.source_version}${section.source_sha256 ? ` (SHA-256 ${section.source_sha256.slice(0, 12)}...)` : ""}.`
                 : "Unverified legal text is withheld until curator verification."}
           </CardDescription>
         </CardHeader>
@@ -308,7 +308,7 @@ export default function StatuteSectionDetailPage() {
           ) : null}
           {authoritative && section.section_text ? (
             <pre
-              className="whitespace-pre-wrap text-sm text-[var(--color-ink)]"
+              className="whitespace-pre-wrap break-words text-sm text-[var(--color-ink)]"
               data-testid="statute-section-text"
             >
               {section.section_text}
@@ -341,7 +341,7 @@ export default function StatuteSectionDetailPage() {
             <Metadata label="Legal status" value={section.legal_status} />
             <Metadata label="Exact source version" value={section.exact_source_version} />
             <Metadata label="Effective from" value={section.effective_from} />
-            <Metadata label="Effective to" value={section.effective_to ?? "Current / not recorded"} />
+            <Metadata label="Effective to" value={section.effective_to ?? "Not recorded"} />
             <Metadata label="History coverage" value={section.history_status} />
             <Metadata label="Source locator" value={section.source_locator_type} />
             <Metadata label="Link health" value={section.link_health_status} />

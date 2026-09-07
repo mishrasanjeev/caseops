@@ -226,7 +226,8 @@ describe("post-registration workspace", () => {
     const user = userEvent.setup();
     render(<RecordalsPage />, { wrapper: wrapper() });
 
-    expect(await screen.findByRole("heading", { name: "Assignment" })).toBeVisible();
+    await screen.findByText("Assignment", { selector: "h2", exact: true });
+    expect(screen.getByRole("heading", { name: /^Assignment$/ })).toBeVisible();
     await user.click(screen.getByRole("tab", { name: "Title at date" }));
     expect(screen.getByRole("heading", { name: "Registry-recorded position" })).toBeVisible();
     expect(screen.getAllByText("Aster Labs Private Limited").length).toBeGreaterThanOrEqual(1);

@@ -29,6 +29,7 @@ from caseops_api.db.models import (
     PortalUser,
     PortalUserRole,
 )
+from caseops_api.services.ip_domain_policy import general_ip_disclosure_filter
 
 # Per D2 in PHASE_C_KICKOFF_2026-04-24.md.
 MAGIC_LINK_TTL_MINUTES = 30
@@ -250,6 +251,7 @@ def invite_portal_user(
         session.scalars(
             select(IpDocketRecord.id).where(
                 IpDocketRecord.company_id == company_id,
+                general_ip_disclosure_filter(),
                 IpDocketRecord.id.in_(unique_ip_docket_ids),
                 IpDocketRecord.is_active.is_(True),
                 IpDocketRecord.archived_by_matter_disposal.is_(False),

@@ -1,5 +1,29 @@
 # Bug Reopen Learnings — Hari 2026-05-09 sweep
 
+## September 07 Statute Reopen Analysis
+
+BUG-010 reopened because prior acceptance confused a correctly disabled source
+with a usable Act and relied on positive Constitution fixtures instead of the
+reported catalogs. The repair must reconcile full official inventories, source
+identity, text, publisher footnotes, inserted/omitted entries and actual
+attach/detail/reload behavior. A new deterministic fixture alone is insufficient.
+Published editions can contain arrangement/body errors or retain text affected
+by a judgment; preserve those discrepancies and fail closed instead of claiming
+all printed provisions are operative current law. Repeated seeding must retain
+reviewed provenance and source history without fabricating a new link check.
+The current implementation and unfulfilled release proof are recorded in
+`ip-implementation/evidence/bug010-source-release-2026-09-07.md`.
+
+September 07 browser review found three test-assumption failures after genuine
+source admission. Nonselectable counts do not distinguish pending, retired and
+quarantined provisions. Inspect the exact state. A canonical guarded source
+action is not a broken external link: prove browser-cookie authorization,
+audited redirect and exact official destination without bypassing it. Inspect
+each structured failure and rerun serial siblings as well as the whole gate.
+Use width/run-specific fixture identities so a passing prior journey cannot
+cause a later duplicate collision. Production reuse needs exact-release checks,
+dedicated QA authentication and no local database setup helpers on live data.
+
 A durable learning doc covering the five bugs / operational areas
 landed in PRs #20, #21, #22, #23, #24. Anchored on the Hari workbook
 `C:\Users\mishr\Downloads\CaseOps Bug List_Hari9May2026 .xlsx`.
@@ -11,6 +35,68 @@ patterns concrete enough that the next audit can grep for the
 same shape and catch new instances before they ship.
 
 ---
+
+## September 07: Implicit Tenant Locks Are Part Of The Protocol
+
+The same day's complete acceptance also exposed test-boundary errors. Party
+browser tests saved a portfolio URL before navigation committed, or clicked
+the family's Parties tab while the application route was pending. All six
+failed. Explicit destination URL and record-heading assertions now precede
+nested actions; the complete 13-journey replay passes against unchanged exact
+Docker images, including closed-history reload and rejected terminal writes.
+No product guard or timeout was relaxed. The family/application intake tests
+already awaited navigation and were retained unchanged.
+
+The original frontend run retained seven failures. Resource-controlled diagnosis
+isolated a cold, expensive accessible-role loading poll. Polling the exact h2
+text and then asserting its accessible heading and visibility preserves the
+original deadline. The complete 899-test suite passes with that sole test
+change. A targeted pass alone was not used to dismiss the original failures.
+The full API run separately found a route-inventory false positive for four
+real tested paths assembled through URL prefixes. Those paths are now explicit
+in executed HTTP assertions, not unused strings or coverage exemptions. Exact
+results, source identities and remaining release limits belong in the dated
+local evidence record, not a blanket "all fixed" statement.
+
+A new different-actor patent-party/closure PostgreSQL regression reproduced a
+real deadlock. The waiting party command had inserted its idempotency claim,
+which implicitly held Company KEY SHARE, before waiting on the source parent.
+Closure owned that parent and later requested Company FOR UPDATE to advance
+private epochs. Same-actor coverage could not expose this because the shared
+membership lock serialized both commands earlier. This is local root-cause
+evidence, not a retrospective diagnosis of every production alert.
+
+The canonical private-authority fence now uses FOR NO KEY UPDATE; bootstrap
+delegates to the same fence. It still serializes authority writers and blocks
+deletion while allowing tenant FK checks. No retry, error suppression or
+access/tombstone relaxation was added. Both family/application closure races,
+three existing private-index overlap regressions and the full party PostgreSQL
+selection pass (14 tests). Two additional regressions hold a real uncommitted
+claim, prove authority progress, observe a second authority writer waiting,
+prove deletion remains blocked, and verify one active generation. Fresh Docker
+browser and production acceptance remain separate gates. References:
+`test_ip_patent_party_postgres.py`, `test_private_authority_lock_postgres.py`,
+and the existing private-index cases in `test_postgres_validation.py`.
+
+Lock semantics: [PostgreSQL 17 row-level locks](https://www.postgresql.org/docs/17/explicit-locking.html#LOCKING-ROWS).
+
+## September 06: Repeat Lifecycle Journeys Must Be Real
+
+The old shared IP regression closed a docket and reopened it on a later day.
+It did not close the reopened docket again. The expanded patent Playwright
+journey reproduced the actual gap at all three widths: calendar-date duplicate
+matching rejected a distinct second closure. A one-time transition test was
+insufficient proof of a repeatable operational flow.
+
+The fix retains the dedicated parent command and optimistic lifecycle version;
+it does not remove duplicate checks from trademark applications or opposition
+proceedings. The prosecution conflict display must use the same parent-version
+distinction. Generic root event routes may not invent a lifecycle fact. Close
+and reopen also share the same explicit backdate blocker in preview, commit
+and retained event evidence. Required regression: close/reopen/close on one
+date, stale replay, unchanged state on rejection, no child resurrection, history
+reload, PostgreSQL and 393/768/1280px browser proof. The failed first browser
+artifacts and fresh acceptance are recorded in the September 06 IP checkpoint.
 
 ## L1 — Backend/component proof was treated as enough
 
@@ -174,7 +260,7 @@ this anti-pattern.
 ## Future-closure checklist
 
 Before any future closure of a bug in the same shape as the five
-above, the engineer (or Claude) MUST verify:
+above, the engineer (or Codex) MUST verify:
 
 1. **Route existence.** Every URL the backend or any service
    generates resolves to a real frontend route on the running
