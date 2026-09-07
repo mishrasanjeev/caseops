@@ -12,6 +12,8 @@ import { ProductGallery } from "@/components/marketing/ProductGallery";
 import { Security } from "@/components/marketing/Security";
 import { Workflows } from "@/components/marketing/Workflows";
 import { SkipLink } from "@/components/ui/SkipLink";
+import { IpDomainAvailability } from "@/components/ip/IpDomainAvailability";
+import { Container } from "@/components/ui/Container";
 import { marketingFaqs } from "@/lib/marketing-content";
 import { siteConfig } from "@/lib/site";
 
@@ -52,6 +54,7 @@ export default async function LandingPage() {
         <Features />
         <ProductGallery />
         <Workflows />
+        <Container><IpDomainAvailability /></Container>
         <Security />
         <Pricing />
         <FAQ />

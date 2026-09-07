@@ -188,11 +188,15 @@ function WorkProductCard({ matterId }: { matterId: string }) {
   });
   const uploadMutation = useMutation({
     mutationFn: (file: File) => uploadPortalOcWorkProduct(matterId, file),
-    onSuccess: () => {
+    onSuccess: async () => {
       setPickedFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
-      queryClient.invalidateQueries({
+      await queryClient.cancelQueries({
+        queryKey: ["portal", "oc", "matter", matterId, "work-product"], exact: true,
+      });
+      await queryClient.invalidateQueries({
         queryKey: ["portal", "oc", "matter", matterId, "work-product"],
+        exact: true,
       });
       toast.success("Work product uploaded.");
     },
@@ -309,13 +313,17 @@ function InvoicesCard({ matterId }: { matterId: string }) {
         ],
         notes: notes.trim() || null,
       }),
-    onSuccess: () => {
+    onSuccess: async () => {
       setInvoiceNumber("");
       setLineDescription("");
       setLineAmountMinor("");
       setNotes("");
-      queryClient.invalidateQueries({
+      await queryClient.cancelQueries({
+        queryKey: ["portal", "oc", "matter", matterId, "invoices"], exact: true,
+      });
+      await queryClient.invalidateQueries({
         queryKey: ["portal", "oc", "matter", matterId, "invoices"],
+        exact: true,
       });
       toast.success("Invoice submitted. The firm will review.");
     },
@@ -492,12 +500,16 @@ function TimeEntriesCard({ matterId }: { matterId: string }) {
         rate_currency: "INR",
         rate_amount_minor: rateAmountMinor ? Number(rateAmountMinor) : null,
       }),
-    onSuccess: () => {
+    onSuccess: async () => {
       setDescription("");
       setDurationMinutes("");
       setRateAmountMinor("");
-      queryClient.invalidateQueries({
+      await queryClient.cancelQueries({
+        queryKey: ["portal", "oc", "matter", matterId, "time-entries"], exact: true,
+      });
+      await queryClient.invalidateQueries({
         queryKey: ["portal", "oc", "matter", matterId, "time-entries"],
+        exact: true,
       });
       toast.success("Time entry logged.");
     },

@@ -6489,6 +6489,7 @@ export async function createMatter(input: {
   client_name?: string;
   opposing_party?: string;
   case_number?: string;
+  temporary_e_case_number?: string;
   cnr_number?: string;
   description?: string;
   court_name?: string;
@@ -6520,6 +6521,7 @@ export async function updateMatter(input: {
   client_name?: string | null;
   opposing_party?: string | null;
   case_number?: string | null;
+  temporary_e_case_number?: string | null;
   cnr_number?: string | null;
   practice_area?: string;
   forum_level?: string | null;
@@ -10341,6 +10343,7 @@ export type IpWorkspaceReadiness = {
   manual_docketing_available: boolean;
   configuration_status?: IpWorkspaceConfigurationStatus;
   features: IpFeatureReadiness[];
+  domains?: import("@/lib/ip/domain-catalog").IpDomainCapability[];
 };
 
 export type IpDeadlineRuleVersion = {
@@ -10637,6 +10640,10 @@ export async function fetchIpDocuments(): Promise<{ items: IpDocument[]; total: 
   return apiRequest("/api/ip/documents");
 }
 
+export async function fetchIpDocument(documentId: string): Promise<IpDocument> {
+  return apiRequest(`/api/ip/documents/${encodeURIComponent(documentId)}`);
+}
+
 export async function fetchIpDocumentsForDocket(
   docketId: string,
 ): Promise<{ items: IpDocument[]; total: number }> {
@@ -10651,6 +10658,7 @@ export async function fetchIpDocumentTaxonomy(): Promise<{
 }
 
 export async function previewIpDocumentName(input: {
+  assetType?: "Trademark" | "Patent";
   clientCode: string;
   mark: string;
   jurisdiction: string;
@@ -10667,7 +10675,7 @@ export async function previewIpDocumentName(input: {
     method: "POST",
     body: {
       client_code: input.clientCode || null,
-      asset_type: "Trademark",
+      asset_type: input.assetType ?? "Trademark",
       mark: input.mark || null,
       jurisdiction: input.jurisdiction || null,
       application_no: input.applicationNo || null,
@@ -10683,6 +10691,7 @@ export async function previewIpDocumentName(input: {
 }
 
 export async function uploadIpDocument(input: {
+  assetType?: "Trademark" | "Patent";
   file: File;
   taxonomyKey: string;
   title: string;
@@ -10707,7 +10716,7 @@ export async function uploadIpDocument(input: {
       confidentiality: input.confidentiality,
       is_privileged: input.isPrivileged,
       client_code: input.clientCode || null,
-      asset_type: "Trademark",
+      asset_type: input.assetType ?? "Trademark",
       mark: input.mark || null,
       jurisdiction: input.jurisdiction || null,
       application_no: input.applicationNo || null,
@@ -10721,6 +10730,7 @@ export async function uploadIpDocument(input: {
 }
 
 export async function uploadIpDocumentVersion(input: {
+  assetType?: "Trademark" | "Patent";
   documentId: string;
   expectedCurrentVersion: number;
   file: File;
@@ -10739,7 +10749,7 @@ export async function uploadIpDocumentVersion(input: {
     JSON.stringify({
       expected_current_version: input.expectedCurrentVersion,
       client_code: input.clientCode || null,
-      asset_type: "Trademark",
+      asset_type: input.assetType ?? "Trademark",
       mark: input.mark || null,
       jurisdiction: input.jurisdiction || null,
       application_no: input.applicationNo || null,
@@ -10821,7 +10831,14 @@ export async function applyIpDocumentBulk(input: {
 }
 
 export async function fetchIpWorkspaceReadiness(): Promise<IpWorkspaceReadiness> {
-  return apiRequest("/api/ip/readiness");
+  const data = await apiRequest<IpWorkspaceReadiness>("/api/ip/readiness");
+  if (data.domains !== undefined) {
+    const { ipDomainCatalogueSchema } = await import("@/lib/ip/domain-catalog");
+    data.domains = ipDomainCatalogueSchema.parse({
+      catalogue_version: "readiness", domains: data.domains,
+    }).domains;
+  }
+  return data;
 }
 
 export async function saveIpWorkspaceConfiguration(input: {

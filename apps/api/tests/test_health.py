@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from caseops_api.core.settings import get_settings
@@ -66,12 +67,16 @@ def test_health_ingest_returns_global_aggregates_unauthenticated(client: TestCli
     assert payload["last_ingested_at"] is None or isinstance(payload["last_ingested_at"], str)
 
 
-def test_meta_exposes_service_identity() -> None:
-    response = client.get("/api/meta")
-
-    assert response.status_code == 200
-    payload = response.json()
-
-    assert payload["name"] == "CaseOps API"
-    assert payload["version"] == "0.1.0"
-    assert payload["environment"] == "local"
+@pytest.mark.parametrize("environment", ["local", "ci", "e2e"])
+def test_meta_exposes_service_identity(monkeypatch, environment: str) -> None:
+    monkeypatch.setenv("CASEOPS_ENV", environment)
+    get_settings.cache_clear()
+    try:
+        response = client.get("/api/meta")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["name"] == "CaseOps API"
+        assert payload["version"] == "0.1.0"
+        assert payload["environment"] == environment
+    finally:
+        get_settings.cache_clear()

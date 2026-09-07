@@ -28,6 +28,22 @@ def test_shell_scripts_are_checked_out_with_lf_line_endings() -> None:
     assert "*.sh text eol=lf" in attributes
 
 
+def test_test_tools_require_explicit_current_source_entrypoint(tmp_path: Path) -> None:
+    lines = _read_repo_text("scripts/docker-test-tools.Dockerfile").splitlines()
+    entrypoint = json.loads(next(line.removeprefix("ENTRYPOINT ") for line in lines
+                                 if line.startswith("ENTRYPOINT ")))
+    message = "Test tools require an explicit --entrypoint and a current-source runner."
+    assert entrypoint == ["python", "-c", f"raise SystemExit({message!r})"]
+    assert "CMD []" in lines
+    result = subprocess.run(
+        [sys.executable, *entrypoint[1:], "tests/test_deploy_prod_hardening.py"],
+        cwd=tmp_path, capture_output=True, text=True, timeout=5, check=False,
+    )
+    assert result.returncode == 1
+    assert message in result.stderr
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_web_gcloudignore_blocks_local_build_artifacts() -> None:
     """Regression for the 2026-06-26 Windows deploy archive failure.
 
@@ -292,7 +308,7 @@ def test_a0_production_acceptance_is_an_isolated_verify_only_gate() -> None:
     # Renewal preflight, renewal acceptance, and Notice remain visible
     # independently after the broad RAM batch. The historical A0 transition
     # gate additionally requires an explicit manual opt-in.
-    assert workflow.count(prerequisite_gate) == 6
+    assert workflow.count(prerequisite_gate) == 7
     assert (prerequisite_gate + " && inputs.run_historical_a0_gate == true") in workflow
     assert "CASEOPS_IP_A0_PROD_MODE: verify" in workflow
     assert (
@@ -600,6 +616,9 @@ def test_workstation_docker_gate_is_migration_first_and_exact_release() -> None:
     assert '$WorkerStateAfterPlaywright -ne "running"' in docker_script
     assert docker_script.index("stop --timeout 30 worker") < docker_script.index("-m postgres")
     assert docker_script.index("-m postgres") < docker_script.index("start worker")
+    assert docker_script.index("-m postgres") < docker_script.index(
+        "PostgreSQL post-rehearsal index health gate failed."
+    ) < docker_script.index("start worker")
     assert docker_script.index("start worker") < docker_script.index(
         "$WorkerStateAfterPlaywright = Get-ComposeServiceState"
     )
@@ -612,6 +631,15 @@ def test_workstation_docker_gate_is_migration_first_and_exact_release() -> None:
     assert "CASEOPS_E2E_DOCKER_PROJECT" in e2e_helpers
     assert '"caseops-document-worker"' in e2e_helpers
     assert '"--skip-migrations"' in e2e_helpers
+
+
+def test_all_postgres_marked_modules_are_selected_locally_and_in_ci() -> None:
+    for path in ("scripts/verify-docker.ps1", ".github/workflows/ci.yml"):
+        lines = _read_repo_text(path).splitlines()
+        commands = [line.strip() for line in lines if "pytest" in line and "-m postgres" in line]
+        assert len(commands) == 1, path
+        assert commands[0].endswith("pytest -q -m postgres"), path
+        assert "test_postgres_validation.py" not in commands[0], path
 
 
 def test_forum_alias_journey_is_discovered_with_an_isolated_docker_founder() -> None:
@@ -635,6 +663,50 @@ def test_release_images_carry_exact_revision_label(dockerfile: str) -> None:
 
     assert "ARG CASEOPS_RELEASE_SHA=unavailable" in image
     assert "LABEL org.opencontainers.image.revision=$CASEOPS_RELEASE_SHA" in image
+
+
+def test_docker_acceptance_rechecks_the_exact_source_before_certification() -> None:
+    script = _read_repo_text("scripts/verify-docker.ps1")
+    assert "$SourceFingerprint = Get-WorkingTreeFingerprint" in script
+    guard = script.split("function Assert-CandidateSourceUnchanged {", 1)[1].split(
+        "\nfunction ", 1
+    )[0]
+    assert "(Get-WorkingTreeFingerprint) -ne $SourceFingerprint" in guard
+    assert "$CurrentHead -ne $ReleaseSha" in guard
+    assert "this run cannot certify it" in guard
+    assert script.index(
+        'Assert-CandidateSourceUnchanged -Stage "after image build"'
+    ) < script.index(
+        'Write-Host "[docker-acceptance] starting migration-first stack"'
+    )
+    assert script.index(
+        'Assert-CandidateSourceUnchanged -Stage "before browser acceptance"'
+    ) < script.index(
+        'Write-Host "[docker-acceptance] running Playwright against Docker + PostgreSQL"'
+    )
+    assert script.index(
+        'Assert-CandidateSourceUnchanged -Stage "before acceptance certification"'
+    ) < script.index("$Succeeded = $true")
+
+
+def test_docker_acceptance_restores_release_statutes_after_database_rehearsals() -> None:
+    script = _read_repo_text("scripts/verify-docker.ps1")
+    seed_command = (
+        "& docker compose --project-name $ComposeProject --file $ComposeFile "
+        "exec --no-TTY api python -m caseops_api.scripts.seed_statutes"
+    )
+    assert script.count(seed_command) == 1
+    seed_at = script.index(seed_command)
+    assert script.index("$ImageRevision -ne $ReleaseSha") < seed_at
+    assert script.index("& $ApiPython -m pytest -q -m postgres") < seed_at
+    assert script.index('throw "PostgreSQL post-rehearsal index health gate failed."') < seed_at
+    assert seed_at < script.index(
+        'Assert-CandidateSourceUnchanged -Stage "before browser acceptance"'
+    )
+    next_line = script[seed_at:].splitlines()[1].strip()
+    assert next_line == (
+        'if ($LASTEXITCODE -ne 0) { throw "Release statute catalog seed failed." }'
+    )
 
 
 def test_api_release_image_uses_frozen_dependencies_before_source_layers() -> None:
@@ -842,6 +914,20 @@ def _bash_path(path: Path) -> str:
 def _write_fake_executable(path: Path, source: str) -> None:
     path.write_text(source, encoding="utf-8", newline="\n")
     path.chmod(0o755)
+    if os.name != "nt" and not os.access(path, os.X_OK):
+        raise RuntimeError(
+            "Deployment fixture is not executable; use an exec-enabled test "
+            "filesystem so PATH cannot fall through to a real CLI."
+        )
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX mount execution policy")
+def test_fake_cli_rejects_non_executable_filesystem(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(os, "access", lambda path, mode: False)
+    with pytest.raises(RuntimeError, match="PATH cannot fall through to a real CLI"):
+        _write_fake_executable(tmp_path / "git", "#!/bin/sh\nexit 0\n")
 
 
 def _a0_fingerprint_json() -> str:

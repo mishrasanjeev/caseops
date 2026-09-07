@@ -61,6 +61,7 @@ from caseops_api.services.ip_document_workflow import (
     get_accessible_ip_document_ids,
     get_ip_document_policies,
 )
+from caseops_api.services.ip_domain_policy import general_ip_disclosure_filter
 from caseops_api.services.llm import (
     PURPOSE_ASSISTANT,
     build_provider,
@@ -333,6 +334,7 @@ def _resolve_scope_versions(
                 IpDocketRecord.id.in_(docket_ids),
                 IpDocketRecord.is_active.is_(True),
                 IpDocketRecord.archived_by_matter_disposal.is_(False),
+                general_ip_disclosure_filter(),
                 visible_ip_dockets_filter(session, context=context),
             )
         ).all()
@@ -803,6 +805,7 @@ def search_assistant_scopes(
             IpDocketRecord.company_id == company_id,
             IpDocketRecord.is_active.is_(True),
             IpDocketRecord.archived_by_matter_disposal.is_(False),
+            general_ip_disclosure_filter(),
             visible_ip_dockets_filter(session, context=context),
             or_(
                 IpDocketRecord.title.ilike(pattern, escape="\\"),
@@ -828,6 +831,7 @@ def search_assistant_scopes(
         .join(IpDocketRecord, IpDocketRecord.id == IpAsset.docket_id)
         .where(
             IpAsset.company_id == company_id,
+            general_ip_disclosure_filter(),
             visible_ip_dockets_filter(session, context=context),
             IpAsset.title.ilike(pattern, escape="\\"),
         )
@@ -855,6 +859,7 @@ def search_assistant_scopes(
         )
         .where(
             TrademarkApplication.company_id == company_id,
+            general_ip_disclosure_filter(),
             visible_ip_dockets_filter(session, context=context),
             or_(
                 TrademarkApplication.office.ilike(pattern, escape="\\"),
@@ -885,6 +890,7 @@ def search_assistant_scopes(
         )
         .where(
             IpProceeding.company_id == company_id,
+            general_ip_disclosure_filter(),
             visible_ip_dockets_filter(session, context=context),
             or_(
                 IpProceeding.proceeding_kind.ilike(pattern, escape="\\"),
@@ -1086,6 +1092,7 @@ def _sources_for_scopes(
             select(IpDocketRecord).where(
                 IpDocketRecord.company_id == context.company.id,
                 IpDocketRecord.id.in_(docket_ids),
+                general_ip_disclosure_filter(),
             )
         ).all()
         for row in rows:

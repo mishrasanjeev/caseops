@@ -245,11 +245,11 @@ def test_event_commands_reject_stale_registry_and_cross_tenant_targets(
                 session,
                 context=context,
                 docket_id=first_docket["id"],
-                    payload=_manual_event(
-                        membership_id=membership_id,
-                        application_id=application.json()["application"]["id"],
-                        expected_application_version=1,
-                    ),
+                payload=_manual_event(
+                    membership_id=membership_id,
+                    application_id=application.json()["application"]["id"],
+                    expected_application_version=1,
+                ),
             )
         assert tenant_error.value.status_code == 422
 
@@ -382,7 +382,7 @@ def test_lifecycle_transition_is_fail_closed_and_reopen_does_not_revive_children
             payload=IpLifecycleTransitionRequest(
                 expected_lifecycle_version=1,
                 to_status="ready",
-                effective_at=EFFECTIVE_AT + timedelta(days=1),
+                effective_at=EFFECTIVE_AT + timedelta(minutes=1),
                 reason="Named lawyer approved a controlled reopen.",
                 outcome="reopened",
                 source="lawyer_review",
@@ -413,6 +413,147 @@ def test_lifecycle_transition_is_fail_closed_and_reopen_does_not_revive_children
     assert reloaded.json()["lifecycle_version"] == 2
     assert reloaded.json()["deadline_coverages"][0]["coverage_status"] == ("inactive_lifecycle")
     assert reloaded.json()["related_right_obligations"][0]["status"] == ("cancelled_lifecycle")
+    close_again = {
+        "expected_lifecycle_version": 2,
+        "to_status": "closed",
+        "effective_at": (EFFECTIVE_AT + timedelta(minutes=2)).isoformat(),
+        "reason": "Second explicit closure on the same calendar day.",
+        "outcome": "closed",
+        "source": "lawyer_review",
+        "evidence_ref": "attachment:second-closure",
+        "linked_matter_handling": "reviewed",
+    }
+    closed_again = client.post(
+        f"/api/ip/dockets/{docket['id']}/lifecycle", headers=headers, json=close_again
+    )
+    assert closed_again.status_code == 200, closed_again.text
+    assert closed_again.json()["lifecycle_version"] == 3
+    assert closed_again.json()["is_active"] is False
+    assert (
+        client.post(
+            f"/api/ip/dockets/{docket['id']}/lifecycle", headers=headers, json=close_again
+        ).status_code
+        == 409
+    )
+    with get_session_factory()() as session:
+        retained = session.get(IpDocketRecord, docket["id"])
+        assert retained.status == "closed" and not retained.is_active
+        events = session.scalars(
+            select(IpDocketEvent)
+            .where(IpDocketEvent.docket_id == docket["id"])
+            .order_by(IpDocketEvent.sequence)
+        ).all()
+        assert [event.resulting_lifecycle_version for event in events] == [1, 2, 3]
+        assert session.get(MatterDeadline, deadline_id).status == "cancelled"
+    history = client.get(f"/api/ip/dockets/{docket['id']}/prosecution", headers=headers)
+    assert history.status_code == 200, history.text
+    assert history.json()["conflicting_event_ids"] == []
+
+
+def test_backdated_lifecycle_commands_preview_acknowledge_and_preserve_history(client: TestClient):
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    docket = _docket(client, headers, title="BACKDATED LIFECYCLE")
+    endpoint = f"/api/ip/dockets/{docket['id']}/lifecycle"
+    expected_states = [("closed", 2), ("ready", 1), ("closed", 0)]
+    for version, (status, minutes) in enumerate(expected_states):
+        payload = {
+            "expected_lifecycle_version": version,
+            "to_status": status,
+            "effective_at": (EFFECTIVE_AT + timedelta(minutes=minutes)).isoformat(),
+            "reason": "Explicit recorded instruction with a reviewed effective date.",
+            "outcome": "reopened" if status == "ready" else "closed",
+            "source": "lawyer_review",
+            "evidence_ref": f"attachment:backdated-{version}",
+            "linked_matter_handling": "reviewed",
+        }
+        preview = client.post(f"{endpoint}/preview", headers=headers, json=payload)
+        assert preview.status_code == 200, preview.text
+        codes = preview.json()["blocker_codes"]
+        assert codes == (["backdated_recalculation_review_required"] if version else [])
+        if version:
+            rejected = client.post(endpoint, headers=headers, json=payload)
+            assert rejected.status_code == 409, rejected.text
+            with get_session_factory()() as session:
+                row = session.get(IpDocketRecord, docket["id"])
+                assert row.lifecycle_version == version
+                assert row.status == expected_states[version - 1][0]
+                assert (
+                    len(
+                        list_ip_docket_events(
+                            session, context=_context(session, bootstrap), docket_id=docket["id"]
+                        )
+                    )
+                    == version
+                )
+        accepted = client.post(
+            endpoint,
+            headers=headers,
+            json={
+                **payload,
+                "acknowledged_exception_codes": codes,
+            },
+        )
+        assert accepted.status_code == 200, accepted.text
+        assert accepted.json()["lifecycle_version"] == version + 1
+        assert accepted.json()["status"] == status
+        assert accepted.json()["is_active"] is (status == "ready")
+        assert (
+            client.post(
+                endpoint,
+                headers=headers,
+                json={
+                    **payload,
+                    "acknowledged_exception_codes": codes,
+                },
+            ).status_code
+            == 409
+        )
+    with get_session_factory()() as session:
+        events = list_ip_docket_events(
+            session, context=_context(session, bootstrap), docket_id=docket["id"]
+        )
+        assert [event.resulting_lifecycle_version for event in events] == [1, 2, 3]
+        assert [event.payload_json["backdated"] for event in events] == [False, True, True]
+        assert [event.payload_json["acknowledged_exception_codes"] for event in events] == [
+            [],
+            ["backdated_recalculation_review_required"],
+            ["backdated_recalculation_review_required"],
+        ]
+        assert [event.after_phase for event in events] == ["closed", "ready", "closed"]
+    history = client.get(f"/api/ip/dockets/{docket['id']}/prosecution", headers=headers)
+    assert history.status_code == 200, history.text
+    assert history.json()["conflicting_event_ids"] == []
+
+
+@pytest.mark.parametrize("suffix", ["events/preview", "events"])
+def test_generic_event_cannot_forge_a_parent_lifecycle_fact(client: TestClient, suffix: str):
+    bootstrap = bootstrap_company(client)
+    headers = auth_headers(str(bootstrap["access_token"]))
+    docket = _docket(client, headers, title="LIFECYCLE COMMAND BOUNDARY")
+    denied = client.post(
+        f"/api/ip/dockets/{docket['id']}/{suffix}",
+        headers=headers,
+        json={
+            "expected_lifecycle_version": 0,
+            "event_kind": "lifecycle_transition",
+            "source": "manual",
+            "effective_at": EFFECTIVE_AT.isoformat(),
+            "responsible_membership_id": bootstrap["membership"]["id"],
+            "reason": "Attempted forged closure event.",
+            "before_phase": "ready",
+            "after_phase": "closed",
+        },
+    )
+    assert denied.status_code == 409, denied.text
+    assert "dedicated docket lifecycle command" in denied.text
+    with get_session_factory()() as session:
+        record = session.get(IpDocketRecord, docket["id"])
+        assert record.is_active and record.lifecycle_version == 0
+        assert (
+            session.scalar(select(IpDocketEvent).where(IpDocketEvent.docket_id == record.id))
+            is None
+        )
 
 
 @pytest.mark.parametrize("matter_linked", [False, True], ids=["standalone", "matter-linked"])
@@ -513,9 +654,7 @@ def test_lifecycle_neutralizes_every_uncovered_docket_deadline_before_reopen(
 
     with get_session_factory()() as session:
         unchanged_deadlines = list(
-            session.scalars(
-                select(MatterDeadline).where(MatterDeadline.id.in_(deadline_ids))
-            )
+            session.scalars(select(MatterDeadline).where(MatterDeadline.id.in_(deadline_ids)))
         )
         assert {deadline.status for deadline in unchanged_deadlines} == {"open", "missed"}
         assert all(deadline.neutralized_at is None for deadline in unchanged_deadlines)
@@ -747,9 +886,7 @@ def test_reopen_repairs_legacy_terminal_docket_with_uncovered_deadlines(
             provider_account_id=f"legacy-lifecycle-{suffix}-calendar",
             status="connected",
         )
-        session.add_all(
-            [legacy_obligation, legacy_reminder, legacy_intent, connection]
-        )
+        session.add_all([legacy_obligation, legacy_reminder, legacy_intent, connection])
         session.flush()
         session.add_all(
             [
@@ -1136,8 +1273,7 @@ def test_terminal_docket_neutralizes_live_work_and_outbound_state_before_reopen(
         assert preserved_claim is not None
         assert preserved_claim.provider_event_id is None
         assert (
-            preserved_claim.dead_letter_reason
-            == "provider_upsert_claim:in-flight-lifecycle-create"
+            preserved_claim.dead_letter_reason == "provider_upsert_claim:in-flight-lifecycle-create"
         )
         assert preserved_claim.neutralized_ip_docket_id is None
         expired_claim = session.get(CalendarEventSync, expired_sync_id)
@@ -1151,10 +1287,7 @@ def test_terminal_docket_neutralizes_live_work_and_outbound_state_before_reopen(
         assert typed_unknown.dead_letter_reason == CALENDAR_UPSERT_UNKNOWN_OUTCOME_REASON
         assert typed_unknown.last_error == "Calendar provider upsert outcome is unknown."
         assert typed_unknown.attempts == 7
-        assert all(
-            row.neutralized_ip_docket_id is None
-            for row in (expired_claim, typed_unknown)
-        )
+        assert all(row.neutralized_ip_docket_id is None for row in (expired_claim, typed_unknown))
         for connection_id in reconciliation_connection_ids:
             connection = session.get(UserCalendarConnection, connection_id)
             assert connection is not None and connection.encrypted_token_ref is not None
@@ -1439,9 +1572,7 @@ def test_reopen_rejects_inactive_linked_matter_roles(
         assert exc_info.value.detail == {
             "code": "ip_docket_reopen_matter_role_unavailable",
             "role": (
-                "assignee"
-                if role_attribute == "assignee_membership_id"
-                else "responsible_lawyer"
+                "assignee" if role_attribute == "assignee_membership_id" else "responsible_lawyer"
             ),
             "membership_id": target_id,
         }

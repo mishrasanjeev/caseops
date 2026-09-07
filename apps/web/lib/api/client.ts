@@ -52,6 +52,27 @@ export async function fetchWithTimeout(
   init: RequestInit = {},
   timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
 ): Promise<Response> {
+  return consumeResponseWithTimeout(input, init, timeoutMs, async (response) => response);
+}
+
+export async function fetchJsonWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+): Promise<{ ok: boolean; status: number; data: unknown }> {
+  return consumeResponseWithTimeout(input, init, timeoutMs, async (response) => ({
+    ok: response.ok,
+    status: response.status,
+    data: await response.json(),
+  }));
+}
+
+async function consumeResponseWithTimeout<T>(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  timeoutMs: number,
+  consume: (response: Response) => Promise<T>,
+): Promise<T> {
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new RangeError("timeoutMs must be a positive finite number.");
   }
@@ -69,7 +90,8 @@ export async function fetchWithTimeout(
     controller.abort(new DOMException("Request deadline exceeded.", "TimeoutError"));
   }, timeoutMs);
   try {
-    return await fetch(input, { ...init, signal: controller.signal });
+    // JSON readers keep cancellation and the deadline through body consumption.
+    return await consume(await fetch(input, { ...init, signal: controller.signal }));
   } catch (error) {
     if (timedOut) {
       throw new NetworkError(

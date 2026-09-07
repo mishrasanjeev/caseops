@@ -7,6 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from caseops_api.schemas.ip_domains import IpDomainCapability
 from caseops_api.schemas.ip_records import (
     IpApplicationNumberCreate,
     IpAssetResponse,
@@ -49,6 +50,7 @@ class IpWorkspaceReadinessResponse(BaseModel):
     manual_docketing_available: bool
     configuration_status: IpWorkspaceConfigurationStatusResponse
     features: list[IpFeatureReadinessRecord]
+    domains: list[IpDomainCapability] = Field(default_factory=list)
 
 
 class TrademarkClassScope(BaseModel):

@@ -1,8 +1,17 @@
 from fastapi import APIRouter
 
+from caseops_api.api.dependencies import DbSession
 from caseops_api.core.settings import get_settings, is_non_local_env
+from caseops_api.schemas.ip_domains import IpDomainCatalogue
+from caseops_api.services.ip_capability_catalog import domain_catalogue
 
 router = APIRouter()
+
+
+@router.get("/ip-domains", response_model=IpDomainCatalogue, summary="IP domain availability")
+def ip_domain_availability(session: DbSession) -> IpDomainCatalogue:
+    """Public release claims only; no tenant data, permissions or entitlements."""
+    return domain_catalogue(session)
 
 
 @router.get("/meta", summary="Service metadata")

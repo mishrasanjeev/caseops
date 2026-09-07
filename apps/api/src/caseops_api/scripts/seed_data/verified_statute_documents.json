@@ -1,0 +1,160 @@
+{
+  "schema_version": 1,
+  "retrieved_on": "2026-09-07",
+  "scope": "All numbered central sections in the five named official editions, including inserted and omitted identities. Schedules, Orders, appendices and standalone state-law records are not separate selectable provisions in this bundle. Published text verification is not a claim of universal commencement, applicability or current judicial treatment.",
+  "documents": [
+    {
+      "statute_id": "arbitration-1996",
+      "retrieved_at": "2026-09-06T19:20:44.866427+00:00",
+      "treatment_evidence": {
+        "87": {
+          "file": "hcc-2019-sci.pdf",
+          "sha256": "de5788e48fe5a992741479bafc165811795a8e5b8022e1c9d4b6895d36c377a4",
+          "source_url": "https://api.sci.gov.in/supremecourt/2019/29540/29540_2019_4_1501_18556_Judgement_27-Nov-2019.pdf#page=62",
+          "page": 62,
+          "required_text": "struck down as being manifestly arbitrary"
+        }
+      },
+      "file": "arbitration-1996.pdf",
+      "source_url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/1978/1/A199626.pdf",
+      "act_url": "https://www.indiacode.nic.in/indiacode/handle/123456789/1978?view_type=browse",
+      "sha256": "85caeeda710bda215e7bfb169a05617f301be6f3698280fb2b595cf6cb9ecf94",
+      "source_version": "India Code consolidation as on 2025-05-14",
+      "issuing_body": "Ministry of Law and Justice, Government of India",
+      "toc_pages": [
+        3,
+        6
+      ],
+      "body_pages": [
+        7,
+        39
+      ],
+      "section_count": 106,
+      "label_variants": {
+        "26": "Expert appointed by arbitral tribunal",
+        "60": "Saving"
+      },
+      "blocked_sections": {
+        "26": "Publisher conflict: arrangement lists this section as omitted, but page 18 retains its substantive text. Not admitted as a verified selectable provision.",
+        "87": "Not admitted as current operative law: constitutional invalidation in Hindustan Construction Company Ltd. v Union of India (27 November 2019) requires treatment distinct from the retained India Code text."
+      }
+    },
+    {
+      "statute_id": "bns-2023",
+      "retrieved_at": "2026-09-06T19:20:44.152126+00:00",
+      "file": "bns-2023.pdf",
+      "source_url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/20062/1/a202345.pdf",
+      "act_url": "https://www.indiacode.nic.in/indiacode/handle/123456789/20062?view_type=browse",
+      "sha256": "ff92dcc72778944011807644b6033b1140ddbe6d7e9f82ac32fd419dae03aa86",
+      "source_version": "India Code consolidation as on 2025-10-06",
+      "issuing_body": "Ministry of Home Affairs, Government of India",
+      "toc_pages": [
+        3,
+        15
+      ],
+      "body_pages": [
+        16,
+        110
+      ],
+      "section_count": 358,
+      "source_discrepancies": {
+        "106": "Commencement limitation in this published edition: the publisher's footnote on PDF page 16 expressly excludes section 106(2) from the 1 July 2024 commencement notification (S.O. 850(E), 23 February 2024). Verification of the printed section does not certify commencement of subsection (2). Check subsequent official notifications for the relevant date. Source: https://www.indiacode.nic.in/indiacode/bitstream/123456789/20062/1/a202345.pdf#page=16"
+      }
+    },
+    {
+      "statute_id": "bnss-2023",
+      "retrieved_at": "2026-09-07T12:21:08.753481+00:00",
+      "file": "bnss-2023.pdf",
+      "source_url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/20099/1/A202346.pdf",
+      "act_url": "https://www.indiacode.nic.in/indiacode/handle/123456789/20099?view_type=browse",
+      "sha256": "54b27a4f2786dc5867c2cc23391e8359b3b29125684119acbc652d1630a716d6",
+      "source_version": "India Code consolidation as on 2025-10-06",
+      "issuing_body": "Ministry of Home Affairs, Government of India",
+      "toc_pages": [
+        3,
+        17
+      ],
+      "body_pages": [
+        18,
+        174
+      ],
+      "section_count": 531
+    },
+    {
+      "statute_id": "companies-2013",
+      "retrieved_at": "2026-09-06T19:15:44.152156+00:00",
+      "file": "companies-2013.pdf",
+      "source_url": "https://www.indiacode.nic.in/bitstream/123456789/2114/5/A2013-18.pdf",
+      "act_url": "https://www.indiacode.nic.in/indiacode/handle/123456789/2114?view_type=browse",
+      "sha256": "d6e286d2a3feec89a7d432a5a572e91af9f0135411b03e57f72b7a8ef72139af",
+      "source_version": "India Code A2013-18; retrieved 2026-09-07; cutoff unstated",
+      "issuing_body": "Ministry of Corporate Affairs, Government of India",
+      "toc_pages": [
+        1,
+        15
+      ],
+      "body_pages": [
+        16,
+        252
+      ],
+      "section_count": 523,
+      "label_variants": {
+        "48": "Variations of shareholders",
+        "54": "Issue of sweat equity",
+        "67": "Restriction on purchase",
+        "178": "Nomination and Remuneration",
+        "185": "Loans to directors",
+        "227": "Legal advisors and bankers",
+        "231": "Power of Tribunal",
+        "356": "Powers of Tribunal",
+        "468": "Powers of Central Government",
+        "378ZA": "Annual general meeting"
+      },
+      "number_aliases": {
+        "37ZA": "378ZA"
+      },
+      "source_discrepancies": {
+        "378ZA": "The section body prints 37ZA on page 213; its arrangement and surrounding 378Z/378ZB provisions identify 378ZA. The printed body is retained without textual correction."
+      }
+    },
+    {
+      "statute_id": "cpc-1908",
+      "retrieved_at": "2026-09-06T19:20:44.548938+00:00",
+      "file": "cpc-1908.pdf",
+      "source_url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/2191/1/A190805.pdf",
+      "act_url": "https://www.indiacode.nic.in/indiacode/handle/123456789/2191?view_type=browse",
+      "sha256": "8849fc32fdca660d16cf64b0f0ccdc97c453d54006947f67f73420765bd03946",
+      "source_version": "India Code consolidation as on 2026-01-10",
+      "issuing_body": "Ministry of Law and Justice, Government of India",
+      "toc_pages": [
+        4,
+        10
+      ],
+      "body_pages": [
+        34,
+        85
+      ],
+      "section_count": 171,
+      "label_variants": {
+        "119": "Unauthorized persons",
+        "87B": "Applications of sections"
+      },
+      "number_aliases": {
+        "392": "92",
+        "860": "60"
+      },
+      "heading_pages": {
+        "115": [
+          71,
+          72,
+          73
+        ]
+      },
+      "source_discrepancies": {
+        "60": "Printed superscript footnote 8 precedes section 60.",
+        "92": "Printed superscript footnote 3 precedes section 92.",
+        "115": "Central section begins on page 71; separately labelled state amendments on pages 72-73 remain contextual text, not duplicate central provisions."
+      }
+    }
+  ]
+}

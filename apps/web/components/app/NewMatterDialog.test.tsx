@@ -279,6 +279,10 @@ describe("NewMatterDialog", () => {
     await user.type(screen.getByLabelText("Practice area"), "Commercial");
     await user.type(screen.getByLabelText("Case number"), " WP(C) 1/2026 ");
     await user.type(
+      screen.getByLabelText("Temporary E-Case number"),
+      " TEMP/2026/00125 ",
+    );
+    await user.type(
       screen.getByLabelText("CNR number"),
       " dlhc-0100-1234-2026 ",
     );
@@ -291,6 +295,7 @@ describe("NewMatterDialog", () => {
         matter_code: "BLR-001",
         practice_area: "Commercial",
         case_number: "WP(C) 1/2026",
+        temporary_e_case_number: "TEMP/2026/00125",
         cnr_number: "dlhc-0100-1234-2026",
         forum_level: "high_court",
         court_id: "delhi-hc",

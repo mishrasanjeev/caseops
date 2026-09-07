@@ -90,16 +90,118 @@ def _ensure_migrations():
     from alembic.config import Config
 
     from alembic import command
+    from caseops_api.core.settings import get_settings
 
     project_root = Path(__file__).resolve().parents[1]
     cfg = Config(str(project_root / "alembic.ini"))
     cfg.set_main_option("script_location", str(project_root / "alembic"))
     cfg.set_main_option("sqlalchemy.url", url)
-    command.upgrade(cfg, "head")
+    # env.py resolves Settings, not only sqlalchemy.url. Never migrate the
+    # application DSN when the test runner explicitly owns a different database.
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("CASEOPS_DATABASE_URL", url)
+        get_settings.cache_clear()
+        try:
+            command.upgrade(cfg, "head")
+        finally:
+            get_settings.cache_clear()
     yield
 
 
 # ---------- helpers ----------
+
+
+def test_ip_domain_document_disclosure_filters_before_limit_on_postgres(pg_engine) -> None:
+    from caseops_api.db.models import (
+        IpDocketRecord,
+        IpDocument,
+        IpDocumentLink,
+        IpDocumentTaxonomyEntry,
+    )
+    from caseops_api.services.ip_domain_policy import (
+        disclosable_ip_document_ids,
+        general_ip_document_disclosure_filter,
+    )
+
+    with Session(pg_engine) as session:
+        company_id = _seed_company(session)
+        membership_id = _seed_membership(session, company_id)
+        dockets = [
+            IpDocketRecord(
+                company_id=company_id,
+                record_type=domain,
+                title=f"Domain fixture {domain}",
+                status="draft",
+                restricted=True,
+                created_by_membership_id=membership_id,
+            )
+            for domain in ("patent", "trademark")
+        ]
+        session.add_all(dockets)
+        session.flush()
+        taxonomy = IpDocumentTaxonomyEntry(
+            company_id=company_id,
+            key="domain-evidence",
+            label="Domain evidence",
+            updated_by_membership_id=membership_id,
+        )
+        session.add(taxonomy)
+        session.flush()
+        all_ids: set[str] = set()
+        expected: set[str] = set()
+        for index in range(204):
+            document = IpDocument(
+                company_id=company_id,
+                taxonomy_entry_id=taxonomy.id,
+                title=f"Disclosure fixture {index}",
+                created_by_membership_id=membership_id,
+            )
+            session.add(document)
+            session.flush()
+            targets = [dockets[1]] if index >= 200 else [dockets[0]]
+            if index == 203:
+                targets.append(dockets[0])
+            elif index >= 200:
+                expected.add(document.id)
+            for docket in targets:
+                session.add(
+                    IpDocumentLink(
+                        company_id=company_id,
+                        document_id=document.id,
+                        target_type="docket",
+                        target_id=docket.id,
+                        docket_id=docket.id,
+                        created_by_membership_id=membership_id,
+                    )
+                )
+            all_ids.add(document.id)
+        session.commit()
+        statements: list[str] = []
+
+        def capture(_conn, _cursor, statement, _parameters, _context, _executemany):
+            statements.append(statement)
+
+        event.listen(pg_engine, "before_cursor_execute", capture)
+        try:
+            assert (
+                disclosable_ip_document_ids(session, company_id=company_id, document_ids=all_ids)
+                == expected
+            )
+            limited = set(
+                session.scalars(
+                    select(IpDocument.id)
+                    .where(
+                        IpDocument.company_id == company_id,
+                        general_ip_document_disclosure_filter(),
+                    )
+                    .order_by(IpDocument.id)
+                    .limit(2)
+                )
+            )
+            assert len(limited) == 2 and limited <= expected
+            assert len(statements) == 2
+        finally:
+            event.remove(pg_engine, "before_cursor_execute", capture)
 
 
 def _seed_company(session: Session) -> str:
@@ -310,13 +412,17 @@ def _wait_for_postgres_lock_wait(pg_engine, *, application_name: str) -> None:
     # enters its lock wait.
     with pg_engine.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
         while datetime.now(UTC) < deadline:
-            last_state = connection.execute(
-                text(
-                    "SELECT state, wait_event_type, wait_event "
-                    "FROM pg_stat_activity WHERE application_name = :name"
-                ),
-                {"name": application_name},
-            ).mappings().first()
+            last_state = (
+                connection.execute(
+                    text(
+                        "SELECT state, wait_event_type, wait_event "
+                        "FROM pg_stat_activity WHERE application_name = :name"
+                    ),
+                    {"name": application_name},
+                )
+                .mappings()
+                .first()
+            )
             if last_state is not None and last_state["wait_event_type"] == "Lock":
                 return
             Event().wait(0.02)
@@ -326,24 +432,64 @@ def _wait_for_postgres_lock_wait(pg_engine, *, application_name: str) -> None:
     )
 
 
-def _truncate_postgres_application_tables(pg_engine) -> None:
-    """Give destructive migration probes an isolated, schema-only database.
+@pytest.fixture
+def migration_pg_engine(pg_engine, monkeypatch: pytest.MonkeyPatch):
+    """Own a disposable database; destructive probes never reset the app database."""
+    from alembic.config import Config
 
-    The PostgreSQL validation module intentionally keeps ordinary test rows
-    between cases.  A downgrade probe is different: rows created by a newer
-    contract can make an older migration fail before the probe has installed
-    its own legacy fixture, leaving every later test on a partially downgraded
-    schema.  Clear application rows while retaining ``alembic_version`` so the
-    three downgrade/upgrade tests remain independent of collection order.
-    """
+    from alembic import command
+    from caseops_api.core.settings import get_settings
+    from caseops_api.db.session import clear_engine_cache
 
-    with pg_engine.begin() as connection:
-        # Tenant fixtures all descend from one of these roots.  Keep global
-        # catalog/configuration rows intact: several later migrations assume
-        # the canonical forum catalog populated by earlier revisions exists.
-        connection.execute(
-            text("TRUNCATE TABLE companies, users RESTART IDENTITY CASCADE")
-        )
+    source_url = make_url(os.environ["CASEOPS_TEST_POSTGRES_URL"])
+    database_name = f"caseops_migration_{uuid4().hex}"
+    assert database_name != source_url.database
+    probe_url = source_url.set(database=database_name)
+    catalogue_statement = text(
+        "SELECT id, normalized_alias, is_active, verification_status "
+        "FROM forum_catalog_aliases ORDER BY id"
+    )
+    with pg_engine.connect() as connection:
+        original_catalogue = connection.execute(catalogue_statement).all()
+        original_revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
+    assert original_catalogue, "Use a fresh migrated acceptance database with its reviewed aliases."
+    admin = create_engine(source_url, isolation_level="AUTOCOMMIT", poolclass=NullPool)
+    identifier = admin.dialect.identifier_preparer.quote(database_name)
+    created = False
+    probe = None
+    try:
+        with admin.connect() as connection:
+            connection.exec_driver_sql(f"CREATE DATABASE {identifier}")
+        created = True
+        url = probe_url.render_as_string(hide_password=False)
+        monkeypatch.setenv("CASEOPS_DATABASE_URL", url)
+        monkeypatch.setenv("CASEOPS_TEST_POSTGRES_URL", url)
+        get_settings.cache_clear()
+        clear_engine_cache()
+        root = Path(__file__).resolve().parents[1]
+        config = Config(str(root / "alembic.ini"))
+        config.set_main_option("script_location", str(root / "alembic"))
+        config.set_main_option("sqlalchemy.url", url)
+        command.upgrade(config, "head")
+        probe = create_engine(probe_url, future=True)
+        yield probe
+    finally:
+        if probe is not None:
+            probe.dispose()
+        clear_engine_cache()
+        if created:
+            # The name is generated above and never taken from a DSN/user input.
+            assert database_name.startswith("caseops_migration_")
+            assert database_name != source_url.database
+            with admin.connect() as connection:
+                connection.exec_driver_sql(f"DROP DATABASE {identifier} WITH (FORCE)")
+        admin.dispose()
+        with pg_engine.connect() as connection:
+            assert (
+                connection.scalar(text("SELECT version_num FROM alembic_version"))
+                == original_revision
+            )
+            assert connection.execute(catalogue_statement).all() == original_catalogue
 
 
 def _seed_notice(
@@ -1883,10 +2029,11 @@ def test_ip_delivery_holds_docket_lock_during_final_authorization(
 
 
 def test_notification_convergence_backfills_boolean_on_postgres(
-    pg_engine,
+    migration_pg_engine,
     monkeypatch: pytest.MonkeyPatch,
 ):
     """A legacy reminder upgrades with a native PostgreSQL boolean value."""
+    pg_engine = migration_pg_engine
     from alembic.config import Config
 
     from alembic import command
@@ -1900,7 +2047,6 @@ def test_notification_convergence_backfills_boolean_on_postgres(
     config.set_main_option("script_location", str(project_root / "alembic"))
     config.set_main_option("sqlalchemy.url", url)
 
-    _truncate_postgres_application_tables(pg_engine)
     pg_engine.dispose()
     command.downgrade(config, "20260804_0003")
 
@@ -1985,10 +2131,11 @@ def test_notification_convergence_backfills_boolean_on_postgres(
 
 
 def test_lifecycle_migration_neutralizes_legacy_children_on_postgres(
-    pg_engine,
+    migration_pg_engine,
     monkeypatch: pytest.MonkeyPatch,
 ):
     """Upgrade a real legacy terminal row and prove children cannot revive."""
+    pg_engine = migration_pg_engine
     from alembic.config import Config
 
     from alembic import command
@@ -2013,7 +2160,6 @@ def test_lifecycle_migration_neutralizes_legacy_children_on_postgres(
     config.set_main_option("script_location", str(project_root / "alembic"))
     config.set_main_option("sqlalchemy.url", url)
 
-    _truncate_postgres_application_tables(pg_engine)
     company_id = str(uuid4())
     user_id = str(uuid4())
     membership_id = str(uuid4())
@@ -2161,10 +2307,7 @@ def test_lifecycle_migration_neutralizes_legacy_children_on_postgres(
             {"id": deadline_id},
         ).one()
         hearing_row = connection.execute(
-            text(
-                "SELECT status, cancelled_by_matter_disposal "
-                "FROM matter_hearings WHERE id = :id"
-            ),
+            text("SELECT status, cancelled_by_matter_disposal FROM matter_hearings WHERE id = :id"),
             {"id": hearing_id},
         ).one()
         calendar_sync_row = connection.execute(
@@ -2303,6 +2446,110 @@ def test_conflict_check_trigram_indexes_exist_after_head(pg_engine):
         assert "USING gin" in indexdef
         assert "gin_trgm_ops" in indexdef
         assert "lower(" in indexdef
+
+
+def test_ram05_temporary_and_final_matter_identifier_search_indexes(pg_engine):
+    columns = ("temporary_e_case_number", "case_number", "cnr_number", "filing_number")
+    with pg_engine.connect() as connection:
+        for column in columns:
+            name = f"ix_matters_{column}_trgm"
+            index = (
+                connection.execute(
+                    text(
+                        "SELECT i.indisvalid, i.indisready, "
+                        "pg_get_indexdef(i.indexrelid) AS definition "
+                        "FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid "
+                        "JOIN pg_namespace n ON n.oid = c.relnamespace "
+                        "WHERE c.relname = :name AND n.nspname = current_schema()"
+                    ),
+                    {"name": name},
+                )
+                .mappings()
+                .one()
+            )
+            assert index["indisvalid"] and index["indisready"]
+            assert f"{column} gin_trgm_ops" in index["definition"]
+            connection.execute(text("SET LOCAL enable_seqscan = off"))
+            plan = "\n".join(
+                connection.execute(
+                    text(
+                        f"EXPLAIN (COSTS OFF) SELECT id FROM matters "
+                        f"WHERE {column} ILIKE :query LIMIT 25"
+                    ),
+                    {"query": "%TEMP/2026/00125%"},
+                ).scalars()
+            )
+            assert name in plan
+        field = next(
+            c
+            for c in inspect(connection).get_columns("matters")
+            if c["name"] == "temporary_e_case_number"
+        )
+        assert field["nullable"] and field["default"] is None
+
+
+def test_ram05_identifier_migration_recovers_interrupted_concurrent_index(pg_engine):
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "alembic"
+        / "versions"
+        / "20260905_0002_temporary_e_case_number.py"
+    )
+    spec = importlib.util.spec_from_file_location(path.stem, path)
+    assert spec is not None and spec.loader is not None
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    schema = f"ram05_index_{uuid4().hex}"
+    with pg_engine.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
+        try:
+            connection.execute(text(f"CREATE SCHEMA {schema}"))
+            connection.execute(text(f"SET search_path TO {schema}, public"))
+            connection.execute(
+                text(
+                    "CREATE TABLE matters (temporary_e_case_number varchar(120), "
+                    "case_number varchar(120), cnr_number varchar(32), filing_number varchar(120))"
+                )
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO matters (temporary_e_case_number, case_number) "
+                    "VALUES ('TEMP/KEEP/1', 'duplicate'), ('TEMP/KEEP/2', 'duplicate')"
+                )
+            )
+            # A failed concurrent unique build leaves a real invalid pg_index row.
+            with pytest.raises(IntegrityError):
+                connection.execute(
+                    text(
+                        "CREATE UNIQUE INDEX CONCURRENTLY ix_matters_case_number_trgm "
+                        "ON matters (case_number)"
+                    )
+                )
+            assert (
+                connection.scalar(migration._INDEX_HEALTH, {"name": "ix_matters_case_number_trgm"})
+                is False
+            )
+            connection.commit()
+            context = MigrationContext.configure(connection)
+            with context.begin_transaction(), Operations.context(context):
+                migration.upgrade()
+                migration.upgrade()
+                with pytest.raises(RuntimeError, match="restore forward"):
+                    migration.downgrade()
+            assert connection.scalar(text("SELECT count(*) FROM matters")) == 2
+            for column in migration._IDENTIFIERS:
+                assert (
+                    connection.scalar(
+                        migration._INDEX_HEALTH, {"name": f"ix_matters_{column}_trgm"}
+                    )
+                    is True
+                )
+        finally:
+            connection.rollback()
+            connection.execute(text("SET search_path TO public"))
+            connection.execute(text(f"DROP SCHEMA IF EXISTS {schema} CASCADE"))
 
 
 def test_authority_structured_search_trigram_indexes_exist_after_head(pg_engine):
@@ -2715,6 +2962,7 @@ def test_shared_outbox_skip_locked_claims_are_disjoint_on_postgres(pg_engine):
     from datetime import timedelta
 
     from caseops_api.services.domain_outbox import claim_outbox_events
+
     now = datetime(2026, 8, 12, 6, 30, tzinfo=UTC)
     with Session(pg_engine) as seed:
         company_id = _seed_company(seed)
@@ -2774,10 +3022,7 @@ def test_workflow_definition_identity_is_immutable_on_postgres(pg_engine):
             {"id": definition_id, "company_id": company_id},
         )
         connection.execute(
-            text(
-                "UPDATE ip_workflow_definitions SET name = 'Renamed retained' "
-                "WHERE id = :id"
-            ),
+            text("UPDATE ip_workflow_definitions SET name = 'Renamed retained' WHERE id = :id"),
             {"id": definition_id},
         )
 
@@ -2785,8 +3030,7 @@ def test_workflow_definition_identity_is_immutable_on_postgres(pg_engine):
         with pg_engine.begin() as connection:
             connection.execute(
                 text(
-                    "UPDATE ip_workflow_definitions SET initial_state = 'rewritten' "
-                    "WHERE id = :id"
+                    "UPDATE ip_workflow_definitions SET initial_state = 'rewritten' WHERE id = :id"
                 ),
                 {"id": definition_id},
             )
@@ -2852,14 +3096,18 @@ def test_shared_reliability_downgrade_lock_excludes_postgres_writer(pg_engine):
             writer.result(timeout=5)
 
     with Session(pg_engine) as session:
-        assert session.scalar(
-            text("SELECT count(*) FROM api_idempotency_records WHERE id = :id"),
-            {"id": record_id},
-        ) == 1
+        assert (
+            session.scalar(
+                text("SELECT count(*) FROM api_idempotency_records WHERE id = :id"),
+                {"id": record_id},
+            )
+            == 1
+        )
 
 
-def test_shared_reliability_actual_postgres_downgrade_refuses_evidence(pg_engine):
+def test_shared_reliability_actual_postgres_downgrade_refuses_evidence(migration_pg_engine):
     """Alembic must not cross the revision that owns retained evidence."""
+    pg_engine = migration_pg_engine
 
     from alembic.config import Config
     from alembic.script import ScriptDirectory
@@ -2871,7 +3119,6 @@ def test_shared_reliability_actual_postgres_downgrade_refuses_evidence(pg_engine
     config = Config(str(project_root / "alembic.ini"))
     config.set_main_option("script_location", str(project_root / "alembic"))
     config.set_main_option("sqlalchemy.url", url)
-    _truncate_postgres_application_tables(pg_engine)
     now = datetime(2026, 8, 12, 6, 55, tzinfo=UTC)
     with Session(pg_engine) as seed:
         company_id = _seed_company(seed)
@@ -2900,24 +3147,44 @@ def test_shared_reliability_actual_postgres_downgrade_refuses_evidence(pg_engine
         )
         seed.commit()
 
-    try:
-        with pytest.raises(RuntimeError, match="roll application code forward"):
-            command.downgrade(config, "20260811_0005")
-
+    def schema_snapshot():
         with pg_engine.connect() as connection:
-            revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
-            assert revision is not None
-            remaining_lineage = {
-                candidate.revision
-                for candidate in ScriptDirectory.from_config(config).walk_revisions(
-                    base="base", head=revision
+            indexes = connection.execute(
+                text(
+                    "SELECT c.relname, i.indisvalid, i.indisready, pg_get_indexdef(i.indexrelid) "
+                    "FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid "
+                    "JOIN pg_namespace n ON n.oid = c.relnamespace "
+                    "WHERE n.nspname = current_schema() ORDER BY c.relname"
                 )
-            }
-            assert "20260812_0001" in remaining_lineage
-            assert connection.scalar(
-                text("SELECT count(*) FROM api_idempotency_records WHERE id = :id"),
-                {"id": record_id},
-            ) == 1
+            ).all()
+            columns = connection.execute(
+                text(
+                    "SELECT table_name, column_name, data_type, is_nullable, column_default "
+                    "FROM information_schema.columns WHERE table_schema = current_schema() "
+                    "ORDER BY table_name, ordinal_position"
+                )
+            ).all()
+            return indexes, columns
+
+    before = schema_snapshot()
+    expected_head = ScriptDirectory.from_config(config).get_current_head()
+    try:
+        for _attempt in range(2):
+            with pytest.raises(RuntimeError, match="roll application code forward"):
+                command.downgrade(config, "20260811_0005")
+            with pg_engine.connect() as connection:
+                assert (
+                    connection.scalar(text("SELECT version_num FROM alembic_version"))
+                    == expected_head
+                )
+                assert (
+                    connection.scalar(
+                        text("SELECT count(*) FROM api_idempotency_records WHERE id = :id"),
+                        {"id": record_id},
+                    )
+                    == 1
+                )
+            assert schema_snapshot() == before
     finally:
         command.upgrade(config, "head")
 
@@ -3060,18 +3327,24 @@ def test_shared_reliability_company_fk_and_transaction_rollback_on_postgres(
         session.rollback()
 
     with Session(pg_engine) as session:
-        assert session.scalar(
-            select(func.count()).select_from(DomainOutboxEvent).where(
-                DomainOutboxEvent.event_key == rolled_back_key
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(DomainOutboxEvent)
+                .where(DomainOutboxEvent.event_key == rolled_back_key)
             )
-        ) == 0
+            == 0
+        )
         from caseops_api.db.models import ApiIdempotencyRecord
 
-        assert session.scalar(
-            select(func.count()).select_from(ApiIdempotencyRecord).where(
-                ApiIdempotencyRecord.idempotency_key == rolled_back_key
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(ApiIdempotencyRecord)
+                .where(ApiIdempotencyRecord.idempotency_key == rolled_back_key)
             )
-        ) == 0
+            == 0
+        )
         company_a = _seed_company(session)
         company_b = _seed_company(session)
         membership_a = _seed_membership(session, company_a)
@@ -3268,10 +3541,7 @@ def test_records_governance_guards_reject_real_postgres_mutations(pg_engine):
     with pytest.raises(IntegrityError):
         with pg_engine.begin() as connection:
             connection.execute(
-                text(
-                    "UPDATE legal_holds SET status = 'active' "
-                    "WHERE id = :hold_id"
-                ),
+                text("UPDATE legal_holds SET status = 'active' WHERE id = :hold_id"),
                 {"hold_id": hold_id},
             )
 
@@ -3308,10 +3578,7 @@ def test_records_governance_guards_reject_real_postgres_mutations(pg_engine):
     with pytest.raises(DBAPIError, match="Legal hold scope is immutable"):
         with pg_engine.begin() as connection:
             connection.execute(
-                text(
-                    "UPDATE legal_hold_items SET target_type = 'matter' "
-                    "WHERE id = :hold_item_id"
-                ),
+                text("UPDATE legal_hold_items SET target_type = 'matter' WHERE id = :hold_item_id"),
                 {"hold_item_id": hold_item_id},
             )
     with pytest.raises(DBAPIError, match="Published retention policy terms are immutable"):
@@ -3938,15 +4205,17 @@ def test_new_ip_foreign_keys_are_tenant_matched_and_preserve_delete_actions(pg_e
         )
         assert connection.execute(
             text(
-                "SELECT company_id, created_by_membership_id "
-                "FROM bulk_import_jobs WHERE id = :id"
+                "SELECT company_id, created_by_membership_id FROM bulk_import_jobs WHERE id = :id"
             ),
             {"id": import_id},
         ).one() == (company_a, None)
-        assert connection.scalar(
-            text("SELECT count(*) FROM ip_docket_queues WHERE id = :id"),
-            {"id": queue_id},
-        ) == 0
+        assert (
+            connection.scalar(
+                text("SELECT count(*) FROM ip_docket_queues WHERE id = :id"),
+                {"id": queue_id},
+            )
+            == 0
+        )
 
 
 def test_ip_rule_governance_fingerprint_uses_real_postgres_read_only_snapshot(
@@ -4433,9 +4702,7 @@ def test_deactivation_wins_completion_response_final_mint_fence_on_postgres(
     with Session(pg_engine) as session:
         membership = session.get(CompanyMembership, fixture["target_id"])
         profile = session.scalar(
-            select(EmployeeProfile).where(
-                EmployeeProfile.membership_id == fixture["target_id"]
-            )
+            select(EmployeeProfile).where(EmployeeProfile.membership_id == fixture["target_id"])
         )
         assert membership is not None and membership.is_active is False
         assert membership.sessions_valid_after is not None
@@ -4635,13 +4902,13 @@ def test_assignment_fence_waits_for_global_user_deactivation_on_postgres(
                 membership_id=actor_id,
             )
             try:
-                    _lock_assignment_memberships_or_404(
-                        session,
-                        context,
-                        membership_ids={target_id},
-                        active_membership_ids={target_id},
-                        required_capability="ip:write",
-                    )
+                _lock_assignment_memberships_or_404(
+                    session,
+                    context,
+                    membership_ids={target_id},
+                    active_membership_ids={target_id},
+                    required_capability="ip:write",
+                )
             except HTTPException as exc:
                 session.rollback()
                 return exc.status_code, exc.detail
@@ -4933,39 +5200,50 @@ def test_generic_deactivation_wins_matter_role_writer_race_on_postgres(
         target = session.get(CompanyMembership, fixture["target_id"])
         assert target is not None and target.is_active is False
         if writer_kind == "task_create":
-            assert session.scalar(
-                select(MatterTask.id).where(
-                    MatterTask.matter_id == fixture["linked_matter_id"],
-                    MatterTask.title == "Concurrent target task",
+            assert (
+                session.scalar(
+                    select(MatterTask.id).where(
+                        MatterTask.matter_id == fixture["linked_matter_id"],
+                        MatterTask.title == "Concurrent target task",
+                    )
                 )
-            ) is None
+                is None
+            )
         elif writer_kind == "task_reassign":
             task = session.get(MatterTask, fixture["existing_task_id"])
             assert task is not None and task.owner_membership_id == fixture["actor_id"]
         elif writer_kind == "hearing_create":
-            assert session.scalar(
-                select(MatterHearing.id).where(
-                    MatterHearing.matter_id == fixture["linked_matter_id"],
-                    MatterHearing.purpose == "Concurrent escalation assignment",
+            assert (
+                session.scalar(
+                    select(MatterHearing.id).where(
+                        MatterHearing.matter_id == fixture["linked_matter_id"],
+                        MatterHearing.purpose == "Concurrent escalation assignment",
+                    )
                 )
-            ) is None
+                is None
+            )
         elif writer_kind == "deadline_create":
-            assert session.scalar(
-                select(MatterDeadline.id).where(
-                    MatterDeadline.matter_id == fixture["linked_matter_id"],
-                    MatterDeadline.title
-                    == "Concurrent generic linked-IP deadline",
+            assert (
+                session.scalar(
+                    select(MatterDeadline.id).where(
+                        MatterDeadline.matter_id == fixture["linked_matter_id"],
+                        MatterDeadline.title == "Concurrent generic linked-IP deadline",
+                    )
                 )
-            ) is None
+                is None
+            )
         else:
             hearing = session.get(MatterHearing, fixture["follow_up_hearing_id"])
             assert hearing is not None and hearing.status == "scheduled"
-            assert session.scalar(
-                select(MatterTask.id).where(
-                    MatterTask.matter_id == fixture["plain_matter_id"],
-                    MatterTask.owner_membership_id == fixture["target_id"],
+            assert (
+                session.scalar(
+                    select(MatterTask.id).where(
+                        MatterTask.matter_id == fixture["plain_matter_id"],
+                        MatterTask.owner_membership_id == fixture["target_id"],
+                    )
                 )
-            ) is None
+                is None
+            )
 
 
 @pytest.mark.parametrize("writer_kind", ("task_create", "hearing_create"))
@@ -5291,18 +5569,24 @@ def test_team_removal_wins_concurrent_linked_role_assignment_on_postgres(
 
     assert assignment_status == 400
     with Session(pg_engine) as session:
-        assert session.scalar(
-            select(TeamMembership.id).where(
-                TeamMembership.team_id == fixture["team_id"],
-                TeamMembership.membership_id == fixture["target_id"],
+        assert (
+            session.scalar(
+                select(TeamMembership.id).where(
+                    TeamMembership.team_id == fixture["team_id"],
+                    TeamMembership.membership_id == fixture["target_id"],
+                )
             )
-        ) is None
-        assert session.scalar(
-            select(MatterTask.id).where(
-                MatterTask.matter_id == fixture["matter_id"],
-                MatterTask.owner_membership_id == fixture["target_id"],
+            is None
+        )
+        assert (
+            session.scalar(
+                select(MatterTask.id).where(
+                    MatterTask.matter_id == fixture["matter_id"],
+                    MatterTask.owner_membership_id == fixture["target_id"],
+                )
             )
-        ) is None
+            is None
+        )
 
 
 def test_linked_role_assignment_wins_concurrent_scoping_enable_on_postgres(
@@ -5395,12 +5679,15 @@ def test_linked_role_assignment_wins_concurrent_scoping_enable_on_postgres(
     with Session(pg_engine) as session:
         company = session.get(Company, fixture["company_id"])
         assert company is not None and company.team_scoping_enabled is False
-        assert session.scalar(
-            select(MatterTask.id).where(
-                MatterTask.matter_id == fixture["matter_id"],
-                MatterTask.owner_membership_id == fixture["target_id"],
+        assert (
+            session.scalar(
+                select(MatterTask.id).where(
+                    MatterTask.matter_id == fixture["matter_id"],
+                    MatterTask.owner_membership_id == fixture["target_id"],
+                )
             )
-        ) is not None
+            is not None
+        )
 
 
 def _seed_unrelated_actor_mutation_fixture(session: Session) -> dict[str, str]:
@@ -5599,12 +5886,15 @@ def test_unrelated_actor_deactivation_wins_mutation_without_deadlock_on_postgres
         team = session.get(Team, fixture["team_id"])
         assert writer is not None and writer.is_active is False
         assert team is not None and team.is_active is True
-        assert session.scalar(
-            select(MatterTask.id).where(
-                MatterTask.matter_id == fixture["matter_id"],
-                MatterTask.title == "Unrelated actor concurrent task",
+        assert (
+            session.scalar(
+                select(MatterTask.id).where(
+                    MatterTask.matter_id == fixture["matter_id"],
+                    MatterTask.title == "Unrelated actor concurrent task",
+                )
             )
-        ) is None
+            is None
+        )
 
 
 @pytest.mark.parametrize("mutation_kind", ("matter_task", "team_deactivate"))
@@ -5870,17 +6160,23 @@ def test_unrelated_actor_deactivation_wins_core_ip_writer_on_postgres(
     with Session(pg_engine) as session:
         actor = session.get(CompanyMembership, fixture["writer_id"])
         assert actor is not None and actor.is_active is False
-        assert session.scalar(
-            select(MatterTask.id).where(
-                MatterTask.ip_docket_id == fixture["docket_id"],
-                MatterTask.title == "Unrelated actor shared task",
+        assert (
+            session.scalar(
+                select(MatterTask.id).where(
+                    MatterTask.ip_docket_id == fixture["docket_id"],
+                    MatterTask.title == "Unrelated actor shared task",
+                )
             )
-        ) is None
-        assert session.scalar(
-            select(IpDeadlineCoverage.id).where(
-                IpDeadlineCoverage.matter_deadline_id == fixture["deadline_id"]
+            is None
+        )
+        assert (
+            session.scalar(
+                select(IpDeadlineCoverage.id).where(
+                    IpDeadlineCoverage.matter_deadline_id == fixture["deadline_id"]
+                )
             )
-        ) is None
+            is None
+        )
 
 
 def test_core_ip_writer_wins_then_unrelated_actor_deactivation_waits_on_postgres(
@@ -6108,9 +6404,10 @@ def test_create_ip_docket_rejects_concurrent_linked_child_role_change_on_postgre
         persisted_task = session.get(MatterTask, task_id)
         assert persisted_task is not None
         assert persisted_task.owner_membership_id == new_owner_id
-        assert session.scalar(
-            select(IpDocketRecord.id).where(IpDocketRecord.matter_id == matter_id)
-        ) is None
+        assert (
+            session.scalar(select(IpDocketRecord.id).where(IpDocketRecord.matter_id == matter_id))
+            is None
+        )
 
 
 def test_ip_access_change_wins_generic_linked_deadline_assignment_on_postgres(
@@ -6233,12 +6530,15 @@ def test_ip_access_change_wins_generic_linked_deadline_assignment_on_postgres(
     if assignment_status == 409:
         assert assignment_detail["code"] == "ip_linked_docket_family_changed"
     with Session(pg_engine) as session:
-        assert session.scalar(
-            select(MatterDeadline.id).where(
-                MatterDeadline.matter_id == fixture["matter_id"],
-                MatterDeadline.title == "Must not outlive a winning IP wall",
+        assert (
+            session.scalar(
+                select(MatterDeadline.id).where(
+                    MatterDeadline.matter_id == fixture["matter_id"],
+                    MatterDeadline.title == "Must not outlive a winning IP wall",
+                )
             )
-        ) is None
+            is None
+        )
 
 
 def test_ip_docket_lifecycle_wins_generic_linked_deadline_assignment_on_postgres(
@@ -6342,12 +6642,15 @@ def test_ip_docket_lifecycle_wins_generic_linked_deadline_assignment_on_postgres
     assert assignment_status == 409
     assert assignment_detail["code"] == "ip_linked_docket_family_changed"
     with Session(pg_engine) as session:
-        assert session.scalar(
-            select(MatterDeadline.id).where(
-                MatterDeadline.matter_id == fixture["matter_id"],
-                MatterDeadline.title == "Must not attach after docket closure",
+        assert (
+            session.scalar(
+                select(MatterDeadline.id).where(
+                    MatterDeadline.matter_id == fixture["matter_id"],
+                    MatterDeadline.title == "Must not attach after docket closure",
+                )
             )
-        ) is None
+            is None
+        )
 
 
 # ---------- final locked-capability / actor-fence races (2026-08-17) ----------
@@ -6511,15 +6814,11 @@ def test_custom_role_update_serializes_with_locked_employee_capability_on_postgr
             return _run_capability_employee_writer(session, fixture=fixture)
 
     with ThreadPoolExecutor(max_workers=2) as executor:
-        first = executor.submit(
-            write_employee if ordering == "writer_first" else update_role
-        )
+        first = executor.submit(write_employee if ordering == "writer_first" else update_role)
         second = None
         try:
             assert first_holds_actor.wait(timeout=10)
-            second = executor.submit(
-                update_role if ordering == "writer_first" else write_employee
-            )
+            second = executor.submit(update_role if ordering == "writer_first" else write_employee)
             _wait_for_postgres_lock_wait(
                 pg_engine,
                 application_name=application_name,
@@ -6540,9 +6839,7 @@ def test_custom_role_update_serializes_with_locked_employee_capability_on_postgr
         assert role is not None and role.is_active is False
         assert target is not None
         assert target.full_name == (
-            "Capability target after"
-            if ordering == "writer_first"
-            else "Capability target before"
+            "Capability target after" if ordering == "writer_first" else "Capability target before"
         )
 
 
@@ -6687,9 +6984,7 @@ def test_bulk_acknowledge_serializes_with_actor_deactivation_on_postgres(
                 response = ip_operations.bulk_acknowledge_ip_coverage(
                     session,
                     context=context,
-                    payload=IpCoverageBulkAcknowledgeRequest(
-                        coverage_ids=[fixture["coverage_id"]]
-                    ),
+                    payload=IpCoverageBulkAcknowledgeRequest(coverage_ids=[fixture["coverage_id"]]),
                 )
             except HTTPException as exc:
                 session.rollback()
@@ -6697,9 +6992,7 @@ def test_bulk_acknowledge_serializes_with_actor_deactivation_on_postgres(
             return 200, response.acknowledged_count
 
     with ThreadPoolExecutor(max_workers=2) as executor:
-        first = executor.submit(
-            deactivate if ordering == "deactivation_first" else acknowledge
-        )
+        first = executor.submit(deactivate if ordering == "deactivation_first" else acknowledge)
         second = None
         try:
             assert first_holds_actor.wait(timeout=10)
@@ -6900,16 +7193,22 @@ def test_fixed_role_demotion_wins_core_capability_writer_on_postgres(
         target = session.get(User, fixture["target_user_id"])
         assert actor is not None and actor.role == "member"
         assert target is not None and target.full_name == "Capability target before"
-        assert session.scalar(
-            select(IpWorkspaceConfiguration.id).where(
-                IpWorkspaceConfiguration.company_id == fixture["company_id"]
+        assert (
+            session.scalar(
+                select(IpWorkspaceConfiguration.id).where(
+                    IpWorkspaceConfiguration.company_id == fixture["company_id"]
+                )
             )
-        ) is None
-        assert session.scalar(
-            select(LegalWorkingCalendar.id).where(
-                LegalWorkingCalendar.company_id == fixture["company_id"]
+            is None
+        )
+        assert (
+            session.scalar(
+                select(LegalWorkingCalendar.id).where(
+                    LegalWorkingCalendar.company_id == fixture["company_id"]
+                )
             )
-        ) is None
+            is None
+        )
 
 
 # ---------- Matter / Team locked-capability races (2026-08-17) ----------
@@ -6939,9 +7238,7 @@ def _run_matter_team_capability_writer(
                 session,
                 context=context,
                 matter_id=fixture["matter_id"],
-                payload=MatterNoteCreateRequest(
-                    body="Matter capability fence writer committed"
-                ),
+                payload=MatterNoteCreateRequest(body="Matter capability fence writer committed"),
             )
         elif writer_kind == "team_create":
             team_service.create_team(
@@ -6988,9 +7285,7 @@ def test_fixed_role_change_serializes_with_matter_team_capability_writer_on_post
 
     first_holds_actor = Event()
     release_first = Event()
-    application_name = (
-        f"caseops-matter-team-cap-{ordering}-{writer_kind}-{str(uuid4())[:8]}"
-    )
+    application_name = f"caseops-matter-team-cap-{ordering}-{writer_kind}-{str(uuid4())[:8]}"
 
     if ordering == "demotion_first":
         original_lock = identity_service.lock_company_memberships_for_assignment
@@ -7000,9 +7295,7 @@ def test_fixed_role_change_serializes_with_matter_team_capability_writer_on_post
             if fixture["writer_id"] in memberships:
                 first_holds_actor.set()
                 if not release_first.wait(timeout=10):
-                    raise TimeoutError(
-                        "Matter/Team writer did not wait on fixed-role demotion."
-                    )
+                    raise TimeoutError("Matter/Team writer did not wait on fixed-role demotion.")
             return memberships
 
         monkeypatch.setattr(
@@ -7111,12 +7404,8 @@ def test_fixed_role_change_serializes_with_matter_team_capability_writer_on_post
                 Team.slug == f"pg-team-cap-{fixture['company_id'][:8]}",
             )
         )
-        assert (note is not None) is (
-            writer_kind == "matter_note" and ordering == "writer_first"
-        )
-        assert (team is not None) is (
-            writer_kind == "team_create" and ordering == "writer_first"
-        )
+        assert (note is not None) is (writer_kind == "matter_note" and ordering == "writer_first")
+        assert (team is not None) is (writer_kind == "team_create" and ordering == "writer_first")
 
 
 # ---------- final IP-operation actor fence races (2026-08-17) ----------
@@ -7191,9 +7480,7 @@ def test_saved_queue_serializes_with_exact_actor_capability_on_postgres(
 
     first_holds_actor = Event()
     release_first = Event()
-    application_name = (
-        f"caseops-ip-writer-{revocation_kind}-{ordering}-{str(uuid4())[:8]}"
-    )
+    application_name = f"caseops-ip-writer-{revocation_kind}-{ordering}-{str(uuid4())[:8]}"
 
     if ordering == "writer_first":
         original_record = ip_operations.record_from_context
@@ -7272,11 +7559,7 @@ def test_saved_queue_serializes_with_exact_actor_capability_on_postgres(
                         membership_id=fixture["actor_id"],
                         payload=CompanyUserUpdateRequest(
                             role="viewer" if revocation_kind == "fixed_role" else None,
-                            is_active=(
-                                False
-                                if revocation_kind == "actor_deactivation"
-                                else None
-                            ),
+                            is_active=(False if revocation_kind == "actor_deactivation" else None),
                         ),
                     )
             except HTTPException as exc:
@@ -7338,8 +7621,7 @@ def test_saved_queue_serializes_with_exact_actor_capability_on_postgres(
             session.scalars(
                 select(IpDocketQueue).where(
                     IpDocketQueue.company_id == fixture["company_id"],
-                    IpDocketQueue.name
-                    == f"PG actor fence {fixture['company_id'][:8]}",
+                    IpDocketQueue.name == f"PG actor fence {fixture['company_id'][:8]}",
                 )
             ).all()
         )
@@ -7458,9 +7740,7 @@ def test_login_releases_identity_fence_before_background_audit_on_postgres(
             )
         )
         profile = verify.scalar(
-            select(EmployeeProfile).where(
-                EmployeeProfile.membership_id == fixture["target_id"]
-            )
+            select(EmployeeProfile).where(EmployeeProfile.membership_id == fixture["target_id"])
         )
         assert audit is not None
         assert profile is not None and profile.last_login_at is not None
@@ -7552,10 +7832,7 @@ def test_founder_tenant_capability_does_not_wait_on_platform_admin_row(
                     ),
                 )
                 assert matter.company_id == company_id
-                assert not any(
-                    isinstance(row, PlatformAdminMembership)
-                    for row in candidate.dirty
-                )
+                assert not any(isinstance(row, PlatformAdminMembership) for row in candidate.dirty)
                 assert candidate.scalar(text("SELECT 1")) == 1
 
             locker.rollback()
@@ -7865,9 +8142,7 @@ def test_document_worker_does_not_contend_with_interactive_actor_fence_on_postgr
                 assert compliance_started.wait(timeout=15)
                 upload_session.execute(text("SET LOCAL lock_timeout = '1000ms'"))
                 locked_matter_id = upload_session.scalar(
-                    select(Matter.id)
-                    .where(Matter.id == matter_id)
-                    .with_for_update()
+                    select(Matter.id).where(Matter.id == matter_id).with_for_update()
                 )
                 assert locked_matter_id == matter_id
                 release_compliance.set()
@@ -8021,9 +8296,7 @@ def test_matter_disposal_wins_attachment_compliance_preparation_race_on_postgres
         )
         assert (
             verify.scalar(
-                select(MatterComplianceItem.id).where(
-                    MatterComplianceItem.matter_id == matter_id
-                )
+                select(MatterComplianceItem.id).where(MatterComplianceItem.matter_id == matter_id)
             )
             is None
         )
@@ -8092,9 +8365,7 @@ def test_invoice_number_cannot_be_rewritten_on_postgres(pg_engine):
     with Session(pg_engine) as session:
         with pytest.raises(DBAPIError) as exc:
             session.execute(
-                text(
-                    "UPDATE matter_invoices SET invoice_number = :n WHERE id = :i"
-                ),
+                text("UPDATE matter_invoices SET invoice_number = :n WHERE id = :i"),
                 {"n": "GBA-9999", "i": invoice_id},
             )
             session.commit()
@@ -8250,9 +8521,7 @@ def test_iplf039c_reconciliation_candidate_evidence_constraints_on_postgres(pg_e
         session.add(duplicate)
         with pytest.raises(IntegrityError) as duplicate_error:
             session.commit()
-        assert "uq_calendar_projection_reconciliation_snapshot" in str(
-            duplicate_error.value
-        )
+        assert "uq_calendar_projection_reconciliation_snapshot" in str(duplicate_error.value)
         session.rollback()
 
         incomplete_decision = CalendarProjectionReconciliationCandidate(
@@ -8573,8 +8842,7 @@ def test_uj58_incident_evidence_is_append_only_retained_and_tenant_correlated_on
             "evidence is retained",
         ),
         (
-            "UPDATE ip_deadline_incident_impacts SET assessment = 'not_affected' "
-            "WHERE id = :id",
+            "UPDATE ip_deadline_incident_impacts SET assessment = 'not_affected' WHERE id = :id",
             {"id": impact_id},
             "append-only",
         ),
@@ -8702,15 +8970,11 @@ def test_iplf051_registry_snapshot_is_append_only_and_tenant_fks_exist_on_postgr
     )
 
     inspector = inspect(pg_engine)
-    snapshot_fk_names = {
-        row["name"] for row in inspector.get_foreign_keys("ip_registry_snapshots")
-    }
+    snapshot_fk_names = {row["name"] for row in inspector.get_foreign_keys("ip_registry_snapshots")}
     attempt_fk_names = {
         row["name"] for row in inspector.get_foreign_keys("ip_registry_sync_attempts")
     }
-    diff_fk_names = {
-        row["name"] for row in inspector.get_foreign_keys("ip_registry_diffs")
-    }
+    diff_fk_names = {row["name"] for row in inspector.get_foreign_keys("ip_registry_diffs")}
     tracked_reference_fk_names = {
         row["name"] for row in inspector.get_foreign_keys("ip_tracked_case_links")
     }
@@ -8812,8 +9076,7 @@ def test_iplf057a_madrid_tenant_fks_and_designation_identity_on_postgres(pg_engi
 
     inspector = inspect(pg_engine)
     foreign_keys = {
-        row["name"]
-        for row in inspector.get_foreign_keys("trademark_international_registrations")
+        row["name"] for row in inspector.get_foreign_keys("trademark_international_registrations")
     }
     assert {
         "fk_tm_international_docket_company",
@@ -8823,8 +9086,7 @@ def test_iplf057a_madrid_tenant_fks_and_designation_identity_on_postgres(pg_engi
         "fk_tm_international_updater_company",
     } <= foreign_keys
     indexes = {
-        row["name"]: row
-        for row in inspector.get_indexes("trademark_international_registrations")
+        row["name"]: row for row in inspector.get_indexes("trademark_international_registrations")
     }
     assert indexes["uq_tm_international_company_ir_number"]["unique"] is True
     assert indexes["uq_tm_international_designation_member"]["unique"] is True
@@ -9063,9 +9325,7 @@ def test_iplf057b_madrid_projection_and_source_reconciliation_on_postgres(pg_eng
             )
         )
         assert projection is not None
-        assert projection.classes_json == [
-            {"class_number": 9, "specification": "Legal software"}
-        ]
+        assert projection.classes_json == [{"class_number": 9, "specification": "Legal software"}]
 
         first_docket = session.get(IpDocketRecord, first.docket_id)
         assert first_docket is not None
@@ -9144,36 +9404,15 @@ def test_iplf057b_madrid_projection_and_source_reconciliation_on_postgres(pg_eng
 
 
 def test_bounded_renewal_report_reader_runs_on_postgres(
-    pg_engine,
-    monkeypatch: pytest.MonkeyPatch,
+    isolated_postgres_client,
 ) -> None:
     """IPLF-038B exercises its bounded canonical renewal join on PostgreSQL."""
 
-    from fastapi.testclient import TestClient
-
-    from caseops_api.core.settings import get_settings
-    from caseops_api.db.session import clear_engine_cache
-    from caseops_api.main import create_application
     from tests.test_ip_report_workflow import (
         test_iplf_req_report_01_renewal_report_returns_canonical_evidence,
     )
 
-    monkeypatch.setenv(
-        "CASEOPS_DATABASE_URL",
-        os.environ["CASEOPS_TEST_POSTGRES_URL"].strip(),
-    )
-    monkeypatch.setenv("CASEOPS_ENV", "ci")
-    monkeypatch.setenv("CASEOPS_AUTO_MIGRATE", "false")
-    monkeypatch.setenv(
-        "CASEOPS_AUTH_SECRET",
-        "pg-report-reader-secret-at-least-32-bytes",
-    )
-    monkeypatch.setenv("CASEOPS_AUTH_RATE_LIMIT_ENABLED", "false")
-    get_settings.cache_clear()
-    clear_engine_cache()
-
-    with TestClient(create_application()) as test_client:
-        test_iplf_req_report_01_renewal_report_returns_canonical_evidence(test_client)
+    test_iplf_req_report_01_renewal_report_returns_canonical_evidence(isolated_postgres_client)
 
 
 def test_ip_document_link_projection_event_key_is_bounded_on_postgres(
@@ -9229,9 +9468,7 @@ def test_ip_document_link_projection_event_key_is_bounded_on_postgres(
             assert bootstrap.status_code == 200, bootstrap.text
             company_id = str(bootstrap.json()["company"]["id"])
             membership_id = str(bootstrap.json()["membership"]["id"])
-            headers = {
-                "Authorization": f"Bearer {bootstrap.json()['access_token']}"
-            }
+            headers = {"Authorization": f"Bearer {bootstrap.json()['access_token']}"}
 
             with Session(pg_engine) as seed:
                 taxonomy = IpDocumentTaxonomyEntry(
@@ -9319,16 +9556,13 @@ def test_ip_document_link_projection_event_key_is_bounded_on_postgres(
                         PrivateProjectionEvent.company_id == company_id,
                         PrivateProjectionEvent.target_type == "ip_document",
                         PrivateProjectionEvent.target_id == document_id,
-                        PrivateProjectionEvent.reason_code
-                        == "ip_document_links_changed",
+                        PrivateProjectionEvent.reason_code == "ip_document_links_changed",
                     )
                 ).all()
             )
             assert len(events) == 1
             assert events[0].status == "applied"
-            assert events[0].idempotency_key == build_private_projection_event_key(
-                raw_key
-            )
+            assert events[0].idempotency_key == build_private_projection_event_key(raw_key)
             assert len(events[0].idempotency_key) == 120
     finally:
         clear_engine_cache()
@@ -9393,8 +9627,9 @@ def test_matterless_ip_cost_evidence_is_immutable_on_postgres(pg_engine):
             },
         )
         session.commit()
-    with Session(pg_engine) as session, pytest.raises(
-        DBAPIError, match="creator must be an active member of the cost tenant"
+    with (
+        Session(pg_engine) as session,
+        pytest.raises(DBAPIError, match="creator must be an active member of the cost tenant"),
     ):
         session.execute(
             insert_cost,
@@ -9410,8 +9645,9 @@ def test_matterless_ip_cost_evidence_is_immutable_on_postgres(pg_engine):
             },
         )
         session.commit()
-    with Session(pg_engine) as session, pytest.raises(
-        DBAPIError, match="creator must be an active member of the cost tenant"
+    with (
+        Session(pg_engine) as session,
+        pytest.raises(DBAPIError, match="creator must be an active member of the cost tenant"),
     ):
         session.execute(
             insert_cost,
@@ -9464,8 +9700,11 @@ def test_matterless_ip_cost_evidence_is_immutable_on_postgres(pg_engine):
         "(:id, :company, :docket, :source, 'supersede', :replacement, "
         "'Registry corrected the amount', 'correction:registry', :actor, :now)"
     )
-    with Session(pg_engine) as session, pytest.raises(
-        DBAPIError, match="correction actor must be an active member of the cost tenant"
+    with (
+        Session(pg_engine) as session,
+        pytest.raises(
+            DBAPIError, match="correction actor must be an active member of the cost tenant"
+        ),
     ):
         session.execute(
             insert_correction,
@@ -9500,8 +9739,9 @@ def test_matterless_ip_cost_evidence_is_immutable_on_postgres(pg_engine):
         "UPDATE ip_cost_items SET billable = true WHERE id = :id",
         "UPDATE ip_cost_items SET evidence_reference = 'rewritten' WHERE id = :id",
     ):
-        with Session(pg_engine) as session, pytest.raises(
-            DBAPIError, match="IP cost evidence is immutable"
+        with (
+            Session(pg_engine) as session,
+            pytest.raises(DBAPIError, match="IP cost evidence is immutable"),
         ):
             session.execute(text(statement), {"id": cost_id})
             session.commit()
@@ -9515,30 +9755,27 @@ def test_matterless_ip_cost_evidence_is_immutable_on_postgres(pg_engine):
             {"id": cost_id},
         )
         session.commit()
-    with Session(pg_engine) as session, pytest.raises(
-        DBAPIError, match="reconciler must be an active member of the cost tenant"
+    with (
+        Session(pg_engine) as session,
+        pytest.raises(DBAPIError, match="reconciler must be an active member of the cost tenant"),
     ):
         session.execute(
-            text(
-                "UPDATE ip_cost_items SET reconciled_by_membership_id = :actor "
-                "WHERE id = :id"
-            ),
+            text("UPDATE ip_cost_items SET reconciled_by_membership_id = :actor WHERE id = :id"),
             {"id": cost_id, "actor": other_actor_id},
         )
         session.commit()
-    with Session(pg_engine) as session, pytest.raises(
-        DBAPIError, match="reconciler must be an active member of the cost tenant"
+    with (
+        Session(pg_engine) as session,
+        pytest.raises(DBAPIError, match="reconciler must be an active member of the cost tenant"),
     ):
         session.execute(
-            text(
-                "UPDATE ip_cost_items SET reconciled_by_membership_id = :actor "
-                "WHERE id = :id"
-            ),
+            text("UPDATE ip_cost_items SET reconciled_by_membership_id = :actor WHERE id = :id"),
             {"id": cost_id, "actor": inactive_actor_id},
         )
         session.commit()
-    with Session(pg_engine) as session, pytest.raises(
-        DBAPIError, match="corrections are append-only"
+    with (
+        Session(pg_engine) as session,
+        pytest.raises(DBAPIError, match="corrections are append-only"),
     ):
         session.execute(
             text(
@@ -9548,13 +9785,15 @@ def test_matterless_ip_cost_evidence_is_immutable_on_postgres(pg_engine):
             {"id": cost_id},
         )
         session.commit()
-    with Session(pg_engine) as session, pytest.raises(
-        DBAPIError, match="IP cost evidence is retained"
+    with (
+        Session(pg_engine) as session,
+        pytest.raises(DBAPIError, match="IP cost evidence is retained"),
     ):
         session.execute(text("DELETE FROM ip_cost_items WHERE id = :id"), {"id": cost_id})
         session.commit()
-    with Session(pg_engine) as session, pytest.raises(
-        DBAPIError, match="IP cost corrections are retained"
+    with (
+        Session(pg_engine) as session,
+        pytest.raises(DBAPIError, match="IP cost corrections are retained"),
     ):
         session.execute(
             text("DELETE FROM ip_cost_item_corrections WHERE id = :id"),
@@ -9575,14 +9814,22 @@ def test_matterless_ip_cost_evidence_is_immutable_on_postgres(pg_engine):
         )
         session.commit()
     with Session(pg_engine) as session:
-        assert session.scalar(
-            text("SELECT count(*) FROM ip_cost_items WHERE docket_id = :id"),
-            {"id": docket_id},
-        ) == 0
-        assert session.scalar(
-            text("SELECT count(*) FROM ip_cost_item_corrections WHERE docket_id = :id"),
-            {"id": docket_id},
-        ) == 0
+        assert (
+            session.scalar(
+                text("SELECT count(*) FROM ip_cost_items WHERE docket_id = :id"),
+                {"id": docket_id},
+            )
+            == 0
+        )
+        assert (
+            session.scalar(
+                text("SELECT count(*) FROM ip_cost_item_corrections WHERE docket_id = :id"),
+                {"id": docket_id},
+            )
+            == 0
+        )
+
+
 def test_private_generation_readiness_and_lifecycle_event_share_tenant_first_lock_order(
     pg_engine,
 ) -> None:
@@ -10112,12 +10359,15 @@ def test_private_retrieval_prefilters_before_bounded_rank_on_postgres(
         assert query_count <= 20
         assert all(row.source_id == matter.id for row in results)
         assert all("Forbidden" not in row.label for row in results)
-        assert hydrate_private_projection_results(
-            session,
-            context=context,
-            projection_ids=[forged_other.id],
-            query="bounded needle",
-        ) == ()
+        assert (
+            hydrate_private_projection_results(
+                session,
+                context=context,
+                projection_ids=[forged_other.id],
+                query="bounded needle",
+            )
+            == ()
+        )
 
         first_event = enqueue_private_projection_event(
             session,
@@ -10173,14 +10423,17 @@ def test_private_retrieval_prefilters_before_bounded_rank_on_postgres(
         assert failed.next_attempt_at is None
         assert failed.error_code == "DataError"
         assert succeeded is not None and succeeded.status == "applied"
-        assert session.scalar(
-            select(PrivateIndexProjection.id).where(
-                PrivateIndexProjection.company_id == company_id,
-                PrivateIndexProjection.source_type == "matter",
-                PrivateIndexProjection.source_id == matter_id,
-                PrivateIndexProjection.is_tombstoned.is_(False),
+        assert (
+            session.scalar(
+                select(PrivateIndexProjection.id).where(
+                    PrivateIndexProjection.company_id == company_id,
+                    PrivateIndexProjection.source_type == "matter",
+                    PrivateIndexProjection.source_id == matter_id,
+                    PrivateIndexProjection.is_tombstoned.is_(False),
+                )
             )
-        ) is None
+            is None
+        )
 
 
 def test_ip_writer_does_not_wait_on_private_projection_scope_fk_locks(pg_engine) -> None:
@@ -10299,6 +10552,7 @@ def test_ip_writer_does_not_wait_on_private_projection_scope_fk_locks(pg_engine)
                 workflow_writer.rollback()
         finally:
             rebuild_writer.rollback()
+
 
 def test_private_rebuild_releases_interactive_parent_locks_on_postgres(
     pg_engine,
@@ -10533,10 +10787,7 @@ def test_private_rebuild_scope_batch_cannot_deadlock_lifecycle_epoch_writer_on_p
             while monotonic() < deadline:
                 with Session(pg_engine) as observer:
                     wait_type = observer.scalar(
-                        text(
-                            "SELECT wait_event_type FROM pg_stat_activity "
-                            "WHERE pid = :pid"
-                        ),
+                        text("SELECT wait_event_type FROM pg_stat_activity WHERE pid = :pid"),
                         {"pid": worker_pid[0]},
                     )
                 if wait_type == "Lock":
@@ -11100,10 +11351,7 @@ def test_shared_provider_budget_serializes_cross_provider_reservations_on_postgr
             while monotonic() < deadline:
                 with Session(pg_engine) as observer:
                     wait_type = observer.scalar(
-                        text(
-                            "SELECT wait_event_type FROM pg_stat_activity "
-                            "WHERE pid = :pid"
-                        ),
+                        text("SELECT wait_event_type FROM pg_stat_activity WHERE pid = :pid"),
                         {"pid": contender_pid[0]},
                     )
                 if wait_type == "Lock":

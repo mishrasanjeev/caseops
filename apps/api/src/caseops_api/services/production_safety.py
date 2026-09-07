@@ -435,6 +435,7 @@ def _machine_envelope(
     subject: str,
     conclusion: str,
     evidence_ref: str,
+    domain_evidence: dict | None = None,
 ) -> dict[str, object]:
     envelope: dict[str, object] = {
         "schema": MACHINE_READINESS_EVIDENCE_SCHEMA,
@@ -445,6 +446,8 @@ def _machine_envelope(
         "run_id": run_id,
         "evidence_ref": evidence_ref,
     }
+    if domain_evidence is not None:
+        envelope["domain_evidence"] = domain_evidence
     envelope["proof"] = machine_readiness_evidence_proof(
         secret=secret,
         evidence=envelope,
@@ -480,11 +483,17 @@ def record_machine_readiness_evidence(
 
     billing_codes = set(PRODUCTION_BILLING_CHECK_CODES)
     operational_gates = {gate["gate_code"]: gate for gate in PLATFORM_OPERATIONAL_GATES}
+    from caseops_api.services.ip_domain_catalog import (
+        DOMAIN_BY_ID,
+        DOMAIN_EVIDENCE_PRODUCERS,
+        evaluate_domain,
+    )
     pine_codes = set(PINE_LABS_UAT_SCENARIO_CODES)
     producer_kinds = {
         "billing_check": MACHINE_READINESS_BILLING_PRODUCERS,
         "operational_gate": MACHINE_READINESS_OPERATIONAL_PRODUCERS,
         "pine_labs_uat": MACHINE_READINESS_PINE_PRODUCERS,
+        "ip_domain_release": DOMAIN_EVIDENCE_PRODUCERS,
     }
     for item in payload.items:
         if payload.producer not in producer_kinds[item.kind]:
@@ -493,7 +502,9 @@ def record_machine_readiness_evidence(
                 detail=(f"Producer {payload.producer!r} cannot write {item.kind!r} evidence."),
             )
         allowed_subjects = (
-            billing_codes
+            DOMAIN_BY_ID.keys()
+            if item.kind == "ip_domain_release"
+            else billing_codes
             if item.kind == "billing_check"
             else operational_gates.keys()
             if item.kind == "operational_gate"
@@ -505,6 +516,16 @@ def record_machine_readiness_evidence(
                 detail=f"Unknown {item.kind} subject {item.subject!r}.",
             )
         _assert_no_secret_material(item.evidence_ref, path="evidence_ref")
+        if item.kind == "ip_domain_release":
+            assert item.domain_evidence is not None
+            decision = evaluate_domain(
+                DOMAIN_BY_ID[item.subject], release_sha=serving_sha,
+                evidence=item.domain_evidence,
+            )
+            if item.conclusion == "pass" and decision.stage not in {"beta", "ga"}:
+                raise HTTPException(status_code=409, detail={
+                    "code": "ip_domain_evidence_incomplete", "blockers": decision.blockers,
+                })
 
     _lock_machine_readiness_writer(session)
     now = _now()
@@ -545,6 +566,9 @@ def record_machine_readiness_evidence(
             subject=stored_subject,
             conclusion=item.conclusion,
             evidence_ref=item.evidence_ref,
+            domain_evidence=(
+                item.domain_evidence.model_dump(mode="json") if item.domain_evidence else None
+            ),
         )
         if item.kind == "billing_check":
             assert billing_signoff is not None
@@ -567,8 +591,12 @@ def record_machine_readiness_evidence(
             row.recorded_by_platform_admin_id = None
             row.recorded_at = now
             session.add(row)
-        elif item.kind == "operational_gate":
-            gate = operational_gates[item.subject]
+        elif item.kind in {"operational_gate", "ip_domain_release"}:
+            gate = (
+                {"category": "ip_domain", "label": DOMAIN_BY_ID[item.subject].label,
+                 "readiness_classification": "review-first"}
+                if item.kind == "ip_domain_release" else operational_gates[item.subject]
+            )
             row = session.scalar(
                 select(PlatformOperationalReadinessEvidence)
                 .where(

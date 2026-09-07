@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "corpus_id": "caseops-product-guide",
-  "content_version": "2026.09.04.1",
-  "display_version": "v4",
+  "content_version": "2026.09.07.1",
+  "display_version": "v5",
   "language": "en-IN",
   "canonical_path": "/guide",
-  "updated_on": "2026-09-04",
+  "updated_on": "2026-09-07",
   "navigation_groups": {
     "overview": "Overview",
     "schedule": "Schedule",
@@ -485,6 +485,26 @@
         "plain language",
         "legal words"
       ]
+    },
+    {
+      "id": "patents",
+      "title": "Patent intake and source records",
+      "summary": "Record restricted invention families, separate applications, sourced parties and priority relationships, corrections, retained history, and explicit record closure. Intake records do not establish legal entitlement or automate prosecution.",
+      "keywords": [
+        "patent",
+        "invention",
+        "priority",
+        "divisional",
+        "PCT",
+        "national phase",
+        "inventor",
+        "patent of addition"
+      ],
+      "aliases": [
+        "patent family",
+        "parent application",
+        "patent intake"
+      ]
     }
   ],
   "commands": [
@@ -554,6 +574,23 @@
         "ip",
         "trademark docket",
         "intellectual property"
+      ],
+      "required_capabilities": [
+        "ip:read"
+      ]
+    },
+    {
+      "id": "patent-intake",
+      "label": "Patent intake",
+      "href": "/app/ip/patents",
+      "icon": "BookOpenCheck",
+      "group": "ip",
+      "summary": "Open restricted patent families, applications, party evidence and priority records.",
+      "keywords": [
+        "patent family",
+        "invention disclosure",
+        "priority parent",
+        "patent application"
       ],
       "required_capabilities": [
         "ip:read"

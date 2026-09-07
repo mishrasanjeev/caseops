@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -65,6 +65,12 @@ const matterStub = {
   next_hearing_on: "2026-05-30",
 };
 
+function holdInitialRead(mock: typeof workProductMock, empty: object, current: object) {
+  let resolve!: (value: object) => void;
+  mock.mockReturnValueOnce(new Promise((done) => { resolve = done; })).mockResolvedValue(current);
+  return async () => { await act(async () => resolve(empty)); };
+}
+
 describe("PortalOcMatterDetailPage", () => {
   beforeEach(() => {
     matterMock.mockReset();
@@ -98,14 +104,16 @@ describe("PortalOcMatterDetailPage", () => {
 
   it("uploads a work-product file via the multipart helper", async () => {
     matterMock.mockResolvedValue(matterStub);
-    uploadMock.mockResolvedValue({
+    const record = {
       id: "wp-1",
       original_filename: "brief.pdf",
       content_type: "application/pdf",
       size_bytes: 1234,
       submitted_by_portal_user_id: "p-1",
       created_at: "2026-04-25T10:00:00Z",
-    });
+    };
+    uploadMock.mockResolvedValue(record);
+    const releaseStale = holdInitialRead(workProductMock, { items: [] }, { items: [record] });
     const user = userEvent.setup();
     render(withClient(<PortalOcMatterDetailPage />));
     await waitFor(() => expect(matterMock).toHaveBeenCalled());
@@ -121,11 +129,15 @@ describe("PortalOcMatterDetailPage", () => {
     await waitFor(() =>
       expect(uploadMock).toHaveBeenCalledWith("matter-oc-1", file),
     );
+    await screen.findByText("brief.pdf");
+    await releaseStale();
+    expect(screen.getByText("brief.pdf")).toBeVisible();
+    expect(workProductMock).toHaveBeenCalledTimes(2);
   });
 
   it("submits an invoice with line item + lands the call", async () => {
     matterMock.mockResolvedValue(matterStub);
-    submitInvoiceMock.mockResolvedValue({
+    const record = {
       id: "inv-1",
       invoice_number: "OC-2026-001",
       status: "needs_review",
@@ -136,7 +148,9 @@ describe("PortalOcMatterDetailPage", () => {
       due_on: null,
       submitted_by_portal_user_id: "p-1",
       created_at: "2026-04-25T10:00:00Z",
-    });
+    };
+    submitInvoiceMock.mockResolvedValue(record);
+    const releaseStale = holdInitialRead(invoicesMock, { invoices: [] }, { invoices: [record] });
     const user = userEvent.setup();
     render(withClient(<PortalOcMatterDetailPage />));
     await waitFor(() => expect(matterMock).toHaveBeenCalled());
@@ -164,11 +178,15 @@ describe("PortalOcMatterDetailPage", () => {
       { description: "Drafting brief", amount_minor: 500000 },
     ]);
     expect(payload.currency).toBe("INR");
+    await screen.findByTestId("portal-oc-invoice-inv-1");
+    await releaseStale();
+    expect(screen.getByTestId("portal-oc-invoice-inv-1")).toHaveTextContent("OC-2026-001");
+    expect(invoicesMock).toHaveBeenCalledTimes(2);
   });
 
   it("submits a time entry with duration + description", async () => {
     matterMock.mockResolvedValue(matterStub);
-    submitTimeEntryMock.mockResolvedValue({
+    const record = {
       id: "te-1",
       work_date: "2026-04-25",
       description: "Reviewed docs",
@@ -179,7 +197,9 @@ describe("PortalOcMatterDetailPage", () => {
       total_amount_minor: 750000,
       submitted_by_portal_user_id: "p-1",
       created_at: "2026-04-25T10:00:00Z",
-    });
+    };
+    submitTimeEntryMock.mockResolvedValue(record);
+    const releaseStale = holdInitialRead(timeEntriesMock, { entries: [] }, { entries: [record] });
     const user = userEvent.setup();
     render(withClient(<PortalOcMatterDetailPage />));
     await waitFor(() => expect(matterMock).toHaveBeenCalled());
@@ -198,6 +218,10 @@ describe("PortalOcMatterDetailPage", () => {
     expect(payload.description).toBe("Reviewed docs");
     expect(payload.duration_minutes).toBe(90);
     expect(payload.billable).toBe(true);
+    await screen.findByText("Reviewed docs");
+    await releaseStale();
+    expect(screen.getByText("Reviewed docs")).toBeVisible();
+    expect(timeEntriesMock).toHaveBeenCalledTimes(2);
   });
 
   it("renders the matter-not-found error when the API 404s", async () => {

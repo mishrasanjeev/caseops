@@ -6,11 +6,11 @@ Generated from `DATA_GOVERNANCE_MAP.yaml`; do not edit this view directly.
 
 - Status: `repository_inventory_snapshot_policy_unapproved`
 - Policy approval: `pending_named_human_approval`
-- Canonical map SHA-256: `3ebbbb602345a3f9692c19a808fe1f05cbb4c3c44cccfa595f555f5a4d459b48`
-- SQL tables: `308`
-- SQL columns: `4995`
-- ORM indexes: `1666`
-- Alembic/raw index declarations: `709`
+- Canonical map SHA-256: `67b46feb4005f0c3857dc29662852fe9af249d9f75ce280dc64d231bbcc7d764`
+- SQL tables: `316`
+- SQL columns: `5093`
+- ORM indexes: `1694`
+- Alembic/raw index declarations: `721`
 - Non-SQL data classes: `12`
 
 ## Boundary
@@ -166,6 +166,14 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `ip_journal_publications` | `tenant_restricted_legal_content` | 28 | `registry_fail_closed` |
 | `ip_matter_links` | `tenant_restricted_legal_content` | 15 | `registry_fail_closed` |
 | `ip_parties_and_roles` | `tenant_restricted_legal_content` | 11 | `registry_fail_closed` |
+| `ip_patent_application_identifiers` | `tenant_restricted_legal_content` | 10 | `registry_fail_closed` |
+| `ip_patent_application_identities` | `tenant_restricted_legal_content` | 9 | `registry_fail_closed` |
+| `ip_patent_application_versions` | `tenant_restricted_legal_content` | 17 | `registry_fail_closed` |
+| `ip_patent_applications` | `tenant_restricted_legal_content` | 6 | `registry_fail_closed` |
+| `ip_patent_families` | `tenant_restricted_legal_content` | 5 | `registry_fail_closed` |
+| `ip_patent_family_versions` | `tenant_restricted_legal_content` | 16 | `registry_fail_closed` |
+| `ip_patent_party_details` | `tenant_restricted_legal_content` | 14 | `registry_fail_closed` |
+| `ip_patent_priority_details` | `tenant_restricted_legal_content` | 20 | `registry_fail_closed` |
 | `ip_portfolio_export_jobs` | `tenant_restricted_legal_content` | 15 | `registry_fail_closed` |
 | `ip_portfolio_saved_views` | `tenant_restricted_legal_content` | 12 | `registry_fail_closed` |
 | `ip_post_registration_recordals` | `tenant_restricted_legal_content` | 24 | `registry_fail_closed` |
@@ -251,7 +259,7 @@ This inventory does not claim approved platform-wide retention bounds, legal-hol
 | `matter_tags` | `tenant_restricted_legal_content` | 8 | `registry_fail_closed` |
 | `matter_tasks` | `tenant_restricted_legal_content` | 18 | `registry_fail_closed` |
 | `matter_time_entries` | `tenant_restricted_legal_content` | 14 | `registry_fail_closed` |
-| `matters` | `tenant_restricted_legal_content` | 52 | `registry_fail_closed` |
+| `matters` | `tenant_restricted_legal_content` | 53 | `registry_fail_closed` |
 | `mock_hearing_questions` | `tenant_operational_record` | 20 | `registry_fail_closed` |
 | `mock_hearing_responses` | `tenant_operational_record` | 23 | `registry_fail_closed` |
 | `mock_hearing_sessions` | `tenant_operational_record` | 21 | `registry_fail_closed` |

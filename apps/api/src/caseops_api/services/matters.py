@@ -443,7 +443,7 @@ def _assert_matching_optional(
     expected: str | None,
     field_name: str,
 ) -> None:
-    if provided and expected and provided.strip() != expected:
+    if provided and provided.strip() != expected:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"{field_name} does not match the selected forum catalog entry.",
@@ -2073,6 +2073,7 @@ def create_matter(
         opposing_party=payload.opposing_party.strip() if payload.opposing_party else None,
         opposing_counsel=(payload.opposing_counsel.strip() if payload.opposing_counsel else None),
         case_number=normalized_case_number,
+        temporary_e_case_number=payload.temporary_e_case_number,
         filing_number=payload.filing_number.strip() if payload.filing_number else None,
         filing_date=payload.filing_date,
         cnr_number=payload.cnr_number.strip() if payload.cnr_number else None,
@@ -2145,6 +2146,7 @@ def create_matter(
             "matter_type": matter.matter_type,
             "status": matter.status,
             "case_number": matter.case_number,
+            "temporary_e_case_number": matter.temporary_e_case_number,
             "filing_number": matter.filing_number,
             "assignee_membership_id": matter.assignee_membership_id,
             "responsible_lawyer_membership_id": matter.responsible_lawyer_membership_id,
@@ -2210,6 +2212,10 @@ def _apply_list_filters(stmt, filters: MatterListFilters):
             or_(
                 Matter.title.ilike(needle),
                 Matter.matter_code.ilike(needle),
+                Matter.temporary_e_case_number.ilike(needle),
+                Matter.case_number.ilike(needle),
+                Matter.cnr_number.ilike(needle),
+                Matter.filing_number.ilike(needle),
                 Matter.client_name.ilike(needle),
                 Matter.opposing_party.ilike(needle),
                 Matter.court_name.ilike(needle),
@@ -2721,7 +2727,9 @@ def update_matter(
             value = value.strip().upper()
         if field_name == "claim_amount_notes" and isinstance(value, str):
             value = value.strip() or None
-        if field_name in {"cnr_number", "filing_number"} and isinstance(value, str):
+        if field_name in {
+            "cnr_number", "filing_number", "temporary_e_case_number"
+        } and isinstance(value, str):
             value = value.strip() or None
         if field_name in {"title", "practice_area"} and isinstance(value, str):
             value = value.strip()

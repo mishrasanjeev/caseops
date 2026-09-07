@@ -15,9 +15,10 @@
  * upload, etc.) the unit tests can't detect.
  */
 import { expect, request, test } from "@playwright/test";
-import type { APIRequestContext } from "@playwright/test";
+import type { APIRequestContext, Page } from "@playwright/test";
 
 import { apiBaseUrl } from "./support/env";
+import { noPaidProviderHeaders } from "./support/cost-controls";
 
 const PASSWORD = "OcPortalE2E!23";
 
@@ -97,6 +98,22 @@ function unique(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// September 05: a pre-mutation list response must not erase a successful write.
+async function holdInitialList(page: Page, path: string) {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  let held = false;
+  page.once("close", release);
+  await page.route(`**${path}`, async (route) => {
+    if (route.request().method() !== "GET" || held) return route.continue();
+    held = true;
+    const response = await route.fetch();
+    await gate;
+    if (!page.isClosed()) await route.fulfill({ response });
+  });
+  return release;
+}
+
 test.describe("Phase C-3 outside-counsel portal", () => {
   test.setTimeout(180_000);
 
@@ -104,7 +121,7 @@ test.describe("Phase C-3 outside-counsel portal", () => {
     page,
     context,
   }) => {
-    const api = await request.newContext();
+    const api = await request.newContext({ extraHTTPHeaders: noPaidProviderHeaders });
     const slug = unique("oc");
     const { token, matterId } = await bootstrapAndCreateMatter(api, slug);
     const ocEmail = `oc-${slug}@example.com`;
@@ -148,6 +165,7 @@ test.describe("Phase C-3 outside-counsel portal", () => {
     ).toBeVisible({ timeout: 15_000 });
 
     // --- Upload work product ---
+    const releaseUploads = await holdInitialList(page, `/api/portal/oc/matters/${matterId}/work-product`);
     await page.getByRole("tab", { name: /work product/i }).click();
     const pdfBytes = Buffer.from(
       "%PDF-1.4\n%\xe2\xe3\xcf\xd3\n1 0 obj <<>> endobj\ntrailer<<>>\n%%EOF",
@@ -164,8 +182,13 @@ test.describe("Phase C-3 outside-counsel portal", () => {
     await expect(page.getByText("ocbrief.pdf")).toBeVisible({
       timeout: 15_000,
     });
+    releaseUploads();
+    await page.reload();
+    await page.getByRole("tab", { name: /work product/i }).click();
+    await expect(page.getByText("ocbrief.pdf")).toBeVisible();
 
     // --- Submit invoice ---
+    const releaseInvoices = await holdInitialList(page, `/api/portal/oc/matters/${matterId}/invoices`);
     await page.getByRole("tab", { name: /invoices/i }).click();
     await page
       .getByTestId("portal-oc-invoice-number")
@@ -182,8 +205,13 @@ test.describe("Phase C-3 outside-counsel portal", () => {
     await expect(page.getByText(/needs_review/i)).toBeVisible({
       timeout: 15_000,
     });
+    releaseInvoices();
+    await page.reload();
+    await page.getByRole("tab", { name: /invoices/i }).click();
+    await expect(page.getByText(/OC-E2E-001/i)).toBeVisible();
 
     // --- Log time entry ---
+    const releaseTime = await holdInitialList(page, `/api/portal/oc/matters/${matterId}/time-entries`);
     await page.getByRole("tab", { name: /time/i }).click();
     await page
       .getByTestId("portal-oc-time-description")
@@ -193,5 +221,10 @@ test.describe("Phase C-3 outside-counsel portal", () => {
     await expect(
       page.getByText(/Reviewed lower-court order — e2e/i),
     ).toBeVisible({ timeout: 15_000 });
+    releaseTime();
+    await page.reload();
+    await page.getByRole("tab", { name: /time/i }).click();
+    await expect(page.getByText(/Reviewed lower-court order — e2e/i)).toBeVisible();
+    await api.dispose();
   });
 });

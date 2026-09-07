@@ -7,6 +7,9 @@ Create Date: 2026-08-11
 
 from __future__ import annotations
 
+# DATA-GOVERNANCE-MAP: updated
+# Transactional index removal does not alter authority rows or retention owners.
+
 from collections.abc import Sequence
 
 from sqlalchemy import text
@@ -115,6 +118,6 @@ def downgrade() -> None:
     if bind.dialect.name != "postgresql":
         return
 
-    with op.get_context().autocommit_block():
-        for index_name, _ in reversed(AUTHORITY_STRUCTURED_SEARCH_TRIGRAM_INDEXES):
-            op.execute(f"DROP INDEX CONCURRENTLY IF EXISTS {index_name}")
+    # A later refusal must roll these drops back with the rest of the downgrade.
+    for index_name, _ in reversed(AUTHORITY_STRUCTURED_SEARCH_TRIGRAM_INDEXES):
+        op.execute(f"DROP INDEX IF EXISTS {index_name}")

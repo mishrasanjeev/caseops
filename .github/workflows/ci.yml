@@ -65,6 +65,9 @@ jobs:
       - name: Validate production scheduler inventory
         run: uv --directory apps/api run python ../../scripts/scheduler_inventory.py validate
 
+      - name: Reproduce every official statute provision from pinned PDF evidence
+        run: uv run --no-project --python 3.13 --with pdfplumber==0.11.9 python scripts/build_verified_statute_bundle.py --check
+
       - name: Enforce offline AI safety release gate (IPLF-065)
         run: uv --directory apps/api run python -m caseops_api.scripts.eval_ai_safety --release-gate
 
@@ -319,7 +322,7 @@ jobs:
           CASEOPS_DATABASE_URL: postgresql+psycopg://caseops@127.0.0.1:5432/caseops_test
           CASEOPS_ENV: ci
           CASEOPS_AUTH_SECRET: pg-validation-secret-at-least-32-bytes
-        run: uv run pytest -q -m postgres tests/test_postgres_validation.py
+        run: uv run pytest -q -m postgres
 
   web:
     name: Web (typecheck + vitest + build)
@@ -341,6 +344,9 @@ jobs:
 
       - name: Web typecheck
         run: npm run typecheck:web
+
+      - name: Browser test and configuration typecheck
+        run: npm run typecheck:e2e
 
       - name: Vitest with coverage (AQ-002 reliability + threshold ratchet)
         # AQ-002 (2026-04-25): replaced the bare `test:web` step with

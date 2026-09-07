@@ -1,5 +1,17 @@
 # Strict Bug Task List - 2026-04-22
 
+September 07 pre-release update: current Docker API coverage (4,149 passes),
+complete PostgreSQL (186 passes), frontend coverage (968 passes), and the full
+Docker browser replay (274 passed, zero failed, five intentional skips) have
+positive evidence. All 188 API skips have exact passing supplements. The
+496-row original import, all 1,689 source records and 23 existing-QA patent/domain
+journeys also pass locally. Git/CI and exact-production acceptance remain
+separate pending gates; no deployment is claimed by this pre-release record.
+See `ip-implementation/evidence/bug010-source-release-2026-09-07.md` for the
+authoritative scoped checkpoint and retained failures. Older dated statuses
+below are historical, not the result of this candidate. Wider catalog coverage
+and all 25 unfinished IP slices remain open.
+
 Purpose: fail-closed release gate after the Hari and Ram bug-sheet review. No
 agent may claim "all bugs fixed" until every item below meets its done-when
 criteria and required verification.
@@ -18,6 +30,93 @@ Current evidence from 2026-04-22 verification:
 - Partially fixed
 - Not fixed
 - Inconclusive
+
+## Ram September 05 Source Reconciliation
+
+Latest BUG-010 checkpoint: Inconclusive, not closed. A complete pinned
+numbered-section bundle for the five reported Acts is implemented, with source
+history and fail-closed exclusions. Targeted Docker evidence is positive;
+fresh browser/full-suite/production gates are still pending. Source truth and
+scoped-release acceptance are in
+`ip-implementation/evidence/bug010-source-release-2026-09-07.md`. The older
+zero-verified-section results below remain historical reproduction evidence.
+
+September 07 production-request follow-up: b525 adds bounded ancestry traversal
+with local PostgreSQL/HTTP and fresh-image Playwright proof. Production has not
+run, so release closure remains Inconclusive. Fresh Docker acceptance exposed a
+separate missing release-seed step; the verifier now restores real seed data
+after database rollback tests. Its unchanged ten-test replay has nine passes
+and BUG-010 still fails: all five reported Acts are present but disabled, with
+zero verified sections. Verdict for BUG-010: Not fixed. Original import replay
+and all-cell/mapped-field verification pass on b525. Exact results and retained
+setup failures are in `ip-implementation/evidence/local-patent-priorities-2026-09-07.md`.
+
+September 07 priority review: three f030 Docker browser journeys passed, and
+178 migration-first PostgreSQL checks passed without skips. Screenshot review
+then exposed duplicate active navigation and squeezed tablet title rows.
+The corrected 7ec22 runtime passes all three priority widths and four mobile
+journeys, with all nine priority screenshots inspected. Formal verdict for the
+adjacent navigation/title defects: Inconclusive because production acceptance
+has not run. The navigation defect reproduced on 21 paths before the shared
+most-specific-path correction. The complete 231-test desktop inventory has 225
+passing identities, BUG-010 failed and five skipped checks after the explicit
+test-only replay. Unsupported Playwright locator options exposed a missing E2E
+type gate; it now passes in offline Docker and gates CI/local verification.
+The provider deadline test now isolates provider timing, proves health remains
+responsive while it is blocked, and rejects late projection persistence; the
+complete 29-test module passes. Full evidence and retained test-harness
+failures: `ip-implementation/evidence/local-patent-priorities-2026-09-07.md`.
+This does not close BUG-010, historical Matter reopening or any production item.
+
+September 07 shared-lock continuation: local PostgreSQL reproduced and fixed a
+different-actor patent-party/closure deadlock without weakening lifecycle or
+private-generation fences. Complete database and dated browser proof, the
+retained initial failures and subsequent test-only corrections are recorded in
+`ip-implementation/evidence/local-patent-parties-2026-09-07.md`. This is not
+production verification or proof of the cause of the reported historical Matter
+reopening. Formal workbook verdicts and the BUG-010 release blocker remain.
+
+September 06 adjacent rollback finding: the local repeated PostgreSQL run
+reproduced independently committed index removals surviving an evidence-based
+downgrade refusal. Formal verdict: Partially fixed, pending full release and
+exact-production verification. All 132 PostgreSQL tests passed on fresh and
+retained Docker databases, with clean index health after both runs. Five
+downgrade functions now remain in the
+enclosing transaction; the regression asserts two consecutive refusals preserve
+the exact schema, every index and retained evidence. See
+`ip-implementation/codex-takeover-2026-09-06.md` for failed runs and subsequent
+proof. This finding does not establish the cause of a historical Matter reopening.
+
+Owner: Codex. Release verdict: **NO-GO**. Full source, journey and test mapping:
+`docs/bugfix-ram05sep-2026.md`. One populated workbook bug, nine overlapping
+bulk error categories and one E-Case enhancement were supplied. The copied
+four-bug summary is not the source inventory. All 496 original import rows
+were recovered with tenant-scoped read-only access; no production commit ran.
+
+| Item | Formal verdict | Evidence / remaining work |
+| --- | --- | --- |
+| BUG-010 statute completeness | Not fixed | Production API and browser reproduce 22 disabled Acts; 1 of 3,393 provisions verified. Five reported Acts remain without selectable sections. Complete source data and attachment/reload acceptance before closure. |
+| Bulk owner/team/lawyer sample assignments | Inconclusive | Invalid identities correctly rejected. CSV/XLSX sample assignments corrected locally; template round-trip and dated browser tests added. Exact-production proof pending. |
+| Bulk duplicate code/case/title-client suppression | Inconclusive | Only admitted rows now claim identities; invalid-first, skipped-existing chain, valid sibling, commit and replay regressions pass locally. Production pending. |
+| Bulk/manual catalog context and uncatalogued context retention | Inconclusive | Explicit-ID and category/name conflicts rejected; missing catalog metadata cannot accept invented manual values; uncatalogued context preserved. Expanded 90-test Docker subset and final dated browser workflows pass. Production proof pending. |
+| Bulk ambiguous/unsupported original courts | Not fixed | Three official-source qualified aliases added locally and round-trip tested. Remaining ambiguous/private/city-only values still need factual context. Do not guess districts or convert a private arbitrator into a registry court. |
+| Saved import original-source revalidation | Inconclusive | Confirmation and interrupted recovery now re-resolve original cells and reject withdrawn/retargeted court identities; forced-interleaving tests pass. Production pending. |
+| Billing profile stale-list race | Inconclusive | Initial-load gating, server-result caching, saved-value hydration and dirty-only PATCH implemented for profiles/rates. 831 frontend tests and final held-read browser journey pass. Production proof pending. |
+| Outside-counsel stale lists | Inconclusive | Upload, invoice and time-entry writes cancel older list requests and await fresh data. Forced-interleaving unit/browser workflows and persisted reload pass locally. Production proof pending. |
+| Empty import admission | Inconclusive | This batch briefly bypassed the no-work guard for all-invalid/duplicate files. Corrected and caught by existing API plus new browser disabled-action/direct-400 regressions. Production proof pending. |
+| Local proxy cancellation | Inconclusive | Reproduced retained upstream on browser response closure. Four Windows and four Docker transport tests pass; dated browser replay has no proxy errors. Test-harness repair, not a production API claim. |
+| Temporary E-Case Number | Inconclusive | Additive model/migration/API/workspace/UI/search/bulk implementation. Mobile and desktop dated local journeys pass. PostgreSQL interrupted-index recovery and restore-forward checks pass. No deployment yet. |
+| Historical Matter reopening | Inconclusive | Bounded September 1-5 tester audit returned no disposal/reopen events. Specific affected Matter/time still needed; local lifecycle guards remain intact and are browser-tested. |
+
+The dated spec is registered in local discovery and both relevant production
+config selectors. The final expanded 90-test API subset passes; complete API
+closure passed 3,966 with zero failures and 140 explicitly retained skips.
+Final fresh Docker acceptance passed 122 PostgreSQL
+and 196 browser tests, failed only BUG-010 and skipped five. The original
+496-row local Ram replay created 391 valid Matters and verified all 28
+importable fields plus all 10,416 retained original cells. No item above is
+production-closed. Thirteen regression lessons are persisted in both AGENTS
+instruction files; full evidence is in the batch report.
 
 ## CaseOps automatic next-hearing sync - Ram 2026-09-04
 

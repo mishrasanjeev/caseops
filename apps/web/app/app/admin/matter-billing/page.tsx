@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CreditCard, Loader2, Plus } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/Button";
@@ -25,15 +25,18 @@ function rupeesToMinor(value: string): number {
   return Number.isFinite(parsed) ? Math.round(parsed * 100) : 0;
 }
 
+const profilesKey = ["admin", "matter-billing"] as const;
+type ProfilesResponse = Awaited<ReturnType<typeof fetchMatterBillingProfiles>>;
+
 export default function AdminMatterBillingPage() {
   const canAdmin = useCapability("workspace:admin");
   const queryClient = useQueryClient();
-  const [name, setName] = useState("GBA Law Office");
-  const [firmLegalName, setFirmLegalName] = useState("GBA Law Office");
+  const [name, setName] = useState("Default");
+  const [firmLegalName, setFirmLegalName] = useState("");
   const [firmAddress, setFirmAddress] = useState("");
   const [firmGstin, setFirmGstin] = useState("");
   const [firmPan, setFirmPan] = useState("");
-  const [prefix, setPrefix] = useState("GBA");
+  const [prefix, setPrefix] = useState("INV");
   const [defaultRate, setDefaultRate] = useState("");
   const [sac, setSac] = useState("");
   const [placeOfSupply, setPlaceOfSupply] = useState("");
@@ -44,9 +47,11 @@ export default function AdminMatterBillingPage() {
   const [rateValue, setRateValue] = useState("");
   const [ratePractice, setRatePractice] = useState("");
   const [rateRole, setRateRole] = useState("");
+  const [profileReady, setProfileReady] = useState(false);
+  const loadedProfile = useRef<ProfilesResponse["profiles"][number] | null>(null);
 
   const profilesQuery = useQuery({
-    queryKey: ["admin", "matter-billing"],
+    queryKey: profilesKey,
     queryFn: fetchMatterBillingProfiles,
     enabled: canAdmin,
   });
@@ -55,6 +60,26 @@ export default function AdminMatterBillingPage() {
     queryFn: () => fetchMatterInvoiceNumberPreview(),
     enabled: canAdmin,
   });
+
+  useEffect(() => {
+    if (profileReady || !profilesQuery.isSuccess) return;
+    const profile = profilesQuery.data.profiles.find((item) => item.is_default) ?? null;
+    loadedProfile.current = profile;
+    if (profile) {
+      setName(profile.name);
+      setFirmLegalName(profile.firm_legal_name ?? "");
+      setFirmAddress(profile.firm_address ?? "");
+      setFirmGstin(profile.firm_gstin ?? "");
+      setFirmPan(profile.firm_pan ?? "");
+      setPrefix(profile.invoice_prefix);
+      setDefaultRate(profile.default_rate_minor_per_hour == null ? "" : String(profile.default_rate_minor_per_hour / 100));
+      setSac(profile.default_sac_hsn ?? "");
+      setPlaceOfSupply(profile.default_place_of_supply ?? "");
+      setGstStateCode(profile.gstin_state_code ?? "");
+      setIgstBps(String(profile.igst_rate_bps));
+    }
+    setProfileReady(true);
+  }, [profileReady, profilesQuery.data, profilesQuery.isSuccess]);
 
   const buildProfilePayload = () => ({
     name,
@@ -82,6 +107,9 @@ export default function AdminMatterBillingPage() {
   });
   const saveProfileMutation = useMutation({
     mutationFn: () => {
+      if (!profileReady || !profilesQuery.isSuccess) {
+        throw new Error("Load billing profiles before saving.");
+      }
       const payload = buildProfilePayload();
       const existingProfile =
         profilesQuery.data?.profiles.find((profile) => profile.is_default) ??
@@ -89,9 +117,21 @@ export default function AdminMatterBillingPage() {
           (profile) => profile.name.trim().toLowerCase() === name.trim().toLowerCase(),
       );
       if (existingProfile) {
-        const { next_invoice_sequence: omittedNextInvoiceSequence, ...updateBody } =
-          payload;
-        void omittedNextInvoiceSequence;
+        if (loadedProfile.current?.id !== existingProfile.id) {
+          throw new Error("The default billing profile changed. Reload before saving.");
+        }
+        const editable = {
+          name: payload.name, firm_legal_name: payload.firm_legal_name || null,
+          firm_address: payload.firm_address, firm_gstin: payload.firm_gstin,
+          firm_pan: payload.firm_pan, default_place_of_supply: payload.default_place_of_supply,
+          default_sac_hsn: payload.default_sac_hsn, gstin_state_code: payload.gstin_state_code,
+          invoice_prefix: payload.invoice_prefix, igst_rate_bps: payload.igst_rate_bps,
+          default_rate_minor_per_hour: payload.default_rate_minor_per_hour,
+        };
+        const baseline = loadedProfile.current;
+        const updateBody = Object.fromEntries(Object.entries(editable).filter(
+          ([key, value]) => value !== baseline[key as keyof typeof baseline],
+        ));
         return updateMatterBillingProfile({
           profileId: existingProfile.id,
           body: updateBody,
@@ -100,8 +140,19 @@ export default function AdminMatterBillingPage() {
       return createMatterBillingProfile(payload);
     },
     onSuccess: async (profile) => {
+      loadedProfile.current = profile;
       setProfileForRate(profile.id);
-      await queryClient.invalidateQueries({ queryKey: ["admin", "matter-billing"] });
+      // A read started before this write must not replace the committed record.
+      await queryClient.cancelQueries({ queryKey: profilesKey, exact: true });
+      queryClient.setQueryData<ProfilesResponse>(profilesKey, (previous) => ({
+        profiles: [
+          ...(previous?.profiles ?? [])
+            .filter((item) => item.id !== profile.id)
+            .map((item) => profile.is_default ? { ...item, is_default: false } : item),
+          profile,
+        ],
+      }));
+      await queryClient.invalidateQueries({ queryKey: profilesKey, exact: true });
       await queryClient.invalidateQueries({
         queryKey: ["admin", "matter-billing", "invoice-preview"],
       });
@@ -111,8 +162,11 @@ export default function AdminMatterBillingPage() {
   });
 
   const addRateMutation = useMutation({
-    mutationFn: () =>
-      createMatterBillingRate({
+    mutationFn: () => {
+      if (!profilesQuery.isSuccess || !profilesQuery.data.profiles.length) {
+        throw new Error("Load a billing profile before adding a rate.");
+      }
+      return createMatterBillingRate({
         profileId: profileForRate || profilesQuery.data?.profiles[0]?.id || "",
         body: {
           rate_scope: rateScope,
@@ -121,9 +175,18 @@ export default function AdminMatterBillingPage() {
           practice_area: rateScope === "practice_area" ? ratePractice || null : null,
           role: rateScope === "role" ? rateRole || null : null,
         },
-      }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["admin", "matter-billing"] });
+      });
+    },
+    onSuccess: async (rate) => {
+      await queryClient.cancelQueries({ queryKey: profilesKey, exact: true });
+      queryClient.setQueryData<ProfilesResponse>(profilesKey, (previous) => previous && ({
+        profiles: previous.profiles.map((profile) =>
+          profile.id === rate.billing_profile_id
+            ? { ...profile, rates: [...profile.rates.filter((item) => item.id !== rate.id), rate] }
+            : profile,
+        ),
+      }));
+      await queryClient.invalidateQueries({ queryKey: profilesKey, exact: true });
       setRateValue("");
       toast.success("Rate rule added.");
     },
@@ -157,7 +220,8 @@ export default function AdminMatterBillingPage() {
               Server-side invoice data uses this profile when a matter has no explicit profile.
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-3 md:grid-cols-2">
+          <CardContent>
+            <fieldset className="grid min-w-0 gap-3 md:grid-cols-2" disabled={!profileReady || !profilesQuery.isSuccess || saveProfileMutation.isPending || addRateMutation.isPending}>
             <Field label="Profile name">
               <Input value={name} onChange={(event) => setName(event.target.value)} />
             </Field>
@@ -195,12 +259,13 @@ export default function AdminMatterBillingPage() {
               <Button
                 type="button"
                 onClick={() => saveProfileMutation.mutate()}
-                disabled={saveProfileMutation.isPending}
+                disabled={!profileReady || !profilesQuery.isSuccess || saveProfileMutation.isPending || addRateMutation.isPending}
               >
                 {saveProfileMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                 Save default profile
               </Button>
             </div>
+            </fieldset>
           </CardContent>
         </Card>
 
@@ -267,7 +332,7 @@ export default function AdminMatterBillingPage() {
           <Button
             type="button"
             onClick={() => addRateMutation.mutate()}
-            disabled={addRateMutation.isPending || !rateValue}
+            disabled={!profilesQuery.isSuccess || !profiles.length || saveProfileMutation.isPending || addRateMutation.isPending || !rateValue}
           >
             Add rate
           </Button>
@@ -279,7 +344,16 @@ export default function AdminMatterBillingPage() {
           <CardTitle>Configured profiles</CardTitle>
         </CardHeader>
         <CardContent>
-          {profiles.length === 0 ? (
+          {profilesQuery.isPending ? (
+            <p role="status">Loading billing profiles...</p>
+          ) : profilesQuery.isError ? (
+            <div role="alert" className="space-y-2">
+              <p>{apiErrorMessage(profilesQuery.error, "Could not load billing profiles.")}</p>
+              <Button type="button" onClick={() => void profilesQuery.refetch()} disabled={profilesQuery.isFetching}>
+                Retry loading profiles
+              </Button>
+            </div>
+          ) : profiles.length === 0 ? (
             <EmptyState icon={CreditCard} title="No billing profiles" description="Create the default profile to enable server-side invoice fields." />
           ) : (
             <div className="overflow-x-auto">

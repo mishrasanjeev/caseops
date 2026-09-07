@@ -17,6 +17,7 @@ if (
 }
 
 const server = http.createServer((request, response) => {
+  let downstreamAborted = false;
   const headers = {
     ...request.headers,
     connection: "close",
@@ -43,6 +44,7 @@ const server = http.createServer((request, response) => {
     upstream.destroy(new Error("Docker API upstream timed out after 125 seconds."));
   });
   upstream.on("error", (error) => {
+    if (downstreamAborted) return;
     console.error(
       JSON.stringify({
         event: "docker_acceptance_api_proxy_error",
@@ -65,7 +67,13 @@ const server = http.createServer((request, response) => {
       );
     }
   });
-  request.on("aborted", () => upstream.destroy());
+  const cancelUpstream = () => {
+    if (response.writableFinished) return;
+    downstreamAborted = true;
+    upstream.destroy();
+  };
+  request.on("aborted", cancelUpstream);
+  response.on("close", cancelUpstream);
   request.pipe(upstream);
 });
 

@@ -84,7 +84,7 @@ async function createMatterFromUi(
   await dialog.getByLabel("Practice area").fill("Litigation");
   await dialog.getByLabel("Client name").fill("Functional QA Client");
   await dialog.getByLabel("Opposing party").fill("Functional QA Respondent");
-  await dialog.getByLabel("Case number").fill("WP(C) 77/2026");
+  await dialog.getByLabel("Case number", { exact: true }).fill("WP(C) 77/2026");
   await dialog.getByLabel("CNR number").fill("dlhc-0100-7777-2026");
 
   const createResponse = page.waitForResponse(

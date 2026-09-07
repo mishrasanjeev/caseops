@@ -32,7 +32,7 @@ Generated; do not edit.
 | UJ-26 | Manage renewal | 4 | IPLF-037B | 4 | 1 | implemented | passed | false |
 | UJ-27 | Share client report and instruction | 4 | IPLF-038B, IPLF-055B | 10 | 1 | implemented | passed | false |
 | UJ-28 | Export or offboard portfolio | 4 | IPLF-028B, IPLF-071B | 4 | 0 | in_progress | not_run | false |
-| UJ-29 | Manage patent family | 4 | IPLF-080B | 4 | 0 | not_started | not_run | false |
+| UJ-29 | Manage patent family | 4 | IPLF-080B | 4 | 0 | in_progress | not_run | false |
 | UJ-30 | Manage design, copyright, or licence | 3 | IPLF-090B | 3 | 0 | not_started | not_run | false |
 | UJ-31 | Conduct clearance search and obtain filing instruction | 5 | IPLF-039H | 5 | 0 | not_started | not_run | false |
 | UJ-32 | Prepare, submit, and reconcile trademark filing | 5 | IPLF-039H | 5 | 0 | not_started | not_run | false |
@@ -42,8 +42,8 @@ Generated; do not edit.
 | UJ-36 | Complete post-registration recordal | 5 | IPLF-058B | 10 | 2 | implemented | passed | true |
 | UJ-37 | Coordinate foreign associate filing | 5 | IPLF-059B | 12 | 2 | implemented | passed | true |
 | UJ-38 | Manage rectification, cancellation, or non-use removal | 5 | IPLF-049B | 5 | 2 | implemented | passed | true |
-| UJ-39 | Manage patent prosecution or opposition | 5 | IPLF-080B | 5 | 0 | not_started | not_run | false |
-| UJ-40 | Manage patent annuity and working requirement | 5 | IPLF-080B | 5 | 0 | not_started | not_run | false |
+| UJ-39 | Manage patent prosecution or opposition | 5 | IPLF-080B | 5 | 0 | in_progress | not_run | false |
+| UJ-40 | Manage patent annuity and working requirement | 5 | IPLF-080B | 5 | 0 | in_progress | not_run | false |
 | UJ-41 | Manage industrial design lifecycle | 5 | IPLF-090B | 5 | 0 | not_started | not_run | false |
 | UJ-42 | Manage copyright lifecycle and enforcement | 4 | IPLF-090B | 4 | 0 | not_started | not_run | false |
 | UJ-43 | Manage assignment, licence, and obligations | 5 | IPLF-090B | 5 | 0 | not_started | not_run | false |
@@ -63,7 +63,7 @@ Generated; do not edit.
 | UJ-57 | Reassign critical work for leave, transfer, or deactivation | 7 | IPLF-039C, IPLF-039H | 9 | 2 | in_progress | not_run | false |
 | UJ-58 | Respond to a suspected missed or incorrect deadline | 6 | IPLF-039D, IPLF-039H | 6 | 2 | in_progress | not_run | false |
 | UJ-59 | Produce and sign off a daily docket control report | 4 | IPLF-038B, IPLF-039C, IPLF-039H | 6 | 2 | in_progress | not_run | false |
-| UJ-60 | Qualify and launch a non-trademark IP domain | 5 | IPLF-079B | 5 | 0 | not_started | not_run | false |
+| UJ-60 | Qualify and launch a non-trademark IP domain | 5 | IPLF-079B | 5 | 0 | in_progress | not_run | false |
 | UJ-61 | Reconcile chain of title and related-right family | 3 | IPLF-039E, IPLF-039H, IPLF-058B | 3 | 2 | in_progress | not_run | false |
 | UJ-62 | Synchronize an external calendar without surrendering docket authority | 6 | IPLF-025B, IPLF-035B, IPLF-039C, IPLF-039H | 10 | 3 | in_progress | not_run | false |
 | UJ-63 | Grant, use, expire, and review emergency access | 5 | IPLF-073B | 5 | 0 | not_started | not_run | false |

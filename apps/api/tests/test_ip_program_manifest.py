@@ -83,6 +83,19 @@ def test_active_ip_evidence_cannot_assign_work_to_claude(tmp_path: Path) -> None
         "CaseOps Product PRD for Claude Code",
         "Claude Fix Order",
         "The unified PRD for Claude work lives here.",
+        "IPLF-080A is assigned to Anthropic.",
+        "Anthropic remains assigned to the patent queue.",
+        "Anthropic-owned implementation track.",
+        "Execution owner: Anthropic.",
+        "Anthropic is the implementation owner.",
+        "WORK_TO_BE_DONE belongs to Anthropic.",
+        "Backlog for Anthropic.",
+        "An execution brief for Claude Code: fix the open items.",
+        "An execution brief for Anthropic: fix the open items.",
+        "The engineer (or Claude) MUST verify the closure.",
+        "The engineer (or Anthropic) MUST verify the closure.",
+        "The PRD for Anthropic is binding.",
+        "This contract is for Anthropic execution.",
     )
     for index, line in enumerate(forbidden_lines, start=1):
         (tmp_path / f"{index:02d}.md").write_text(f"{line}\n", encoding="utf-8")
@@ -91,6 +104,15 @@ def test_active_ip_evidence_cannot_assign_work_to_claude(tmp_path: Path) -> None
         f"{index:02d}.md:1" for index in range(1, len(forbidden_lines) + 1)
     ]
     assert ip_program_manifest.forbidden_work_assignment_matches() == []
+
+
+def test_ownership_guard_covers_active_quality_and_reopen_execution_documents() -> None:
+    names = {path.name for path in ip_program_manifest.ACTIVE_EXECUTION_DOCUMENTS}
+    assert {
+        "WORK_TO_BE_DONE.md",
+        "STRICT_REPO_QUALITY_AUDIT_2026-04-24.md",
+        "BUG_REOPEN_LEARNINGS_2026-05-09.md",
+    } <= names
 
 
 def test_historical_claude_attribution_remains_valid(tmp_path: Path) -> None:
@@ -102,6 +124,7 @@ def test_historical_claude_attribution_remains_valid(tmp_path: Path) -> None:
                 "Read `.codex/skills/impeccable/SKILL.md` for compatibility.",
                 "Migration `20260821_0005` follows Claude-owned `20260821_0004`.",
                 "Completed historical fact: Claude repaired the generated client.",
+                "Historical provider: Anthropic; the runtime now uses OpenAI.",
             )
         ),
         encoding="utf-8",

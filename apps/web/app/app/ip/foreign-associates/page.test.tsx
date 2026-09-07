@@ -190,7 +190,8 @@ describe("foreign-associate coordinator workspace", () => {
 
   it("keeps delivery separate from acknowledgement and opens selected source documents", async () => {
     render(<ForeignAssociatesPage />, { wrapper: wrapper() });
-    expect(await screen.findByRole("heading", { name: "Liberty IP LLP" })).toBeVisible();
+    await screen.findByText("Liberty IP LLP", { selector: "h2" });
+    expect(screen.getByRole("heading", { name: "Liberty IP LLP" })).toBeVisible();
     expect(screen.getByText("Delivered")).toBeVisible();
     expect(screen.getByText("Outstanding")).toBeVisible();
     expect(screen.getByText("Privileged filing strategy · privileged")).toBeVisible();

@@ -99,6 +99,7 @@ def _selectable_statute_section_sql():
     return and_(
         StatuteSection.is_active.is_(True),
         StatuteSection.section_text.is_not(None),
+        StatuteSection.legal_status == "enacted",
         StatuteSection.verification_status.in_(
             {"verified_official", "verified_licensed"}
         ),
@@ -115,6 +116,7 @@ def _selectable_statute_section_sql():
 def _is_selectable_statute_section(section: StatuteSection) -> bool:
     return bool(
         section.is_active
+        and section.legal_status == "enacted"
         and section.section_text
         and section.verification_status in {"verified_official", "verified_licensed"}
         and section.source_sha256

@@ -7,6 +7,9 @@ Create Date: 2026-07-08
 
 from __future__ import annotations
 
+# DATA-GOVERNANCE-MAP: updated
+# The index-only downgrade remains atomic with retained-evidence refusals.
+
 from collections.abc import Sequence
 
 from alembic import op
@@ -63,6 +66,6 @@ def downgrade() -> None:
     if bind.dialect.name != "postgresql":
         return
 
-    with op.get_context().autocommit_block():
-        for index_name, _ in reversed(CONFLICT_TRIGRAM_INDEXES):
-            op.execute(f"DROP INDEX CONCURRENTLY IF EXISTS {index_name}")
+    # Keep the whole downgrade atomic if a later retained-evidence gate refuses it.
+    for index_name, _ in reversed(CONFLICT_TRIGRAM_INDEXES):
+        op.execute(f"DROP INDEX IF EXISTS {index_name}")

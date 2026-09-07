@@ -94,6 +94,7 @@ export const matter = z.object({
   forum_consumer_level: z.string().nullable().optional(),
   judge_name: z.string().nullable().optional(),
   case_number: z.string().nullable().optional(),
+  temporary_e_case_number: z.string().max(120).nullable().optional(),
   filing_number: z.string().nullable().optional(),
   filing_date: z.string().nullable().optional(),
   cnr_number: z.string().nullable().optional(),

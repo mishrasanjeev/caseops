@@ -24,16 +24,16 @@ from caseops_api.governance.types import ReviewedDataClass
 PROJECTION_SCHEMA_VERSION = 1
 
 # Fingerprints of the exact artifacts this projection was rendered from.
-MAP_DOCUMENT_FINGERPRINT = "3ebbbb602345a3f9692c19a808fe1f05cbb4c3c44cccfa595f555f5a4d459b48"
-MAP_SCHEMA_FINGERPRINT = "32176bccd598c470ca8f9972dee5a7099ddf04272f426cb9f8dbab02896b2f59"
+MAP_DOCUMENT_FINGERPRINT = "67b46feb4005f0c3857dc29662852fe9af249d9f75ce280dc64d231bbcc7d764"
+MAP_SCHEMA_FINGERPRINT = "faa5634c782c7f5d0fdb645c8a6ca6af5a93cdbbd9a712fea90792a38871ed88"
 REGISTRY_028A_FINGERPRINT = "dd3c30cf69a9b498cea3820acb485a0368a72bf6d9348c2f0d430b5efa99802d"
 REGISTRY_027A_FINGERPRINT = "10b97a818b23d4fae8fe7f54b63edb50b0e04c16778cf0e646ef907f40e1ad96"
 # The ORM schema at render time. Compared against the live models at runtime, so
 # an image whose models moved after this file was rendered reports stale rather
 # than answering from a projection that no longer describes it.
-ORM_SCHEMA_FINGERPRINT = "0d2c997d8b2511f7461bad23d811b3c0651ed4b3dff7af8ee811d16e53fafc4e"
+ORM_SCHEMA_FINGERPRINT = "db672598d4b32f54e539f41c8652ba56ba5ed275b3dabfc37463fa306e15cf5a"
 
-PROJECTION_ID = "d34e0a1b1c473227317bcb19525be0a8dd0e08c3d6b3c97595057aa3473ef316"
+PROJECTION_ID = "9593b3fb5d65ef1ba87e9a547490239aedc664dec1f53ef965f998ec9d961c51"
 
 # Every SQL table the repository-wide map inventories. Membership here is what
 # separates "inventoried but never reviewed" from "no such data class", which
@@ -185,6 +185,14 @@ INVENTORIED_SQL_TABLES = frozenset(
         "ip_journal_publications",
         "ip_matter_links",
         "ip_parties_and_roles",
+        "ip_patent_application_identifiers",
+        "ip_patent_application_identities",
+        "ip_patent_application_versions",
+        "ip_patent_applications",
+        "ip_patent_families",
+        "ip_patent_family_versions",
+        "ip_patent_party_details",
+        "ip_patent_priority_details",
         "ip_portfolio_export_jobs",
         "ip_portfolio_saved_views",
         "ip_post_registration_recordals",

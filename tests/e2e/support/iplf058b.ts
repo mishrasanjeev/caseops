@@ -209,6 +209,26 @@ export async function createRecordalFixture(
   };
 }
 
+export function recordTransaction(
+  api: APIRequestContext,
+  apiBase: string,
+  headers: Record<string, string>,
+  membershipId: string,
+  fixture: Json,
+  kind: string,
+  input?: Json,
+  expectedStatus?: 201,
+): Promise<Json>;
+export function recordTransaction(
+  api: APIRequestContext,
+  apiBase: string,
+  headers: Record<string, string>,
+  membershipId: string,
+  fixture: Json,
+  kind: string,
+  input: Json,
+  expectedStatus: number,
+): Promise<Json | APIResponse>;
 export async function recordTransaction(
   api: APIRequestContext,
   apiBase: string,

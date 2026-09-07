@@ -7,17 +7,18 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import text
 
 from caseops_api.db.models import (
     AuthorityCitation,
     AuthorityDocument,
     AuthorityDocumentType,
+    AuthorityStatuteReference,
     Court,
     Judge,
     JudgeAlias,
     JudgeAuthorityAffinity,
     JudgeDecisionIndex,
+    JudgeMappingReview,
     JudgeStatuteFocus,
     Statute,
     StatuteSection,
@@ -26,11 +27,7 @@ from caseops_api.db.session import get_session_factory
 from caseops_api.services import bench_analysis_layers as bal
 from caseops_api.services.judge_aliases import normalise
 
-
-def _is_postgres(session) -> bool:
-    """L-B and L-C use Postgres-only SQL (gen_random_uuid + array_agg
-    with ORDER BY). On SQLite test envs, skip those tests."""
-    return session.bind.dialect.name == "postgresql"
+pytestmark = pytest.mark.postgres
 
 
 def _seed_court_and_judges(session, court_id: str, court_name: str) -> dict:
@@ -90,11 +87,11 @@ def _seed_authority_doc(session, *, court_name, judges, year=2024, doc_id=None):
     return doc.id
 
 
-def test_la_inserts_judge_decision_index_with_alias_match(client: TestClient) -> None:
+def test_la_inserts_judge_decision_index_with_alias_match(
+    isolated_postgres_client: TestClient,
+) -> None:
     factory = get_session_factory()
     with factory() as session:
-        if not _is_postgres(session):
-            pytest.skip("L-A uses Postgres EXTRACT() — verified on prod refresh run")
         judges = _seed_court_and_judges(session, "delhi-hc", "Delhi High Court")
         # Doc with both judges (variant spellings)
         _seed_authority_doc(
@@ -113,12 +110,10 @@ def test_la_inserts_judge_decision_index_with_alias_match(client: TestClient) ->
     assert all(r.role == "sat_on" for r in rows)
 
 
-def test_la_idempotent_on_rerun(client: TestClient) -> None:
+def test_la_idempotent_on_rerun(isolated_postgres_client: TestClient) -> None:
     """Second call must not double-insert."""
     factory = get_session_factory()
     with factory() as session:
-        if not _is_postgres(session):
-            pytest.skip("L-A uses Postgres EXTRACT()")
         _seed_court_and_judges(session, "delhi-hc", "Delhi High Court")
         _seed_authority_doc(
             session,
@@ -133,34 +128,39 @@ def test_la_idempotent_on_rerun(client: TestClient) -> None:
         assert session.query(JudgeDecisionIndex).count() == 1
 
 
-def test_la_skips_unknown_court(client: TestClient) -> None:
+def test_la_skips_unknown_court(isolated_postgres_client: TestClient) -> None:
     """A doc whose court_name doesn't match any known court_id is
     skipped (not inserted)."""
     factory = get_session_factory()
     with factory() as session:
-        if not _is_postgres(session):
-            pytest.skip("L-A uses Postgres EXTRACT()")
         _seed_court_and_judges(session, "delhi-hc", "Delhi High Court")
-        _seed_authority_doc(
+        unknown_court = f"Unlisted Bench Fixture {uuid4().hex}"
+        assert session.query(Court).filter(Court.name == unknown_court).first() is None
+        document_id = _seed_authority_doc(
             session,
-            court_name="Sikkim High Court",  # not in matchers
+            court_name=unknown_court,
             judges=["Yashwant Varma"],
             year=2024,
         )
         s = bal.refresh_judge_decision_index(session)
     assert s.judge_decision_index_inserted == 0
-    assert s.skipped_unmatched_judges == 0  # we never even tried to match
+    assert s.skipped_unmatched_judges == 1
     with factory() as session:
         assert session.query(JudgeDecisionIndex).count() == 0
+        reviews = session.query(JudgeMappingReview).filter(
+            JudgeMappingReview.authority_document_id == document_id
+        ).all()
+        assert len(reviews) == 1
+        assert reviews[0].reason == "unresolved_court"
+        assert reviews[0].status == "open"
+        assert reviews[0].court_id is None
 
 
-def test_la_counts_unmatched_judges(client: TestClient) -> None:
+def test_la_counts_unmatched_judges(isolated_postgres_client: TestClient) -> None:
     """A judge name not in our judges table is counted as
     skipped_unmatched_judges (not silently dropped)."""
     factory = get_session_factory()
     with factory() as session:
-        if not _is_postgres(session):
-            pytest.skip("L-A uses Postgres EXTRACT()")
         _seed_court_and_judges(session, "delhi-hc", "Delhi High Court")
         _seed_authority_doc(
             session,
@@ -173,14 +173,11 @@ def test_la_counts_unmatched_judges(client: TestClient) -> None:
     assert s.skipped_unmatched_judges == 1
 
 
-def test_lb_aggregates_citations_per_judge(client: TestClient) -> None:
+def test_lb_aggregates_citations_per_judge(isolated_postgres_client: TestClient) -> None:
     """L-B groups authority_citations by (judge, cited_authority).
-    Uses Postgres-only SQL (gen_random_uuid + array_agg ORDER BY) —
-    skipped on SQLite test envs."""
+    Uses the migrated PostgreSQL fixture for gen_random_uuid and array_agg."""
     factory = get_session_factory()
     with factory() as session:
-        if not _is_postgres(session):
-            pytest.skip("L-B uses Postgres-only SQL")
         judges = _seed_court_and_judges(session, "delhi-hc", "Delhi High Court")
         # Judge1 sat on doc1 + doc2; both cite cited_X
         cited_x = _seed_authority_doc(
@@ -217,35 +214,35 @@ def test_lb_aggregates_citations_per_judge(client: TestClient) -> None:
     assert rows[0].last_year == 2024  # max of 2024, 2023
 
 
-def test_lc_aggregates_statute_refs_per_judge(client: TestClient) -> None:
+def test_lc_aggregates_statute_refs_per_judge(isolated_postgres_client: TestClient) -> None:
     """L-C groups authority_statute_references by (judge, section).
-    Postgres-only SQL — skipped on SQLite test envs."""
+    The migrated PostgreSQL fixture owns the global aggregate tables."""
     factory = get_session_factory()
     with factory() as session:
-        if not _is_postgres(session):
-            pytest.skip("L-C uses Postgres-only SQL")
         judges = _seed_court_and_judges(session, "delhi-hc", "Delhi High Court")
         # Statute + section
+        statute_id = f"bench-statute-{uuid4().hex}"
         st = Statute(
-            id="ipc-1860", short_name="IPC",
+            id=statute_id, short_name="Bench fixture",
             long_name="Indian Penal Code", enacted_year=1860,
             jurisdiction="india", source_url=None, is_active=True,
         )
         sec = StatuteSection(
-            id=str(uuid4()), statute_id="ipc-1860", section_number="300",
+            id=str(uuid4()), statute_id=statute_id, section_number="300",
             section_label="Murder", is_active=True, ordinal=1,
         )
-        session.add_all([st, sec])
+        session.add(st)
+        session.flush()
+        session.add(sec)
+        session.flush()
         doc1 = _seed_authority_doc(
             session, court_name="Delhi High Court",
             judges=["Yashwant Varma"], year=2024,
         )
         # statute reference
-        session.execute(text(
-            "INSERT INTO authority_statute_references "
-            "(id, authority_document_id, section_id, relevance, created_at, updated_at) "
-            "VALUES (:i, :a, :s, :r, NOW(), NOW())"
-        ), {"i": str(uuid4()), "a": doc1, "s": sec.id, "r": "cited"})
+        session.add(AuthorityStatuteReference(
+            authority_id=doc1, section_id=sec.id, source="local_bench_fixture",
+        ))
         session.commit()
         bal.refresh_judge_decision_index(session)
         s = bal.refresh_judge_statute_focus(session)

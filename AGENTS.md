@@ -1,5 +1,23 @@
 # CaseOps agent instructions
 
+- A nonselectable statute count includes retired and quarantined rows as well
+  as verification-pending rows. Discover the exact state before testing its UI.
+  Source-opening acceptance must exercise the authenticated, audited redirect
+  and its exact official destination, not demand a bypassing external href.
+- Production patent regression must reuse the dedicated QA tenants without
+  bootstrapping accounts or rewriting entitlements. Keep fixture identities
+  unique across retained runs, authenticate cross-tenant probes separately,
+  assert exact API/web release identity and serialize mutation phases.
+
+- Recursive graph acceptance must bound retained edge/history rows and query
+  count, not only distinct nodes returned by a recursive CTE. Charge raw
+  versions before filtering current edges, and prove dense/deep-history/depth
+  boundaries plus successful below-bound HTTP saves and idempotent replay on
+  PostgreSQL. History fixtures must reuse the canonical relationship identity.
+- Inspect every failing test's structured result before classifying a run.
+  A truncated first failure cannot establish the cause of sibling failures;
+  fixture constraint errors are not successful reproductions of product bugs.
+
 - Recurring production verification must survive its own destructive canary.
   Keep Intelligent Review on its persistent projected QA target. A first
   release run proves private answer creation and disposal; later runs must
@@ -17,6 +35,72 @@ spreadsheet skill's formatting, formula, inspection, and visual-verification
 requirements when using the fallback.
 
 ## Permanent regression learnings
+
+- A published legal PDF's arrangement, body, footnotes and judicial treatment
+  may disagree. Reconcile the entire numbered inventory against pinned source
+  bytes, retain explicit discrepancies and commencement context, and keep
+  omitted/conflicted provisions unselectable. A verified edition is not a
+  certification of current law or a substitute for missing schedules/Orders.
+- Release statute seeding must preserve reviewed labels and provenance, pending
+  candidates, stable IDs and immutable version history. Idempotent replay must
+  not fabricate a fresh source retrieval/link check or overwrite a separately
+  reviewed record merely because the body hash happens to match.
+
+- Fresh Docker acceptance must restore the exact image's release-owned catalog
+  seeds after destructive database/migration rehearsals and before Playwright.
+  An empty test catalog is a setup defect, not proof that each reported Act
+  lacks verified content. Preserve the failed setup report, replay the unchanged
+  browser gate after the real seed, and keep content gaps separate and open.
+
+- Fake deployment CLIs must be executable before a test launches its shell.
+  A noexec temporary mount can make PATH fall through to real git/gcloud tools
+  even after chmod succeeds. Fail before launch, use exec-enabled isolated
+  test storage, and keep offline regression containers network-disabled.
+- Product-guide search may cache bounded immutable public search metadata,
+  never capability decisions or mutable response objects. Normalize the query
+  once, recheck current permissions on every search, and retain the original
+  performance budget plus content-change and response-mutation regressions.
+
+- A lifecycle command's identity is its locked parent lifecycle version, not
+  its calendar date. Regress close, explicit reopen and a second close on the
+  same day, reject stale replay, preserve neutralized children and keep the
+  prosecution conflict display aligned. Generic root events cannot forge
+  lifecycle facts. Backdated close and reopen commands must show the same
+  required acknowledgement in preview and commit and retain it in history.
+
+- A terminal patent family's retained disclosure and source versions must stay
+  readable to currently authorized users without reopening the record. Keep
+  that permission on explicit read paths only; correction, creation replay,
+  upload, document lifecycle and publication remain fail-closed. Prove close,
+  historical byte-identical download, grant revocation, explicit reopen and a
+  second closure through both PostgreSQL and the dated browser journey.
+
+- Concurrent-index migrations must recover after the column transaction has
+  committed but an index build has failed. Inspect existing column shape,
+  rebuild invalid/not-ready indexes, preserve populated identifiers, and prove
+  an interrupted build plus a second upgrade on real PostgreSQL.
+- Catalog acceptance requires a present option, a positive verified-section
+  response, successful selection/attachment and persisted reload. A negative
+  enabled-state assertion alone is not proof of a usable native option.
+- A saved import's original rows may be retained in the tenant-scoped import
+  ledger even when the preview DTO omits them. Recover the authorized job with
+  bounded read-only access before asking for another source upload; never
+  substitute normalized output for the original court/context fields.
+- A bulk-import row may reserve duplicate-detection identities only after it
+  passes validation and is admitted for creation. Invalid and skipped rows
+  must not suppress later valid rows, including chains where one existing
+  identity is combined with a second, previously unused identity. Preserve
+  existing rows and prove commit/replay behavior, not preview counts alone.
+- Downloaded import templates must round-trip in a fresh tenant. Do not put
+  invented owner emails, lawyer emails, or team slugs in the importable sample
+  row. Test both CSV and XLSX without silently correcting the template first.
+- An explicit catalog ID does not authorize discarding conflicting supplied
+  State, District, City, or Consumer Level. Apply the same context predicate
+  to ID-based and name/alias-based imports before deriving canonical lineage.
+- Additive Matter identifiers must survive the separate workspace DTO as well
+  as create, edit, list, bulk, generated OpenAPI and frontend schemas. Verify
+  retention when final identifiers arrive, search indexes, stale-write and
+  terminal-state rejection, and the same browser journey on mobile and desktop.
 
 - A horizontally scrolling table must contain absolutely positioned accessible
   labels as well as visible cells. Give its scroller a positioning context;
@@ -371,3 +455,236 @@ requirements when using the fallback.
   local smoke page to prove the actual shared-library/runtime contract before the
   suite. This keeps optional font-mirror stalls from consuming the browser-test
   budget while still failing closed when Chromium genuinely cannot start.
+
+- A successful mutation must not be erased by an older in-flight list read.
+  Wait for initial authoritative discovery before choosing create versus update,
+  cancel stale exact queries, apply the server-returned record, and refetch.
+  Regress delayed initial loads, failed loads, background reads, sibling rate
+  mutations, persisted reload, and prevention of accidental duplicate defaults.
+- Saved-import confirmation and interrupted-import recovery must revalidate the
+  original retained source cells, not previously normalized catalog identifiers.
+  Withdrawn aliases fail closed; a changed canonical court requires a new preview
+  instead of silently moving the Matter. Preserve source evidence and already
+  created rows, and test both boundaries with forced catalogue changes.
+
+- An edit form must hydrate the saved server record before becoming editable.
+  Refetches must preserve unsaved edits, and PATCH must contain only dirty
+  editable fields, never hardcoded tenant identity or hidden billing defaults.
+  Prove that changing an address preserves tax applicability, billing mode,
+  payment terms, invoice sequence, and the other saved profile fields.
+- Filtering an import to currently valid candidates must not bypass the
+  no-work guard. A fresh confirmation with all-invalid or all-duplicate rows
+  must reject with zero created Matters, while interrupted recovery must retain
+  its already-created outcomes. Test empty admission as well as mixed rows,
+  both through the browser action state and a direct confirmation request.
+- Cross-format import evidence must preserve logical record identity. Embedded
+  newlines make CSV physical line numbers differ from Excel row numbers; never
+  join findings on those numbers alone. Reconcile record count and every source
+  identity before reporting row-level outcomes, and label both row conventions.
+- A loopback test proxy must release its upstream when the browser closes a
+  response, not only when a request upload is aborted. Distinguish intentional
+  cancellation from real upstream failures, keep complete mutation responses
+  intact, and regress both cancellation phases without increasing timeouts.
+
+- A cross-tenant browser test must isolate the second tenant's cookie jar.
+  Bootstrap and login issue session cookies, and cookie-first authentication
+  intentionally takes precedence over a supplied bearer token. Verify the
+  original user remains authenticated before continuing that user's mutation;
+  do not weaken authentication to compensate for a shared test session.
+- Append-only legal history requires database mutation guards as well as a
+  correction service. Prove direct UPDATE/DELETE rejection, a legitimate new
+  version, historical reload and retained guards after repeated refused
+  downgrades on PostgreSQL; service-only tests cannot establish immutability.
+- A patent disclosure source pin must also retain the canonical restricted
+  document link. Create it atomically with document-management authorization,
+  audit and private-index invalidation; correction must not remove historical
+  disclosure scope. Verify reuse of a previously trademark-only document, not
+  just a document already uploaded inside the restricted family.
+- Destructive migration probes must own disposable databases. PostgreSQL
+  TRUNCATE CASCADE follows table-level foreign-key dependencies even when the
+  surviving global rows have null administrative references; truncating users
+  can therefore erase reviewed aliases. Assert exact main-schema/catalogue
+  retention around probes and run browser acceptance on the untouched database.
+  Fixed-tenant API fixtures and bounded global-worker queues need the same
+  isolation on repeat runs. Do not clear shared data or increase a queue limit
+  merely to make a test's newly inserted record appear in the first page.
+- Foreign-key index acceptance must inspect complete constraint prefixes in the
+  actual migrated schema, using the same rule as release index health. Do not
+  add redundant single-column indexes to satisfy a component-only heuristic;
+  prove that dropping a required composite index is detected by the gate.
+- A supporting-request count must start at the intended workflow boundary.
+  Finish asynchronous sign-in/landing discovery before measuring the workspace,
+  and inspect trace timestamps before attributing a late setup request to that
+  workspace. Keep the zero-duplicate assertion and rerun the broader sequence;
+  do not hide the request with a retry or a relaxed count.
+- A shared-corpus browser fixture needs a unique searchable test scope and
+  proof that its record entered the bounded candidate set. Retained fixtures
+  from another journey must not displace the intended quality-filter probe.
+  Assert raw candidates, omissions and visible output together, rerun against
+  retained corpus noise, and never delete another journey's source records.
+- A product domain is not identical to a storage discriminator. Inventory every
+  canonical creator and schema before adding a domain allowlist; Madrid
+  international registrations and designations are existing trademark records.
+  Preserve their list, event, document, portal and PostgreSQL journeys while
+  keeping unknown or unimplemented domains fail-closed.
+- A document linked to an undisclosed domain cannot gain AI, portal, export or
+  notification eligibility through an ordinary second link. Check every current
+  link before pagination, reuse that policy for saved-publication reads and
+  delivery-time authorization, and prove both old-projection denial and the
+  original query-count budget. Internal authorized download remains separate.
+- A complete PostgreSQL gate selects all tests carrying the postgres marker,
+  not a single historical test file. Reconcile skipped nodes by module and
+  reason, and keep local Docker and CI selectors identical. Dialect-only tests
+  must use the PostgreSQL fixture and marker, not a SQLite client with a
+  permanent skip. Global aggregate refreshes must own disposable databases;
+  passing the marked suite does not prove incorrectly unmarked nodes executed.
+- Public requests use the shared HTTP deadline boundary without credentials.
+  A JSON deadline must include body consumption, preserve caller cancellation,
+  clear timers/listeners and never retry silently. Prove stalled headers and
+  stalled bodies separately; receiving headers is not request completion.
+- An evidence-refusing downgrade must leave the entire schema and every index
+  unchanged, not merely retain the protected table or an ancestor revision.
+  Concurrent index builds belong to upgrades; downgrade removals must stay in
+  the enclosing transaction so a later refusal rolls them back. Regress two
+  consecutive refusals, exact head/column/index equality and evidence retention,
+  and rerun index health after migration rehearsals before resuming workers.
+- A final SQL LIMIT and a green index inventory do not bound a multi-table
+  listing's intermediate work. Admit an ACL-filtered parent page first, then
+  load only its exact current-version keys. Regress a freshly populated 10,000
+  record PostgreSQL dataset without relying on manual ANALYZE, enforce a short
+  statement budget, and retain the slow-run evidence rather than raising timeouts.
+  Regress adverse join plans as well: use the tenant cursor index and bounded
+  correlated ACL lookups where the join can otherwise defeat early pagination.
+  A later fast EXPLAIN does not establish which plan caused a prior timeout.
+- Restricted invention disclosure is a server-owned invariant. Generic access
+  management must not make patent anchors unrestricted and thereby expose their
+  linked documents. Keep explicit grants and ethical walls available; test the
+  shared mutation boundary, not only the patent form's confidentiality label.
+- A Docker frontend snapshot must include repository-level golden fixtures as
+  well as the web source. A missing fixture is a harness failure, not product
+  evidence. Regress each new route page and measure native checkbox/radio labels
+  as click targets while still asserting that the input itself remains visible.
+- Regenerate schema/index governance fingerprints and their runtime projection
+  before building the acceptance images. A passing source-tree generator does
+  not update a previously built image; retain exact-source hashes and separate
+  later test-only changes from the runtime revision actually exercised.
+- A shared document panel displays the canonical controlled filename, which
+  may differ from its title. Assert the server-returned filename, fully visible
+  download control and original byte hash; do not rename a source or weaken
+  controlled naming to satisfy a title-based browser locator.
+- Clean test storage must not hide required runtime binaries. Keep Temporal's
+  real test server outside an overlaid /tmp, pin its executable path and hash,
+  and run its workflow with networking disabled. A missing cache is a test
+  infrastructure failure, not a reason to skip notification workflow coverage
+  or enable external provider traffic.
+- PostgreSQL test migrations must pin both Alembic's URL and the Settings
+  database URL to the explicit test DSN, clearing cached Settings before and
+  after migration. A config-only override can silently target the application
+  database because env.py resolves Settings. Prove isolation with a different
+  application DSN and never treat setup failures as executed test coverage.
+- Multi-tenant API regressions must isolate session cookies as well as bearer
+  headers. Bootstrap replaces the client's cookie; use separate clients or
+  clear that cookie before switching explicit bearer identities. Check both
+  tenants' positive results in addition to foreign-ID denial.
+- Independent patent records may share immutable source evidence. Closing a
+  sibling or family must not prevent corrections to an active application.
+  Distinguish read-only source parents from mutation targets under the same
+  deterministic locks; retain source ACL/hash checks and terminal-write guards.
+  Regress closed siblings, closed families and revoked source access together.
+- Docker acceptance must recheck the candidate source after image builds,
+  before browser tests and before certification. Reject source or commit drift
+  instead of attributing green tests to an image built from different code.
+  Exercise the actual PowerShell guard, not only a string-presence assertion.
+- Authority serialization on Company must permit implicit foreign-key KEY SHARE
+  locks held by waiting idempotent writers. Use the canonical NO KEY UPDATE
+  private-authority fence for bootstrap and event/generation transitions; it
+  still excludes authority writers and deletion. Regress different actors,
+  real uncommitted claims, both patent parent kinds, closure persistence and
+  zero generated child rows. Same-actor tests can hide this inversion behind
+  the membership lock; never mask it with retries or a rolled-back closure.
+- A client-side link click is not proof that navigation has committed. Assert
+  the destination URL and record heading before using shared tab labels or
+  saving page.url(); otherwise a test can operate on the previous record and
+  later misdiagnose a terminal-history failure. Replay the complete journey.
+- Async DOM polling must not starve the render it awaits. When a cold role
+  query is expensive, poll a precise user-visible text/element and then retain
+  the accessible-role and visibility assertion under the original deadline.
+  Measure test-resource contention and rerun the full suite; never hide a
+  product failure with longer timeouts, mutation retries or disabled checks.
+- Route-reference heuristics are not behavioral coverage. When a URL helper
+  hides a tested route from the inventory, make the path explicit in an actual
+  executed HTTP assertion with status and payload checks. Do not satisfy the
+  gate with comments, unused strings, exemptions or a weaker detector.
+- A committed-diff release gate does not inspect an uncommitted candidate.
+  Enumerate tracked and untracked changes with the workstation's Git, then
+  apply the existing migration and data-governance analyzers to those exact
+  files. Do not accept "no migration changed" or an advisory-only validate
+  result as dirty-source acceptance. Risk annotations need reviewed operational
+  rationale and real PostgreSQL proof; comment-only changes must retain exact
+  executable equivalence with the tested image.
+- A test-tools image may define its own entrypoint and may not include Bash.
+  Inspect the image contract, select the intended entrypoint and available
+  shell explicitly, and require a nonempty selected-test count, actual exit
+  status and uniquely named report. A zero-test or failed-launch run is never
+  acceptance; keep its diagnostics separate from the corrected execution.
+- Reusable test-tools images must reject implicit execution instead of inheriting
+  a historical runner from their base image. Require an explicit current-source
+  runner and unique report paths, and execute the default-entrypoint refusal in
+  regression coverage. A green run from the wrong source owner is not evidence;
+  retain it separately and never reuse its generic output files as certification.
+- An authorization-aware serializer may omit a record whose source access was
+  revoked. Bulk consumers must reconcile requested identities with returned
+  authorized identities and return a typed denial, not index a missing record.
+  Regress a readable child with an unreadable parent source, including history
+  and idempotent replay, without granting access or turning denial into a 500.
+- A Docker test snapshot must include repository-level fixtures, not only the
+  application directory. Explicit node selections must strip CRLF delimiters,
+  remain nonempty and reconcile one-to-one with collected identities. PostgreSQL
+  shards must migrate their independent base database before fixtures snapshot
+  catalogs. Preserve failed attempts and verify every shard's source hash.
+- A success-path test must verify the successful user outcome and the absence
+  of error feedback. Missing notification mocks can turn a successful mutation
+  into a caught error while a weak call-count assertion still passes. Pair
+  publication success with rejection, retained inputs and unchanged evidence.
+- A nested navigation destination must have one active visible owner. Match
+  the most-specific authorized catalog path, respecting segment boundaries,
+  and regress every catalog destination plus desktop and mobile navigation.
+- Responsive list actions must not squeeze the record title into a narrow
+  column. Reserve a useful title basis, wrap actions to the next row when needed,
+  and assert title width and sibling non-overlap after the sidebar consumes its
+  space. Inspect screenshots as well as DOM bounds at breakpoint edges.
+- Browser specs and Playwright configurations must be type-checked before
+  expensive Docker builds and in CI. Query options from Testing Library are
+  not interchangeable with Playwright options; unsupported options can be
+  silently ignored at runtime. Use the installed contract and retain the
+  original failure plus the complete corrected user journey.
+- A provider-deadline regression must measure the provider boundary separately
+  from database setup and cleanup, prove an unrelated endpoint remains within
+  its latency budget while the provider is still blocked, then prove no late
+  projection is persisted. Keep total-work performance tests separate; never
+  inflate a timeout or count a test-only replay as a clean full release run.
+- A retained local web process also retains its anti-abuse buckets. Before a
+  complete Docker browser replay, restart only the owned exact-image web
+  container when the previous run consumed its demo quota. Preserve both
+  structured failures and network traces; do not raise limits, spoof client
+  identity, or automatically retry a mutation to obtain a green result.
+- A parallel read-only source audit must authenticate once per worker, not
+  once per batch. Keep release identity and no-paid-provider assertions, dispose
+  worker contexts, and prove every source record with the existing login limit.
+- Existing-tenant document journeys need unique synthetic evidence bytes, not
+  only unique titles. HTTP 200 can validly return a duplicate offer without a
+  created document. Assert the outcome and retained byte hash; preserve prior
+  fixtures and duplicate detection when replaying production-shaped tests.
+- An outcome heading can repeat text already present in a coverage banner.
+  Use its precise accessible role, verify the committed HTTP query and response,
+  and retain the original visibility deadline. Never swallow strict-locator
+  errors inside a Promise race and mistake them for a missing result surface.
+- Research quality-filter outcomes and index-health notices are independent.
+  Assert the actual outcome heading, exact candidate/omission counts and the
+  returned coverage notice together; a stale index can legitimately replace
+  supporting prose without exposing an unreadable result.
+- A retained shared catalog can satisfy a broad success locator with an older
+  record. Match the exact new alias, assert its mutation response and current
+  displayed identity version before a dependent merge. Inspect the HTTP
+  conflict and refresh timeline; never replay a stale mutation automatically
+  or weaken its optimistic-concurrency token to make the journey pass.

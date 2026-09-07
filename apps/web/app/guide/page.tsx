@@ -2310,6 +2310,46 @@ export default function GuidePage() {
                   </dl>
                 </Section>
 
+                <Section id="patents" title="28. Patent intake and source records">
+                  <p>
+                    Open <a className="underline" href="/app/ip/patents">Patent intake</a> to
+                    maintain restricted invention families and separate application records.
+                    Application, publication and grant identifiers retain their source form;
+                    an application number may be explicitly recorded as pending allocation.
+                  </p>
+                  <Steps items={[
+                    <><strong>Record the disclosure.</strong> Select the client, enter the
+                      disclosure date and narrative, then retain the source document in the
+                      family Documents area. Family membership does not establish priority.</>,
+                    <><strong>Add separate applications.</strong> Record the application type,
+                      jurisdiction, office, dates, identifiers and exact source versions.
+                      Applications keep their own record lifecycle and correction history.</>,
+                    <><strong>Record parties.</strong> Use Parties for inventor, applicant,
+                      proprietor, agent and licensee facts. Pin the address and source version;
+                      replace an incorrect fact with a reason instead of overwriting history.</>,
+                    <><strong>Record priority and parents.</strong> Open an application&apos;s
+                      Priorities area, select an authorized parent application and the
+                      relationship type, then record the priority date and source. A parent
+                      may belong to another family without moving either application. The
+                      family Relationships area shows the recorded links.</>,
+                    <><strong>Correct or withdraw a record.</strong> Corrections and withdrawals
+                      append new evidence and preserve the original source. A withdrawal here
+                      withdraws the recorded link, not the patent application. Historical
+                      evidence for a closed parent remains readable; a new link requires an
+                      active parent and an active child.</>,
+                    <><strong>Review and close explicitly.</strong> Inspect recorded review notes,
+                      download the exact retained source version, and use Lifecycle for an
+                      authorized closure with an impact preview. Source edits and relationship
+                      changes do not reopen closed records.</>,
+                  ]} />
+                  <p>
+                    These are intake and evidence records. They do not confirm legal priority,
+                    grant, ownership or filing, calculate patent deadlines, or complete a
+                    prosecution or maintenance action. Verify the governing source and the
+                    domain availability shown in the workspace before relying on automation.
+                  </p>
+                </Section>
+
                 <div className="mt-14 rounded-2xl border border-[var(--color-line)] bg-[var(--color-bg-2)] p-8">
                   <div className="font-display text-xl text-[var(--color-ink)]">
                     Still a question left over?

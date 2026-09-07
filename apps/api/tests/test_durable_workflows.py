@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import inspect
 import json
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
@@ -58,6 +60,74 @@ from caseops_api.workflows.notification_intents import (
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _temporal_test_server_path() -> str | None:
+    path = os.environ.get("CASEOPS_TEST_TEMPORAL_SERVER_PATH")
+    expected_hash = os.environ.get("CASEOPS_TEST_TEMPORAL_SERVER_SHA256")
+    if path is None and expected_hash is None:
+        return None
+    if not path or not expected_hash:
+        raise RuntimeError("Configure both the Temporal test-server path and SHA-256.")
+    executable = Path(path)
+    if not executable.is_file() or not os.access(executable, os.X_OK):
+        raise RuntimeError("The configured Temporal test server is not executable.")
+    if executable.stat().st_size > 256 * 1024 * 1024:
+        raise RuntimeError("The configured Temporal test server exceeds the size bound.")
+    with executable.open("rb") as stream:
+        actual_hash = hashlib.file_digest(stream, "sha256").hexdigest()
+    if actual_hash != expected_hash:
+        raise RuntimeError("The configured Temporal test-server SHA-256 does not match.")
+    return str(executable.resolve())
+
+
+def test_temporal_test_server_default_remains_sdk_managed(monkeypatch) -> None:
+    monkeypatch.delenv("CASEOPS_TEST_TEMPORAL_SERVER_PATH", raising=False)
+    monkeypatch.delenv("CASEOPS_TEST_TEMPORAL_SERVER_SHA256", raising=False)
+    assert _temporal_test_server_path() is None
+
+
+@pytest.mark.parametrize("missing", ["PATH", "SHA256"])
+def test_temporal_test_server_rejects_partial_configuration(monkeypatch, missing) -> None:
+    monkeypatch.setenv("CASEOPS_TEST_TEMPORAL_SERVER_PATH", "/not-used")
+    monkeypatch.setenv("CASEOPS_TEST_TEMPORAL_SERVER_SHA256", "0" * 64)
+    monkeypatch.delenv(f"CASEOPS_TEST_TEMPORAL_SERVER_{missing}")
+    with pytest.raises(RuntimeError, match="Configure both"):
+        _temporal_test_server_path()
+
+
+def test_temporal_test_server_requires_verified_executable(monkeypatch, tmp_path) -> None:
+    executable = tmp_path / "temporal-test-server.exe"
+    executable.write_bytes(b"test fixture, never launched")
+    executable.chmod(0o755)
+    monkeypatch.setenv("CASEOPS_TEST_TEMPORAL_SERVER_PATH", str(executable))
+    monkeypatch.setenv("CASEOPS_TEST_TEMPORAL_SERVER_SHA256", "0" * 64)
+    with pytest.raises(RuntimeError, match="SHA-256 does not match"):
+        _temporal_test_server_path()
+    monkeypatch.setenv(
+        "CASEOPS_TEST_TEMPORAL_SERVER_SHA256",
+        hashlib.sha256(executable.read_bytes()).hexdigest(),
+    )
+    assert _temporal_test_server_path() == str(executable.resolve())
+    monkeypatch.setattr(os, "access", lambda *_args: False)
+    with pytest.raises(RuntimeError, match="not executable"):
+        _temporal_test_server_path()
+
+
+@pytest.mark.parametrize("kind", ["missing", "directory", "oversized"])
+def test_temporal_test_server_rejects_invalid_artifacts(monkeypatch, tmp_path, kind) -> None:
+    executable = tmp_path / "temporal-test-server.exe"
+    if kind == "directory":
+        executable.mkdir()
+    elif kind == "oversized":
+        with executable.open("wb") as stream:
+            stream.truncate(256 * 1024 * 1024 + 1)
+        executable.chmod(0o755)
+    monkeypatch.setenv("CASEOPS_TEST_TEMPORAL_SERVER_PATH", str(executable))
+    monkeypatch.setenv("CASEOPS_TEST_TEMPORAL_SERVER_SHA256", "0" * 64)
+    message = "size bound" if kind == "oversized" else "not executable"
+    with pytest.raises(RuntimeError, match=message):
+        _temporal_test_server_path()
 
 
 def _context(session) -> SessionContext:
@@ -512,7 +582,9 @@ async def test_notification_runtime_probe_workflow_runs_in_temporal_test_environ
     from temporalio.testing import WorkflowEnvironment
     from temporalio.worker import Worker
 
-    async with await WorkflowEnvironment.start_time_skipping() as env:
+    async with await WorkflowEnvironment.start_time_skipping(
+        test_server_existing_path=_temporal_test_server_path(),
+    ) as env:
         async with Worker(
             env.client,
             task_queue=task_queue,

@@ -48,7 +48,7 @@ let token = "";
 const createdMatterIds = new Set<string>();
 
 async function expectStatus(
-  response: APIResponse,
+  response: Pick<APIResponse, "status" | "text">,
   expected: number,
   label: string,
 ): Promise<void> {
@@ -190,7 +190,7 @@ test.describe.serial("Ram 2026-09-04 provider, statute, and forum acceptance", (
     expect(await usageRows()).toEqual(before);
   });
 
-  test("all catalogued Bare Act sections open a truthful detail and source surface", async ({
+  test("a verification-pending Bare Act section opens a truthful detail and source surface", async ({
     page,
   }) => {
     const catalogResponse = await api.get(`${apiBaseUrl}/api/statutes/`, {
@@ -205,26 +205,24 @@ test.describe.serial("Ram 2026-09-04 provider, statute, and forum acceptance", (
         source_url: string | null;
       }>;
     };
-    const statute = catalog.statutes.find(
-      (row) =>
-        row.source_url && row.catalog_section_count > row.section_count,
-    );
-    expect(statute, "a pending section with an Act source must exist").toBeTruthy();
-    const sectionsResponse = await api.get(
-      `${apiBaseUrl}/api/statutes/${encodeURIComponent(statute!.id)}/sections`,
-      { headers: { Authorization: `Bearer ${token}` } },
-    );
-    await expectStatus(sectionsResponse, 200, "catalogued statute sections");
-    const sections = (await sectionsResponse.json()) as {
-      catalog_sections: Array<{
-        id: string;
-        section_number: string;
-        selection_state: string;
-      }>;
-    };
-    const pending = sections.catalog_sections.find(
-      (row) => row.selection_state === "verification_pending",
-    );
+    let statute: (typeof catalog.statutes)[number] | undefined;
+    let pending: { id: string; section_number: string } | undefined;
+    // Nonselectable totals include quarantined and retired rows, not only pending.
+    for (const candidate of catalog.statutes.filter(
+      (row) => row.source_url && row.catalog_section_count > row.section_count,
+    ).slice(0, 32)) {
+      const sectionsResponse = await api.get(
+        `${apiBaseUrl}/api/statutes/${encodeURIComponent(candidate.id)}/sections`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      await expectStatus(sectionsResponse, 200, "catalogued statute sections");
+      const sections = (await sectionsResponse.json()) as {
+        catalog_sections: Array<{ id: string; section_number: string; selection_state: string }>;
+      };
+      pending = sections.catalog_sections.find((row) => row.selection_state === "verification_pending");
+      if (pending) { statute = candidate; break; }
+    }
+    expect(statute, "an explicitly pending section with an Act source must exist").toBeTruthy();
     expect(pending).toBeTruthy();
 
     await signIn(page);

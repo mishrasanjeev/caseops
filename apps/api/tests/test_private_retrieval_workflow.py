@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
 import time
 from datetime import UTC, datetime, timedelta
 
@@ -1915,32 +1916,72 @@ def test_integrity_ignores_stale_retired_generations(
 
 def test_private_embedding_provider_has_a_hard_deadline(
     client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     bootstrap = bootstrap_company(client)
     token = str(bootstrap["access_token"])
     company_id = str(bootstrap["company"]["id"])
     _matter(client, token, "IPLF-066B-DEADLINE")
+    entered = threading.Event()
+    release = threading.Event()
+    finished = threading.Event()
+    provider_durations: list[float] = []
+    original_embed = private_retrieval_jobs._embed_private_payloads
+
+    def timed_embed(*args, **kwargs):
+        started = time.perf_counter()
+        try:
+            return original_embed(*args, **kwargs)
+        finally:
+            provider_durations.append(time.perf_counter() - started)
+
+    monkeypatch.setattr(private_retrieval_jobs, "_embed_private_payloads", timed_embed)
 
     class SlowProvider(_SpyEmbeddingProvider):
         def embed(self, texts, *, input_type="document"):
-            time.sleep(0.25)
-            return super().embed(texts, input_type=input_type)
+            entered.set()
+            try:
+                if not release.wait(timeout=5):
+                    raise RuntimeError("Test did not release the blocked provider.")
+                return super().embed(texts, input_type=input_type)
+            finally:
+                finished.set()
 
-    started = time.perf_counter()
+    try:
+        with get_session_factory()() as session:
+            with pytest.raises(
+                PrivateRetrievalInvariantError,
+                match="exceeded its bounded deadline",
+            ):
+                rebuild_private_index(
+                    session,
+                    company_id=company_id,
+                    provider=SlowProvider(),
+                    allow_external_provider=True,
+                    provider_deadline_seconds=0.02,
+                )
+            session.rollback()
+        assert entered.is_set()
+        assert not finished.is_set()
+        assert len(provider_durations) == 1
+        assert provider_durations[0] < 0.2
+        health_started = time.perf_counter()
+        assert client.get("/api/health").status_code == 200
+        assert time.perf_counter() - health_started < 0.2
+        assert not finished.is_set()
+    finally:
+        release.set()
+        assert finished.wait(timeout=2)
     with get_session_factory()() as session:
-        with pytest.raises(
-            PrivateRetrievalInvariantError,
-            match="exceeded its bounded deadline",
-        ):
-            rebuild_private_index(
-                session,
-                company_id=company_id,
-                provider=SlowProvider(),
-                allow_external_provider=True,
-                provider_deadline_seconds=0.02,
+        generations = session.scalars(
+            select(PrivateIndexGeneration).where(PrivateIndexGeneration.company_id == company_id)
+        ).all()
+        assert sorted(row.state for row in generations) == ["active", "failed"]
+        assert session.scalar(
+            select(func.count(PrivateIndexProjection.id)).where(
+                PrivateIndexProjection.company_id == company_id
             )
-        session.rollback()
-    assert time.perf_counter() - started < 0.2
+        ) == 0
 
 
 def test_assistant_private_attachment_hydration_has_no_n_plus_one(

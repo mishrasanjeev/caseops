@@ -148,19 +148,11 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    bind = op.get_bind()
-    if bind.dialect.name == "postgresql":
-        with op.get_context().autocommit_block():
-            op.drop_index(
-                "uq_tracking_operation_one_running",
-                table_name="tracked_case_provider_operations",
-                postgresql_concurrently=True,
-            )
-    else:
-        op.drop_index(
-            "uq_tracking_operation_one_running",
-            table_name="tracked_case_provider_operations",
-        )
+    # Do not commit earlier schema changes before a later restore-forward refusal.
+    op.drop_index(
+        "uq_tracking_operation_one_running",
+        table_name="tracked_case_provider_operations",
+    )
     op.execute(
         sa.text(
             "UPDATE case_tracking_support_matrix "

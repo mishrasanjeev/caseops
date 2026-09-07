@@ -4,11 +4,12 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { contractMock, previewMock, capabilityMock, errorToastMock, grantsMock, publishMock } = vi.hoisted(() => ({
+const { contractMock, previewMock, capabilityMock, errorToastMock, successToastMock, grantsMock, publishMock } = vi.hoisted(() => ({
   contractMock: vi.fn(),
   previewMock: vi.fn(),
   capabilityMock: vi.fn(),
   errorToastMock: vi.fn(),
+  successToastMock: vi.fn(),
   grantsMock: vi.fn(),
   publishMock: vi.fn(),
 }));
@@ -27,7 +28,7 @@ vi.mock("@/lib/api/portal", () => ({
   publishIpReportToPortal: publishMock,
 }));
 
-vi.mock("sonner", () => ({ toast: { error: errorToastMock } }));
+vi.mock("sonner", () => ({ toast: { error: errorToastMock, success: successToastMock } }));
 
 import IpReportsPage from "@/app/app/ip/reports/page";
 
@@ -119,6 +120,30 @@ describe("IpReportsPage", () => {
     await user.click(screen.getByLabelText("ASTER DEVICE"));
     await user.click(screen.getByRole("button", { name: "Publish" }));
     await waitFor(() => expect(publishMock).toHaveBeenCalledWith(expect.objectContaining({ portalUserId: "portal-user-1", grantIds: ["grant-1"], expectedSnapshotSha256: "a".repeat(64) })));
+    await waitFor(() => expect(successToastMock).toHaveBeenCalledWith("Client report published."));
+    expect(screen.getByLabelText("Client title")).toHaveValue("");
+    expect(screen.getByLabelText("ASTER DEVICE")).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "Publish" })).toBeDisabled();
+    expect(errorToastMock).not.toHaveBeenCalled();
+  });
+
+  it("retains the reviewed snapshot and client inputs when publication is rejected", async () => {
+    const user = userEvent.setup();
+    previewMock.mockResolvedValue({ ...REPORT, confidentiality: "internal" });
+    grantsMock.mockResolvedValue({ grants: [{ id: "grant-1", portal_user_id: "portal-user-1", portal_user_name: "Asha Rao", portal_user_email: "asha@example.com", docket_title: "ASTER DEVICE", active: true }] });
+    publishMock.mockRejectedValue(new Error("The reviewed source changed; generate a new snapshot."));
+    render(withClient(<IpReportsPage />));
+    await user.click(await screen.findByRole("button", { name: "Generate" }));
+    await user.selectOptions(await screen.findByLabelText("Client"), "portal-user-1");
+    await user.type(screen.getByLabelText("Client title"), "Opposition update");
+    await user.click(screen.getByLabelText("ASTER DEVICE"));
+    await user.click(screen.getByRole("button", { name: "Publish" }));
+    await waitFor(() => expect(errorToastMock).toHaveBeenCalledWith("The reviewed source changed; generate a new snapshot."));
+    expect(screen.getByLabelText("Client title")).toHaveValue("Opposition update");
+    expect(screen.getByLabelText("ASTER DEVICE")).toBeChecked();
+    expect(screen.getByTestId("ip-report-result")).toHaveTextContent("OPP / 88 / 2026");
+    expect(publishMock).toHaveBeenCalledTimes(1);
+    expect(successToastMock).not.toHaveBeenCalled();
   });
 
   it("generates a filtered, classified report with identifier and freshness evidence", async () => {

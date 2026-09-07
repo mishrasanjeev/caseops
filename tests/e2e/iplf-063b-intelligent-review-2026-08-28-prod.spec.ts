@@ -1,6 +1,7 @@
 /** IPLF-063B exact-release production acceptance for UJ-18. */
 
 import { expect, test, type APIResponse, type Page } from "@playwright/test";
+import type { IntelligentReview } from "../../apps/web/lib/api/intelligent-reviews";
 
 import { expectStatus } from "./support/iplf058b";
 
@@ -55,9 +56,9 @@ async function waitForReview(
   reviewId: string,
   headers: Record<string, string>,
   terminal: string[],
-) {
+): Promise<IntelligentReview | { state: "private_generation_changed"; problem: unknown }> {
   const deadline = Date.now() + 180_000;
-  let body: Record<string, unknown> = {};
+  let body: IntelligentReview | null = null;
   while (Date.now() < deadline) {
     const response = await page.request.get(
       `${API}/api/research/reviews/${reviewId}`,
@@ -70,7 +71,7 @@ async function waitForReview(
       );
       return { state: "private_generation_changed", problem };
     }
-    body = await json(response, 200, "poll intelligent review");
+    body = await json(response, 200, "poll intelligent review") as IntelligentReview;
     if (terminal.includes(String(body.state))) return body;
     await new Promise((resolve) => setTimeout(resolve, 2_000));
   }

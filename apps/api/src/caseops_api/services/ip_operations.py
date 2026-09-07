@@ -140,6 +140,7 @@ from caseops_api.services.ip_deadlines import (
     assert_distinct_deadline_coverage,
     assert_distinct_deadline_escalation,
 )
+from caseops_api.services.ip_domain_policy import TRADEMARK_RECORD_TYPES, assert_trademark_docket
 from caseops_api.services.matter_access import (
     _operational_matter_role_snapshot,
     assert_access,
@@ -336,6 +337,7 @@ def _lock_ip_dockets_in_stable_order(
     context: SessionContext,
     docket_ids: set[str],
     required_capability: str,
+    read_only_patent_source_docket_ids: frozenset[str] = frozenset(),
 ) -> dict[str, IpDocketRecord]:
     """Discover, lock, and exactly revalidate a related docket set.
 
@@ -346,6 +348,10 @@ def _lock_ip_dockets_in_stable_order(
     PostgreSQL uses ``FOR NO KEY UPDATE`` here: it preserves writer/lifecycle
     serialization while remaining compatible with the ``KEY SHARE`` locks
     taken when private-index scope rows validate their source FKs.
+
+    Explicit historical patent source rows may be locked for evidence reads,
+    never as mutation targets. Their lifecycle and linked documents remain
+    unchanged; callers must exclude their actual mutation targets from this set.
     """
 
     require_locked_membership_capability(
@@ -354,6 +360,8 @@ def _lock_ip_dockets_in_stable_order(
         required_capability,
     )
     requested_ids = sorted(docket_ids)
+    if not read_only_patent_source_docket_ids.issubset(docket_ids):
+        raise ValueError("Historical patent source locks must belong to the requested docket set.")
     discovered_rows = list(
         session.execute(
             select(IpDocketRecord.id, IpDocketRecord.matter_id)
@@ -412,7 +420,18 @@ def _lock_ip_dockets_in_stable_order(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="The IP docket parent changed; retry the operation.",
             )
-        if docket.archived_by_matter_disposal or not docket.is_active:
+        historical_patent_source = (
+            docket_id in read_only_patent_source_docket_ids
+            and docket.record_type in {"patent_family", "patent_application"}
+            and docket.restricted
+            and docket.matter_id is None
+            and not docket.is_active
+            and docket.status in _TERMINAL_DOCKET_STATUSES
+        )
+        if docket.archived_by_matter_disposal or (
+            (not docket.is_active or docket.status in _TERMINAL_DOCKET_STATUSES)
+            and not historical_patent_source
+        ):
             raise HTTPException(status_code=404, detail="IP docket record not found.")
         assert_ip_docket_access(session, context=context, docket=docket)
     return dockets_by_id
@@ -693,6 +712,7 @@ def _serialize_docket(
     it properly rather than assuming either answer.
     """
 
+    assert_trademark_docket(docket)
     if preload is None:
         preload = _load_docket_serialization_rows(
             session, company_id=docket.company_id, docket_ids=[docket.id]
@@ -1021,6 +1041,7 @@ def append_ip_docket_version(
         for_update=True,
         required_capability="ip:write",
     )
+    assert_trademark_docket(docket)
     if docket.current_version != payload.expected_current_version:
         raise HTTPException(
             status_code=409,
@@ -1066,6 +1087,7 @@ def list_ip_dockets(
             select(IpDocketRecord)
             .where(
                 IpDocketRecord.company_id == context.company.id,
+                IpDocketRecord.record_type.in_(TRADEMARK_RECORD_TYPES),
                 IpDocketRecord.is_active.is_(True),
                 IpDocketRecord.archived_by_matter_disposal.is_(False),
                 visible_ip_dockets_filter(session, context=context),

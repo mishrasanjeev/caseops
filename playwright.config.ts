@@ -89,10 +89,7 @@ export default defineConfig({
     {
       command: apiServerCommand,
       cwd: apiPythonOverride ? path.join(repoRoot, "apps", "api") : repoRoot,
-      env: {
-        ...process.env,
-        ...e2eEnv,
-      },
+      env: e2eEnv,
       url: `${apiBaseUrl}/api/health`,
       timeout: 120_000,
       reuseExistingServer: !process.env.CI,
@@ -101,7 +98,6 @@ export default defineConfig({
       command: "npx next dev --turbopack --hostname 127.0.0.1 --port 3000",
       cwd: path.join(repoRoot, "apps", "web"),
       env: {
-        ...process.env,
         ...e2eEnv,
         NEXT_PUBLIC_API_BASE_URL: apiBaseUrl,
       },

@@ -65,7 +65,7 @@ test.describe("Hari 2026-06-30 bugs", () => {
     await page.getByLabel("Practice area").fill("Litigation");
     await page.getByLabel("Client name").fill("Example Petitioner");
     await page.getByLabel("Opposing party").fill("Example Respondent");
-    await page.getByLabel("Case number").fill("WP(C) 1/2026");
+    await page.getByLabel("Case number", { exact: true }).fill("WP(C) 1/2026");
     await page.getByLabel("CNR number").fill("dlhc-0100-1234-2026");
     await expect(page.getByTestId("new-matter-forum-state")).toHaveValue("Delhi");
     await page.getByRole("button", { name: /Create matter/i }).click();

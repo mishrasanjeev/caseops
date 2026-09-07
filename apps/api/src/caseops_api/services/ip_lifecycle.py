@@ -55,6 +55,7 @@ from caseops_api.services.calendar_projection_safety import (
     calendar_sync_upsert_claim_state,
     materialize_expired_calendar_sync_upsert_claim,
 )
+from caseops_api.services.ip_domain_policy import assert_trademark_docket
 from caseops_api.services.ip_records import assert_application_can_enter_filed_phase
 from caseops_api.services.matter_access import (
     assert_ip_docket_access,
@@ -279,9 +280,7 @@ def _assert_reopen_linked_matter_roles(
             user=membership.user,
         )
         can_access_matter = can_access(session, context=member_context, matter=matter)
-        can_access_docket = can_access_ip_docket(
-            session, context=member_context, docket=docket
-        )
+        can_access_docket = can_access_ip_docket(session, context=member_context, docket=docket)
         if not can_access_matter or not can_access_docket:
             raise HTTPException(
                 status_code=409,
@@ -440,13 +439,21 @@ def _same_event_duplicate_identity(
     row: IpDocketEvent,
     payload: IpDocketEventCreateRequest,
 ) -> bool:
+    if (
+        payload.event_kind == "lifecycle_transition"
+        and payload.application_id is None
+        and payload.proceeding_id is None
+    ):
+        # A new close after an explicit reopen is a distinct lifecycle command,
+        # even on the same day. The parent lock/version and provenance constraint
+        # still prevent two commands from producing the same lifecycle version.
+        return row.resulting_lifecycle_version == payload.expected_lifecycle_version + 1
     if payload.event_kind == "opposition_shared_action":
         return True
     if payload.event_kind == "post_registration_recordal_transaction":
         return (
             row.payload_json.get("recordal_id") == payload.payload.get("recordal_id")
-            and row.payload_json.get("transaction_kind")
-            == payload.payload.get("transaction_kind")
+            and row.payload_json.get("transaction_kind") == payload.payload.get("transaction_kind")
             and row.payload_json.get("recordal_version_before")
             == payload.payload.get("recordal_version_before")
         )
@@ -454,8 +461,7 @@ def _same_event_duplicate_identity(
         return (
             row.payload_json.get("foreign_associate_instruction_id")
             == payload.payload.get("foreign_associate_instruction_id")
-            and row.payload_json.get("transaction_kind")
-            == payload.payload.get("transaction_kind")
+            and row.payload_json.get("transaction_kind") == payload.payload.get("transaction_kind")
             and row.payload_json.get("row_version_before")
             == payload.payload.get("row_version_before")
         )
@@ -472,11 +478,9 @@ def _same_event_duplicate_identity(
         return True
     if row.payload_json.get("action_identity") == payload.payload.get("action_identity"):
         return True
-    return (
-        payload.event_kind == "madrid_action"
-        and row.payload_json.get("source_reference")
-        == payload.payload.get("source_reference")
-    )
+    return payload.event_kind == "madrid_action" and row.payload_json.get(
+        "source_reference"
+    ) == payload.payload.get("source_reference")
 
 
 def preview_ip_docket_event(
@@ -492,6 +496,11 @@ def preview_ip_docket_event(
         docket_id=docket_id,
         for_update=False,
     )
+    assert_trademark_docket(docket)
+    if payload.event_kind == "lifecycle_transition" and not (
+        payload.application_id or payload.proceeding_id
+    ):
+        raise HTTPException(status_code=409, detail="Use the dedicated docket lifecycle command.")
     if docket.lifecycle_version != payload.expected_lifecycle_version:
         raise HTTPException(status_code=409, detail="IP lifecycle version changed; reload.")
     if not docket.is_active:
@@ -537,10 +546,7 @@ def preview_ip_docket_event(
         and row.application_id == payload.application_id
         and row.proceeding_id == payload.proceeding_id
         and row.effective_at.date() == payload.effective_at.date()
-        and (
-            payload.proceeding_id is None
-            or row.resulting_stage == payload.resulting_stage
-        )
+        and (payload.proceeding_id is None or row.resulting_stage == payload.resulting_stage)
         and _same_event_duplicate_identity(row, payload)
         and row.candidate_status != "rejected"
         and row.id != payload.supersedes_event_id
@@ -552,14 +558,9 @@ def preview_ip_docket_event(
     if payload.event_kind == "opposition_shared_action":
         duplicate_ids = []
     latest_effective = max((_as_utc(row.effective_at) for row in rows), default=None)
-    backdated = (
-        latest_effective is not None
-        and _as_utc(payload.effective_at) < latest_effective
-    )
+    backdated = latest_effective is not None and _as_utc(payload.effective_at) < latest_effective
     checklist = _event_checklist(payload)
-    unresolved = [
-        row.key for row in checklist if row.required and not row.satisfied
-    ]
+    unresolved = [row.key for row in checklist if row.required and not row.satisfied]
     if duplicate_ids and payload.reconciles_event_id is None:
         unresolved.append("duplicate_reconciliation_required")
     if backdated:
@@ -585,6 +586,14 @@ def _append_locked_event(
     payload: IpDocketEventCreateRequest,
     resulting_lifecycle_version: int | None = None,
 ) -> IpDocketEvent:
+    if resulting_lifecycle_version is None:
+        assert_trademark_docket(docket)
+        if payload.event_kind == "lifecycle_transition" and not (
+            payload.application_id or payload.proceeding_id
+        ):
+            raise HTTPException(
+                status_code=409, detail="Use the dedicated docket lifecycle command."
+            )
     if docket.lifecycle_version != payload.expected_lifecycle_version:
         raise HTTPException(status_code=409, detail="IP lifecycle version changed; reload.")
     if not docket.is_active:
@@ -622,10 +631,7 @@ def _append_locked_event(
         and row.application_id == payload.application_id
         and row.proceeding_id == payload.proceeding_id
         and row.effective_at.date() == payload.effective_at.date()
-        and (
-            payload.proceeding_id is None
-            or row.resulting_stage == payload.resulting_stage
-        )
+        and (payload.proceeding_id is None or row.resulting_stage == payload.resulting_stage)
         and _same_event_duplicate_identity(row, payload)
         and row.candidate_status != "rejected"
         and row.id != payload.supersedes_event_id
@@ -640,9 +646,7 @@ def _append_locked_event(
         duplicate_ids
         and payload.reconciles_event_id is None
         and payload.supersedes_event_id is None
-        and not (
-            payload.source == "registry" and payload.candidate_status == "candidate"
-        )
+        and not (payload.source == "registry" and payload.candidate_status == "candidate")
     )
     if unresolved_confirmed_duplicate:
         raise HTTPException(
@@ -656,20 +660,14 @@ def _append_locked_event(
         (_as_utc(row.effective_at) for row in existing_events),
         default=None,
     )
-    backdated = (
-        latest_effective is not None
-        and _as_utc(payload.effective_at) < latest_effective
-    )
+    backdated = latest_effective is not None and _as_utc(payload.effective_at) < latest_effective
     if (
         backdated
-        and "backdated_recalculation_review_required"
-        not in payload.acknowledged_exception_codes
+        and "backdated_recalculation_review_required" not in payload.acknowledged_exception_codes
     ):
         raise HTTPException(
             status_code=409,
-            detail=(
-                "Backdated events require acknowledgement of the recalculation preview."
-            ),
+            detail=("Backdated events require acknowledgement of the recalculation preview."),
         )
     latest_target_effective = max(
         (
@@ -771,24 +769,16 @@ def _append_locked_event(
                     session,
                     proceeding=proceeding,
                     to_stage=proposed_phase,
-                    transition_kind=str(
-                        payload.payload.get("transition_kind", "normal")
-                    ),
-                    expected_proceeding_version=payload.payload.get(
-                        "expected_proceeding_version"
-                    ),
+                    transition_kind=str(payload.payload.get("transition_kind", "normal")),
+                    expected_proceeding_version=payload.payload.get("expected_proceeding_version"),
                     authority_reference=payload.payload.get("authority_reference"),
                     reason=payload.reason,
                     source_reference=payload.source_reference,
                     evidence_refs=payload.evidence_refs,
                     document_refs=payload.document_refs,
                     outcome=payload.payload.get("outcome"),
-                    outcome_effective_date=payload.payload.get(
-                        "outcome_effective_date"
-                    ),
-                    authorized_confirmation=payload.payload.get(
-                        "authorized_confirmation"
-                    ),
+                    outcome_effective_date=payload.payload.get("outcome_effective_date"),
+                    authorized_confirmation=payload.payload.get("authorized_confirmation"),
                 )
             proceeding.stage = proposed_phase
             proceeding.version += 1
@@ -817,9 +807,7 @@ def _append_locked_event(
         target_phase_is_backdated and proposed_phase is not None
     )
     event_payload["stage_checklist"] = [row.model_dump(mode="json") for row in checklist]
-    event_payload["operational_completion"] = bool(
-        _payload_refs(payload.payload, "task_refs")
-    )
+    event_payload["operational_completion"] = bool(_payload_refs(payload.payload, "task_refs"))
     event_payload["filing_evidence"] = bool(
         payload.event_kind in {"filing", "response"} and payload.document_refs
     )
@@ -828,9 +816,7 @@ def _append_locked_event(
         and payload.event_kind in {"acceptance", "registration"}
         and payload.candidate_status in {"confirmed", "reconciled"}
     )
-    event_payload["final_legal_disposition"] = bool(
-        proposed_phase in TERMINAL_APPLICATION_PHASES
-    )
+    event_payload["final_legal_disposition"] = bool(proposed_phase in TERMINAL_APPLICATION_PHASES)
     row = IpDocketEvent(
         company_id=docket.company_id,
         docket_id=docket.id,
@@ -910,6 +896,23 @@ def _lifecycle_impacts(
     payload: IpLifecycleTransitionRequest,
 ) -> list[IpLifecycleImpactRow]:
     impacts: list[IpLifecycleImpactRow] = []
+    latest_effective = session.scalar(
+        select(func.max(IpDocketEvent.effective_at)).where(
+            IpDocketEvent.company_id == docket.company_id,
+            IpDocketEvent.docket_id == docket.id,
+        )
+    )
+    if latest_effective is not None and _as_utc(payload.effective_at) < _as_utc(latest_effective):
+        impacts.append(
+            IpLifecycleImpactRow(
+                impact_kind="lifecycle_event",
+                record_id=docket.id,
+                current_state="later_effective_event_recorded",
+                proposed_outcome="retain_history_and_apply_explicit_lifecycle_command",
+                blocking=True,
+                blocker_code="backdated_recalculation_review_required",
+            )
+        )
     for row in session.scalars(
         select(IpDeadlineCoverage).where(
             IpDeadlineCoverage.company_id == docket.company_id,
@@ -1137,9 +1140,7 @@ def _remaining_operational_deadline_roles(
                 IpDeadlineCoverage.company_id == docket.company_id,
                 IpDeadlineCoverage.docket_id != docket.id,
                 IpDeadlineCoverage.matter_deadline_id.in_(deadline_ids),
-                IpDeadlineCoverage.coverage_status.notin_(
-                    ("inactive_lifecycle", "completed")
-                ),
+                IpDeadlineCoverage.coverage_status.notin_(("inactive_lifecycle", "completed")),
                 IpDocketRecord.company_id == docket.company_id,
                 IpDocketRecord.is_active.is_(True),
                 IpDocketRecord.archived_by_matter_disposal.is_(False),
@@ -1168,9 +1169,7 @@ def _remaining_operational_deadline_roles(
                 IpRelatedRightObligation.company_id == docket.company_id,
                 IpRelatedRightObligation.docket_id != docket.id,
                 IpRelatedRightObligation.matter_deadline_id.in_(deadline_ids),
-                IpRelatedRightObligation.status.notin_(
-                    ("completed", "cancelled_lifecycle")
-                ),
+                IpRelatedRightObligation.status.notin_(("completed", "cancelled_lifecycle")),
                 IpDocketRecord.company_id == docket.company_id,
                 IpDocketRecord.is_active.is_(True),
                 IpDocketRecord.archived_by_matter_disposal.is_(False),
@@ -1183,9 +1182,7 @@ def _remaining_operational_deadline_roles(
     )
     remaining_reference_ids = set(roles)
     remaining_reference_ids.update(
-        row.matter_deadline_id
-        for row in obligations
-        if row.matter_deadline_id is not None
+        row.matter_deadline_id for row in obligations if row.matter_deadline_id is not None
     )
     return roles, remaining_reference_ids
 
@@ -1241,9 +1238,7 @@ def _neutralize_direct_docket_work_and_projections(
             .where(
                 MatterTask.company_id == docket.company_id,
                 MatterTask.ip_docket_id == docket.id,
-                MatterTask.status.notin_(
-                    (MatterTaskStatus.COMPLETED, MatterTaskStatus.CANCELLED)
-                ),
+                MatterTask.status.notin_((MatterTaskStatus.COMPLETED, MatterTaskStatus.CANCELLED)),
             )
             .order_by(MatterTask.id)
             .with_for_update(of=MatterTask)
@@ -1473,21 +1468,16 @@ def _neutralize_direct_docket_work_and_projections(
             sync.neutralized_at = None
             sync.updated_at = now
             continue
-        if (
-            sync.neutralized_by_ip_lifecycle_event_id is not None
-            and sync.sync_status
-            in (
-                CalendarEventSyncStatus.DELETE_PENDING,
-                CalendarEventSyncStatus.DELETED,
-            )
+        if sync.neutralized_by_ip_lifecycle_event_id is not None and sync.sync_status in (
+            CalendarEventSyncStatus.DELETE_PENDING,
+            CalendarEventSyncStatus.DELETED,
         ):
             # The first lifecycle transition remains the immutable reason this
             # projection was withdrawn; a later controlled reopen must not
             # rewrite that provenance.
             continue
         source_survives = (
-            sync.source_type == "matter_deadline"
-            and sync.source_id in surviving_deadline_ids
+            sync.source_type == "matter_deadline" and sync.source_id in surviving_deadline_ids
         )
         if sync.provider_event_id:
             sync.sync_status = CalendarEventSyncStatus.DELETE_PENDING
@@ -1525,9 +1515,7 @@ def _neutralize_direct_docket_work_and_projections(
             created_syncs += 1
 
     return {
-        "cancelled_foreign_associate_instructions": len(
-            foreign_associate_instructions
-        ),
+        "cancelled_foreign_associate_instructions": len(foreign_associate_instructions),
         "cancelled_shared_tasks": len(tasks),
         "cancelled_shared_hearings": len(hearings),
         "cancelled_hearing_reminders": len(reminders),
@@ -1593,9 +1581,7 @@ def transition_ip_docket_lifecycle(
         )
     impacts = _lifecycle_impacts(session, docket=docket, payload=payload)
     blocker_codes = {row.blocker_code for row in impacts if row.blocker_code}
-    missing_acknowledgements = sorted(
-        blocker_codes - set(payload.acknowledged_exception_codes)
-    )
+    missing_acknowledgements = sorted(blocker_codes - set(payload.acknowledged_exception_codes))
     if missing_acknowledgements:
         raise HTTPException(
             status_code=409,
@@ -1641,6 +1627,7 @@ def transition_ip_docket_lifecycle(
         evidence_refs=[payload.evidence_ref],
         before_phase=before_status,
         after_phase=payload.to_status,
+        acknowledged_exception_codes=payload.acknowledged_exception_codes,
         payload={
             "outcome": payload.outcome,
             "successor_docket_id": payload.successor_docket_id,
@@ -1649,6 +1636,7 @@ def transition_ip_docket_lifecycle(
             "second_approver_membership_id": payload.second_approver_membership_id,
             "client_report_handling": payload.client_report_handling,
             "linked_matter_handling": payload.linked_matter_handling,
+            "backdated": "backdated_recalculation_review_required" in blocker_codes,
         },
     )
     if docket.is_active:
@@ -1699,9 +1687,7 @@ def transition_ip_docket_lifecycle(
     )
     legal_deadline_ids = {row.id for row in live_legal_deadlines}
     legal_projection_deadline_ids = {
-        row.matter_deadline_id
-        for row in live_legal_deadlines
-        if row.matter_deadline_id is not None
+        row.matter_deadline_id for row in live_legal_deadlines if row.matter_deadline_id is not None
     }
     neutralized_coverages = 0
     neutralized_obligations = 0
@@ -1715,9 +1701,7 @@ def transition_ip_docket_lifecycle(
             select(IpDeadlineCoverage.id, IpDeadlineCoverage.matter_deadline_id).where(
                 IpDeadlineCoverage.company_id == docket.company_id,
                 IpDeadlineCoverage.docket_id == docket.id,
-                IpDeadlineCoverage.coverage_status.notin_(
-                    ("inactive_lifecycle", "completed")
-                ),
+                IpDeadlineCoverage.coverage_status.notin_(("inactive_lifecycle", "completed")),
             )
         ).all()
         obligation_refs = session.execute(
@@ -1727,9 +1711,7 @@ def transition_ip_docket_lifecycle(
             ).where(
                 IpRelatedRightObligation.company_id == docket.company_id,
                 IpRelatedRightObligation.docket_id == docket.id,
-                IpRelatedRightObligation.status.notin_(
-                    ("completed", "cancelled_lifecycle")
-                ),
+                IpRelatedRightObligation.status.notin_(("completed", "cancelled_lifecycle")),
             )
         ).all()
         referenced_deadline_ids = {
@@ -1742,9 +1724,7 @@ def transition_ip_docket_lifecycle(
         directly_owned_deadline = and_(
             MatterDeadline.ip_docket_id == docket.id,
             MatterDeadline.matter_id.is_(None),
-            MatterDeadline.status.in_(
-                (MatterDeadlineStatus.OPEN, MatterDeadlineStatus.MISSED)
-            ),
+            MatterDeadline.status.in_((MatterDeadlineStatus.OPEN, MatterDeadlineStatus.MISSED)),
             MatterDeadline.neutralized_at.is_(None),
         )
         if docket.matter_id is not None:
@@ -1802,9 +1782,7 @@ def transition_ip_docket_lifecycle(
                     IpDeadlineCoverage.company_id == docket.company_id,
                     IpDeadlineCoverage.docket_id.in_(operational_sibling_docket_ids),
                     IpDeadlineCoverage.matter_deadline_id.in_(locked_deadline_ids),
-                    IpDeadlineCoverage.coverage_status.notin_(
-                        ("inactive_lifecycle", "completed")
-                    ),
+                    IpDeadlineCoverage.coverage_status.notin_(("inactive_lifecycle", "completed")),
                 )
             ).all()
             if operational_sibling_docket_ids and locked_deadline_ids
@@ -1818,24 +1796,16 @@ def transition_ip_docket_lifecycle(
                     IpRelatedRightObligation.matter_deadline_id,
                 ).where(
                     IpRelatedRightObligation.company_id == docket.company_id,
-                    IpRelatedRightObligation.docket_id.in_(
-                        operational_sibling_docket_ids
-                    ),
-                    IpRelatedRightObligation.matter_deadline_id.in_(
-                        locked_deadline_ids
-                    ),
-                    IpRelatedRightObligation.status.notin_(
-                        ("completed", "cancelled_lifecycle")
-                    ),
+                    IpRelatedRightObligation.docket_id.in_(operational_sibling_docket_ids),
+                    IpRelatedRightObligation.matter_deadline_id.in_(locked_deadline_ids),
+                    IpRelatedRightObligation.status.notin_(("completed", "cancelled_lifecycle")),
                 )
             ).all()
             if operational_sibling_docket_ids and locked_deadline_ids
             else []
         )
 
-        target_coverage_ids = {
-            row_id for row_id, _deadline_id in coverage_refs
-        }
+        target_coverage_ids = {row_id for row_id, _deadline_id in coverage_refs}
         sibling_coverage_ids = {
             row_id for row_id, _docket_id, _deadline_id in sibling_coverage_refs
         }
@@ -1877,9 +1847,7 @@ def transition_ip_docket_lifecycle(
             coverage.updated_at = datetime.now(UTC)
         neutralized_coverages = len(coverages)
 
-        target_obligation_ids = {
-            row_id for row_id, _deadline_id in obligation_refs
-        }
+        target_obligation_ids = {row_id for row_id, _deadline_id in obligation_refs}
         sibling_obligation_ids = {
             row_id for row_id, _docket_id, _deadline_id in sibling_obligation_refs
         }
@@ -1920,9 +1888,7 @@ def transition_ip_docket_lifecycle(
             obligation.updated_at = datetime.now(UTC)
         neutralized_obligations = len(obligations)
 
-        sibling_deadline_ids = (
-            sibling_coverage_deadline_ids | sibling_obligation_deadline_ids
-        )
+        sibling_deadline_ids = sibling_coverage_deadline_ids | sibling_obligation_deadline_ids
         for deadline in deadlines:
             is_directly_owned = deadline.ip_docket_id == docket.id and deadline.matter_id is None
             if (
@@ -1952,9 +1918,7 @@ def transition_ip_docket_lifecycle(
             ).where(
                 IpDeadlineCoverage.company_id == docket.company_id,
                 IpDeadlineCoverage.docket_id == docket.id,
-                IpDeadlineCoverage.coverage_status.notin_(
-                    ("inactive_lifecycle", "completed")
-                ),
+                IpDeadlineCoverage.coverage_status.notin_(("inactive_lifecycle", "completed")),
             )
         ).all()
         legacy_obligation_refs = session.execute(
@@ -1964,9 +1928,7 @@ def transition_ip_docket_lifecycle(
             ).where(
                 IpRelatedRightObligation.company_id == docket.company_id,
                 IpRelatedRightObligation.docket_id == docket.id,
-                IpRelatedRightObligation.status.notin_(
-                    ("completed", "cancelled_lifecycle")
-                ),
+                IpRelatedRightObligation.status.notin_(("completed", "cancelled_lifecycle")),
             )
         ).all()
         calendar_deadline_ids.update(
@@ -2024,18 +1986,16 @@ def transition_ip_docket_lifecycle(
             else []
         )
         for coverage in legacy_coverages:
-            if (
-                coverage.docket_id == docket.id
-                and coverage.coverage_status not in ("inactive_lifecycle", "completed")
+            if coverage.docket_id == docket.id and coverage.coverage_status not in (
+                "inactive_lifecycle",
+                "completed",
             ):
                 coverage.coverage_status = "inactive_lifecycle"
                 coverage.calendar_projection_status = "inactive_lifecycle"
                 coverage.updated_at = neutralized_at
         neutralized_coverages = len(legacy_coverages)
 
-        legacy_obligation_ids = {
-            row_id for row_id, _deadline_id in legacy_obligation_refs
-        }
+        legacy_obligation_ids = {row_id for row_id, _deadline_id in legacy_obligation_refs}
         legacy_obligations = (
             list(
                 session.scalars(
@@ -2053,9 +2013,9 @@ def transition_ip_docket_lifecycle(
             else []
         )
         for obligation in legacy_obligations:
-            if (
-                obligation.docket_id == docket.id
-                and obligation.status not in ("completed", "cancelled_lifecycle")
+            if obligation.docket_id == docket.id and obligation.status not in (
+                "completed",
+                "cancelled_lifecycle",
             ):
                 obligation.status = "cancelled_lifecycle"
                 obligation.updated_at = neutralized_at
@@ -2070,9 +2030,7 @@ def transition_ip_docket_lifecycle(
             deadline_ids=calendar_deadline_ids,
         )
         for deadline in legacy_deadlines:
-            is_directly_owned = (
-                deadline.ip_docket_id == docket.id and deadline.matter_id is None
-            )
+            is_directly_owned = deadline.ip_docket_id == docket.id and deadline.matter_id is None
             if (
                 deadline.company_id == docket.company_id
                 and (
@@ -2140,9 +2098,7 @@ def transition_ip_docket_lifecycle(
         "neutralized_coverages": neutralized_coverages,
         "neutralized_obligations": neutralized_obligations,
         "cancelled_shared_deadlines": cancelled_deadlines,
-        "neutralized_responsibility_assignments": (
-            neutralized_responsibility_assignments
-        ),
+        "neutralized_responsibility_assignments": (neutralized_responsibility_assignments),
         **direct_work_counts,
         "final_legal_disposition": will_be_terminal,
     }
@@ -2159,9 +2115,7 @@ def transition_ip_docket_lifecycle(
         target_type="ip_docket",
         target_id=docket.id,
         target_version=str(docket.lifecycle_version),
-        reason_code=(
-            "ip_docket_terminal" if will_be_terminal else "ip_docket_reopened_reindex"
-        ),
+        reason_code=("ip_docket_terminal" if will_be_terminal else "ip_docket_reopened_reindex"),
     )
     record_from_context(
         session,
@@ -2181,9 +2135,7 @@ def transition_ip_docket_lifecycle(
             "neutralized_coverages": neutralized_coverages,
             "neutralized_obligations": neutralized_obligations,
             "cancelled_shared_deadlines": cancelled_deadlines,
-            "neutralized_responsibility_assignments": (
-                neutralized_responsibility_assignments
-            ),
+            "neutralized_responsibility_assignments": (neutralized_responsibility_assignments),
             **direct_work_counts,
         },
     )
@@ -2229,6 +2181,7 @@ def get_ip_prosecution_workspace(
         docket_id=docket_id,
         for_update=False,
     )
+    assert_trademark_docket(docket)
     events = list_ip_docket_events(
         session,
         context=context,
@@ -2286,6 +2239,14 @@ def get_ip_prosecution_workspace(
                 and row.application_id == candidate.application_id
                 and row.proceeding_id == candidate.proceeding_id
                 and row.effective_at.date() == candidate.effective_at.date()
+                and not (
+                    row.event_kind == "lifecycle_transition"
+                    and row.application_id is None
+                    and row.proceeding_id is None
+                    and row.resulting_lifecycle_version is not None
+                    and candidate.resulting_lifecycle_version is not None
+                    and row.resulting_lifecycle_version != candidate.resulting_lifecycle_version
+                )
                 and row.id not in reconciled_ids
                 and candidate.id not in reconciled_ids
             ):

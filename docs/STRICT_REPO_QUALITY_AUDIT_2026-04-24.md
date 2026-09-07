@@ -1,9 +1,144 @@
 # Strict Repo Quality Audit - 2026-04-24
 
+September 07 pre-release update: current Docker API coverage (4,149 passes),
+complete PostgreSQL (186 passes), frontend coverage (968 passes), and the full
+Docker browser replay (274 passed, zero failed, five intentional skips) have
+positive evidence. All 188 API skips have exact passing supplements. The
+496-row original import, all 1,689 source records and 23 existing-QA patent/domain
+journeys also pass locally. Git/CI and exact-production acceptance remain
+separate pending gates; no deployment is claimed by this pre-release record.
+See `ip-implementation/evidence/bug010-source-release-2026-09-07.md` for the
+authoritative scoped checkpoint and retained failures. Older dated statuses
+below are historical, not the result of this candidate. Wider catalog coverage
+and all 25 unfinished IP slices remain open.
+
 Verdict: `NO-GO` for release-grade strictness.
 
+## September 07 BUG-010 Candidate
+
+The latest source candidate has a reproducible five-edition statute bundle
+and targeted Docker/PostgreSQL proof. It remains Inconclusive pending fresh
+browser/full-suite/deployment verification. The source inventory, retained
+exceptions and scoped-release gates are in
+`ip-implementation/evidence/bug010-source-release-2026-09-07.md`; old b525
+failures below are baseline evidence, not certification of this newer source.
+
+## September 07 Ancestry Follow-Up
+
+Current application image b525 includes the bounded patent ancestry correction.
+145 affected API checks, six corrected PostgreSQL/HTTP boundary cases and seven
+fresh-stack PostgreSQL HTTP journeys pass. The unchanged seeded browser
+selection has nine passes and one genuine BUG-010 failure. The first empty
+catalog failure was a missing local release-seed step, now corrected separately;
+it was not direct evidence for every reported Act. Exact image hashes, source
+qualification, original-data replay, 16-identity PostgreSQL reconciliation and
+the retained failures are in
+`ip-implementation/evidence/local-patent-priorities-2026-09-07.md`.
+This is focused local proof, not a complete current-source certificate. All 25
+incomplete slices and legal/retrieval acceptance remain open. No Git publication
+or production deployment occurred. The older checkpoints below are historical.
+
+## September 07 Local Party Checkpoint
+
+Current source has independently sourced patent applications/parties and a
+corrected implicit tenant-FK/authority lock boundary. Complete PostgreSQL 168,
+frontend 899 and corrected patent browser 13 pass. The original full API run
+had 4,115 passes, one route-reference inventory failure and 170 skips. The
+121-test correction/replay and exact-identity supplements reconcile all 4,286
+collected API nodes; they do not turn the original run into a clean full run or
+prove every possible PRD flow. The current complete desktop browser regression
+finished at 222 passed, one BUG-010 failure and five skips. The separate mobile
+project passed four tests. See `ip-implementation/evidence/local-patent-parties-2026-09-07.md`
+for exact images, retained failures, current inventory and release limitations.
+The sections below are historical checkpoints, not the current source verdict.
+
+## September 06 Local IP Revalidation
+
+Latest continuation: restricted patent-family persistence and read-only closed
+history now exist locally; they are not merely schema contracts. The corrected
+full frontend suite passed 862 tests in 164 files. Image 0ecca1eeb201 passed
+143 PostgreSQL tests and index health, but its three-width family browser run
+exposed a real second-close duplicate-identity defect. The local shared lifecycle
+corrections and qualified public marketing copy are now verified on fresh image
+2b53b74f031b: 12 family/source/domain/Madrid journeys and six marketing checks
+passed, including narrow mobile, tablet and desktop family controls. All 145
+PostgreSQL tests subsequently passed inside Docker with clean index health;
+an earlier wrapper setup failure is retained in the run ledger. Every original
+import cell and all 28 mapped fields on 391 Matters passed another replay.
+The earlier 4,085-pass API run retained a Temporal test-server cache failure.
+After the hash-pinned tools-layer correction, the complete offline API rerun
+passed 4,093 tests with zero failures and 147 skips. Every skipped node has an
+exact identity match in independent passing PostgreSQL/native/Windows reports.
+The real Temporal workflow and adjacent gates passed in a 106-test offline run.
+Fresh Docker image f2f21af176f9 includes the guide optimization and passed all
+145 PostgreSQL tests plus post-test index health. Its complete desktop browser
+selection remains red: 213 passed, one failed (BUG-010), five skipped. All four
+mobile tests passed separately. The original-data browser replay and all-cell/
+mapped-field verification also passed on that exact image. The five browser
+skips are not covered by API skip reconciliation. The seven SQLite-bound bench probes described below received
+real PostgreSQL fixtures and passed. These are dated deltas to the earlier
+inventory, not a whole-PRD completion claim. All 25 slices remain incomplete;
+the complete run ledger is `ip-implementation/codex-takeover-2026-09-06.md`.
+
+Current local inventory: Docker runtime 2b53 exposes 732 OpenAPI paths and
+831 operations. The source has 55 non-initializer route modules, 397 pytest
+modules, 110 frontend pages, 100 direct page-test files, 150 Playwright specs
+and six CI workflows. File presence and route counts are inventory only;
+they do not prove every state, access boundary or user journey is tested.
+
+### Earlier Inventory Snapshot
+
+Owner: Codex. This is a dated candidate checkpoint, not whole-PRD completion.
+The current Docker API exposes 727 paths and 825 operations. Source inventory:
+54 route modules, 395 pytest modules, 108 frontend pages, 98 direct page-test
+files, 148 Playwright specs and six CI workflows. The configured desktop Docker
+suite now selects 209 tests across 94 files after the added timeout journey;
+the four-test mobile project is separate.
+
+The latest complete offline Docker frontend run passed 842 tests in 159 files.
+Fresh API/web images, index checks, all 132 PostgreSQL-marked tests and twelve
+selected Madrid/domain/mobile browser journeys passed. All 132 database tests
+also passed inside Docker on retained state with clean index health afterward.
+The new typed patent contracts have separate offline Docker coverage, not a
+persisted patent workflow or production closure. The full API run had 4,000
+passes, one timeout-inventory failure and 141 skips. The failure was corrected
+with a shared header/body deadline and verified by the unchanged guard and
+focused tests; this does not rewrite the original failed full run. Complete
+208-test browser runs and their failures are retained in
+`ip-implementation/codex-takeover-2026-09-06.md`. Test counts do not
+replace missing patent family/application/prosecution/maintenance workflows.
+
+Coverage correction: CI and local Docker now select all `-m postgres` modules,
+not only `test_postgres_validation.py`. Nine marked concurrency/provider nodes
+were previously omitted. The new selection is guarded by
+`test_all_postgres_marked_modules_are_selected_locally_and_in_ci`. Seven other
+bench/court tests still use SQLite-bound fixtures and skip their PostgreSQL
+logic; native-reranker and Windows-only checks also need separate evidence.
+
+Coverage limitation: `test_route_coverage_matrix.py` remains a route-reference
+heuristic with an old exemption list; its 401 anchor is suite-wide, not a
+per-operation permission/tenant-isolation matrix. The page matrix checks test
+file presence, not complete state/viewport coverage. Do not infer exhaustive
+coverage or retire manual acceptance from those guards. No new exemptions,
+skips or weakened assertions were added for this checkpoint.
+
+## September 05 Targeted Revalidation
+
+The current bug batch is recorded in `bugfix-ram05sep-2026.md`. This is a
+targeted update, not a fresh whole-repository coverage certification. Its
+release remains NO-GO: production BUG-010 is reproduced, exact-source statutory
+content is incomplete, and no candidate has been deployed. Local Docker checks
+currently prove 90 focused API tests, 122 PostgreSQL tests and 831 frontend
+tests. Complete API closure passed 3,966 with zero failures and 140 skips;
+the separate PostgreSQL run does not blanket-close other skipped nodes. Final fresh browser
+acceptance passed 196 with only BUG-010 failed and five skipped. The local
+original-source replay verifies all 28 importable fields on 391 Matters and
+all 10,416 raw cells; it is not a production mutation or release acceptance.
+Four Windows and four Docker proxy tests cover response cancellation and
+transport integrity. Full chronology and skipped gates remain in the batch record.
+
 This audit is intentionally stricter than the current CI bar. It is written as
-an execution brief for Claude Code: fix the P0/P1 items, add the missing tests,
+an execution brief for Codex: fix the P0/P1 items, add the missing tests,
 and do not close an item without evidence from code, tests, and where relevant
 runtime or deploy state.
 
@@ -624,7 +759,11 @@ Priority frontend routes to add direct tests first:
 | QG-DOC-002 | Docs do not claim complete coverage where tests are skipped or partial. | Docs review. |
 | QG-DOC-003 | Every P0/P1 closure links code, tests, and verification output. | Gap ledger. |
 
-## Claude Code Fix Order
+## Codex Fix Order
+
+The sequence below is the retained April 24 audit snapshot, not a current
+missing-work inventory. Codex must reconcile each item with the dated updates,
+current code and canonical program manifest before implementing it again.
 
 Do not parallelize fixes that touch the same files. Suggested order:
 

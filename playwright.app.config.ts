@@ -49,6 +49,7 @@ export default defineConfig({
     // Dated tester batches must be discovered automatically. Manual entries
     // allowed committed regressions to silently fall out of the normal suite.
     /(?:hari|ram)-\d{4}-\d{2}-\d{2}-bugs\.spec\.ts/,
+    /ram-2026-09-07-statute-source-data\.spec\.ts/,
     /iplf-\d{3}[a-z]-[a-z0-9-]+-\d{4}-\d{2}-\d{2}\.spec\.ts/,
     /hari-2026-05-09-bugs\.spec\.ts/,
     /hari-2026-05-09-bug-033\.spec\.ts/,
@@ -137,7 +138,7 @@ export default defineConfig({
           ? `apps\\api\\.venv\\Scripts\\python.exe -m uvicorn caseops_api.main:app --host 127.0.0.1 --port ${apiPort} --header Connection:close --app-dir apps/api/src`
           : `apps/api/.venv/bin/uvicorn caseops_api.main:app --host 127.0.0.1 --port ${apiPort} --header Connection:close --app-dir apps/api/src`,
       cwd: repoRoot,
-      env: { ...process.env, ...e2eEnv },
+      env: e2eEnv,
       url: `${apiBaseUrl}/api/health`,
       timeout: 120_000,
       // Playwright creates and disposes many APIRequestContexts. Uvicorn's
@@ -159,7 +160,6 @@ export default defineConfig({
       command: "npx next start --hostname 127.0.0.1 --port 3100",
       cwd: path.join(repoRoot, "apps", "web"),
       env: {
-        ...process.env,
         ...e2eEnv,
         NEXT_PUBLIC_API_BASE_URL: apiBaseUrl,
         // Tests assert the canonical URL + OG tags on the prod domain;

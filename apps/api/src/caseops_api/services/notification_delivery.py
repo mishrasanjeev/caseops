@@ -445,6 +445,12 @@ def _recipient_still_permitted(
             if not primary_grant_exists:
                 return False
             if intent.source_type == "portal_publication":
+                from caseops_api.services.portal_ip import portal_publication_is_available
+
+                if not portal_publication_is_available(
+                    session, portal_user=portal_user, publication_id=intent.source_id
+                ):
+                    return False
                 publication_targets = session.execute(
                     select(PortalPublicationTarget, MatterPortalGrant, IpDocketRecord)
                     .join(

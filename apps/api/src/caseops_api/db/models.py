@@ -1438,6 +1438,7 @@ class Matter(Base):
     court_forum_number: Mapped[str | None] = mapped_column(String(120), nullable=True)
     judge_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     case_number: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    temporary_e_case_number: Mapped[str | None] = mapped_column(String(120), nullable=True)
     filing_number: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     filing_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     cnr_number: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
@@ -15690,6 +15691,325 @@ class IpAsset(Base):
     )
 
 
+class IpPatentFamily(Base):
+    __tablename__ = "ip_patent_families"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_patent_family_docket_company", ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["asset_id", "company_id"], ["ip_assets.id", "ip_assets.company_id"],
+            name="fk_patent_family_asset_company", ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["client_id", "company_id"], ["clients.id", "clients.company_id"],
+            name="fk_patent_family_client_company", ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_patent_family_id_company"),
+        UniqueConstraint("company_id", "docket_id", name="uq_patent_family_company_docket"),
+        UniqueConstraint("company_id", "asset_id", name="uq_patent_family_company_asset"),
+        Index("ix_patent_families_company_client", "company_id", "client_id", "id"),
+        Index("ix_patent_families_company_cursor", "company_id", "id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    asset_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    client_id: Mapped[str] = mapped_column(String(36), nullable=False)
+
+
+class IpPatentFamilyVersion(Base):
+    """Append-only disclosure facts; the existing docket owns current version and ACL."""
+
+    __tablename__ = "ip_patent_family_versions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["family_id", "company_id"],
+            ["ip_patent_families.id", "ip_patent_families.company_id"],
+            name="fk_patent_family_version_family_company", ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["client_id", "company_id"], ["clients.id", "clients.company_id"],
+            name="fk_patent_family_version_client_company", ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_patent_family_version_actor_company", ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["source_document_version_id", "company_id", "source_document_id"],
+            [
+                "ip_document_versions.id", "ip_document_versions.company_id",
+                "ip_document_versions.document_id",
+            ],
+            name="fk_patent_family_version_document_company", ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["source_registry_snapshot_id", "company_id"],
+            ["ip_registry_snapshots.id", "ip_registry_snapshots.company_id"],
+            name="fk_patent_family_version_registry_company", ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_patent_family_version_id_company"),
+        UniqueConstraint(
+            "company_id", "family_id", "version", name="uq_patent_family_version_number",
+        ),
+        CheckConstraint("version > 0", name="ck_patent_family_version_positive"),
+        CheckConstraint(
+            "(source_document_version_id IS NULL AND source_document_id IS NULL "
+            "AND source_registry_snapshot_id IS NULL "
+            "AND source_sha256 IS NULL AND source_normalized_sha256 IS NULL) OR "
+            "(source_document_version_id IS NOT NULL AND source_document_id IS NOT NULL "
+            "AND source_registry_snapshot_id IS NULL "
+            "AND source_sha256 IS NOT NULL AND length(source_sha256) = 64 "
+            "AND source_normalized_sha256 IS NULL) OR "
+            "(source_document_version_id IS NULL AND source_document_id IS NULL "
+            "AND source_registry_snapshot_id IS NOT NULL "
+            "AND source_sha256 IS NOT NULL AND source_normalized_sha256 IS NOT NULL "
+            "AND length(source_sha256) = 64 AND length(source_normalized_sha256) = 64)",
+            name="ck_patent_family_version_source_pin",
+        ),
+        Index("ix_patent_family_versions_company_created", "company_id", "created_at", "id"),
+        Index("ix_patent_family_versions_company_client", "company_id", "client_id"),
+        Index("ix_patent_family_versions_company_actor", "company_id", "created_by_membership_id"),
+        Index(
+            "ix_patent_family_versions_company_document", "company_id",
+            "source_document_version_id", "source_document_id",
+        ),
+        Index(
+            "ix_patent_family_versions_company_registry",
+            "company_id", "source_registry_snapshot_id",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    family_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    client_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    disclosure_date: Mapped[date] = mapped_column(Date, nullable=False)
+    disclosure_narrative: Mapped[str] = mapped_column(Text, nullable=False)
+    source_document_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    source_document_version_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    source_registry_snapshot_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    source_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    source_normalized_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    reason: Mapped[str] = mapped_column(String(1000), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False,
+    )
+
+
+class IpPatentApplication(Base):
+    __tablename__ = "ip_patent_applications"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_patent_application_docket_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["asset_id", "company_id"],
+            ["ip_assets.id", "ip_assets.company_id"],
+            name="fk_patent_application_asset_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["family_id", "company_id"],
+            ["ip_patent_families.id", "ip_patent_families.company_id"],
+            name="fk_patent_application_family_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_patent_application_id_company"),
+        UniqueConstraint("company_id", "docket_id", name="uq_patent_application_docket"),
+        UniqueConstraint("company_id", "asset_id", name="uq_patent_application_asset"),
+        Index("ix_patent_applications_company_family", "company_id", "family_id", "id"),
+        Index("ix_patent_applications_company_cursor", "company_id", "id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    asset_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    family_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    prosecution_phase: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="disclosure",
+        server_default="disclosure",
+    )
+
+
+class IpPatentApplicationVersion(Base):
+    __tablename__ = "ip_patent_application_versions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["application_id", "company_id"],
+            ["ip_patent_applications.id", "ip_patent_applications.company_id"],
+            name="fk_patent_app_version_application",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["source_document_version_id", "company_id", "source_document_id"],
+            [
+                "ip_document_versions.id",
+                "ip_document_versions.company_id",
+                "ip_document_versions.document_id",
+            ],
+            name="fk_patent_app_version_source",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_patent_app_version_actor",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_patent_app_version_id_company"),
+        UniqueConstraint("id", "company_id", "application_id", name="uq_patent_app_version_owner"),
+        UniqueConstraint(
+            "company_id", "application_id", "version", name="uq_patent_app_version_number"
+        ),
+        CheckConstraint("version > 0", name="ck_patent_app_version_positive"),
+        CheckConstraint("length(source_sha256) = 64", name="ck_patent_app_version_hash"),
+        CheckConstraint(
+            "publication_date IS NULL OR filing_date IS NULL OR publication_date >= filing_date",
+            name="ck_patent_app_version_dates",
+        ),
+        Index(
+            "ix_patent_app_versions_source",
+            "company_id",
+            "source_document_version_id",
+            "source_document_id",
+        ),
+        Index("ix_patent_app_versions_actor", "company_id", "created_by_membership_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    application_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    application_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    jurisdiction: Mapped[str] = mapped_column(String(2), nullable=False)
+    office: Mapped[str] = mapped_column(String(80), nullable=False)
+    filing_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    publication_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    source_pending_identifier_allocation: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    source_document_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    source_document_version_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    source_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    reason: Mapped[str] = mapped_column(String(1000), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class IpPatentApplicationIdentifier(Base):
+    """Immutable identifier evidence belonging to one exact application version."""
+
+    __tablename__ = "ip_patent_application_identifiers"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["application_version_id", "company_id", "application_id"],
+            [
+                "ip_patent_application_versions.id",
+                "ip_patent_application_versions.company_id",
+                "ip_patent_application_versions.application_id",
+            ],
+            name="fk_patent_app_identifier_version",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["source_document_version_id", "company_id", "source_document_id"],
+            [
+                "ip_document_versions.id",
+                "ip_document_versions.company_id",
+                "ip_document_versions.document_id",
+            ],
+            name="fk_patent_app_identifier_source",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_patent_app_identifier_id_company"),
+        UniqueConstraint(
+            "company_id",
+            "application_version_id",
+            "ordinal",
+            name="uq_patent_app_identifier_ordinal",
+        ),
+        CheckConstraint("ordinal >= 0 AND ordinal < 20", name="ck_patent_app_identifier_ordinal"),
+        CheckConstraint("length(source_sha256) = 64", name="ck_patent_app_identifier_hash"),
+        Index(
+            "ix_patent_app_identifiers_version_owner",
+            "company_id",
+            "application_version_id",
+            "application_id",
+        ),
+        Index(
+            "ix_patent_app_identifiers_source",
+            "company_id",
+            "source_document_version_id",
+            "source_document_id",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    application_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    application_version_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    identifier_kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    raw_value: Mapped[str] = mapped_column(String(120), nullable=False)
+    source_document_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    source_document_version_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    source_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class IpPatentApplicationIdentity(Base):
+    """Current duplicate-detection projection; historical raw identifiers remain immutable."""
+
+    __tablename__ = "ip_patent_application_identities"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["application_version_id", "company_id", "application_id"],
+            [
+                "ip_patent_application_versions.id",
+                "ip_patent_application_versions.company_id",
+                "ip_patent_application_versions.application_id",
+            ],
+            name="fk_patent_app_identity_version",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("company_id", "identity_sha256", name="uq_patent_app_identity_scope"),
+        CheckConstraint("length(identity_sha256) = 64", name="ck_patent_app_identity_hash"),
+        Index("ix_patent_app_identities_application", "company_id", "application_id"),
+        Index("ix_patent_app_identities_lookup", "company_id", "value_key", "application_id"),
+        Index(
+            "ix_patent_app_identities_version_owner",
+            "company_id",
+            "application_version_id",
+            "application_id",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    application_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    application_version_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    identity_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    jurisdiction: Mapped[str] = mapped_column(String(2), nullable=False)
+    office_key: Mapped[str] = mapped_column(String(320), nullable=False)
+    identifier_kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    value_key: Mapped[str] = mapped_column(String(480), nullable=False)
+
+
 class TrademarkApplication(Base):
     __tablename__ = "trademark_applications"
     __table_args__ = (
@@ -16001,6 +16321,7 @@ class IpPartyAndRole(Base):
         ),
         Index("ix_ip_parties_company_docket", "company_id", "docket_id"),
         Index("ix_ip_parties_proceeding_company", "proceeding_id", "company_id"),
+        Index("uq_ip_party_owner", "id", "company_id", "docket_id", unique=True),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -16016,6 +16337,86 @@ class IpPartyAndRole(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )
+
+
+class IpPatentPartyDetail(Base):
+    __tablename__ = "ip_patent_party_details"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["id", "company_id", "docket_id"],
+            [
+                "ip_parties_and_roles.id",
+                "ip_parties_and_roles.company_id",
+                "ip_parties_and_roles.docket_id",
+            ],
+            name="fk_patent_party_owner",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["supersedes_party_id", "company_id", "docket_id"],
+            [
+                "ip_patent_party_details.id",
+                "ip_patent_party_details.company_id",
+                "ip_patent_party_details.docket_id",
+            ],
+            name="fk_patent_party_predecessor",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["source_document_version_id", "company_id", "source_document_id"],
+            [
+                "ip_document_versions.id",
+                "ip_document_versions.company_id",
+                "ip_document_versions.document_id",
+            ],
+            name="fk_patent_party_source",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_patent_party_actor",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", "docket_id", name="uq_patent_party_detail_owner"),
+        UniqueConstraint("company_id", "docket_id", "sequence", name="uq_patent_party_sequence"),
+        UniqueConstraint("company_id", "supersedes_party_id", name="uq_patent_party_successor"),
+        CheckConstraint(
+            "sequence > 0 AND anchor_version > 0 AND lifecycle_version >= 0",
+            name="ck_patent_party_versions",
+        ),
+        CheckConstraint(
+            "supersedes_party_id IS NULL OR supersedes_party_id <> id",
+            name="ck_patent_party_no_self",
+        ),
+        CheckConstraint(
+            "length(source_sha256) = 64 AND length(fact_sha256) = 64", name="ck_patent_party_hashes"
+        ),
+        Index("ix_patent_party_predecessor", "company_id", "supersedes_party_id", "docket_id"),
+        Index(
+            "ix_patent_party_source",
+            "company_id",
+            "source_document_version_id",
+            "source_document_id",
+        ),
+        Index("ix_patent_party_actor", "company_id", "created_by_membership_id"),
+        Index("ix_patent_party_fact", "company_id", "docket_id", "fact_sha256"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    anchor_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    lifecycle_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    supersedes_party_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    address_json: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    source_document_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    source_document_version_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    source_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    fact_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    reason: Mapped[str] = mapped_column(String(1000), nullable=False)
 
 
 class IpRelationship(Base):
@@ -16051,6 +16452,14 @@ class IpRelationship(Base):
         ),
         Index("ix_ip_relationships_company_source", "company_id", "source_docket_id"),
         Index("ix_ip_relationships_company_target", "company_id", "target_docket_id"),
+        Index(
+            "uq_ip_relationship_patent_owner",
+            "id",
+            "company_id",
+            "source_docket_id",
+            "target_docket_id",
+            unique=True,
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
@@ -16061,6 +16470,119 @@ class IpRelationship(Base):
     effective_from: Mapped[date] = mapped_column(Date, nullable=False)
     effective_until: Mapped[date | None] = mapped_column(Date, nullable=True)
     source: Mapped[str] = mapped_column(String(120), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
+class IpPatentPriorityDetail(Base):
+    """Append-only evidence for canonical IP relationships, never a second edge owner."""
+
+    __tablename__ = "ip_patent_priority_details"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["relationship_id", "company_id", "source_docket_id", "target_docket_id"],
+            [
+                "ip_relationships.id",
+                "ip_relationships.company_id",
+                "ip_relationships.source_docket_id",
+                "ip_relationships.target_docket_id",
+            ],
+            name="fk_patent_priority_relationship_owner",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["supersedes_priority_id", "company_id", "source_docket_id"],
+            [
+                "ip_patent_priority_details.id",
+                "ip_patent_priority_details.company_id",
+                "ip_patent_priority_details.source_docket_id",
+            ],
+            name="fk_patent_priority_predecessor_owner",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["source_document_version_id", "company_id", "source_document_id"],
+            [
+                "ip_document_versions.id",
+                "ip_document_versions.company_id",
+                "ip_document_versions.document_id",
+            ],
+            name="fk_patent_priority_document_owner",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["created_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_patent_priority_actor_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "id", "company_id", "source_docket_id", name="uq_patent_priority_detail_owner"
+        ),
+        UniqueConstraint("company_id", "sequence", name="uq_patent_priority_sequence"),
+        UniqueConstraint(
+            "company_id", "supersedes_priority_id", name="uq_patent_priority_successor"
+        ),
+        CheckConstraint(
+            "sequence > 0 AND application_version > 0 AND parent_version > 0 "
+            "AND lifecycle_version >= 0 AND parent_lifecycle_version >= 0",
+            name="ck_patent_priority_versions",
+        ),
+        CheckConstraint(
+            "supersedes_priority_id IS NULL OR supersedes_priority_id <> id",
+            name="ck_patent_priority_predecessor_distinct",
+        ),
+        CheckConstraint(
+            "NOT withdrawn OR supersedes_priority_id IS NOT NULL",
+            name="ck_patent_priority_withdrawal_predecessor",
+        ),
+        CheckConstraint(
+            "length(source_sha256) = 64 AND length(fact_sha256) = 64",
+            name="ck_patent_priority_hashes",
+        ),
+        Index(
+            "ix_patent_priorities_company_source_sequence",
+            "company_id", "source_docket_id", "sequence",
+        ),
+        Index(
+            "ix_patent_priorities_company_target_sequence",
+            "company_id", "target_docket_id", "sequence",
+        ),
+        Index(
+            "ix_patent_priorities_relationship_owner",
+            "relationship_id", "company_id", "source_docket_id", "target_docket_id",
+        ),
+        Index(
+            "ix_patent_priorities_predecessor_owner",
+            "supersedes_priority_id", "company_id", "source_docket_id",
+        ),
+        Index(
+            "ix_patent_priorities_source_version",
+            "source_document_version_id", "company_id", "source_document_id",
+        ),
+        Index("ix_patent_priorities_actor_company", "created_by_membership_id", "company_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    relationship_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    source_docket_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    target_docket_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    application_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    parent_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    lifecycle_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    parent_lifecycle_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    supersedes_priority_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    withdrawn: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    review_flags_json: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    source_document_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    source_document_version_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    source_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    fact_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    reason: Mapped[str] = mapped_column(String(1000), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )

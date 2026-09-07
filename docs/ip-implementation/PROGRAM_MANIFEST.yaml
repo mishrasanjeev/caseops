@@ -14,16 +14,16 @@
     "verification_status": "not_run",
     "release_status": "blocked",
     "execution_policy": "codex_owned_single_ordered_queue; implement first and run the automated check and exact-release verification batch at the end",
-    "active_slice": "IPLF-070A",
+    "active_slice": "IPLF-080A",
     "checkpoint": {
-      "recorded_at": "2026-09-01T01:30:57+05:30",
-      "repository_revision": "cc491c644c2c360ec7cb29c71e18d8532c132f59",
-      "environment": "Production serves exact main cc491c644c2c360ec7cb29c71e18d8532c132f59 through API revision caseops-api-00399-8xj and web revision caseops-web-00377-bsn; fixture bootstrap execution caseops-ip-qa-bootstrap-8lhwt completed before verification. In GitHub Actions run 33431768233, exact-release identity, the IPLF-039F fixture preflight and the isolated Run IPLF-039F cost acceptance step passed. The workflow concluded failure because the broader RAM batch had unrelated database-lock, Notice-visibility and intelligent-review structured-response failures; those failures are not credited as green.",
-      "completed_scope": "IPLF-066 owns the bounded tenant-private projection/event/access-manifest boundary recorded in its evidence. IPLF-039F is now deployment-verified at the exact production release: matterless nonbillable capture, append-only correction lineage, active-replacement billing exclusion and complete-Matter preservation passed its isolated dated production acceptance. Of 144 implementation slices, 25 remain repository-incomplete.",
+      "recorded_at": "2026-09-07",
+      "repository_revision": "6a85cd5025101fd453bdc9b8472e963d16ba708a",
+      "environment": "Uncommitted scoped September 07 release candidate in codex/ram05sep-bugs-20260905, based on repository_revision. Exact local Docker runtime d0cad5f558a4107ffaee3e76f6ff7f25ed2b7448 is a dirty-source identity, not a Git commit. No commit, push, merge or deployment at this checkpoint. The narrower request is BUG-010 and accumulated changes, not completion of all 25 unfinished program slices.",
+      "completed_scope": "Restricted patent families, typed applications, source versions, parties, priority relationships, correction/withdrawal history and lifecycle controls have local Docker proof. Complete frozen API coverage: 4149 passed; all 188 skips map to passing PostgreSQL/native/Windows supplements. Complete PostgreSQL: 186 passed; frontend coverage: 968 passed. The later deployment regression modules pass all 94 checks. All 23 production-shaped patent/domain journeys pass against retained existing local QA accounts. All 1689 named-Act source records pass complete identity/provenance/text/hash assertions in local and four-reader production configurations. Original 496-row replay created 391 Matters, rejected 97 invalid and 8 duplicate rows, and reconciled all 10416 source cells and 28 fields per created Matter. The complete current Docker browser replay passes 274 tests with zero failures and five deliberate provider/production-only skips. The runtime and all 17 test/configuration overlay paths are unchanged across the complete run; all 2269 source paths reconcile. Prior failed attempts remain retained with independent diagnoses. All 25 incomplete slices remain open: 10 in progress, 15 not started. Patent P1-P6 and production quality benchmarks are not complete.",
       "program_state": "PROGRAM INCOMPLETE",
-      "next_slice": "IPLF-070A",
-      "next_action": "Codex continues the dependency-ready IPLF-070A repository work and runs the integrated automated check and exact-release verification batch at the end.",
-      "evidence_ref": "docs/ip-implementation/evidence/m3/IPLF-039F/cost-finalization-2026-08-30.md"
+      "next_slice": "IPLF-080A",
+      "next_action": "Finish final source/governance checks, then publish and deploy only the user-authorized scoped candidate through green PR/main CI and exact-production acceptance. The complete local browser replay is passed, not pending implementation. Keep BUG-010 catalog-wide coverage open beyond the five named Acts. After this scoped release, continue patent prosecution/maintenance and the remaining P1-P6 requirements under IPLF-080A; do not reimplement the existing application, party, priority, source or lifecycle owners. Separately reconcile judgment enrichment and representative quality evidence. All 25 unfinished slices retain their existing open status.",
+      "evidence_ref": "docs/ip-implementation/evidence/bug010-source-release-2026-09-07.md"
     },
     "work_owner": {
       "owner": "Codex",
@@ -2600,10 +2600,12 @@
         "IPLF-079A",
         "IPLF-079B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
-      "evidence_refs": []
+      "evidence_refs": [
+        "docs/ip-implementation/codex-takeover-2026-09-06.md"
+      ]
     },
     {
       "id": "IPLF-080",
@@ -2634,10 +2636,12 @@
         "IPLF-080A",
         "IPLF-080B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
-      "evidence_refs": []
+      "evidence_refs": [
+        "docs/ip-implementation/codex-takeover-2026-09-06.md"
+      ]
     },
     {
       "id": "IPLF-090",
@@ -16598,20 +16602,44 @@
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
+      "implementation_refs": [
+        "apps/api/src/caseops_api/services/ip_domain_catalog.py",
+        "apps/api/src/caseops_api/schemas/ip_domains.py",
+        "apps/api/src/caseops_api/services/production_safety.py",
+        "apps/api/src/caseops_api/api/routes/meta.py"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_domain_catalog.py",
+        "apps/api/tests/test_machine_readiness_writer.py",
+        "apps/api/tests/test_ip_program_manifest.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/codex-takeover-2026-09-06.md"
+      ],
       "evidence_metadata": [],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Complete release-owned domain evidence collection and all atomic path/source-pack fixtures; keep beta/GA disabled without exact-release proof. Targeted local checks are not full slice acceptance."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "No new table. Reuse authenticated machine evidence and existing PlatformOperationalReadinessEvidence; no tenant/admin promotion route."
       ],
-      "documentation_impact": [],
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/codex-takeover-2026-09-06.md",
+          "disposition": "updated",
+          "owner": "Codex",
+          "evidence": "Scoped local implementation and honest remaining-work checkpoint; no production completion claim."
+        },
+        {
+          "artifact": "docs/WORK_TO_BE_DONE.md",
+          "disposition": "updated",
+          "owner": "Codex",
+          "evidence": "Scoped local implementation and honest remaining-work checkpoint; no production completion claim."
+        }
+      ],
       "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "administrative_exception": {
@@ -16663,26 +16691,48 @@
       "dependencies": [
         "IPLF-079A"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/web/components/ip/IpDomainAvailability.tsx",
+        "apps/web/lib/ip/domain-catalog.ts",
+        "apps/web/app/page.tsx",
+        "apps/web/app/app/ip/page.tsx"
+      ],
       "test_refs": [
         "planned:IPLF-UJ-60-EXC-01",
         "planned:IPLF-UJ-60-EXC-02",
         "planned:IPLF-UJ-60-EXC-03",
         "planned:IPLF-UJ-60-EXC-04",
-        "planned:IPLF-UJ-60-NORMAL"
+        "planned:IPLF-UJ-60-NORMAL",
+        "apps/web/components/ip/IpDomainAvailability.test.tsx",
+        "tests/e2e/iplf-079b-domain-availability-2026-09-06.spec.ts"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/codex-takeover-2026-09-06.md"
+      ],
       "evidence_metadata": [],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Complete configured/unconfigured workspace, public-page and outage browser proof; integrate exact-release production verification. UJ-60 atomic paths are not satisfied by a catalogue-only test."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Read-only public catalogue with no tenant data; readiness reuses the same catalogue without supporting-request fan-out."
       ],
-      "documentation_impact": [],
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/codex-takeover-2026-09-06.md",
+          "disposition": "updated",
+          "owner": "Codex",
+          "evidence": "Scoped local implementation and honest remaining-work checkpoint; no production completion claim."
+        },
+        {
+          "artifact": "docs/WORK_TO_BE_DONE.md",
+          "disposition": "updated",
+          "owner": "Codex",
+          "evidence": "Scoped local implementation and honest remaining-work checkpoint; no production completion claim."
+        }
+      ],
       "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked"
     },
@@ -16708,20 +16758,76 @@
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
+      "implementation_refs": [
+      "docs/PRD_PATENT_DOMAIN_2026-09-06.md",
+      "apps/api/src/caseops_api/schemas/ip_patents.py",
+      "apps/api/alembic/versions/20260906_0001_patent_family_intake.py",
+      "apps/api/alembic/versions/20260906_0002_patent_applications.py",
+      "apps/api/alembic/versions/20260907_0001_patent_party_evidence.py",
+      "apps/api/alembic/versions/20260907_0002_patent_priority_evidence.py",
+      "apps/api/src/caseops_api/api/routes/ip_patents.py",
+      "apps/api/src/caseops_api/services/ip_patent_families.py",
+      "apps/api/src/caseops_api/services/ip_patent_applications.py",
+      "apps/api/src/caseops_api/services/ip_patent_parties.py",
+      "apps/api/src/caseops_api/services/ip_patent_priorities.py",
+      "apps/web/components/ip/PatentApplicationWorkspace.tsx",
+      "apps/web/components/ip/PatentSourceDownload.tsx",
+      "apps/api/src/caseops_api/services/ip_lifecycle.py",
+        "apps/api/src/caseops_api/services/ip_domain_policy.py",
+        "apps/api/src/caseops_api/services/ip_document_workflow.py",
+        "apps/api/src/caseops_api/services/private_retrieval.py",
+        "apps/api/src/caseops_api/services/private_retrieval_jobs.py",
+        "apps/api/src/caseops_api/services/workspace_assistant.py",
+        "apps/api/src/caseops_api/services/portal_ip.py"
+      ],
+      "test_refs": [
+      "apps/api/tests/test_ip_patent_contracts.py",
+      "apps/api/tests/test_ip_patent_families.py",
+      "apps/api/tests/test_ip_patent_postgres.py",
+      "apps/api/tests/test_ip_patent_applications.py",
+      "apps/api/tests/test_ip_patent_application_postgres.py",
+      "apps/api/tests/test_ip_patent_parties.py",
+      "apps/api/tests/test_ip_patent_party_postgres.py",
+      "apps/api/tests/test_ip_patent_priorities.py",
+      "apps/api/tests/test_ip_patent_priority_postgres.py",
+      "apps/api/tests/test_private_authority_lock_postgres.py",
+      "apps/web/components/ip/PatentApplicationWorkspace.test.tsx",
+      "tests/e2e/iplf-080a-patent-application-2026-09-06.spec.ts",
+      "apps/api/tests/test_ip_lifecycle_service.py",
+        "apps/api/tests/test_ip_domain_boundaries.py",
+        "apps/api/tests/test_postgres_validation.py",
+        "apps/api/tests/test_portal_ip.py",
+        "apps/api/tests/test_workspace_assistant_qa.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/codex-takeover-2026-09-06.md",
+        "docs/ip-implementation/evidence/local-patent-parties-2026-09-07.md",
+        "docs/ip-implementation/evidence/local-patent-priorities-2026-09-07.md"
+      ],
       "evidence_metadata": [],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Family/application/party and priority/graph paths have scoped local acceptance on the 7ec22 Docker runtime: 178 PostgreSQL tests, 968 frontend tests and three priority widths pass. The exact 231-test desktop inventory retains BUG-010 and five skips; original API failures and their passing supplements remain explicit. Close dense/deep-history ancestry bounds, then prosecution, proceedings, claims, obligations and title adapters from P1-P6 without rebuilding existing owners. Full PRD, clean integrated local certification and exact-release evidence remain required before activation."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+      "P1 adds tenant-composite family/application owners, append-only disclosure/application/identifier evidence and a bounded current-identity projection under canonical restricted docket/asset ownership. The existing IpPartyAndRole owns patent parties; a one-to-one append-only detail adds address/source/supersession facts, with bounded sequence paging and no inferred ownership or recordal. Exact document-version pins remain tenant-authorized. P0 keeps unreviewed domains and mixed-domain documents out of general disclosure, including previously saved projections. Existing trademark rows and lifecycle safeguards remain canonical."
       ],
-      "documentation_impact": [],
+      "documentation_impact": [
+        {
+          "artifact": "docs/ip-implementation/codex-takeover-2026-09-06.md",
+          "disposition": "updated",
+          "owner": "Codex",
+          "evidence": "Scoped local implementation and honest remaining-work checkpoint; no production completion claim."
+        },
+        {
+          "artifact": "docs/WORK_TO_BE_DONE.md",
+          "disposition": "updated",
+          "owner": "Codex",
+          "evidence": "Scoped local implementation and honest remaining-work checkpoint; no production completion claim."
+        }
+      ],
       "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "administrative_exception": {
@@ -16786,8 +16892,30 @@
       "dependencies": [
         "IPLF-080A"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/web/components/ip/PatentFamilyWorkspace.tsx",
+        "apps/web/components/ip/PatentFamilyLifecycle.tsx",
+        "apps/web/components/ip/PatentApplicationWorkspace.tsx",
+        "apps/web/components/ip/PatentParties.tsx",
+        "apps/web/components/ip/PatentPriorities.tsx",
+        "apps/web/app/guide/page.tsx",
+        "docs/ip-implementation/PRODUCT_GUIDE_CATALOG.json",
+        "apps/web/app/app/ip/patents/page.tsx",
+        "apps/web/app/app/ip/patents/[familyId]/page.tsx",
+        "apps/web/app/app/ip/patents/applications/[applicationId]/page.tsx",
+        "apps/web/lib/api/ip-patents.ts"
+      ],
       "test_refs": [
+        "apps/web/components/ip/PatentFamilyWorkspace.test.tsx",
+        "apps/web/components/ip/PatentFamilyLifecycle.test.tsx",
+        "apps/web/components/ip/PatentApplicationWorkspace.test.tsx",
+        "apps/web/components/ip/PatentParties.test.tsx",
+        "apps/web/components/ip/PatentPriorities.test.tsx",
+        "apps/web/lib/api/ip-patents.test.ts",
+        "tests/e2e/iplf-080a-patent-family-2026-09-06.spec.ts",
+        "tests/e2e/iplf-080b-patent-source-scope-2026-09-06.spec.ts",
+        "tests/e2e/iplf-080b-patent-parties-2026-09-07.spec.ts",
+        "tests/e2e/iplf-080b-patent-priorities-2026-09-07.spec.ts",
         "planned:IPLF-UJ-29-EXC-01",
         "planned:IPLF-UJ-29-EXC-02",
         "planned:IPLF-UJ-29-EXC-03",
@@ -16803,18 +16931,25 @@
         "planned:IPLF-UJ-40-EXC-04",
         "planned:IPLF-UJ-40-NORMAL"
       ],
-      "evidence_refs": [],
+      "evidence_refs": [
+        "docs/ip-implementation/codex-takeover-2026-09-06.md",
+        "docs/ip-implementation/evidence/local-patent-parties-2026-09-07.md",
+        "docs/ip-implementation/evidence/local-patent-priorities-2026-09-07.md"
+      ],
       "evidence_metadata": [],
       "blockers": [],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "The 7ec22 Docker runtime passes all three priority/history/family-graph browser widths after a guarded test-only locator correction, four mobile journeys and all 968 frontend tests. The original desktop run retains four failures; the corrected replay resolves the three priority failures, not BUG-010. Complete remaining prosecution workflows and UJ-29/39/40 exceptions, scale gaps and full release acceptance. No authoritative patent or production-completion claim is enabled."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "The existing family/application UI, shared party editor and sourced priority/graph views delegate mutations to their canonical writers; this UI allocation creates no separate persistence owner. Remaining workflow UI must follow the typed patent child contract."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
+      "documentation_impact": [
+        "docs/PRD_PATENT_DOMAIN_2026-09-06.md",
+        "docs/ip-implementation/codex-takeover-2026-09-06.md"
+      ],
+      "allocation_review": "September 06 source reconciliation: family UI and dated browser coverage exist locally; the complete patent workflow and production acceptance remain incomplete.",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked"
     },
@@ -25650,7 +25785,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -25688,7 +25823,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -25726,7 +25861,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -25764,7 +25899,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -37265,7 +37400,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -37345,7 +37480,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -37425,7 +37560,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -37505,7 +37640,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -37585,7 +37720,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -37665,7 +37800,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -37745,7 +37880,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -37825,7 +37960,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -37905,7 +38040,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -37985,7 +38120,7 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -42946,7 +43081,7 @@
         "planned:IPLF-UJ-29-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -43550,7 +43685,7 @@
         "planned:IPLF-UJ-39-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -43595,7 +43730,7 @@
         "planned:IPLF-UJ-40-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -45321,7 +45456,7 @@
         "planned:IPLF-UJ-60-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -50914,7 +51049,7 @@
         "planned:IPLF-UJ-29-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -50949,7 +51084,7 @@
         "planned:IPLF-UJ-29-EXC-01"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -50984,7 +51119,7 @@
         "planned:IPLF-UJ-29-EXC-02"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -51019,7 +51154,7 @@
         "planned:IPLF-UJ-29-EXC-03"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -53246,7 +53381,7 @@
         "planned:IPLF-UJ-39-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -53281,7 +53416,7 @@
         "planned:IPLF-UJ-39-EXC-01"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -53316,7 +53451,7 @@
         "planned:IPLF-UJ-39-EXC-02"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -53351,7 +53486,7 @@
         "planned:IPLF-UJ-39-EXC-03"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -53386,7 +53521,7 @@
         "planned:IPLF-UJ-39-EXC-04"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -53420,7 +53555,7 @@
         "planned:IPLF-UJ-40-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -53455,7 +53590,7 @@
         "planned:IPLF-UJ-40-EXC-01"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -53490,7 +53625,7 @@
         "planned:IPLF-UJ-40-EXC-02"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -53525,7 +53660,7 @@
         "planned:IPLF-UJ-40-EXC-03"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -53560,7 +53695,7 @@
         "planned:IPLF-UJ-40-EXC-04"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -61944,7 +62079,7 @@
         "planned:IPLF-UJ-60-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -61975,7 +62110,7 @@
         "planned:IPLF-UJ-60-EXC-01"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -62006,7 +62141,7 @@
         "planned:IPLF-UJ-60-EXC-02"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -62037,7 +62172,7 @@
         "planned:IPLF-UJ-60-EXC-03"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
@@ -62068,7 +62203,7 @@
         "planned:IPLF-UJ-60-EXC-04"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [

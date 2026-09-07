@@ -150,9 +150,9 @@ test("IPLF-UJ-16-NORMAL/EXC: typed outcomes, frozen query, report, and 360px con
     });
   });
 
-  let savedReportBody: Record<string, unknown> | null = null;
+  const savedReportBody: { current: Record<string, unknown> | null } = { current: null };
   await page.route("**/api/authorities/research-reports", async (route) => {
-    savedReportBody = route.request().postDataJSON() as Record<string, unknown>;
+    savedReportBody.current = route.request().postDataJSON() as Record<string, unknown>;
     await route.fulfill({
       status: 201,
       contentType: "application/json",
@@ -182,9 +182,9 @@ test("IPLF-UJ-16-NORMAL/EXC: typed outcomes, frozen query, report, and 360px con
   await expect(page.getByTestId("research-result-relevance")).toContainText("exact citation");
 
   await page.getByTestId("research-save-report").click();
-  await expect.poll(() => savedReportBody).not.toBeNull();
-  expect(savedReportBody?.result_ids).toEqual(["authority-111"]);
-  expect(savedReportBody?.mode).toBe("exact_citation");
+  await expect.poll(() => savedReportBody.current).not.toBeNull();
+  expect(savedReportBody.current?.result_ids).toEqual(["authority-111"]);
+  expect(savedReportBody.current?.mode).toBe("exact_citation");
 
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,

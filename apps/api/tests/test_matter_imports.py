@@ -924,11 +924,10 @@ def test_bulk_matter_import_reports_invalid_rows_and_unsupported_documents(
         "missing",
         "invalid",
     ]
-    # Ram BUG-003 (2026-08-14): a row whose only problem is duplication is
-    # skipped from the submission instead of being rejected for correction.
-    # The first row claimed ADP11-BAD, so this repeat is the skipped copy.
-    assert rows[1]["status"] == "duplicate"
-    assert "Duplicate matter code in this import file." in rows[1]["errors"]
+    # RAM05-BULK-CODE: the invalid first row creates nothing, so it must not
+    # reserve ADP11-BAD and suppress the valid second row.
+    assert rows[1]["status"] == "valid"
+    assert "Duplicate matter code in this import file." not in rows[1]["errors"]
 
 
 def test_bulk_matter_import_omitted_or_explicit_active_status_is_valid(

@@ -498,6 +498,7 @@ def _column_category(column_name: str) -> str:
             "document",
             "file",
             "description",
+            "narrative",
             "details",
         )
     ):

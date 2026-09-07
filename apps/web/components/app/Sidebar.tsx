@@ -140,6 +140,10 @@ export function SidebarBody({
     }
     return item.requiredCapabilities.every((capability) => can(role, capability));
   });
+  const activeHref = visible.reduce<string | undefined>((current, item) => {
+    if (!isActive(pathname, item.href)) return current;
+    return !current || item.href.length > current.length ? item.href : current;
+  }, undefined);
   const grouped = Object.entries(SECTION_LABEL)
     .map(([key, label]) => ({
       key: key as NavItem["section"],
@@ -164,7 +168,7 @@ export function SidebarBody({
                 <li key={item.href}>
                   <NavLink
                     item={item}
-                    active={isActive(pathname, item.href)}
+                    active={item.href === activeHref}
                     onNavigate={onNavigate}
                   />
                 </li>

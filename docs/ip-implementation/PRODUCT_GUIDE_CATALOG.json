@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "corpus_id": "caseops-product-guide",
-  "content_version": "2026.09.04.1",
-  "display_version": "v4",
+  "content_version": "2026.09.07.1",
+  "display_version": "v5",
   "language": "en-IN",
   "canonical_path": "/guide",
-  "updated_on": "2026-09-04",
+  "updated_on": "2026-09-07",
   "navigation_groups": {
     "overview": "Overview",
     "schedule": "Schedule",
@@ -203,6 +203,13 @@
       "summary": "Find plain-language definitions and approved aliases for CaseOps, litigation, IP, registry, deadline, and governance terms.",
       "keywords": ["glossary", "definition", "meaning", "terminology", "alias"],
       "aliases": ["terms", "plain language", "legal words"]
+    },
+    {
+      "id": "patents",
+      "title": "Patent intake and source records",
+      "summary": "Record restricted invention families, separate applications, sourced parties and priority relationships, corrections, retained history, and explicit record closure. Intake records do not establish legal entitlement or automate prosecution.",
+      "keywords": ["patent", "invention", "priority", "divisional", "PCT", "national phase", "inventor", "patent of addition"],
+      "aliases": ["patent family", "parent application", "patent intake"]
     }
   ],
   "commands": [
@@ -211,6 +218,7 @@
     {"id":"matters","label":"Matters","href":"/app/matters","icon":"Briefcase","group":"casework","summary":"Open the matter list and matter workflows.","keywords":["cases","case files","legal matters"],"required_capabilities":[]},
     {"id":"import-activity","label":"Import activity","href":"/app/imports","icon":"History","group":"casework","summary":"Review current and historical import activity.","keywords":["imports","bulk upload","import history"],"required_capabilities":[]},
     {"id":"ip-docket","label":"IP docket","href":"/app/ip","icon":"BookOpenCheck","group":"ip","summary":"Open the intellectual-property operations workspace.","keywords":["ip","trademark docket","intellectual property"],"required_capabilities":["ip:read"]},
+    {"id":"patent-intake","label":"Patent intake","href":"/app/ip/patents","icon":"BookOpenCheck","group":"ip","summary":"Open restricted patent families, applications, party evidence and priority records.","keywords":["patent family","invention disclosure","priority parent","patent application"],"required_capabilities":["ip:read"]},
     {"id":"trademark-portfolio","label":"Trademark portfolio","href":"/app/ip/portfolio","icon":"PanelsTopLeft","group":"ip","summary":"Browse trademark applications, registrations, and proceedings.","keywords":["trade mark","application number","registration"],"required_capabilities":["ip:read"]},
     {"id":"deadline-control","label":"Deadline control","href":"/app/ip/docket","icon":"CalendarClock","group":"ip","summary":"Review IP deadlines, responsibility, acknowledgement, and escalation.","keywords":["docket deadline","critical date","coverage"],"required_capabilities":["ip:read"]},
     {"id":"trademark-renewals","label":"Trademark renewals","href":"/app/ip/renewals","icon":"Repeat2","group":"ip","summary":"Review trademark renewal eligibility, evidence, instructions, and status.","keywords":["renewal","renew trade mark","expiry"],"required_capabilities":["ip:read"]},
