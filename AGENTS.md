@@ -688,3 +688,8 @@ requirements when using the fallback.
   displayed identity version before a dependent merge. Inspect the HTTP
   conflict and refresh timeline; never replay a stale mutation automatically
   or weaken its optimistic-concurrency token to make the journey pass.
+- Replay the actual committed-diff CLI after publication as well as the local
+  dirty-source evaluator. A text-only governance reader must not decode unrelated
+  binary evidence, but unreadable governed source must still fail closed with a
+  bounded diagnostic. Regress binary evidence beside real provider and migration
+  changes so a parsing repair cannot bypass the map or migration-marker checks.

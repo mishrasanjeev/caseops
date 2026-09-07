@@ -248,6 +248,18 @@ every provision for current applicability.
 
 ## Remaining Release Gates
 
+The first PR #458 CI run (`34149626146`) exposed an additional release-tooling
+defect: the committed-diff governance CLI decoded unrelated PDF evidence as
+UTF-8. The dirty-source evaluator had not exercised that entry point. Both new
+regressions reproduced it in network-disabled local Docker. The corrected
+reader only consumes governed source and still rejects unreadable governed
+files with a bounded diagnostic; provider/map and migration-marker checks
+remain mandatory. All 62 governance, migration-preflight and manifest tests
+passed, followed by the actual committed-diff governance CLI, all ten changed
+migrations and Ruff (`bug010-committed-gate-fixed.log`). Two new tests supplement,
+not replace or inflate, the earlier complete suite. No application, seed or
+dependency source changed. The first failed CI remains retained.
+
 - The complete 279-test Docker browser selection is reconciled: 274 passed,
   zero failed, five explicit skips. Prior failed runs remain historical evidence,
   not an originally clean canonical-verifier certificate.

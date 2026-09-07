@@ -1445,12 +1445,29 @@ def check_change(base: str | None = None) -> list[str]:
         ]
     changed_paths = [line for line in diff.splitlines() if line.strip()]
     source_by_path: dict[str, str] = {}
+    read_errors: list[str] = []
     for path in changed_paths:
         normalized = _normalise_path(path)
+        # Only these boundaries consume source text. Evidence PDFs and other
+        # unrelated assets still belong to the diff, but are not UTF-8 source.
+        if not (
+            normalized in RISKY_PATHS
+            or normalized.startswith(RISKY_SOURCE_ROOTS)
+            or (
+                normalized.startswith("apps/api/alembic/versions/")
+                and normalized.endswith(".py")
+            )
+        ):
+            continue
         candidate = REPO_ROOT / normalized
         if candidate.is_file():
-            source_by_path[normalized] = candidate.read_text(encoding="utf-8")
-    return change_gate_errors(changed_paths, source_by_path=source_by_path)
+            try:
+                source_by_path[normalized] = candidate.read_text(encoding="utf-8")
+            except (OSError, UnicodeError) as exc:
+                read_errors.append(
+                    f"cannot read governed source {normalized}: {type(exc).__name__}"
+                )
+    return read_errors + change_gate_errors(changed_paths, source_by_path=source_by_path)
 
 
 def main(argv: list[str] | None = None) -> int:
