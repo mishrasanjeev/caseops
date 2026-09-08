@@ -1,6 +1,17 @@
 # CaseOps  - Work To Be Done
 
-September 08 post-review checkpoint: PR #458 is open. The current rebuilt
+September 08 follow-up pre-deployment checkpoint: PR #458's release
+`2664ee29` is deployed, but its production certification failed on three stale
+contracts and sixteen HTTPS-to-HTTP patent setup redirects. The repaired local
+Docker candidate now passes 4,198 API, 192 PostgreSQL, 968 frontend and 275
+browser tests. All 194 API skips have exact passing supplements; the five
+browser skips remain explicit. All 1,689 statute records and 23 production-shaped
+patent journeys pass locally. Committed-source, PR/main CI and exact-production
+acceptance remain required before certifying the follow-up release.
+See `docs/ip-implementation/evidence/bug010-production-followup-2026-09-08.md`.
+Broader catalog and pending IP requirements remain open.
+
+Historical September 08 pre-deployment checkpoint: PR #458 was open. The rebuilt
 Docker runtime is `19a33de2b82f6253d42ba6ba5a7ae63dcf6a5d6e`, a source
 fingerprint, not a released commit. Its complete browser suite passes 274 tests
 with zero failures and five explicitly reconciled skips. All 192 PostgreSQL

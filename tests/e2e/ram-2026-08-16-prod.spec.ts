@@ -223,6 +223,7 @@ const NAV_GROUPS: ReadonlyArray<{
     label: "Intellectual property",
     items: [
       { label: "IP docket", href: "/app/ip", capability: "ip:read" },
+      { label: "Patent intake", href: "/app/ip/patents", capability: "ip:read" },
       {
         label: "Trademark portfolio",
         href: "/app/ip/portfolio",
