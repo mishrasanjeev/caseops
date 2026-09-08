@@ -1,5 +1,12 @@
 # Ram September 05 Bug Batch
 
+September 08 production checkpoint: release `2664ee29` is serving production
+after local Docker, PR CI and main CI success. All 1,689 statute source records
+pass the deployed gate. Complete certification remains NO-GO while the shared
+TLS-terminated slash redirect and three stale historical expectations are
+repaired and retested. See
+`docs/ip-implementation/evidence/bug010-production-followup-2026-09-08.md`.
+
 September 07 pre-release update: current Docker API coverage (4,149 passes),
 complete PostgreSQL (186 passes), frontend coverage (968 passes), and the full
 Docker browser replay (274 passed, zero failed, five intentional skips) have

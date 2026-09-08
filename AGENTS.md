@@ -1,5 +1,21 @@
 # CaseOps agent instructions
 
+- Windows release-test wrappers must preserve drive-letter arguments through
+  native PowerShell forwarding. Pass an explicit argument array, inspect the
+  received arguments and reconcile the nonempty collected test inventory.
+  A zero-test XML report is incomplete evidence, even with zero failures.
+- TLS-terminated router redirects must retain the caller's scheme and origin.
+  Emit a relative Location for the exact same-origin slash correction, preserve
+  method/body/authentication and encoded queries, and leave publisher/signed
+  source redirects unchanged. Do not solve this by trusting arbitrary forwarded
+  headers, following an HTTPS-to-HTTP mutation, or retrying a failed mutation.
+- A green app-config suite does not cover production-only dated contracts.
+  Inventory historical assertions affected by new fields, navigation and source
+  verification, replay those complete changed journeys against local Docker,
+  then rerun the exact-release production suite. Keep a genuinely unverified
+  negative statute alongside the positive official-source record; do not freeze
+  a newly verified provision in an obsolete unverified test expectation.
+
 - A nonselectable statute count includes retired and quarantined rows as well
   as verification-pending rows. Discover the exact state before testing its UI.
   Source-opening acceptance must exercise the authenticated, audited redirect

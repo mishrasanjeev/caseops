@@ -114,7 +114,10 @@ describe("IpReportsPage", () => {
     previewMock.mockResolvedValue({ ...REPORT, confidentiality: "internal" });
     grantsMock.mockResolvedValue({ grants: [{ id: "grant-1", portal_user_id: "portal-user-1", portal_user_name: "Asha Rao", portal_user_email: "asha@example.com", docket_title: "ASTER DEVICE", active: true }] });
     render(withClient(<IpReportsPage />));
-    await user.click(await screen.findByRole("button", { name: "Generate" }));
+    await screen.findByText("Generate", { selector: "button" });
+    expect(screen.getByRole("button", { name: "Generate" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Generate" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Generate" }));
     await user.selectOptions(await screen.findByLabelText("Client"), "portal-user-1");
     await user.type(screen.getByLabelText("Client title"), "Opposition update");
     await user.click(screen.getByLabelText("ASTER DEVICE"));
@@ -133,7 +136,10 @@ describe("IpReportsPage", () => {
     grantsMock.mockResolvedValue({ grants: [{ id: "grant-1", portal_user_id: "portal-user-1", portal_user_name: "Asha Rao", portal_user_email: "asha@example.com", docket_title: "ASTER DEVICE", active: true }] });
     publishMock.mockRejectedValue(new Error("The reviewed source changed; generate a new snapshot."));
     render(withClient(<IpReportsPage />));
-    await user.click(await screen.findByRole("button", { name: "Generate" }));
+    await screen.findByText("Generate", { selector: "button" });
+    expect(screen.getByRole("button", { name: "Generate" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Generate" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Generate" }));
     await user.selectOptions(await screen.findByLabelText("Client"), "portal-user-1");
     await user.type(screen.getByLabelText("Client title"), "Opposition update");
     await user.click(screen.getByLabelText("ASTER DEVICE"));
@@ -193,7 +199,10 @@ describe("IpReportsPage", () => {
     const user = userEvent.setup();
     previewMock.mockRejectedValue(new Error("Report source timed out"));
     const view = render(withClient(<IpReportsPage />));
-    await user.click(await screen.findByRole("button", { name: "Generate" }));
+    await screen.findByText("Generate", { selector: "button" });
+    expect(screen.getByRole("button", { name: "Generate" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Generate" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Generate" }));
     await waitFor(() => expect(errorToastMock).toHaveBeenCalledWith("Report source timed out"));
 
     capabilityMock.mockReturnValue(false);

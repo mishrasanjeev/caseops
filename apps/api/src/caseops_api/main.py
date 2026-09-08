@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from slowapi.middleware import SlowAPIMiddleware
 
 from caseops_api.api.router import api_router
+from caseops_api.core.canonical_redirects import CanonicalSlashRedirectMiddleware
 from caseops_api.core.csrf import CSRFMiddleware
 from caseops_api.core.observability import configure_logging, configure_tracing
 from caseops_api.core.problem_details import problem_json, register_problem_handlers
@@ -44,6 +45,7 @@ def create_application() -> FastAPI:
     configure_tracing(application)
     limiter = configure_limiter()
     application.state.limiter = limiter
+    application.add_middleware(CanonicalSlashRedirectMiddleware)
     application.add_middleware(SlowAPIMiddleware)
     # EG-001 (2026-04-23): CSRF middleware. The bearer-auth path is
     # exempt — see core/csrf.py for the policy. Order matters:

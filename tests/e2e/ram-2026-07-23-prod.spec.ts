@@ -64,6 +64,8 @@ const EXPECTED_TEMPLATE_HEADERS = [
   "Matter Owner",
   "Assigned Team",
   "Responsible Lawyer",
+  "Temporary E-Case Number",
+  "CNR Number",
 ] as const;
 
 type HttpResponse = {
@@ -508,7 +510,7 @@ test.describe.serial("Ram 2026-07-23 deployed bulk Matter compatibility", () => 
       .replace(/^\uFEFF/, "");
     const csvHeaders = csvTemplate.split(/\r?\n/, 1)[0].split(",");
     expect(csvHeaders).toEqual(EXPECTED_TEMPLATE_HEADERS);
-    expect(csvHeaders).toHaveLength(21);
+    expect(csvHeaders).toHaveLength(23);
     expect(csvHeaders.indexOf("Court Forum Number")).toBe(
       csvHeaders.indexOf("Court") + 1,
     );
@@ -525,7 +527,7 @@ test.describe.serial("Ram 2026-07-23 deployed bulk Matter compatibility", () => 
       await downloadBytes(xlsxDownload),
     );
     expect(xlsxHeaders).toEqual(EXPECTED_TEMPLATE_HEADERS);
-    expect(xlsxHeaders).toHaveLength(21);
+    expect(xlsxHeaders).toHaveLength(23);
     expect(xlsxHeaders.indexOf("Court Forum Number")).toBe(
       xlsxHeaders.indexOf("Court") + 1,
     );

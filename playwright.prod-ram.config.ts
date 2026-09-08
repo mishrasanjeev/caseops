@@ -43,6 +43,7 @@ export default defineConfig({
   testMatch: [
     /(ram-batch-2026-04-26-prod\.spec\.ts|recommendations-grounding-2026-04-29-prod\.spec\.ts|ram-batch-2026-05-01-prod\.spec\.ts|pg-004-today-cockpit-2026-05-01-prod\.spec\.ts|hari-2026-05-09-prod\.spec\.ts|hari-2026-05-09-bug-033-prod\.spec\.ts|hari-2026-05-09-outlook-sync-prod\.spec\.ts|hari-2026-05-09-bug-032-prod\.spec\.ts|hari-2026-07-02-prod\.spec\.ts|(?:hari|ram)-\d{4}-\d{2}-\d{2}-prod\.spec\.ts|ram-2026-08-(?:11|24)-bugs\.spec\.ts|ram-2026-09-(?:02|04)-bugs\.spec\.ts|iplf-05(?:4b-indian-kanoon|6b-provider-operations|7b-madrid-workflow|8b-recordal-workflow)-2026-08-25-prod\.spec\.ts|iplf-0(?:59b-foreign-associate|60b-judge)-workflow-2026-08-26-prod\.spec\.ts|iplf-061a-product-guide-foundation-2026-08-26-prod\.spec\.ts|iplf-061b-product-guide-workflow-2026-08-27-prod\.spec\.ts|iplf-062b-workspace-assistant-2026-08-27-prod\.spec\.ts|iplf-063b-intelligent-review-2026-08-28-prod\.spec\.ts|iplf-064b-assistant-actions-2026-08-29-prod\.spec\.ts|iplf-065b-ai-safety-feedback-2026-08-30-prod\.spec\.ts|iplf-066b-private-retrieval-2026-08-31-prod\.spec\.ts|product-ownership-2026-08-29\.spec\.ts|qa-auth\.setup\.ts)$/,
     /ram-2026-09-05-bugs\.spec\.ts$/,
+    /ram-2026-09-08-bugs\.spec\.ts$/,
     /ram-2026-09-07-statute-source-data\.spec\.ts$/,
     PATENT_PROD_SPECS,
   ],
@@ -85,7 +86,7 @@ export default defineConfig({
     },
     {
       name: "tester-prod-chromium",
-      testMatch: [TESTER_AUTH_PROD_SPECS, /ram-2026-09-05-bugs\.spec\.ts$/],
+      testMatch: [TESTER_AUTH_PROD_SPECS, /ram-2026-09-05-bugs\.spec\.ts$/, /ram-2026-09-08-bugs\.spec\.ts$/],
       use: {
         ...devices["Desktop Chrome"],
         storageState: { cookies: [], origins: [] },

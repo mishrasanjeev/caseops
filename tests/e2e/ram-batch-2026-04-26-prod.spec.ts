@@ -27,6 +27,9 @@ import {
   type APIResponse,
   type Page,
 } from "@playwright/test";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 
 // `??` treats empty string as a value; an unset GitHub repo variable
 // materializes as "" in the workflow. Trim + truthy-check.
@@ -475,9 +478,8 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
     }
   });
 
-  test("STATUTE-LOOP: unverified BNS §318 text is withheld until curator verification", async ({
+  test("STATUTE-LOOP: source-verified BNS 318 is available while unverified IPC 420 remains withheld", async ({
     page,
-    request,
   }) => {
     // The /api/statutes/{slug}/sections endpoint serializes every
     // section in one shot (~47 KB for BNS, ~50KB+ for IPC). On a
@@ -488,16 +490,16 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
     // pagination + section_text-as-detail-fetch).
     test.setTimeout(300_000);
     await signIn(page);
-    const cookies = await page.context().cookies();
-    const cookieHeader = cookies
-      .filter((c) => c.domain.includes("caseops.ai"))
-      .map((c) => `${c.name}=${c.value}`)
-      .join("; ");
-    // IPLF-006C makes the public list verified-only. Legacy manual BNS
-    // §318 must be absent instead of appearing as a row with a hidden body.
+    const sourceRows = JSON.parse(readFileSync(path.resolve(__dirname,
+      "../../apps/api/src/caseops_api/scripts/seed_data/verified_india_code_sources.json"), "utf8")) as Array<{
+        statute_id: string; section_number: string; section_text: string;
+        source_sha256: string; source_url: string; exact_source_version: string;
+        verification_status: string;
+      }>;
+    const expected = sourceRows.find(row => row.statute_id === "bns-2023" && row.section_number === "Section 318");
+    expect(expected?.verification_status).toBe("verified_official");
     const listUrl = `${PROD_API_BASE_URL}/api/statutes/bns-2023/sections`;
-    const listResp = await request.get(listUrl, {
-      headers: { Cookie: cookieHeader, Accept: "application/json" },
+    const listResp = await page.request.get(listUrl, {
       timeout: 120_000,
     });
     expect(listResp.ok(), `${listUrl} returned ${listResp.status()}`).toBeTruthy();
@@ -507,36 +509,30 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
     const listed318 = (listBody.sections ?? []).find((section) =>
       /\b(?:Section\s*)?318\b/i.test(section.section_number),
     );
-    expect(
-      listed318,
-      "unverified BNS §318 must not appear in the verified-only list",
-    ).toBeUndefined();
+    expect(listed318).toMatchObject({ verification_status: "verified_official", is_provisional: false });
+    const verifiedResponse = await page.request.get(
+      `${PROD_API_BASE_URL}/api/statutes/bns-2023/sections/Section%20318`);
+    expect(verifiedResponse.status()).toBe(200);
+    const verified = (await verifiedResponse.json()).section;
+    expect(verified).toMatchObject({ section_text: expected!.section_text,
+      source_sha256: expected!.source_sha256, section_url: expected!.source_url,
+      exact_source_version: expected!.exact_source_version, verification_status: "verified_official" });
+    expect(createHash("sha256").update(verified.section_text).digest("hex")).toBe(expected!.source_sha256);
+    const source = await page.request.get(`${PROD_API_BASE_URL}${verified.source_action.open_url}`, { maxRedirects: 0 });
+    expect(source.status()).toBe(307);
+    expect(source.headers().location).toBe(expected!.source_url);
 
-    // Direct detail preserves metadata for controlled review while text
-    // fails closed. Accept the two historical number spellings, but require
-    // one canonical detail record to exist.
-    let detailResp = null;
-    for (const sectionNumber of ["Section 318", "318"]) {
-      const candidateUrl = `${PROD_API_BASE_URL}/api/statutes/bns-2023/sections/${encodeURIComponent(sectionNumber)}`;
-      const candidate = await request.get(candidateUrl, {
-        headers: { Cookie: cookieHeader, Accept: "application/json" },
-        timeout: 60_000,
-      });
-      if (candidate.ok()) {
-        detailResp = candidate;
-        break;
-      }
-    }
-    expect(detailResp, "BNS §318 controlled detail record must exist").not.toBeNull();
-    const detail = (await detailResp!.json()) as {
-      section: {
-        section_text: string | null;
-        verification_status: string;
-      };
-    };
-    const sectionText = detail.section?.section_text;
-    expect(detail.section.verification_status).toBe("unverified");
-    expect(sectionText, "unverified legal text must fail closed").toBeNull();
+    const unverifiedList = await page.request.get(`${PROD_API_BASE_URL}/api/statutes/ipc-1860/sections`);
+    expect(unverifiedList.status()).toBe(200);
+    expect((await unverifiedList.json()).sections).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ section_number: "Section 420" }),
+    ]));
+    const withheldResponse = await page.request.get(
+      `${PROD_API_BASE_URL}/api/statutes/ipc-1860/sections/Section%20420`);
+    expect(withheldResponse.status()).toBe(200);
+    expect((await withheldResponse.json()).section).toMatchObject({
+      verification_status: "unverified", section_text: null,
+    });
   });
 
   test("BUG-017: POST /api/matters/{id}/statute-references returns 201 (not 422)", async ({

@@ -140,7 +140,7 @@ describe("IpOppositionOpponentWorkflow", () => {
       }],
     });
 
-    expect(await screen.findByLabelText("Trigger date")).toHaveValue("2026-09-03");
+    await waitFor(() => expect(screen.getByLabelText("Trigger date")).toHaveValue("2026-09-03"));
     fireEvent.click(screen.getByRole("button", { name: "Propose deadline" }));
     await waitFor(() => expect(proposeMock).toHaveBeenCalledOnce());
     expect(proposeMock).toHaveBeenCalledWith(expect.objectContaining({

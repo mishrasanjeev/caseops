@@ -1,6 +1,12 @@
 # BUG-010 Official Source Release
 
-Current checkpoint, 2026-09-08 IST: **NO-GO** until final PR/main CI and
+Latest production checkpoint: PR #458 and main CI passed, and `2664ee29`
+is deployed. All 1,689 source records pass production verification, but broader
+release certification remains **NO-GO** due to the independently recorded
+historical-test drift and shared router redirect defect. See
+`bug010-production-followup-2026-09-08.md` for complete failure classification.
+
+Historical pre-deployment checkpoint, 2026-09-08 IST: **NO-GO** until final PR/main CI and
 exact-production acceptance finish. Complete rebuilt local acceptance passes. PR
 #458 contains the locally validated terminal replay fix in `88146527`; its
 CI-launcher follow-up has separate local proof. Production remains unchanged.
