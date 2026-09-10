@@ -105,6 +105,7 @@ export type Capability =
   // governance
   | "workspace:admin"
   | "audit:export"
+  | "legal_holds:manage"
   | "matter_access:manage"
   // intake (Sprint 8b BG-025)
   | "intake:submit"
@@ -240,6 +241,7 @@ const GOVERNANCE: Capability[] = [
   "portal:invite",
   "portal:manage_grants",
   "notifications:manage",
+  "legal_holds:manage",
   "ip:import",
   "ip:fees_manage",
   "ip:rules_propose",

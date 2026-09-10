@@ -60,6 +60,16 @@ class DomainEventContract:
 # time, correlation, aggregate, producer, and source identity are immutable
 # envelope columns and must not be duplicated as payload contract fields.
 _EVENT_CONTRACTS: dict[tuple[str, int], DomainEventContract] = {
+    ("case_tracking.update_summary_requested", 1): DomainEventContract(
+        required_payload_fields=frozenset({
+            "update_id", "tracked_case_id", "source_version", "source_sha256",
+            "actor_membership_id", "actor_user_id", "auth_issued_at",
+            "bookmark_id", "matter_id", "matter_lifecycle_version", "no_paid_providers",
+        }),
+        consumers=("case-tracking-update-summary",),
+        confidentiality="privileged",
+        aggregate_payload_field="update_id",
+    ),
     ("ip.legal_state.lifecycle_changed", 1): DomainEventContract(
         required_payload_fields=frozenset(
             {
@@ -326,7 +336,13 @@ def _validate_contract_payload(
         "operation_version",
     }
     for field, value in payload.items():
-        if field in version_fields:
+        if field == "matter_lifecycle_version":
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise TypeError("Domain event matter_lifecycle_version must be nonnegative.")
+        elif field == "no_paid_providers":
+            if not isinstance(value, bool):
+                raise TypeError("Domain event no_paid_providers must be a boolean.")
+        elif field in version_fields:
             if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
                 raise TypeError(f"Domain event payload field {field} must be a version.")
         elif field == "safe_counts":
@@ -556,6 +572,7 @@ def claim_outbox_events(
     limit: int = 25,
     lease_for: timedelta = timedelta(minutes=5),
     company_id: str | None = None,
+    event_type: str | None = None,
     now: datetime | None = None,
 ) -> list[OutboxClaim]:
     """Claim a disjoint due batch; PostgreSQL uses ``SKIP LOCKED``."""
@@ -599,6 +616,8 @@ def claim_outbox_events(
     )
     if company_id is not None:
         statement = statement.where(DomainOutboxEvent.company_id == company_id)
+    if event_type is not None:
+        statement = statement.where(DomainOutboxEvent.event_type == event_type)
     rows = list(session.scalars(_event_lock_statement(session, statement, skip_locked=True)).all())
     claims: list[OutboxClaim] = []
     for event in rows:

@@ -14,10 +14,12 @@ from caseops_api.db.models import (
     IpProceeding,
     TrademarkApplication,
 )
+from caseops_api.services.ip_specialist_contracts import RECORD_TYPES as SPECIALIST_RECORD_TYPES
 
 # New domains opt in only after their disclosure journey is implemented.
 GENERAL_DISCLOSURE_DOMAINS = ("trademark",)
 RECORD_DOMAINS = {
+    **SPECIALIST_RECORD_TYPES,
     "patent_family": "patent",
     "patent_application": "patent",
     "trademark": "trademark",

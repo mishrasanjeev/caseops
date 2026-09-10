@@ -20,9 +20,23 @@ class CaseTrackingProviderStatusResponse(BaseModel):
     provider: str
     configured: bool
     reason: str | None = None
+    scheduled_sync_eligible: bool = False
+    scheduled_sync_disabled_reason: (
+        Literal[
+            "tracking_disabled",
+            "provider_not_configured",
+            "configured_test_tenant",
+            "synthetic_test_tenant",
+        ]
+        | None
+    ) = None
+    scheduled_sync_local_time: str
+    scheduled_sync_window_end_local_time: str
+    scheduled_sync_timezone: str
     performs_external_probe: bool = False
     provider_prepaid_balance_checked: bool = False
     workspace_monthly_spend_minor: int = 0
+    workspace_monthly_reserved_minor: int = 0
     workspace_monthly_limit_minor: int | None = None
     workspace_monthly_remaining_minor: int | None = None
     workspace_monthly_limit_unlimited: bool = False

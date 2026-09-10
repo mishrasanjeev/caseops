@@ -1,4 +1,4 @@
-"""Evidence-only tenant data-operation routes for IPLF-028B."""
+"""Non-executable data operations and authenticated preservation for IPLF-028B."""
 
 from __future__ import annotations
 
@@ -16,6 +16,16 @@ from caseops_api.schemas.data_governance import (
     TenantDataOperationTenantDryRunRequest,
     TenantLegalHoldSummary,
 )
+from caseops_api.schemas.legal_holds import (
+    HoldDraftRequest,
+    HoldListResponse,
+    HoldRecord,
+    HoldReleaseListResponse,
+    HoldReleaseProposal,
+    HoldReleaseRequest,
+    HoldVersionCommand,
+)
+from caseops_api.services import legal_hold_workflow
 from caseops_api.services.data_governance import (
     create_dry_run_manifest,
     create_tenant_scoped_dry_run_manifest,
@@ -33,6 +43,12 @@ DataGovernanceOperator = Annotated[
     SessionContext,
     Depends(require_capability("audit:export")),
 ]
+LegalHoldOperator = Annotated[
+    SessionContext,
+    Depends(require_capability("legal_holds:manage")),
+]
+
+
 @router.post(
     "/operations/dry-runs",
     response_model=TenantDataOperationDryRunRecord,
@@ -99,6 +115,75 @@ def read_tenant_legal_hold_summary(
     session: DbSession,
 ) -> TenantLegalHoldSummary:
     return get_tenant_legal_hold_summary(session, context=context)
+
+
+@router.get("/holds", response_model=HoldListResponse)
+def list_preservation_holds(
+    context: LegalHoldOperator,
+    session: DbSession,
+    limit: int = Query(default=25, ge=1, le=100),
+    before_id: str | None = Query(default=None, min_length=1, max_length=36),
+) -> HoldListResponse:
+    return legal_hold_workflow.list_holds(
+        session, context=context, limit=limit, before_id=before_id
+    )
+
+
+@router.post("/holds", response_model=HoldRecord, status_code=201)
+def draft_preservation_hold(
+    payload: HoldDraftRequest, context: DataGovernanceOperator, session: DbSession
+) -> HoldRecord:
+    return legal_hold_workflow.create_hold(session, context=context, payload=payload)
+
+
+@router.post("/holds/{hold_id}/activate", response_model=HoldRecord)
+def activate_preservation_hold(
+    hold_id: str, payload: HoldVersionCommand, context: LegalHoldOperator, session: DbSession
+) -> HoldRecord:
+    return legal_hold_workflow.activate_hold(
+        session, context=context, hold_id=hold_id, expected_updated_at=payload.expected_updated_at
+    )
+
+
+@router.get("/holds/{hold_id}/release-requests", response_model=HoldReleaseListResponse)
+def list_preservation_release_requests(
+    hold_id: str,
+    context: LegalHoldOperator,
+    session: DbSession,
+    limit: int = Query(default=25, ge=1, le=100),
+    before_id: str | None = Query(default=None, min_length=1, max_length=36),
+) -> HoldReleaseListResponse:
+    return legal_hold_workflow.list_release_proposals(
+        session, context=context, hold_id=hold_id, limit=limit, before_id=before_id
+    )
+
+
+@router.post(
+    "/holds/{hold_id}/release-requests", response_model=HoldReleaseProposal, status_code=201
+)
+def request_preservation_release(
+    hold_id: str, payload: HoldReleaseRequest, context: DataGovernanceOperator, session: DbSession
+) -> HoldReleaseProposal:
+    return legal_hold_workflow.propose_release(
+        session, context=context, hold_id=hold_id, payload=payload
+    )
+
+
+@router.post("/holds/{hold_id}/release-requests/{proposal_id}/approve", response_model=HoldRecord)
+def approve_preservation_release(
+    hold_id: str,
+    proposal_id: str,
+    payload: HoldVersionCommand,
+    context: LegalHoldOperator,
+    session: DbSession,
+) -> HoldRecord:
+    return legal_hold_workflow.approve_release(
+        session,
+        context=context,
+        hold_id=hold_id,
+        proposal_id=proposal_id,
+        expected_updated_at=payload.expected_updated_at,
+    )
 
 
 @router.get(

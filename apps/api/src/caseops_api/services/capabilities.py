@@ -12,6 +12,7 @@ from caseops_api.db.models import CompanyMembership, CustomRole, MembershipRole
 _NON_DELEGABLE_CUSTOM_ROLE_CAPABILITIES: frozenset[str] = frozenset(
     {
         "workspace:admin",
+        "legal_holds:manage",
         "company:manage_profile",
         "matter_access:manage",
         "teams:manage",

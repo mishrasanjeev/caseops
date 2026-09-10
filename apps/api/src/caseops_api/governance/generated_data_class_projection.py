@@ -24,22 +24,24 @@ from caseops_api.governance.types import ReviewedDataClass
 PROJECTION_SCHEMA_VERSION = 1
 
 # Fingerprints of the exact artifacts this projection was rendered from.
-MAP_DOCUMENT_FINGERPRINT = "67b46feb4005f0c3857dc29662852fe9af249d9f75ce280dc64d231bbcc7d764"
-MAP_SCHEMA_FINGERPRINT = "faa5634c782c7f5d0fdb645c8a6ca6af5a93cdbbd9a712fea90792a38871ed88"
+MAP_DOCUMENT_FINGERPRINT = "3a38c38d80c3ee3c7be9e1cfab1ec245b4779edbef70d794826202717d97afe9"
+MAP_SCHEMA_FINGERPRINT = "8f8ea8634a399b87cc2f7dea6cc122dbc0f40e2a81594190b5a3bd6bd078662a"
 REGISTRY_028A_FINGERPRINT = "dd3c30cf69a9b498cea3820acb485a0368a72bf6d9348c2f0d430b5efa99802d"
 REGISTRY_027A_FINGERPRINT = "10b97a818b23d4fae8fe7f54b63edb50b0e04c16778cf0e646ef907f40e1ad96"
 # The ORM schema at render time. Compared against the live models at runtime, so
 # an image whose models moved after this file was rendered reports stale rather
 # than answering from a projection that no longer describes it.
-ORM_SCHEMA_FINGERPRINT = "db672598d4b32f54e539f41c8652ba56ba5ed275b3dabfc37463fa306e15cf5a"
+ORM_SCHEMA_FINGERPRINT = "1200b7766ec461a2c87f673ee749b5eff7a658ca83792b00ab425878d2f5490f"
 
-PROJECTION_ID = "9593b3fb5d65ef1ba87e9a547490239aedc664dec1f53ef965f998ec9d961c51"
+PROJECTION_ID = "a4bd6720c8011d2d67b949d8aaaf381b1cc7899e37c62bbd24896dfdf6bc991d"
 
 # Every SQL table the repository-wide map inventories. Membership here is what
 # separates "inventoried but never reviewed" from "no such data class", which
 # are different answers with different remedies.
 INVENTORIED_SQL_TABLES = frozenset(
     {
+        "access_review_campaigns",
+        "access_review_decisions",
         "account_setup_tokens",
         "affidavit_intelligence_runs",
         "affidavit_questions",
@@ -189,10 +191,15 @@ INVENTORIED_SQL_TABLES = frozenset(
         "ip_patent_application_identities",
         "ip_patent_application_versions",
         "ip_patent_applications",
+        "ip_patent_evidence_documents",
+        "ip_patent_evidence_versions",
         "ip_patent_families",
         "ip_patent_family_versions",
         "ip_patent_party_details",
         "ip_patent_priority_details",
+        "ip_patent_proceeding_details",
+        "ip_patent_proceeding_events",
+        "ip_patent_prosecution_events",
         "ip_portfolio_export_jobs",
         "ip_portfolio_saved_views",
         "ip_post_registration_recordals",
@@ -207,6 +214,14 @@ INVENTORIED_SQL_TABLES = frozenset(
         "ip_responsibility_assignments",
         "ip_rule_sets",
         "ip_rule_versions",
+        "ip_specialist_obligation_events",
+        "ip_specialist_obligation_links",
+        "ip_specialist_observations",
+        "ip_specialist_records",
+        "ip_specialist_versions",
+        "ip_specialist_workflow_sources",
+        "ip_specialist_workflow_versions",
+        "ip_specialist_workflows",
         "ip_title_interests",
         "ip_tracked_case_links",
         "ip_trademark_particular_versions",
@@ -227,6 +242,7 @@ INVENTORIED_SQL_TABLES = frozenset(
         "judgment_alert_rules",
         "judgment_alerts",
         "legal_hold_items",
+        "legal_hold_release_requests",
         "legal_holds",
         "legal_knowledge_graph_edges",
         "legal_knowledge_graph_nodes",
@@ -337,6 +353,7 @@ INVENTORIED_SQL_TABLES = frozenset(
         "tenant_notification_preferences",
         "tenant_outlook_configurations",
         "tenant_security_policies",
+        "tracked_case_backfill_cursors",
         "tracked_case_bookmarks",
         "tracked_case_poll_runs",
         "tracked_case_provider_operations",

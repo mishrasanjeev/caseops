@@ -26,6 +26,49 @@ def test_published_contract_covers_every_arch_ops_requirement() -> None:
     assert ip_arch_ops_contract.validate(_contract(), _catalogue()) == []
 
 
+def test_case_summary_extends_the_canonical_court_tracking_owner() -> None:
+    event = next(
+        row for row in _catalogue()["domain_events"]
+        if row["name"] == "case_tracking.update_summary_requested"
+    )
+    assert event["owner"] == "court-tracking"
+    assert event["consumers"] == ["case-tracking-update-summary"]
+
+
+def test_preservation_actions_extend_the_existing_foundations_owner() -> None:
+    actions = {
+        row["name"]: row for row in _catalogue()["audit_actions"]
+        if row["name"].startswith("legal_hold.")
+    }
+    assert set(actions) == {
+        "legal_hold.created", "legal_hold.activated",
+        "legal_hold.release_requested", "legal_hold.released",
+    }
+    assert {row["owner"] for row in actions.values()} == {"platform-shared-foundations"}
+    assert {row["emission_status"] for row in actions.values()} == {"runtime_emitted"}
+    assert actions["legal_hold.released"]["payload_schema"]["required"] == [
+        "proposal_id", "request_hash", "fresh_purge_dry_run_required",
+    ]
+
+
+def test_patent_work_actions_use_the_legal_state_owner_and_locked_sequence() -> None:
+    names = {
+        "ip_patent_evidence.created", "ip_patent_prosecution.recorded",
+        "ip_patent_proceeding.created", "ip_patent_proceeding.transitioned",
+    }
+    actions = {row["name"]: row for row in _catalogue()["audit_actions"] if row["name"] in names}
+    assert set(actions) == names
+    for row in actions.values():
+        assert row["owner"] == "ip-legal-state"
+        assert row["emission_status"] == "runtime_emitted"
+        assert row["idempotency_key"] == "company_id:application_id:sequence"
+        assert row["payload_schema"]["required"] == [
+            "application_id",
+            "sequence",
+            "lifecycle_version",
+        ]
+
+
 @pytest.mark.parametrize(
     "requirement_id", [f"ARCH-OPS-{index:02d}" for index in range(1, 27)]
 )

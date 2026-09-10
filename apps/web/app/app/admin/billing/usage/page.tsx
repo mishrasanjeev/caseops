@@ -133,9 +133,10 @@ function ProviderSpendTable({ rows }: { rows: BillingProviderSpendRow[] }) {
             <thead className="border-b border-[var(--color-line)] text-xs uppercase text-[var(--color-mute)]">
               <tr>
                 <th className="py-2 pr-4">Provider</th>
-                <th className="py-2 pr-4">Provider spend</th>
+                <th className="py-2 pr-4">Estimated provider spend</th>
                 <th className="py-2 pr-4">Budget scope</th>
                 <th className="py-2 pr-4">Budget used</th>
+                <th className="py-2 pr-4">Budget reserved</th>
                 <th className="py-2 pr-4">Monthly limit</th>
                 <th className="py-2">Remaining</th>
               </tr>
@@ -144,22 +145,25 @@ function ProviderSpendTable({ rows }: { rows: BillingProviderSpendRow[] }) {
               {rows.map((row) => (
                 <tr key={row.provider_key} className="border-b border-[var(--color-line-2)]">
                   <td className="py-3 pr-4 font-medium text-[var(--color-ink)]">{row.label}</td>
-                  <td className="py-3 pr-4">{formatMoneyMinor(row.spent_minor, row.currency)}</td>
+                  <td className="py-3 pr-4">{formatMoneyMinor(row.spent_minor, row.currency, 2)}</td>
                   <td className="py-3 pr-4">
                     {row.budget_scope === "account" ? "Shared account" : "Provider"}
                   </td>
                   <td className="py-3 pr-4">
-                    {formatMoneyMinor(row.budget_spent_minor, row.currency)}
+                    {formatMoneyMinor(row.budget_spent_minor, row.currency, 2)}
+                  </td>
+                  <td className="py-3 pr-4" title="Pending provider confirmation, including interrupted requests">
+                    {formatMoneyMinor(row.reserved_minor, row.currency, 2)}
                   </td>
                   <td className="py-3 pr-4">
                     {row.unlimited
                       ? "Unlimited"
-                      : formatMoneyMinor(row.monthly_limit_minor, row.currency)}
+                      : formatMoneyMinor(row.monthly_limit_minor, row.currency, 2)}
                   </td>
                   <td className="py-3">
                     {row.unlimited
                       ? "Unlimited"
-                      : formatMoneyMinor(row.remaining_minor, row.currency)}
+                      : formatMoneyMinor(row.remaining_minor, row.currency, 2)}
                   </td>
                 </tr>
               ))}

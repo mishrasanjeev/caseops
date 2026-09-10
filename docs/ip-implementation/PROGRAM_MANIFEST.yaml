@@ -4,7 +4,7 @@
   "program": {
     "id": "PRD-IPLF-2026-08-01",
     "prd_path": "docs/PRD_IP_LAW_FIRM_PLATFORM_2026-08-01.md",
-    "prd_sha256": "96b655bc84dd8ae705c036de04f1cd3b12128c325d673c6cfa8d68485a874cf3",
+    "prd_sha256": "f5d16609f9836bd4e1f61b518902439c954126134aea73cda1e06f84832ce9a1",
     "baseline": {
       "requirement_count": 436,
       "family_count": 50,
@@ -2572,10 +2572,12 @@
         "IPLF-073A",
         "IPLF-073B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
-      "evidence_refs": []
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/ip-access-review-campaign-2026-09-10.md"
+      ]
     },
     {
       "id": "IPLF-079",
@@ -2674,10 +2676,13 @@
         "IPLF-090A",
         "IPLF-090B"
       ],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
-      "evidence_refs": []
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/other-ip-domain-workflows-2026-09-10-v2/HANDOFF.md",
+        "docs/ip-implementation/evidence/other-ip-domains-closure-2026-09-09.md"
+      ]
     },
     {
       "id": "IPLF-091",
@@ -16478,27 +16483,46 @@
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260910_0001_access_review_campaigns.py",
+        "apps/api/src/caseops_api/api/routes/access_reviews.py",
+        "apps/api/src/caseops_api/schemas/access_reviews.py",
+        "apps/api/src/caseops_api/services/access_reviews.py"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_20260910_access_reviews.py",
+        "apps/api/tests/test_20260910_access_reviews_postgres.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/ip-access-review-campaign-2026-09-10.md"
+      ],
       "evidence_metadata": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-073-EXTERNAL-ACCEPTANCE",
+          "summary": "PostgreSQL and exact-release browser acceptance are not certified by this local integration.",
+          "owner": "Codex",
+          "evidence_needed": "Fresh isolated PostgreSQL execution plus exact-release responsive browser acceptance."
+        }
+      ],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Complete scheduled and emergency-access scope separately; keep this campaign adapter restricted to current grants and fail closed until PostgreSQL and exact-release acceptance pass."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Adds tenant-scoped access_review_campaigns and access_review_decisions as retained review evidence. These tables do not grant, export, purge, or independently mutate access."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
+      "documentation_impact": [
+        "docs/ip-implementation/evidence/ip-access-review-campaign-2026-09-10.md"
+      ],
+      "allocation_review": "September 10 integration: campaign persistence and finalization extend the existing target-aware access owner; emergency-access sessions and scheduled policy automation remain outside this partial slice.",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "administrative_exception": {
         "prd_citation": "PRD Section 25 and the parent epic title",
-        "reviewer": "CaseOps Phase 0 control-plane reconciliation",
-        "reason": "This bounded technical slice has no direct requirement family or journey path; its parent completion slices carry the full reciprocal allocation.",
-        "date": "2026-08-02",
+        "reviewer": "CaseOps September 10 integration",
+        "reason": "The foundation slice has no direct requirement or journey path; the parent completion slice carries the reciprocal allocation.",
+        "date": "2026-09-10",
         "milestone": "M7-M10"
       }
     },
@@ -16557,25 +16581,38 @@
       "dependencies": [
         "IPLF-073A"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-63-EXC-01",
-        "planned:IPLF-UJ-63-EXC-02",
-        "planned:IPLF-UJ-63-EXC-03",
-        "planned:IPLF-UJ-63-EXC-04",
-        "planned:IPLF-UJ-63-NORMAL"
+      "implementation_refs": [
+        "apps/web/app/app/admin/access-reviews/page.tsx",
+        "apps/web/lib/api/access-reviews.ts",
+        "tests/e2e/iplf-073b-access-reviews-2026-09-10.spec.ts"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_20260910_access_reviews.py",
+        "apps/web/app/app/admin/access-reviews/page.test.tsx",
+        "apps/web/lib/api/access-reviews.test.ts"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/ip-access-review-campaign-2026-09-10.md"
+      ],
       "evidence_metadata": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-073-EXTERNAL-ACCEPTANCE",
+          "summary": "PostgreSQL and exact-release browser acceptance are not certified by this local integration.",
+          "owner": "Codex",
+          "evidence_needed": "Fresh isolated PostgreSQL execution plus exact-release responsive browser acceptance."
+        }
+      ],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Run the retained browser journey against the exact serving revision and complete the scheduled, emergency-access, and remaining reciprocal UJ-63 paths before closure."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Uses the tenant-scoped campaign and decision evidence created by IPLF-073A; finalization delegates grant changes to the canonical access owner."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
+      "documentation_impact": [
+        "docs/ip-implementation/evidence/ip-access-review-campaign-2026-09-10.md"
+      ],
+      "allocation_review": "September 10 integration: the visible campaign journey covers current Matter/IP grants and canonical revocation, while emergency sessions, scheduled policy triggers, and exact-release proof remain open.",
       "implementation_status": "not_started",
       "verification_status": "not_run",
       "release_status": "blocked"
@@ -16975,20 +17012,43 @@
         }
       ],
       "dependencies": [],
-      "implementation_refs": [],
-      "test_refs": [],
-      "evidence_refs": [],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260909_0005_specialist_intake.py",
+        "apps/api/src/caseops_api/db/ip_specialist_models.py",
+        "apps/api/src/caseops_api/services/ip_specialist_contracts.py",
+        "apps/api/src/caseops_api/services/ip_specialist.py",
+        "apps/api/src/caseops_api/api/routes/ip_specialist.py"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_specialist.py",
+        "apps/api/tests/test_ip_specialist_schema.py",
+        "apps/api/tests/test_ip_specialist_migration.py"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/other-ip-domains-closure-2026-09-09.md",
+        "docs/ip-implementation/evidence/other-ip-domain-workflows-2026-09-10-v2/HANDOFF.md"
+      ],
       "evidence_metadata": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-090-EXTERNAL-ACCEPTANCE",
+          "summary": "Specialist intake remains partial; authoritative source packs, PostgreSQL, browser and exact-release proof are not certified.",
+          "owner": "Codex",
+          "evidence_needed": "Per-domain source evidence, isolated PostgreSQL inventory, responsive browser journeys and exact-release verification."
+        }
+      ],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Keep all ten specialist domains intake-only or unavailable as catalog evidence allows; add authoritative legal sources before any beta/GA or automated legal claim."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Adds tenant-scoped specialist records, immutable versions, observations and workflow evidence behind restricted access and fail-closed data governance."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
-      "implementation_status": "not_started",
+      "documentation_impact": [
+        "docs/ip-implementation/child-prds/",
+        "docs/ip-implementation/evidence/other-ip-domain-workflows-2026-09-10-v2/HANDOFF.md"
+      ],
+      "allocation_review": "September 10 integration: typed specialist intake and immutable source/version boundaries are registered per domain; legal automation, public disclosure and beta/GA remain disabled without exact evidence.",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "administrative_exception": {
@@ -17057,37 +17117,45 @@
       "dependencies": [
         "IPLF-090A"
       ],
-      "implementation_refs": [],
-      "test_refs": [
-        "planned:IPLF-UJ-30-EXC-01",
-        "planned:IPLF-UJ-30-EXC-02",
-        "planned:IPLF-UJ-30-NORMAL",
-        "planned:IPLF-UJ-41-EXC-01",
-        "planned:IPLF-UJ-41-EXC-02",
-        "planned:IPLF-UJ-41-EXC-03",
-        "planned:IPLF-UJ-41-EXC-04",
-        "planned:IPLF-UJ-41-NORMAL",
-        "planned:IPLF-UJ-42-EXC-01",
-        "planned:IPLF-UJ-42-EXC-02",
-        "planned:IPLF-UJ-42-EXC-03",
-        "planned:IPLF-UJ-42-NORMAL",
-        "planned:IPLF-UJ-43-EXC-01",
-        "planned:IPLF-UJ-43-EXC-02",
-        "planned:IPLF-UJ-43-EXC-03",
-        "planned:IPLF-UJ-43-EXC-04",
-        "planned:IPLF-UJ-43-NORMAL"
+      "implementation_refs": [
+        "apps/web/app/app/ip/specialist/page.tsx",
+        "apps/web/components/ip/SpecialistWorkspace.tsx",
+        "apps/web/lib/api/ip-specialist.ts",
+        "tests/e2e/iplf-090a-other-ip-domains-2026-09-09.spec.ts",
+        "tests/e2e/iplf-090b-other-ip-workflows-2026-09-10.spec.ts"
       ],
-      "evidence_refs": [],
+      "test_refs": [
+        "apps/api/tests/test_ip_specialist.py",
+        "apps/api/tests/test_ip_specialist_workflows.py",
+        "apps/api/tests/test_ip_specialist_layout.py",
+        "apps/api/tests/test_ip_specialist_performance.py",
+        "apps/web/components/ip/SpecialistWorkspace.test.tsx",
+        "apps/web/components/ip/SpecialistWorkflows.test.tsx",
+        "apps/web/components/ip/SpecialistLayoutWorkflows.test.tsx"
+      ],
+      "evidence_refs": [
+        "docs/ip-implementation/evidence/other-ip-domain-workflows-2026-09-10-v2/HANDOFF.md",
+        "docs/ip-implementation/evidence/other-ip-domains-closure-2026-09-09.md"
+      ],
       "evidence_metadata": [],
-      "blockers": [],
+      "blockers": [
+        {
+          "id": "IPLF-090-EXTERNAL-ACCEPTANCE",
+          "summary": "Specialist workflow implementation is partial; PostgreSQL, browser, source-pack and exact-release proof remain open.",
+          "owner": "Codex",
+          "evidence_needed": "Complete replacement PostgreSQL inventory, dated responsive browser journeys and per-domain authoritative source evidence."
+        }
+      ],
       "next_actions": [
-        "Start this node whenever its direct dependencies are ready; unresolved external acceptance keeps only its authoritative activation and claims fail-closed while independent implementation continues."
+        "Reconcile the complete V2 replacement inventory before claiming any workflow slice; preserve unavailable/intake-only labels for unsupported domains."
       ],
       "data_impact": [
-        "Pending slice design; no data mutation is authorized by this allocation row."
+        "Workflow rows reuse canonical restricted records and retain immutable source, cost and lifecycle evidence; they do not create parallel access or finance owners."
       ],
-      "documentation_impact": [],
-      "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
+      "documentation_impact": [
+        "docs/ip-implementation/evidence/other-ip-domain-workflows-2026-09-10-v2/HANDOFF.md"
+      ],
+      "allocation_review": "September 10 integration: the specialist workflow supplement covers bounded design/copyright/licensing/layout behavior and preserves fail-closed source/cost/lifecycle boundaries; full UJ-44 and exact-release acceptance remain open.",
       "implementation_status": "not_started",
       "verification_status": "not_run",
       "release_status": "blocked"

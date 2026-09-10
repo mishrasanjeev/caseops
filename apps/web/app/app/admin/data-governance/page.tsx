@@ -95,6 +95,7 @@ export default function DataGovernancePage() {
     <div className="flex flex-col gap-6">
       <Link href="/app/admin" className="text-sm text-[var(--color-mute)] hover:text-[var(--color-ink)]">← Back to admin</Link>
       <PageHeader eyebrow="Admin · Data governance" title="Data-governance integrity" description="Create and inspect non-executable workspace dry runs. CaseOps validates the registered data class and derives the tenant scope automatically." />
+      <Link href="/app/admin/data-governance/holds" className="text-sm underline">Legal holds</Link>
       {canAudit ? (
       <Card>
         <CardHeader><CardTitle as="h2">Current integrity checks</CardTitle><CardDescription>Unavailable checks are intentionally not shown as healthy.</CardDescription></CardHeader>

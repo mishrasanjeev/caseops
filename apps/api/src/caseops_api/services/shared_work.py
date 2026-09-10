@@ -405,6 +405,7 @@ def update_ip_shared_task(
     context: SessionContext,
     task_id: str,
     payload: IpSharedTaskUpdateRequest,
+    commit: bool = True,
 ) -> IpSharedTaskRecord:
     candidate = session.execute(
         select(MatterTask.owner_membership_id, MatterTask.status).where(
@@ -471,8 +472,9 @@ def update_ip_shared_task(
         target_id=task.id,
         metadata={"ip_docket_id": target.target_id, "changed_fields": sorted(updates)},
     )
-    session.commit()
-    session.refresh(task)
+    if commit:
+        session.commit()
+        session.refresh(task)
     return _task_record(task)
 
 
@@ -1046,6 +1048,7 @@ def update_ip_operational_deadline(
     context: SessionContext,
     deadline_id: str,
     payload: IpOperationalDeadlineUpdateRequest,
+    commit: bool = True,
 ) -> IpOperationalDeadlineRecord:
     updates = payload.model_dump(exclude_unset=True, exclude={"docket_id"})
     candidate = session.execute(
@@ -1159,8 +1162,9 @@ def update_ip_operational_deadline(
         target_id=deadline.id,
         metadata={"ip_docket_id": target.target_id, "changed_fields": sorted(updates)},
     )
-    session.commit()
-    session.refresh(deadline)
+    if commit:
+        session.commit()
+        session.refresh(deadline)
     return _deadline_record(deadline)
 
 

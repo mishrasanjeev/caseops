@@ -1457,8 +1457,10 @@ export default function GuidePage() {
                     </li>
                     <li>
                       <strong>Backlog.</strong> Unfinished work persists and resumes on the
-                      next run. Batches are fair across tenants so one tenant cannot consume
-                      the entire refresh window.
+                      next five-minute continuation inside the execution window. Batches
+                      are fair across tenants so one tenant cannot consume the entire window.
+                      A queued provider refresh is checked for completion before another
+                      refresh is purchased.
                     </li>
                     <li>
                       <strong>Provider safety.</strong> Disabled or misconfigured providers
@@ -1478,11 +1480,34 @@ export default function GuidePage() {
                       lawyer and AI review.
                     </li>
                     <li>
+                      <strong>Verified hearing identity.</strong> CNR is the primary exact
+                      identifier. Without it, matching requires the court and a public case
+                      or filing number with year, corroborated by the supplied case details.
+                      Missing, conflicting, multiple or incomplete matches do not update a
+                      Matter. Party names alone never identify a case. A verified result
+                      updates Next Hearing with the nearest upcoming date; it never reopens
+                      a closed or disposed Matter.
+                    </li>
+                    <li>
+                      <strong>Summary processing.</strong> Eligible new order summaries
+                      are processed asynchronously under the workspace AI policy. A model
+                      failure does not undo the saved provider update. Current access,
+                      source identity and Matter lifecycle are checked again before a
+                      summary is published.
+                    </li>
+                    <li>
                       <strong>Workspace provider budget.</strong> Live human searches,
-                      refreshes, and source downloads count toward one shared Indian Kanoon and
+                      refreshes, scheduled eligible refreshes and source downloads count toward one shared Indian Kanoon and
                       eCourts account budget. The default is INR 1,000 per month; Admin &gt;
                       Billing &gt; Usage separates provider contribution from total budget use,
                       limit, remaining amount, and any explicit unlimited policy.
+                    </li>
+                    <li>
+                      <strong>Scheduled eligibility.</strong> Configured credentials do
+                      not guarantee that a workspace is eligible for unattended refresh.
+                      Provider status reports the current scheduled policy separately from
+                      live-human access. Automated tests and configured persistent QA
+                      workspaces cannot consume paid provider credits.
                     </li>
                     <li>
                       <strong>Manual fallback.</strong> Manual refresh is rate-limited,
@@ -1494,7 +1519,9 @@ export default function GuidePage() {
                       <strong>Replay and quarantine.</strong> Admin replay is previewed,
                       tenant-scoped, limited to 25 rows, step-up protected where MFA policy
                       applies, and executed by the next bounded poll. A poison record can be
-                      quarantined without stopping other cases. Incident closure requires a
+                      quarantined without stopping other cases. Rate limits, timeouts and
+                      temporary outages use bounded automatic recovery, not permanent
+                      quarantine or mandatory manual replay. Incident closure requires a
                       successful canary plus root-cause and prevention evidence.
                     </li>
                     <li>
@@ -1711,8 +1738,8 @@ export default function GuidePage() {
                 <Section id="statutes" title="17 · Statutes and sections">
                   <p>
                     Visit <code>/app/statutes</code> to browse the structured
-                    catalog of central Indian Acts. The committed catalog as of 11 July
-                    2026 contains 23 Acts and 3,393 sections, including the Constitution,
+                    catalog of central Indian Acts. The live catalog separates catalogued
+                    provisions from verified selectable provisions, including the Constitution,
                     BNSS, BNS, BSA, CrPC, IPC, CPC, major commercial and regulatory Acts,
                     and source links to{" "}
                     <a
@@ -1722,8 +1749,7 @@ export default function GuidePage() {
                     >
                       indiacode.nic.in
                     </a>{" "}
-                    — the Government of India&apos;s official Acts repository
-                    (public domain).
+                    — the Government of India&apos;s official Acts repository.
                   </p>
                   <ul className="mt-3 space-y-2 text-[15px]">
                     <li>
@@ -1744,18 +1770,20 @@ export default function GuidePage() {
                       BNS&quot;.
                     </li>
                     <li>
-                      <strong>Complete catalog visibility.</strong> An Act page lists every
+                      <strong>Catalog visibility.</strong> An Act page lists every
                       catalogued section, including pending, quarantined, and retired rows,
                       with its available source and trust state. Only fully verified sections
                       can be attached or used for drafting and AI grounding.
                     </li>
                   </ul>
-                  <Callout title="Bare text indexing">
-                    Section number + label + source URL ship with the catalog
-                    today. Bare text for the most-litigated sections is being
-                    enriched from indiacode.nic.in; until a section&apos;s text is
-                    indexed, the prompt and UI surface the source URL so you can
-                    verify directly.
+                  <Callout title="Verified source coverage">
+                    Catalog coverage remains incomplete. An Act name or a section count
+                    is not proof of verified text. Selectable provisions require official
+                    text, its hash, publisher, issuing body, exact source version and a
+                    checked provision-level link. The source and trust state remain visible;
+                    pending or quarantined content cannot be attached or used as verified
+                    grounding. Historical provisions retain their source edition and
+                    applicability limitations.
                   </Callout>
                 </Section>
 

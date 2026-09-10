@@ -33,6 +33,11 @@ from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship
 
 from caseops_api.db.base import Base
 from caseops_api.db.index_coverage import ensure_foreign_key_indexes
+from caseops_api.db.ip_specialist_models import (  # noqa: F401
+    IpSpecialistObservation,
+    IpSpecialistRecord,
+    IpSpecialistVersion,
+)
 
 
 def utcnow() -> datetime:
@@ -1386,6 +1391,7 @@ class Matter(Base):
     __table_args__ = (
         UniqueConstraint("company_id", "matter_code", name="uq_company_matter_code"),
         UniqueConstraint("id", "company_id", name="uq_matters_id_company_id"),
+        Index("ix_matters_company_created_id", "company_id", "created_at", "id"),
         CheckConstraint(
             "(status IN ('disposed', 'closed') AND is_active = false) OR "
             "(status NOT IN ('disposed', 'closed') AND is_active = true)",
@@ -4773,6 +4779,9 @@ class TrackedCase(Base):
 class TrackedCaseBookmark(Base):
     __tablename__ = "tracked_case_bookmarks"
     __table_args__ = (
+        Index(
+            "ix_tracking_bookmarks_company_matter_active", "company_id", "matter_id", "is_archived"
+        ),
         UniqueConstraint(
             "company_id",
             "tracked_case_id",
@@ -4878,6 +4887,28 @@ class TrackedCaseUpdate(Base):
     model_run: Mapped[ModelRun | None] = relationship("ModelRun")
 
 
+class TrackedCaseBackfillCursor(Base):
+    """Bounded cyclic scan position, not Matter identity or legal evidence."""
+
+    __tablename__ = "tracked_case_backfill_cursors"
+    __table_args__ = (
+        CheckConstraint(
+            "(last_created_at IS NULL) = (last_matter_id IS NULL)",
+            name="ck_tracking_backfill_cursor_pair",
+        ),
+    )
+
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), primary_key=True
+    )
+    provider: Mapped[str] = mapped_column(String(40), primary_key=True)
+    last_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_matter_id: Mapped[str | None] = mapped_column(String(36))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
 class TrackedCasePollRun(Base):
     __tablename__ = "tracked_case_poll_runs"
 
@@ -4912,6 +4943,7 @@ class TrackedCaseProviderOperation(Base):
     __tablename__ = "tracked_case_provider_operations"
     __table_args__ = (
         UniqueConstraint("company_id", "correlation_id", name="uq_tracking_operation_correlation"),
+        Index("ix_tracking_operation_recovery", "company_id", "status", "lease_expires_at"),
         Index(
             "uq_tracking_operation_one_running",
             "tracked_case_id",
@@ -4945,6 +4977,11 @@ class TrackedCaseProviderOperation(Base):
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
     next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    lease_token: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    spend_reservation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     quarantined_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     quarantine_reason_redacted: Mapped[str | None] = mapped_column(Text, nullable=True)
     metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
@@ -7772,6 +7809,7 @@ class ProviderSpendReservation(Base):
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, index=True
     )
+    dispatched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     settled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -15838,6 +15876,9 @@ class IpPatentApplication(Base):
     docket_id: Mapped[str] = mapped_column(String(36), nullable=False)
     asset_id: Mapped[str] = mapped_column(String(36), nullable=False)
     family_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    work_sequence: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     prosecution_phase: Mapped[str] = mapped_column(
         String(32),
         nullable=False,
@@ -20073,6 +20114,7 @@ class LegalHold(Base):
             name="ck_legal_hold_approver_company_complete",
         ),
         Index("ix_legal_holds_company_status", "company_id", "status", "created_at"),
+        Index("ix_legal_holds_register_page", "company_id", "created_at", "id"),
         Index(
             "ix_legal_holds_creator_company",
             "created_by_membership_id",
@@ -20109,6 +20151,127 @@ class LegalHold(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False
     )
+
+
+class AccessReviewCampaign(Base):
+    """Frozen grant inventory; only matter_access owns effective access."""
+
+    __tablename__ = "access_review_campaigns"
+    __table_args__ = (
+        UniqueConstraint("id", "company_id", name="uq_access_review_company"),
+        ForeignKeyConstraint(
+            ["matter_id", "company_id"],
+            ["matters.id", "matters.company_id"],
+            name="fk_review_matter_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["ip_docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_review_ip_company",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "(matter_id IS NOT NULL AND ip_docket_id IS NULL) OR "
+            "(matter_id IS NULL AND ip_docket_id IS NOT NULL)",
+            name="ck_review_one_target",
+        ),
+        CheckConstraint("status IN ('open', 'finalized') AND version >= 1", name="ck_review_state"),
+        Index("ix_review_matter_company", "matter_id", "company_id"),
+        Index("ix_review_ip_company", "ip_docket_id", "company_id"),
+        Index("ix_review_page", "company_id", "created_at", "id"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="RESTRICT"), index=True
+    )
+    matter_id: Mapped[str | None] = mapped_column(String(36))
+    ip_docket_id: Mapped[str | None] = mapped_column(String(36))
+    title: Mapped[str] = mapped_column(String(200))
+    reason: Mapped[str] = mapped_column(String(1000))
+    trigger: Mapped[str] = mapped_column(String(40))
+    creator_user_id: Mapped[str] = mapped_column(String(36))
+    snapshot_json: Mapped[dict] = mapped_column(JSON)
+    snapshot_hash: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(20), default="open")
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    finalized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AccessReviewDecision(Base):
+    """Append-only independent review, not a permission or a nominated approval."""
+
+    __tablename__ = "access_review_decisions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["campaign_id", "company_id"],
+            ["access_review_campaigns.id", "access_review_campaigns.company_id"],
+            name="fk_review_decision_campaign",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["reviewer_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_review_decision_reviewer",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("campaign_id", "grant_id", name="uq_review_decision_grant"),
+        CheckConstraint("decision IN ('keep', 'revoke')", name="ck_review_decision"),
+        Index("ix_review_decision_campaign", "campaign_id", "company_id"),
+        Index("ix_review_decision_reviewer", "reviewer_membership_id", "company_id"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="RESTRICT"), index=True
+    )
+    campaign_id: Mapped[str] = mapped_column(String(36))
+    grant_id: Mapped[str] = mapped_column(String(36))
+    decision: Mapped[str] = mapped_column(String(10))
+    reason: Mapped[str] = mapped_column(String(1000))
+    reviewer_user_id: Mapped[str] = mapped_column(String(36))
+    reviewer_membership_id: Mapped[str] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class LegalHoldReleaseRequest(Base):
+    """Immutable, expiring release proposal; LegalHold alone owns preservation state."""
+
+    __tablename__ = "legal_hold_release_requests"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["legal_hold_id", "company_id"],
+            ["legal_holds.id", "legal_holds.company_id"],
+            name="fk_hold_release_request_hold_company", ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["dry_run_id", "company_id"],
+            ["tenant_data_operations.id", "tenant_data_operations.company_id"],
+            name="fk_hold_release_request_dry_run_company", ondelete="RESTRICT",
+        ),
+        UniqueConstraint("company_id", "idempotency_key", name="uq_hold_release_request_key"),
+        CheckConstraint("expires_at > created_at", name="ck_hold_release_request_expiry"),
+        CheckConstraint("length(request_hash) = 64", name="ck_hold_release_request_hash"),
+        Index("ix_hold_release_request_hold_company", "legal_hold_id", "company_id"),
+        Index("ix_hold_release_request_page", "company_id", "legal_hold_id", "created_at", "id"),
+        Index("ix_hold_release_request_dry_run_company", "dry_run_id", "company_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="RESTRICT"), index=True
+    )
+    legal_hold_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    dry_run_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    requester_user_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    requester_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    requester_label_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
+    reason_reference: Mapped[str] = mapped_column(String(512), nullable=False)
+    request_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class LegalHoldItem(Base):
@@ -21810,4 +21973,14 @@ class AssistantActionPreview(Base):
 
 # PostgreSQL does not create indexes for referencing foreign-key columns. Keep
 # model-created schemas and migration-created schemas on the same coverage contract.
+from caseops_api.db.patent_proceeding_models import (  # noqa: E402, F401
+    IpPatentProceedingDetail,
+    IpPatentProceedingEvent,
+)
+from caseops_api.db.patent_prosecution_models import (  # noqa: E402, F401
+    IpPatentEvidenceDocument,
+    IpPatentEvidenceVersion,
+    IpPatentProsecutionEvent,
+)
+
 ensure_foreign_key_indexes(Base.metadata)

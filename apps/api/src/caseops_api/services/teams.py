@@ -787,6 +787,7 @@ def remove_team_member(
 def set_team_scoping(
     session: Session, *, context: SessionContext, enabled: bool
 ) -> bool:
+    session.scalar(select(Company.id).where(Company.id == context.company.id).with_for_update())
     discovered_enabled = session.scalar(
         select(Company.team_scoping_enabled).where(Company.id == context.company.id)
     )

@@ -19,6 +19,11 @@ const canonicalIpCapabilities: Capability[] = [
 ];
 
 describe("IP capability catalogue", () => {
+  it("keeps preservation review separate from owner-only audit export", () => {
+    for (const role of ["owner", "admin"] satisfies Role[]) expect(can(role, "legal_holds:manage")).toBe(true);
+    for (const role of ["partner", "member", "paralegal", "viewer"] satisfies Role[]) expect(can(role, "legal_holds:manage")).toBe(false);
+    expect(can("admin", "audit:export")).toBe(false);
+  });
   it("gives owner and admin every canonical IP capability", () => {
     for (const role of ["owner", "admin"] satisfies Role[]) {
       for (const capability of canonicalIpCapabilities) {

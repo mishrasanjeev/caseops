@@ -154,6 +154,7 @@ class BillingProviderSpendRow(BaseModel):
     label: str
     spent_minor: int = Field(ge=0)
     budget_spent_minor: int = Field(ge=0)
+    reserved_minor: int = Field(default=0, ge=0)
     budget_scope: Literal["account", "provider"]
     monthly_limit_minor: int | None = Field(default=None, ge=0)
     remaining_minor: int | None = Field(default=None, ge=0)

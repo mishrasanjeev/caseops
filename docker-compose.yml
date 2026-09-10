@@ -61,6 +61,9 @@ services:
       CASEOPS_CASE_TRACKING_PROVIDER: ${CASEOPS_CASE_TRACKING_PROVIDER:-disabled}
       CASEOPS_ECOURTSINDIA_API_BASE_URL: ${CASEOPS_ECOURTSINDIA_API_BASE_URL:-}
       CASEOPS_ECOURTSINDIA_API_TOKEN: ${CASEOPS_ECOURTSINDIA_API_TOKEN:-}
+      CASEOPS_LLM_PROVIDER: ${CASEOPS_LLM_PROVIDER:-mock}
+      CASEOPS_LLM_MODEL: ${CASEOPS_LLM_MODEL:-caseops-mock-1}
+      CASEOPS_SUMMARY_ACCEPTANCE: ${CASEOPS_SUMMARY_ACCEPTANCE:-0}
       CASEOPS_DOCUMENT_STORAGE_BACKEND: local
       CASEOPS_DOCUMENT_STORAGE_PATH: /app/storage/documents
       CASEOPS_DOCUMENT_STORAGE_CACHE_PATH: /app/storage/document-cache
@@ -87,9 +90,10 @@ services:
 
   acceptance-case-provider:
     profiles: ["acceptance"]
+    networks: [default, worker-offline]
     image: caseops-api-local:${CASEOPS_RELEASE_SHA:-dev}
     command:
-      ["python", "-m", "caseops_api.scripts.docker_acceptance_case_provider"]
+      ["python", "-m", "caseops_api.scripts.docker_acceptance_hearing_provider"]
     environment:
       CASEOPS_ACCEPTANCE_PROVIDER_PORT: 8080
       CASEOPS_ECOURTSINDIA_API_TOKEN: ${CASEOPS_ECOURTSINDIA_API_TOKEN:-docker-acceptance-provider-token}
@@ -127,6 +131,7 @@ services:
         condition: service_healthy
 
   worker:
+    networks: [worker-offline]
     image: caseops-api-local:${CASEOPS_RELEASE_SHA:-dev}
     build:
       context: ./apps/api
@@ -142,6 +147,14 @@ services:
       CASEOPS_AUTH_SECRET: change-me-change-me-change-me-2026
       CASEOPS_AUTO_MIGRATE: "false"
       CASEOPS_RELEASE_SHA: ${CASEOPS_RELEASE_SHA:-unavailable}
+      CASEOPS_CASE_TRACKING_ENABLED: ${CASEOPS_CASE_TRACKING_ENABLED:-false}
+      CASEOPS_CASE_TRACKING_PROVIDER: ${CASEOPS_CASE_TRACKING_PROVIDER:-disabled}
+      CASEOPS_ECOURTSINDIA_API_BASE_URL: ${CASEOPS_ECOURTSINDIA_API_BASE_URL:-}
+      CASEOPS_ECOURTSINDIA_API_TOKEN: ${CASEOPS_ECOURTSINDIA_API_TOKEN:-}
+      CASEOPS_LLM_PROVIDER: ${CASEOPS_LLM_PROVIDER:-mock}
+      CASEOPS_LLM_MODEL: ${CASEOPS_LLM_MODEL:-caseops-mock-1}
+      CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS: ${CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS:-caseops-qa,caseops-ip-qa,test-legal}
+      CASEOPS_SUMMARY_ACCEPTANCE: ${CASEOPS_SUMMARY_ACCEPTANCE:-0}
       CASEOPS_DOCUMENT_STORAGE_BACKEND: local
       CASEOPS_DOCUMENT_STORAGE_PATH: /app/storage/documents
       CASEOPS_DOCUMENT_STORAGE_CACHE_PATH: /app/storage/document-cache
@@ -155,6 +168,7 @@ services:
       - document_data:/app/storage
 
   postgres:
+    networks: [default, worker-offline]
     image: pgvector/pgvector:pg17
     # Published on 15432 on the host because workstations often have native
     # Postgres services on 5432/5433. Inside the docker network the port
@@ -176,6 +190,7 @@ services:
       retries: 10
 
   valkey:
+    networks: [default, worker-offline]
     image: valkey/valkey:8.1
     ports:
       - "127.0.0.1:${CASEOPS_DOCKER_VALKEY_PORT:-16379}:6379"
@@ -184,6 +199,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 12
+
+networks:
+  default:
+  worker-offline:
+    internal: ${CASEOPS_DOCKER_INTERNAL_WORKER_NETWORK:-false}
 
 volumes:
   postgres_data:

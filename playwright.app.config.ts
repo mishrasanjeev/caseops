@@ -49,6 +49,8 @@ export default defineConfig({
     // Dated tester batches must be discovered automatically. Manual entries
     // allowed committed regressions to silently fall out of the normal suite.
     /(?:hari|ram)-\d{4}-\d{2}-\d{2}-bugs\.spec\.ts/,
+    /ram-\d{4}-\d{2}-\d{2}-(?:statutes|hearings)\.spec\.ts$/,
+    /case-tracking-summary-\d{4}-\d{2}-\d{2}\.spec\.ts$/,
     /ram-2026-09-07-statute-source-data\.spec\.ts/,
     /iplf-\d{3}[a-z]-[a-z0-9-]+-\d{4}-\d{2}-\d{2}\.spec\.ts/,
     /hari-2026-05-09-bugs\.spec\.ts/,

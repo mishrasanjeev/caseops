@@ -12,7 +12,7 @@ from caseops_api.core.settings import get_settings
 from caseops_api.db.session import clear_engine_cache
 from caseops_api.main import create_application
 
-pytest_plugins = ["tests.fixtures_postgres_client"]
+pytest_plugins = ["tests.fixtures_postgres_client", "tests.retained_results"]
 
 
 # Autouse fixture — defense against suite-order leakage.

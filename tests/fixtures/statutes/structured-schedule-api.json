@@ -1,0 +1,4844 @@
+{
+  "ndps-1985": {
+    "statute": {
+      "id": "ndps-1985",
+      "short_name": "NDPS Act",
+      "long_name": "Narcotic Drugs and Psychotropic Substances Act, 1985",
+      "enacted_year": 1985,
+      "jurisdiction": "india",
+      "source_url": "https://www.indiacode.nic.in/indiacode/handle/123456789/1791?view_type=browse",
+      "issuing_body": null,
+      "source_category": "consolidated_statute",
+      "source_status": "unverified",
+      "legal_status": "enacted",
+      "verification_status": "unverified",
+      "publication_date": null,
+      "effective_from": null,
+      "effective_to": null,
+      "source_retrieved_at": null,
+      "source_sha256": null,
+      "exact_source_version": null,
+      "history_status": "current_text_only",
+      "is_active": true
+    },
+    "section": {
+      "id": "fixture-ndps-1985-Schedule",
+      "statute_id": "ndps-1985",
+      "section_number": "Schedule",
+      "section_label": "THE SCHEDULE",
+      "section_text": "THE SCHEDULE\n[See clause (xxiii) of Section 2]\nLIST OF PSYCHOTROPIC SUBSTANCES\nSl. International non-proprietary Other nonproprietary Chemical name\nNo. names names\n1 DET N, N-Diethyltryptamine\n2 DMHP 3-(1,2-Dimethylheptyl)-1-hydroxy-7,\n8, 9, 10-tetrahydro 6, 6, 9-trimethyl-\n6H-dibenzo [b, d] pyran\n3 DMT N, N-Dimethyltryptamine\n4 (+)-LYSERGIDE LSD, LSD-25 (+)-N, N-Diethyllysergamide (d-\nlysergic acid diethylamide)\n5 mescaline 3, 4, 5-Trimethoxyphenethylamine\n6 parahexyl 3-Hexyl-1-hydroxy-7, 8, 9, 10-\ntetrahydro-6, 6, 9-trimethyl-6H-\ndibenzo [b, d] pyran\n7 ETICYCLIDINE PCE N-Ethyl-1-phenylcyclohexylamine\n8 ROLICYCLIDINE PHP, PCPY 1-(1-phenylcyclohexyl) pyrrolidine\n9 psilocine, psilotsin 3-(2-Dimethylaminoethyl)-4-\nhydroxyindole\n10 PSILOCYBINE 3-(2-Dimethylaminoethyl)-indol-4-yl\ndihydrogen phosphate\n11 STP, DOM 2-Amino-1-(2, 5-dimethoxy-methyl)\nphenylpropane\n12 TENOCYCLIDINE TCP 1-[1-(2-Thienyl) cydohexyl] piperidine\n13 THC Tetrahydrocannabinols, the following\nisomers: Δ6a(10a), Δ6a(7), Δ7, Δ8, Δ9,\nΔ10, Δ9(11) and their stcreochemical\nvariants\n14 DOB 2, 5-dimethoxyl-4-bromoamphetamine\n15 MDA 3, 4-methylenedioxyamphetamine\n16 AMPHETAMINE (±)-2-Amino-1-phenylpropane\n17 DEXAMPHETAMINE (+)-2-Amino-1-phenylpropane\n18 MECLOQUALONE 3-(o-Chlorophenyl)-2-methyl-4(3H)-\nquinazolinone\n19 METHAMPHETAMINE (+)-2-Methylamino-1-phenylpropane\n20 METHAQUALONE 2-Methyl-3-0-tolyl-4-(3H)-\nquinazoinone\n21 METHYLPHENIDATE 2-Phenyl-2(2-piperidyl) acetic acid,\nmethyl ester\n22 PHENCYCLIDINE PCP 1-(1-Phenylcyclohexyl) piperidine\n23 PHENMETRAZINE 3-Methyl-2-phenylmorpholine\n\nSl. International non-proprietary Other nonproprietary Chemical name\nNo. names names\n24 AMOBARBITAL 5-Ethyl-5-(3-methylbutyl) barbituric\nacid\n25 CYCLOBARBITAL 5-(1-Cyclohexen-1-yl)-5-ethyl-\nbarbituric acid\n26 GLUTETHIMIDE 2-Ethyl-2-phenylglutarimide\n27 PENTAZOCINE 1, 2, 3, 4, 5, 6-Hexahydro-6, 11-\ndimethyl-3-(3-methyl-2-butenyl)-2, 6-\nmethano-3 benzazocin-8-ol\n28 PENTOBARBITAL 5-Ethyl-5-(1-methylbutyl) barbituric\nacid\n29 SECOBARBITAL 5-Allyl-5-(1-methylbutyl) barbituric\nacid\n30 ALPRAZOLAM 8-Chloro-1-methyl-6-phenyl-4H-s-\ntriazolo [4, 3-a] [1, 4] benzodiazepine\n31 AMFEPRAMONE 2-(Diethylamino) propiophenone\n32 BARBITAL 5, 5-Diethylbarbituric acid\n33 BENZPHETAMINE N-Benzyl-N, α-dimethylphenethyl-\namine\n34 BROMAZEPAM 7-Bromo-1, 3-dihydro-5-(2-pyridyl)-\n2H-1, 4-benzodiazepin-2-one.\n35 CAMAZEPAM 7-Chloro-1, 3-dihydro-3-hydroxy-1-\nmethyl-5-phenyl-2-H-1, 4 benezo-\ndiazepin-2-one dimethylcarbamate\n(ester)\n36 CHLORDIAZEPOXIDE 7-Chloro-2-(methylamino)-5-phenyl-\n3H-1, 4-benzodiazepine-4-oxide\n37 CLOBAZAM 7-Chloro-1-methyl-5-phenyl-1H-1, 5-\nbenzodiazepine, 2, 4 (3H, 5H)-dione\n38 CLONAZEPAM 5-(o-Chlorophenyl)-1, 3-dihydro-7-\nnitro-2H-1, 4-benzodiazepin-2-one\n39 CLORAZEPATE 7-Chloro-2, 3-dihydro-2-oxo-5-phenyl-\n1H, 4-benzodiazepine-3-carboxylic\nacid\n40 CLOTIAZEPAM 5-(0-Chlorophenyl)-7-ethyl-1, 3-\ndihydro-1-methyl-2H-thieno [2, 3-e]-1,\n4-diazepine-2-one\n41 CLOXAZOLAM 10-Chloro-11b-(o-chlorophenyl)-2, 3,\n7, 11b-tetrahydro-oxazolo-[3, 2-d] [1,\n4] benzodiazepine-6 (5H)-one\n42 DELORAZEPAM 7-Chloro-5-(o-chlorophenyl)-1, 3-\ndihydro-2H-1, 4-benzodiazepin-2-one\n\nSl. International non-proprietary Other nonproprietary Chemical name\nNo. names names\n43 DIAZEPAM 7-Chloro-1, 3-dihydro-1-methyl-5-\nphenyl-2H-1, 4-benzodiazepin-2-one\n44 ESTAZOLAM 8-Chloro-6-phenyl-4H-s-triazolo [4,\n3-a], [1, 4] benzodiazepine\n45 ETHCHLORVYNOL Ethyl-2-chlorovinylethynylcarbinol\n46 ETHINAMATE 1-Ethylnylcyclohexanolcarbamate\n47 ETHYLLOFLAZEPATE Ethyl 7-chloro-5-(o-fluorophenyl)-2,\n3-dihydro-2-oxo-1H-1, 4-benzo-\ndiazepine-3-carboxylate\n48 FLUDIAZEPAM 7-Chloro-5-(o-fluorophenyl)-1, 3-\ndihydro-1-methyl-2H-1, 4-benzo-\ndiazepine-2-one\n49 FLUNITRAZEPAM 5-(o-Fluorophenyl)-1, 3-dihydro-1-\nmethyl-7-nitro-2H-1, 4-benzo-\ndiazepin-2-one\n50 FLURAZEPAM 7-Chloro-1-[2-(diethylamino) ethyl]-\n5-(o-fluorophenyl)-1, 3-dihydro-2H-\n1, 4-benzo-diazepin-2-one\n51 HALAZEPAM 7-Chloro-1, 3-dihydro-5-phenyl-1-(2,\n2, 2-trifluoroethyl)-2H-1, 4-benzo-\ndiazepin-2-one\n52 HALOXAZOLAM 10-Bromo-11b-(o-fluorophenyl)-2, 3,\n7, 11b-tetrahydrooxazolo [3, 2-d] [1,\n4] benzodiazepine-6, (5H)-one\n53 KETAZOLAM 11-Chloro-8, 12b-dihydro-2, 8-\ndimethyl-12b-phenyl-4H-[1, 3]-\noxazino-[3, 2-d] [1, 4]\nbenzodiazepine-4, 7(6H)-dione\n54 LEFETAMINE SPA (—)-1-dimethylamino-1, 2diphenyl-\nethane\n55 LOPRAZOLAM 6-(o-Chlorophenyl)-2, 4-dihydro-2-\n[(4 methyl-1-piperazinyl) metnylene]-\n8-nitro-1H-imidazo [1, 2-0] [1, 4]\nbenzodiazepin-1-one\n56 LORAZEPAM 7-Chloro-5-(o-chlorophenyl)-1, 3-\ndihydro-3-hydroxy-2H-1, 4-benzo-\ndiazepine-2-one\n57 LORMETAZEPAM 7-Chloro-5-(o-chlorophenyl)-1, 3-\ndihydro-3-hydroxy-1-methyl-2H-1, 4-\nbenzcxiiazepine-2-one\n58 MAZINDOL 5-(P-Chlorophenyl)-2, 5-dihydro-3-\nH-imidazo [2, 1-x] isoindol-5-01\n\nSl. International non-proprietary Other nonproprietary Chemical name\nNo. names names\n59 MEDAZEPAM 7-Chloro-2, 3-dihydro-1-methyl-5-\nphenyl-1H-1, 4-benzodiazepine\n60 MEPROBAMATE 2-Methyl-2-propyl-1, 3-propanediol\ndicarbamate\n61 METHYLPHENOBARBITA 5-Ethyl-1-methyl-5-phenylbarbituric\nL acid\n62 METHYPRYLON 3, 3-Diethyl-5-methyl-2, 4 piperidine-\ndione\n63 NIMETAZEPAM 1, 3-Dihydro-1-methyl-7-nitro-5-\nphenyl- 2-H-1, 4-benzodiazepin-2-\none\n64 NITRAZEPAM 1, 3-Dihydro-7-nitro-5-phenyl-2H-1,\n4-benzodiazepin-2-one\n65 NORDAZEPAM 7-Chloro-1, 3-dihydro-5-phenyl-1\n(2H)-1, 4-benzodiazepin-2-one\n66 OXAZEPAM 7-Chloro-1, 3-dihydro-3-hydroxy-5-\nphenyl -2H-1, 4-benzodiazepin-2-one\n67 OXAZOLAM 10-Chloro-2, 3, 7, 11b-tetrahydro-2-\nmethyl-11b-phenyl-oxazolo [3, 2-d]\n[1, 4] benzodiazepin-6 (5H)-one\n68 PHENDIMETRAZINE (+)-3, 4-Dimethyl-2-phenyl-\nmorpholine\n69 PHENOBARBITAL 5-Ethyl-5-phenylbarbituric acid\n70 PHENTERMINE £, £-Dimethylphenethylamine\n71 PINAZEPAM 7-Chloro-1, 3-dihydro-5-phenyl-1-(2-\npropynyl)-2H-1, 4-benzodiazepin-2-\none\n72 PIPRADROL 1-1-Diphenyl-1-(2-piperidyl)-\nmethanol\n73 PRAZEPAM 7-Chlorol-(cyclopropylmethyl)-1,-3-\ndihydro-5-phenyl)-2H-1, 4-benzo-\ndiazepin-2-one\n74 TEMAZEPAM 7-Chloro-1, 3-dihydro-3-hydroxy-1-\nmethyl-5-phenyl -2H-1-4-benzo-\ndiazepin-2-one\n75 TETRAZEPAM 7-Chloro-5-(cycloexen-1-yl)-1, 3-\ndihydro-1-methyl-2H-1, 4-benzo-\ndiazepin-2-one\n76 TRIAZOLAM 8-Chloro-6-(o-chlorophenyl)-1-\nmethyl-4H-s-triazodo[4,3-a] [1,4]\nbenzodiazepine.\n\n1[77. CATHIONE (--)-(S)-2-aminopropophenone\n78. DMA (±)-2,5-dimethoxy-a-\nmethlyphenethylamine\n79. DOET (±)-4 ethyl -2, 5-dimethoxy-a-\nphenethylamine\n80. MDMA (±)-N, a-dimethyl-3. 4- (methylene-\ndioxy) phenethylamine\n81. 4-methylaminorex (±)-cis-2-amino-4-methyl-5-phcnyl-2-\noxazoline\n82. MMDA 2-methoxy-a-methyl-4-5, (methylene-\ndioxy) phenethylamine\n83. N-ethyl MDA (±) N-ethyl-u-methyl-4, 4 (methylene-\ndioxy) phenethylamine\n84. N-hydroxy MDA (±) -N (u-methyl 3, 4-\n(methylenedioxy) phenethy\nhydroxylamine\n85. PMA p-methoxy-a-methylphenethyamine\n86. TMA (±) -3,4, 5-trimethoxy-a-\nmethylphenethy-lamine\n87. FENETYLINE 7-(2-(ø-methylphenethyl) amino)\nethyl-) theophyline\n88. LEVAMFETAMINE levamphetamine (--)-(R)- ø-\nmethylphenethylamine\n89. lovomethamphetamine (--)-N-[ ø-\nmethylphenethylamine\n90. METAMFETAMINE Methamphetamine (±)-N-ø-\nRACEMATE mecnate\ndimethylphenethylamine\n91. Delta-9-***tetrahy- (6a-R, 10aR)-6a, 7, 8, 10a-\ndrocannabinol and tctrahydro-6, 6, 9-trimethyl-3-penty\nstereochemical variants 611-dibenzo [b-d] pyran-OI\n92. BUPRENORPHINE 21, cyclopropyl-7-cc-[(S)-I-hydroxy-\n1-2,2-trimethyl-propyl] 6/14-endo-\nethano-6-7,8,14-tetra-hydrooripavine\n93. BUTALBITAL 5-allyl-5-isobutylbarbituric acid\n94. CATHINE (+)-norpseudo- (+)-(R)-ø-[(R)-I-aminoethyl]\nephedrine\nBenzyl alcohol\n95. ALLOBARBITAL MEFENOREX 5,5-diallybarbituric acid\n96. ETILAMFETAMINE N-ethylamphetamine N-ethyl-ø-\nmethylphenethylamine\n97. FENCAMEFAMIN N-ethyl-3-phenly-2-norbornanmine\n98. FENPROPOREX (±) -3-[(??-methyphenethy) amino]\npropioxitrile\n\nN(3 chloropropyl)-a-methylphenethy-\nlamine\n99.\nMEFENOREX\n8-chloro-6-a-(o-fluorophenyl)-1-\nmethyl-4H-imidazol (1, 5-a] [1, 4]\n100. MIDAZOLAM benzodiazepine\n101. PEMOLINE 2-amino-5-phenyl-2-oxazolin-4-one(-\n2-imino-5-phenyl-4-oxazolidinone)\n102. PYROVAERONE 4-methyl-2-(1-pyrrolidinyl)\nvalerophenone\n103. SECBUTABARB1TAL 5-sec-butyl-5-ethylbarbituric acid\n104. VINYLBITAL 5-(1- methylbutyl)-5vinylbarbituric\nacid\n105. rutobarbital 5-butyl-5-ethylbarbituric acid]\n1[105A ETRYPTAMINE (3-(2-aminobutyl) indole)\n.\n105B. METHCATHINONE (2-(methylamino)-1 phenylpropan-1-\none)\n105C. ZIPEPROL (ø-(ø-methoxybenzyl)-4\n(methoxyphenethyl)-1-\n(piperazineetha-nol)\n105D. AMINOREX (2-amino-5-phenyl-2-oxazoline)\n105E. BROTIZOLAM (2-bromo-4-) 0-chlorophenyl)-9-\nmethyl-6H-thieno (3,2-f)-s-triazolo\n[4,3,-a) (1,4} diazepine)\n105F. MESOCARB (3-(ø-methylphenethyl-N-\n(phenylerbamoyl) Sydnone imine].\n2[106. 2C.-B(4-bromo-2,\n5dimethoxyphenethylamine)\n107. 4-MTA (ø* Methyl-4-\nMthylthiophenethylamine)\n108. GHB (r-Hydroxybutyric Acid)\n109. Zolpidem (INN)]\n3[110. Salts and preparations of\nabove.]\n4[110A. Ketamine 2-(2-cholorphenyl)-2-(methylamino)\ncyclohexanone]\n5[110B. MEPHEDRONE 4-methylmethcathinone (RS)-2-methylamino-1-(4-\n(4-MMC) methylphenyl) propan-1-one.\n4-methylephedrone\n6[110C. 25B-NBOMe 2C-B-NBOMe 2-(4-brome-2,5-dimethoxyphenyl)-N-\n\n(2-methoxybenzyl) ethanamine\n110D. 25C-NBOMe 2C-C-NBOMe 2-(4-chloro-2,5- dimethoxyphenyl)-\nN-(2-methoxybenzyl) ethanamine\n110E. 25I-NBOMe 2C-I-NBOMe 2-(4-iodo-2,5-dimethoxyphenyl)-N-\n(2-methoxybenzyl) ethanamine\n110F. N-BENZYLPIPERAZINE Benzylpiperazine, BZP 1-benzylpiperazine\n110G. JWH-018 AM-678 Naphthalene-1-yl(1-pentyl-1H-indol-\n3-yl) methanone\n110H. AM-2201 JWH-2201 [1-(5-Fluoropentyl)-1H-indol-3-yl]\n(naphthalen-1-yl) methanone\n3,4- (R/S)-1—(Benzo[d][1,3] dioxol-5-\n110I. Methylenedioxypyroval yl)-2-(pyrrolidine-1-yl)\nMDPV erone Pentan-1-one\n110J. METHYLONE Beta-keto-MDMA (RS)-2-methylamino-1-(3,4-\nmethylenedioxyphenyl) propan-1-\none]\n1[110K. para- 1-(4—methoxyphenyl)-N-\nMethoxymethylamphet methylpropan-2-amine\namine,PMMA\n110L. a- 1-phenyl-2-(pyrrolidine-1-yl) pentan-\nPyrrolidinovaleropheno 1-one\nne, a-PVP\n110M. para-Methyl-4- 4-methyl-5-(4-methylphenyl)-4,5-\nethylaminorex, 4,4’- dihydro-1,3-oxazol-2-amine\nDMAR\n110N. Methoxetamine,MXE 2-(ethylamino)-2-(3-methoxyphenyl)\ncyclohexanone\n110O. Phenazepam 7-bromo-5-(2- chlorophenyl)-1,3-\ndihydro-2H-1,4-benzodiazepin-2-\none.]\n2[110P 4-Methylethcathinone 4-MEC\n110Q Ethylone\n110R Pentedrone\n110S Ethylphenidate\n110T Methiopropamine MPA\n110U MDMB-CHMICA\n110V 5F-APINACA 5F-AKB-48\n110W XLR-11\n110X Catha Edulis (Dry Chatt\nor Mira Leaves Dry\nChat Edulish)]\n3[110Y Tramadol ]\n4[110Z AB-CHMINACA N-[(2S)-1-Amino-3-methyl-1-\noxobutan-2-yl]-1-(cyclohexylmethyl)-\n1H-indazole-3-carboxamide\n\n110ZA 5F-ADB(5F-MDMB- Methyl(2S)-2-{1-5-fluorophentyl)-\nPINACA) 1H-indazole-3-carbonylamino}-3,3-\ndimethylbutanoate\n110ZB AB-PINACA N-[(2S)-1-Amino-3-methyl-\n1oxobutan-2yl]-1-penty1H-indazole\n3-carboxamide\n110ZC UR-144 (1-Penty-1 H-indol-3-yl) (2,2,3,3-\ntetramrthylcyclopropyl) methanone\n110ZD 5F-PB-22 Quinolin-8-yl 1-(5-fluropenthl)-1h-\ninodole-3-carboxylate\n110ZE 4-Fluoroamphetamine 4-FA 1-(4-Fluorophenyl) propan-2-amine.]\nN-[(2S)-1-amino-3-methyl-1-\n1[110ZF. oxobutan-2-yl]-1-[4-fluorophenyl)\nAB-FUBINACA\nmethyl] indazole-3-carboxamide\n110ZG 5F-AMB-PINACA (5F- Methyl 2-({[1-5-fluoropenty)-1H-\nAMB,5F-MMB- indazol3yl] carbonyl} amino)-3-\nPINACA) methylbutanoate\n110ZH 5F-MDMB-PICA (5F- Methyl(S)-2-(1-5-fluoropentyl)-1H-\nMDMB-2201) indole-3- carboxamido)-3,3-\ndimethylbutanoate\n110ZI 4F-MDMB-BINACA Methyl(S)-2-(1-(4-fluorobutyl)-1H-\nindazole-3-carboxamido)-3,3-\ndimethylbutanoate\n110ZJ 4-CMC (4- clephedrone 1-(4-chlorophenyl)-2-(methylamino)-\nchloromethcathinone) 1-propanone\n110ZK N-ethylhexedrone 2-(Ethylamino)-1-phenyl-1-hexanone\n110ZL Alpha-PHP (RS)-1-Phenyl-2-(pyrrolidine-1-\nyl)hexan-1-one\n110ZM flualprazolam 8-Chloro-6-(2-fluoro-phenyl)-1-\nmethyl-4hbenzo[f][1,2,4]triazolo[4,3-\na][1,4]diazepime\n110ZN Etizolam 4-(2-Chlorophenyl)-2-ethyl-9-methyl-\n6H-thieno[3,2-\nf][1,2,4]triazolo[4,3a][1,4]diazepine\n110ZO DOC 4-Chloro-2,5-\ndimethoxyamfetamine\n110ZP ADB-FUBINACA N-[(2S)-1-amino-3,3-dimethyl-1-\noxobutan-2-yl]-1-[4-\nfluorophenyl)methyl]-1Hindazole-3-\ncarboxamide\n110ZQ FUB- Methyl(2S)-2-({1-[4-\nAMB,MMBFUBINAC fluorophenyl]methyl-1Hindazole-3-\nA,AMBFUBINACA carbonyl} amino)-3-methylbutanoate\n110ZR CUMYL-4CNBINACA 1-(4-cyanobutyl)-N-(2-phenylpropan-\n2-yl)-1Hindazole-3-carboxamide\n110ZS ADB- N-[(2S)-1-amino-3,3-dimethyl-1-\n\nCHMINACA,MAB- oxobutan-2-yl]-1-(cyclohexylmethyl)-\nCHMINACA 1H-indazole-3-carboxamide\n110ZT N-ethylnorpentylone 1-(2H-1,3-benzodioxol-5-yl)-2-\n(ethylamino)pentan-1-one”.]",
+      "section_text_source": "official_release_manifest",
+      "editorial_notes": "Published-edition text. Commencement, amendments, territorial applicability and judicial treatment must be checked for the relevant date; the edition is not a current-law certification.\n\nPublisher notes for PDF page 50 (shared page context):\n1. Ins. by S.O. 785(E), dated 26th October, 1992.\n\nPublisher notes for PDF page 51 (shared page context):\n1. Ins. by S.O. 39(E), dated 12th January, 1996.\n2. Ins. by G.S.R. No. 475(E), dated 11th June, 2003.\n3. Entry 106 re-numbered as Entry 110 by G.S.R. 475(E), dated 11th June, 2003.\n4. Ins. by vide Notification No. S.O. 311(E) dated 10.02.2011.\n5. Ins. by vide Notification No. S.O. 376(E) dated 05.02.2015.\n6. Ins. by vide Notification No. S.O. 2374(E) dated 12.07-2016.\n\nPublisher notes for PDF page 52 (shared page context):\n1. Ins. by vide Notification No. S.O. 1383(E) dated 02.05.2017.\n2. Ins. by vide Notification No. S.O. 0821(E) dated 27.02.2018.\n3. Ins. by vide Notification No. S.O. 1761(E), dated 26.04.2018.\n4. Ins. by vide Notification No. S.O. 1352(E), dated 13.03.2019.\n\nPublisher notes for PDF page 53 (shared page context):\n1. Ins. by vide Notification No. S.O. 1275(E), dated 23.03.2021",
+      "case_annotations": null,
+      "ai_explanation": null,
+      "is_provisional": false,
+      "verification_status": "verified_official",
+      "source_sha256": "3d6df2b1cf2b677689a163dc5e2d7dda8e68ce71b8853ef54c94ea0f3714b150",
+      "source_publisher": "India Code, Legislative Department, Government of India",
+      "issuing_body": "Ministry of Finance, Government of India",
+      "source_category": "consolidated_statute",
+      "source_status": "official",
+      "legal_status": "enacted",
+      "publication_date": null,
+      "effective_from": null,
+      "effective_to": null,
+      "amendment_metadata_json": {},
+      "history_status": "current_text_only",
+      "exact_source_version": "India Code A1985-61; last update 3 January 2022; SHA-256 ef1b399172971dc8bc6e4da0ae67444f62ee2ea05a983ac26821e96a4e866bd6",
+      "source_locator_type": "section_deep_link",
+      "structured_tables": [
+        {
+          "title": "LIST OF PSYCHOTROPIC SUBSTANCES",
+          "columns": [
+            "Sl. No.",
+            "International non-proprietary names",
+            "Other nonproprietary names",
+            "Chemical name"
+          ],
+          "rows": [
+            {
+              "serial": "1",
+              "cells": [
+                "1",
+                "",
+                "DET",
+                "N, N-Diethyltryptamine"
+              ],
+              "fragments": [
+                {
+                  "page": 46,
+                  "bbox": [
+                    66.0,
+                    170.80463999999995,
+                    547.0,
+                    189.40463999999997
+                  ],
+                  "cells": [
+                    "1",
+                    "",
+                    "DET",
+                    "N, N-Diethyltryptamine"
+                  ]
+                }
+              ],
+              "sha256": "317172e87c2fdc40678934b6f242d35954903497d7d5a14a0d6a015f382bd9d5"
+            },
+            {
+              "serial": "2",
+              "cells": [
+                "2",
+                "",
+                "DMHP",
+                "3-(1,2-Dimethylheptyl)-1-hydroxy-7,\n8, 9, 10-tetrahydro 6, 6, 9-trimethyl-\n6H-dibenzo [b, d] pyran"
+              ],
+              "fragments": [
+                {
+                  "page": 46,
+                  "bbox": [
+                    66.0,
+                    189.40463999999997,
+                    547.0,
+                    233.44463999999994
+                  ],
+                  "cells": [
+                    "2",
+                    "",
+                    "DMHP",
+                    "3-(1,2-Dimethylheptyl)-1-hydroxy-7,\n8, 9, 10-tetrahydro 6, 6, 9-trimethyl-\n6H-dibenzo [b, d] pyran"
+                  ]
+                }
+              ],
+              "sha256": "a6485d0165f5bf91cf7ad1406de487239bd5aa48c9fa991b7e2fbd9d4b278bed"
+            },
+            {
+              "serial": "3",
+              "cells": [
+                "3",
+                "",
+                "DMT",
+                "N, N-Dimethyltryptamine"
+              ],
+              "fragments": [
+                {
+                  "page": 46,
+                  "bbox": [
+                    66.0,
+                    233.44463999999994,
+                    547.0,
+                    252.07463999999993
+                  ],
+                  "cells": [
+                    "3",
+                    "",
+                    "DMT",
+                    "N, N-Dimethyltryptamine"
+                  ]
+                }
+              ],
+              "sha256": "dc98d9a9094430436cc15d3d0e9cb034b71752b92e4bde8a40083bd3c2980b13"
+            },
+            {
+              "serial": "4",
+              "cells": [
+                "4",
+                "(+)-LYSERGIDE",
+                "LSD, LSD-25",
+                "(+)-N, N-Diethyllysergamide (d-\nlysergic acid diethylamide)"
+              ],
+              "fragments": [
+                {
+                  "page": 46,
+                  "bbox": [
+                    66.0,
+                    252.07463999999993,
+                    547.0,
+                    283.39464
+                  ],
+                  "cells": [
+                    "4",
+                    "(+)-LYSERGIDE",
+                    "LSD, LSD-25",
+                    "(+)-N, N-Diethyllysergamide (d-\nlysergic acid diethylamide)"
+                  ]
+                }
+              ],
+              "sha256": "df34c3017f865dcee3c3c147fcbd74320b25b0afede856c5c6f6ce516dcc2a39"
+            },
+            {
+              "serial": "5",
+              "cells": [
+                "5",
+                "",
+                "mescaline",
+                "3, 4, 5-Trimethoxyphenethylamine"
+              ],
+              "fragments": [
+                {
+                  "page": 46,
+                  "bbox": [
+                    66.0,
+                    283.39464,
+                    547.0,
+                    301.99464
+                  ],
+                  "cells": [
+                    "5",
+                    "",
+                    "mescaline",
+                    "3, 4, 5-Trimethoxyphenethylamine"
+                  ]
+                }
+              ],
+              "sha256": "7058256b2ae8972be8fc63cd6c9f5331a8000de3c7599f2d0e73f6fab1893600"
+            },
+            {
+              "serial": "6",
+              "cells": [
+                "6",
+                "",
+                "parahexyl",
+                "3-Hexyl-1-hydroxy-7, 8, 9, 10-\ntetrahydro-6, 6, 9-trimethyl-6H-\ndibenzo [b, d] pyran"
+              ],
+              "fragments": [
+                {
+                  "page": 46,
+                  "bbox": [
+                    66.0,
+                    301.99464,
+                    547.0,
+                    346.03463999999997
+                  ],
+                  "cells": [
+                    "6",
+                    "",
+                    "parahexyl",
+                    "3-Hexyl-1-hydroxy-7, 8, 9, 10-\ntetrahydro-6, 6, 9-trimethyl-6H-\ndibenzo [b, d] pyran"
+                  ]
+                }
+              ],
+              "sha256": "2025385ac4b34e66caac6fe31732ac1376a0f29e27d94a57f421570eb7c061d7"
+            },
+            {
+              "serial": "7",
+              "cells": [
+                "7",
+                "ETICYCLIDINE",
+                "PCE",
+                "N-Ethyl-1-phenylcyclohexylamine"
+              ],
+              "fragments": [
+                {
+                  "page": 46,
+                  "bbox": [
+                    66.0,
+                    346.03463999999997,
+                    547.0,
+                    364.63464
+                  ],
+                  "cells": [
+                    "7",
+                    "ETICYCLIDINE",
+                    "PCE",
+                    "N-Ethyl-1-phenylcyclohexylamine"
+                  ]
+                }
+              ],
+              "sha256": "de8ae2ce5e4bbd7ed0c7ec8061bf8b927662566b4f5db1bf38ec42c6847854a6"
+            },
+            {
+              "serial": "8",
+              "cells": [
+                "8",
+                "ROLICYCLIDINE",
+                "PHP, PCPY",
+                "1-(1-phenylcyclohexyl) pyrrolidine"
+              ],
+              "fragments": [
+                {
+                  "page": 46,
+                  "bbox": [
+                    66.0,
+                    364.63464,
+                    547.0,
+                    383.23464
+                  ],
+                  "cells": [
+                    "8",
+                    "ROLICYCLIDINE",
+                    "PHP, PCPY",
+                    "1-(1-phenylcyclohexyl) pyrrolidine"
+                  ]
+                }
+              ],
+              "sha256": "d7aa84fa3ffd1c26c58ce8d873b72cf98f06ee43a2b0c87e3b1a22e60ddf2dec"
+            },
+            {
+              "serial": "9",
+              "cells": [
+                "9",
+                "",
+                "psilocine, psilotsin",
+                "3-(2-Dimethylaminoethyl)-4-\nhydroxyindole"
+              ],
+              "fragments": [
+                {
+                  "page": 46,
+                  "bbox": [
+                    66.0,
+                    383.23464,
+                    547.0,
+                    412.63464
+                  ],
+                  "cells": [
+                    "9",
+                    "",
+                    "psilocine, psilotsin",
+                    "3-(2-Dimethylaminoethyl)-4-\nhydroxyindole"
+                  ]
+                }
+              ],
+              "sha256": "3575d289c9faa0554ac57cb4c4631f0262a996bb5e0585f6decaabd261ef59e7"
+            },
+            {
+              "serial": "10",
+              "cells": [
+                "10",
+                "PSILOCYBINE",
+                "",
+                "3-(2-Dimethylaminoethyl)-indol-4-yl\ndihydrogen phosphate"
+              ],
+              "fragments": [
+                {
+                  "page": 46,
+                  "bbox": [
+                    66.0,
+                    412.63464,
+                    547.0,
+                    441.93464
+                  ],
+                  "cells": [
+                    "10",
+                    "PSILOCYBINE",
+                    "",
+                    "3-(2-Dimethylaminoethyl)-indol-4-yl\ndihydrogen phosphate"
+                  ]
+                }
+              ],
+              "sha256": "0e4544c541cc3c80a9421c8cb18183a6f9591469fc665077df87a6bea6ba232b"
+            },
+            {
+              "serial": "11",
+              "cells": [
+                "11",
+                "",
+                "STP, DOM",
+                "2-Amino-1-(2, 5-dimethoxy-methyl)\nphenylpropane"
+              ],
+              "fragments": [
+                {
+                  "page": 46,
+                  "bbox": [
+                    66.0,
+                    441.93464,
+                    547.0,
+                    471.21464
+                  ],
+                  "cells": [
+                    "11",
+                    "",
+                    "STP, DOM",
+                    "2-Amino-1-(2, 5-dimethoxy-methyl)\nphenylpropane"
+                  ]
+                }
+              ],
+              "sha256": "2ada56834bfa14998ead6fd8a8719456b531c6bcc4e1a8eb4fcf6d17897dce57"
+            },
+            {
+              "serial": "12",
+              "cells": [
+                "12",
+                "TENOCYCLIDINE",
+                "TCP",
+                "1-[1-(2-Thienyl) cydohexyl] piperidine"
+              ],
+              "fragments": [
+                {
+                  "page": 46,
+                  "bbox": [
+                    66.0,
+                    471.21464,
+                    547.0,
+                    487.89464
+                  ],
+                  "cells": [
+                    "12",
+                    "TENOCYCLIDINE",
+                    "TCP",
+                    "1-[1-(2-Thienyl) cydohexyl] piperidine"
+                  ]
+                }
+              ],
+              "sha256": "c41070a09786e3e07aeb3ee3d63d584a0903b55b02dc9b45736e8b218cf6720a"
+            },
+            {
+              "serial": "13",
+              "cells": [
+                "13",
+                "",
+                "THC",
+                "Tetrahydrocannabinols, the following\nisomers: Δ6a(10a), Δ6a(7), Δ7, Δ8, Δ9,\nΔ10, Δ9(11) and their stcreochemical\nvariants"
+              ],
+              "fragments": [
+                {
+                  "page": 46,
+                  "bbox": [
+                    66.0,
+                    487.89464,
+                    547.0,
+                    542.49464
+                  ],
+                  "cells": [
+                    "13",
+                    "",
+                    "THC",
+                    "Tetrahydrocannabinols, the following\nisomers: Δ6a(10a), Δ6a(7), Δ7, Δ8, Δ9,\nΔ10, Δ9(11) and their stcreochemical\nvariants"
+                  ]
+                }
+              ],
+              "sha256": "6d2294ee5aeb2b0101b0cb423050613d490fd6baab5d0f75341a1ba150d02278"
+            },
+            {
+              "serial": "14",
+              "cells": [
+                "14",
+                "",
+                "DOB",
+                "2, 5-dimethoxyl-4-bromoamphetamine"
+              ],
+              "fragments": [
+                {
+                  "page": 46,
+                  "bbox": [
+                    66.0,
+                    542.49464,
+                    547.0,
+                    559.17464
+                  ],
+                  "cells": [
+                    "14",
+                    "",
+                    "DOB",
+                    "2, 5-dimethoxyl-4-bromoamphetamine"
+                  ]
+                }
+              ],
+              "sha256": "10c270f26353c57fac459bbce06e0033c8d1f74159546409ff118069aa1b89e1"
+            },
+            {
+              "serial": "15",
+              "cells": [
+                "15",
+                "",
+                "MDA",
+                "3, 4-methylenedioxyamphetamine"
+              ],
+              "fragments": [
+                {
+                  "page": 46,
+                  "bbox": [
+                    66.0,
+                    559.17464,
+                    547.0,
+                    575.7346399999999
+                  ],
+                  "cells": [
+                    "15",
+                    "",
+                    "MDA",
+                    "3, 4-methylenedioxyamphetamine"
+                  ]
+                }
+              ],
+              "sha256": "bcbd7d530624258912708f2e6bb4f5fc750d1d3b78c1a2cba973684916f99618"
+            },
+            {
+              "serial": "16",
+              "cells": [
+                "16",
+                "AMPHETAMINE",
+                "",
+                "(±)-2-Amino-1-phenylpropane"
+              ],
+              "fragments": [
+                {
+                  "page": 46,
+                  "bbox": [
+                    66.0,
+                    575.7346399999999,
+                    547.0,
+                    592.41464
+                  ],
+                  "cells": [
+                    "16",
+                    "AMPHETAMINE",
+                    "",
+                    "(±)-2-Amino-1-phenylpropane"
+                  ]
+                }
+              ],
+              "sha256": "4cd1c0c1489bc3d1120d3634c83c6304fa6496dcf2bd0d346e789d907978b1ec"
+            },
+            {
+              "serial": "17",
+              "cells": [
+                "17",
+                "DEXAMPHETAMINE",
+                "",
+                "(+)-2-Amino-1-phenylpropane"
+              ],
+              "fragments": [
+                {
+                  "page": 46,
+                  "bbox": [
+                    66.0,
+                    592.41464,
+                    547.0,
+                    609.12464
+                  ],
+                  "cells": [
+                    "17",
+                    "DEXAMPHETAMINE",
+                    "",
+                    "(+)-2-Amino-1-phenylpropane"
+                  ]
+                }
+              ],
+              "sha256": "1b904c9d44228be5f34a4561f35498e42b7b10aa282e6344b2459ac15fcb79c1"
+            },
+            {
+              "serial": "18",
+              "cells": [
+                "18",
+                "MECLOQUALONE",
+                "",
+                "3-(o-Chlorophenyl)-2-methyl-4(3H)-\nquinazolinone"
+              ],
+              "fragments": [
+                {
+                  "page": 46,
+                  "bbox": [
+                    66.0,
+                    609.12464,
+                    547.0,
+                    638.40464
+                  ],
+                  "cells": [
+                    "18",
+                    "MECLOQUALONE",
+                    "",
+                    "3-(o-Chlorophenyl)-2-methyl-4(3H)-\nquinazolinone"
+                  ]
+                }
+              ],
+              "sha256": "1eed797100f7e4429087902cf0fb56f308c90c93b2f2d057cce77fee1f5862fe"
+            },
+            {
+              "serial": "19",
+              "cells": [
+                "19",
+                "METHAMPHETAMINE",
+                "",
+                "(+)-2-Methylamino-1-phenylpropane"
+              ],
+              "fragments": [
+                {
+                  "page": 46,
+                  "bbox": [
+                    66.0,
+                    638.40464,
+                    547.0,
+                    655.0846399999999
+                  ],
+                  "cells": [
+                    "19",
+                    "METHAMPHETAMINE",
+                    "",
+                    "(+)-2-Methylamino-1-phenylpropane"
+                  ]
+                }
+              ],
+              "sha256": "c29de5bb580705e7451b226ae45410c37b7559d39b2624607e7133103a4816d9"
+            },
+            {
+              "serial": "20",
+              "cells": [
+                "20",
+                "METHAQUALONE",
+                "",
+                "2-Methyl-3-0-tolyl-4-(3H)-\nquinazoinone"
+              ],
+              "fragments": [
+                {
+                  "page": 46,
+                  "bbox": [
+                    66.0,
+                    655.0846399999999,
+                    547.0,
+                    684.36464
+                  ],
+                  "cells": [
+                    "20",
+                    "METHAQUALONE",
+                    "",
+                    "2-Methyl-3-0-tolyl-4-(3H)-\nquinazoinone"
+                  ]
+                }
+              ],
+              "sha256": "864605ec7d56872b93a627d3d014c4d18942ba45aae29ec1d19f86189be0698f"
+            },
+            {
+              "serial": "21",
+              "cells": [
+                "21",
+                "METHYLPHENIDATE",
+                "",
+                "2-Phenyl-2(2-piperidyl) acetic acid,\nmethyl ester"
+              ],
+              "fragments": [
+                {
+                  "page": 46,
+                  "bbox": [
+                    66.0,
+                    684.36464,
+                    547.0,
+                    713.64464
+                  ],
+                  "cells": [
+                    "21",
+                    "METHYLPHENIDATE",
+                    "",
+                    "2-Phenyl-2(2-piperidyl) acetic acid,\nmethyl ester"
+                  ]
+                }
+              ],
+              "sha256": "c10ba264b63bc971b0c454444c0909f964993783f264e7c2eff3e0c1863d82ff"
+            },
+            {
+              "serial": "22",
+              "cells": [
+                "22",
+                "PHENCYCLIDINE",
+                "PCP",
+                "1-(1-Phenylcyclohexyl) piperidine"
+              ],
+              "fragments": [
+                {
+                  "page": 46,
+                  "bbox": [
+                    66.0,
+                    713.64464,
+                    547.0,
+                    732.24064
+                  ],
+                  "cells": [
+                    "22",
+                    "PHENCYCLIDINE",
+                    "PCP",
+                    "1-(1-Phenylcyclohexyl) piperidine"
+                  ]
+                }
+              ],
+              "sha256": "745ceca8bbc5d4a956b7f014b7fd21a21db5b62b6f7f916ee1df05a0e5022ea4"
+            },
+            {
+              "serial": "23",
+              "cells": [
+                "23",
+                "PHENMETRAZINE",
+                "",
+                "3-Methyl-2-phenylmorpholine"
+              ],
+              "fragments": [
+                {
+                  "page": 46,
+                  "bbox": [
+                    66.0,
+                    732.24064,
+                    547.0,
+                    770.0
+                  ],
+                  "cells": [
+                    "23",
+                    "PHENMETRAZINE",
+                    "",
+                    "3-Methyl-2-phenylmorpholine"
+                  ]
+                }
+              ],
+              "sha256": "195ea038eff792c6a8cff9355d9f378142697128b742c9a578081f903f832af9"
+            },
+            {
+              "serial": "24",
+              "cells": [
+                "24",
+                "AMOBARBITAL",
+                "",
+                "5-Ethyl-5-(3-methylbutyl) barbituric\nacid"
+              ],
+              "fragments": [
+                {
+                  "page": 47,
+                  "bbox": [
+                    66.0,
+                    102.88463999999999,
+                    547.0,
+                    134.20464000000004
+                  ],
+                  "cells": [
+                    "24",
+                    "AMOBARBITAL",
+                    "",
+                    "5-Ethyl-5-(3-methylbutyl) barbituric\nacid"
+                  ]
+                }
+              ],
+              "sha256": "af710d02d84287f2b724e0339657c1fbda22b6ea9a224f389e6f27053e5ee16c"
+            },
+            {
+              "serial": "25",
+              "cells": [
+                "25",
+                "CYCLOBARBITAL",
+                "",
+                "5-(1-Cyclohexen-1-yl)-5-ethyl-\nbarbituric acid"
+              ],
+              "fragments": [
+                {
+                  "page": 47,
+                  "bbox": [
+                    66.0,
+                    134.20464000000004,
+                    547.0,
+                    165.40463999999997
+                  ],
+                  "cells": [
+                    "25",
+                    "CYCLOBARBITAL",
+                    "",
+                    "5-(1-Cyclohexen-1-yl)-5-ethyl-\nbarbituric acid"
+                  ]
+                }
+              ],
+              "sha256": "af7d07148c5908cb6ae22c3a8d54e477099cca44db756740d9fd0a60cdfd71dc"
+            },
+            {
+              "serial": "26",
+              "cells": [
+                "26",
+                "GLUTETHIMIDE",
+                "",
+                "2-Ethyl-2-phenylglutarimide"
+              ],
+              "fragments": [
+                {
+                  "page": 47,
+                  "bbox": [
+                    66.0,
+                    165.40463999999997,
+                    547.0,
+                    184.12464
+                  ],
+                  "cells": [
+                    "26",
+                    "GLUTETHIMIDE",
+                    "",
+                    "2-Ethyl-2-phenylglutarimide"
+                  ]
+                }
+              ],
+              "sha256": "cba83d312de0651136c548779e02209689e842df672d2fc227b6fc600f7c8987"
+            },
+            {
+              "serial": "27",
+              "cells": [
+                "27",
+                "PENTAZOCINE",
+                "",
+                "1, 2, 3, 4, 5, 6-Hexahydro-6, 11-\ndimethyl-3-(3-methyl-2-butenyl)-2, 6-\nmethano-3 benzazocin-8-ol"
+              ],
+              "fragments": [
+                {
+                  "page": 47,
+                  "bbox": [
+                    66.0,
+                    184.12464,
+                    547.0,
+                    228.04463999999996
+                  ],
+                  "cells": [
+                    "27",
+                    "PENTAZOCINE",
+                    "",
+                    "1, 2, 3, 4, 5, 6-Hexahydro-6, 11-\ndimethyl-3-(3-methyl-2-butenyl)-2, 6-\nmethano-3 benzazocin-8-ol"
+                  ]
+                }
+              ],
+              "sha256": "3457e422d61f4760c5de8ef6de31a2867854c2738008b1d7af58de75321867fb"
+            },
+            {
+              "serial": "28",
+              "cells": [
+                "28",
+                "PENTOBARBITAL",
+                "",
+                "5-Ethyl-5-(1-methylbutyl) barbituric\nacid"
+              ],
+              "fragments": [
+                {
+                  "page": 47,
+                  "bbox": [
+                    66.0,
+                    228.04463999999996,
+                    547.0,
+                    259.39464
+                  ],
+                  "cells": [
+                    "28",
+                    "PENTOBARBITAL",
+                    "",
+                    "5-Ethyl-5-(1-methylbutyl) barbituric\nacid"
+                  ]
+                }
+              ],
+              "sha256": "a866f74187c0a565972ef6338a66a1c734f6c78faf17037aff3886b3b9bb46b7"
+            },
+            {
+              "serial": "29",
+              "cells": [
+                "29",
+                "SECOBARBITAL",
+                "",
+                "5-Allyl-5-(1-methylbutyl) barbituric\nacid"
+              ],
+              "fragments": [
+                {
+                  "page": 47,
+                  "bbox": [
+                    66.0,
+                    259.39464,
+                    547.0,
+                    290.71464000000003
+                  ],
+                  "cells": [
+                    "29",
+                    "SECOBARBITAL",
+                    "",
+                    "5-Allyl-5-(1-methylbutyl) barbituric\nacid"
+                  ]
+                }
+              ],
+              "sha256": "16125afb926ca8a6e1c7bf5f19615235aa4bd02a2b50df023a6591479f9138ba"
+            },
+            {
+              "serial": "30",
+              "cells": [
+                "30",
+                "ALPRAZOLAM",
+                "",
+                "8-Chloro-1-methyl-6-phenyl-4H-s-\ntriazolo [4, 3-a] [1, 4] benzodiazepine"
+              ],
+              "fragments": [
+                {
+                  "page": 47,
+                  "bbox": [
+                    66.0,
+                    290.71464000000003,
+                    547.0,
+                    322.03463999999997
+                  ],
+                  "cells": [
+                    "30",
+                    "ALPRAZOLAM",
+                    "",
+                    "8-Chloro-1-methyl-6-phenyl-4H-s-\ntriazolo [4, 3-a] [1, 4] benzodiazepine"
+                  ]
+                }
+              ],
+              "sha256": "15cc093051f826602bccd5f285086a5cd6c3633f7811884ceaa601e0938645d7"
+            },
+            {
+              "serial": "31",
+              "cells": [
+                "31",
+                "AMFEPRAMONE",
+                "",
+                "2-(Diethylamino) propiophenone"
+              ],
+              "fragments": [
+                {
+                  "page": 47,
+                  "bbox": [
+                    66.0,
+                    322.03463999999997,
+                    547.0,
+                    340.63464
+                  ],
+                  "cells": [
+                    "31",
+                    "AMFEPRAMONE",
+                    "",
+                    "2-(Diethylamino) propiophenone"
+                  ]
+                }
+              ],
+              "sha256": "84b417ee08fcd0d006ef1de218117737c656be6b4022e4598d0492e6f40ac08c"
+            },
+            {
+              "serial": "32",
+              "cells": [
+                "32",
+                "BARBITAL",
+                "",
+                "5, 5-Diethylbarbituric acid"
+              ],
+              "fragments": [
+                {
+                  "page": 47,
+                  "bbox": [
+                    66.0,
+                    340.63464,
+                    547.0,
+                    359.23464
+                  ],
+                  "cells": [
+                    "32",
+                    "BARBITAL",
+                    "",
+                    "5, 5-Diethylbarbituric acid"
+                  ]
+                }
+              ],
+              "sha256": "f9a5121479b367b1392b79df653f31c26f5932ad5ad4560620b2561a77544054"
+            },
+            {
+              "serial": "33",
+              "cells": [
+                "33",
+                "BENZPHETAMINE",
+                "",
+                "N-Benzyl-N, α-dimethylphenethyl-\namine"
+              ],
+              "fragments": [
+                {
+                  "page": 47,
+                  "bbox": [
+                    66.0,
+                    359.23464,
+                    547.0,
+                    390.55464
+                  ],
+                  "cells": [
+                    "33",
+                    "BENZPHETAMINE",
+                    "",
+                    "N-Benzyl-N, α-dimethylphenethyl-\namine"
+                  ]
+                }
+              ],
+              "sha256": "ed1b884edd7645f18b85c134876fc652fe50c6e432ea33722bf744f3d2fe1aef"
+            },
+            {
+              "serial": "34",
+              "cells": [
+                "34",
+                "BROMAZEPAM",
+                "",
+                "7-Bromo-1, 3-dihydro-5-(2-pyridyl)-\n2H-1, 4-benzodiazepin-2-one."
+              ],
+              "fragments": [
+                {
+                  "page": 47,
+                  "bbox": [
+                    66.0,
+                    390.55464,
+                    547.0,
+                    421.87464
+                  ],
+                  "cells": [
+                    "34",
+                    "BROMAZEPAM",
+                    "",
+                    "7-Bromo-1, 3-dihydro-5-(2-pyridyl)-\n2H-1, 4-benzodiazepin-2-one."
+                  ]
+                }
+              ],
+              "sha256": "92024c63d7365b43bdb028765068913385f5b1b5a3594380e6bb3c5235d978d5"
+            },
+            {
+              "serial": "35",
+              "cells": [
+                "35",
+                "CAMAZEPAM",
+                "",
+                "7-Chloro-1, 3-dihydro-3-hydroxy-1-\nmethyl-5-phenyl-2-H-1, 4 benezo-\ndiazepin-2-one dimethylcarbamate\n(ester)"
+              ],
+              "fragments": [
+                {
+                  "page": 47,
+                  "bbox": [
+                    66.0,
+                    421.87464,
+                    547.0,
+                    478.53463999999997
+                  ],
+                  "cells": [
+                    "35",
+                    "CAMAZEPAM",
+                    "",
+                    "7-Chloro-1, 3-dihydro-3-hydroxy-1-\nmethyl-5-phenyl-2-H-1, 4 benezo-\ndiazepin-2-one dimethylcarbamate\n(ester)"
+                  ]
+                }
+              ],
+              "sha256": "7908641746fccf5e5cf82f404273422f646890b40db63ccf04bd959b5d9a9808"
+            },
+            {
+              "serial": "36",
+              "cells": [
+                "36",
+                "CHLORDIAZEPOXIDE",
+                "",
+                "7-Chloro-2-(methylamino)-5-phenyl-\n3H-1, 4-benzodiazepine-4-oxide"
+              ],
+              "fragments": [
+                {
+                  "page": 47,
+                  "bbox": [
+                    66.0,
+                    478.53463999999997,
+                    547.0,
+                    509.73464
+                  ],
+                  "cells": [
+                    "36",
+                    "CHLORDIAZEPOXIDE",
+                    "",
+                    "7-Chloro-2-(methylamino)-5-phenyl-\n3H-1, 4-benzodiazepine-4-oxide"
+                  ]
+                }
+              ],
+              "sha256": "14a1536cbd7725a1cb51c53598e9a1f102eea5eef4198d61b66513cb32786c35"
+            },
+            {
+              "serial": "37",
+              "cells": [
+                "37",
+                "CLOBAZAM",
+                "",
+                "7-Chloro-1-methyl-5-phenyl-1H-1, 5-\nbenzodiazepine, 2, 4 (3H, 5H)-dione"
+              ],
+              "fragments": [
+                {
+                  "page": 47,
+                  "bbox": [
+                    66.0,
+                    509.73464,
+                    547.0,
+                    541.0546400000001
+                  ],
+                  "cells": [
+                    "37",
+                    "CLOBAZAM",
+                    "",
+                    "7-Chloro-1-methyl-5-phenyl-1H-1, 5-\nbenzodiazepine, 2, 4 (3H, 5H)-dione"
+                  ]
+                }
+              ],
+              "sha256": "1a281372ad88c9bdf3220540c760f0971b708de82f3359527a4fccdc37da4d0a"
+            },
+            {
+              "serial": "38",
+              "cells": [
+                "38",
+                "CLONAZEPAM",
+                "",
+                "5-(o-Chlorophenyl)-1, 3-dihydro-7-\nnitro-2H-1, 4-benzodiazepin-2-one"
+              ],
+              "fragments": [
+                {
+                  "page": 47,
+                  "bbox": [
+                    66.0,
+                    541.0546400000001,
+                    547.0,
+                    572.37464
+                  ],
+                  "cells": [
+                    "38",
+                    "CLONAZEPAM",
+                    "",
+                    "5-(o-Chlorophenyl)-1, 3-dihydro-7-\nnitro-2H-1, 4-benzodiazepin-2-one"
+                  ]
+                }
+              ],
+              "sha256": "57f398f5b40fb209c0d059143098901b73100d1afff49b992dd46f790876ace0"
+            },
+            {
+              "serial": "39",
+              "cells": [
+                "39",
+                "CLORAZEPATE",
+                "",
+                "7-Chloro-2, 3-dihydro-2-oxo-5-phenyl-\n1H, 4-benzodiazepine-3-carboxylic\nacid"
+              ],
+              "fragments": [
+                {
+                  "page": 47,
+                  "bbox": [
+                    66.0,
+                    572.37464,
+                    547.0,
+                    616.3246399999999
+                  ],
+                  "cells": [
+                    "39",
+                    "CLORAZEPATE",
+                    "",
+                    "7-Chloro-2, 3-dihydro-2-oxo-5-phenyl-\n1H, 4-benzodiazepine-3-carboxylic\nacid"
+                  ]
+                }
+              ],
+              "sha256": "4548ea2ff905d303ebd2558e738d7eb8a12409cd6cd510f67e3473c18032b77d"
+            },
+            {
+              "serial": "40",
+              "cells": [
+                "40",
+                "CLOTIAZEPAM",
+                "",
+                "5-(0-Chlorophenyl)-7-ethyl-1, 3-\ndihydro-1-methyl-2H-thieno [2, 3-e]-1,\n4-diazepine-2-one"
+              ],
+              "fragments": [
+                {
+                  "page": 47,
+                  "bbox": [
+                    66.0,
+                    616.3246399999999,
+                    547.0,
+                    660.2446399999999
+                  ],
+                  "cells": [
+                    "40",
+                    "CLOTIAZEPAM",
+                    "",
+                    "5-(0-Chlorophenyl)-7-ethyl-1, 3-\ndihydro-1-methyl-2H-thieno [2, 3-e]-1,\n4-diazepine-2-one"
+                  ]
+                }
+              ],
+              "sha256": "e19f53e1d349e72acadce110f7cd2b46eea0dcc97185b6b3a7eac828bb22885d"
+            },
+            {
+              "serial": "41",
+              "cells": [
+                "41",
+                "CLOXAZOLAM",
+                "",
+                "10-Chloro-11b-(o-chlorophenyl)-2, 3,\n7, 11b-tetrahydro-oxazolo-[3, 2-d] [1,\n4] benzodiazepine-6 (5H)-one"
+              ],
+              "fragments": [
+                {
+                  "page": 47,
+                  "bbox": [
+                    66.0,
+                    660.2446399999999,
+                    547.0,
+                    704.28464
+                  ],
+                  "cells": [
+                    "41",
+                    "CLOXAZOLAM",
+                    "",
+                    "10-Chloro-11b-(o-chlorophenyl)-2, 3,\n7, 11b-tetrahydro-oxazolo-[3, 2-d] [1,\n4] benzodiazepine-6 (5H)-one"
+                  ]
+                }
+              ],
+              "sha256": "25fae8a5d6acac65e8642772a73a057710fbc7dedbc6a2c6f461d100743b3355"
+            },
+            {
+              "serial": "42",
+              "cells": [
+                "42",
+                "DELORAZEPAM",
+                "",
+                "7-Chloro-5-(o-chlorophenyl)-1, 3-\ndihydro-2H-1, 4-benzodiazepin-2-one"
+              ],
+              "fragments": [
+                {
+                  "page": 47,
+                  "bbox": [
+                    66.0,
+                    704.28464,
+                    547.0,
+                    770.0
+                  ],
+                  "cells": [
+                    "42",
+                    "DELORAZEPAM",
+                    "",
+                    "7-Chloro-5-(o-chlorophenyl)-1, 3-\ndihydro-2H-1, 4-benzodiazepin-2-one"
+                  ]
+                }
+              ],
+              "sha256": "42ee9fd05bf544e856dcc9a6641d77af0023cf689b62d8033f7ca5e26d1b2951"
+            },
+            {
+              "serial": "43",
+              "cells": [
+                "43",
+                "DIAZEPAM",
+                "",
+                "7-Chloro-1, 3-dihydro-1-methyl-5-\nphenyl-2H-1, 4-benzodiazepin-2-one"
+              ],
+              "fragments": [
+                {
+                  "page": 48,
+                  "bbox": [
+                    66.0,
+                    102.88463999999999,
+                    547.0,
+                    134.20464000000004
+                  ],
+                  "cells": [
+                    "43",
+                    "DIAZEPAM",
+                    "",
+                    "7-Chloro-1, 3-dihydro-1-methyl-5-\nphenyl-2H-1, 4-benzodiazepin-2-one"
+                  ]
+                }
+              ],
+              "sha256": "f4662a2035f0f452716bc2c5dc78fb0fe03458b3ab3f3818c159c35ef70dd688"
+            },
+            {
+              "serial": "44",
+              "cells": [
+                "44",
+                "ESTAZOLAM",
+                "",
+                "8-Chloro-6-phenyl-4H-s-triazolo [4,\n3-a], [1, 4] benzodiazepine"
+              ],
+              "fragments": [
+                {
+                  "page": 48,
+                  "bbox": [
+                    66.0,
+                    134.20464000000004,
+                    547.0,
+                    165.40463999999997
+                  ],
+                  "cells": [
+                    "44",
+                    "ESTAZOLAM",
+                    "",
+                    "8-Chloro-6-phenyl-4H-s-triazolo [4,\n3-a], [1, 4] benzodiazepine"
+                  ]
+                }
+              ],
+              "sha256": "b8ab7a6123c607d506f359ab5604daf00e0dc0374f2d1727d79f70877511995a"
+            },
+            {
+              "serial": "45",
+              "cells": [
+                "45",
+                "ETHCHLORVYNOL",
+                "",
+                "Ethyl-2-chlorovinylethynylcarbinol"
+              ],
+              "fragments": [
+                {
+                  "page": 48,
+                  "bbox": [
+                    66.0,
+                    165.40463999999997,
+                    547.0,
+                    184.12464
+                  ],
+                  "cells": [
+                    "45",
+                    "ETHCHLORVYNOL",
+                    "",
+                    "Ethyl-2-chlorovinylethynylcarbinol"
+                  ]
+                }
+              ],
+              "sha256": "116ece1fe7190a33f7031cfb232ac501992225a6f704841274ac911f7132e5ad"
+            },
+            {
+              "serial": "46",
+              "cells": [
+                "46",
+                "ETHINAMATE",
+                "",
+                "1-Ethylnylcyclohexanolcarbamate"
+              ],
+              "fragments": [
+                {
+                  "page": 48,
+                  "bbox": [
+                    66.0,
+                    184.12464,
+                    547.0,
+                    202.72464000000002
+                  ],
+                  "cells": [
+                    "46",
+                    "ETHINAMATE",
+                    "",
+                    "1-Ethylnylcyclohexanolcarbamate"
+                  ]
+                }
+              ],
+              "sha256": "901360c2dff9ed8a40806250c3c51922c46ea0e6301a4bf8f58fdd4e43f37f68"
+            },
+            {
+              "serial": "47",
+              "cells": [
+                "47",
+                "ETHYLLOFLAZEPATE",
+                "",
+                "Ethyl 7-chloro-5-(o-fluorophenyl)-2,\n3-dihydro-2-oxo-1H-1, 4-benzo-\ndiazepine-3-carboxylate"
+              ],
+              "fragments": [
+                {
+                  "page": 48,
+                  "bbox": [
+                    66.0,
+                    202.72464000000002,
+                    547.0,
+                    246.64463999999998
+                  ],
+                  "cells": [
+                    "47",
+                    "ETHYLLOFLAZEPATE",
+                    "",
+                    "Ethyl 7-chloro-5-(o-fluorophenyl)-2,\n3-dihydro-2-oxo-1H-1, 4-benzo-\ndiazepine-3-carboxylate"
+                  ]
+                }
+              ],
+              "sha256": "aa3c47aa937e70278effd17a4b61a072327f386a3043001f719b333807eaab88"
+            },
+            {
+              "serial": "48",
+              "cells": [
+                "48",
+                "FLUDIAZEPAM",
+                "",
+                "7-Chloro-5-(o-fluorophenyl)-1, 3-\ndihydro-1-methyl-2H-1, 4-benzo-\ndiazepine-2-one"
+              ],
+              "fragments": [
+                {
+                  "page": 48,
+                  "bbox": [
+                    66.0,
+                    246.64463999999998,
+                    547.0,
+                    290.71464000000003
+                  ],
+                  "cells": [
+                    "48",
+                    "FLUDIAZEPAM",
+                    "",
+                    "7-Chloro-5-(o-fluorophenyl)-1, 3-\ndihydro-1-methyl-2H-1, 4-benzo-\ndiazepine-2-one"
+                  ]
+                }
+              ],
+              "sha256": "65d3106b49324aa5948130f446af2f74aa99049bf30bff966a9dae311b263a45"
+            },
+            {
+              "serial": "49",
+              "cells": [
+                "49",
+                "FLUNITRAZEPAM",
+                "",
+                "5-(o-Fluorophenyl)-1, 3-dihydro-1-\nmethyl-7-nitro-2H-1, 4-benzo-\ndiazepin-2-one"
+              ],
+              "fragments": [
+                {
+                  "page": 48,
+                  "bbox": [
+                    66.0,
+                    290.71464000000003,
+                    547.0,
+                    334.63464
+                  ],
+                  "cells": [
+                    "49",
+                    "FLUNITRAZEPAM",
+                    "",
+                    "5-(o-Fluorophenyl)-1, 3-dihydro-1-\nmethyl-7-nitro-2H-1, 4-benzo-\ndiazepin-2-one"
+                  ]
+                }
+              ],
+              "sha256": "abf2427eb112b83dc45f0a7057f5c173a3be2c9b5130d123c272b5e29e01a1f7"
+            },
+            {
+              "serial": "50",
+              "cells": [
+                "50",
+                "FLURAZEPAM",
+                "",
+                "7-Chloro-1-[2-(diethylamino) ethyl]-\n5-(o-fluorophenyl)-1, 3-dihydro-2H-\n1, 4-benzo-diazepin-2-one"
+              ],
+              "fragments": [
+                {
+                  "page": 48,
+                  "bbox": [
+                    66.0,
+                    334.63464,
+                    547.0,
+                    378.55464
+                  ],
+                  "cells": [
+                    "50",
+                    "FLURAZEPAM",
+                    "",
+                    "7-Chloro-1-[2-(diethylamino) ethyl]-\n5-(o-fluorophenyl)-1, 3-dihydro-2H-\n1, 4-benzo-diazepin-2-one"
+                  ]
+                }
+              ],
+              "sha256": "91c45898a1f263160a053c990463e1964dcc61072d1d22cfb9cf5b4a93e3ba09"
+            },
+            {
+              "serial": "51",
+              "cells": [
+                "51",
+                "HALAZEPAM",
+                "",
+                "7-Chloro-1, 3-dihydro-5-phenyl-1-(2,\n2, 2-trifluoroethyl)-2H-1, 4-benzo-\ndiazepin-2-one"
+              ],
+              "fragments": [
+                {
+                  "page": 48,
+                  "bbox": [
+                    66.0,
+                    378.55464,
+                    547.0,
+                    422.47463999999997
+                  ],
+                  "cells": [
+                    "51",
+                    "HALAZEPAM",
+                    "",
+                    "7-Chloro-1, 3-dihydro-5-phenyl-1-(2,\n2, 2-trifluoroethyl)-2H-1, 4-benzo-\ndiazepin-2-one"
+                  ]
+                }
+              ],
+              "sha256": "faa10bcb2d6f72936c61aaf7628576efbb78f91c7ecddc6c6fb200c296709dc4"
+            },
+            {
+              "serial": "52",
+              "cells": [
+                "52",
+                "HALOXAZOLAM",
+                "",
+                "10-Bromo-11b-(o-fluorophenyl)-2, 3,\n7, 11b-tetrahydrooxazolo [3, 2-d] [1,\n4] benzodiazepine-6, (5H)-one"
+              ],
+              "fragments": [
+                {
+                  "page": 48,
+                  "bbox": [
+                    66.0,
+                    422.47463999999997,
+                    547.0,
+                    466.53463999999997
+                  ],
+                  "cells": [
+                    "52",
+                    "HALOXAZOLAM",
+                    "",
+                    "10-Bromo-11b-(o-fluorophenyl)-2, 3,\n7, 11b-tetrahydrooxazolo [3, 2-d] [1,\n4] benzodiazepine-6, (5H)-one"
+                  ]
+                }
+              ],
+              "sha256": "4dda0cc7c2ca6570e2f1804049d18dd8a0575875ff5ed11c6d9d0818252884c8"
+            },
+            {
+              "serial": "53",
+              "cells": [
+                "53",
+                "KETAZOLAM",
+                "",
+                "11-Chloro-8, 12b-dihydro-2, 8-\ndimethyl-12b-phenyl-4H-[1, 3]-\noxazino-[3, 2-d] [1, 4]\nbenzodiazepine-4, 7(6H)-dione"
+              ],
+              "fragments": [
+                {
+                  "page": 48,
+                  "bbox": [
+                    66.0,
+                    466.53463999999997,
+                    547.0,
+                    523.0546400000001
+                  ],
+                  "cells": [
+                    "53",
+                    "KETAZOLAM",
+                    "",
+                    "11-Chloro-8, 12b-dihydro-2, 8-\ndimethyl-12b-phenyl-4H-[1, 3]-\noxazino-[3, 2-d] [1, 4]\nbenzodiazepine-4, 7(6H)-dione"
+                  ]
+                }
+              ],
+              "sha256": "c01be9680e71af66435748024f6a143db743bfb6c25d6f4bf7b965ec5af74415"
+            },
+            {
+              "serial": "54",
+              "cells": [
+                "54",
+                "LEFETAMINE",
+                "SPA",
+                "(—)-1-dimethylamino-1, 2diphenyl-\nethane"
+              ],
+              "fragments": [
+                {
+                  "page": 48,
+                  "bbox": [
+                    66.0,
+                    523.0546400000001,
+                    547.0,
+                    568.41464
+                  ],
+                  "cells": [
+                    "54",
+                    "LEFETAMINE",
+                    "SPA",
+                    "(—)-1-dimethylamino-1, 2diphenyl-\nethane"
+                  ]
+                }
+              ],
+              "sha256": "e36e3db57e5386caa08a343f8ccfcb8ead809d9c031e368b6d85a57ee94e46de"
+            },
+            {
+              "serial": "55",
+              "cells": [
+                "55",
+                "LOPRAZOLAM",
+                "",
+                "6-(o-Chlorophenyl)-2, 4-dihydro-2-\n[(4 methyl-1-piperazinyl) metnylene]-\n8-nitro-1H-imidazo [1, 2-0] [1, 4]\nbenzodiazepin-1-one"
+              ],
+              "fragments": [
+                {
+                  "page": 48,
+                  "bbox": [
+                    66.0,
+                    568.41464,
+                    547.0,
+                    624.9646399999999
+                  ],
+                  "cells": [
+                    "55",
+                    "LOPRAZOLAM",
+                    "",
+                    "6-(o-Chlorophenyl)-2, 4-dihydro-2-\n[(4 methyl-1-piperazinyl) metnylene]-\n8-nitro-1H-imidazo [1, 2-0] [1, 4]\nbenzodiazepin-1-one"
+                  ]
+                }
+              ],
+              "sha256": "5d97773842b8649cb2e343b8880dc7e8407ac7916f1e0b9a3bf02d2d0ddeb160"
+            },
+            {
+              "serial": "56",
+              "cells": [
+                "56",
+                "LORAZEPAM",
+                "",
+                "7-Chloro-5-(o-chlorophenyl)-1, 3-\ndihydro-3-hydroxy-2H-1, 4-benzo-\ndiazepine-2-one"
+              ],
+              "fragments": [
+                {
+                  "page": 48,
+                  "bbox": [
+                    66.0,
+                    624.9646399999999,
+                    547.0,
+                    669.00464
+                  ],
+                  "cells": [
+                    "56",
+                    "LORAZEPAM",
+                    "",
+                    "7-Chloro-5-(o-chlorophenyl)-1, 3-\ndihydro-3-hydroxy-2H-1, 4-benzo-\ndiazepine-2-one"
+                  ]
+                }
+              ],
+              "sha256": "34823653cf8441112d9d7f27704d7aa23ae13ed3d9dd6c0a978d977ecd5df108"
+            },
+            {
+              "serial": "57",
+              "cells": [
+                "57",
+                "LORMETAZEPAM",
+                "",
+                "7-Chloro-5-(o-chlorophenyl)-1, 3-\ndihydro-3-hydroxy-1-methyl-2H-1, 4-\nbenzcxiiazepine-2-one"
+              ],
+              "fragments": [
+                {
+                  "page": 48,
+                  "bbox": [
+                    66.0,
+                    669.00464,
+                    547.0,
+                    712.92464
+                  ],
+                  "cells": [
+                    "57",
+                    "LORMETAZEPAM",
+                    "",
+                    "7-Chloro-5-(o-chlorophenyl)-1, 3-\ndihydro-3-hydroxy-1-methyl-2H-1, 4-\nbenzcxiiazepine-2-one"
+                  ]
+                }
+              ],
+              "sha256": "b8e3e3ecbc0825fed8f415696996672539d7f90d9f5c4a57d5d38dec5543a892"
+            },
+            {
+              "serial": "58",
+              "cells": [
+                "58",
+                "MAZINDOL",
+                "",
+                "5-(P-Chlorophenyl)-2, 5-dihydro-3-\nH-imidazo [2, 1-x] isoindol-5-01"
+              ],
+              "fragments": [
+                {
+                  "page": 48,
+                  "bbox": [
+                    66.0,
+                    712.92464,
+                    547.0,
+                    770.0
+                  ],
+                  "cells": [
+                    "58",
+                    "MAZINDOL",
+                    "",
+                    "5-(P-Chlorophenyl)-2, 5-dihydro-3-\nH-imidazo [2, 1-x] isoindol-5-01"
+                  ]
+                }
+              ],
+              "sha256": "fe052043c5b3a2d78e25376adf74f88d988cb1250fa8b21df1da773fc951d45a"
+            },
+            {
+              "serial": "59",
+              "cells": [
+                "59",
+                "MEDAZEPAM",
+                "",
+                "7-Chloro-2, 3-dihydro-1-methyl-5-\nphenyl-1H-1, 4-benzodiazepine"
+              ],
+              "fragments": [
+                {
+                  "page": 49,
+                  "bbox": [
+                    66.62,
+                    110.66,
+                    545.5,
+                    142.46
+                  ],
+                  "cells": [
+                    "59",
+                    "MEDAZEPAM",
+                    "",
+                    "7-Chloro-2, 3-dihydro-1-methyl-5-\nphenyl-1H-1, 4-benzodiazepine"
+                  ]
+                }
+              ],
+              "sha256": "c309dabc7b102b326958dba8120098d8acbaa24a4040964c9a30d11ddd265f36"
+            },
+            {
+              "serial": "60",
+              "cells": [
+                "60",
+                "MEPROBAMATE",
+                "",
+                "2-Methyl-2-propyl-1, 3-propanediol\ndicarbamate"
+              ],
+              "fragments": [
+                {
+                  "page": 49,
+                  "bbox": [
+                    66.62,
+                    142.46,
+                    545.5,
+                    172.34
+                  ],
+                  "cells": [
+                    "60",
+                    "MEPROBAMATE",
+                    "",
+                    "2-Methyl-2-propyl-1, 3-propanediol\ndicarbamate"
+                  ]
+                }
+              ],
+              "sha256": "5a44ca691dcfee527c07a0a359b61518ae774fbaa55d30837a4849355cf91f24"
+            },
+            {
+              "serial": "61",
+              "cells": [
+                "61",
+                "METHYLPHENOBARBITA\nL",
+                "",
+                "5-Ethyl-1-methyl-5-phenylbarbituric\nacid"
+              ],
+              "fragments": [
+                {
+                  "page": 49,
+                  "bbox": [
+                    66.62,
+                    172.34,
+                    545.5,
+                    202.1
+                  ],
+                  "cells": [
+                    "61",
+                    "METHYLPHENOBARBITA\nL",
+                    "",
+                    "5-Ethyl-1-methyl-5-phenylbarbituric\nacid"
+                  ]
+                }
+              ],
+              "sha256": "951719d263516fd2c72ba40dbc6b4a820be6e2402155b48a5173b6e3b7624459"
+            },
+            {
+              "serial": "62",
+              "cells": [
+                "62",
+                "METHYPRYLON",
+                "",
+                "3, 3-Diethyl-5-methyl-2, 4 piperidine-\ndione"
+              ],
+              "fragments": [
+                {
+                  "page": 49,
+                  "bbox": [
+                    66.62,
+                    202.1,
+                    545.5,
+                    231.86
+                  ],
+                  "cells": [
+                    "62",
+                    "METHYPRYLON",
+                    "",
+                    "3, 3-Diethyl-5-methyl-2, 4 piperidine-\ndione"
+                  ]
+                }
+              ],
+              "sha256": "f05129cbfaf4dfd449d7268711dec7237dd78c55b5f7a5f7083fdf54873c7aa7"
+            },
+            {
+              "serial": "63",
+              "cells": [
+                "63",
+                "NIMETAZEPAM",
+                "",
+                "1, 3-Dihydro-1-methyl-7-nitro-5-\nphenyl- 2-H-1, 4-benzodiazepin-2-\none"
+              ],
+              "fragments": [
+                {
+                  "page": 49,
+                  "bbox": [
+                    66.62,
+                    231.86,
+                    545.5,
+                    274.37
+                  ],
+                  "cells": [
+                    "63",
+                    "NIMETAZEPAM",
+                    "",
+                    "1, 3-Dihydro-1-methyl-7-nitro-5-\nphenyl- 2-H-1, 4-benzodiazepin-2-\none"
+                  ]
+                }
+              ],
+              "sha256": "470ee2f616d00de58834fb58c7237db67ab92c2bddbe1cc695f60cc06bae83a0"
+            },
+            {
+              "serial": "64",
+              "cells": [
+                "64",
+                "NITRAZEPAM",
+                "",
+                "1, 3-Dihydro-7-nitro-5-phenyl-2H-1,\n4-benzodiazepin-2-one"
+              ],
+              "fragments": [
+                {
+                  "page": 49,
+                  "bbox": [
+                    66.62,
+                    274.37,
+                    545.5,
+                    304.13
+                  ],
+                  "cells": [
+                    "64",
+                    "NITRAZEPAM",
+                    "",
+                    "1, 3-Dihydro-7-nitro-5-phenyl-2H-1,\n4-benzodiazepin-2-one"
+                  ]
+                }
+              ],
+              "sha256": "4210131318ffc0d1542bf426947962ed5e7ddfd05518d4da41a80702ce56fb79"
+            },
+            {
+              "serial": "65",
+              "cells": [
+                "65",
+                "NORDAZEPAM",
+                "",
+                "7-Chloro-1, 3-dihydro-5-phenyl-1\n(2H)-1, 4-benzodiazepin-2-one"
+              ],
+              "fragments": [
+                {
+                  "page": 49,
+                  "bbox": [
+                    66.62,
+                    304.13,
+                    545.5,
+                    334.01
+                  ],
+                  "cells": [
+                    "65",
+                    "NORDAZEPAM",
+                    "",
+                    "7-Chloro-1, 3-dihydro-5-phenyl-1\n(2H)-1, 4-benzodiazepin-2-one"
+                  ]
+                }
+              ],
+              "sha256": "8f0462dd37508d639740cc1baf2b27b9f1e9f7bba41b481a77aeadb35603eab0"
+            },
+            {
+              "serial": "66",
+              "cells": [
+                "66",
+                "OXAZEPAM",
+                "",
+                "7-Chloro-1, 3-dihydro-3-hydroxy-5-\nphenyl -2H-1, 4-benzodiazepin-2-one"
+              ],
+              "fragments": [
+                {
+                  "page": 49,
+                  "bbox": [
+                    66.62,
+                    334.01,
+                    545.5,
+                    382.13
+                  ],
+                  "cells": [
+                    "66",
+                    "OXAZEPAM",
+                    "",
+                    "7-Chloro-1, 3-dihydro-3-hydroxy-5-\nphenyl -2H-1, 4-benzodiazepin-2-one"
+                  ]
+                }
+              ],
+              "sha256": "687ee997150673b1dff59d9b190d074efc08a38b5af4df26eb1a98c8687745ca"
+            },
+            {
+              "serial": "67",
+              "cells": [
+                "67",
+                "OXAZOLAM",
+                "",
+                "10-Chloro-2, 3, 7, 11b-tetrahydro-2-\nmethyl-11b-phenyl-oxazolo [3, 2-d]\n[1, 4] benzodiazepin-6 (5H)-one"
+              ],
+              "fragments": [
+                {
+                  "page": 49,
+                  "bbox": [
+                    66.62,
+                    382.13,
+                    545.5,
+                    424.61
+                  ],
+                  "cells": [
+                    "67",
+                    "OXAZOLAM",
+                    "",
+                    "10-Chloro-2, 3, 7, 11b-tetrahydro-2-\nmethyl-11b-phenyl-oxazolo [3, 2-d]\n[1, 4] benzodiazepin-6 (5H)-one"
+                  ]
+                }
+              ],
+              "sha256": "d2be04830eda291dfdd8660eed54284670959aeb1004d6926d99580d66f8e583"
+            },
+            {
+              "serial": "68",
+              "cells": [
+                "68",
+                "PHENDIMETRAZINE",
+                "",
+                "(+)-3, 4-Dimethyl-2-phenyl-\nmorpholine"
+              ],
+              "fragments": [
+                {
+                  "page": 49,
+                  "bbox": [
+                    66.62,
+                    424.61,
+                    545.5,
+                    454.39
+                  ],
+                  "cells": [
+                    "68",
+                    "PHENDIMETRAZINE",
+                    "",
+                    "(+)-3, 4-Dimethyl-2-phenyl-\nmorpholine"
+                  ]
+                }
+              ],
+              "sha256": "ea432ed7d094cddd9266d6c634624a84c4600c5588d009fac64b99fe3b1a2499"
+            },
+            {
+              "serial": "69",
+              "cells": [
+                "69",
+                "PHENOBARBITAL",
+                "",
+                "5-Ethyl-5-phenylbarbituric acid"
+              ],
+              "fragments": [
+                {
+                  "page": 49,
+                  "bbox": [
+                    66.62,
+                    454.39,
+                    545.5,
+                    471.55
+                  ],
+                  "cells": [
+                    "69",
+                    "PHENOBARBITAL",
+                    "",
+                    "5-Ethyl-5-phenylbarbituric acid"
+                  ]
+                }
+              ],
+              "sha256": "3e3b4c7b9eeb9a2c937ab4421c94778652f6da740fe2e4ddc730e726592ae6dc"
+            },
+            {
+              "serial": "70",
+              "cells": [
+                "70",
+                "PHENTERMINE",
+                "",
+                "£, £-Dimethylphenethylamine"
+              ],
+              "fragments": [
+                {
+                  "page": 49,
+                  "bbox": [
+                    66.62,
+                    471.55,
+                    545.5,
+                    488.71
+                  ],
+                  "cells": [
+                    "70",
+                    "PHENTERMINE",
+                    "",
+                    "£, £-Dimethylphenethylamine"
+                  ]
+                }
+              ],
+              "sha256": "15acd32985880e0d178e9d37980bc223bcee19f09d2703c8c6668559a356aae0"
+            },
+            {
+              "serial": "71",
+              "cells": [
+                "71",
+                "PINAZEPAM",
+                "",
+                "7-Chloro-1, 3-dihydro-5-phenyl-1-(2-\npropynyl)-2H-1, 4-benzodiazepin-2-\none"
+              ],
+              "fragments": [
+                {
+                  "page": 49,
+                  "bbox": [
+                    66.62,
+                    488.71,
+                    545.5,
+                    531.07
+                  ],
+                  "cells": [
+                    "71",
+                    "PINAZEPAM",
+                    "",
+                    "7-Chloro-1, 3-dihydro-5-phenyl-1-(2-\npropynyl)-2H-1, 4-benzodiazepin-2-\none"
+                  ]
+                }
+              ],
+              "sha256": "5f4df9131ed98da051eebb7d9f6fe77dbb18057fc75e25c14fd50fb884f808e0"
+            },
+            {
+              "serial": "72",
+              "cells": [
+                "72",
+                "PIPRADROL",
+                "",
+                "1-1-Diphenyl-1-(2-piperidyl)-\nmethanol"
+              ],
+              "fragments": [
+                {
+                  "page": 49,
+                  "bbox": [
+                    66.62,
+                    531.07,
+                    545.5,
+                    560.95
+                  ],
+                  "cells": [
+                    "72",
+                    "PIPRADROL",
+                    "",
+                    "1-1-Diphenyl-1-(2-piperidyl)-\nmethanol"
+                  ]
+                }
+              ],
+              "sha256": "ac9baf63956c214b5bbdc4a470f2bb7a86de03ba332c1a99c3ead1921bba8f42"
+            },
+            {
+              "serial": "73",
+              "cells": [
+                "73",
+                "PRAZEPAM",
+                "",
+                "7-Chlorol-(cyclopropylmethyl)-1,-3-\ndihydro-5-phenyl)-2H-1, 4-benzo-\ndiazepin-2-one"
+              ],
+              "fragments": [
+                {
+                  "page": 49,
+                  "bbox": [
+                    66.62,
+                    560.95,
+                    545.5,
+                    603.43
+                  ],
+                  "cells": [
+                    "73",
+                    "PRAZEPAM",
+                    "",
+                    "7-Chlorol-(cyclopropylmethyl)-1,-3-\ndihydro-5-phenyl)-2H-1, 4-benzo-\ndiazepin-2-one"
+                  ]
+                }
+              ],
+              "sha256": "2884261d3df7493bc35e0d29c4c86e35de0cd255971aeacc56c4416c38df0702"
+            },
+            {
+              "serial": "74",
+              "cells": [
+                "74",
+                "TEMAZEPAM",
+                "",
+                "7-Chloro-1, 3-dihydro-3-hydroxy-1-\nmethyl-5-phenyl -2H-1-4-benzo-\ndiazepin-2-one"
+              ],
+              "fragments": [
+                {
+                  "page": 49,
+                  "bbox": [
+                    66.62,
+                    603.43,
+                    545.5,
+                    645.82
+                  ],
+                  "cells": [
+                    "74",
+                    "TEMAZEPAM",
+                    "",
+                    "7-Chloro-1, 3-dihydro-3-hydroxy-1-\nmethyl-5-phenyl -2H-1-4-benzo-\ndiazepin-2-one"
+                  ]
+                }
+              ],
+              "sha256": "53107231f7d989753ce6cadbaa47e0928ded73dd241e995a50802e875b67e889"
+            },
+            {
+              "serial": "75",
+              "cells": [
+                "75",
+                "TETRAZEPAM",
+                "",
+                "7-Chloro-5-(cycloexen-1-yl)-1, 3-\ndihydro-1-methyl-2H-1, 4-benzo-\ndiazepin-2-one"
+              ],
+              "fragments": [
+                {
+                  "page": 49,
+                  "bbox": [
+                    66.62,
+                    645.82,
+                    545.5,
+                    688.3
+                  ],
+                  "cells": [
+                    "75",
+                    "TETRAZEPAM",
+                    "",
+                    "7-Chloro-5-(cycloexen-1-yl)-1, 3-\ndihydro-1-methyl-2H-1, 4-benzo-\ndiazepin-2-one"
+                  ]
+                }
+              ],
+              "sha256": "3f0c3a24d8de2ad93f7dca1f90488ae717515545bbd6c535928363f9cb56f1ed"
+            },
+            {
+              "serial": "76",
+              "cells": [
+                "76",
+                "TRIAZOLAM",
+                "",
+                "8-Chloro-6-(o-chlorophenyl)-1-\nmethyl-4H-s-triazodo[4,3-a] [1,4]\nbenzodiazepine."
+              ],
+              "fragments": [
+                {
+                  "page": 49,
+                  "bbox": [
+                    66.62,
+                    688.3,
+                    545.5,
+                    730.78
+                  ],
+                  "cells": [
+                    "76",
+                    "TRIAZOLAM",
+                    "",
+                    "8-Chloro-6-(o-chlorophenyl)-1-\nmethyl-4H-s-triazodo[4,3-a] [1,4]\nbenzodiazepine."
+                  ]
+                }
+              ],
+              "sha256": "b5652de3af774aa473be8067abb231c82c42b33525fb80ceff4876ba1c7261ff"
+            },
+            {
+              "serial": "77",
+              "cells": [
+                "1[77.",
+                "CATHIONE",
+                "",
+                "(--)-(S)-2-aminopropophenone"
+              ],
+              "fragments": [
+                {
+                  "page": 50,
+                  "bbox": [
+                    66.62,
+                    72.24,
+                    545.5,
+                    89.42
+                  ],
+                  "cells": [
+                    "1[77.",
+                    "CATHIONE",
+                    "",
+                    "(--)-(S)-2-aminopropophenone"
+                  ]
+                }
+              ],
+              "sha256": "e9d818058c217613276697ed62421eaa0d7b7e3b882a1421b442ad82b7a0ac93"
+            },
+            {
+              "serial": "78",
+              "cells": [
+                "78.",
+                "",
+                "DMA",
+                "(±)-2,5-dimethoxy-a-\nmethlyphenethylamine"
+              ],
+              "fragments": [
+                {
+                  "page": 50,
+                  "bbox": [
+                    66.62,
+                    89.42,
+                    545.5,
+                    119.18
+                  ],
+                  "cells": [
+                    "78.",
+                    "",
+                    "DMA",
+                    "(±)-2,5-dimethoxy-a-\nmethlyphenethylamine"
+                  ]
+                }
+              ],
+              "sha256": "6689ae67f469a46917630ce7a4d99cefb00e95381b863fefaff8922a89d0b8b0"
+            },
+            {
+              "serial": "79",
+              "cells": [
+                "79.",
+                "",
+                "DOET",
+                "(±)-4 ethyl -2, 5-dimethoxy-a-\nphenethylamine"
+              ],
+              "fragments": [
+                {
+                  "page": 50,
+                  "bbox": [
+                    66.62,
+                    119.18,
+                    545.5,
+                    149.06
+                  ],
+                  "cells": [
+                    "79.",
+                    "",
+                    "DOET",
+                    "(±)-4 ethyl -2, 5-dimethoxy-a-\nphenethylamine"
+                  ]
+                }
+              ],
+              "sha256": "a1f569d5fe58484f115fc3eb0697f716f17ce755921ce23b3a35c97d4b640a4c"
+            },
+            {
+              "serial": "80",
+              "cells": [
+                "80.",
+                "",
+                "MDMA",
+                "(±)-N, a-dimethyl-3. 4- (methylene-\ndioxy) phenethylamine"
+              ],
+              "fragments": [
+                {
+                  "page": 50,
+                  "bbox": [
+                    66.62,
+                    149.06,
+                    545.5,
+                    178.82
+                  ],
+                  "cells": [
+                    "80.",
+                    "",
+                    "MDMA",
+                    "(±)-N, a-dimethyl-3. 4- (methylene-\ndioxy) phenethylamine"
+                  ]
+                }
+              ],
+              "sha256": "acabd8bce9477f33bc0b4e1cd5733ef91bf446210218d887665e47681f2c9011"
+            },
+            {
+              "serial": "81",
+              "cells": [
+                "81.",
+                "",
+                "4-methylaminorex",
+                "(±)-cis-2-amino-4-methyl-5-phcnyl-2-\noxazoline"
+              ],
+              "fragments": [
+                {
+                  "page": 50,
+                  "bbox": [
+                    66.62,
+                    178.82,
+                    545.5,
+                    208.58
+                  ],
+                  "cells": [
+                    "81.",
+                    "",
+                    "4-methylaminorex",
+                    "(±)-cis-2-amino-4-methyl-5-phcnyl-2-\noxazoline"
+                  ]
+                }
+              ],
+              "sha256": "157616871c30f8664a3900de231e201e9052e31b9fb2ce45eb6294ae1e495968"
+            },
+            {
+              "serial": "82",
+              "cells": [
+                "82.",
+                "",
+                "MMDA",
+                "2-methoxy-a-methyl-4-5, (methylene-\ndioxy) phenethylamine"
+              ],
+              "fragments": [
+                {
+                  "page": 50,
+                  "bbox": [
+                    66.62,
+                    208.58,
+                    545.5,
+                    238.34
+                  ],
+                  "cells": [
+                    "82.",
+                    "",
+                    "MMDA",
+                    "2-methoxy-a-methyl-4-5, (methylene-\ndioxy) phenethylamine"
+                  ]
+                }
+              ],
+              "sha256": "d5aca7766d3d251fa2951edba3e38d8b25bb9bd7eaec93e5b9ba7ea36e8cb90b"
+            },
+            {
+              "serial": "83",
+              "cells": [
+                "83.",
+                "",
+                "N-ethyl MDA",
+                "(±) N-ethyl-u-methyl-4, 4 (methylene-\ndioxy) phenethylamine"
+              ],
+              "fragments": [
+                {
+                  "page": 50,
+                  "bbox": [
+                    66.62,
+                    238.34,
+                    545.5,
+                    268.25
+                  ],
+                  "cells": [
+                    "83.",
+                    "",
+                    "N-ethyl MDA",
+                    "(±) N-ethyl-u-methyl-4, 4 (methylene-\ndioxy) phenethylamine"
+                  ]
+                }
+              ],
+              "sha256": "961b8014fad62313add863b0cb477a22f9212b49261c72a3b57d6ae4a2b78d83"
+            },
+            {
+              "serial": "84",
+              "cells": [
+                "84.",
+                "",
+                "N-hydroxy MDA",
+                "(±) -N (u-methyl 3, 4-\n(methylenedioxy) phenethy\nhydroxylamine"
+              ],
+              "fragments": [
+                {
+                  "page": 50,
+                  "bbox": [
+                    66.62,
+                    268.25,
+                    545.5,
+                    310.73
+                  ],
+                  "cells": [
+                    "84.",
+                    "",
+                    "N-hydroxy MDA",
+                    "(±) -N (u-methyl 3, 4-\n(methylenedioxy) phenethy\nhydroxylamine"
+                  ]
+                }
+              ],
+              "sha256": "092a493acbd8eec4e2899460c4b68fe01d8a56fe7e4f378049a9e3a2abbe5065"
+            },
+            {
+              "serial": "85",
+              "cells": [
+                "85.",
+                "",
+                "PMA",
+                "p-methoxy-a-methylphenethyamine"
+              ],
+              "fragments": [
+                {
+                  "page": 50,
+                  "bbox": [
+                    66.62,
+                    310.73,
+                    545.5,
+                    327.77
+                  ],
+                  "cells": [
+                    "85.",
+                    "",
+                    "PMA",
+                    "p-methoxy-a-methylphenethyamine"
+                  ]
+                }
+              ],
+              "sha256": "f3fb528f7153ddbc83c7522dae2585827ad3caa1804259b16d0ec81f1eab5146"
+            },
+            {
+              "serial": "86",
+              "cells": [
+                "86.",
+                "",
+                "TMA",
+                "(±) -3,4, 5-trimethoxy-a-\nmethylphenethy-lamine"
+              ],
+              "fragments": [
+                {
+                  "page": 50,
+                  "bbox": [
+                    66.62,
+                    327.77,
+                    545.5,
+                    357.65
+                  ],
+                  "cells": [
+                    "86.",
+                    "",
+                    "TMA",
+                    "(±) -3,4, 5-trimethoxy-a-\nmethylphenethy-lamine"
+                  ]
+                }
+              ],
+              "sha256": "2050aa271c98d21b9a4348bf3f6214cf87d303a2c6a4d7575505722e0d277757"
+            },
+            {
+              "serial": "87",
+              "cells": [
+                "87.",
+                "FENETYLINE",
+                "",
+                "7-(2-(ø-methylphenethyl) amino)\nethyl-) theophyline"
+              ],
+              "fragments": [
+                {
+                  "page": 50,
+                  "bbox": [
+                    66.62,
+                    357.65,
+                    545.5,
+                    387.41
+                  ],
+                  "cells": [
+                    "87.",
+                    "FENETYLINE",
+                    "",
+                    "7-(2-(ø-methylphenethyl) amino)\nethyl-) theophyline"
+                  ]
+                }
+              ],
+              "sha256": "9984fe57c82dc77c017d1ade5b427e7468a819470bebf8b48f7d185e75c896d1"
+            },
+            {
+              "serial": "88",
+              "cells": [
+                "88.",
+                "LEVAMFETAMINE",
+                "levamphetamine",
+                "(--)-(R)- ø-\nmethylphenethylamine"
+              ],
+              "fragments": [
+                {
+                  "page": 50,
+                  "bbox": [
+                    66.62,
+                    387.41,
+                    545.5,
+                    421.25
+                  ],
+                  "cells": [
+                    "88.",
+                    "LEVAMFETAMINE",
+                    "levamphetamine",
+                    "(--)-(R)- ø-\nmethylphenethylamine"
+                  ]
+                }
+              ],
+              "sha256": "0bc62fe1f776b408ac63ff47057baf4bf65e3a2b036dafe322f78a0547e4f2b7"
+            },
+            {
+              "serial": "89",
+              "cells": [
+                "89.",
+                "",
+                "lovomethamphetamine",
+                "(--)-N-[ ø-\nmethylphenethylamine"
+              ],
+              "fragments": [
+                {
+                  "page": 50,
+                  "bbox": [
+                    66.62,
+                    421.25,
+                    545.5,
+                    454.99
+                  ],
+                  "cells": [
+                    "89.",
+                    "",
+                    "lovomethamphetamine",
+                    "(--)-N-[ ø-\nmethylphenethylamine"
+                  ]
+                }
+              ],
+              "sha256": "6a4934352f84c1570ed842a821316637a96a23de4683722ebd6528c0fa2a1d94"
+            },
+            {
+              "serial": "90",
+              "cells": [
+                "90.",
+                "METAMFETAMINE\nRACEMATE",
+                "Methamphetamine\nmecnate",
+                "(±)-N-ø-\ndimethylphenethylamine"
+              ],
+              "fragments": [
+                {
+                  "page": 50,
+                  "bbox": [
+                    66.62,
+                    454.99,
+                    545.5,
+                    488.83
+                  ],
+                  "cells": [
+                    "90.",
+                    "METAMFETAMINE\nRACEMATE",
+                    "Methamphetamine\nmecnate",
+                    "(±)-N-ø-\ndimethylphenethylamine"
+                  ]
+                }
+              ],
+              "sha256": "2c261f326988983a3f14a7c0b8a6e8269fd0d4ffb9d9974657b96f40cef2f624"
+            },
+            {
+              "serial": "91",
+              "cells": [
+                "91.",
+                "",
+                "Delta-9-***tetrahy-\ndrocannabinol and\nstereochemical variants",
+                "(6a-R, 10aR)-6a, 7, 8, 10a-\ntctrahydro-6, 6, 9-trimethyl-3-penty\n611-dibenzo [b-d] pyran-OI"
+              ],
+              "fragments": [
+                {
+                  "page": 50,
+                  "bbox": [
+                    66.62,
+                    488.83,
+                    545.5,
+                    531.31
+                  ],
+                  "cells": [
+                    "91.",
+                    "",
+                    "Delta-9-***tetrahy-\ndrocannabinol and\nstereochemical variants",
+                    "(6a-R, 10aR)-6a, 7, 8, 10a-\ntctrahydro-6, 6, 9-trimethyl-3-penty\n611-dibenzo [b-d] pyran-OI"
+                  ]
+                }
+              ],
+              "sha256": "6c8f7793b97fcf8b3f0b2d3457b07afde335ab0e789896fcc9920183664fc1ce"
+            },
+            {
+              "serial": "92",
+              "cells": [
+                "92.",
+                "BUPRENORPHINE",
+                "",
+                "21, cyclopropyl-7-cc-[(S)-I-hydroxy-\n1-2,2-trimethyl-propyl] 6/14-endo-\nethano-6-7,8,14-tetra-hydrooripavine"
+              ],
+              "fragments": [
+                {
+                  "page": 50,
+                  "bbox": [
+                    66.62,
+                    531.31,
+                    545.5,
+                    573.67
+                  ],
+                  "cells": [
+                    "92.",
+                    "BUPRENORPHINE",
+                    "",
+                    "21, cyclopropyl-7-cc-[(S)-I-hydroxy-\n1-2,2-trimethyl-propyl] 6/14-endo-\nethano-6-7,8,14-tetra-hydrooripavine"
+                  ]
+                }
+              ],
+              "sha256": "094864eeb5c8c3ef5c7bd86d27d210d67e609e6d3e08cf8191cc260a181f45f6"
+            },
+            {
+              "serial": "93",
+              "cells": [
+                "93.",
+                "BUTALBITAL",
+                "",
+                "5-allyl-5-isobutylbarbituric acid"
+              ],
+              "fragments": [
+                {
+                  "page": 50,
+                  "bbox": [
+                    66.62,
+                    573.67,
+                    545.5,
+                    590.83
+                  ],
+                  "cells": [
+                    "93.",
+                    "BUTALBITAL",
+                    "",
+                    "5-allyl-5-isobutylbarbituric acid"
+                  ]
+                }
+              ],
+              "sha256": "2c99b591a17af5b480a71d875747b8144e8f6a760dec23ed7761cacf8580cca7"
+            },
+            {
+              "serial": "94",
+              "cells": [
+                "94.",
+                "CATHINE",
+                "(+)-norpseudo-\nephedrine",
+                "(+)-(R)-ø-[(R)-I-aminoethyl]\nBenzyl alcohol"
+              ],
+              "fragments": [
+                {
+                  "page": 50,
+                  "bbox": [
+                    66.62,
+                    590.83,
+                    545.5,
+                    624.7
+                  ],
+                  "cells": [
+                    "94.",
+                    "CATHINE",
+                    "(+)-norpseudo-\nephedrine",
+                    "(+)-(R)-ø-[(R)-I-aminoethyl]\nBenzyl alcohol"
+                  ]
+                }
+              ],
+              "sha256": "5e6b0c61db9786bf6f13611748edeb5405a60eda4f3553f563b0f4a1695d4e44"
+            },
+            {
+              "serial": "95",
+              "cells": [
+                "95.",
+                "ALLOBARBITAL",
+                "MEFENOREX",
+                "5,5-diallybarbituric acid"
+              ],
+              "fragments": [
+                {
+                  "page": 50,
+                  "bbox": [
+                    66.62,
+                    624.7,
+                    545.5,
+                    641.86
+                  ],
+                  "cells": [
+                    "95.",
+                    "ALLOBARBITAL",
+                    "MEFENOREX",
+                    "5,5-diallybarbituric acid"
+                  ]
+                }
+              ],
+              "sha256": "2f422273748f56fc0e5875bc5dc0e375fe12201844950c50c2ec26669ea03c61"
+            },
+            {
+              "serial": "96",
+              "cells": [
+                "96.",
+                "ETILAMFETAMINE",
+                "N-ethylamphetamine",
+                "N-ethyl-ø-\nmethylphenethylamine"
+              ],
+              "fragments": [
+                {
+                  "page": 50,
+                  "bbox": [
+                    66.62,
+                    641.86,
+                    545.5,
+                    675.7
+                  ],
+                  "cells": [
+                    "96.",
+                    "ETILAMFETAMINE",
+                    "N-ethylamphetamine",
+                    "N-ethyl-ø-\nmethylphenethylamine"
+                  ]
+                }
+              ],
+              "sha256": "c8e387d4cf48e5a12b74d16c28dfa5507e1355d86bc8f7162fa9d44ed301fe06"
+            },
+            {
+              "serial": "97",
+              "cells": [
+                "97.",
+                "FENCAMEFAMIN",
+                "",
+                "N-ethyl-3-phenly-2-norbornanmine"
+              ],
+              "fragments": [
+                {
+                  "page": 50,
+                  "bbox": [
+                    66.62,
+                    675.7,
+                    545.5,
+                    692.74
+                  ],
+                  "cells": [
+                    "97.",
+                    "FENCAMEFAMIN",
+                    "",
+                    "N-ethyl-3-phenly-2-norbornanmine"
+                  ]
+                }
+              ],
+              "sha256": "0f5a9672ecc4c0f4c07403c801635b0888537c7c762880f4e13359fbc4f1d572"
+            },
+            {
+              "serial": "98",
+              "cells": [
+                "98.",
+                "FENPROPOREX",
+                "",
+                "(±) -3-[(??-methyphenethy) amino]\npropioxitrile"
+              ],
+              "fragments": [
+                {
+                  "page": 50,
+                  "bbox": [
+                    66.62,
+                    692.74,
+                    545.5,
+                    722.62
+                  ],
+                  "cells": [
+                    "98.",
+                    "FENPROPOREX",
+                    "",
+                    "(±) -3-[(??-methyphenethy) amino]\npropioxitrile"
+                  ]
+                }
+              ],
+              "sha256": "18e1399b2cb4611663fba1402e2c9f0c6eda0ca77fc22a4160a9aea8fe62c084"
+            },
+            {
+              "serial": "99",
+              "cells": [
+                "99.",
+                "MEFENOREX",
+                "",
+                "N(3 chloropropyl)-a-methylphenethy-\nlamine"
+              ],
+              "fragments": [
+                {
+                  "page": 51,
+                  "bbox": [
+                    66.62,
+                    72.24,
+                    545.5,
+                    116.06
+                  ],
+                  "cells": [
+                    "99.",
+                    "MEFENOREX",
+                    "",
+                    "N(3 chloropropyl)-a-methylphenethy-\nlamine"
+                  ]
+                }
+              ],
+              "sha256": "7b450e921554419fdbb313995d4edb4dd14960407ca0036d99e9d0ef57704457"
+            },
+            {
+              "serial": "100",
+              "cells": [
+                "100.",
+                "MIDAZOLAM",
+                "",
+                "8-chloro-6-a-(o-fluorophenyl)-1-\nmethyl-4H-imidazol (1, 5-a] [1, 4]\nbenzodiazepine"
+              ],
+              "fragments": [
+                {
+                  "page": 51,
+                  "bbox": [
+                    66.62,
+                    116.06,
+                    545.5,
+                    159.86
+                  ],
+                  "cells": [
+                    "100.",
+                    "MIDAZOLAM",
+                    "",
+                    "8-chloro-6-a-(o-fluorophenyl)-1-\nmethyl-4H-imidazol (1, 5-a] [1, 4]\nbenzodiazepine"
+                  ]
+                }
+              ],
+              "sha256": "846991e22fb44aaa846add43d7e830e3e45b89b2c948c107c21e8e7e9873b170"
+            },
+            {
+              "serial": "101",
+              "cells": [
+                "101.",
+                "PEMOLINE",
+                "",
+                "2-amino-5-phenyl-2-oxazolin-4-one(-\n2-imino-5-phenyl-4-oxazolidinone)"
+              ],
+              "fragments": [
+                {
+                  "page": 51,
+                  "bbox": [
+                    66.62,
+                    159.86,
+                    545.5,
+                    189.62
+                  ],
+                  "cells": [
+                    "101.",
+                    "PEMOLINE",
+                    "",
+                    "2-amino-5-phenyl-2-oxazolin-4-one(-\n2-imino-5-phenyl-4-oxazolidinone)"
+                  ]
+                }
+              ],
+              "sha256": "4b8d3114a16a640ad9b7c4975e34a954bfd03f7fe7d008f5d506875f19b443f9"
+            },
+            {
+              "serial": "102",
+              "cells": [
+                "102.",
+                "PYROVAERONE",
+                "",
+                "4-methyl-2-(1-pyrrolidinyl)\nvalerophenone"
+              ],
+              "fragments": [
+                {
+                  "page": 51,
+                  "bbox": [
+                    66.62,
+                    189.62,
+                    545.5,
+                    219.5
+                  ],
+                  "cells": [
+                    "102.",
+                    "PYROVAERONE",
+                    "",
+                    "4-methyl-2-(1-pyrrolidinyl)\nvalerophenone"
+                  ]
+                }
+              ],
+              "sha256": "6c76debea7bb78bdb9f9aaee80726f8bd342d0a542268ac89d003681225d787c"
+            },
+            {
+              "serial": "103",
+              "cells": [
+                "103.",
+                "SECBUTABARB1TAL",
+                "",
+                "5-sec-butyl-5-ethylbarbituric acid"
+              ],
+              "fragments": [
+                {
+                  "page": 51,
+                  "bbox": [
+                    66.62,
+                    219.5,
+                    545.5,
+                    236.66
+                  ],
+                  "cells": [
+                    "103.",
+                    "SECBUTABARB1TAL",
+                    "",
+                    "5-sec-butyl-5-ethylbarbituric acid"
+                  ]
+                }
+              ],
+              "sha256": "9a3a6b3a9c75adf878282126c06ebce96ae053b0fd1817232b8bc870cfde04d2"
+            },
+            {
+              "serial": "104",
+              "cells": [
+                "104.",
+                "VINYLBITAL",
+                "",
+                "5-(1- methylbutyl)-5vinylbarbituric\nacid"
+              ],
+              "fragments": [
+                {
+                  "page": 51,
+                  "bbox": [
+                    66.62,
+                    236.66,
+                    545.5,
+                    266.45
+                  ],
+                  "cells": [
+                    "104.",
+                    "VINYLBITAL",
+                    "",
+                    "5-(1- methylbutyl)-5vinylbarbituric\nacid"
+                  ]
+                }
+              ],
+              "sha256": "3e47b136e1ca1282263438bda3662e5f4dca10fadbd772c3553b30f8952f0a06"
+            },
+            {
+              "serial": "105",
+              "cells": [
+                "105.",
+                "",
+                "rutobarbital",
+                "5-butyl-5-ethylbarbituric acid]"
+              ],
+              "fragments": [
+                {
+                  "page": 51,
+                  "bbox": [
+                    66.62,
+                    266.45,
+                    545.5,
+                    283.61
+                  ],
+                  "cells": [
+                    "105.",
+                    "",
+                    "rutobarbital",
+                    "5-butyl-5-ethylbarbituric acid]"
+                  ]
+                }
+              ],
+              "sha256": "c91d68f1afc2afe3bc1a7fe4b61063361e9c5fcc08f66d702ad7b9fe0c0e2b0d"
+            },
+            {
+              "serial": "105A",
+              "cells": [
+                "1[105A\n.",
+                "ETRYPTAMINE",
+                "",
+                "(3-(2-aminobutyl) indole)"
+              ],
+              "fragments": [
+                {
+                  "page": 51,
+                  "bbox": [
+                    66.62,
+                    283.61,
+                    545.5,
+                    308.81
+                  ],
+                  "cells": [
+                    "1[105A\n.",
+                    "ETRYPTAMINE",
+                    "",
+                    "(3-(2-aminobutyl) indole)"
+                  ]
+                }
+              ],
+              "sha256": "8cccdf8d601ccd2267f8d368f6c9ea88bae40f2eac329aa9865042e2b27678d8"
+            },
+            {
+              "serial": "105B",
+              "cells": [
+                "105B.",
+                "METHCATHINONE",
+                "",
+                "(2-(methylamino)-1 phenylpropan-1-\none)"
+              ],
+              "fragments": [
+                {
+                  "page": 51,
+                  "bbox": [
+                    66.62,
+                    308.81,
+                    545.5,
+                    338.57
+                  ],
+                  "cells": [
+                    "105B.",
+                    "METHCATHINONE",
+                    "",
+                    "(2-(methylamino)-1 phenylpropan-1-\none)"
+                  ]
+                }
+              ],
+              "sha256": "5355e33582fad160f52da90e16e29a562629bf27e6becaaf851677b9aab9eafe"
+            },
+            {
+              "serial": "105C",
+              "cells": [
+                "105C.",
+                "ZIPEPROL",
+                "",
+                "(ø-(ø-methoxybenzyl)-4\n(methoxyphenethyl)-1-\n(piperazineetha-nol)"
+              ],
+              "fragments": [
+                {
+                  "page": 51,
+                  "bbox": [
+                    66.62,
+                    338.57,
+                    545.5,
+                    381.05
+                  ],
+                  "cells": [
+                    "105C.",
+                    "ZIPEPROL",
+                    "",
+                    "(ø-(ø-methoxybenzyl)-4\n(methoxyphenethyl)-1-\n(piperazineetha-nol)"
+                  ]
+                }
+              ],
+              "sha256": "4b70cea0ec8ce952b1b97ac8f4db0d3f45b3c485cfac7b9064af72d120e7d497"
+            },
+            {
+              "serial": "105D",
+              "cells": [
+                "105D.",
+                "AMINOREX",
+                "",
+                "(2-amino-5-phenyl-2-oxazoline)"
+              ],
+              "fragments": [
+                {
+                  "page": 51,
+                  "bbox": [
+                    66.62,
+                    381.05,
+                    545.5,
+                    398.21
+                  ],
+                  "cells": [
+                    "105D.",
+                    "AMINOREX",
+                    "",
+                    "(2-amino-5-phenyl-2-oxazoline)"
+                  ]
+                }
+              ],
+              "sha256": "637bd6ae5c5b9ac97f2ad66866cc7dc7544a78956ebbd3ff7c3fd08ba7a01a9f"
+            },
+            {
+              "serial": "105E",
+              "cells": [
+                "105E.",
+                "BROTIZOLAM",
+                "",
+                "(2-bromo-4-) 0-chlorophenyl)-9-\nmethyl-6H-thieno (3,2-f)-s-triazolo\n[4,3,-a) (1,4} diazepine)"
+              ],
+              "fragments": [
+                {
+                  "page": 51,
+                  "bbox": [
+                    66.62,
+                    398.21,
+                    545.5,
+                    440.59
+                  ],
+                  "cells": [
+                    "105E.",
+                    "BROTIZOLAM",
+                    "",
+                    "(2-bromo-4-) 0-chlorophenyl)-9-\nmethyl-6H-thieno (3,2-f)-s-triazolo\n[4,3,-a) (1,4} diazepine)"
+                  ]
+                }
+              ],
+              "sha256": "7d3cdfb3ccc47e6e1b773e2ac05d4abd3a0b6ab41e0e3adb9920113d4d485131"
+            },
+            {
+              "serial": "105F",
+              "cells": [
+                "105F.",
+                "MESOCARB",
+                "",
+                "(3-(ø-methylphenethyl-N-\n(phenylerbamoyl) Sydnone imine]."
+              ],
+              "fragments": [
+                {
+                  "page": 51,
+                  "bbox": [
+                    66.62,
+                    440.59,
+                    545.5,
+                    470.47
+                  ],
+                  "cells": [
+                    "105F.",
+                    "MESOCARB",
+                    "",
+                    "(3-(ø-methylphenethyl-N-\n(phenylerbamoyl) Sydnone imine]."
+                  ]
+                }
+              ],
+              "sha256": "bffad051d5b9d4fc7a8f8949862d7c9b3d6ff496a6a349b04b1931368419c2f0"
+            },
+            {
+              "serial": "106",
+              "cells": [
+                "2[106.",
+                "",
+                "",
+                "2C.-B(4-bromo-2,\n5dimethoxyphenethylamine)"
+              ],
+              "fragments": [
+                {
+                  "page": 51,
+                  "bbox": [
+                    66.62,
+                    470.47,
+                    545.5,
+                    500.23
+                  ],
+                  "cells": [
+                    "2[106.",
+                    "",
+                    "",
+                    "2C.-B(4-bromo-2,\n5dimethoxyphenethylamine)"
+                  ]
+                }
+              ],
+              "sha256": "f1e46ddb95ba8cddd54ad0153902b09b0693437db7449e81b8e0f922e2307854"
+            },
+            {
+              "serial": "107",
+              "cells": [
+                "107.",
+                "",
+                "",
+                "4-MTA (ø* Methyl-4-\nMthylthiophenethylamine)"
+              ],
+              "fragments": [
+                {
+                  "page": 51,
+                  "bbox": [
+                    66.62,
+                    500.23,
+                    545.5,
+                    529.99
+                  ],
+                  "cells": [
+                    "107.",
+                    "",
+                    "",
+                    "4-MTA (ø* Methyl-4-\nMthylthiophenethylamine)"
+                  ]
+                }
+              ],
+              "sha256": "9377c568e8125c6c70904f591e40e4dd8406192e0e349d3bba31cf974f13a478"
+            },
+            {
+              "serial": "108",
+              "cells": [
+                "108.",
+                "",
+                "",
+                "GHB (r-Hydroxybutyric Acid)"
+              ],
+              "fragments": [
+                {
+                  "page": 51,
+                  "bbox": [
+                    66.62,
+                    529.99,
+                    545.5,
+                    547.15
+                  ],
+                  "cells": [
+                    "108.",
+                    "",
+                    "",
+                    "GHB (r-Hydroxybutyric Acid)"
+                  ]
+                }
+              ],
+              "sha256": "b9e1762796e5c1b3db12ce9a11f33314707fabb64d71562fcbd2d54a3b2fcaf8"
+            },
+            {
+              "serial": "109",
+              "cells": [
+                "109.",
+                "",
+                "",
+                "Zolpidem (INN)]"
+              ],
+              "fragments": [
+                {
+                  "page": 51,
+                  "bbox": [
+                    66.62,
+                    547.15,
+                    545.5,
+                    564.31
+                  ],
+                  "cells": [
+                    "109.",
+                    "",
+                    "",
+                    "Zolpidem (INN)]"
+                  ]
+                }
+              ],
+              "sha256": "999d814b98c68fc13547854f2f208716e79898dfbd23e0a1735a3d6eb20d61e8"
+            },
+            {
+              "serial": "110",
+              "cells": [
+                "3[110.",
+                "Salts and preparations of\nabove.]",
+                "",
+                ""
+              ],
+              "fragments": [
+                {
+                  "page": 51,
+                  "bbox": [
+                    66.62,
+                    564.31,
+                    545.5,
+                    594.07
+                  ],
+                  "cells": [
+                    "3[110.",
+                    "Salts and preparations of\nabove.]",
+                    "",
+                    ""
+                  ]
+                }
+              ],
+              "sha256": "498fa5fd3d99754124ef46caf4a4b2e13140cf1eaa18af6f36591601db9b3180"
+            },
+            {
+              "serial": "110A",
+              "cells": [
+                "4[110A.",
+                "Ketamine",
+                "",
+                "2-(2-cholorphenyl)-2-(methylamino)\ncyclohexanone]"
+              ],
+              "fragments": [
+                {
+                  "page": 51,
+                  "bbox": [
+                    66.62,
+                    594.07,
+                    545.5,
+                    623.98
+                  ],
+                  "cells": [
+                    "4[110A.",
+                    "Ketamine",
+                    "",
+                    "2-(2-cholorphenyl)-2-(methylamino)\ncyclohexanone]"
+                  ]
+                }
+              ],
+              "sha256": "8dde29a4fd48d50c95517e34d470a3823ceb9dd3983aaf8bfea488aa14c1a2e2"
+            },
+            {
+              "serial": "110B",
+              "cells": [
+                "5[110B.",
+                "MEPHEDRONE",
+                "4-methylmethcathinone\n(4-MMC)\n4-methylephedrone",
+                "(RS)-2-methylamino-1-(4-\nmethylphenyl) propan-1-one."
+              ],
+              "fragments": [
+                {
+                  "page": 51,
+                  "bbox": [
+                    66.62,
+                    623.98,
+                    545.5,
+                    670.42
+                  ],
+                  "cells": [
+                    "5[110B.",
+                    "MEPHEDRONE",
+                    "4-methylmethcathinone\n(4-MMC)\n4-methylephedrone",
+                    "(RS)-2-methylamino-1-(4-\nmethylphenyl) propan-1-one."
+                  ]
+                }
+              ],
+              "sha256": "a12ceee970522163a11e3e02cdc2be9f18e716fd84a2ea1905c6839607839791"
+            },
+            {
+              "serial": "110C",
+              "cells": [
+                "6[110C.",
+                "25B-NBOMe",
+                "2C-B-NBOMe",
+                "2-(4-brome-2,5-dimethoxyphenyl)-N-\n(2-methoxybenzyl) ethanamine"
+              ],
+              "fragments": [
+                {
+                  "page": 51,
+                  "bbox": [
+                    66.62,
+                    670.42,
+                    545.5,
+                    687.58
+                  ],
+                  "cells": [
+                    "6[110C.",
+                    "25B-NBOMe",
+                    "2C-B-NBOMe",
+                    "2-(4-brome-2,5-dimethoxyphenyl)-N-"
+                  ]
+                },
+                {
+                  "page": 52,
+                  "bbox": [
+                    66.62,
+                    72.24,
+                    545.5,
+                    85.46
+                  ],
+                  "cells": [
+                    "",
+                    "",
+                    "",
+                    "(2-methoxybenzyl) ethanamine"
+                  ]
+                }
+              ],
+              "sha256": "4028f47269ae0c28f99227385181e23df13c3b7ffa318b93fb15ccfe5f78cc61"
+            },
+            {
+              "serial": "110D",
+              "cells": [
+                "110D.",
+                "25C-NBOMe",
+                "2C-C-NBOMe",
+                "2-(4-chloro-2,5- dimethoxyphenyl)-\nN-(2-methoxybenzyl) ethanamine"
+              ],
+              "fragments": [
+                {
+                  "page": 52,
+                  "bbox": [
+                    66.62,
+                    85.46,
+                    545.5,
+                    113.18
+                  ],
+                  "cells": [
+                    "110D.",
+                    "25C-NBOMe",
+                    "2C-C-NBOMe",
+                    "2-(4-chloro-2,5- dimethoxyphenyl)-\nN-(2-methoxybenzyl) ethanamine"
+                  ]
+                }
+              ],
+              "sha256": "c7d5b58cc577343bc7cb3b60177717a2d99170cc3d5c4dd9b61dced54a0a5976"
+            },
+            {
+              "serial": "110E",
+              "cells": [
+                "110E.",
+                "25I-NBOMe",
+                "2C-I-NBOMe",
+                "2-(4-iodo-2,5-dimethoxyphenyl)-N-\n(2-methoxybenzyl) ethanamine"
+              ],
+              "fragments": [
+                {
+                  "page": 52,
+                  "bbox": [
+                    66.62,
+                    113.18,
+                    545.5,
+                    141.02
+                  ],
+                  "cells": [
+                    "110E.",
+                    "25I-NBOMe",
+                    "2C-I-NBOMe",
+                    "2-(4-iodo-2,5-dimethoxyphenyl)-N-\n(2-methoxybenzyl) ethanamine"
+                  ]
+                }
+              ],
+              "sha256": "c642ffecca28a948b09a26d88118953924000bb4aaae8851866c744f82f8c19b"
+            },
+            {
+              "serial": "110F",
+              "cells": [
+                "110F.",
+                "N-BENZYLPIPERAZINE",
+                "Benzylpiperazine, BZP",
+                "1-benzylpiperazine"
+              ],
+              "fragments": [
+                {
+                  "page": 52,
+                  "bbox": [
+                    66.62,
+                    141.02,
+                    545.5,
+                    156.14
+                  ],
+                  "cells": [
+                    "110F.",
+                    "N-BENZYLPIPERAZINE",
+                    "Benzylpiperazine, BZP",
+                    "1-benzylpiperazine"
+                  ]
+                }
+              ],
+              "sha256": "69a597aa3c1c0f858a0f2684c5bf90fd1163245635fdd06feed35e5ddba0c4de"
+            },
+            {
+              "serial": "110G",
+              "cells": [
+                "110G.",
+                "JWH-018",
+                "AM-678",
+                "Naphthalene-1-yl(1-pentyl-1H-indol-\n3-yl) methanone"
+              ],
+              "fragments": [
+                {
+                  "page": 52,
+                  "bbox": [
+                    66.62,
+                    156.14,
+                    545.5,
+                    183.98
+                  ],
+                  "cells": [
+                    "110G.",
+                    "JWH-018",
+                    "AM-678",
+                    "Naphthalene-1-yl(1-pentyl-1H-indol-\n3-yl) methanone"
+                  ]
+                }
+              ],
+              "sha256": "4e4fcbe7045b572f04e1a5c674536057125f32d828f5f20435cfd5711f69b700"
+            },
+            {
+              "serial": "110H",
+              "cells": [
+                "110H.",
+                "AM-2201",
+                "JWH-2201",
+                "[1-(5-Fluoropentyl)-1H-indol-3-yl]\n(naphthalen-1-yl) methanone"
+              ],
+              "fragments": [
+                {
+                  "page": 52,
+                  "bbox": [
+                    66.62,
+                    183.98,
+                    545.5,
+                    211.7
+                  ],
+                  "cells": [
+                    "110H.",
+                    "AM-2201",
+                    "JWH-2201",
+                    "[1-(5-Fluoropentyl)-1H-indol-3-yl]\n(naphthalen-1-yl) methanone"
+                  ]
+                }
+              ],
+              "sha256": "097458e271c144413d3ad908d42454307decf8ac8e4cba7c4b2020085c8792ec"
+            },
+            {
+              "serial": "110I",
+              "cells": [
+                "110I.",
+                "MDPV",
+                "3,4-\nMethylenedioxypyroval\nerone",
+                "(R/S)-1—(Benzo[d][1,3] dioxol-5-\nyl)-2-(pyrrolidine-1-yl)\nPentan-1-one"
+              ],
+              "fragments": [
+                {
+                  "page": 52,
+                  "bbox": [
+                    66.62,
+                    211.7,
+                    545.5,
+                    254.18
+                  ],
+                  "cells": [
+                    "110I.",
+                    "MDPV",
+                    "3,4-\nMethylenedioxypyroval\nerone",
+                    "(R/S)-1—(Benzo[d][1,3] dioxol-5-\nyl)-2-(pyrrolidine-1-yl)\nPentan-1-one"
+                  ]
+                }
+              ],
+              "sha256": "2cb6404bbff840ad673cc68ea366a2609ef0695c010cda3bdcc47fa9fd123603"
+            },
+            {
+              "serial": "110J",
+              "cells": [
+                "110J.",
+                "METHYLONE",
+                "Beta-keto-MDMA",
+                "(RS)-2-methylamino-1-(3,4-\nmethylenedioxyphenyl) propan-1-\none]"
+              ],
+              "fragments": [
+                {
+                  "page": 52,
+                  "bbox": [
+                    66.62,
+                    254.18,
+                    545.5,
+                    294.65
+                  ],
+                  "cells": [
+                    "110J.",
+                    "METHYLONE",
+                    "Beta-keto-MDMA",
+                    "(RS)-2-methylamino-1-(3,4-\nmethylenedioxyphenyl) propan-1-\none]"
+                  ]
+                }
+              ],
+              "sha256": "5d6b18b163a03c1bea42c9df92459b7ad96303a8db431be9266c7b8d0642c4a6"
+            },
+            {
+              "serial": "110K",
+              "cells": [
+                "1[110K.",
+                "",
+                "para-\nMethoxymethylamphet\namine,PMMA",
+                "1-(4—methoxyphenyl)-N-\nmethylpropan-2-amine"
+              ],
+              "fragments": [
+                {
+                  "page": 52,
+                  "bbox": [
+                    66.62,
+                    294.65,
+                    545.5,
+                    335.09
+                  ],
+                  "cells": [
+                    "1[110K.",
+                    "",
+                    "para-\nMethoxymethylamphet\namine,PMMA",
+                    "1-(4—methoxyphenyl)-N-\nmethylpropan-2-amine"
+                  ]
+                }
+              ],
+              "sha256": "3999e6c8bd08d0222103e2f6c2733dc00b02cd3a573e9cf3ac462e755b010466"
+            },
+            {
+              "serial": "110L",
+              "cells": [
+                "110L.",
+                "",
+                "a-\nPyrrolidinovaleropheno\nne, a-PVP",
+                "1-phenyl-2-(pyrrolidine-1-yl) pentan-\n1-one"
+              ],
+              "fragments": [
+                {
+                  "page": 52,
+                  "bbox": [
+                    66.62,
+                    335.09,
+                    545.5,
+                    375.53
+                  ],
+                  "cells": [
+                    "110L.",
+                    "",
+                    "a-\nPyrrolidinovaleropheno\nne, a-PVP",
+                    "1-phenyl-2-(pyrrolidine-1-yl) pentan-\n1-one"
+                  ]
+                }
+              ],
+              "sha256": "22ef697652c6bedcf566b03d10fe1fd27cbc331a36c0efd694faaad672fa47d6"
+            },
+            {
+              "serial": "110M",
+              "cells": [
+                "110M.",
+                "",
+                "para-Methyl-4-\nethylaminorex, 4,4’-\nDMAR",
+                "4-methyl-5-(4-methylphenyl)-4,5-\ndihydro-1,3-oxazol-2-amine"
+              ],
+              "fragments": [
+                {
+                  "page": 52,
+                  "bbox": [
+                    66.62,
+                    375.53,
+                    545.5,
+                    415.97
+                  ],
+                  "cells": [
+                    "110M.",
+                    "",
+                    "para-Methyl-4-\nethylaminorex, 4,4’-\nDMAR",
+                    "4-methyl-5-(4-methylphenyl)-4,5-\ndihydro-1,3-oxazol-2-amine"
+                  ]
+                }
+              ],
+              "sha256": "040b020e224208f959dcea637e869aeb98751e30b1fb6cea4acbfbb3d88140b6"
+            },
+            {
+              "serial": "110N",
+              "cells": [
+                "110N.",
+                "",
+                "Methoxetamine,MXE",
+                "2-(ethylamino)-2-(3-methoxyphenyl)\ncyclohexanone"
+              ],
+              "fragments": [
+                {
+                  "page": 52,
+                  "bbox": [
+                    66.62,
+                    415.97,
+                    545.5,
+                    443.83
+                  ],
+                  "cells": [
+                    "110N.",
+                    "",
+                    "Methoxetamine,MXE",
+                    "2-(ethylamino)-2-(3-methoxyphenyl)\ncyclohexanone"
+                  ]
+                }
+              ],
+              "sha256": "1f65842c8d0cd140c88a27b7847b5d761bd6fb18b624df3382cfb0b996837889"
+            },
+            {
+              "serial": "110O",
+              "cells": [
+                "110O.",
+                "",
+                "Phenazepam",
+                "7-bromo-5-(2- chlorophenyl)-1,3-\ndihydro-2H-1,4-benzodiazepin-2-\none.]"
+              ],
+              "fragments": [
+                {
+                  "page": 52,
+                  "bbox": [
+                    66.62,
+                    443.83,
+                    545.5,
+                    484.27
+                  ],
+                  "cells": [
+                    "110O.",
+                    "",
+                    "Phenazepam",
+                    "7-bromo-5-(2- chlorophenyl)-1,3-\ndihydro-2H-1,4-benzodiazepin-2-\none.]"
+                  ]
+                }
+              ],
+              "sha256": "fd77086974adb095969e4fe6a6f63ba5ebf2f194fb82f9c5bdb2cdd6372956c6"
+            },
+            {
+              "serial": "110P",
+              "cells": [
+                "2[110P",
+                "4-Methylethcathinone",
+                "4-MEC",
+                ""
+              ],
+              "fragments": [
+                {
+                  "page": 52,
+                  "bbox": [
+                    66.62,
+                    484.27,
+                    545.5,
+                    499.39
+                  ],
+                  "cells": [
+                    "2[110P",
+                    "4-Methylethcathinone",
+                    "4-MEC",
+                    ""
+                  ]
+                }
+              ],
+              "sha256": "966495a405e63a2e26a52364c9d59f73c99014f7ea73c534b4248bb03e3bb4d1"
+            },
+            {
+              "serial": "110Q",
+              "cells": [
+                "110Q",
+                "Ethylone",
+                "",
+                ""
+              ],
+              "fragments": [
+                {
+                  "page": 52,
+                  "bbox": [
+                    66.62,
+                    499.39,
+                    545.5,
+                    514.63
+                  ],
+                  "cells": [
+                    "110Q",
+                    "Ethylone",
+                    "",
+                    ""
+                  ]
+                }
+              ],
+              "sha256": "0c949c884e215a3081b6a4b0adff11539941208f839e8c387a328208512ac58b"
+            },
+            {
+              "serial": "110R",
+              "cells": [
+                "110R",
+                "Pentedrone",
+                "",
+                ""
+              ],
+              "fragments": [
+                {
+                  "page": 52,
+                  "bbox": [
+                    66.62,
+                    514.63,
+                    545.5,
+                    529.75
+                  ],
+                  "cells": [
+                    "110R",
+                    "Pentedrone",
+                    "",
+                    ""
+                  ]
+                }
+              ],
+              "sha256": "4dcb4af15a5a76911f79a97058207c3bbd369ca4e550b01efa22dd9c134e047d"
+            },
+            {
+              "serial": "110S",
+              "cells": [
+                "110S",
+                "Ethylphenidate",
+                "",
+                ""
+              ],
+              "fragments": [
+                {
+                  "page": 52,
+                  "bbox": [
+                    66.62,
+                    529.75,
+                    545.5,
+                    544.87
+                  ],
+                  "cells": [
+                    "110S",
+                    "Ethylphenidate",
+                    "",
+                    ""
+                  ]
+                }
+              ],
+              "sha256": "2656f4b0a9e1594bcfad4cf2d97fedb02a918e90d3adcb153e5016fb612a72eb"
+            },
+            {
+              "serial": "110T",
+              "cells": [
+                "110T",
+                "Methiopropamine",
+                "MPA",
+                ""
+              ],
+              "fragments": [
+                {
+                  "page": 52,
+                  "bbox": [
+                    66.62,
+                    544.87,
+                    545.5,
+                    559.99
+                  ],
+                  "cells": [
+                    "110T",
+                    "Methiopropamine",
+                    "MPA",
+                    ""
+                  ]
+                }
+              ],
+              "sha256": "32ae46e9d5943ba143035a01edf2a635f831a62aa69f95fd6a5ca65185817d8a"
+            },
+            {
+              "serial": "110U",
+              "cells": [
+                "110U",
+                "MDMB-CHMICA",
+                "",
+                ""
+              ],
+              "fragments": [
+                {
+                  "page": 52,
+                  "bbox": [
+                    66.62,
+                    559.99,
+                    545.5,
+                    575.23
+                  ],
+                  "cells": [
+                    "110U",
+                    "MDMB-CHMICA",
+                    "",
+                    ""
+                  ]
+                }
+              ],
+              "sha256": "d906eeeeb3472a6f97722412e3a006a3fe6ceace0151051ea8223d20b8e23d7a"
+            },
+            {
+              "serial": "110V",
+              "cells": [
+                "110V",
+                "5F-APINACA",
+                "5F-AKB-48",
+                ""
+              ],
+              "fragments": [
+                {
+                  "page": 52,
+                  "bbox": [
+                    66.62,
+                    575.23,
+                    545.5,
+                    590.35
+                  ],
+                  "cells": [
+                    "110V",
+                    "5F-APINACA",
+                    "5F-AKB-48",
+                    ""
+                  ]
+                }
+              ],
+              "sha256": "26101642b5eb39b9a73db7a945293e137b0e18bb823bc9c15cc501b3ef195e0d"
+            },
+            {
+              "serial": "110W",
+              "cells": [
+                "110W",
+                "XLR-11",
+                "",
+                ""
+              ],
+              "fragments": [
+                {
+                  "page": 52,
+                  "bbox": [
+                    66.62,
+                    590.35,
+                    545.5,
+                    605.47
+                  ],
+                  "cells": [
+                    "110W",
+                    "XLR-11",
+                    "",
+                    ""
+                  ]
+                }
+              ],
+              "sha256": "b26f023a546bd10d15572d4285b3c7cc3e6153391529a4467f7e28f6e1149ca9"
+            },
+            {
+              "serial": "110X",
+              "cells": [
+                "110X",
+                "",
+                "Catha Edulis (Dry Chatt\nor Mira Leaves Dry\nChat Edulish)]",
+                ""
+              ],
+              "fragments": [
+                {
+                  "page": 52,
+                  "bbox": [
+                    66.62,
+                    605.47,
+                    545.5,
+                    645.94
+                  ],
+                  "cells": [
+                    "110X",
+                    "",
+                    "Catha Edulis (Dry Chatt\nor Mira Leaves Dry\nChat Edulish)]",
+                    ""
+                  ]
+                }
+              ],
+              "sha256": "61a8717a17658917a458e11bd2da1e78a37811473140e91011cd1d830eebfd9c"
+            },
+            {
+              "serial": "110Y",
+              "cells": [
+                "3[110Y",
+                "Tramadol",
+                "",
+                "]"
+              ],
+              "fragments": [
+                {
+                  "page": 52,
+                  "bbox": [
+                    66.62,
+                    645.94,
+                    545.5,
+                    661.06
+                  ],
+                  "cells": [
+                    "3[110Y",
+                    "Tramadol",
+                    "",
+                    "]"
+                  ]
+                }
+              ],
+              "sha256": "fc20501f2ca04cfd7c01046ea8ca1ad5cdd2326fc340e507ad6b4d8384132fcb"
+            },
+            {
+              "serial": "110Z",
+              "cells": [
+                "4[110Z",
+                "",
+                "AB-CHMINACA",
+                "N-[(2S)-1-Amino-3-methyl-1-\noxobutan-2-yl]-1-(cyclohexylmethyl)-\n1H-indazole-3-carboxamide"
+              ],
+              "fragments": [
+                {
+                  "page": 52,
+                  "bbox": [
+                    66.62,
+                    661.06,
+                    545.5,
+                    703.54
+                  ],
+                  "cells": [
+                    "4[110Z",
+                    "",
+                    "AB-CHMINACA",
+                    "N-[(2S)-1-Amino-3-methyl-1-\noxobutan-2-yl]-1-(cyclohexylmethyl)-\n1H-indazole-3-carboxamide"
+                  ]
+                }
+              ],
+              "sha256": "a8d3deb2658b087442bf422cb7908a0eee3283cfa87bf21cbdbfa8472642a4a0"
+            },
+            {
+              "serial": "110ZA",
+              "cells": [
+                "110ZA",
+                "",
+                "5F-ADB(5F-MDMB-\nPINACA)",
+                "Methyl(2S)-2-{1-5-fluorophentyl)-\n1H-indazole-3-carbonylamino}-3,3-\ndimethylbutanoate"
+              ],
+              "fragments": [
+                {
+                  "page": 53,
+                  "bbox": [
+                    66.62,
+                    72.24,
+                    545.5,
+                    114.74
+                  ],
+                  "cells": [
+                    "110ZA",
+                    "",
+                    "5F-ADB(5F-MDMB-\nPINACA)",
+                    "Methyl(2S)-2-{1-5-fluorophentyl)-\n1H-indazole-3-carbonylamino}-3,3-\ndimethylbutanoate"
+                  ]
+                }
+              ],
+              "sha256": "f76c495e151bd0bc9b3a8bbb95ef11c7cabd500cc2ead32cac68dcb255481aac"
+            },
+            {
+              "serial": "110ZB",
+              "cells": [
+                "110ZB",
+                "",
+                "AB-PINACA",
+                "N-[(2S)-1-Amino-3-methyl-\n1oxobutan-2yl]-1-penty1H-indazole\n3-carboxamide"
+              ],
+              "fragments": [
+                {
+                  "page": 53,
+                  "bbox": [
+                    66.62,
+                    114.74,
+                    545.5,
+                    157.1
+                  ],
+                  "cells": [
+                    "110ZB",
+                    "",
+                    "AB-PINACA",
+                    "N-[(2S)-1-Amino-3-methyl-\n1oxobutan-2yl]-1-penty1H-indazole\n3-carboxamide"
+                  ]
+                }
+              ],
+              "sha256": "9956ca19f87c8c8ccd8d9d434bd060566d2c12391a1447af8b602e09eacb529a"
+            },
+            {
+              "serial": "110ZC",
+              "cells": [
+                "110ZC",
+                "",
+                "UR-144",
+                "(1-Penty-1 H-indol-3-yl) (2,2,3,3-\ntetramrthylcyclopropyl) methanone"
+              ],
+              "fragments": [
+                {
+                  "page": 53,
+                  "bbox": [
+                    66.62,
+                    157.1,
+                    545.5,
+                    186.98
+                  ],
+                  "cells": [
+                    "110ZC",
+                    "",
+                    "UR-144",
+                    "(1-Penty-1 H-indol-3-yl) (2,2,3,3-\ntetramrthylcyclopropyl) methanone"
+                  ]
+                }
+              ],
+              "sha256": "b19bf962db62f2de6cd50ec7d9c0bc55162002945b25c24da421839c2ae7888e"
+            },
+            {
+              "serial": "110ZD",
+              "cells": [
+                "110ZD",
+                "",
+                "5F-PB-22",
+                "Quinolin-8-yl 1-(5-fluropenthl)-1h-\ninodole-3-carboxylate"
+              ],
+              "fragments": [
+                {
+                  "page": 53,
+                  "bbox": [
+                    66.62,
+                    186.98,
+                    545.5,
+                    216.74
+                  ],
+                  "cells": [
+                    "110ZD",
+                    "",
+                    "5F-PB-22",
+                    "Quinolin-8-yl 1-(5-fluropenthl)-1h-\ninodole-3-carboxylate"
+                  ]
+                }
+              ],
+              "sha256": "869fea32a932f550e45e27ce1da4cdf10aae338959c0fe233f25b0f1c592a9c7"
+            },
+            {
+              "serial": "110ZE",
+              "cells": [
+                "110ZE",
+                "4-Fluoroamphetamine",
+                "4-FA",
+                "1-(4-Fluorophenyl) propan-2-amine.]"
+              ],
+              "fragments": [
+                {
+                  "page": 53,
+                  "bbox": [
+                    66.62,
+                    216.74,
+                    545.5,
+                    233.9
+                  ],
+                  "cells": [
+                    "110ZE",
+                    "4-Fluoroamphetamine",
+                    "4-FA",
+                    "1-(4-Fluorophenyl) propan-2-amine.]"
+                  ]
+                }
+              ],
+              "sha256": "176665b37a21b967d46c8faf47348c508b46651965c33413f26be534ec996a18"
+            },
+            {
+              "serial": "110ZF",
+              "cells": [
+                "1[110ZF.",
+                "",
+                "AB-FUBINACA",
+                "N-[(2S)-1-amino-3-methyl-1-\noxobutan-2-yl]-1-[4-fluorophenyl)\nmethyl] indazole-3-carboxamide"
+              ],
+              "fragments": [
+                {
+                  "page": 53,
+                  "bbox": [
+                    66.62,
+                    233.9,
+                    545.5,
+                    276.41
+                  ],
+                  "cells": [
+                    "1[110ZF.",
+                    "",
+                    "AB-FUBINACA",
+                    "N-[(2S)-1-amino-3-methyl-1-\noxobutan-2-yl]-1-[4-fluorophenyl)\nmethyl] indazole-3-carboxamide"
+                  ]
+                }
+              ],
+              "sha256": "17bb26c0b85369357a15cce8ed8e789e5524ec01543ea10e9e4bb9e848cd52c6"
+            },
+            {
+              "serial": "110ZG",
+              "cells": [
+                "110ZG",
+                "",
+                "5F-AMB-PINACA (5F-\nAMB,5F-MMB-\nPINACA)",
+                "Methyl 2-({[1-5-fluoropenty)-1H-\nindazol3yl] carbonyl} amino)-3-\nmethylbutanoate"
+              ],
+              "fragments": [
+                {
+                  "page": 53,
+                  "bbox": [
+                    66.62,
+                    276.41,
+                    545.5,
+                    318.77
+                  ],
+                  "cells": [
+                    "110ZG",
+                    "",
+                    "5F-AMB-PINACA (5F-\nAMB,5F-MMB-\nPINACA)",
+                    "Methyl 2-({[1-5-fluoropenty)-1H-\nindazol3yl] carbonyl} amino)-3-\nmethylbutanoate"
+                  ]
+                }
+              ],
+              "sha256": "00b08368f32a92a1a734a58a5d2255563a634112cbdcf51211c828a386dacd89"
+            },
+            {
+              "serial": "110ZH",
+              "cells": [
+                "110ZH",
+                "",
+                "5F-MDMB-PICA (5F-\nMDMB-2201)",
+                "Methyl(S)-2-(1-5-fluoropentyl)-1H-\nindole-3- carboxamido)-3,3-\ndimethylbutanoate"
+              ],
+              "fragments": [
+                {
+                  "page": 53,
+                  "bbox": [
+                    66.62,
+                    318.77,
+                    545.5,
+                    361.25
+                  ],
+                  "cells": [
+                    "110ZH",
+                    "",
+                    "5F-MDMB-PICA (5F-\nMDMB-2201)",
+                    "Methyl(S)-2-(1-5-fluoropentyl)-1H-\nindole-3- carboxamido)-3,3-\ndimethylbutanoate"
+                  ]
+                }
+              ],
+              "sha256": "9127f83095ecbc4960653ad323220fbd8fb51fac668eb3f10721b304ace1161b"
+            },
+            {
+              "serial": "110ZI",
+              "cells": [
+                "110ZI",
+                "",
+                "4F-MDMB-BINACA",
+                "Methyl(S)-2-(1-(4-fluorobutyl)-1H-\nindazole-3-carboxamido)-3,3-\ndimethylbutanoate"
+              ],
+              "fragments": [
+                {
+                  "page": 53,
+                  "bbox": [
+                    66.62,
+                    361.25,
+                    545.5,
+                    403.73
+                  ],
+                  "cells": [
+                    "110ZI",
+                    "",
+                    "4F-MDMB-BINACA",
+                    "Methyl(S)-2-(1-(4-fluorobutyl)-1H-\nindazole-3-carboxamido)-3,3-\ndimethylbutanoate"
+                  ]
+                }
+              ],
+              "sha256": "1a0aecf972b64c7a9cf7cc2ec2df5bdfe3982abb70fa3d5144c7465296c5aa90"
+            },
+            {
+              "serial": "110ZJ",
+              "cells": [
+                "110ZJ",
+                "4-CMC (4-\nchloromethcathinone)",
+                "clephedrone",
+                "1-(4-chlorophenyl)-2-(methylamino)-\n1-propanone"
+              ],
+              "fragments": [
+                {
+                  "page": 53,
+                  "bbox": [
+                    66.62,
+                    403.73,
+                    545.5,
+                    433.49
+                  ],
+                  "cells": [
+                    "110ZJ",
+                    "4-CMC (4-\nchloromethcathinone)",
+                    "clephedrone",
+                    "1-(4-chlorophenyl)-2-(methylamino)-\n1-propanone"
+                  ]
+                }
+              ],
+              "sha256": "52661abd7d2a8247bd7bedd802d99d007f7b710a25202eef89d876002a611732"
+            },
+            {
+              "serial": "110ZK",
+              "cells": [
+                "110ZK",
+                "",
+                "N-ethylhexedrone",
+                "2-(Ethylamino)-1-phenyl-1-hexanone"
+              ],
+              "fragments": [
+                {
+                  "page": 53,
+                  "bbox": [
+                    66.62,
+                    433.49,
+                    545.5,
+                    450.67
+                  ],
+                  "cells": [
+                    "110ZK",
+                    "",
+                    "N-ethylhexedrone",
+                    "2-(Ethylamino)-1-phenyl-1-hexanone"
+                  ]
+                }
+              ],
+              "sha256": "88bca8f1177884a3bf34320d85693c07cfa56a17df79b419da39745c43e4ba63"
+            },
+            {
+              "serial": "110ZL",
+              "cells": [
+                "110ZL",
+                "",
+                "Alpha-PHP",
+                "(RS)-1-Phenyl-2-(pyrrolidine-1-\nyl)hexan-1-one"
+              ],
+              "fragments": [
+                {
+                  "page": 53,
+                  "bbox": [
+                    66.62,
+                    450.67,
+                    545.5,
+                    480.43
+                  ],
+                  "cells": [
+                    "110ZL",
+                    "",
+                    "Alpha-PHP",
+                    "(RS)-1-Phenyl-2-(pyrrolidine-1-\nyl)hexan-1-one"
+                  ]
+                }
+              ],
+              "sha256": "4c6f917ea54ad70fae56daf7104276e8a7198a89efb35e20f497d4b291f0b060"
+            },
+            {
+              "serial": "110ZM",
+              "cells": [
+                "110ZM",
+                "",
+                "flualprazolam",
+                "8-Chloro-6-(2-fluoro-phenyl)-1-\nmethyl-4hbenzo[f][1,2,4]triazolo[4,3-\na][1,4]diazepime"
+              ],
+              "fragments": [
+                {
+                  "page": 53,
+                  "bbox": [
+                    66.62,
+                    480.43,
+                    545.5,
+                    522.91
+                  ],
+                  "cells": [
+                    "110ZM",
+                    "",
+                    "flualprazolam",
+                    "8-Chloro-6-(2-fluoro-phenyl)-1-\nmethyl-4hbenzo[f][1,2,4]triazolo[4,3-\na][1,4]diazepime"
+                  ]
+                }
+              ],
+              "sha256": "a53925cb99479805355807669ff65d9b2492668c0e714637cf496ffabec2ca1b"
+            },
+            {
+              "serial": "110ZN",
+              "cells": [
+                "110ZN",
+                "Etizolam",
+                "",
+                "4-(2-Chlorophenyl)-2-ethyl-9-methyl-\n6H-thieno[3,2-\nf][1,2,4]triazolo[4,3a][1,4]diazepine"
+              ],
+              "fragments": [
+                {
+                  "page": 53,
+                  "bbox": [
+                    66.62,
+                    522.91,
+                    545.5,
+                    565.39
+                  ],
+                  "cells": [
+                    "110ZN",
+                    "Etizolam",
+                    "",
+                    "4-(2-Chlorophenyl)-2-ethyl-9-methyl-\n6H-thieno[3,2-\nf][1,2,4]triazolo[4,3a][1,4]diazepine"
+                  ]
+                }
+              ],
+              "sha256": "8b9a81f117a473bab53bb48bd00435a35eef809e382c3f3e4014ebf4bb3512ea"
+            },
+            {
+              "serial": "110ZO",
+              "cells": [
+                "110ZO",
+                "",
+                "DOC",
+                "4-Chloro-2,5-\ndimethoxyamfetamine"
+              ],
+              "fragments": [
+                {
+                  "page": 53,
+                  "bbox": [
+                    66.62,
+                    565.39,
+                    545.5,
+                    599.23
+                  ],
+                  "cells": [
+                    "110ZO",
+                    "",
+                    "DOC",
+                    "4-Chloro-2,5-\ndimethoxyamfetamine"
+                  ]
+                }
+              ],
+              "sha256": "83281bf40bce0d20cd8f0fb67a4d42ce93abbd25dce88d5f7c37fe0fb0d12c29"
+            },
+            {
+              "serial": "110ZP",
+              "cells": [
+                "110ZP",
+                "",
+                "ADB-FUBINACA",
+                "N-[(2S)-1-amino-3,3-dimethyl-1-\noxobutan-2-yl]-1-[4-\nfluorophenyl)methyl]-1Hindazole-3-\ncarboxamide"
+              ],
+              "fragments": [
+                {
+                  "page": 53,
+                  "bbox": [
+                    66.62,
+                    599.23,
+                    545.5,
+                    654.34
+                  ],
+                  "cells": [
+                    "110ZP",
+                    "",
+                    "ADB-FUBINACA",
+                    "N-[(2S)-1-amino-3,3-dimethyl-1-\noxobutan-2-yl]-1-[4-\nfluorophenyl)methyl]-1Hindazole-3-\ncarboxamide"
+                  ]
+                }
+              ],
+              "sha256": "a613e572fcb1651fc8326e3e0b573078a05e1c9ccf8e26aed7a909272049a843"
+            },
+            {
+              "serial": "110ZQ",
+              "cells": [
+                "110ZQ",
+                "",
+                "FUB-\nAMB,MMBFUBINAC\nA,AMBFUBINACA",
+                "Methyl(2S)-2-({1-[4-\nfluorophenyl]methyl-1Hindazole-3-\ncarbonyl} amino)-3-methylbutanoate"
+              ],
+              "fragments": [
+                {
+                  "page": 53,
+                  "bbox": [
+                    66.62,
+                    654.34,
+                    545.5,
+                    696.7
+                  ],
+                  "cells": [
+                    "110ZQ",
+                    "",
+                    "FUB-\nAMB,MMBFUBINAC\nA,AMBFUBINACA",
+                    "Methyl(2S)-2-({1-[4-\nfluorophenyl]methyl-1Hindazole-3-\ncarbonyl} amino)-3-methylbutanoate"
+                  ]
+                }
+              ],
+              "sha256": "2a5133083f5dccca0293e94a85663c2a30ebb3e1f6b05166377e9835349bac17"
+            },
+            {
+              "serial": "110ZR",
+              "cells": [
+                "110ZR",
+                "",
+                "CUMYL-4CNBINACA",
+                "1-(4-cyanobutyl)-N-(2-phenylpropan-\n2-yl)-1Hindazole-3-carboxamide"
+              ],
+              "fragments": [
+                {
+                  "page": 53,
+                  "bbox": [
+                    66.62,
+                    696.7,
+                    545.5,
+                    726.58
+                  ],
+                  "cells": [
+                    "110ZR",
+                    "",
+                    "CUMYL-4CNBINACA",
+                    "1-(4-cyanobutyl)-N-(2-phenylpropan-\n2-yl)-1Hindazole-3-carboxamide"
+                  ]
+                }
+              ],
+              "sha256": "3e4c7f1278ec7ada3cbcc47eb552142cc9833b0cc0843c2ac7dc3414dba5a202"
+            },
+            {
+              "serial": "110ZS",
+              "cells": [
+                "110ZS",
+                "",
+                "ADB-\nCHMINACA,MAB-\nCHMINACA",
+                "N-[(2S)-1-amino-3,3-dimethyl-1-\noxobutan-2-yl]-1-(cyclohexylmethyl)-\n1H-indazole-3-carboxamide"
+              ],
+              "fragments": [
+                {
+                  "page": 53,
+                  "bbox": [
+                    66.62,
+                    726.58,
+                    545.5,
+                    743.74
+                  ],
+                  "cells": [
+                    "110ZS",
+                    "",
+                    "ADB-",
+                    "N-[(2S)-1-amino-3,3-dimethyl-1-"
+                  ]
+                },
+                {
+                  "page": 54,
+                  "bbox": [
+                    66.62,
+                    72.24,
+                    545.5,
+                    98.06
+                  ],
+                  "cells": [
+                    "",
+                    "",
+                    "CHMINACA,MAB-\nCHMINACA",
+                    "oxobutan-2-yl]-1-(cyclohexylmethyl)-\n1H-indazole-3-carboxamide"
+                  ]
+                }
+              ],
+              "sha256": "ce7479060a6486eb9b5b978c106bac84b5625934835d826192ddaaa83c7e6e50"
+            },
+            {
+              "serial": "110ZT",
+              "cells": [
+                "110ZT",
+                "",
+                "N-ethylnorpentylone",
+                "1-(2H-1,3-benzodioxol-5-yl)-2-\n(ethylamino)pentan-1-one”.]"
+              ],
+              "fragments": [
+                {
+                  "page": 54,
+                  "bbox": [
+                    66.62,
+                    98.06,
+                    545.5,
+                    127.82
+                  ],
+                  "cells": [
+                    "110ZT",
+                    "",
+                    "N-ethylnorpentylone",
+                    "1-(2H-1,3-benzodioxol-5-yl)-2-\n(ethylamino)pentan-1-one”.]"
+                  ]
+                }
+              ],
+              "sha256": "8042b560b5407822eca1ea5ad3607f15ba8697df71b5891a47dff6976ae1e1a5"
+            }
+          ],
+          "physical_row_count": 164
+        }
+      ],
+      "link_health_status": "available",
+      "link_last_checked_at": null,
+      "link_last_error": null,
+      "source_retrieved_at": "2026-09-08T05:07:26.781745Z",
+      "source_version": 1,
+      "verified_at": null,
+      "quarantine_reason": null,
+      "source_action": {
+        "state": "available",
+        "label": "Open source",
+        "open_url": "/api/source-actions/targets/statute_section/fixture-ndps-1985-Schedule/open",
+        "source_reference": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/1791/5/a1985-61.pdf#page=46",
+        "reason": null,
+        "opens_new_tab": true,
+        "target_type": "statute_section",
+        "target_id": "fixture-ndps-1985-Schedule"
+      },
+      "section_url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/1791/5/a1985-61.pdf#page=46",
+      "parent_section_id": null,
+      "ordinal": 1
+    },
+    "parent_section": null,
+    "child_sections": []
+  },
+  "specific-relief-1963": {
+    "statute": {
+      "id": "specific-relief-1963",
+      "short_name": "Specific Relief Act",
+      "long_name": "Specific Relief Act, 1963",
+      "enacted_year": 1963,
+      "jurisdiction": "india",
+      "source_url": "https://www.indiacode.nic.in/indiacode/handle/123456789/1583?view_type=browse",
+      "issuing_body": null,
+      "source_category": "consolidated_statute",
+      "source_status": "unverified",
+      "legal_status": "enacted",
+      "verification_status": "unverified",
+      "publication_date": null,
+      "effective_from": null,
+      "effective_to": null,
+      "source_retrieved_at": null,
+      "source_sha256": null,
+      "exact_source_version": null,
+      "history_status": "current_text_only",
+      "is_active": true
+    },
+    "section": {
+      "id": "fixture-specific-relief-1963-Schedule",
+      "statute_id": "specific-relief-1963",
+      "section_number": "Schedule",
+      "section_label": "1[THE SCHEDULE",
+      "section_text": "1[THE SCHEDULE\n[See sections 20A and 41 (ha)]\nCategory of projects and Infrastructure Sub-Sectors\nSl. No. Category Infrastructure Sub-Sectors\n1 2 3\n1. Transport (a) Road and bridges\n(b) Ports (including Capital Dredging)\n(c) Shipyards (including a floating or land-based facility with the\nessential features of waterfront, turning basin, berthing and docking\nfacility, slipways or ship lifts, and which is self-sufficient for carrying on\nshipbuilding/repair/breaking activities)\n(d) Inland Waterways\n(e) Airports\n(f) Railway Track, tunnels, viaducts, bridges, terminal infrastructure\nincluding stations and adjoining commercial infrastructure\n(g) Urban Public Transport (except rolling stock in case of urban road\ntransport)\n2. Energy (a) Electricity Generation\n(b) Electricity Transmission\n(c) Electricity Distribution\n(d) Oil pipelines\n(e) Oil/Gas/Liquefied Natural Gas (LNG) storage facility(including\nstrategic storage of crude oil)\n(f) Gas pipelines (including city gas distribution network)\n3. Water and (a) Solid Waste Management\nSanitation\n(b) Water supply pipelines\n(c) Water treatment plants\n(d) Sewage collection, treatment and disposal system\n(e) Irrigation (dams, channels, embankments, etc.)\n(f) Storm Water Drainage System\n(g) Slurry pipelines\n4. Communication (a) Telecommunication (Fixed network including optic fibre/wire/cable\nnetworks which provide broadband/internet)\n(b) Telecommunication towers\n(c) Telecommunications and Telecom Services\n\nSl. No. Category Infrastructure Sub-Sectors\n1 2 3\n5. Social and (a) Education Institutions (capital stock)\nCommercial\n(b) Sports infrastructure (including provision of Sports Stadia and\nInfrastructure\nInfrastructure for Academies for Training/Research in Sports and Sports-\nrelating activities)\n(c) Hospitals (capital stock including Medical Colleges, Para Medical\nTraining Institutes and Diagnostic Centres)\n(d) Tourism infrastructure viz.\n(i) three-star or higher category classified hotels located outside\ncities with population of more than one million;\n(ii) ropeways and cable cars\n(e) Common infrastructure for industrial parks and other parks with\nindustrial activity such as food parks, textile parks, Special Economic\nZones, tourism facilities and agriculture markets\n(f) Post-harvest storage infrastructure for agriculture and horticulture\nproduce including cold storage\n(g) Terminal markets\n(h) Soil-testing laboratories\n(i) Cold chain (including cold room facility for farm level pre-cooling,\nfor preservation or storage of agriculture and allied produce, marine\nproducts and meat)\n(j) Affordable Housing (including a housing project using at least 50%\nof the Floor Area Ratio (FAR)/Floor Space Index (FSI) for dwelling units\nwith carpet area of not more than 60 square meters\nExplanation.—For the purposes of this sub-clause, the term “carpet area”\nshall have the same meaning as assigned to it in clause (k) of section 2 of\nthe Real Estate (Regulation and Development) Act, 2016\n(16 of 2016).]",
+      "section_text_source": "official_release_manifest",
+      "editorial_notes": "Published-edition text. Commencement, amendments, territorial applicability and judicial treatment must be checked for the relevant date; the edition is not a current-law certification.\n\nPublisher notes for PDF page 16 (shared page context):\n1. Ins. by Act 18 of 2018, s. 14 (w.e.f. 1-10-2018).",
+      "case_annotations": null,
+      "ai_explanation": null,
+      "is_provisional": false,
+      "verification_status": "verified_official",
+      "source_sha256": "6116c135eb7b5849f61f36460e73f25152c0e858226a521ae1c2296e5facfa90",
+      "source_publisher": "India Code, Legislative Department, Government of India",
+      "issuing_body": "Ministry of Law and Justice, Government of India",
+      "source_category": "consolidated_statute",
+      "source_status": "official",
+      "legal_status": "enacted",
+      "publication_date": null,
+      "effective_from": null,
+      "effective_to": null,
+      "amendment_metadata_json": {},
+      "history_status": "current_text_only",
+      "exact_source_version": "India Code A1963-47; retrieved 08 September 2026; SHA-256 7b90aae6b01d7c9533f5b69a8ccbf00c16ba439e4624561204de236d5cb7f43d",
+      "source_locator_type": "section_deep_link",
+      "structured_tables": [
+        {
+          "title": "Category of projects and Infrastructure Sub-Sectors",
+          "columns": [
+            "Sl. No.",
+            "Category",
+            "Infrastructure Sub-Sectors"
+          ],
+          "rows": [
+            {
+              "serial": "1",
+              "cells": [
+                "1.",
+                "Transport",
+                "(a) Road and bridges\n(b) Ports (including Capital Dredging)\n(c) Shipyards (including a floating or land-based facility with the\nessential features of waterfront, turning basin, berthing and docking\nfacility, slipways or ship lifts, and which is self-sufficient for carrying on\nshipbuilding/repair/breaking activities)\n(d) Inland Waterways\n(e) Airports\n(f) Railway Track, tunnels, viaducts, bridges, terminal infrastructure\nincluding stations and adjoining commercial infrastructure\n(g) Urban Public Transport (except rolling stock in case of urban road\ntransport)"
+              ],
+              "fragments": [
+                {
+                  "page": 16,
+                  "bbox": [
+                    91.22399999999999,
+                    176.29999499999997,
+                    551.1600199999999,
+                    370.61000999999993
+                  ],
+                  "cells": [
+                    "1.",
+                    "Transport",
+                    "(a) Road and bridges\n(b) Ports (including Capital Dredging)\n(c) Shipyards (including a floating or land-based facility with the\nessential features of waterfront, turning basin, berthing and docking\nfacility, slipways or ship lifts, and which is self-sufficient for carrying on\nshipbuilding/repair/breaking activities)\n(d) Inland Waterways\n(e) Airports\n(f) Railway Track, tunnels, viaducts, bridges, terminal infrastructure\nincluding stations and adjoining commercial infrastructure\n(g) Urban Public Transport (except rolling stock in case of urban road\ntransport)"
+                  ]
+                }
+              ],
+              "sha256": "2e922e544e7b412107bf619522b4cd73b04629e5ae76033f313aad6a32ac923c"
+            },
+            {
+              "serial": "2",
+              "cells": [
+                "2.",
+                "Energy",
+                "(a) Electricity Generation\n(b) Electricity Transmission\n(c) Electricity Distribution\n(d) Oil pipelines\n(e) Oil/Gas/Liquefied Natural Gas (LNG) storage facility(including\nstrategic storage of crude oil)\n(f) Gas pipelines (including city gas distribution network)"
+              ],
+              "fragments": [
+                {
+                  "page": 16,
+                  "bbox": [
+                    91.22399999999999,
+                    370.61000999999993,
+                    551.1600199999999,
+                    495.669995
+                  ],
+                  "cells": [
+                    "2.",
+                    "Energy",
+                    "(a) Electricity Generation\n(b) Electricity Transmission\n(c) Electricity Distribution\n(d) Oil pipelines\n(e) Oil/Gas/Liquefied Natural Gas (LNG) storage facility(including\nstrategic storage of crude oil)\n(f) Gas pipelines (including city gas distribution network)"
+                  ]
+                }
+              ],
+              "sha256": "091a8bf35ba6eb17b05a911fc685ad4a45ef12da2c7632d8a0aa3c44160b2249"
+            },
+            {
+              "serial": "3",
+              "cells": [
+                "3.",
+                "Water and\nSanitation",
+                "(a) Solid Waste Management\n(b) Water supply pipelines\n(c) Water treatment plants\n(d) Sewage collection, treatment and disposal system\n(e) Irrigation (dams, channels, embankments, etc.)\n(f) Storm Water Drainage System\n(g) Slurry pipelines"
+              ],
+              "fragments": [
+                {
+                  "page": 16,
+                  "bbox": [
+                    91.22399999999999,
+                    495.669995,
+                    551.1600199999999,
+                    626.74001
+                  ],
+                  "cells": [
+                    "3.",
+                    "Water and\nSanitation",
+                    "(a) Solid Waste Management\n(b) Water supply pipelines\n(c) Water treatment plants\n(d) Sewage collection, treatment and disposal system\n(e) Irrigation (dams, channels, embankments, etc.)\n(f) Storm Water Drainage System\n(g) Slurry pipelines"
+                  ]
+                }
+              ],
+              "sha256": "7fdad290fc29d99d6d8840d261af04928f080907a7089fb36185167e6ac6a3a9"
+            },
+            {
+              "serial": "4",
+              "cells": [
+                "4.",
+                "Communication",
+                "(a) Telecommunication (Fixed network including optic fibre/wire/cable\nnetworks which provide broadband/internet)\n(b) Telecommunication towers\n(c) Telecommunications and Telecom Services"
+              ],
+              "fragments": [
+                {
+                  "page": 16,
+                  "bbox": [
+                    91.22399999999999,
+                    626.74001,
+                    551.1600199999999,
+                    695.8600099999999
+                  ],
+                  "cells": [
+                    "4.",
+                    "Communication",
+                    "(a) Telecommunication (Fixed network including optic fibre/wire/cable\nnetworks which provide broadband/internet)\n(b) Telecommunication towers\n(c) Telecommunications and Telecom Services"
+                  ]
+                }
+              ],
+              "sha256": "dadd33b88ca629a2c4960bda5554079ba0ea6d7ececdb6d9f71b325fa64875fb"
+            },
+            {
+              "serial": "5",
+              "cells": [
+                "5.",
+                "Social and\nCommercial\nInfrastructure",
+                "(a) Education Institutions (capital stock)\n(b) Sports infrastructure (including provision of Sports Stadia and\nInfrastructure for Academies for Training/Research in Sports and Sports-\nrelating activities)\n(c) Hospitals (capital stock including Medical Colleges, Para Medical\nTraining Institutes and Diagnostic Centres)\n(d) Tourism infrastructure viz.\n(i) three-star or higher category classified hotels located outside\ncities with population of more than one million;\n(ii) ropeways and cable cars\n(e) Common infrastructure for industrial parks and other parks with\nindustrial activity such as food parks, textile parks, Special Economic\nZones, tourism facilities and agriculture markets\n(f) Post-harvest storage infrastructure for agriculture and horticulture\nproduce including cold storage\n(g) Terminal markets\n(h) Soil-testing laboratories\n(i) Cold chain (including cold room facility for farm level pre-cooling,\nfor preservation or storage of agriculture and allied produce, marine\nproducts and meat)\n(j) Affordable Housing (including a housing project using at least 50%\nof the Floor Area Ratio (FAR)/Floor Space Index (FSI) for dwelling units\nwith carpet area of not more than 60 square meters\nExplanation.—For the purposes of this sub-clause, the term “carpet area”\nshall have the same meaning as assigned to it in clause (k) of section 2 of\nthe Real Estate (Regulation and Development) Act, 2016\n(16 of 2016).]"
+              ],
+              "fragments": [
+                {
+                  "page": 17,
+                  "bbox": [
+                    91.22399999999999,
+                    110.53999999999996,
+                    551.1600199999999,
+                    536.58998
+                  ],
+                  "cells": [
+                    "5.",
+                    "Social and\nCommercial\nInfrastructure",
+                    "(a) Education Institutions (capital stock)\n(b) Sports infrastructure (including provision of Sports Stadia and\nInfrastructure for Academies for Training/Research in Sports and Sports-\nrelating activities)\n(c) Hospitals (capital stock including Medical Colleges, Para Medical\nTraining Institutes and Diagnostic Centres)\n(d) Tourism infrastructure viz.\n(i) three-star or higher category classified hotels located outside\ncities with population of more than one million;\n(ii) ropeways and cable cars\n(e) Common infrastructure for industrial parks and other parks with\nindustrial activity such as food parks, textile parks, Special Economic\nZones, tourism facilities and agriculture markets\n(f) Post-harvest storage infrastructure for agriculture and horticulture\nproduce including cold storage\n(g) Terminal markets\n(h) Soil-testing laboratories\n(i) Cold chain (including cold room facility for farm level pre-cooling,\nfor preservation or storage of agriculture and allied produce, marine\nproducts and meat)\n(j) Affordable Housing (including a housing project using at least 50%\nof the Floor Area Ratio (FAR)/Floor Space Index (FSI) for dwelling units\nwith carpet area of not more than 60 square meters\nExplanation.—For the purposes of this sub-clause, the term “carpet area”\nshall have the same meaning as assigned to it in clause (k) of section 2 of\nthe Real Estate (Regulation and Development) Act, 2016\n(16 of 2016).]"
+                  ]
+                }
+              ],
+              "sha256": "d1996331b59b5eb3abbde15aa58d39934718bc38bdcb0435e454d6063749fc71"
+            }
+          ],
+          "physical_row_count": 5
+        }
+      ],
+      "link_health_status": "available",
+      "link_last_checked_at": null,
+      "link_last_error": null,
+      "source_retrieved_at": "2026-09-08T05:07:26.004740Z",
+      "source_version": 1,
+      "verified_at": null,
+      "quarantine_reason": null,
+      "source_action": {
+        "state": "available",
+        "label": "Open source",
+        "open_url": "/api/source-actions/targets/statute_section/fixture-specific-relief-1963-Schedule/open",
+        "source_reference": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/1583/7/A1963-47.pdf#page=16",
+        "reason": null,
+        "opens_new_tab": true,
+        "target_type": "statute_section",
+        "target_id": "fixture-specific-relief-1963-Schedule"
+      },
+      "section_url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/1583/7/A1963-47.pdf#page=16",
+      "parent_section_id": null,
+      "ordinal": 1
+    },
+    "parent_section": null,
+    "child_sections": []
+  },
+  "ipc-1860": {
+    "statute": {
+      "id": "ipc-1860",
+      "short_name": "IPC",
+      "long_name": "Indian Penal Code, 1860",
+      "enacted_year": 1860,
+      "jurisdiction": "india",
+      "source_url": "https://www.indiacode.nic.in/indiacode/repealedfileopen?rfilename=A1860-45.pdf",
+      "issuing_body": null,
+      "source_category": "consolidated_statute",
+      "source_status": "unverified",
+      "legal_status": "enacted",
+      "verification_status": "unverified",
+      "publication_date": null,
+      "effective_from": null,
+      "effective_to": null,
+      "source_retrieved_at": null,
+      "source_sha256": null,
+      "exact_source_version": null,
+      "history_status": "current_text_only",
+      "is_active": true
+    },
+    "section": {
+      "id": "fixture-ipc-1860-Section-302",
+      "statute_id": "ipc-1860",
+      "section_number": "Section 302",
+      "section_label": "Punishment for murder",
+      "section_text": "302. Punishment for murder.—Whoever commits murder shall be punished with death, or\n1[imprisonment for life], and shall also be liable to fine.",
+      "section_text_source": "official_release_manifest",
+      "editorial_notes": "Published-edition text. Commencement, amendments, territorial applicability and judicial treatment must be checked for the relevant date; the edition is not a current-law certification.\n\nRetained repealed-law edition. BNS section 358 repeal and savings, commencement, and judicial treatment must be checked for the relevant event and proceeding. This is source verification, not a determination that a historical offence remains operative.\n\nPublisher notes for PDF page 74 (shared page context):\n1. Subs. by Act 26 of 1955, s. 117 and the Sch., for “transportation for life” (w.e.f. 1-1-1956).",
+      "case_annotations": null,
+      "ai_explanation": null,
+      "is_provisional": false,
+      "verification_status": "verified_official",
+      "source_sha256": "67614a8217eba5618186996b3a7a5deb250ba3972b0ff30adabcc0c2beb643ab",
+      "source_publisher": "India Code, Legislative Department, Government of India",
+      "issuing_body": "Ministry of Home Affairs, Government of India",
+      "source_category": "consolidated_statute",
+      "source_status": "official",
+      "legal_status": "repealed",
+      "publication_date": null,
+      "effective_from": null,
+      "effective_to": null,
+      "amendment_metadata_json": {},
+      "history_status": "current_text_only",
+      "exact_source_version": "India Code A1860-45; retained repealed-law edition; SHA-256 ae8920ad726fbb6dfdec8d327c4bdda580ca175bcad1ef4212ca868fe4d1ea3a",
+      "source_locator_type": "section_deep_link",
+      "structured_tables": [],
+      "link_health_status": "available",
+      "link_last_checked_at": null,
+      "link_last_error": null,
+      "source_retrieved_at": "2026-09-08T05:52:43.067059Z",
+      "source_version": 1,
+      "verified_at": null,
+      "quarantine_reason": null,
+      "source_action": {
+        "state": "available",
+        "label": "Open source",
+        "open_url": "/api/source-actions/targets/statute_section/fixture-ipc-1860-Section-302/open",
+        "source_reference": "https://www.indiacode.nic.in/indiacode/repealedfileopen?rfilename=A1860-45.pdf#page=74",
+        "reason": null,
+        "opens_new_tab": true,
+        "target_type": "statute_section",
+        "target_id": "fixture-ipc-1860-Section-302"
+      },
+      "section_url": "https://www.indiacode.nic.in/indiacode/repealedfileopen?rfilename=A1860-45.pdf#page=74",
+      "parent_section_id": null,
+      "ordinal": 1
+    },
+    "parent_section": null,
+    "child_sections": []
+  },
+  "iea-1872": {
+    "statute": {
+      "id": "iea-1872",
+      "short_name": "IEA",
+      "long_name": "The Indian Evidence Act, 1872",
+      "enacted_year": 1872,
+      "jurisdiction": "india",
+      "source_url": "https://www.indiacode.nic.in/indiacode/repealedfileopen?rfilename=A1872-1.pdf",
+      "issuing_body": null,
+      "source_category": "consolidated_statute",
+      "source_status": "unverified",
+      "legal_status": "enacted",
+      "verification_status": "unverified",
+      "publication_date": null,
+      "effective_from": null,
+      "effective_to": null,
+      "source_retrieved_at": null,
+      "source_sha256": null,
+      "exact_source_version": null,
+      "history_status": "current_text_only",
+      "is_active": true
+    },
+    "section": {
+      "id": "fixture-iea-1872-Section-65B",
+      "statute_id": "iea-1872",
+      "section_number": "Section 65B",
+      "section_label": "Admissibility of electronic records",
+      "section_text": "65B. Admissibility of electronic records.––(1) Notwithstanding anything contained in this Act, any\ninformation contained in an electronic record which is printed on a paper, stored, recorded or copied in\noptical or magnetic media produced by a computer (hereinafter referred to as the computer output) shall\nbe deemed to be also a document, if the conditions mentioned in this section are satisfied in relation to the\ninformation and computer in question and shall be admissible in any proceedings, without further proof or\nproduction of the original, as evidence or any contents of the original or of any fact stated therein of\nwhich direct evidence would be admissible.\n(2) The conditions referred to in sub-section (1) in respect of a computer output shall be the\nfollowing, namely:––\n(a) the computer output containing the information was produced by the computer during the\nperiod over which the computer was used regularly to store or process information for the\npurposes of any activities regularly carried on over that period by the person having lawful\ncontrol over the use of the computer;\n(b) during the said period, information of the kind contained in the electronic record or of the\nkind from which the information so contained is derived was regularly fed into the computer in\nthe ordinary course of the said activities;\n(c) throughout the material part of the said period, the computer was operating properly or, if\nnot, then in respect of any period in which it was not operating properly or was out of operation\nduring that part of the period, was not such as to affect the electronic record or the accuracy of its\ncontents; and\n(d) the information contained in the electronic record reproduces or is derived from such\ninformation fed into the computer in the ordinary course of the said activities.\n(3) Where over any period, the function of storing or processing information for the purposes of\nany activities regularly carried on over that period as mentioned in clause (a) of sub-section (2) was\nregularly performed by computers, whether––\n(a) by a combination of computers operating over that period; or\n\n(b) by different computers operating in succession over that period; or\n(c) by different combinations of computers operating in succession over that period; or\n(d) in any other manner involving the successive operation over that period, in whatever\norder, of one or more computers and one or more combinations of computers,\nall the computers used for that purpose during that period shall be treated for the purposes of this\nsection as constituting a single computer; and references in this section to a computer shall be\nconstrued accordingly.\n(4) In any proceedings where it is desired to give a statement in evidence by virtue of this section,\na certificate doing any of the following things, that is to say,––\n(a) identifying the electronic record containing the statement and describing the manner in\nwhich it was produced;\n(b) giving such particulars of any device involved in the production of that electronic record\nas may be appropriate for the purpose of showing that the electronic record was produced by a\ncomputer;\n(c) dealing with any of the matters to which the conditions mentioned in\nsub-section (2) relate,\nand purporting to be signed by a person occupying a responsible official position in relation to the\noperation of the relevant device or the management of the relevant activities (whichever is\nappropriate) shall be evidence of any matter stated in the certificate; and for the purposes of this\nsub-section it shall be sufficient for a matter to be stated to the best of the knowledge and belief of the\nperson stating it.\n(5) For the purposes of this section,––\n(a) information shall be taken to be supplied to a computer if it is supplied thereto in any\nappropriate form and whether it is so supplied directly or (with or without human intervention) by\nmeans of any appropriate equipment;\n(b) whether in the course of activities carried on by any official, information is supplied with\na view to its being stored or processed for the purposes of those activities by a computer operated\notherwise than in the course of those activities, that information, if duly supplied to that\ncomputer, shall be taken to be supplied to it in the course of those activities;\n(c) a computer output shall be taken to have been produced by a computer whether it was\nproduced by it directly or (with or without human intervention) by means of any appropriate\nequipment.\nExplanation.––For the purposes of this section any reference to information being derived from other\ninformation shall be a reference to its being derived therefrom by calculation, comparison or any other\nprocess.]",
+      "section_text_source": "official_release_manifest",
+      "editorial_notes": "Published-edition text. Commencement, amendments, territorial applicability and judicial treatment must be checked for the relevant date; the edition is not a current-law certification.\n\nRetained repealed-law edition. The Bharatiya Sakshya Adhiniyam, 2023 section 170 repeal-and-savings boundary must be checked for the relevant proceeding; source verification does not establish present applicability.\n\nPublisher notes for PDF page 34 (shared page context):\n1. Subs. by Act 3 of 1951, s. 3 and the Schedule, for “the States” (w.e.f. 1-4-1951).\n2. Cf. has Bankers’ Books Evidence Act, 1891 (18 of 1891), s. 4.\n3. Subs. by Act 21 of 2000, s. 92 and the Second Schedule (w.e.f. 17-10-2000).\n\nPublisher notes for PDF page 35 (shared page context):\n1. Ins. by Act 18 of 1872, s. 6 (w.e.f. 29-8-1872).",
+      "case_annotations": null,
+      "ai_explanation": null,
+      "is_provisional": false,
+      "verification_status": "verified_official",
+      "source_sha256": "4e9124c46aee7ff1300e3bb6a2540edfb73e0a614ff4434c14a3c85408b64f33",
+      "source_publisher": "India Code, Legislative Department, Government of India",
+      "issuing_body": "Ministry of Law and Justice, Government of India",
+      "source_category": "consolidated_statute",
+      "source_status": "official",
+      "legal_status": "repealed",
+      "publication_date": null,
+      "effective_from": null,
+      "effective_to": null,
+      "amendment_metadata_json": {},
+      "history_status": "current_text_only",
+      "exact_source_version": "India Code A1872-1; retained repealed-law edition; SHA-256 03958dcbfb98e714e9b0b432a671a5f874df9ff5beaa4f69fe0931dbc8ea1c8f",
+      "source_locator_type": "section_deep_link",
+      "structured_tables": [],
+      "link_health_status": "available",
+      "link_last_checked_at": null,
+      "link_last_error": null,
+      "source_retrieved_at": "2026-09-08T06:24:33.113701Z",
+      "source_version": 1,
+      "verified_at": null,
+      "quarantine_reason": null,
+      "source_action": {
+        "state": "available",
+        "label": "Open source",
+        "open_url": "/api/source-actions/targets/statute_section/fixture-iea-1872-Section-65B/open",
+        "source_reference": "https://www.indiacode.nic.in/indiacode/repealedfileopen?rfilename=A1872-1.pdf#page=34",
+        "reason": null,
+        "opens_new_tab": true,
+        "target_type": "statute_section",
+        "target_id": "fixture-iea-1872-Section-65B"
+      },
+      "section_url": "https://www.indiacode.nic.in/indiacode/repealedfileopen?rfilename=A1872-1.pdf#page=34",
+      "parent_section_id": null,
+      "ordinal": 1
+    },
+    "parent_section": null,
+    "child_sections": []
+  }
+}

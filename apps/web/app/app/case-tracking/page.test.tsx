@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -92,6 +92,62 @@ const bookmark = {
 };
 
 describe("CaseTrackingPage", () => {
+  it("cancels stale Matter reads and invalidates every hearing surface after refresh", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const surfaces = [
+      ["matters", "list", {}], ["matters", "dashboard-overview"],
+      ["matters", "hearings-aggregate"], ["matters", "portfolio"],
+      ["matters", "matter-1", "workspace"],
+    ];
+    for (const key of surfaces) client.setQueryData(key, { next_hearing_on: null });
+    let finishOldRead!: (value: { next_hearing_on: string }) => void;
+    const oldRead = client.fetchQuery({
+      queryKey: surfaces[0],
+      queryFn: () => new Promise<{ next_hearing_on: string }>(resolve => { finishOldRead = resolve; }),
+    }).catch(() => undefined);
+    listCaseTrackingBookmarksMock.mockResolvedValue({ bookmarks: [bookmark] });
+    listCaseTrackingUpdatesMock.mockResolvedValue({ updates: [] });
+    refreshCaseTrackingBookmarkMock.mockResolvedValue({ bookmark, created_update_count: 1 });
+    render(<QueryClientProvider client={client}><CaseTrackingPage /></QueryClientProvider>);
+    await userEvent.click(await screen.findByRole("button", { name: /^Refresh$/ }));
+    await waitFor(() => {
+      for (const key of surfaces) expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+    });
+    finishOldRead({ next_hearing_on: "2026-01-01" });
+    await oldRead;
+    expect(client.getQueryData(surfaces[0])).toEqual({ next_hearing_on: null });
+    expect(screen.queryByText(/Could not refresh/i)).not.toBeInTheDocument();
+  });
+
+  it("distinguishes scheduled QA exclusion from live human availability", async () => {
+    fetchCaseTrackingStatusMock.mockResolvedValue({
+      enabled: true, configured: true, provider: "ecourtsindia", reason: null,
+      scheduled_sync_eligible: false, scheduled_sync_disabled_reason: "configured_test_tenant",
+      scheduled_sync_local_time: "18:00", scheduled_sync_timezone: "Asia/Kolkata",
+    });
+    render(withClient(<CaseTrackingPage />));
+    expect(await screen.findByRole("region", { name: "Scheduled hearing updates" })).toHaveTextContent("18:00 (Asia/Kolkata)");
+    expect(screen.getByText(/Scheduled paid updates are excluded/)).toHaveTextContent("Human-initiated search and refresh remain available");
+    await userEvent.type(screen.getByRole("textbox", { name: "CNR number" }), "DLHC010012342026");
+    expect(screen.getByRole("button", { name: /^Search$/ })).toBeEnabled();
+    expect(searchTrackedCasesMock).not.toHaveBeenCalled();
+    expect(refreshCaseTrackingBookmarkMock).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("case-tracking-disabled")).not.toBeInTheDocument();
+  });
+
+  it("shows normal scheduled eligibility without claiming a provider refresh succeeded", async () => {
+    fetchCaseTrackingStatusMock.mockResolvedValue({
+      enabled: true, configured: true, provider: "ecourtsindia", reason: null,
+      scheduled_sync_eligible: true, scheduled_sync_disabled_reason: null,
+      scheduled_sync_local_time: "18:00", scheduled_sync_timezone: "Asia/Kolkata",
+      scheduled_sync_window_end_local_time: "20:00",
+    });
+    render(withClient(<CaseTrackingPage />));
+    expect(await screen.findByRole("region", { name: "Scheduled hearing updates" })).toHaveTextContent("Eligible for scheduled updates from uniquely matched court records.");
+    expect(screen.getByRole("region", { name: "Scheduled hearing updates" })).toHaveTextContent("18:00-20:00 (Asia/Kolkata)");
+    expect(screen.queryByText(/Scheduled paid updates are excluded/)).not.toBeInTheDocument();
+  });
+
   beforeEach(() => {
     fetchCaseTrackingStatusMock.mockReset();
     searchTrackedCasesMock.mockReset();

@@ -1,380 +1,188 @@
-"""DATA-GOV-05: step-up and dual approval on hold activation and release.
+"""DATA-GOV-05 using authenticated actors instead of nominated reviewers.
 
-The requirement has three clauses. The middle one was already enforced in the
-database - ``ck_legal_hold_activation_approval`` and
-``ck_legal_hold_approver_distinct`` refuse an active hold without a distinct,
-company-scoped approver - and that constraint is the guarantee, because it
-survives a service bug.
-
-The other two could not be enforced there:
-
-- **step-up** is a property of the SESSION, not of the row, so no CHECK
-  constraint can express it
-- **release never deletes immediately without a new dry-run** is a relationship
-  between two records and a clock
-
-Before this there was no hold activation or release path at all, so neither
-clause had anywhere to live. These tests assert the service refuses each way it
-can be misused, and - equally - that the legitimate path still completes.
+The former lifecycle assertions now exercise an actual second actor and an
+immutable release proposal. No caller may invent reviewer attendance.
 """
-
-from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
-from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
+from sqlalchemy import select
 
-from caseops_api.db.models import (
-    Company,
-    CompanyMembership,
-    LegalHold,
-    LegalHoldStatus,
-    TenantDataOperation,
-    User,
-    UserMFAStepUp,
-)
+from caseops_api.db.models import LegalHold, UserMFAStepUp
 from caseops_api.db.session import get_session_factory
-from caseops_api.services.data_governance import activate_legal_hold, release_legal_hold
-from caseops_api.services.session_context import SessionContext
-from tests.test_auth_company import bootstrap_company
+from tests.test_20260909_legal_hold_workflow import (
+    BASE,
+    _activate,
+    _create,
+    _proposal,
+    make_actors,
+)
 
 
-@pytest.fixture()
-def context(client: TestClient) -> SessionContext:
-    bootstrap = bootstrap_company(client)
+@pytest.fixture
+def actors(client):
+    return make_actors(client)
+
+
+def _dry(client, actor):
+    result = client.post(
+        f"{BASE}/operations/dry-runs/tenant-scope",
+        headers=actor["headers"],
+        json={"operation_type": "tenant_offboarding", "data_class_ids": ["tenant_data_operations"]},
+    )
+    assert result.status_code == 201, result.text
+    return result.json()["id"]
+
+
+def _request(client, actor, hold, dry_run_id):
+    return client.post(
+        f"{BASE}/holds/{hold['id']}/release-requests",
+        headers=actor["headers"],
+        json={
+            "expected_updated_at": hold["updated_at"],
+            "idempotency_key": uuid4().hex,
+            "dry_run_id": dry_run_id,
+            "reason_reference": "fixture://release-authority",
+        },
+    )
+
+
+def test_the_requester_cannot_approve_their_own_activation(client, actors):
+    owner, _ = actors
+    hold, _ = _create(client, owner)
+    response = client.post(
+        f"{BASE}/holds/{hold['id']}/activate",
+        headers=owner["headers"],
+        json={"expected_updated_at": hold["updated_at"]},
+    )
+    assert response.status_code == 409
+    assert response.json()["type"] == "legal_hold_approver_must_be_distinct"
+
+
+def test_a_distinct_approver_activates(client, actors):
+    owner, reviewer = actors
+    hold = _activate(client, reviewer, _create(client, owner)[0])
+    assert hold["status"] == "active" and hold["activated_at"]
+    assert hold["approved_by_membership_id"] == reviewer["id"]
+
+
+def test_only_a_draft_can_be_activated(client, actors):
+    owner, reviewer = actors
+    hold = _activate(client, reviewer, _create(client, owner)[0])
+    again = client.post(
+        f"{BASE}/holds/{hold['id']}/activate",
+        headers=reviewer["headers"],
+        json={"expected_updated_at": hold["updated_at"]},
+    )
+    assert again.status_code == 409 and again.json()["type"] == "legal_hold_not_draft"
+
+
+def test_release_without_a_dry_run_is_refused(client, actors):
+    owner, reviewer = actors
+    hold = _activate(client, reviewer, _create(client, owner)[0])
+    response = _request(client, owner, hold, "missing-dry-run")
+    assert (
+        response.status_code == 409
+        and response.json()["type"] == "legal_hold_release_requires_dry_run"
+    )
+
+
+def test_a_dry_run_predating_the_hold_is_refused(client, actors):
+    owner, reviewer = actors
+    dry_run_id = _dry(client, owner)
+    hold = _activate(client, reviewer, _create(client, owner)[0])
+    response = _request(client, owner, hold, dry_run_id)
+    assert (
+        response.status_code == 409
+        and response.json()["type"] == "legal_hold_release_requires_dry_run"
+    )
+
+
+def test_another_companys_dry_run_is_refused(client, actors):
+    owner, reviewer = actors
+    hold = _activate(client, reviewer, _create(client, owner)[0])
+    response = client.post(
+        "/api/bootstrap/company",
+        json={
+            "company_name": "Foreign synthetic workspace",
+            "company_slug": "foreign-hold-workspace",
+            "company_type": "law_firm",
+            "owner_full_name": "Other owner",
+            "owner_email": "other@hold.fixture",
+            "owner_password": "SyntheticPass123!",
+        },
+    )
+    assert response.status_code == 200, response.text
+    foreign = {
+        "headers": {
+            "Authorization": f"Bearer {response.json()['access_token']}",
+            "X-CaseOps-Automated-Test": "no-paid-providers",
+        }
+    }
+    dry_run_id = _dry(client, foreign)
+    denied = _request(client, owner, hold, dry_run_id)
+    assert (
+        denied.status_code == 409 and denied.json()["type"] == "legal_hold_release_requires_dry_run"
+    )
+    assert client.get(f"{BASE}/holds", headers=foreign["headers"]).json()["holds"] == []
+
+
+def test_a_current_dry_run_releases(client, actors):
+    owner, reviewer = actors
+    hold = _activate(client, reviewer, _create(client, owner)[0])
+    proposal, _ = _proposal(client, owner, hold)
+    response = client.post(
+        f"{BASE}/holds/{hold['id']}/release-requests/{proposal['id']}/approve",
+        headers=reviewer["headers"],
+        json={"expected_updated_at": hold["updated_at"]},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "released" and response.json()["released_at"]
     with get_session_factory()() as session:
-        company = session.get(Company, str(bootstrap["company"]["id"]))
-        membership = session.get(CompanyMembership, str(bootstrap["membership"]["id"]))
-        assert company is not None and membership is not None
-        user = session.get(User, membership.user_id)
-        assert user is not None
-        session.expunge_all()
-    return SessionContext(company=company, user=user, membership=membership)
+        assert session.get(LegalHold, hold["id"]).status == "released"
 
 
-@pytest.fixture()
-def session(client) -> Session:  # noqa: ARG001 - client configures the test database
-    with get_session_factory()() as active:
-        yield active
-
-
-@pytest.fixture(autouse=True)
-def _actor_has_stepped_up(session: Session, context: SessionContext) -> None:
-    """Activating or releasing a hold now requires a step-up unconditionally.
-
-    Before that it was required only of a caller with MFA already enrolled, so
-    every test here passed without one - the control was satisfied by the actor
-    not having enrolled. The dedicated step-up test below deletes this row to
-    prove the gate still closes.
-    """
-
-    _step_up(session, context)
-
-
-def _step_up(session: Session, context: SessionContext) -> None:
-    now = datetime.now(UTC)
-    session.add(
-        UserMFAStepUp(
-            user_id=context.user.id,
-            membership_id=context.membership.id,
-            purpose="legal_hold_change",
-            method="totp",
-            completed_at=now,
-            expires_at=now + timedelta(minutes=10),
-        )
+def test_the_requester_cannot_approve_their_own_release(client, actors):
+    owner, reviewer = actors
+    hold = _activate(client, reviewer, _create(client, owner)[0])
+    proposal, _ = _proposal(client, owner, hold)
+    response = client.post(
+        f"{BASE}/holds/{hold['id']}/release-requests/{proposal['id']}/approve",
+        headers=owner["headers"],
+        json={"expected_updated_at": hold["updated_at"]},
     )
-    session.flush()
-
-
-def _approver(session: Session, company_id: str) -> str:
-    user = User(
-        email=f"approver-{uuid4().hex[:8]}@fixture.example",
-        full_name="Hold Approver",
-        password_hash="fixture-only",
+    assert (
+        response.status_code == 409
+        and response.json()["type"] == "legal_hold_approver_must_be_distinct"
     )
-    session.add(user)
-    session.flush()
-    membership = CompanyMembership(company_id=company_id, user_id=user.id, role="admin")
-    session.add(membership)
-    session.flush()
-    return membership.id
 
 
-def _draft_hold(session: Session, company_id: str, *, creator_membership_id: str) -> LegalHold:
-    # The creator is recorded at DRAFT time and is immutable thereafter, which
-    # is how the schema guarantees a first party exists before anyone approves.
-    now = datetime.now(UTC)
-    hold = LegalHold(
-        company_id=company_id,
-        key=f"hold-{uuid4().hex[:8]}",
-        title="Preservation order",
-        authority_reference="Court order 2026/11",
-        status=LegalHoldStatus.DRAFT,
-        created_by_membership_id=creator_membership_id,
-        created_by_membership_company_id=company_id,
-        creator_label_snapshot="Records owner",
-        created_at=now,
-        updated_at=now,
+@pytest.mark.parametrize("action", ["activate", "release"])
+def test_both_lifecycle_paths_demand_step_up(client, actors, action):
+    owner, reviewer = actors
+    hold, _ = _create(client, owner)
+    path = f"{BASE}/holds/{hold['id']}/activate"
+    if action == "release":
+        hold = _activate(client, reviewer, hold)
+        proposal, _ = _proposal(client, owner, hold)
+        path = f"{BASE}/holds/{hold['id']}/release-requests/{proposal['id']}/approve"
+    with get_session_factory()() as session:
+        for row in session.scalars(
+            select(UserMFAStepUp).where(UserMFAStepUp.membership_id == reviewer["id"])
+        ):
+            row.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+        session.commit()
+    response = client.post(
+        path, headers=reviewer["headers"], json={"expected_updated_at": hold["updated_at"]}
     )
-    session.add(hold)
-    session.flush()
-    return hold
+    assert response.status_code == 403 and "step-up" in response.json()["detail"].lower()
 
 
-def _dry_run(session: Session, company_id: str, *, completed_at: datetime) -> str:
-    now = datetime.now(UTC)
-    operation = TenantDataOperation(
-        company_id=company_id,
-        operation_type="retention_purge",
-        execution_mode="dry_run",
-        status="dry_run_complete",
-        approval_status="not_requested",
-        request_scope_json={"schema_version": 2},
-        request_scope_hash="a" * 64,
-        request_evidence_ref="ticket://release",
-        requester_label_snapshot="Requester",
-        manifest_hash="b" * 64,
-        dry_run_completed_at=completed_at,
-        created_at=now,
-        updated_at=now,
+def test_the_purpose_is_registered():
+    from caseops_api.schemas.security import MFAStepUpRequest
+
+    assert (
+        MFAStepUpRequest(code="123456", purpose="legal_hold_change").purpose == "legal_hold_change"
     )
-    session.add(operation)
-    session.flush()
-    return operation.id
-
-
-class TestDualApproval:
-    def test_the_requester_cannot_approve_their_own_activation(
-        self, session: Session, context: SessionContext
-    ) -> None:
-        hold = _draft_hold(session, context.company.id, creator_membership_id=context.membership.id)
-
-        with pytest.raises(HTTPException) as excinfo:
-            activate_legal_hold(
-                session,
-                context=context,
-                hold_id=hold.id,
-                approver_membership_id=context.membership.id,
-                approver_label="Self",
-            )
-
-        assert excinfo.value.status_code == 409
-        assert excinfo.value.detail["type"] == "legal_hold_approver_must_be_distinct"
-
-    def test_a_distinct_approver_activates(
-        self, session: Session, context: SessionContext
-    ) -> None:
-        hold = _draft_hold(session, context.company.id, creator_membership_id=context.membership.id)
-        approver = _approver(session, context.company.id)
-
-        activated = activate_legal_hold(
-            session,
-            context=context,
-            hold_id=hold.id,
-            approver_membership_id=approver,
-            approver_label="Approver",
-        )
-
-        assert activated.status == LegalHoldStatus.ACTIVE
-        assert activated.activated_at is not None
-        assert activated.approved_by_membership_id == approver
-
-    def test_only_a_draft_can_be_activated(
-        self, session: Session, context: SessionContext
-    ) -> None:
-        hold = _draft_hold(session, context.company.id, creator_membership_id=context.membership.id)
-        approver = _approver(session, context.company.id)
-        activate_legal_hold(
-            session,
-            context=context,
-            hold_id=hold.id,
-            approver_membership_id=approver,
-            approver_label="Approver",
-        )
-
-        with pytest.raises(HTTPException) as excinfo:
-            activate_legal_hold(
-                session,
-                context=context,
-                hold_id=hold.id,
-                approver_membership_id=approver,
-                approver_label="Approver",
-            )
-
-        assert excinfo.value.detail["type"] == "legal_hold_not_draft"
-
-
-class TestReleaseRequiresACurrentDryRun:
-    """The clause with teeth.
-
-    Releasing a hold does not delete anything by itself - it removes the thing
-    that was BLOCKING deletion. So the operator must have seen a current
-    manifest of what becomes eligible the moment the hold lifts.
-    """
-
-    def _active_hold(self, session: Session, context: SessionContext) -> tuple[LegalHold, str]:
-        hold = _draft_hold(session, context.company.id, creator_membership_id=context.membership.id)
-        approver = _approver(session, context.company.id)
-        activate_legal_hold(
-            session,
-            context=context,
-            hold_id=hold.id,
-            approver_membership_id=approver,
-            approver_label="Approver",
-        )
-        return hold, approver
-
-    def test_release_without_a_dry_run_is_refused(
-        self, session: Session, context: SessionContext
-    ) -> None:
-        hold, approver = self._active_hold(session, context)
-
-        with pytest.raises(HTTPException) as excinfo:
-            release_legal_hold(
-                session,
-                context=context,
-                hold_id=hold.id,
-                approver_membership_id=approver,
-                approver_label="Approver",
-                release_dry_run_id=str(uuid4()),
-            )
-
-        assert excinfo.value.detail["type"] == "legal_hold_release_requires_dry_run"
-
-    def test_a_dry_run_predating_the_hold_is_refused(
-        self, session: Session, context: SessionContext
-    ) -> None:
-        # Otherwise the control is satisfied by a manifest generated before the
-        # preserved data even existed.
-        hold, approver = self._active_hold(session, context)
-        stale = _dry_run(
-            session,
-            context.company.id,
-            completed_at=datetime.now(UTC) - timedelta(days=30),
-        )
-
-        with pytest.raises(HTTPException) as excinfo:
-            release_legal_hold(
-                session,
-                context=context,
-                hold_id=hold.id,
-                approver_membership_id=approver,
-                approver_label="Approver",
-                release_dry_run_id=stale,
-            )
-
-        assert excinfo.value.detail["type"] == "legal_hold_release_dry_run_stale"
-
-    def test_another_companys_dry_run_is_refused(
-        self, session: Session, context: SessionContext
-    ) -> None:
-        # A real second company, not a fabricated id: tenant_data_operations has
-        # a foreign key on company_id, so a fake tenant proves nothing about
-        # cross-tenant behaviour - it just fails at insert.
-        hold, approver = self._active_hold(session, context)
-        other = Company(
-            name="Other Firm LLP",
-            slug=f"other-{uuid4().hex[:8]}",
-            company_type="law_firm",
-            tenant_key=uuid4().hex,
-        )
-        session.add(other)
-        session.flush()
-        foreign = _dry_run(session, other.id, completed_at=datetime.now(UTC))
-
-        with pytest.raises(HTTPException) as excinfo:
-            release_legal_hold(
-                session,
-                context=context,
-                hold_id=hold.id,
-                approver_membership_id=approver,
-                approver_label="Approver",
-                release_dry_run_id=foreign,
-            )
-
-        assert excinfo.value.detail["type"] == "legal_hold_release_requires_dry_run"
-
-    def test_a_current_dry_run_releases(
-        self, session: Session, context: SessionContext
-    ) -> None:
-        # The positive path must complete, or the control is an outage.
-        hold, approver = self._active_hold(session, context)
-        current = _dry_run(
-            session,
-            context.company.id,
-            completed_at=datetime.now(UTC) + timedelta(seconds=1),
-        )
-
-        released = release_legal_hold(
-            session,
-            context=context,
-            hold_id=hold.id,
-            approver_membership_id=approver,
-            approver_label="Approver",
-            release_dry_run_id=current,
-        )
-
-        assert released.status == LegalHoldStatus.RELEASED
-        assert released.released_at is not None
-
-    def test_the_requester_cannot_approve_their_own_release(
-        self, session: Session, context: SessionContext
-    ) -> None:
-        hold, _ = self._active_hold(session, context)
-        current = _dry_run(
-            session, context.company.id, completed_at=datetime.now(UTC) + timedelta(seconds=1)
-        )
-
-        with pytest.raises(HTTPException) as excinfo:
-            release_legal_hold(
-                session,
-                context=context,
-                hold_id=hold.id,
-                approver_membership_id=context.membership.id,
-                approver_label="Self",
-                release_dry_run_id=current,
-            )
-
-        assert excinfo.value.detail["type"] == "legal_hold_approver_must_be_distinct"
-
-
-class TestStepUpIsWired:
-    def test_both_lifecycle_paths_demand_step_up(
-        self, session: Session, context: SessionContext
-    ) -> None:
-        # Behaviour, not source text. The previous version asserted
-        # `'require_recent_step_up' in source`, which passes whether the gate is
-        # conditional or unconditional - and the conditional form let an actor
-        # with no MFA enrolment through, which is the default for a new tenant.
-        # Grepping for the call could never see that.
-        session.query(UserMFAStepUp).delete()
-        session.flush()
-
-        hold = _draft_hold(
-            session, context.company.id, creator_membership_id=context.membership.id
-        )
-        approver = _approver(session, context.company.id)
-
-        with pytest.raises(HTTPException) as activation:
-            activate_legal_hold(
-                session,
-                context=context,
-                hold_id=hold.id,
-                approver_membership_id=approver,
-                approver_label="Second partner",
-            )
-        assert activation.value.status_code == 403
-
-        assert "legal_hold_change" in str(activation.value.detail)
-
-    def test_the_purpose_is_registered(self) -> None:
-        # An unregistered purpose would be rejected by the step-up service, so
-        # the control would fail at runtime rather than at import.
-        from caseops_api.services.security import STEP_UP_PURPOSES
-
-        assert "legal_hold_change" in STEP_UP_PURPOSES
-        assert "retention_policy_activation" in STEP_UP_PURPOSES

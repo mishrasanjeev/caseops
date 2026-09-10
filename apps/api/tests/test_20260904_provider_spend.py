@@ -186,6 +186,7 @@ def test_workspace_usage_report_publishes_spend_and_remaining_by_provider(
         "label": "eCourtsIndia",
         "spent_minor": 15,
         "budget_spent_minor": 15,
+        "reserved_minor": 0,
         "budget_scope": "account",
         "monthly_limit_minor": 100_000,
         "remaining_minor": 99_985,

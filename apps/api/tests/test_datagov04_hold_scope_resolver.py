@@ -82,7 +82,9 @@ def _approval_pair(session: Session, company_id: str) -> tuple[str, str]:
     return ids[0], ids[1]
 
 
-def _hold(session: Session, company_id: str, *, key: str = "hold-1") -> LegalHold:
+def _hold(
+    session: Session, company_id: str, *, key: str = "hold-1", draft: bool = False
+) -> LegalHold:
     now = datetime.now(UTC)
     creator_id, approver_id = _approval_pair(session, company_id)
     hold = LegalHold(
@@ -90,8 +92,8 @@ def _hold(session: Session, company_id: str, *, key: str = "hold-1") -> LegalHol
         key=key,
         title="Preservation order",
         authority_reference="Court order 2026/11",
-        status=LegalHoldStatus.ACTIVE,
-        activated_at=now,
+        status=LegalHoldStatus.DRAFT if draft else LegalHoldStatus.ACTIVE,
+        activated_at=None if draft else now,
         created_by_membership_id=creator_id,
         created_by_membership_company_id=company_id,
         creator_label_snapshot="Records owner",
@@ -114,6 +116,7 @@ def _item(
     target_type: str,
     target_reference_hash: str,
 ) -> None:
+    assert hold.status == LegalHoldStatus.DRAFT
     session.add(
         LegalHoldItem(
             company_id=hold.company_id,
@@ -124,6 +127,13 @@ def _item(
             created_at=datetime.now(UTC),
         )
     )
+    session.flush()
+
+
+def _activate_fixture(session: Session, hold: LegalHold) -> None:
+    assert hold.status == LegalHoldStatus.DRAFT
+    hold.status = LegalHoldStatus.ACTIVE
+    hold.activated_at = datetime.now(UTC)
     session.flush()
 
 
@@ -142,8 +152,7 @@ class TestNoHold:
 
 
 class TestUnscopedHoldCoversEverything:
-    """An itemless hold is company-wide. This is the live path today - nothing
-    in the application writes LegalHoldItem yet - so it must not regress."""
+    """An itemless hold is company-wide and must not regress."""
 
     def test_itemless_hold_covers_any_target(
         self, session: Session, company_id: str
@@ -180,7 +189,7 @@ class TestDataClassScope:
     def test_data_class_item_covers_every_record_in_that_class(
         self, session: Session, company_id: str
     ) -> None:
-        hold = _hold(session, company_id)
+        hold = _hold(session, company_id, draft=True)
         _item(
             session,
             hold,
@@ -188,6 +197,7 @@ class TestDataClassScope:
             target_type=HOLD_TARGET_TYPE_DATA_CLASS,
             target_reference_hash=_HASH_ONE,
         )
+        _activate_fixture(session, hold)
 
         # Any record of the held class, including one the item did not name.
         assert (
@@ -205,7 +215,7 @@ class TestDataClassScope:
         self, session: Session, company_id: str
     ) -> None:
         # The narrowing that motivates the whole change.
-        hold = _hold(session, company_id)
+        hold = _hold(session, company_id, draft=True)
         _item(
             session,
             hold,
@@ -213,6 +223,7 @@ class TestDataClassScope:
             target_type=HOLD_TARGET_TYPE_DATA_CLASS,
             target_reference_hash=_HASH_ONE,
         )
+        _activate_fixture(session, hold)
 
         assert (
             resolve_hold_for_target(
@@ -230,7 +241,7 @@ class TestRecordScope:
     def test_record_item_covers_the_named_record(
         self, session: Session, company_id: str
     ) -> None:
-        hold = _hold(session, company_id)
+        hold = _hold(session, company_id, draft=True)
         _item(
             session,
             hold,
@@ -238,6 +249,7 @@ class TestRecordScope:
             target_type="tenant",
             target_reference_hash=_HASH_ONE,
         )
+        _activate_fixture(session, hold)
 
         assert (
             resolve_hold_for_target(
@@ -253,7 +265,7 @@ class TestRecordScope:
     def test_record_item_does_not_cover_a_different_record(
         self, session: Session, company_id: str
     ) -> None:
-        hold = _hold(session, company_id)
+        hold = _hold(session, company_id, draft=True)
         _item(
             session,
             hold,
@@ -261,6 +273,7 @@ class TestRecordScope:
             target_type="tenant",
             target_reference_hash=_HASH_ONE,
         )
+        _activate_fixture(session, hold)
 
         assert (
             resolve_hold_for_target(
@@ -279,7 +292,7 @@ class TestRecordScope:
         # The dangerous composition: adding a NARROW hold must never shrink the
         # coverage an existing broad hold already provides.
         broad = _hold(session, company_id, key="broad")
-        narrow = _hold(session, company_id, key="narrow")
+        narrow = _hold(session, company_id, key="narrow", draft=True)
         _item(
             session,
             narrow,
@@ -287,6 +300,7 @@ class TestRecordScope:
             target_type="tenant",
             target_reference_hash=_HASH_ONE,
         )
+        _activate_fixture(session, narrow)
 
         covering = resolve_hold_for_target(
             session,

@@ -282,7 +282,9 @@ export default function StatuteSectionDetailPage() {
             <SourceBadge source={section.section_text_source} />
           </CardTitle>
           <CardDescription>
-            {section.verification_status === "quarantined" || section.verification_status === "retired"
+            {section.verification_status === "retired"
+              ? "Retired provision. The publisher's omission or repeal record is retained; it is not selectable as operative text."
+              : section.verification_status === "quarantined"
               ? `Quarantined: ${section.quarantine_reason ?? "curator verification required"}. The text is withheld.`
               : section.verification_status === "verified_official" || section.verification_status === "verified_licensed"
                 ? `${section.source_publisher ?? "Verified publisher"}; verified published source version ${section.source_version}${section.source_sha256 ? ` (SHA-256 ${section.source_sha256.slice(0, 12)}...)` : ""}.`
@@ -290,6 +292,11 @@ export default function StatuteSectionDetailPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {authoritative && section.legal_status === "repealed" ? (
+            <p role="note" className="mb-4 text-sm text-[var(--color-mute)]">
+              Historical repealed-law edition. Verify the relevant date and repeal-and-savings provisions before relying on this text.
+            </p>
+          ) : null}
           {section.is_provisional ? (
             <div
               className="mb-4 flex items-start gap-2 rounded-[var(--radius-md)] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
@@ -307,7 +314,35 @@ export default function StatuteSectionDetailPage() {
             </div>
           ) : null}
           {authoritative && section.section_text ? (
-            <pre
+            section.structured_tables?.length ? (
+              <div className="min-w-0 space-y-4" data-testid="statute-structured-tables">
+                {section.structured_tables.map((table, index) => (
+                  <div key={`${table.title}-${index}`} className="relative max-w-full overflow-x-auto" tabIndex={0} role="region" aria-label={table.title}>
+                    <table className="w-full min-w-[720px] table-fixed border-collapse text-left text-sm">
+                      <caption className="pb-3 text-left font-semibold">{table.title}</caption>
+                      <thead>
+                        <tr>{table.columns.map((column, columnIndex) => (
+                          <th key={columnIndex} scope="col" className={`border border-[var(--color-line)] p-2 align-top ${columnIndex === 0 ? "w-20" : ""}`}>{column}</th>
+                        ))}</tr>
+                      </thead>
+                      <tbody>{table.rows.map((row) => (
+                        <tr key={row.serial} data-source-serial={row.serial}>
+                          {row.cells.map((cell, columnIndex) => columnIndex === 0 ? (
+                            <th key={columnIndex} scope="row" className="whitespace-pre-wrap break-words border border-[var(--color-line)] p-2 align-top font-normal">{cell}</th>
+                          ) : (
+                            <td key={columnIndex} className="whitespace-pre-wrap break-words border border-[var(--color-line)] p-2 align-top">{cell}</td>
+                          ))}
+                        </tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                ))}
+                <details>
+                  <summary className="cursor-pointer text-sm font-medium">Published text transcription</summary>
+                  <pre className="mt-3 whitespace-pre-wrap break-words text-sm" data-testid="statute-section-text">{section.section_text}</pre>
+                </details>
+              </div>
+            ) : <pre
               className="whitespace-pre-wrap break-words text-sm text-[var(--color-ink)]"
               data-testid="statute-section-text"
             >

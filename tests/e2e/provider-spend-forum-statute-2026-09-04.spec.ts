@@ -187,6 +187,8 @@ test.describe.serial("Ram 2026-09-04 provider, statute, and forum acceptance", (
     await expect(table).toContainText("Indian Kanoon");
     await expect(table).toContainText("1,000");
     await expect(table).toContainText("Shared account");
+    await expect(table.getByRole("columnheader", { name: "Estimated provider spend" })).toBeVisible();
+    await expect(table.getByRole("columnheader", { name: "Budget reserved" })).toBeVisible();
     expect(await usageRows()).toEqual(before);
   });
 

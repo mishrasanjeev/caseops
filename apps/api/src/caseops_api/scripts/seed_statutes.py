@@ -197,11 +197,25 @@ def _seed(session: Session) -> tuple[int, int, int, int]:
         official_sections = [
             source for (act_id, _), source in official_sources.items() if act_id == act["id"]
         ]
-        if not {section["section_number"] for section in act["sections"]}.issubset(
-            {section["section_number"] for section in official_sections}
+        official_numbers = {section["section_number"] for section in official_sections}
+        declared_placeholders = documents[act["id"]].get("retained_legacy_placeholders", [])
+        placeholders = [
+            section
+            for section in act["sections"]
+            if section["section_number"] not in official_numbers
+        ]
+        if (
+            {section["section_number"] for section in placeholders} != set(declared_placeholders)
+            or len(placeholders) != len(declared_placeholders)
+            or any(
+                section.get(field) is not None
+                for section in placeholders
+                for field in ("section_label", "section_url", "section_text", "section_text_source")
+            )
         ):
             raise ValueError("Official inventory would orphan a seeded provision identity")
-        act["sections"] = official_sections
+        # These explicitly reconciled empty legacy identities are not official source units.
+        act["sections"] = official_sections + placeholders
         act["source_url"] = documents[act["id"]]["act_url"]
     applied_verified_keys: set[tuple[str, str]] = set()
     s_ins = s_upd = sec_ins = sec_upd = 0

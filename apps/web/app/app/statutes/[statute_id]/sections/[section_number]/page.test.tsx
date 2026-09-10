@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import fixtures from "../../../../../../../../tests/fixtures/statutes/structured-schedule-api.json";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -30,6 +31,40 @@ function withClient(children: ReactNode) {
 describe("StatuteSectionDetailPage", () => {
   beforeEach(() => {
     fetchStatuteSectionMock.mockReset();
+  });
+
+  it.each(["ndps-1985", "specific-relief-1963"] as const)("preserves every canonical source cell for %s", async (act) => {
+    const fixture = fixtures[act];
+    fetchStatuteSectionMock.mockResolvedValue(fixture);
+    render(withClient(<StatuteSectionDetailPage />));
+    const table = await screen.findByRole("table");
+    const source = fixture.section.structured_tables[0];
+    expect(within(table).getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual(source.columns);
+    expect(table.querySelectorAll("tbody tr")).toHaveLength(source.rows.length);
+    for (const row of source.rows) {
+      const actual = table.querySelector(`tr[data-source-serial="${row.serial}"]`)!;
+      expect(Array.from(actual.children, (cell) => cell.textContent)).toEqual(row.cells);
+    }
+    fireEvent.click(screen.getByText("Published text transcription"));
+    expect(screen.getByTestId("statute-section-text").textContent).toBe(fixture.section.section_text);
+    expect(screen.queryByText(/Verified statutory text unavailable/)).not.toBeInTheDocument();
+  });
+
+  it.each(["ipc-1860", "iea-1872"] as const)("labels the verified historical edition of %s", async (act) => {
+    fetchStatuteSectionMock.mockResolvedValue(fixtures[act]);
+    render(withClient(<StatuteSectionDetailPage />));
+    expect(await screen.findByText(/Historical repealed-law edition/)).toBeVisible();
+    expect(screen.getByTestId("statute-section-text").textContent).toBe(fixtures[act].section.section_text);
+  });
+
+  it.each(["retired", "quarantined", "unverified"])("withholds stale source tables when %s", async (status) => {
+    const fixture = structuredClone(fixtures["ndps-1985"]);
+    fixture.section.verification_status = status;
+    fetchStatuteSectionMock.mockResolvedValue(fixture);
+    render(withClient(<StatuteSectionDetailPage />));
+    expect(await screen.findByText(/Verified statutory text unavailable/)).toBeVisible();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("statute-section-text")).not.toBeInTheDocument();
   });
 
   it("renders bare text when present", async () => {

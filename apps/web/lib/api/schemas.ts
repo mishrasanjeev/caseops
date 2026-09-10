@@ -4063,6 +4063,7 @@ export const billingProviderSpendRow = z.object({
   label: z.string(),
   spent_minor: z.number().int().nonnegative(),
   budget_spent_minor: z.number().int().nonnegative(),
+  reserved_minor: z.number().int().nonnegative().default(0),
   budget_scope: z.enum(["account", "provider"]),
   monthly_limit_minor: z.number().int().nonnegative().nullable(),
   remaining_minor: z.number().int().nonnegative().nullable(),

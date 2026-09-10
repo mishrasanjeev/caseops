@@ -4,6 +4,7 @@ import fnmatch
 import hashlib
 import json
 import os
+import shlex
 import shutil
 import socket
 import subprocess
@@ -634,13 +635,52 @@ def test_workstation_docker_gate_is_migration_first_and_exact_release() -> None:
     assert '"--skip-migrations"' in e2e_helpers
 
 
+def _assert_complete_postgres_selection(command: str) -> None:
+    tokens = shlex.split(command)
+    assert tokens.count("pytest") == 1, command
+    arguments = tokens[tokens.index("pytest") + 1:]
+    assert arguments[:3] == ["-q", "-m", "postgres"], command
+    reporting = arguments[3:]
+    assert not reporting or (
+        len(reporting) == 1
+        and reporting[0].startswith("--junitxml=")
+        and reporting[0].removeprefix("--junitxml=").strip()
+    ), command
+
+
 def test_all_postgres_marked_modules_are_selected_locally_and_in_ci() -> None:
     for path in ("scripts/verify-docker.ps1", ".github/workflows/ci.yml"):
         lines = _read_repo_text(path).splitlines()
         commands = [line.strip() for line in lines if "pytest" in line and "-m postgres" in line]
         assert len(commands) == 1, path
-        assert commands[0].endswith("pytest -q -m postgres"), path
-        assert "test_postgres_validation.py" not in commands[0], path
+        _assert_complete_postgres_selection(commands[0])
+
+
+@pytest.mark.parametrize("command", [
+    "uv run python -m pytest -q -m postgres",
+    '& $ApiPython -m pytest -q -m postgres "--junitxml=$PostgresReport"',
+    'python -m pytest -q -m postgres "--junitxml=reports/all postgres.xml"',
+])
+def test_complete_postgres_selector_accepts_reporting_only(command: str) -> None:
+    _assert_complete_postgres_selection(command)
+
+
+@pytest.mark.parametrize("arguments", [
+    "-q -m postgres tests/test_postgres_validation.py",
+    "-q -m postgres tests/test_hearing_backfill_postgres.py::test_one_case",
+    "-q -m postgres -k migration",
+    "-q -m postgres --ignore=tests/test_hearing_backfill_postgres.py",
+    "-q -m postgres --deselect=tests/test_postgres_validation.py::test_one_case",
+    '-q -m "postgres and not slow"',
+    "-q -m postgres --junitxml=report.xml tests/test_postgres_validation.py",
+    "-q -m postgres --junitxml=report.xml --collect-only",
+    "-q -m postgres --junitxml=",
+])
+def test_complete_postgres_selector_rejects_narrowed_or_nonexecuting_gates(
+    arguments: str,
+) -> None:
+    with pytest.raises(AssertionError):
+        _assert_complete_postgres_selection(f"python -m pytest {arguments}")
 
 
 def test_postgres_ci_requires_complete_disjoint_shard_results_before_browser_acceptance() -> None:
@@ -652,6 +692,13 @@ def test_postgres_ci_requires_complete_disjoint_shard_results_before_browser_acc
     step = next(item for item in shards["steps"] if item.get("name") == "Pytest -m postgres")
     assert "-p tests.postgres_sharding" in step["env"]["PYTEST_ADDOPTS"]
     assert "--postgres-shards=4" in step["env"]["PYTEST_ADDOPTS"]
+    assert step["env"]["CASEOPS_TEST_RESULT_JOURNAL"] == (
+        "postgres-shard-${{ matrix.shard }}.jsonl"
+    )
+    upload = next(item for item in shards["steps"]
+                  if item.get("name") == "Upload exact PostgreSQL collection and results")
+    assert "postgres-shard-${{ matrix.shard }}.jsonl" in upload["with"]["path"]
+    assert upload["if"] == "always()"
     aggregate = workflow["jobs"]["postgres-validation"]
     assert aggregate["needs"] == ["postgres-validation-shards"]
     assert any("tests.postgres_sharding postgres-evidence --total 4" in item.get("run", "")
@@ -672,6 +719,13 @@ def test_forum_alias_journey_is_discovered_with_an_isolated_docker_founder() -> 
     assert 'page.goto("/app/platform-admin/forum-aliases")' in spec
     assert "test.info().project.use.baseURL" in spec
     assert "localhost" in spec
+
+
+def test_dated_hearing_statute_and_summary_regressions_remain_in_app_discovery() -> None:
+    config = _read_repo_text("playwright.app.config.ts")
+    assert r"/ram-\d{4}-\d{2}-\d{2}-(?:statutes|hearings)\.spec\.ts$/" in config
+    assert r"/case-tracking-summary-\d{4}-\d{2}-\d{2}\.spec\.ts$/" in config
+    assert 'from "./playwright.app.config"' in _read_repo_text("playwright.docker.config.ts")
 
 
 @pytest.mark.parametrize("dockerfile", ["apps/api/Dockerfile", "apps/web/Dockerfile"])
@@ -936,6 +990,56 @@ def _write_fake_executable(path: Path, source: str) -> None:
             "Deployment fixture is not executable; use an exec-enabled test "
             "filesystem so PATH cannot fall through to a real CLI."
         )
+
+
+@pytest.mark.parametrize(
+    ("dependencies", "expected_flags"),
+    [('{"api":["clamav"]}', ["--depends-on", ""]), ("{}", []),
+     ("", []), ('{"worker":["clamav"]}', [])],
+)
+def test_api_startup_dependency_removal_is_rerunnable(
+    tmp_path: Path, dependencies: str, expected_flags: list[str]
+) -> None:
+    script = _read_repo_text("scripts/deploy-prod.sh")
+    snippet = script.split("API_DEPENDENCY_FLAGS=()", 1)[1].split(
+        "gcloud run deploy caseops-api", 1
+    )[0]
+    fake = tmp_path / "gcloud"
+    _write_fake_executable(
+        fake, "#!/bin/sh\nprintf '%s' \"$TEST_DEPENDENCIES\"\n"
+    )
+    env = {**os.environ, "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}",
+           "TEST_DEPENDENCIES": dependencies}
+    result = subprocess.run(
+        [_find_working_bash(), "-c", "set -euo pipefail\nREGION=local\nPROJECT=offline\n"
+         "API_DEPENDENCY_FLAGS=()" + snippet
+         + '\nprintf "<%s>" "${API_DEPENDENCY_FLAGS[@]}"'],
+        env=env, capture_output=True, text=True, timeout=5, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ("".join(f"<{flag}>" for flag in expected_flags) or "<>")
+
+
+@pytest.mark.parametrize("dependencies", ["invalid-json", "[]", "null"])
+def test_api_startup_dependency_rejects_invalid_runtime_metadata(
+    tmp_path: Path, dependencies: str
+) -> None:
+    script = _read_repo_text("scripts/deploy-prod.sh")
+    snippet = script.split("API_DEPENDENCY_FLAGS=()", 1)[1].split(
+        "gcloud run deploy caseops-api", 1
+    )[0]
+    _write_fake_executable(
+        tmp_path / "gcloud", "#!/bin/sh\nprintf '%s' \"$TEST_DEPENDENCIES\"\n"
+    )
+    result = subprocess.run(
+        [_find_working_bash(), "-c", "set -euo pipefail\nREGION=local\nPROJECT=offline\n"
+         "API_DEPENDENCY_FLAGS=()" + snippet + "\nprintf 'UNSAFE_CONTINUATION'"],
+        env={**os.environ, "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}",
+             "TEST_DEPENDENCIES": dependencies},
+        capture_output=True, text=True, timeout=5, check=False,
+    )
+    assert result.returncode != 0
+    assert "UNSAFE_CONTINUATION" not in result.stdout
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX mount execution policy")
@@ -1382,6 +1486,9 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
   FAKE_LLM_PROVIDER='openai'
   FAKE_LLM_SECRET='caseops-openai-api-key'
   FAKE_SERVICE_MIN='4'
+  FAKE_SCANNER_REQUIRED='true'
+  FAKE_API_PROBE_PERIOD='2'
+  FAKE_STARTUP_DEPENDENCIES='{}'
   if [[ "${FAKE_TRAFFIC_MODE}" == "drift" ]]; then
     FAKE_TRAFFIC_REVISION='caseops-api-old'
     FAKE_TRAFFIC_LATEST='false'
@@ -1397,12 +1504,25 @@ elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"--format=json"* ]
     FAKE_LLM_PROVIDER='mock'
   elif [[ "${FAKE_TRAFFIC_MODE}" == "llm-secret-drift" ]]; then
     FAKE_LLM_SECRET='wrong-llm-secret'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "scanner-disabled" ]]; then
+    FAKE_SCANNER_REQUIRED='false'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "api-probe-drift" ]]; then
+    FAKE_API_PROBE_PERIOD='240'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "startup-serialized" ]]; then
+    FAKE_STARTUP_DEPENDENCIES='{\\"api\\":[\\"clamav\\"]}'
+  elif [[ "${FAKE_TRAFFIC_MODE}" == "startup-malformed" ]]; then
+    FAKE_STARTUP_DEPENDENCIES='[]'
   fi
   printf '%s' \
     '{"metadata":{"generation":2,"annotations":{' \
     '"run.googleapis.com/minScale":"' "${FAKE_SERVICE_MIN}" '"}},' \
     '"spec":{"traffic":[{"latestRevision":true,"percent":100}],' \
-    '"template":{"spec":{"containers":[{"name":"api","env":[' \
+    '"template":{"metadata":{"annotations":{' \
+    '"run.googleapis.com/container-dependencies":"' "${FAKE_STARTUP_DEPENDENCIES}" \
+    '"}},"spec":{"containers":[{"name":"api",' \
+    '"startupProbe":{"tcpSocket":{"port":8080},"periodSeconds":' \
+    "${FAKE_API_PROBE_PERIOD}" ',"timeoutSeconds":1,"failureThreshold":120},"env":[' \
+    '{"name":"CASEOPS_CLAMAV_REQUIRED","value":"' "${FAKE_SCANNER_REQUIRED}" '"},' \
     '{"name":"CASEOPS_RELEASE_SHA",' \
     '"value":"abcdef1234567890abcdef1234567890abcdef12"},' \
     '{"name":"CASEOPS_IP_RULE_GOVERNANCE_ENABLED","value":"' \
@@ -2160,6 +2280,10 @@ def test_fingerprint_wrapper_fails_on_local_expected_digest_mismatch(
         ("secret-drift", "TRAFFIC/REVISION DRIFT"),
         ("llm-provider-drift", "TRAFFIC/REVISION DRIFT"),
         ("llm-secret-drift", "TRAFFIC/REVISION DRIFT"),
+        ("scanner-disabled", "TRAFFIC/REVISION DRIFT"),
+        ("api-probe-drift", "TRAFFIC/REVISION DRIFT"),
+        ("startup-serialized", "TRAFFIC/REVISION DRIFT"),
+        ("startup-malformed", "TRAFFIC/REVISION DRIFT"),
         ("image-drift", "REVISION IMAGE DRIFT"),
     ],
 )

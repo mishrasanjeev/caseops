@@ -38,7 +38,7 @@
     {
       "scheduler_name": "caseops-case-tracking-poll-1800-ist",
       "run_job_name": "caseops-case-tracking-poll",
-      "schedule": "0 18 * * *",
+      "schedule": "*/5 18-19 * * *",
       "time_zone": "Asia/Kolkata",
       "desired_state": "ENABLED",
       "task_timeout_seconds": 1800,

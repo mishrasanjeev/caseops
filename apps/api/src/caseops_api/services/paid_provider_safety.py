@@ -75,7 +75,7 @@ def paid_provider_block_reason(
     # automated. Human users of long-lived QA workspaces must retain paid
     # access. Only unattended scheduled polling uses the static tenant filter.
     if scheduled_tenant_filter:
-        tenant_reason = paid_provider_test_tenant_reason(context)
+        tenant_reason = scheduled_paid_provider_tenant_reason(context, base_url=base_url)
         if tenant_reason is not None:
             return tenant_reason
     # A leaked live provider configuration must not turn a local pytest run
@@ -83,6 +83,16 @@ def paid_provider_block_reason(
     if os.environ.get("PYTEST_CURRENT_TEST"):
         return "automated_test_process"
     return None
+
+
+def scheduled_paid_provider_tenant_reason(
+    context: SessionContext, *, base_url: str | None
+) -> str | None:
+    """Report unattended tenant policy independently of the current HTTP request."""
+    hostname = urlsplit((base_url or "").strip()).hostname
+    if (hostname or "").lower() not in _PAID_PROVIDER_HOSTS:
+        return None
+    return paid_provider_test_tenant_reason(context)
 
 
 def assert_paid_provider_call_allowed(
@@ -121,4 +131,5 @@ __all__ = [
     "assert_paid_provider_call_allowed",
     "paid_provider_block_reason",
     "paid_provider_test_tenant_reason",
+    "scheduled_paid_provider_tenant_reason",
 ]

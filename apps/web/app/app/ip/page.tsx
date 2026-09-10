@@ -263,6 +263,7 @@ export default function IpDocketPage() {
       />
 
       <Link href="/app/ip/patents" className="w-fit text-sm text-brand-700 underline">Patent disclosures</Link>
+      <Link href="/app/ip/specialist" className="w-fit text-sm text-brand-700 underline">Specialist IP intake</Link>
 
       {readiness.data.features.some((feature) => !feature.available) ? (
         <IpAutomationReadiness features={readiness.data.features} />

@@ -57,7 +57,6 @@ from caseops_api.services.assignment_memberships import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.governance_integrity_scan import run_integrity_scan
-from caseops_api.services.security import require_step_up_always
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.tenant_offboarding import build_offboarding_plan
 
@@ -417,34 +416,6 @@ def export_exclusions() -> list[dict[str, str]]:
     return [dict(entry) for entry in EXPORT_EXCLUSIONS]
 
 
-def _as_utc(value: datetime | None) -> datetime | None:
-    """Coerce a stored timestamp to UTC-aware.
-
-    SQLite returns naive datetimes while the application writes aware ones, so
-    comparing a stored value against a fresh one raises TypeError. Normalising
-    at the comparison keeps the rule expressible on both backends.
-    """
-    if value is None:
-        return None
-    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
-
-
-def _require_distinct_approver(
-    *, requester_membership_id: str, approver_membership_id: str
-) -> None:
-    if requester_membership_id == approver_membership_id:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "type": "legal_hold_approver_must_be_distinct",
-                "detail": (
-                    "The person requesting a legal hold change cannot approve it. "
-                    "DATA-GOV-05 requires configured dual approval."
-                ),
-            },
-        )
-
-
 def activate_legal_hold(
     session: Session,
     *,
@@ -453,60 +424,24 @@ def activate_legal_hold(
     approver_membership_id: str,
     approver_label: str,
 ) -> LegalHold:
-    """Activate a drafted hold under step-up and dual approval (DATA-GOV-05).
+    """Delegate legacy callers to the authenticated independent hold writer."""
 
-    The database already refuses an active hold without a distinct
-    company-scoped approver. That constraint is the guarantee; this function is
-    where the SECOND control lives - step-up - which a CHECK constraint cannot
-    express because it is a property of the session, not the row.
-    """
+    # Compatibility callers cannot nominate an absent approver. The HTTP
+    # command and this adapter delegate to the same authenticated writer.
+    from caseops_api.services.legal_hold_workflow import activate_hold
 
-    require_step_up_always(session, context=context, purpose="legal_hold_change")
-    hold = session.get(LegalHold, hold_id)
-    if hold is None or hold.company_id != context.company.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Legal hold not found.")
-    if hold.status != LegalHoldStatus.DRAFT:
+    if approver_membership_id != context.membership.id:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "type": "legal_hold_not_draft",
-                "detail": f"Only a draft hold can be activated; this one is {hold.status}.",
-            },
+            status_code=403, detail="The signed-in person must perform the approval."
         )
-    _require_distinct_approver(
-        requester_membership_id=context.membership.id,
-        approver_membership_id=approver_membership_id,
+    del approver_label
+    retained = session.get(LegalHold, hold_id)
+    if retained is None or retained.company_id != context.company.id:
+        raise HTTPException(status_code=404, detail="Legal hold not found.")
+    activate_hold(
+        session, context=context, hold_id=hold_id, expected_updated_at=retained.updated_at
     )
-
-    # The creator columns are immutable by trigger: `created_by_membership_id`,
-    # its company, and the creator label are fixed when the hold is DRAFTED.
-    # That is the schema encoding dual approval end to end - the requester is
-    # recorded before anyone can approve, so activation cannot retroactively
-    # nominate one. An earlier version of this function set them here and the
-    # trigger correctly rejected it.
-    if hold.created_by_membership_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "type": "legal_hold_has_no_recorded_requester",
-                "detail": (
-                    "A hold cannot be activated without the membership that drafted "
-                    "it, because dual approval is meaningless without a first party."
-                ),
-            },
-        )
-    _require_distinct_approver(
-        requester_membership_id=hold.created_by_membership_id,
-        approver_membership_id=approver_membership_id,
-    )
-
-    hold.status = LegalHoldStatus.ACTIVE
-    hold.activated_at = _now()
-    hold.approved_by_membership_id = approver_membership_id
-    hold.approved_by_membership_company_id = context.company.id
-    hold.approver_label_snapshot = approver_label
-    session.flush()
-    return hold
+    return retained
 
 
 def release_legal_hold(
@@ -518,76 +453,12 @@ def release_legal_hold(
     approver_label: str,
     release_dry_run_id: str,
 ) -> LegalHold:
-    """Release a hold under step-up, dual approval, and a fresh dry run.
+    """Retired nomination-based command; release requires an immutable proposal."""
 
-    DATA-GOV-05's last clause is the one with teeth: "release never deletes
-    immediately without a new dry-run and waiting/approval policy". Releasing a
-    hold does not itself delete anything, but it removes the thing that was
-    blocking deletion - so the operator must have seen a CURRENT manifest of
-    what becomes eligible the moment the hold lifts. A manifest produced before
-    the hold, or for a different scope, does not answer that question.
-
-    The dry run is required to be this company's, to be complete, and to
-    postdate the hold's activation. Without the last condition an operator could
-    satisfy the control with a manifest generated before the preserved data
-    even existed.
-    """
-
-    require_step_up_always(session, context=context, purpose="legal_hold_change")
-    hold = session.get(LegalHold, hold_id)
-    if hold is None or hold.company_id != context.company.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Legal hold not found.")
-    if hold.status != LegalHoldStatus.ACTIVE:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "type": "legal_hold_not_active",
-                "detail": f"Only an active hold can be released; this one is {hold.status}.",
-            },
-        )
-    _require_distinct_approver(
-        requester_membership_id=context.membership.id,
-        approver_membership_id=approver_membership_id,
+    raise HTTPException(
+        status_code=503,
+        detail="Release requires an immutable proposal and authenticated independent approval.",
     )
-
-    dry_run = session.get(TenantDataOperation, release_dry_run_id)
-    if (
-        dry_run is None
-        or dry_run.company_id != context.company.id
-        or dry_run.status != "dry_run_complete"
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "type": "legal_hold_release_requires_dry_run",
-                "detail": (
-                    "Releasing a hold requires a completed dry run for this company "
-                    "showing what becomes eligible once the hold lifts."
-                ),
-            },
-        )
-    activated_at = _as_utc(hold.activated_at)
-    dry_run_completed_at = _as_utc(dry_run.dry_run_completed_at)
-    if activated_at is not None and dry_run_completed_at is not None:
-        if dry_run_completed_at < activated_at:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={
-                    "type": "legal_hold_release_dry_run_stale",
-                    "detail": (
-                        "The dry run predates the hold, so it cannot describe what "
-                        "the hold is preserving. Run a new one."
-                    ),
-                },
-            )
-
-    hold.status = LegalHoldStatus.RELEASED
-    hold.released_at = _now()
-    hold.approved_by_membership_id = approver_membership_id
-    hold.approved_by_membership_company_id = context.company.id
-    hold.approver_label_snapshot = approver_label
-    session.flush()
-    return hold
 
 
 def purge_dependency_plan(data_class_ids: Sequence[str]) -> dict[str, Any]:

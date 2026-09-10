@@ -1,21 +1,106 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import re
-from dataclasses import dataclass, field
-from datetime import date, datetime
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass, field, replace
+from datetime import UTC, date, datetime
 from typing import Protocol
 from urllib.parse import quote
 
 import httpx
 
 from caseops_api.core.settings import get_settings
-from caseops_api.services.http_retries import request_with_retries
+from caseops_api.services.hearing_matching import (
+    MAX_MATCH_CANDIDATES,
+    HearingIdentity,
+    provider_identity,
+    search_number,
+)
+from caseops_api.services.http_retries import RETRYABLE_READ_STATUS_CODES
+
+PROVIDER_REQUEST_BUDGET_SECONDS = 30.0
+PROVIDER_BULK_BUDGET_SECONDS = 120.0
+_MAX_PROVIDER_RESPONSE_BYTES = 8 * 1024 * 1024
+_MAX_PROVIDER_SOURCE_BYTES = 32 * 1024 * 1024
+_PROVIDER_PENDING_MESSAGE = (
+    "Provider refresh is queued; automatic status recovery is scheduled. [provider_pending]"
+)
+_TRANSPORT_DEADLINE: ContextVar[float | None] = ContextVar("case_tracking_deadline", default=None)
+
+
+@contextmanager
+def case_tracking_transport_budget(seconds: float = PROVIDER_BULK_BUDGET_SECONDS) -> Iterator[None]:
+    current = _TRANSPORT_DEADLINE.get()
+    deadline = time.monotonic() + seconds
+    token = _TRANSPORT_DEADLINE.set(min(current, deadline) if current is not None else deadline)
+    try:
+        yield
+    finally:
+        _TRANSPORT_DEADLINE.reset(token)
+
+
+def _remaining_transport_budget(maximum: float) -> float:
+    deadline = _TRANSPORT_DEADLINE.get()
+    remaining = min(maximum, deadline - time.monotonic()) if deadline is not None else maximum
+    if remaining <= 0:
+        raise CaseTrackingProviderError(
+            "Case tracking provider total deadline exceeded.", response_class="timeout"
+        )
+    return remaining
 
 
 class CaseTrackingProviderUnavailable(RuntimeError):
     pass
+
+
+def download_provider_source(
+    *,
+    url: str,
+    token: str,
+    transport: httpx.AsyncBaseTransport | None = None,
+    budget_seconds: float = PROVIDER_REQUEST_BUDGET_SECONDS,
+) -> httpx.Response:
+    if not 0 < budget_seconds <= PROVIDER_REQUEST_BUDGET_SECONDS:
+        raise ValueError("The source deadline must fit the provider request budget.")
+
+    async def download() -> httpx.Response:
+        try:
+            async with (
+                asyncio.timeout(_remaining_transport_budget(budget_seconds)),
+                httpx.AsyncClient(
+                    timeout=budget_seconds, follow_redirects=False, transport=transport
+                ) as client,
+                client.stream(
+                    "GET",
+                    url,
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Accept": "application/pdf,application/octet-stream,*/*",
+                    },
+                ) as response,
+            ):
+                response.raise_for_status()
+                content = bytearray()
+                async for chunk in response.aiter_bytes():
+                    if len(content) + len(chunk) > _MAX_PROVIDER_SOURCE_BYTES:
+                        raise httpx.DecodingError("Provider source exceeds the supported size.")
+                    content.extend(chunk)
+                return httpx.Response(
+                    response.status_code,
+                    headers=response.headers,
+                    content=bytes(content),
+                    request=response.request,
+                )
+        except TimeoutError as exc:
+            raise httpx.ReadTimeout("Provider source total deadline exceeded.") from exc
+
+    return asyncio.run(download())
 
 
 class CaseTrackingProviderError(RuntimeError):
@@ -25,10 +110,14 @@ class CaseTrackingProviderError(RuntimeError):
         *,
         response_class: str = "provider_error",
         http_status_code: int | None = None,
+        confirmed_cost_minor: int | None = None,
+        uncertain_charge: bool = False,
     ) -> None:
         super().__init__(message)
         self.response_class = response_class
         self.http_status_code = http_status_code
+        self.confirmed_cost_minor = confirmed_cost_minor
+        self.uncertain_charge = uncertain_charge
 
 
 def _http_error_response_class(exc: httpx.HTTPError) -> str:
@@ -64,6 +153,7 @@ class CaseSearchQuery:
     court_code: str | None = None
     state: str | None = None
     court_name: str | None = None
+    require_complete_results: bool = False
 
 
 @dataclass(frozen=True)
@@ -95,6 +185,7 @@ class ProviderCaseSnapshot:
     hearings: list[ProviderCaseEvent] = field(default_factory=list)
     source_url: str | None = None
     metadata: dict[str, object] = field(default_factory=dict)
+    matching_identity: HearingIdentity | None = None
 
 
 @dataclass(frozen=True)
@@ -102,6 +193,8 @@ class ProviderBulkRefreshResult:
     snapshots: list[ProviderCaseSnapshot]
     errors: dict[str, str] = field(default_factory=dict)
     provider_call_count: int = 1
+    confirmed_cost_minor_by_cnr: dict[str, int] = field(default_factory=dict)
+    uncertain_charge_cnrs: set[str] = field(default_factory=set)
 
 
 class CaseTrackingProvider(Protocol):
@@ -189,7 +282,10 @@ def _events(raw: object, *, prefix: str) -> list[ProviderCaseEvent]:
                 source_record_key=f"{prefix}:{source_key}",
                 title=title,
                 event_date=_parse_date(
-                    item.get("date") or item.get("order_date") or item.get("judgment_date")
+                    (item.get("hearingDate") if prefix == "hearing" else None)
+                    or item.get("date")
+                    or item.get("order_date")
+                    or item.get("judgment_date")
                 ),
                 source_url=_compact(item.get("source_url") or item.get("pdf_url"), limit=800),
                 text=source_text,
@@ -219,6 +315,15 @@ def _data_payload(payload: object) -> object:
     if isinstance(payload, dict) and "data" in payload:
         return payload["data"]
     return payload
+
+
+def _json_payload(response: httpx.Response) -> object:
+    try:
+        return response.json()
+    except ValueError as exc:
+        raise CaseTrackingProviderError(
+            "Case tracking provider returned invalid JSON.", response_class="parse_error"
+        ) from exc
 
 
 def _first_dict(*values: object) -> dict[str, object] | None:
@@ -442,8 +547,10 @@ def _snapshot_from_payload(
     # (2). A valid CNR carries the canonical six-character court code, so use
     # it when the payload does not provide a search-ready value. Search results
     # already expose the canonical ``courtCode`` and retain it above.
-    if cnr and re.fullmatch(r"[A-Z]{4}\d{12}", cnr.upper()) and (
-        not provider_court_code or provider_court_code.isdigit()
+    if (
+        cnr
+        and re.fullmatch(r"[A-Z]{4}\d{12}", cnr.upper())
+        and (not provider_court_code or provider_court_code.isdigit())
     ):
         provider_court_code = cnr[:6].upper()
     next_hearing_fields = (
@@ -515,6 +622,18 @@ def _snapshot_from_payload(
                 "hearing_event_count": len(hearings),
             },
         },
+        matching_identity=replace(
+            provider_identity(case, descriptions_dict),
+            cnr=cnr,
+            court_code=provider_court_code,
+            case_number=_compact(
+                case.get("registrationNumber") or case.get("case_number") or case.get("caseNumber"),
+                limit=120,
+            ),
+            court_name=_court_name(
+                case, descriptions_dict, court_code_override=provider_court_code
+            ),
+        ),
     )
 
 
@@ -526,11 +645,19 @@ class EcourtsIndiaApiProvider:
         *,
         base_url: str,
         token: str,
-        transport: httpx.BaseTransport | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
+        request_budget_seconds: float = PROVIDER_REQUEST_BUDGET_SECONDS,
+        bulk_budget_seconds: float = PROVIDER_BULK_BUDGET_SECONDS,
     ) -> None:
+        if not 0 < request_budget_seconds <= PROVIDER_REQUEST_BUDGET_SECONDS:
+            raise ValueError("The request deadline must fit the provider operation budget.")
+        if not 0 < bulk_budget_seconds <= PROVIDER_BULK_BUDGET_SECONDS:
+            raise ValueError("The bulk deadline must fit the provider operation budget.")
         self.base_url = base_url.rstrip("/")
         self.token = token
         self.transport = transport
+        self.request_budget_seconds = request_budget_seconds
+        self.bulk_budget_seconds = bulk_budget_seconds
 
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.token}", "Accept": "application/json"}
@@ -540,16 +667,63 @@ class EcourtsIndiaApiProvider:
         partner_base = base if base.endswith("/api/partner") else f"{base}/api/partner"
         return f"{partner_base}{path}"
 
-    def _client(self) -> httpx.Client:
-        return httpx.Client(
-            timeout=30,
-            follow_redirects=True,
+    def _client(self) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            timeout=self.request_budget_seconds,
+            follow_redirects=False,
             transport=self.transport,
         )
+
+    async def _request(
+        self, client: httpx.AsyncClient, method: str, path: str, **kwargs: object
+    ) -> httpx.Response:
+        # Only a received failed HTTP response can be retried without an unknown
+        # paid outcome. The caller's absolute deadline includes sleep and body.
+        attempts = 3 if method == "GET" else 1
+        for attempt in range(attempts):
+            async with client.stream(
+                method, self._url(path), headers=self._headers(), **kwargs
+            ) as streamed:
+                content = bytearray()
+                async for chunk in streamed.aiter_bytes():
+                    if len(content) + len(chunk) > _MAX_PROVIDER_RESPONSE_BYTES:
+                        raise CaseTrackingProviderError(
+                            "Case tracking provider response exceeded the supported size.",
+                            response_class="parse_error",
+                        )
+                    content.extend(chunk)
+                response = httpx.Response(
+                    streamed.status_code,
+                    headers=streamed.headers,
+                    content=bytes(content),
+                    request=streamed.request,
+                )
+            if response.status_code not in RETRYABLE_READ_STATUS_CODES or attempt == attempts - 1:
+                response.raise_for_status()
+                return response
+            await asyncio.sleep(0.25 * 2**attempt)
+        raise AssertionError("Provider retry loop must return or raise.")  # pragma: no cover
+
+    async def _bounded_request(self, method: str, path: str, **kwargs: object) -> httpx.Response:
+        try:
+            async with (
+                asyncio.timeout(_remaining_transport_budget(self.request_budget_seconds)),
+                self._client() as client,
+            ):
+                return await self._request(client, method, path, **kwargs)
+        except TimeoutError as exc:
+            raise httpx.ReadTimeout("Case tracking provider total deadline exceeded.") from exc
 
     def search_cases(self, *, query: CaseSearchQuery) -> list[ProviderCaseSnapshot]:
         if query.cnr_number:
             return [self.get_case_by_cnr(cnr=query.cnr_number)]
+        if query.require_complete_results and not search_number(
+            HearingIdentity(case_number=query.case_number)
+        ):
+            raise CaseTrackingProviderError(
+                "A public case or filing number with year is required for automatic matching.",
+                response_class="match_validation_failed",
+            )
         search_params = {
             key: value
             for key, value in {
@@ -557,29 +731,46 @@ class EcourtsIndiaApiProvider:
                 # v4 exact case-number lookup is a structured filter. Sending
                 # a case number as general full text can return HTTP 200 with
                 # zero results, which is not a valid round-trip from Case Detail.
-                "caseNumbers": query.case_number,
+                "caseNumbers": search_number(HearingIdentity(case_number=query.case_number))
+                if query.require_complete_results
+                else query.case_number,
                 "litigants": query.query,
                 "courtCodes": query.court_code,
                 "state": query.state,
-                "courtName": query.court_name,
+                "courtName": None if query.require_complete_results else query.court_name,
                 "pageSize": 20,
             }.items()
             if value is not None
         }
         try:
-            with self._client() as client:
-                response = request_with_retries(
-                    "GET",
-                    self._url("/search"),
-                    client=client,
-                    params=search_params,
-                    headers=self._headers(),
-                )
+            response = asyncio.run(self._bounded_request("GET", "/search", params=search_params))
         except httpx.HTTPError as exc:
             raise _provider_http_error("Case tracking provider search failed.", exc) from exc
-        payload = response.json()
+        payload = _json_payload(response)
         data = _data_payload(payload)
         rows = data.get("results") if isinstance(data, dict) else data
+        if query.require_complete_results:
+            if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+                raise CaseTrackingProviderError(
+                    "The provider search returned malformed match candidates.",
+                    response_class="parse_error",
+                )
+            total = data.get("totalHits") if isinstance(data, dict) else None
+            has_next = data.get("hasNextPage") if isinstance(data, dict) else None
+            if type(total) is not int or total < len(rows) or type(has_next) is not bool:
+                raise CaseTrackingProviderError(
+                    "Invalid provider search completeness.", response_class="parse_error"
+                )
+            if (
+                has_next
+                or (isinstance(total, int) and total > len(rows))
+                or len(rows) > MAX_MATCH_CANDIDATES
+            ):
+                raise CaseTrackingProviderError(
+                    "The bounded provider search is incomplete; "
+                    "refine the court and case identifiers.",
+                    response_class="ambiguous_match",
+                )
         if not isinstance(rows, list):
             rows = [data] if isinstance(data, dict) else []
         descriptions = (
@@ -610,16 +801,10 @@ class EcourtsIndiaApiProvider:
 
     def get_case_by_cnr(self, *, cnr: str) -> ProviderCaseSnapshot:
         try:
-            with self._client() as client:
-                response = request_with_retries(
-                    "GET",
-                    self._url(f"/case/{quote(cnr)}"),
-                    client=client,
-                    headers=self._headers(),
-                )
+            response = asyncio.run(self._bounded_request("GET", f"/case/{quote(cnr)}"))
         except httpx.HTTPError as exc:
             raise _provider_http_error("Case tracking provider refresh failed.", exc) from exc
-        payload = response.json()
+        payload = _json_payload(response)
         if not isinstance(payload, dict):
             raise CaseTrackingProviderError("Case tracking provider returned invalid data.")
         return _snapshot_from_payload(
@@ -629,39 +814,180 @@ class EcourtsIndiaApiProvider:
         )
 
     def refresh_cases(self, *, cnrs: list[str]) -> ProviderBulkRefreshResult:
+        return asyncio.run(self._refresh_cases(cnrs=list(dict.fromkeys(cnrs))))
+
+    async def _refresh_cases(self, *, cnrs: list[str]) -> ProviderBulkRefreshResult:
         snapshots: list[ProviderCaseSnapshot] = []
         errors: dict[str, str] = {}
-        unique_cnrs = list(dict.fromkeys(cnrs))
+        costs = dict.fromkeys(cnrs, 0)
+        uncertain: set[str] = set()
         provider_call_count = 0
-        if unique_cnrs:
-            try:
-                with self._client() as client:
-                    provider_call_count += 1
-                    response = client.post(
-                        self._url("/case/bulk-refresh"),
-                        json={"cnrs": unique_cnrs},
-                        headers={**self._headers(), "Content-Type": "application/json"},
-                    )
-                    response.raise_for_status()
-            except httpx.HTTPError as exc:
-                response_class = _http_error_response_class(exc)
-                for cnr in unique_cnrs:
-                    errors[cnr] = f"Case tracking provider bulk refresh failed. [{response_class}]"
-                return ProviderBulkRefreshResult(
-                    snapshots=snapshots,
-                    errors=errors,
-                    provider_call_count=provider_call_count,
-                )
-        for cnr in unique_cnrs:
-            try:
+        if len(cnrs) > 50:
+            raise CaseTrackingProviderError("A provider refresh batch cannot exceed 50 cases.")
+        if not cnrs:
+            return ProviderBulkRefreshResult(snapshots=[], provider_call_count=0)
+        try:
+            async with (
+                asyncio.timeout(_remaining_transport_budget(self.bulk_budget_seconds)),
+                self._client() as client,
+            ):
+                # The status endpoint is free. A pending paid refresh must not
+                # be submitted again, including after a worker lease expires.
                 provider_call_count += 1
-                snapshots.append(self.get_case_by_cnr(cnr=cnr))
-            except CaseTrackingProviderError as exc:
-                errors[cnr] = f"{exc} [{exc.response_class}]"
+                response = await self._request(
+                    client, "POST", "/case/bulk-refresh-status", json={"cnrs": cnrs}
+                )
+                data = _data_payload(_json_payload(response))
+                rows = data.get("results") if isinstance(data, dict) else None
+                if not isinstance(rows, list):
+                    raise CaseTrackingProviderError(
+                        "Provider refresh status is malformed.", response_class="parse_error"
+                    )
+                statuses: dict[str, dict] = {}
+                for row in rows:
+                    if (
+                        not isinstance(row, dict)
+                        or not isinstance(row.get("cnr"), str)
+                        or row.get("cnr") not in costs
+                        or row["cnr"] in statuses
+                    ):
+                        raise CaseTrackingProviderError(
+                            "Provider refresh status identity is invalid.",
+                            response_class="parse_error",
+                        )
+                    statuses[row["cnr"]] = row
+                if set(statuses) != set(cnrs):
+                    raise CaseTrackingProviderError(
+                        "Provider refresh status is incomplete.", response_class="parse_error"
+                    )
+                ready: list[str] = []
+                submit: list[str] = []
+                today = datetime.now(UTC).date()
+                for cnr, row in statuses.items():
+                    state = row.get("status")
+                    if not isinstance(state, str):
+                        raise CaseTrackingProviderError(
+                            "Provider refresh status is malformed.", response_class="parse_error"
+                        )
+                    if state == "PENDING":
+                        errors[cnr] = _PROVIDER_PENDING_MESSAGE
+                    elif state == "COMPLETED" and _parse_date(row.get("requestedAt")) == today:
+                        ready.append(cnr)
+                    elif state in {"NOT_REQUESTED", "COMPLETED", "FAILED"}:
+                        submit.append(cnr)
+                    elif state == "INVALID":
+                        errors[cnr] = "Provider rejected the case identifier. [case_not_found]"
+                    else:
+                        raise CaseTrackingProviderError(
+                            "Provider refresh status is unsupported.", response_class="parse_error"
+                        )
+                if submit:
+                    provider_call_count += 1
+                    uncertain.update(submit)
+                    try:
+                        # The published bulk minimum is two; one CNR uses the
+                        # single refresh endpoint with the same asynchronous contract.
+                        if len(submit) == 1:
+                            queued_response = await self._request(
+                                client, "POST", f"/case/{quote(submit[0])}/refresh"
+                            )
+                            queued = _data_payload(_json_payload(queued_response))
+                            if (
+                                not isinstance(queued, dict)
+                                or queued.get("cnr") != submit[0]
+                                or queued.get("status") != "QUEUED"
+                            ):
+                                raise CaseTrackingProviderError(
+                                    "Provider refresh receipt is malformed.",
+                                    response_class="parse_error",
+                                )
+                        else:
+                            queued_response = await self._request(
+                                client, "POST", "/case/bulk-refresh", json={"cnrs": submit}
+                            )
+                            queued = _data_payload(_json_payload(queued_response))
+                            if not isinstance(queued, dict) or any(
+                                not isinstance(queued.get(key), list)
+                                for key in ("refreshed", "queued", "invalid")
+                            ):
+                                raise CaseTrackingProviderError(
+                                    "Provider refresh receipt is malformed.",
+                                    response_class="parse_error",
+                                )
+                            acknowledged = (
+                                queued["refreshed"] + queued["queued"] + queued["invalid"]
+                            )
+                            if (
+                                not all(isinstance(value, str) for value in acknowledged)
+                                or len(acknowledged) != len(set(acknowledged))
+                                or set(acknowledged) != set(submit)
+                            ):
+                                raise CaseTrackingProviderError(
+                                    "Provider refresh receipt identity is invalid.",
+                                    response_class="parse_error",
+                                )
+                            for cnr in queued["invalid"]:
+                                uncertain.discard(cnr)
+                                errors[cnr] = (
+                                    "Provider rejected the case identifier. [case_not_found]"
+                                )
+                        for cnr in submit:
+                            if cnr not in errors:
+                                costs[cnr] += 15
+                                uncertain.discard(cnr)
+                                errors[cnr] = _PROVIDER_PENDING_MESSAGE
+                    except httpx.HTTPStatusError:
+                        uncertain.difference_update(submit)
+                        raise
+                for cnr in ready:
+                    provider_call_count += 1
+                    uncertain.add(cnr)
+                    try:
+                        async with asyncio.timeout(self.request_budget_seconds):
+                            response = await self._request(client, "GET", f"/case/{quote(cnr)}")
+                        payload = _json_payload(response)
+                        if not isinstance(payload, dict):
+                            raise CaseTrackingProviderError(
+                                "Case tracking provider returned invalid data."
+                            )
+                        snapshots.append(
+                            _snapshot_from_payload(
+                                payload,
+                                provider=self.provider_key,
+                                order_download_base_url=self._url(""),
+                            )
+                        )
+                        costs[cnr] += 150
+                        uncertain.discard(cnr)
+                    except (httpx.HTTPError, CaseTrackingProviderError, TimeoutError) as exc:
+                        if isinstance(exc, httpx.HTTPStatusError):
+                            uncertain.discard(cnr)
+                        response_class = (
+                            "timeout"
+                            if isinstance(exc, TimeoutError)
+                            else exc.response_class
+                            if isinstance(exc, CaseTrackingProviderError)
+                            else _http_error_response_class(exc)
+                        )
+                        errors[cnr] = f"Case tracking provider refresh failed. [{response_class}]"
+        except (httpx.HTTPError, CaseTrackingProviderError, TimeoutError) as exc:
+            response_class = (
+                "timeout"
+                if isinstance(exc, TimeoutError)
+                else exc.response_class
+                if isinstance(exc, CaseTrackingProviderError)
+                else _http_error_response_class(exc)
+            )
+            completed = {snapshot.cnr_number for snapshot in snapshots}
+            for cnr in cnrs:
+                if cnr not in completed and cnr not in errors:
+                    errors[cnr] = f"Case tracking provider bulk refresh failed. [{response_class}]"
         return ProviderBulkRefreshResult(
             snapshots=snapshots,
             errors=errors,
             provider_call_count=provider_call_count,
+            confirmed_cost_minor_by_cnr=costs,
+            uncertain_charge_cnrs=uncertain,
         )
 
 

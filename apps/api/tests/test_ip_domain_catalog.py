@@ -18,6 +18,7 @@ from caseops_api.services.ip_domain_catalog import (
     BASE_CHECKS,
     DOMAIN_BY_ID,
     GA_CHECKS,
+    SPECIALIST_DOMAINS,
     assert_domain_operation,
     domain_catalogue,
     evaluate_domain,
@@ -49,10 +50,11 @@ def _evidence(definition=None, *, stage="beta"):
 
 def test_iplf079_catalogue_does_not_claim_missing_domain_implementation():
     rows = domain_catalogue().domains
-    assert len(rows) == len({row.domain for row in rows}) == 11
+    assert len(rows) == len({row.domain for row in rows}) == 12
+    intake_domains = {"trademark", "patent", *SPECIALIST_DOMAINS}
     for row in rows:
         assert row.stage == (
-            "intake_only" if row.domain in {"trademark", "patent"} else "unavailable"
+            "intake_only" if row.domain in intake_domains else "unavailable"
         )
         assert row.authoritative_automation_available is False
         assert "release_evidence_missing" in row.blockers
@@ -65,6 +67,19 @@ def test_iplf079_exact_complete_release_evidence_can_promote_only_its_domain(sta
     assert result.stage == stage
     assert result.blockers == []
     assert result.jurisdictions == ["IN"]
+
+
+@pytest.mark.parametrize("stage", ["beta", "ga"])
+def test_patent_intake_and_coarse_passes_cannot_claim_full_workflow(stage):
+    definition = DOMAIN_BY_ID["patent"]
+    evidence = _evidence(definition, stage=stage)
+    result = evaluate_domain(definition, release_sha=SHA, evidence=evidence, now=NOW)
+    assert result.stage == "intake_only"
+    assert not result.authoritative_automation_available
+    assert "domain_workflow_implementation_missing" in result.blockers
+    assert all(
+        f"check_not_passed:{item}" in result.blockers for item in definition.required_source_checks
+    )
 
 
 @pytest.mark.parametrize(
@@ -152,7 +167,7 @@ def test_iplf079_public_catalogue_has_no_tenant_or_configuration_details(client)
     assert response.status_code == 200
     payload = response.json()
     assert set(payload) == {"catalogue_version", "domains"}
-    assert len(payload["domains"]) == 11
+    assert len(payload["domains"]) == 12
     assert "company_id" not in response.text
     assert "entitlement" not in response.text
     assert client.post("/api/ip-domains", json={"stage": "ga"}).status_code == 403

@@ -86,9 +86,13 @@ export default function CaseTrackingPage() {
   });
   const refreshMutation = useMutation({
     mutationFn: refreshCaseTrackingBookmark,
-    onSuccess: (response) => {
+    onSuccess: async (response) => {
       setSelectedBookmarkId(response.bookmark.id);
-      queryClient.invalidateQueries({ queryKey: ["case-tracking"] });
+      await queryClient.cancelQueries({ queryKey: ["matters"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["case-tracking"] }),
+        queryClient.invalidateQueries({ queryKey: ["matters"] }),
+      ]);
     },
   });
   const updateMutation = useMutation({
@@ -147,6 +151,21 @@ export default function CaseTrackingPage() {
             <Badge tone="neutral">No provider calls made</Badge>
           </CardContent>
         </Card>
+      ) : null}
+
+      {status.data?.scheduled_sync_eligible !== undefined ? (
+        <section aria-label="Scheduled hearing updates" className="space-y-2 border-y border-[var(--color-line)] py-3">
+          <p className="text-sm font-medium">
+            Scheduled hearing updates: {status.data.scheduled_sync_local_time}{status.data.scheduled_sync_window_end_local_time ? `-${status.data.scheduled_sync_window_end_local_time}` : ""} ({status.data.scheduled_sync_timezone})
+          </p>
+          <p className="text-sm text-[var(--color-ink-2)]">
+            {status.data.scheduled_sync_eligible
+              ? "Eligible for scheduled updates from uniquely matched court records."
+              : status.data.scheduled_sync_disabled_reason === "configured_test_tenant" || status.data.scheduled_sync_disabled_reason === "synthetic_test_tenant"
+                ? "Scheduled paid updates are excluded for this test workspace. Human-initiated search and refresh remain available within the workspace budget."
+                : "Scheduled updates are unavailable until the provider is enabled and configured."}
+          </p>
+        </section>
       ) : null}
 
       <Card data-testid="case-tracking-support-matrix">

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import date, timedelta
+import re
+from datetime import UTC, date, datetime, timedelta
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, unquote, urlparse
@@ -10,9 +11,15 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 def _case_payload(*, case_number: str, cnr: str) -> dict[str, object]:
     next_hearing = (date.today() + timedelta(days=21)).isoformat()
+    number = re.fullmatch(r"\s*(.*?)\s*[/ -]?\s*(\d+/\d{4})\s*", case_number)
+    case_type = number.group(1).strip(" /-") if number else ""
     return {
         "cnr": cnr,
         "caseNumber": case_number,
+        "registrationNumber": number.group(2) if number else case_number,
+        "caseType": "WP_C" if case_type in {"", "WP(C)"} else case_type,
+        "courtCode": "DLHC",
+        "courtName": "Delhi High Court",
         "cnrCourtCode": "DLHC",
         "petitioners": ["Local Docker Petitioner"],
         "respondents": ["Local Docker Respondent"],
@@ -50,6 +57,17 @@ class AcceptanceProviderHandler(BaseHTTPRequestHandler):
             return
         if not self._authorized():
             return
+        from caseops_api.scripts.docker_acceptance_summary import SOURCE_PATH, SOURCE_TEXT
+
+        if parsed.path == SOURCE_PATH:
+            body = SOURCE_TEXT.encode("utf-8")
+            self.send_response(HTTPStatus.OK.value)
+            self.send_header("Content-Type", "text/markdown; charset=utf-8")
+            self.send_header("Content-Disposition", 'attachment; filename="summary-20260910.md"')
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if parsed.path == "/api/partner/search":
             params = parse_qs(parsed.query)
             case_number = params.get("caseNumbers", [""])[0].strip()
@@ -71,6 +89,18 @@ class AcceptanceProviderHandler(BaseHTTPRequestHandler):
                                 cnr="DLHC010091232026",
                             )
                         ],
+                        "totalHits": 1,
+                        "page": 1,
+                        "pageSize": 20,
+                        "totalPages": 1,
+                        "hasNextPage": False,
+                        "hasPreviousPage": False,
+                        "enumDescriptions": {
+                            "enumLookup": {
+                                "caseStatus": {"PENDING": "Pending"},
+                                "courtCode": {"DLHC": "Delhi High Court"},
+                            }
+                        },
                         "descriptions": {
                             "enumLookup": {
                                 "caseStatus": {"PENDING": "Pending"},
@@ -111,7 +141,10 @@ class AcceptanceProviderHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if not self._authorized():
             return
-        if parsed.path != "/api/partner/case/bulk-refresh":
+        if parsed.path not in {
+            "/api/partner/case/bulk-refresh",
+            "/api/partner/case/bulk-refresh-status",
+        }:
             self._write_json(HTTPStatus.NOT_FOUND, {"detail": "Not found"})
             return
         length = int(self.headers.get("Content-Length", "0"))
@@ -124,7 +157,28 @@ class AcceptanceProviderHandler(BaseHTTPRequestHandler):
         if not isinstance(cnrs, list):
             self._write_json(HTTPStatus.BAD_REQUEST, {"detail": "cnrs is required"})
             return
-        self._write_json(HTTPStatus.OK, {"data": {"accepted": len(cnrs)}})
+        if parsed.path.endswith("/bulk-refresh-status"):
+            self._write_json(
+                HTTPStatus.OK,
+                {
+                    "data": {
+                        "results": [
+                            {
+                                "cnr": cnr,
+                                "status": "COMPLETED",
+                                "requestedAt": datetime.now(UTC).isoformat(),
+                                "completedAt": datetime.now(UTC).isoformat(),
+                                "failureReason": None,
+                                "creditsCharged": 0,
+                                "refunded": False,
+                            }
+                            for cnr in cnrs
+                        ]
+                    }
+                },
+            )
+            return
+        self._write_json(HTTPStatus.OK, {"data": {"refreshed": cnrs, "queued": [], "invalid": []}})
 
     def log_message(self, format: str, *args: object) -> None:
         # Keep Docker acceptance logs deterministic and free of request data.

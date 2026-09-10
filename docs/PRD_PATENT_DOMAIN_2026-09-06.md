@@ -1,10 +1,17 @@
 # CaseOps Patent Domain Contract
 
-Version: PAT-2026-09-06.1. Owner: Codex. Status: execution contract, not a
+Version: PAT-2026-09-10.2. Owner: Codex. Status: execution contract, not a
 claim of delivered patent functionality. Parent: IP platform PRD PAT-01..04,
 IP-SCOPE-01..10; UJ-29, UJ-39, UJ-40, shared title/licensing UJ-60/61.
 
 ## 1. Scope And Current Truth
+
+September 10 proceeding increment: the versioned child contract
+`PRD_PATENT_PREGRANT_PROCEEDING_2026-09-10.md` owns UJ-39-EXC-03. It adds a
+concrete source-pinned pre-grant opposition journey on the canonical proceeding
+identity and patent application docket. It does not promote the entire patent
+domain or close the remaining proceeding/obligation/title paths. Verification
+belongs to the new proceeding handoff; the prior 28-file handoff is immutable.
 
 Implement invention disclosure, independent patent applications and family
 relationships, parties and priorities, prosecution and separate opposition
@@ -227,7 +234,22 @@ the unsupported automatic/legal-completion capability remains disabled.
    Source/legal fixture failures keep the affected automation and beta/GA claim
    closed; they do not prevent completing independently testable implementation.
 
-Current milestone: P1 in progress. The family-disclosure vertical has local
+September 09 prosecution continuation: the isolated patent track implements
+source-pinned immutable document editions/filing manifests and manually sourced
+prosecution events with concurrency, impact preview and explicit exceptional
+transition acknowledgement. This is a P2 vertical, not completion of P2-P6 or
+IPLF-079/080. Separate proceedings, obligation/instruction/cost/acceptance/title
+lineages, imports, complete reports and integrated release proof remain open.
+See `ip-implementation/evidence/patent-closure-2026-09-09.md` for exact proof.
+
+September 08 reconciliation: family, application, party, priority and bounded
+graph implementations are already present on baseline `5145fb3a`. Their dated
+production-shaped tests are existing regression coverage, not new work to
+rebuild. Full UJ-29 acceptance and P2-P6 remain open, including prosecution,
+proceedings, claim/package versions, obligations, title, import and integrated
+release proof. See `ip-implementation/catalogue-ip-completion-2026-09-08.md`.
+
+Historical September 07 milestone checkpoint: P1 in progress. The family-disclosure vertical has local
 Docker acceptance. Independent source-pinned application persistence, identifier
 corrections, immutable history and scoped UI now exist and are undergoing local
 Docker acceptance. The application checkpoint subsequently passed all 155
@@ -288,3 +310,37 @@ immutable database guards on both canonical and detail rows, tenant/source
 revocation, stale writes, disposal overlap, idempotent replay, indexed pagination,
 and desktop/tablet/mobile reload journeys. Existing trademark parties and
 opposition workflows must remain unchanged. This continuation is not yet done.
+
+### P2 Work Product And Prosecution Contract
+
+An application owns an independently incrementing work sequence, checked with
+the current application-facts and lifecycle versions under its canonical parent
+lock. New editions retain the same lineage identity and append one immutable
+manifest of at most 20 exact authorized document versions. The source, version,
+hash, actor, reason, original title and application anchor cannot be rewritten.
+A filed event pins the exact edition, so a later amendment never rewrites a
+previously filed package. A lineage admits at most 1,000 retained editions;
+reads paginate at most 100 editions and load their source rows in batches.
+
+Prosecution is distinct from docket lifecycle and generic trademark events.
+Manual filing, publication, examination request, office action, response,
+hearing, amendment and grant records require source evidence and a current
+impact preview. Filing requires a frozen package. An exceptional phase change
+requires a reason and acknowledgement; a backdated event previews at most 100
+open deadlines and requires acknowledgement without changing those deadlines.
+Preview identity includes the locked work sequence and current deadline facts.
+No filing receipt alone asserts registry acceptance or legal completion.
+
+Current authorization is rechecked on both retained reads and idempotent
+replays. Closing an application preserves authorized byte-identical source
+download but rejects every ordinary write and creation replay. Explicit reopen
+does not reactivate older editions or replay a prior lifecycle command. A new
+root in the reopened epoch requires explicit creation. A second closure on the
+same day remains a distinct lifecycle operation.
+
+The domain catalogue also requires an implemented end-to-end workflow contract
+and distinct examination/response/annuity/working/restoration legal-source
+fixture checks before patent beta/GA admission. A signed all-green intake-only
+checklist cannot bypass missing workflow implementation. None of these manual
+records activates deadline calculations, paid providers, AI, portal sharing or
+automatic notifications for unpublished patent material.

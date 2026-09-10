@@ -1,5 +1,52 @@
 # CaseOps agent instructions
 
+- A repeated report must be tied to the exact serving API and web revision,
+  not the newest dirty source tree. Inspect loaded selector options and the
+  reported persisted records before choosing between missing deployment,
+  missing source data, policy exclusion and a code defect. Preserve every
+  genuinely unverified legal record's fail-closed behavior.
+- A multi-file test filter is not proof that every requested file ran. Reconcile
+  selected files and collected identities against the intended inventory; a
+  misspelled file can disappear from an otherwise green run. Re-run the missing
+  selection and preserve the earlier incomplete coverage claim as incomplete.
+
+- A legacy-data backfill regression must explicitly establish its pre-feature
+  state. Scope automatic linking off only while creating that legacy fixture,
+  assert zero preexisting bookmarks, restore the prior runtime policy and
+  exercise enabled and disabled ambient settings. Do not alter normal
+  auto-linking or weaken assertions to accommodate setup-created children.
+- Case-tracking network calls must not retain database transactions. Durable
+  pre-call claims require bounded expiry and crash recovery; a bare commit can
+  strand a running operation forever. Recheck the claim, current access,
+  bookmarks, source identity and locked lifecycle after transport, and prove
+  both manual and scheduled boundaries with deterministic PostgreSQL races.
+
+- A long-running pytest gate must retain structured setup/call/teardown results
+  as they occur, not only its final JUnit file. Do not classify buffered progress
+  characters as diagnoses. An interrupted run without a completion event is
+  incomplete, and prior failures remain open until their full details and the
+  complete replacement inventory are reconciled. Never overwrite failed evidence.
+
+- Isolated PostgreSQL HTTP fixtures may clone only a separately migrated,
+  connection-disabled test template, never the shared application database or
+  retained tenant rows. Prove identical schema/index/constraint/trigger/catalog
+  state, independent tenant bootstraps and interruption cleanup. Dedicated
+  migration upgrade and downgrade rehearsals must still start independently
+  fresh; test-speed work cannot replace migration evidence with a clone.
+
+- Whole-catalogue acceptance must reconcile the final provision's continuation
+  pages, not only arrangement identities and hashes of extracted text. BNS
+  section 358(4) was omitted on a separate page even though every section number
+  was present. Inventory schedules, Orders, forms and successor enactments
+  separately; a publisher-hosted PDF may itself be incomplete. Preserve failed
+  acquisitions, source editions and historical references, and require positive
+  attachment/reload/source-opening proof before catalogue closure.
+- A cold-start optimization must preserve byte-identical route contracts and
+  fail-closed malware readiness. Measure full HTTP startup beside the real
+  scanner on an isolated Docker network; prove clean and EICAR scans plus
+  post-start scanner outage rejection. Import-only timings cannot close a
+  production latency defect or authorize weakening the scanner fence.
+
 - Windows release-test wrappers must preserve drive-letter arguments through
   native PowerShell forwarding. Pass an explicit argument array, inspect the
   received arguments and reconcile the nonempty collected test inventory.
@@ -51,6 +98,20 @@ spreadsheet skill's formatting, formula, inspection, and visual-verification
 requirements when using the fallback.
 
 ## Permanent regression learnings
+
+- Parallel pytest collection occurs on xdist workers, not its controller.
+  Retain each worker's complete ordered inventory and its agreement with the
+  canonical collection before reconciling setup/call/teardown results. A green
+  parallel result without collection evidence cannot certify full coverage.
+
+- Scheduled provider eligibility is distinct from configured credentials and
+  live-human access. Expose the actual unattended tenant policy without making
+  the response depend on the current browser's no-paid marker. A successful
+  scheduler process or an excluded QA tenant cannot certify a hearing refresh.
+- Next-hearing acceptance must identify the reported Matter and assert its
+  actual date value in the visible list, after reload and at responsive widths.
+  A column heading, a bookmark count, or a successful provider HTTP response
+  cannot substitute for that outcome. Cover both CNR and case-number/court.
 
 - A published legal PDF's arrangement, body, footnotes and judicial treatment
   may disagree. Reconcile the entire numbered inventory against pinned source
@@ -731,3 +792,63 @@ requirements when using the fallback.
   workflow's actual launcher and options in a clean subprocess with no inherited
   PYTHONPATH, then reconcile all four real reports; an in-process partition test
   cannot prove that the CI executable can import the plugin.
+- A bounded recurring scan must advance past rejected, incomplete, linked and
+  terminal rows. Persist its tenant/provider checkpoint atomically with admission,
+  wrap for later corrections, and count raw rows before filtering. Prove a
+  supported record beyond a rejected full page, two concurrent scans, tenant
+  isolation, rollback and disposal winning after discovery on PostgreSQL and
+  the dated browser journey; raising the batch limit does not repair starvation.
+- Reusing another worktree's Python runtime can import its editable package.
+  Pin PYTHONPATH to the candidate source before schema/code generation and
+  validation, inspect the resolved module path, and require the new table or
+  contract in the generated result. A zero-diff regeneration is not proof.
+- A long offline suite needs measured free executable scratch storage for its
+  source archive, migrated templates, retained SQLite databases and journal files.
+  A 1 GiB tmpfs exhausted during the September 08 full API run. Preflight capacity
+  and actual executable launch, use isolated disk-backed storage, keep Temporal
+  pinned outside it, and replay every affected node without erasing the failed
+  run. Composed replay coverage is not a clean single full-suite result.
+- A scanner-service exception is not an HTTP upload verdict. Cold-start
+  acceptance must separately prove authenticated upload, byte-identical download,
+  EICAR rejection with no attachment persisted, scanner outage and recovery.
+  Retain cold-budget failures even when later functional diagnostics pass; a
+  diagnostic continuation must preserve the failed gate and nonzero exit code.
+- A provider scrape acknowledgement is not fresh case data. eCourts refresh is
+  asynchronous: inspect its free status before another purchase, retain pending
+  work for scheduled recovery, and fetch details only after confirmed completion.
+  Prove submit, pending, completion, malformed receipts and mixed outcomes; do
+  not call an immediate cached detail read a successful hearing refresh.
+- Provider recovery needs a durable fenced claim and reserved budget before
+  transport, not just a transaction commit. A lost response remains an uncertain
+  budget hold; only evidenced free outcomes release it. Distinguish refresh,
+  search, detail and download prices. Cover the entire response-body deadline,
+  recheck current identity/access/lifecycle after I/O, and prove interruption,
+  concurrent claims and revocation on PostgreSQL without another paid request.
+- Repinning a Cloud Run job does not stop its previous executions. Pause the
+  canonical paid scheduler before changing its recovery protocol, inspect a
+  bounded complete execution history rather than only the newest execution,
+  and require current terminal state before continuing. Unknown/truncated state
+  or a drain deadline fails closed with the scheduler paused. Resume only the
+  exact verified release runtime; do not cancel uncertain paid work or use a
+  paid execution as a deployment test.
+- An added audit or outbox event must use the existing ownership ledger's exact
+  owner ID. Validate the complete catalogue immediately and regress the named
+  owner; a plausible subsystem label is not a registered owner.
+- Official-PDF compilation runs in its pinned isolated build environment, not
+  the application OCR environment. Keep those dependency graphs separate and
+  select compiler tests there. A missing compiler dependency is incomplete
+  collection, not product evidence or permission to upgrade runtime pdfminer.
+- A hearing refresh for an authorized bookmark must neither consume another
+  actor's private Matter as matching input nor update that private Matter.
+  After provider transport, lock the authorized parent and then reread/lock
+  the bookmark before publication. Prove archive and retarget writes both
+  between scope discovery and publication and while publication owns its fence,
+  through manual and scheduled PostgreSQL paths.
+- New offline provider fixtures must use disjoint identities and preserve the
+  older fixture's records, dates and order-download handler. Run their combined
+  journeys against the same installed worker and emulator; independently green
+  fixtures cannot establish that the integrated browser stack is compatible.
+- Test node identities are case-sensitive, including parametrized source text.
+  Use ordinal sets and dictionaries when reconciling journals in PowerShell;
+  its default hashtables and unique sorting collapse valid case variants.
+  Regress distinct-case IDs, true duplicates and mismatched phase identities.

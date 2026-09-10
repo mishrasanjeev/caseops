@@ -167,13 +167,19 @@ def test_ft_s2_1_list_statutes_returns_seeded_acts(client: TestClient) -> None:
     } <= short_names
     assert body["total_section_count"] >= 1
     assert body["total_catalog_section_count"] > 0
-    # Complete pinned BNSS text is verified; unrelated legacy text is still not.
+    # Published BNSS/BSA sections and schedules are admitted; legacy placeholders are not.
     bnss = next(a for a in body["statutes"] if a["short_name"] == "BNSS")
-    assert bnss["section_count"] == 531
-    assert bnss["catalog_section_count"] == 531
+    assert bnss["section_count"] == 591
+    assert bnss["catalog_section_count"] == 591
     bsa = next(a for a in body["statutes"] if a["short_name"] == "BSA")
-    assert bsa["section_count"] == 0
-    assert bsa["catalog_section_count"] > 0
+    assert bsa["section_count"] == 171
+    assert bsa["catalog_section_count"] == 171
+    ipc = next(a for a in body["statutes"] if a["short_name"] == "IPC")
+    assert ipc["section_count"] == 554
+    assert ipc["catalog_section_count"] == 575
+    crpc = next(a for a in body["statutes"] if a["short_name"] == "CrPC")
+    assert crpc["section_count"] == 594
+    assert crpc["catalog_section_count"] == 595
     constitution = next(a for a in body["statutes"] if a["short_name"] == "Constitution")
     assert constitution["section_count"] >= 1
 
@@ -192,9 +198,7 @@ def test_official_release_manifest_makes_article_14_selectable_and_traceable(
     assert payload["verified_section_count"] == 1
     assert payload["catalog_section_count"] == 11
     assert len(payload["catalog_sections"]) == 11
-    catalog_by_number = {
-        row["section_number"]: row for row in payload["catalog_sections"]
-    }
+    catalog_by_number = {row["section_number"]: row for row in payload["catalog_sections"]}
     assert catalog_by_number["Article 14"]["selection_state"] == "verified_selectable"
     assert catalog_by_number["Article 19"]["selection_state"] == "verification_pending"
 
@@ -253,7 +257,9 @@ def test_ft_s2_5_list_sections_returns_ordered_rows(client: TestClient) -> None:
     body = resp.json()
     assert body["statute"]["short_name"] == "CrPC"
     nums = [s["section_number"] for s in body["sections"]]
-    assert nums == []
+    assert len(nums) == 594
+    assert "Section 482" in nums
+    assert "First Schedule" not in nums
     # Ordinals are monotonic (seed loader sets them by JSON position).
     ordinals = [s["ordinal"] for s in body["sections"]]
     assert ordinals == sorted(ordinals)
@@ -267,13 +273,12 @@ def test_ft_s2_6_get_section_detail_returns_section_url_fallback(
     level smoke too)."""
     token = _bootstrap_with_seed(client)
     resp = client.get(
-        "/api/statutes/ipc-1860/sections/Section 302",
+        "/api/statutes/income-tax-1961/sections/Section 4",
         headers=auth_headers(token),
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["section"]["section_number"] == "Section 302"
-    assert body["section"]["section_label"] == "Punishment for murder"
+    assert body["section"]["section_number"] == "Section 4"
     assert body["section"]["section_url"]
     assert "indiacode" in body["section"]["section_url"]
     assert body["section"]["source_action"]["target_type"] == "statute_section"
@@ -284,6 +289,29 @@ def test_ft_s2_6_get_section_detail_returns_section_url_fallback(
     # No parent or children for this section in v1 seed.
     assert body["parent_section"] is None
     assert body["child_sections"] == []
+
+
+def test_verified_historical_ipc_detail_preserves_exact_source_and_legal_status(
+    client: TestClient,
+) -> None:
+    from caseops_api.scripts.official_statute_release import load_release_bundle
+
+    token = _bootstrap_with_seed(client)
+    _, sources = load_release_bundle()
+    source = sources["ipc-1860", "Section 302"]
+    response = client.get(
+        "/api/statutes/ipc-1860/sections/Section 302", headers=auth_headers(token)
+    )
+    assert response.status_code == 200, response.text
+    section = response.json()["section"]
+    assert section["section_text"] == source["section_text"]
+    assert section["source_sha256"] == source["source_sha256"]
+    assert section["section_url"] == source["source_url"]
+    assert section["legal_status"] == "repealed"
+    assert section["verification_status"] == "verified_official"
+    assert section["source_action"]["state"] == "available"
+    assert section["source_action"]["target_id"] == section["id"]
+    assert section["source_action"]["open_url"]
 
 
 def test_ft_s2_7_get_section_404_unknown_section_number(

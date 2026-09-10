@@ -1,0 +1,169 @@
+{
+  "schema_version": 1,
+  "scope": "Pinned Act editions only. Not a complete IP source pack, legal applicability certification, or domain activation. Rules, amendments, forms, fees, official notices, and jurisdictional sources require separate reconciliation.",
+  "activation_status": "not_activated",
+  "documents": [
+    {
+      "statute_id": "patents-1970",
+      "file": "patents-1970-central-2026.pdf",
+      "toc_pages": [
+        3,
+        8
+      ],
+      "body_pages": [
+        9,
+        71
+      ],
+      "source_version": "India Code a197039; as on 5 May 2026",
+      "issuing_body": "Department for Promotion of Industry and Internal Trade, Government of India",
+      "supplements": [
+        {
+          "key": "schedule",
+          "kind": "schedule",
+          "section_number": "Schedule",
+          "label": "THE SCHEDULE",
+          "heading": "THE SCHEDULE",
+          "page": 69
+        }
+      ],
+      "sha256": "759fc6f2833eaf2eab8f7f66b0441246bcb543ef5283682eb6427fbff725e135",
+      "retrieved_at": "2026-09-08T06:24:43.4172321+00:00",
+      "source_url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/1392/1/a197039.pdf",
+      "label_variants": {
+        "78": "Power of Controller to correct clerical errors, etc.",
+        "117A": "Appeals to 5[High Court]."
+      },
+      "number_aliases": {},
+      "source_discrepancies": {
+        "78": "The publisher arrangement and body heading differ; the arrangement label and complete body are retained verbatim.",
+        "117A": "The publisher arrangement and body heading differ; the arrangement label and complete body are retained verbatim."
+      },
+      "section_count": 175,
+      "non_provision_pages": [
+        {
+          "pages": [
+            1,
+            2
+          ],
+          "kind": "cover_and_amending_acts"
+        },
+        {
+          "pages": [
+            3,
+            8
+          ],
+          "kind": "arrangement"
+        },
+        {
+          "pages": [
+            72,
+            72
+          ],
+          "kind": "statement_of_objects"
+        }
+      ],
+      "act_url": "https://www.indiacode.nic.in/indiacode/handle/123456789/1392?view_type=browse",
+      "complete_arrangement_labels": true
+    },
+    {
+      "statute_id": "designs-2000",
+      "file": "designs-2000.pdf",
+      "toc_pages": [
+        3,
+        4
+      ],
+      "body_pages": [
+        5,
+        17
+      ],
+      "section_count": 48,
+      "sha256": "feb73c760a844ae61cc25d95215eda5fab78896aa38b31663868188995c98f55",
+      "source_url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/1917/1/A2000-16.pdf",
+      "act_url": "https://www.indiacode.nic.in/indiacode/handle/123456789/1917?view_type=browse",
+      "source_version": "India Code A2000-16; as on 15 June 2026",
+      "issuing_body": "Department for Promotion of Industry and Internal Trade, Government of India",
+      "retrieved_at": "2026-09-08T05:07:04.2131983+00:00",
+      "complete_arrangement_labels": true,
+      "non_provision_pages": [
+        {
+          "pages": [
+            1,
+            2
+          ],
+          "kind": "edition_and_abbreviations"
+        },
+        {
+          "pages": [
+            3,
+            4
+          ],
+          "kind": "arrangement"
+        },
+        {
+          "pages": [
+            18,
+            18
+          ],
+          "kind": "statement_of_objects"
+        }
+      ]
+    },
+    {
+      "statute_id": "copyright-1957",
+      "file": "copyright-1957-current.pdf",
+      "toc_pages": [
+        3,
+        6
+      ],
+      "body_pages": [
+        7,
+        48
+      ],
+      "section_count": 105,
+      "sha256": "da4144b68419cf81bbf10979183ed1cf3fbe3795188995d1efc85fd7d65713bd",
+      "source_url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/1367/1/A195714.pdf",
+      "act_url": "https://www.indiacode.nic.in/indiacode/handle/123456789/1367?view_type=browse",
+      "source_version": "India Code A195714; as on 15 June 2026",
+      "issuing_body": "Department for Promotion of Industry and Internal Trade, Government of India",
+      "retrieved_at": "2026-09-08T05:43:55.3603182+00:00",
+      "complete_arrangement_labels": true,
+      "body_heading_evidence": {
+        "12": {
+          "page": 11,
+          "text": "12. Powers and procedure of 2[Appellate Board].—(1) The 2[Appellate Board] shall, subject to any"
+        },
+        "74": {
+          "page": 45,
+          "text": "74. Registrar of Copyrights and 2[Appellate Board] to possess certain powers of civil"
+        },
+        "30A": {
+          "page": 19,
+          "text": "4[30A. Application of 5[section 19].—The provisions of 5[sections 19] shall, with any necessary"
+        }
+      },
+      "non_provision_pages": [
+        {
+          "pages": [
+            1,
+            2
+          ],
+          "kind": "edition_and_abbreviations"
+        },
+        {
+          "pages": [
+            3,
+            6
+          ],
+          "kind": "arrangement"
+        },
+        {
+          "pages": [
+            49,
+            50
+          ],
+          "kind": "statement_of_objects"
+        }
+      ]
+    }
+  ]
+}

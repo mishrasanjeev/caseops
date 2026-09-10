@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -15,9 +16,15 @@ from caseops_api.main import create_application
 def rate_limited_client(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    _migrated_template_db: Path,
 ):
     database_path = tmp_path / "caseops-rate.db"
+    shutil.copyfile(_migrated_template_db, database_path)
     storage_path = tmp_path / "documents"
+    monkeypatch.setenv("CASEOPS_ENV", "local")
+    monkeypatch.setenv("CASEOPS_AUTO_MIGRATE", "false")
+    monkeypatch.setenv("CASEOPS_CLAMAV_HOST", "")
+    monkeypatch.setenv("CASEOPS_CLAMAV_REQUIRED", "false")
     monkeypatch.setenv("CASEOPS_DATABASE_URL", f"sqlite+pysqlite:///{database_path.as_posix()}")
     monkeypatch.setenv("CASEOPS_AUTH_SECRET", "test-secret-should-be-at-least-32-bytes")
     monkeypatch.setenv("CASEOPS_PUBLIC_APP_URL", "http://testserver")
@@ -30,13 +37,14 @@ def rate_limited_client(
     clear_engine_cache()
     limiter.reset()
 
-    app = create_application()
-    with TestClient(app) as client:
-        yield client
-
-    get_settings.cache_clear()
-    clear_engine_cache()
-    limiter.reset()
+    try:
+        app = create_application()
+        with TestClient(app) as client:
+            yield client
+    finally:
+        get_settings.cache_clear()
+        clear_engine_cache()
+        limiter.reset()
 
 
 def _bootstrap_once(client: TestClient, slug: str) -> int:

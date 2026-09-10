@@ -20,6 +20,30 @@ def test_committed_data_governance_map_covers_current_repository_inventory() -> 
     assert ip_data_governance_map.validate(_map()) == []
 
 
+def test_hold_release_evidence_is_registered_without_disposition_admission() -> None:
+    data = _map()
+    proposal = next(
+        row for row in data["sql_tables"] if row["table_name"] == "legal_hold_release_requests"
+    )
+    assert proposal["policy_profile_id"] == "security_identity_control"
+    assert proposal["disposition_handler_id"] == "registry_fail_closed"
+    assert "legal_hold_release_requests" not in data["table_disposition_handler_overrides"]
+    columns = proposal["columns"]
+    for name in ("request_json", "reason_reference"):
+        assert columns[name]["category_id"] == "privileged_or_raw_content"
+    assert columns["requester_label_snapshot"]["category_id"] == "personal_or_contact_data"
+    for name in ("request_hash", "idempotency_key"):
+        assert columns[name]["category_id"] == "lifecycle_or_audit_evidence"
+    for name in (
+        "company_id",
+        "legal_hold_id",
+        "dry_run_id",
+        "requester_membership_id",
+        "requester_user_id",
+    ):
+        assert columns[name]["category_id"] == "tenant_or_access_identifier"
+
+
 def test_private_projection_is_the_only_runtime_disposition_override() -> None:
     data = _map()
     assert data["table_disposition_handler_overrides"] == {
@@ -39,6 +63,25 @@ def test_private_projection_is_the_only_runtime_disposition_override() -> None:
     data["table_disposition_handler_overrides"]["private_index_projections"] = "invented_handler"
     errors = ip_data_governance_map.validate(data, check_generated_view=False)
     assert any("unknown handler" in error for error in errors)
+
+
+def test_patent_work_product_is_registered_without_export_or_purge_admission() -> None:
+    data = _map()
+    tables = {row["table_name"]: row for row in data["sql_tables"]}
+    for name in (
+        "ip_patent_evidence_versions", "ip_patent_evidence_documents",
+        "ip_patent_prosecution_events", "ip_patent_proceeding_details",
+        "ip_patent_proceeding_events",
+    ):
+        assert tables[name]["policy_profile_id"] == "tenant_restricted_legal_content"
+        assert tables[name]["disposition_handler_id"] == "registry_fail_closed"
+        assert name not in data["table_disposition_handler_overrides"]
+    for name in ("ip_patent_prosecution_events", "ip_patent_proceeding_events"):
+        for column in ("reason", "impact_json", "exceptional_transition_reason"):
+            assert tables[name]["columns"][column]["category_id"] == "privileged_or_raw_content"
+    assert tables["ip_patent_proceeding_details"]["columns"]["counterparty"]["category_id"] == (
+        "personal_or_contact_data"
+    )
 
 
 def test_map_rejects_missing_or_unregistered_sql_table_and_column() -> None:

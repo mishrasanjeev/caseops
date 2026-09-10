@@ -1,12 +1,14 @@
 export function formatMoneyMinor(
   amountMinor: number | null | undefined,
   currency = "INR",
+  maximumFractionDigits = 0,
 ): string {
   if (amountMinor === null || amountMinor === undefined) return "Custom";
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency,
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 0,
+    maximumFractionDigits,
   }).format(amountMinor / 100);
 }
 

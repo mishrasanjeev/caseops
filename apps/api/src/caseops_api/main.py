@@ -1,11 +1,13 @@
+import logging
 from contextlib import asynccontextmanager
+from time import perf_counter
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi.middleware import SlowAPIMiddleware
 
-from caseops_api.api.router import api_router
+from caseops_api.api.router import register_api_routes
 from caseops_api.core.canonical_redirects import CanonicalSlashRedirectMiddleware
 from caseops_api.core.csrf import CSRFMiddleware
 from caseops_api.core.observability import configure_logging, configure_tracing
@@ -13,20 +15,31 @@ from caseops_api.core.problem_details import problem_json, register_problem_hand
 from caseops_api.core.rate_limit import RateLimitExceeded, configure_limiter
 from caseops_api.core.request_context import RequestContextMiddleware
 from caseops_api.core.settings import get_settings
+from caseops_api.core.startup import wait_for_readiness, warm_database_mappers
 from caseops_api.db.migrations import run_migrations
 from caseops_api.services.reranker import warm_reranker
 
 
+def warm_runtime() -> object:
+    warm_database_mappers()
+    return warm_reranker()
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    started = perf_counter()
     settings = get_settings()
     if settings.auto_migrate:
         run_migrations()
-    warm_reranker()
+    await wait_for_readiness(warm_runtime)
+    logging.getLogger(__name__).info(
+        "Startup readiness complete duration_seconds=%.3f", perf_counter() - started
+    )
     yield
 
 
 def create_application() -> FastAPI:
+    started = perf_counter()
     settings = get_settings()
     # Install JSON logging + (optional) OTel before building the app
     # so the FastAPI instrumentor can see the new logger + tracer.
@@ -83,7 +96,12 @@ def create_application() -> FastAPI:
     # frontend can render context-aware recovery copy.
     register_problem_handlers(application)
 
-    application.include_router(api_router, prefix="/api")
+    register_api_routes(application)
+    logging.getLogger(__name__).info(
+        "Startup application constructed duration_seconds=%.3f routes=%d",
+        perf_counter() - started,
+        len(application.routes),
+    )
     return application
 
 

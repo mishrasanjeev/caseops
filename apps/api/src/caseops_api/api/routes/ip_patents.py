@@ -6,6 +6,16 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, Path, Query
 
 from caseops_api.api.dependencies import DbSession, require_capability
+from caseops_api.api.routes.ip_patent_proceedings import router as proceedings_router
+from caseops_api.schemas.ip_patent_prosecution import (
+    PatentEvidenceCreateRequest,
+    PatentEvidencePage,
+    PatentEvidenceRecord,
+    PatentProsecutionCreateRequest,
+    PatentProsecutionPage,
+    PatentProsecutionPreview,
+    PatentProsecutionRecord,
+)
 from caseops_api.schemas.ip_patents import (
     PatentApplicationCorrectionRequest,
     PatentApplicationCreateRequest,
@@ -49,11 +59,135 @@ from caseops_api.services.ip_patent_priorities import (
     get_patent_priority,
     list_patent_priorities,
 )
+from caseops_api.services.ip_patent_prosecution import (
+    create_patent_evidence,
+    create_patent_prosecution,
+    get_patent_evidence,
+    get_patent_prosecution_event,
+    list_patent_evidence,
+    list_patent_prosecution,
+    preview_patent_prosecution,
+)
 from caseops_api.services.session_context import SessionContext
 
 router = APIRouter(prefix="/patents", tags=["patents"])
+router.include_router(proceedings_router)
 PatentReader = Annotated[SessionContext, Depends(require_capability("ip:read"))]
 PatentWriter = Annotated[SessionContext, Depends(require_capability("ip:write"))]
+
+
+@router.get("/applications/{application_id}/evidence", response_model=PatentEvidencePage)
+def get_evidence_page(
+    application_id: UUID,
+    context: PatentReader,
+    session: DbSession,
+    limit: Annotated[int, Query(ge=1, le=100)] = 25,
+    cursor: Annotated[int | None, Query(ge=1)] = None,
+    snapshot_sequence: Annotated[int | None, Query(ge=0)] = None,
+) -> PatentEvidencePage:
+    return list_patent_evidence(
+        session,
+        context=context,
+        application_id=str(application_id),
+        limit=limit,
+        cursor=cursor,
+        snapshot_sequence=snapshot_sequence,
+    )
+
+
+@router.get(
+    "/applications/{application_id}/evidence/{evidence_id}", response_model=PatentEvidenceRecord
+)
+def get_evidence(
+    application_id: UUID, evidence_id: UUID, context: PatentReader, session: DbSession
+) -> PatentEvidenceRecord:
+    return get_patent_evidence(
+        session, context=context, application_id=str(application_id), evidence_id=str(evidence_id)
+    )
+
+
+@router.post(
+    "/applications/{application_id}/evidence", response_model=PatentEvidenceRecord, status_code=201
+)
+def post_evidence(
+    application_id: UUID,
+    payload: PatentEvidenceCreateRequest,
+    context: PatentWriter,
+    session: DbSession,
+    idempotency_key: Annotated[str, Header(min_length=1, max_length=200, pattern=r"\S")],
+) -> PatentEvidenceRecord:
+    return create_patent_evidence(
+        session,
+        context=context,
+        application_id=str(application_id),
+        payload=payload,
+        idempotency_key=idempotency_key,
+    )
+
+
+@router.get("/applications/{application_id}/prosecution", response_model=PatentProsecutionPage)
+def get_prosecution_page(
+    application_id: UUID,
+    context: PatentReader,
+    session: DbSession,
+    limit: Annotated[int, Query(ge=1, le=100)] = 25,
+    cursor: Annotated[int | None, Query(ge=1)] = None,
+    snapshot_sequence: Annotated[int | None, Query(ge=0)] = None,
+) -> PatentProsecutionPage:
+    return list_patent_prosecution(
+        session,
+        context=context,
+        application_id=str(application_id),
+        limit=limit,
+        cursor=cursor,
+        snapshot_sequence=snapshot_sequence,
+    )
+
+
+@router.get(
+    "/applications/{application_id}/prosecution/{event_id}", response_model=PatentProsecutionRecord
+)
+def get_prosecution_event(
+    application_id: UUID, event_id: UUID, context: PatentReader, session: DbSession
+) -> PatentProsecutionRecord:
+    return get_patent_prosecution_event(
+        session, context=context, application_id=str(application_id), event_id=str(event_id)
+    )
+
+
+@router.post(
+    "/applications/{application_id}/prosecution/preview", response_model=PatentProsecutionPreview
+)
+def post_prosecution_preview(
+    application_id: UUID,
+    payload: PatentProsecutionCreateRequest,
+    context: PatentWriter,
+    session: DbSession,
+) -> PatentProsecutionPreview:
+    return preview_patent_prosecution(
+        session, context=context, application_id=str(application_id), payload=payload
+    )
+
+
+@router.post(
+    "/applications/{application_id}/prosecution",
+    response_model=PatentProsecutionRecord,
+    status_code=201,
+)
+def post_prosecution(
+    application_id: UUID,
+    payload: PatentProsecutionCreateRequest,
+    context: PatentWriter,
+    session: DbSession,
+    idempotency_key: Annotated[str, Header(min_length=1, max_length=200, pattern=r"\S")],
+) -> PatentProsecutionRecord:
+    return create_patent_prosecution(
+        session,
+        context=context,
+        application_id=str(application_id),
+        payload=payload,
+        idempotency_key=idempotency_key,
+    )
 
 
 @router.get("/applications/{application_id}/priorities", response_model=PatentPriorityListResponse)

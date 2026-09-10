@@ -3590,12 +3590,25 @@ export type StatuteListResponse = {
   coverage_label?: string;
 };
 
+export type StatuteTable = {
+  title: string;
+  columns: string[];
+  rows: {
+    serial: string;
+    cells: string[];
+    sha256: string;
+    fragments: { page: number; bbox: [number, number, number, number]; cells: string[] }[];
+  }[];
+  physical_row_count: number;
+};
+
 export type StatuteSectionRecord = {
   id: string;
   statute_id: string;
   section_number: string;
   section_label: string | null;
   section_text: string | null;
+  structured_tables?: StatuteTable[];
   section_text_source: string | null;
   editorial_notes?: string | null;
   case_annotations?: string | null;
@@ -3637,11 +3650,12 @@ export type StatuteSectionRecord = {
 // for payload size (IPC with 511 sections × ~500 chars/section was a
 // 250KB+ JSON that took 30-90s on a cold cache). Callers needing the
 // full text fetch the section-detail endpoint.
-export type StatuteSectionListItem = Omit<StatuteSectionRecord, "section_text">;
+export type StatuteSectionListItem = Omit<StatuteSectionRecord, "section_text" | "structured_tables">;
 
 export type StatuteSectionCatalogListItem = {
   id: string;
   statute_id: string;
+  legal_status?: string;
   section_number: string;
   section_label: string | null;
   ordinal: number;
@@ -4068,9 +4082,15 @@ export type CaseTrackingProviderStatus = {
   provider: string;
   configured: boolean;
   reason: string | null;
+  scheduled_sync_eligible?: boolean;
+  scheduled_sync_disabled_reason?: "tracking_disabled" | "provider_not_configured" | "configured_test_tenant" | "synthetic_test_tenant" | null;
+  scheduled_sync_local_time?: string;
+  scheduled_sync_window_end_local_time?: string;
+  scheduled_sync_timezone?: string;
   performs_external_probe?: boolean;
   provider_prepaid_balance_checked?: boolean;
   workspace_monthly_spend_minor?: number;
+  workspace_monthly_reserved_minor?: number;
   workspace_monthly_limit_minor?: number | null;
   workspace_monthly_remaining_minor?: number | null;
   workspace_monthly_limit_unlimited?: boolean;

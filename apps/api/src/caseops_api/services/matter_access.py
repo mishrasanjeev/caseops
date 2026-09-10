@@ -917,6 +917,7 @@ def _lock_ip_access_responsibility_fence(
     context: SessionContext,
     docket_id: str,
 ) -> tuple[IpDocketRecord, dict[str, CompanyMembership], set[str]]:
+    session.scalar(select(Company.id).where(Company.id == context.company.id).with_for_update())
     advisory = _load_ip_docket_for_access_management(
         session,
         context=context,
@@ -1252,6 +1253,20 @@ def _validate_ip_access_change(
     grants: list[MatterAccessGrant],
     walls: list[EthicalWall],
 ) -> tuple[MatterAccessGrant | None, EthicalWall | None]:
+    from caseops_api.services.ip_specialist_contracts import RECORD_TYPES as specialist_types
+
+    if (
+        docket.record_type in specialist_types
+        and payload.action == "set_restricted"
+        and payload.restricted is False
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "specialist_restriction_required",
+                "message": "Specialist intake requires explicit access grants and ethical walls.",
+            },
+        )
     if (
         docket.record_type in {"patent", "patent_family", "patent_application"}
         and payload.action == "set_restricted"
@@ -1859,6 +1874,7 @@ def apply_ip_access_change(
     context: SessionContext,
     docket_id: str,
     payload: IpAccessApplyRequest,
+    commit: bool = True,
 ) -> IpAccessChangeResponse:
     docket, memberships, role_membership_ids = _lock_ip_access_responsibility_fence(
         session,
@@ -2006,7 +2022,8 @@ def apply_ip_access_change(
             docket_id=docket.id,
         ),
     )
-    session.commit()
+    if commit:
+        session.commit()
     return response
 
 
@@ -2240,6 +2257,7 @@ def _lock_matter_access_responsibility_fence(
     dict[str, CompanyMembership],
     dict[str, set[str]],
 ]:
+    session.scalar(select(Company.id).where(Company.id == context.company.id).with_for_update())
     advisory_matter = _load_matter_or_404(
         session,
         context.company.id,
@@ -2558,6 +2576,7 @@ def remove_access_grant(
     context: SessionContext,
     matter_id: str,
     grant_id: str,
+    commit: bool = True,
 ) -> None:
     _require_admin(context)
     matter, dockets, memberships, role_ids_by_docket = (
@@ -2607,7 +2626,8 @@ def remove_access_grant(
         matter_id=matter.id,
         metadata={"membership_id": grant.membership_id},
     )
-    session.commit()
+    if commit:
+        session.commit()
 
 
 def add_ethical_wall(

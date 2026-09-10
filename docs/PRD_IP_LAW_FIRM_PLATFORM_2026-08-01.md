@@ -2697,3 +2697,22 @@ cannot be delegated or an exact irreversible production action not already appro
 - All 11 milestones have dated deliverables, exit criteria, dependencies, and a staffing baseline.
 - Current code reuse boundaries, forbidden duplicates, canonical writers, compatibility/retirement paths, unbuilt export/purge tooling and incomplete recovery evidence are explicit rather than represented as completed foundations.
 - Remaining items in Section 29 are explicit product/legal/security/provider decisions with owners and blocking milestones, not hidden implementation assumptions.
+
+### 33.9 September 10 access-review implementation boundary
+
+The isolated IPLF-073 continuation implements a manual, single-record access-review
+campaign for a currently authorized Matter or IP docket. It snapshots bounded
+membership/team grant evidence, requires independent user decisions and current
+step-up, and finalizes requested revocations atomically through the existing
+`matter_access.py` owner. It adds no grant evaluator or emergency privilege.
+The administration screen includes server-resolved targets and persisted reload.
+Migration `20260910_0001` is independent of the frozen preservation migration.
+
+This implements campaign depth for `SEC-GOV-01/02/04` and `IP-ACCESS-01/03/04/05/06`;
+it does not close their entire reciprocal allocation or IPLF-073A/B overall.
+Automatic periodic/event-triggered campaigns, firm-policy escalation/expiry,
+client/portal campaigns, and `SEC-GOV-03`/UJ-63 emergency sessions remain open.
+Shared catalogs and generated contracts are integrated by the parent candidate;
+no commit, production release, or deployed acceptance is claimed here. See
+`docs/ip-implementation/evidence/ip-access-review-campaign-2026-09-10.md` for exact
+ownership, bounded-work limits, verification and remaining requirements.

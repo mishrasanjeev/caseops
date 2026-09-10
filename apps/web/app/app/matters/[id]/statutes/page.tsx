@@ -350,6 +350,8 @@ function AddReferenceDialog({ matterId }: { matterId: string }) {
                 >
                   {sec.section_number}
                   {sec.section_label ? ` — ${sec.section_label}` : ""}
+                  {sec.legal_status === "repealed" && selectableSectionIds.has(sec.id)
+                    ? " (historical repealed-law edition)" : ""}
                   {!selectableSectionIds.has(sec.id)
                     ? " — verification pending; not attachable"
                     : ""}

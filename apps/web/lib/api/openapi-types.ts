@@ -4,6 +4,109 @@
  */
 
 export interface paths {
+    "/api/access-reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Campaigns */
+        get: operations["campaigns_api_access_reviews_get"];
+        put?: never;
+        /** Create */
+        post: operations["create_api_access_reviews_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/access-reviews/{campaign_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get */
+        get: operations["get_api_access_reviews__campaign_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/access-reviews/{campaign_id}/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Decide */
+        post: operations["decide_api_access_reviews__campaign_id__decisions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/access-reviews/{campaign_id}/finalize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Finalize */
+        post: operations["finalize_api_access_reviews__campaign_id__finalize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/access-reviews/scope": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Scope */
+        get: operations["scope_api_access_reviews_scope_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/access-reviews/targets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Targets */
+        get: operations["targets_api_access_reviews_targets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/ai-feedback": {
         parameters: {
             query?: never;
@@ -172,6 +275,76 @@ export interface paths {
         get: operations["list_data_classes_api_admin_data_governance_data_classes_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/data-governance/holds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Preservation Holds */
+        get: operations["list_preservation_holds_api_admin_data_governance_holds_get"];
+        put?: never;
+        /** Draft Preservation Hold */
+        post: operations["draft_preservation_hold_api_admin_data_governance_holds_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/data-governance/holds/{hold_id}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Activate Preservation Hold */
+        post: operations["activate_preservation_hold_api_admin_data_governance_holds__hold_id__activate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/data-governance/holds/{hold_id}/release-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Preservation Release Requests */
+        get: operations["list_preservation_release_requests_api_admin_data_governance_holds__hold_id__release_requests_get"];
+        put?: never;
+        /** Request Preservation Release */
+        post: operations["request_preservation_release_api_admin_data_governance_holds__hold_id__release_requests_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/data-governance/holds/{hold_id}/release-requests/{proposal_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve Preservation Release */
+        post: operations["approve_preservation_release_api_admin_data_governance_holds__hold_id__release_requests__proposal_id__approve_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6925,6 +7098,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ip/patents/applications/{application_id}/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Evidence Page */
+        get: operations["get_evidence_page_api_ip_patents_applications__application_id__evidence_get"];
+        put?: never;
+        /** Post Evidence */
+        post: operations["post_evidence_api_ip_patents_applications__application_id__evidence_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/patents/applications/{application_id}/evidence/{evidence_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Evidence */
+        get: operations["get_evidence_api_ip_patents_applications__application_id__evidence__evidence_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/ip/patents/applications/{application_id}/lifecycle-history": {
         parameters: {
             query?: never;
@@ -6971,6 +7179,127 @@ export interface paths {
         get: operations["get_priority_api_ip_patents_applications__application_id__priorities__priority_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/patents/applications/{application_id}/proceedings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Page */
+        get: operations["get_page_api_ip_patents_applications__application_id__proceedings_get"];
+        put?: never;
+        /** Create */
+        post: operations["create_api_ip_patents_applications__application_id__proceedings_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/patents/applications/{application_id}/proceedings/{proceeding_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get History */
+        get: operations["get_history_api_ip_patents_applications__application_id__proceedings__proceeding_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/patents/applications/{application_id}/proceedings/{proceeding_id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview */
+        post: operations["preview_api_ip_patents_applications__application_id__proceedings__proceeding_id__preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/patents/applications/{application_id}/proceedings/{proceeding_id}/transitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Transition */
+        post: operations["transition_api_ip_patents_applications__application_id__proceedings__proceeding_id__transitions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/patents/applications/{application_id}/prosecution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Prosecution Page */
+        get: operations["get_prosecution_page_api_ip_patents_applications__application_id__prosecution_get"];
+        put?: never;
+        /** Post Prosecution */
+        post: operations["post_prosecution_api_ip_patents_applications__application_id__prosecution_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/patents/applications/{application_id}/prosecution/{event_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Prosecution Event */
+        get: operations["get_prosecution_event_api_ip_patents_applications__application_id__prosecution__event_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/patents/applications/{application_id}/prosecution/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Prosecution Preview */
+        post: operations["post_prosecution_preview_api_ip_patents_applications__application_id__prosecution_preview_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7673,6 +8002,283 @@ export interface paths {
         };
         /** Get Shared Work Reconciliation */
         get: operations["get_shared_work_reconciliation_api_ip_shared_work_reconciliation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/specialist/contracts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Contracts */
+        get: operations["get_contracts_api_ip_specialist_contracts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/specialist/records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Records */
+        get: operations["list_records_api_ip_specialist_records_get"];
+        put?: never;
+        /** Create Record */
+        post: operations["create_record_api_ip_specialist_records_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/specialist/records/{record_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Record */
+        get: operations["get_record_api_ip_specialist_records__record_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/specialist/records/{record_id}/corrections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Correct Record */
+        post: operations["correct_record_api_ip_specialist_records__record_id__corrections_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/specialist/records/{record_id}/observations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Observations */
+        get: operations["list_observations_api_ip_specialist_records__record_id__observations_get"];
+        put?: never;
+        /** Add Observation */
+        post: operations["add_observation_api_ip_specialist_records__record_id__observations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/specialist/records/{record_id}/versions/{version}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Version */
+        get: operations["get_version_api_ip_specialist_records__record_id__versions__version__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/specialist/records/{record_id}/workflows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Workflows */
+        get: operations["list_workflows_api_ip_specialist_records__record_id__workflows_get"];
+        put?: never;
+        /** Create Workflow */
+        post: operations["create_workflow_api_ip_specialist_records__record_id__workflows_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/specialist/records/{record_id}/workflows/{workflow_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Workflow */
+        get: operations["get_workflow_api_ip_specialist_records__record_id__workflows__workflow_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/specialist/records/{record_id}/workflows/{workflow_id}/cost-evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Cost */
+        post: operations["create_cost_api_ip_specialist_records__record_id__workflows__workflow_id__cost_evidence_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/specialist/records/{record_id}/workflows/{workflow_id}/cost-evidence/{cost_id}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Void Cost */
+        post: operations["void_cost_api_ip_specialist_records__record_id__workflows__workflow_id__cost_evidence__cost_id__void_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/specialist/records/{record_id}/workflows/{workflow_id}/cost-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Cost Options */
+        get: operations["cost_options_api_ip_specialist_records__record_id__workflows__workflow_id__cost_options_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/specialist/records/{record_id}/workflows/{workflow_id}/obligations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Obligations */
+        get: operations["list_obligations_api_ip_specialist_records__record_id__workflows__workflow_id__obligations_get"];
+        put?: never;
+        /** Create Obligation */
+        post: operations["create_obligation_api_ip_specialist_records__record_id__workflows__workflow_id__obligations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/specialist/records/{record_id}/workflows/{workflow_id}/obligations/{obligation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Obligation */
+        get: operations["get_obligation_api_ip_specialist_records__record_id__workflows__workflow_id__obligations__obligation_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/specialist/records/{record_id}/workflows/{workflow_id}/obligations/{obligation_id}/performance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Performance History */
+        get: operations["performance_history_api_ip_specialist_records__record_id__workflows__workflow_id__obligations__obligation_id__performance_get"];
+        put?: never;
+        /** Record Performance */
+        post: operations["record_performance_api_ip_specialist_records__record_id__workflows__workflow_id__obligations__obligation_id__performance_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/specialist/records/{record_id}/workflows/{workflow_id}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revise Workflow */
+        post: operations["revise_workflow_api_ip_specialist_records__record_id__workflows__workflow_id__revisions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ip/specialist/records/{record_id}/workflows/{workflow_id}/versions/{version}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Version */
+        get: operations["get_version_api_ip_specialist_records__record_id__workflows__workflow_id__versions__version__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -15288,6 +15894,11 @@ export interface components {
             provider_key: string;
             /** Remaining Minor */
             remaining_minor?: number | null;
+            /**
+             * Reserved Minor
+             * @default 0
+             */
+            reserved_minor: number;
             /** Spent Minor */
             spent_minor: number;
             /** Unlimited */
@@ -16455,6 +17066,64 @@ export interface components {
             /** Year Start */
             year_start?: number | null;
         };
+        /** CampaignCreate */
+        CampaignCreate: {
+            /** Expected Access Policy Version */
+            expected_access_policy_version: number;
+            /** Reason */
+            reason: string;
+            /** Target Id */
+            target_id: string;
+            /**
+             * Target Type
+             * @enum {string}
+             */
+            target_type: "matter" | "ip_docket";
+            /** Title */
+            title: string;
+            /**
+             * Trigger
+             * @enum {string}
+             */
+            trigger: "periodic" | "client_team_change" | "ethical_wall_change" | "portal_inactivity" | "employee_change" | "counsel_completion" | "incident";
+        };
+        /** CampaignPage */
+        CampaignPage: {
+            /** Campaigns */
+            campaigns: components["schemas"]["CampaignRecord"][];
+            /** Next Before Id */
+            next_before_id: string | null;
+        };
+        /** CampaignRecord */
+        CampaignRecord: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Creator User Id */
+            creator_user_id: string;
+            /** Decisions */
+            decisions: components["schemas"]["DecisionRecord"][];
+            /** Finalized At */
+            finalized_at: string | null;
+            /** Id */
+            id: string;
+            /** Reason */
+            reason: string;
+            snapshot: components["schemas"]["ScopeSnapshot"];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "finalized";
+            /** Title */
+            title: string;
+            /** Trigger */
+            trigger: string;
+            /** Version */
+            version: number;
+        };
         /** CapabilityCatalogResponse */
         CapabilityCatalogResponse: {
             /** Capabilities */
@@ -16480,6 +17149,72 @@ export interface components {
             owner_only: boolean;
             /** Protected Reason */
             protected_reason?: string | null;
+        };
+        /** ContractObligationRecord */
+        caseops_api__schemas__contracts__ContractObligationRecord: {
+            /** Completed At */
+            completed_at: string | null;
+            /** Contract Id */
+            contract_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description: string | null;
+            /** Due On */
+            due_on: string | null;
+            /** Id */
+            id: string;
+            /** Owner Membership Id */
+            owner_membership_id: string | null;
+            /** Owner Name */
+            owner_name: string | null;
+            /**
+             * Priority
+             * @enum {string}
+             */
+            priority: "low" | "medium" | "high";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "in_progress" | "completed" | "waived";
+            /** Title */
+            title: string;
+        };
+        /** ContractObligationRecord */
+        caseops_api__schemas__ip_specialist_workflows__ContractObligationRecord: {
+            /** Cost Item Id */
+            cost_item_id: string | null;
+            /**
+             * Deadline Id
+             * Format: uuid
+             */
+            deadline_id: string;
+            /**
+             * Due On
+             * Format: date
+             */
+            due_on: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Kind */
+            kind: string;
+            source: components["schemas"]["SpecialistSource"];
+            /** Status */
+            status: string;
+            /**
+             * Task Id
+             * Format: uuid
+             */
+            task_id: string;
+            /** Title */
+            title: string;
         };
         /** CaseTrackingBookmarkCreateRequest */
         CaseTrackingBookmarkCreateRequest: {
@@ -16591,6 +17326,19 @@ export interface components {
             provider_prepaid_balance_checked: boolean;
             /** Reason */
             reason?: string | null;
+            /** Scheduled Sync Disabled Reason */
+            scheduled_sync_disabled_reason?: ("tracking_disabled" | "provider_not_configured" | "configured_test_tenant" | "synthetic_test_tenant") | null;
+            /**
+             * Scheduled Sync Eligible
+             * @default false
+             */
+            scheduled_sync_eligible: boolean;
+            /** Scheduled Sync Local Time */
+            scheduled_sync_local_time: string;
+            /** Scheduled Sync Timezone */
+            scheduled_sync_timezone: string;
+            /** Scheduled Sync Window End Local Time */
+            scheduled_sync_window_end_local_time: string;
             /**
              * Workspace Monthly Budget Scope
              * @enum {string}
@@ -16612,6 +17360,11 @@ export interface components {
             workspace_monthly_limit_unlimited: boolean;
             /** Workspace Monthly Remaining Minor */
             workspace_monthly_remaining_minor?: number | null;
+            /**
+             * Workspace Monthly Reserved Minor
+             * @default 0
+             */
+            workspace_monthly_reserved_minor: number;
             /**
              * Workspace Monthly Spend Minor
              * @default 0
@@ -18180,6 +18933,49 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** ContractCostCreate */
+        ContractCostCreate: {
+            /** Amount Minor */
+            amount_minor: number;
+            /**
+             * Cost Nature
+             * @default actual
+             * @enum {string}
+             */
+            cost_nature: "actual" | "estimate";
+            /** Currency */
+            currency: string;
+            /** Description */
+            description: string;
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version: number;
+            source: components["schemas"]["SpecialistSource"];
+        };
+        /** ContractCostOption */
+        ContractCostOption: {
+            /** Description */
+            description: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+        };
+        /** ContractCostOptions */
+        ContractCostOptions: {
+            /** Next Cursor */
+            next_cursor: string | null;
+            /** Records */
+            records: components["schemas"]["ContractCostOption"][];
+        };
+        /** ContractCostVoid */
+        ContractCostVoid: {
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version: number;
+            /** Reason */
+            reason: string;
+            source: components["schemas"]["SpecialistSource"];
+        };
         /** ContractCreateRequest */
         ContractCreateRequest: {
             /**
@@ -18369,6 +19165,28 @@ export interface components {
             /** Renewal On */
             renewal_on?: string | null;
         };
+        /** ContractObligation */
+        ContractObligation: {
+            /** Cost Item Id */
+            cost_item_id?: string | null;
+            /**
+             * Due On As Supplied
+             * Format: date
+             */
+            due_on_as_supplied: string;
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version: number;
+            /** Expected Version */
+            expected_version: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "royalty" | "reporting" | "audit" | "quality_control" | "recordal" | "notice" | "renewal" | "termination" | "filing" | "office_response" | "hearing";
+            source: components["schemas"]["SpecialistSource"];
+            /** Title */
+            title: string;
+        };
         /** ContractObligationCreateRequest */
         ContractObligationCreateRequest: {
             /** Description */
@@ -18392,39 +19210,75 @@ export interface components {
             /** Title */
             title: string;
         };
-        /** ContractObligationRecord */
-        ContractObligationRecord: {
-            /** Completed At */
-            completed_at: string | null;
-            /** Contract Id */
-            contract_id: string;
+        /** ContractObligationList */
+        ContractObligationList: {
+            /** Next Cursor */
+            next_cursor: string | null;
+            /** Records */
+            records: components["schemas"]["caseops_api__schemas__ip_specialist_workflows__ContractObligationRecord"][];
+        };
+        /** ContractPerformance */
+        ContractPerformance: {
+            /** Account */
+            account: string;
             /**
-             * Created At
+             * Action
+             * @enum {string}
+             */
+            action: "complete" | "cancel" | "notice_recorded";
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version: number;
+            /**
+             * Expected Status
+             * @default open
+             * @constant
+             */
+            expected_status: "open";
+            /**
+             * Occurred On
+             * Format: date
+             */
+            occurred_on: string;
+            /** Replacement Cost Item Id */
+            replacement_cost_item_id?: string | null;
+            source: components["schemas"]["SpecialistSource"];
+        };
+        /** ContractPerformanceList */
+        ContractPerformanceList: {
+            /** Next Cursor */
+            next_cursor: string | null;
+            /** Records */
+            records: components["schemas"]["ContractPerformanceRecord"][];
+        };
+        /** ContractPerformanceRecord */
+        ContractPerformanceRecord: {
+            /** Account */
+            account: string;
+            /** Action */
+            action: string;
+            /** Cost Item Id */
+            cost_item_id: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Obligation Id
+             * Format: uuid
+             */
+            obligation_id: string;
+            /**
+             * Occurred On
+             * Format: date
+             */
+            occurred_on: string;
+            /**
+             * Recorded At
              * Format: date-time
              */
-            created_at: string;
-            /** Description */
-            description: string | null;
-            /** Due On */
-            due_on: string | null;
-            /** Id */
-            id: string;
-            /** Owner Membership Id */
-            owner_membership_id: string | null;
-            /** Owner Name */
-            owner_name: string | null;
-            /**
-             * Priority
-             * @enum {string}
-             */
-            priority: "low" | "medium" | "high";
-            /**
-             * Status
-             * @enum {string}
-             */
-            status: "pending" | "in_progress" | "completed" | "waived";
-            /** Title */
-            title: string;
+            recorded_at: string;
+            source: components["schemas"]["SpecialistSource"];
         };
         /** ContractPlaybookHitRecord */
         ContractPlaybookHitRecord: {
@@ -18731,7 +19585,7 @@ export interface components {
             legal_references?: components["schemas"]["ContractLegalReferenceRecord"][];
             linked_matter: components["schemas"]["ContractLinkedMatterRecord"] | null;
             /** Obligations */
-            obligations: components["schemas"]["ContractObligationRecord"][];
+            obligations: components["schemas"]["caseops_api__schemas__contracts__ContractObligationRecord"][];
             owner: components["schemas"]["ContractWorkspaceMembership"] | null;
             /** Playbook Hits */
             playbook_hits: components["schemas"]["ContractPlaybookHitRecord"][];
@@ -18739,6 +19593,71 @@ export interface components {
             playbook_rules: components["schemas"]["ContractPlaybookRuleRecord"][];
             /** Term Suggestions */
             term_suggestions?: components["schemas"]["ContractTermSuggestionRecord"][];
+        };
+        /** CopyrightFacts */
+        CopyrightFacts: {
+            /** Author */
+            author: string;
+            /** Claimant */
+            claimant: string;
+            /** Created On */
+            created_on?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            domain: "copyright";
+            /** Ownership Claim */
+            ownership_claim: string;
+            /**
+             * Ownership Disputed
+             * @default false
+             */
+            ownership_disputed: boolean;
+            /** Published On */
+            published_on?: string | null;
+            /** Work Type As Supplied */
+            work_type_as_supplied: string;
+        };
+        /** CopyrightRegistration */
+        CopyrightRegistration: {
+            /** Account */
+            account: string;
+            /** Identifier As Supplied */
+            identifier_as_supplied?: string | null;
+            /** Jurisdiction */
+            jurisdiction: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "copyright_registration";
+            /**
+             * Occurred On
+             * Format: date
+             */
+            occurred_on: string;
+            /** Registration Identifier */
+            registration_identifier?: string | null;
+            /** Registration On */
+            registration_on?: string | null;
+            /** Registry */
+            registry: string;
+            /**
+             * Rights Effect
+             * @default not_determined_by_registration
+             * @constant
+             */
+            rights_effect: "not_determined_by_registration";
+            source_set: components["schemas"]["SetReference"];
+            /**
+             * Stage
+             * @default prepared
+             * @enum {string}
+             */
+            stage: "prepared" | "filed" | "deficiency" | "objection" | "response" | "hearing" | "registered" | "correction" | "expunged" | "refused" | "withdrawn";
+            /** Title */
+            title: string;
         };
         /**
          * CourtFormatProfileResponse
@@ -18948,6 +19867,49 @@ export interface components {
             /** Permissions */
             permissions?: string[] | null;
         };
+        /** CustomsFacts */
+        CustomsFacts: {
+            /** Asserted Right As Supplied */
+            asserted_right_as_supplied: string;
+            /** Authentication Guide Custodian */
+            authentication_guide_custodian: string;
+            /** Authorised Importer Policy */
+            authorised_importer_policy: string;
+            /** Authority Or Channel As Supplied */
+            authority_or_channel_as_supplied: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            domain: "customs_enforcement";
+            /** Instruction Reference */
+            instruction_reference: string;
+            /** Products */
+            products: string;
+            /** Right Holder */
+            right_holder: string;
+        };
+        /** DecisionRecord */
+        DecisionRecord: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "keep" | "revoke";
+            /** Grant Id */
+            grant_id: string;
+            /** Reason */
+            reason: string;
+            /** Reviewer Membership Id */
+            reviewer_membership_id: string;
+            /** Reviewer User Id */
+            reviewer_user_id: string;
+        };
         /** DecisionVolumePoint */
         DecisionVolumePoint: {
             /** Count */
@@ -19017,6 +19979,85 @@ export interface components {
             /** Statute Counts */
             statute_counts?: components["schemas"]["AnalyticsCount"][];
         };
+        /** DesignApplication */
+        DesignApplication: {
+            /** Account */
+            account: string;
+            /** Identifier As Supplied */
+            identifier_as_supplied?: string | null;
+            /** Jurisdiction */
+            jurisdiction: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "design_application";
+            /**
+             * Occurred On
+             * Format: date
+             */
+            occurred_on: string;
+            /**
+             * Period Action
+             * @default none
+             * @enum {string}
+             */
+            period_action: "none" | "renewal" | "extension";
+            /** Protection From */
+            protection_from?: string | null;
+            /** Protection Until */
+            protection_until?: string | null;
+            /**
+             * Publication
+             * @default not_recorded
+             * @enum {string}
+             */
+            publication: "not_recorded" | "deferred" | "published";
+            /** Publication On */
+            publication_on?: string | null;
+            /** Registration Identifier */
+            registration_identifier?: string | null;
+            /** Registration On */
+            registration_on?: string | null;
+            /** Registry */
+            registry: string;
+            source_set: components["schemas"]["SetReference"];
+            /**
+             * Stage
+             * @default prepared
+             * @enum {string}
+             */
+            stage: "prepared" | "filed" | "examination" | "objection" | "response" | "hearing" | "accepted" | "registered" | "refused" | "withdrawn";
+            /** Title */
+            title: string;
+            variant_basis?: components["schemas"]["SpecialistSource"] | null;
+            /** Variant Of */
+            variant_of?: string | null;
+        };
+        /** DesignFacts */
+        DesignFacts: {
+            /** Applicant */
+            applicant: string;
+            /** Article */
+            article: string;
+            /** Classification As Supplied */
+            classification_as_supplied?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            domain: "design";
+            /** Novelty Statement */
+            novelty_statement?: string | null;
+            /**
+             * Publication Instruction
+             * @default unknown
+             * @enum {string}
+             */
+            publication_instruction: "unknown" | "confidential" | "published";
+            /** Representation Description */
+            representation_description?: string | null;
+        };
         /** DocumentProcessingJobRecord */
         DocumentProcessingJobRecord: {
             /**
@@ -19064,6 +20105,24 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** DomainNameFacts */
+        DomainNameFacts: {
+            /** Dispute Channel As Supplied */
+            dispute_channel_as_supplied?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            domain: "domain_name";
+            /** Domain Name */
+            domain_name: string;
+            /** Expiry As Supplied */
+            expiry_as_supplied?: string | null;
+            /** Registrant As Supplied */
+            registrant_as_supplied: string;
+            /** Registrar */
+            registrar?: string | null;
         };
         /** DraftCompareRecord */
         DraftCompareRecord: {
@@ -20323,6 +21382,27 @@ export interface components {
             /** Role */
             role?: ("admin" | "partner" | "member" | "paralegal" | "viewer") | null;
         };
+        /** EnforcementFacts */
+        EnforcementFacts: {
+            /** Allegation */
+            allegation: string;
+            /** Alleged Party */
+            alleged_party?: string | null;
+            /** Asserted Right As Supplied */
+            asserted_right_as_supplied: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            domain: "enforcement";
+            /**
+             * Proposed Channel
+             * @enum {string}
+             */
+            proposed_channel: "investigation" | "notice" | "platform" | "customs" | "opposition" | "cancellation" | "litigation";
+            /** Represented Party */
+            represented_party: string;
+        };
         /** EnterpriseIdentityReadinessResponse */
         EnterpriseIdentityReadinessResponse: {
             /** Enabled */
@@ -20519,6 +21599,21 @@ export interface components {
              * @default 0
              */
             tax_minor: number;
+        };
+        /** FinancialTerms */
+        FinancialTerms: {
+            /** Audit */
+            audit?: string | null;
+            /** Currency */
+            currency: string;
+            /** Fee Minor */
+            fee_minor?: number | null;
+            /** Minimum Minor */
+            minimum_minor?: number | null;
+            /** Reporting */
+            reporting?: string | null;
+            /** Royalty */
+            royalty?: string | null;
         };
         /** FirmStorageQuotaPatchRequest */
         FirmStorageQuotaPatchRequest: {
@@ -20760,6 +21855,24 @@ export interface components {
              * @default false
              */
             unverified: boolean;
+        };
+        /** GeographicalIndicationFacts */
+        GeographicalIndicationFacts: {
+            /** Applicant Or Association */
+            applicant_or_association: string;
+            /** Authorised User Claim */
+            authorised_user_claim?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            domain: "geographical_indication";
+            /** Geographical Area */
+            geographical_area: string;
+            /** Goods */
+            goods: string;
+            /** Specification As Supplied */
+            specification_as_supplied?: string | null;
         };
         /** GoogleDriveConnectionCallbackResponse */
         GoogleDriveConnectionCallbackResponse: {
@@ -21178,6 +22291,28 @@ export interface components {
              */
             scopes_approved: boolean;
         };
+        /** GrantSnapshot */
+        GrantSnapshot: {
+            /** Effective From */
+            effective_from: string | null;
+            /** Expires At */
+            expires_at: string | null;
+            /** Id */
+            id: string;
+            /** Reason */
+            reason: string | null;
+            /** Record Version */
+            record_version: number;
+            /** Subject Id */
+            subject_id: string;
+            /** Subject Label */
+            subject_label: string;
+            /**
+             * Subject Type
+             * @enum {string}
+             */
+            subject_type: "membership" | "team";
+        };
         /** HearingCoachFeedbackItem */
         HearingCoachFeedbackItem: {
             /** Answered Question */
@@ -21497,6 +22632,116 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** HoldDraftRequest */
+        HoldDraftRequest: {
+            /** Authority Reference */
+            authority_reference: string;
+            /** Data Class Ids */
+            data_class_ids?: string[];
+            /** Idempotency Key */
+            idempotency_key: string;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "company" | "data_classes";
+            /** Title */
+            title: string;
+        };
+        /** HoldListResponse */
+        HoldListResponse: {
+            /** Has More */
+            has_more: boolean;
+            /** Holds */
+            holds: components["schemas"]["HoldRecord"][];
+            /** Next Before Id */
+            next_before_id?: string | null;
+        };
+        /** HoldRecord */
+        HoldRecord: {
+            /** Activated At */
+            activated_at: string | null;
+            /** Approved By Membership Id */
+            approved_by_membership_id: string | null;
+            /** Authority Reference */
+            authority_reference: string;
+            /** Created By Membership Id */
+            created_by_membership_id: string | null;
+            /** Data Class Ids */
+            data_class_ids: string[];
+            /** Id */
+            id: string;
+            /** Released At */
+            released_at: string | null;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "company" | "data_classes";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "active" | "released" | "cancelled";
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** HoldReleaseListResponse */
+        HoldReleaseListResponse: {
+            /** Has More */
+            has_more: boolean;
+            /** Next Before Id */
+            next_before_id?: string | null;
+            /** Proposals */
+            proposals: components["schemas"]["HoldReleaseProposal"][];
+        };
+        /** HoldReleaseProposal */
+        HoldReleaseProposal: {
+            /** Dry Run Id */
+            dry_run_id: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Hold Id */
+            hold_id: string;
+            /** Id */
+            id: string;
+            /** Reason Reference */
+            reason_reference: string;
+            /** Request Hash */
+            request_hash: string;
+            /** Requester Membership Id */
+            requester_membership_id: string;
+        };
+        /** HoldReleaseRequest */
+        HoldReleaseRequest: {
+            /** Dry Run Id */
+            dry_run_id: string;
+            /**
+             * Expected Updated At
+             * Format: date-time
+             */
+            expected_updated_at: string;
+            /** Idempotency Key */
+            idempotency_key: string;
+            /** Reason Reference */
+            reason_reference: string;
+        };
+        /** HoldVersionCommand */
+        HoldVersionCommand: {
+            /**
+             * Expected Updated At
+             * Format: date-time
+             */
+            expected_updated_at: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -32242,6 +33487,67 @@ export interface components {
             /** Documents */
             documents?: components["schemas"]["KycDocumentRecord"][];
         };
+        /** LayoutApplication */
+        LayoutApplication: {
+            /** Account */
+            account: string;
+            /** Cost Item Id */
+            cost_item_id?: string | null;
+            /** Exploitation Territory As Supplied */
+            exploitation_territory_as_supplied?: string | null;
+            /** First Exploitation On As Supplied */
+            first_exploitation_on_as_supplied?: string | null;
+            /** Identifier As Supplied */
+            identifier_as_supplied?: string | null;
+            /** Jurisdiction */
+            jurisdiction: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "layout_application";
+            /**
+             * Legal Eligibility
+             * @default not_determined
+             * @constant
+             */
+            legal_eligibility: "not_determined";
+            /**
+             * Occurred On
+             * Format: date
+             */
+            occurred_on: string;
+            /**
+             * Publication
+             * @default not_recorded
+             * @enum {string}
+             */
+            publication: "not_recorded" | "reported_published";
+            /** Publication On */
+            publication_on?: string | null;
+            /** Registration Identifier */
+            registration_identifier?: string | null;
+            /** Registration On */
+            registration_on?: string | null;
+            /** Registry */
+            registry: string;
+            registry_source?: components["schemas"]["SpecialistSource"] | null;
+            /**
+             * Rights Effect
+             * @default not_determined_by_registration
+             * @constant
+             */
+            rights_effect: "not_determined_by_registration";
+            source_set: components["schemas"]["SetReference"];
+            /**
+             * Stage
+             * @default prepared
+             * @enum {string}
+             */
+            stage: "prepared" | "filed" | "examination" | "objection" | "response" | "hearing" | "registered" | "refused" | "withdrawn";
+            /** Title */
+            title: string;
+        };
         /** LegalCalendarActivationRequest */
         LegalCalendarActivationRequest: {
             /**
@@ -32838,6 +34144,135 @@ export interface components {
             until_date?: string | null;
             /** Update Types */
             update_types?: ("act" | "amendment" | "ordinance" | "notification" | "repeal" | "regulation" | "circular" | "order" | "practice_direction")[] | null;
+        };
+        /** Licence */
+        Licence: {
+            /** Account */
+            account: string;
+            /**
+             * Effective From
+             * Format: date
+             */
+            effective_from: string;
+            /** Effective Until */
+            effective_until?: string | null;
+            /** Enforcement Control */
+            enforcement_control: string;
+            /**
+             * Exclusivity
+             * @enum {string}
+             */
+            exclusivity: "exclusive" | "nonexclusive" | "sole" | "not_stated";
+            /**
+             * Extracted By
+             * @default manual
+             * @enum {string}
+             */
+            extracted_by: "manual" | "document_extraction";
+            /** Field Of Use */
+            field_of_use: string;
+            financial_terms?: components["schemas"]["FinancialTerms"] | null;
+            /**
+             * Financial Terms Withheld
+             * @default false
+             */
+            financial_terms_withheld: boolean;
+            /** Grantee */
+            grantee: string;
+            /** Grantor */
+            grantor: string;
+            /**
+             * Interpretation
+             * @default unreviewed
+             * @enum {string}
+             */
+            interpretation: "unreviewed" | "issues_open" | "reviewed";
+            /** Issues */
+            issues?: components["schemas"]["ReviewIssue"][];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "licence";
+            /** Notice Terms */
+            notice_terms: string;
+            /**
+             * Occurred On
+             * Format: date
+             */
+            occurred_on: string;
+            /** Prosecution Control */
+            prosecution_control: string;
+            /** Quality Control */
+            quality_control: string;
+            /**
+             * Recordal
+             * @default not_determined
+             * @enum {string}
+             */
+            recordal: "not_determined" | "not_required_as_reviewed" | "required" | "filed" | "deficiency" | "accepted" | "rejected" | "withdrawn";
+            /** Recordal Identifier */
+            recordal_identifier?: string | null;
+            /** Recordal On */
+            recordal_on?: string | null;
+            /** Renewal Terms */
+            renewal_terms: string;
+            /** Review Reason */
+            review_reason?: string | null;
+            /** Rights */
+            rights: string;
+            source_set: components["schemas"]["SetReference"];
+            /**
+             * Status
+             * @default draft
+             * @enum {string}
+             */
+            status: "draft" | "active" | "terminated";
+            /** Sublicensing */
+            sublicensing: string;
+            /** Termination On */
+            termination_on?: string | null;
+            /** Termination Terms */
+            termination_terms: string;
+            /** Territory */
+            territory: string;
+            /** Title */
+            title: string;
+            /**
+             * Transaction
+             * @enum {string}
+             */
+            transaction: "licence" | "assignment" | "permission" | "security_interest";
+        };
+        /** LicensingFacts */
+        LicensingFacts: {
+            /** Affected Rights As Supplied */
+            affected_rights_as_supplied: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            domain: "licensing";
+            /**
+             * Exclusivity
+             * @default not_reviewed
+             * @enum {string}
+             */
+            exclusivity: "not_reviewed" | "exclusive" | "non_exclusive" | "sole";
+            /** Field Of Use */
+            field_of_use?: string | null;
+            /** Grantee */
+            grantee: string;
+            /** Grantor */
+            grantor: string;
+            /** Interpretation Issue */
+            interpretation_issue?: string | null;
+            /** Royalty Terms Confidential */
+            royalty_terms_confidential?: string | null;
+            /** Term As Supplied */
+            term_as_supplied?: string | null;
+            /** Territory */
+            territory: string;
         };
         /**
          * LimitationFlag
@@ -38483,6 +39918,92 @@ export interface components {
              */
             kind: "document_version";
         };
+        /** PatentEvidenceCreateRequest */
+        PatentEvidenceCreateRequest: {
+            /**
+             * Document Kind
+             * @enum {string}
+             */
+            document_kind: "claims" | "specification" | "drawings" | "abstract" | "sequence_listing" | "translation" | "amendment" | "response" | "filing_package";
+            /** Documents */
+            documents: components["schemas"]["PatentManifestItem"][];
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version: number;
+            /** Expected Version */
+            expected_version: number;
+            /** Expected Work Sequence */
+            expected_work_sequence: number;
+            /** Predecessor Id */
+            predecessor_id?: string | null;
+            /** Reason */
+            reason: string;
+            source: components["schemas"]["PatentDocumentSource"];
+            /** Title */
+            title: string;
+        };
+        /** PatentEvidencePage */
+        PatentEvidencePage: {
+            /**
+             * Application Id
+             * Format: uuid
+             */
+            application_id: string;
+            /** Next Cursor */
+            next_cursor: number | null;
+            /** Records */
+            records: components["schemas"]["PatentEvidenceRecord"][];
+            /** Work Sequence */
+            work_sequence: number;
+        };
+        /** PatentEvidenceRecord */
+        PatentEvidenceRecord: {
+            /** Anchor Version */
+            anchor_version: number;
+            /**
+             * Application Id
+             * Format: uuid
+             */
+            application_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Document Kind
+             * @enum {string}
+             */
+            document_kind: "claims" | "specification" | "drawings" | "abstract" | "sequence_listing" | "translation" | "amendment" | "response" | "filing_package";
+            /** Documents */
+            documents: components["schemas"]["PatentManifestItem"][];
+            /** Edition */
+            edition: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Current */
+            is_current: boolean;
+            /** Lifecycle Version */
+            lifecycle_version: number;
+            /** Manifest Sha256 */
+            manifest_sha256: string;
+            /** Predecessor Id */
+            predecessor_id: string | null;
+            /** Reason */
+            reason: string;
+            /**
+             * Root Id
+             * Format: uuid
+             */
+            root_id: string;
+            /** Sequence */
+            sequence: number;
+            source: components["schemas"]["PatentDocumentSource"];
+            /** Title */
+            title: string;
+        };
         /** PatentFamilyCorrectionRequest */
         PatentFamilyCorrectionRequest: {
             /** Expected Lifecycle Version */
@@ -38659,6 +40180,15 @@ export interface components {
             raw_value: string;
             /** Source */
             source: components["schemas"]["PatentDocumentSource"] | components["schemas"]["PatentRegistrySource"];
+        };
+        /** PatentManifestItem */
+        PatentManifestItem: {
+            /**
+             * Document Kind
+             * @enum {string}
+             */
+            document_kind: "claims" | "specification" | "drawings" | "abstract" | "sequence_listing" | "translation" | "amendment" | "response" | "filing_package";
+            source: components["schemas"]["PatentDocumentSource"];
         };
         /** PatentPartyCreateRequest */
         PatentPartyCreateRequest: {
@@ -38858,6 +40388,399 @@ export interface components {
             /** Withdrawn */
             withdrawn: boolean;
         };
+        /** PatentProceedingCreateRequest */
+        PatentProceedingCreateRequest: {
+            /** Counterparty */
+            counterparty: string;
+            /**
+             * Effective On
+             * Format: date
+             */
+            effective_on: string;
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version: number;
+            /** Expected Version */
+            expected_version: number;
+            /** Expected Work Sequence */
+            expected_work_sequence: number;
+            /**
+             * Proceeding Kind
+             * @default patent_pre_grant_opposition
+             * @constant
+             */
+            proceeding_kind: "patent_pre_grant_opposition";
+            /** Proceeding Number */
+            proceeding_number?: string | null;
+            /** Reason */
+            reason: string;
+            /**
+             * Received On
+             * Format: date
+             */
+            received_on: string;
+            /**
+             * Side
+             * @enum {string}
+             */
+            side: "applicant" | "opponent";
+            source: components["schemas"]["PatentDocumentSource"];
+            /** Source Pending Identifier Allocation */
+            source_pending_identifier_allocation: boolean;
+            /** Title */
+            title: string;
+        };
+        /** PatentProceedingEventRecord */
+        PatentProceedingEventRecord: {
+            /**
+             * After Stage
+             * @enum {string}
+             */
+            after_stage: "notice_recorded" | "response_preparation" | "response_filed" | "hearing_recorded" | "decided" | "withdrawn";
+            /** Anchor Version */
+            anchor_version: number;
+            /** Before Stage */
+            before_stage: ("notice_recorded" | "response_preparation" | "response_filed" | "hearing_recorded" | "decided" | "withdrawn") | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Effective On
+             * Format: date
+             */
+            effective_on: string;
+            /** Evidence Id */
+            evidence_id: string | null;
+            /** Exceptional Transition Reason */
+            exceptional_transition_reason: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            impact: components["schemas"]["PatentProceedingPreview"] | null;
+            /** Lifecycle Version */
+            lifecycle_version: number;
+            /** Outcome */
+            outcome: string | null;
+            /** Proceeding Number */
+            proceeding_number: string | null;
+            /** Reason */
+            reason: string;
+            /**
+             * Received On
+             * Format: date
+             */
+            received_on: string;
+            /** Revision */
+            revision: number;
+            /** Sequence */
+            sequence: number;
+            source: components["schemas"]["PatentDocumentSource"];
+        };
+        /** PatentProceedingHistory */
+        PatentProceedingHistory: {
+            /** Events */
+            events: components["schemas"]["PatentProceedingEventRecord"][];
+            proceeding: components["schemas"]["PatentProceedingRecord"];
+        };
+        /** PatentProceedingPage */
+        PatentProceedingPage: {
+            /**
+             * Application Id
+             * Format: uuid
+             */
+            application_id: string;
+            /** Next Cursor */
+            next_cursor: string | null;
+            /** Records */
+            records: components["schemas"]["PatentProceedingRecord"][];
+            /** Work Sequence */
+            work_sequence: number;
+        };
+        /** PatentProceedingPreview */
+        PatentProceedingPreview: {
+            /**
+             * Changes Application Phase
+             * @default false
+             * @constant
+             */
+            changes_application_phase: false;
+            /**
+             * Changes Deadlines
+             * @default false
+             * @constant
+             */
+            changes_deadlines: false;
+            /**
+             * Current Stage
+             * @enum {string}
+             */
+            current_stage: "notice_recorded" | "response_preparation" | "response_filed" | "hearing_recorded" | "decided" | "withdrawn";
+            /** Preview Sha256 */
+            preview_sha256: string;
+            /**
+             * Proceeding Id
+             * Format: uuid
+             */
+            proceeding_id: string;
+            /**
+             * Proposed Stage
+             * @enum {string}
+             */
+            proposed_stage: "notice_recorded" | "response_preparation" | "response_filed" | "hearing_recorded" | "decided" | "withdrawn";
+            /** Required Acknowledgements */
+            required_acknowledgements: string[];
+        };
+        /** PatentProceedingRecord */
+        PatentProceedingRecord: {
+            /** Allowed Stages */
+            allowed_stages: ("notice_recorded" | "response_preparation" | "response_filed" | "hearing_recorded" | "decided" | "withdrawn")[];
+            /**
+             * Application Id
+             * Format: uuid
+             */
+            application_id: string;
+            /** Counterparty */
+            counterparty: string;
+            /**
+             * Docket Id
+             * Format: uuid
+             */
+            docket_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Jurisdiction */
+            jurisdiction: string;
+            latest: components["schemas"]["PatentProceedingEventRecord"];
+            /** Lifecycle Version */
+            lifecycle_version: number;
+            /** Office */
+            office: string;
+            /** Operational */
+            operational: boolean;
+            /**
+             * Proceeding Kind
+             * @constant
+             */
+            proceeding_kind: "patent_pre_grant_opposition";
+            /**
+             * Side
+             * @enum {string}
+             */
+            side: "applicant" | "opponent";
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "notice_recorded" | "response_preparation" | "response_filed" | "hearing_recorded" | "decided" | "withdrawn";
+            /** Title */
+            title: string;
+            /** Version */
+            version: number;
+        };
+        /** PatentProceedingTransitionRequest */
+        PatentProceedingTransitionRequest: {
+            /**
+             * Acknowledged Exception Codes
+             * @default []
+             */
+            acknowledged_exception_codes: ("backdated_source_review" | "exceptional_stage_review")[];
+            /**
+             * Effective On
+             * Format: date
+             */
+            effective_on: string;
+            /** Evidence Id */
+            evidence_id?: string | null;
+            /** Exceptional Transition Reason */
+            exceptional_transition_reason?: string | null;
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version: number;
+            /** Expected Proceeding Version */
+            expected_proceeding_version: number;
+            /** Expected Version */
+            expected_version: number;
+            /** Expected Work Sequence */
+            expected_work_sequence: number;
+            /** Outcome */
+            outcome?: string | null;
+            /** Preview Sha256 */
+            preview_sha256?: string | null;
+            /** Proceeding Number */
+            proceeding_number?: string | null;
+            /** Reason */
+            reason: string;
+            /**
+             * Received On
+             * Format: date
+             */
+            received_on: string;
+            source: components["schemas"]["PatentDocumentSource"];
+            /**
+             * To Stage
+             * @enum {string}
+             */
+            to_stage: "notice_recorded" | "response_preparation" | "response_filed" | "hearing_recorded" | "decided" | "withdrawn";
+        };
+        /** PatentProsecutionCreateRequest */
+        PatentProsecutionCreateRequest: {
+            /**
+             * Acknowledged Exception Codes
+             * @default []
+             */
+            acknowledged_exception_codes: ("backdated_recalculation_review_required" | "exceptional_transition_review_required")[];
+            /**
+             * Effective On
+             * Format: date
+             */
+            effective_on: string;
+            /**
+             * Event Kind
+             * @enum {string}
+             */
+            event_kind: "filing_preparation" | "filing" | "publication" | "examination_request" | "office_action" | "response" | "hearing" | "amendment" | "grant" | "restoration";
+            /** Evidence Id */
+            evidence_id?: string | null;
+            /** Exceptional Transition Reason */
+            exceptional_transition_reason?: string | null;
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version: number;
+            /**
+             * Expected Phase
+             * @enum {string}
+             */
+            expected_phase: "disclosure" | "filing_preparation" | "filed" | "published" | "examination_requested" | "examination" | "response_filed" | "hearing" | "granted" | "refused" | "withdrawn" | "abandoned" | "closed";
+            /** Expected Version */
+            expected_version: number;
+            /** Expected Work Sequence */
+            expected_work_sequence: number;
+            /** Preview Sha256 */
+            preview_sha256?: string | null;
+            /** Reason */
+            reason: string;
+            /**
+             * Received On
+             * Format: date
+             */
+            received_on: string;
+            source: components["schemas"]["PatentDocumentSource"];
+        };
+        /** PatentProsecutionPage */
+        PatentProsecutionPage: {
+            /**
+             * Application Id
+             * Format: uuid
+             */
+            application_id: string;
+            /** Next Cursor */
+            next_cursor: number | null;
+            /** Records */
+            records: components["schemas"]["PatentProsecutionRecord"][];
+            /** Work Sequence */
+            work_sequence: number;
+        };
+        /** PatentProsecutionPreview */
+        PatentProsecutionPreview: {
+            /** Affected Deadline Ids */
+            affected_deadline_ids: string[];
+            /**
+             * Application Id
+             * Format: uuid
+             */
+            application_id: string;
+            /**
+             * Authoritative Calculation Available
+             * @default false
+             * @constant
+             */
+            authoritative_calculation_available: false;
+            /** Backdated */
+            backdated: boolean;
+            /**
+             * Changes Deadlines
+             * @default false
+             * @constant
+             */
+            changes_deadlines: false;
+            /**
+             * Current Phase
+             * @enum {string}
+             */
+            current_phase: "disclosure" | "filing_preparation" | "filed" | "published" | "examination_requested" | "examination" | "response_filed" | "hearing" | "granted" | "refused" | "withdrawn" | "abandoned" | "closed";
+            /** Preview Sha256 */
+            preview_sha256: string;
+            /**
+             * Proposed Phase
+             * @enum {string}
+             */
+            proposed_phase: "disclosure" | "filing_preparation" | "filed" | "published" | "examination_requested" | "examination" | "response_filed" | "hearing" | "granted" | "refused" | "withdrawn" | "abandoned" | "closed";
+            /** Required Acknowledgements */
+            required_acknowledgements: string[];
+            /** Work Sequence */
+            work_sequence: number;
+        };
+        /** PatentProsecutionRecord */
+        PatentProsecutionRecord: {
+            /**
+             * After Phase
+             * @enum {string}
+             */
+            after_phase: "disclosure" | "filing_preparation" | "filed" | "published" | "examination_requested" | "examination" | "response_filed" | "hearing" | "granted" | "refused" | "withdrawn" | "abandoned" | "closed";
+            /** Anchor Version */
+            anchor_version: number;
+            /**
+             * Application Id
+             * Format: uuid
+             */
+            application_id: string;
+            /**
+             * Before Phase
+             * @enum {string}
+             */
+            before_phase: "disclosure" | "filing_preparation" | "filed" | "published" | "examination_requested" | "examination" | "response_filed" | "hearing" | "granted" | "refused" | "withdrawn" | "abandoned" | "closed";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Effective On
+             * Format: date
+             */
+            effective_on: string;
+            /**
+             * Event Kind
+             * @enum {string}
+             */
+            event_kind: "filing_preparation" | "filing" | "publication" | "examination_request" | "office_action" | "response" | "hearing" | "amendment" | "grant" | "restoration";
+            /** Evidence Id */
+            evidence_id: string | null;
+            /** Exceptional Transition Reason */
+            exceptional_transition_reason: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            impact: components["schemas"]["PatentProsecutionPreview"];
+            /** Lifecycle Version */
+            lifecycle_version: number;
+            /** Reason */
+            reason: string;
+            /**
+             * Received On
+             * Format: date
+             */
+            received_on: string;
+            /** Sequence */
+            sequence: number;
+            source: components["schemas"]["PatentDocumentSource"];
+        };
         /** PatentRegistrySource */
         PatentRegistrySource: {
             /**
@@ -38996,6 +40919,30 @@ export interface components {
             scenario_code: "plan_payment_success" | "top_up_success" | "failed_payment" | "pending_payment" | "cancelled_expired_payment" | "duplicate_webhook" | "tampered_webhook" | "stale_webhook" | "refund_processed" | "refund_failed" | "subscription_charged" | "subscription_cancelled" | "settlement_report_import";
             /** Webhook Id */
             webhook_id?: string | null;
+        };
+        /** PlantVarietyFacts */
+        PlantVarietyFacts: {
+            /** Applicant */
+            applicant: string;
+            /** Breeder As Supplied */
+            breeder_as_supplied?: string | null;
+            /** Category As Supplied */
+            category_as_supplied: string;
+            /** Crop Species */
+            crop_species: string;
+            /** Denomination */
+            denomination: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            domain: "plant_variety";
+            /** Farmer Claim As Supplied */
+            farmer_claim_as_supplied?: string | null;
+            /** Material Access Instructions */
+            material_access_instructions: string;
+            /** Material Custodian */
+            material_custodian: string;
         };
         /** PlatformCouponCreateRequest */
         PlatformCouponCreateRequest: {
@@ -41313,6 +43260,78 @@ export interface components {
             /** Matched Alias */
             matched_alias: string;
         };
+        /** ReviewDecision */
+        ReviewDecision: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "keep" | "revoke";
+            /** Expected Version */
+            expected_version: number;
+            /** Grant Id */
+            grant_id: string;
+            /** Reason */
+            reason: string;
+        };
+        /** ReviewIssue */
+        ReviewIssue: {
+            /** Clause */
+            clause: string;
+            /** Question */
+            question: string;
+            /** Resolution */
+            resolution?: string | null;
+            source: components["schemas"]["SpecialistSource"];
+        };
+        /** RightsClaim */
+        RightsClaim: {
+            /** Account */
+            account: string;
+            /** Claimant */
+            claimant: string;
+            /** Competing Claims */
+            competing_claims?: string[];
+            /**
+             * Effective From
+             * Format: date
+             */
+            effective_from: string;
+            /** Effective Until */
+            effective_until?: string | null;
+            /**
+             * Interest
+             * @enum {string}
+             */
+            interest: "authorship" | "ownership" | "assignment" | "licence" | "permission";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "rights_claim";
+            /**
+             * Occurred On
+             * Format: date
+             */
+            occurred_on: string;
+            /** Predecessor */
+            predecessor?: string | null;
+            /**
+             * Review
+             * @default unreviewed
+             * @enum {string}
+             */
+            review: "unreviewed" | "unresolved" | "supported" | "rejected";
+            /** Review Reason */
+            review_reason?: string | null;
+            /** Rights */
+            rights: string;
+            source_set: components["schemas"]["SetReference"];
+            /** Territory */
+            territory: string;
+            /** Title */
+            title: string;
+        };
         /** SavedAnnotationListResponse */
         SavedAnnotationListResponse: {
             /** Annotations */
@@ -41378,6 +43397,22 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** ScopeSnapshot */
+        ScopeSnapshot: {
+            /** Access Policy Version */
+            access_policy_version: number;
+            /** Grants */
+            grants: components["schemas"]["GrantSnapshot"][];
+            /** Target Id */
+            target_id: string;
+            /** Target Title */
+            target_title: string;
+            /**
+             * Target Type
+             * @enum {string}
+             */
+            target_type: "matter" | "ip_docket";
         };
         /** SecretRotationEvidenceListResponse */
         SecretRotationEvidenceListResponse: {
@@ -41465,6 +43500,34 @@ export interface components {
              * @default false
              */
             validation_performed: boolean;
+        };
+        /** SemiconductorLayoutFacts */
+        SemiconductorLayoutFacts: {
+            /** Creator */
+            creator: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            domain: "semiconductor_layout";
+            /** Exploitation Territory */
+            exploitation_territory?: string | null;
+            /** First Commercial Exploitation */
+            first_commercial_exploitation?: string | null;
+            /** Layout Description */
+            layout_description: string;
+            /** Proprietor As Supplied */
+            proprietor_as_supplied: string;
+        };
+        /** SetReference */
+        SetReference: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Version */
+            version: number;
         };
         /** SettlementImportRequest */
         SettlementImportRequest: {
@@ -41718,6 +43781,284 @@ export interface components {
              */
             target_type: "authority_document" | "statute_section" | "judge_appointment" | "matter_attachment" | "ip_document_version";
         };
+        /** SourceMember */
+        SourceMember: {
+            /** Role */
+            role: string;
+            source: components["schemas"]["SpecialistSource"];
+        };
+        /** SourceSet */
+        SourceSet: {
+            /**
+             * Confidentiality
+             * @default restricted
+             * @enum {string}
+             */
+            confidentiality: "restricted" | "publication_authorized";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "source_set";
+            /** Members */
+            members: components["schemas"]["SourceMember"][];
+            /** Publication Instruction */
+            publication_instruction?: string | null;
+            /** Publication On As Supplied */
+            publication_on_as_supplied?: string | null;
+            /**
+             * Purpose
+             * @enum {string}
+             */
+            purpose: "representations" | "deposit" | "instrument" | "proceeding_evidence" | "layout_deposit";
+            /** Title */
+            title: string;
+        };
+        /** SpecialistContract */
+        SpecialistContract: {
+            /** Blockers */
+            blockers: string[];
+            /** Child Prd Sha256 */
+            child_prd_sha256: string;
+            /** Contract Path */
+            contract_path: string;
+            /** Contract Version */
+            contract_version: string;
+            /**
+             * Domain
+             * @enum {string}
+             */
+            domain: "design" | "copyright" | "domain_name" | "licensing" | "enforcement" | "geographical_indication" | "plant_variety" | "semiconductor_layout" | "trade_secret" | "customs_enforcement";
+            /** Fields */
+            fields: components["schemas"]["SpecialistField"][];
+            /** Intake Available */
+            intake_available: boolean;
+            /** Label */
+            label: string;
+            /** Observation Kinds */
+            observation_kinds: string[];
+        };
+        /** SpecialistCorrection */
+        SpecialistCorrection: {
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version: number;
+            /** Expected Version */
+            expected_version: number;
+            facts: components["schemas"]["SpecialistFacts"];
+            /** Reason */
+            reason: string;
+        };
+        /** SpecialistFacts */
+        SpecialistFacts: {
+            /**
+             * Client Id
+             * Format: uuid
+             */
+            client_id: string;
+            /** Details */
+            details: components["schemas"]["DesignFacts"] | components["schemas"]["CopyrightFacts"] | components["schemas"]["DomainNameFacts"] | components["schemas"]["LicensingFacts"] | components["schemas"]["EnforcementFacts"] | components["schemas"]["GeographicalIndicationFacts"] | components["schemas"]["PlantVarietyFacts"] | components["schemas"]["SemiconductorLayoutFacts"] | components["schemas"]["TradeSecretFacts"] | components["schemas"]["CustomsFacts"];
+            /** Jurisdiction As Supplied */
+            jurisdiction_as_supplied: string;
+            /** Title */
+            title: string;
+        };
+        /** SpecialistField */
+        SpecialistField: {
+            /** Key */
+            key: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "text" | "textarea" | "date" | "boolean" | "select";
+            /** Label */
+            label: string;
+            /** Max Length */
+            max_length?: number | null;
+            /** Options */
+            options?: string[];
+            /** Required */
+            required: boolean;
+        };
+        /** SpecialistList */
+        SpecialistList: {
+            /** Next Cursor */
+            next_cursor: string | null;
+            /** Records */
+            records: components["schemas"]["SpecialistSummary"][];
+        };
+        /** SpecialistObservation */
+        SpecialistObservation: {
+            /** Account */
+            account: string;
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version: number;
+            /** Expected Version */
+            expected_version: number;
+            /** Kind */
+            kind: string;
+            /**
+             * Occurred On
+             * Format: date
+             */
+            occurred_on: string;
+            source: components["schemas"]["SpecialistSource"];
+            /** Supersedes Id */
+            supersedes_id?: string | null;
+        };
+        /** SpecialistObservationList */
+        SpecialistObservationList: {
+            /** Next Cursor */
+            next_cursor: number | null;
+            /** Observations */
+            observations: components["schemas"]["SpecialistObservationRecord"][];
+        };
+        /** SpecialistObservationRecord */
+        SpecialistObservationRecord: {
+            /** Account */
+            account: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Kind */
+            kind: string;
+            /**
+             * Legal Effect
+             * @default not_determined
+             * @constant
+             */
+            legal_effect: "not_determined";
+            /**
+             * Occurred On
+             * Format: date
+             */
+            occurred_on: string;
+            /**
+             * Recorded At
+             * Format: date-time
+             */
+            recorded_at: string;
+            /** Sequence */
+            sequence: number;
+            source: components["schemas"]["SpecialistSource"];
+            /** Supersedes Id */
+            supersedes_id: string | null;
+        };
+        /** SpecialistProceeding */
+        SpecialistProceeding: {
+            /** Account */
+            account: string;
+            /** Authority */
+            authority: string;
+            /**
+             * Channel
+             * @enum {string}
+             */
+            channel: "design_cancellation" | "copyright_registry" | "platform_takedown" | "court" | "settlement" | "layout_opposition" | "layout_cancellation" | "layout_infringement";
+            /**
+             * Disposition
+             * @default pending
+             * @enum {string}
+             */
+            disposition: "pending" | "platform_removed" | "platform_declined" | "allowed" | "dismissed" | "settled" | "withdrawn";
+            /** Identifier As Supplied */
+            identifier_as_supplied: string;
+            /** Jurisdiction */
+            jurisdiction: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "proceeding";
+            /**
+             * Occurred On
+             * Format: date
+             */
+            occurred_on: string;
+            /** Related Workflow */
+            related_workflow?: string | null;
+            source_set: components["schemas"]["SetReference"];
+            /**
+             * Stage
+             * @default opened
+             * @enum {string}
+             */
+            stage: "opened" | "notice" | "response" | "hearing" | "decision" | "appeal" | "closed";
+            /** Title */
+            title: string;
+        };
+        /** SpecialistRecord */
+        SpecialistRecord: {
+            /**
+             * Asset Id
+             * Format: uuid
+             */
+            asset_id: string;
+            /** Contract Version */
+            contract_version: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Docket Id
+             * Format: uuid
+             */
+            docket_id: string;
+            facts: components["schemas"]["SpecialistFacts"];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Lifecycle Status */
+            lifecycle_status: string;
+            /** Lifecycle Version */
+            lifecycle_version: number;
+            /** Version */
+            version: number;
+        };
+        /** SpecialistSource */
+        SpecialistSource: {
+            /** Content Sha256 */
+            content_sha256: string;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /**
+             * Document Version Id
+             * Format: uuid
+             */
+            document_version_id: string;
+            /** Locator */
+            locator: string;
+        };
+        /** SpecialistSummary */
+        SpecialistSummary: {
+            /**
+             * Domain
+             * @enum {string}
+             */
+            domain: "design" | "copyright" | "domain_name" | "licensing" | "enforcement" | "geographical_indication" | "plant_variety" | "semiconductor_layout" | "trade_secret" | "customs_enforcement";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Lifecycle Status */
+            lifecycle_status: string;
+            /** Title */
+            title: string;
+            /** Version */
+            version: number;
+        };
         /** StatuteAmendmentHistoryResponse */
         StatuteAmendmentHistoryResponse: {
             /** Events */
@@ -41877,6 +44218,11 @@ export interface components {
         StatuteSectionCatalogListItem: {
             /** Id */
             id: string;
+            /**
+             * Legal Status
+             * @default enacted
+             */
+            legal_status: string;
             /** Ordinal */
             ordinal: number;
             /** Section Label */
@@ -41917,6 +44263,11 @@ export interface components {
              * @default false
              */
             is_provisional: boolean;
+            /**
+             * Legal Status
+             * @default enacted
+             */
+            legal_status: string;
             /**
              * Link Health Status
              * @default not_checked
@@ -42050,6 +44401,8 @@ export interface components {
             source_version: number;
             /** Statute Id */
             statute_id: string;
+            /** Structured Tables */
+            structured_tables?: components["schemas"]["StatuteTable"][];
             /**
              * Verification Status
              * @default unverified
@@ -42282,6 +44635,42 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** StatuteTable */
+        StatuteTable: {
+            /** Columns */
+            columns: string[];
+            /** Physical Row Count */
+            physical_row_count: number;
+            /** Rows */
+            rows: components["schemas"]["StatuteTableRow"][];
+            /** Title */
+            title: string;
+        };
+        /** StatuteTableFragment */
+        StatuteTableFragment: {
+            /** Bbox */
+            bbox: [
+                number,
+                number,
+                number,
+                number
+            ];
+            /** Cells */
+            cells: string[];
+            /** Page */
+            page: number;
+        };
+        /** StatuteTableRow */
+        StatuteTableRow: {
+            /** Cells */
+            cells: string[];
+            /** Fragments */
+            fragments: components["schemas"]["StatuteTableFragment"][];
+            /** Serial */
+            serial: string;
+            /** Sha256 */
+            sha256: string;
+        };
         /** StatuteVerificationAuditResponse */
         StatuteVerificationAuditResponse: {
             /** Ai Generated */
@@ -42459,6 +44848,20 @@ export interface components {
             recovery_action: string;
             /** Replacement Membership Id */
             replacement_membership_id?: string | null;
+        };
+        /** TargetOption */
+        TargetOption: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+        };
+        /** TargetPage */
+        TargetPage: {
+            /** Next After Id */
+            next_after_id: string | null;
+            /** Targets */
+            targets: components["schemas"]["TargetOption"][];
         };
         /** TDSReconciliationCreateRequest */
         TDSReconciliationCreateRequest: {
@@ -44009,6 +46412,24 @@ export interface components {
              */
             role: "applicant" | "owner" | "priority_claimant" | "agent";
         };
+        /** TradeSecretFacts */
+        TradeSecretFacts: {
+            /** Asset Reference */
+            asset_reference: string;
+            /** Custodian */
+            custodian: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            domain: "trade_secret";
+            /** Owner As Supplied */
+            owner_as_supplied: string;
+            /** Permitted Access As Supplied */
+            permitted_access_as_supplied: string;
+            /** Protective Controls */
+            protective_controls: string;
+        };
         /** TrialStartRequest */
         TrialStartRequest: {
             /** Company Name */
@@ -44075,12 +46496,63 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /** VersionCommand */
+        VersionCommand: {
+            /** Expected Version */
+            expected_version: number;
+        };
         /** WebhookAckResponse */
         WebhookAckResponse: {
             /** Accepted */
             accepted: number;
             /** Matched */
             matched: number;
+        };
+        /** WorkflowList */
+        WorkflowList: {
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /** Records */
+            records: components["schemas"]["WorkflowRecord"][];
+        };
+        /** WorkflowRecord */
+        WorkflowRecord: {
+            /** Canonical Proceeding Id */
+            canonical_proceeding_id: string | null;
+            /** Canonical Title Interest Id */
+            canonical_title_interest_id: string | null;
+            /** Facts */
+            facts: components["schemas"]["SourceSet"] | components["schemas"]["DesignApplication"] | components["schemas"]["CopyrightRegistration"] | components["schemas"]["LayoutApplication"] | components["schemas"]["RightsClaim"] | components["schemas"]["Licence"] | components["schemas"]["SpecialistProceeding"];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Lifecycle Version */
+            lifecycle_version: number;
+            /**
+             * Record Id
+             * Format: uuid
+             */
+            record_id: string;
+            /**
+             * Recorded At
+             * Format: date-time
+             */
+            recorded_at: string;
+            /** Version */
+            version: number;
+        };
+        /** WorkflowSave */
+        WorkflowSave: {
+            /** Expected Lifecycle Version */
+            expected_lifecycle_version: number;
+            /** Expected Version */
+            expected_version: number;
+            /** Facts */
+            facts: components["schemas"]["SourceSet"] | components["schemas"]["DesignApplication"] | components["schemas"]["CopyrightRegistration"] | components["schemas"]["LayoutApplication"] | components["schemas"]["RightsClaim"] | components["schemas"]["Licence"] | components["schemas"]["SpecialistProceeding"];
+            /** Reason */
+            reason: string;
         };
         /** WorkspaceAssistantFeedbackCreateRequest */
         WorkspaceAssistantFeedbackCreateRequest: {
@@ -44111,6 +46583,236 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    campaigns_api_access_reviews_get: {
+        parameters: {
+            query?: {
+                before_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_api_access_reviews_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CampaignCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_api_access_reviews__campaign_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                campaign_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decide_api_access_reviews__campaign_id__decisions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                campaign_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewDecision"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    finalize_api_access_reviews__campaign_id__finalize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                campaign_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionCommand"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    scope_api_access_reviews_scope_get: {
+        parameters: {
+            query: {
+                kind: "matter" | "ip_docket";
+                target_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScopeSnapshot"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    targets_api_access_reviews_targets_get: {
+        parameters: {
+            query: {
+                after_id?: string | null;
+                kind: "matter" | "ip_docket";
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TargetPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_ai_feedback_api_admin_ai_feedback_get: {
         parameters: {
             query?: {
@@ -44449,6 +47151,211 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TenantDataClassCatalogResponse"];
+                };
+            };
+        };
+    };
+    list_preservation_holds_api_admin_data_governance_holds_get: {
+        parameters: {
+            query?: {
+                before_id?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HoldListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    draft_preservation_hold_api_admin_data_governance_holds_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HoldDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HoldRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    activate_preservation_hold_api_admin_data_governance_holds__hold_id__activate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hold_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HoldVersionCommand"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HoldRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_preservation_release_requests_api_admin_data_governance_holds__hold_id__release_requests_get: {
+        parameters: {
+            query?: {
+                before_id?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                hold_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HoldReleaseListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    request_preservation_release_api_admin_data_governance_holds__hold_id__release_requests_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hold_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HoldReleaseRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HoldReleaseProposal"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_preservation_release_api_admin_data_governance_holds__hold_id__release_requests__proposal_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hold_id: string;
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HoldVersionCommand"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HoldRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -51136,7 +54043,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ContractObligationRecord"];
+                    "application/json": components["schemas"]["caseops_api__schemas__contracts__ContractObligationRecord"];
                 };
             };
             /** @description Validation Error */
@@ -58226,6 +61133,110 @@ export interface operations {
             };
         };
     };
+    get_evidence_page_api_ip_patents_applications__application_id__evidence_get: {
+        parameters: {
+            query?: {
+                cursor?: number | null;
+                limit?: number;
+                snapshot_sequence?: number | null;
+            };
+            header?: never;
+            path: {
+                application_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentEvidencePage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_evidence_api_ip_patents_applications__application_id__evidence_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path: {
+                application_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatentEvidenceCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentEvidenceRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_evidence_api_ip_patents_applications__application_id__evidence__evidence_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: string;
+                evidence_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentEvidenceRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_application_lifecycle_history_api_ip_patents_applications__application_id__lifecycle_history_get: {
         parameters: {
             query?: {
@@ -58352,6 +61363,323 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PatentPriorityRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_page_api_ip_patents_applications__application_id__proceedings_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+                snapshot_sequence?: number | null;
+            };
+            header?: never;
+            path: {
+                application_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentProceedingPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_api_ip_patents_applications__application_id__proceedings_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                application_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatentProceedingCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentProceedingRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_history_api_ip_patents_applications__application_id__proceedings__proceeding_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentProceedingHistory"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_api_ip_patents_applications__application_id__proceedings__proceeding_id__preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatentProceedingTransitionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentProceedingPreview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    transition_api_ip_patents_applications__application_id__proceedings__proceeding_id__transitions_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                application_id: string;
+                proceeding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatentProceedingTransitionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentProceedingRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_prosecution_page_api_ip_patents_applications__application_id__prosecution_get: {
+        parameters: {
+            query?: {
+                cursor?: number | null;
+                limit?: number;
+                snapshot_sequence?: number | null;
+            };
+            header?: never;
+            path: {
+                application_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentProsecutionPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_prosecution_api_ip_patents_applications__application_id__prosecution_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path: {
+                application_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatentProsecutionCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentProsecutionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_prosecution_event_api_ip_patents_applications__application_id__prosecution__event_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: string;
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentProsecutionRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_prosecution_preview_api_ip_patents_applications__application_id__prosecution_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatentProsecutionCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatentProsecutionPreview"];
                 };
             };
             /** @description Validation Error */
@@ -59859,6 +63187,728 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SharedWorkReconciliationReport"];
+                };
+            };
+        };
+    };
+    get_contracts_api_ip_specialist_contracts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpecialistContract"][];
+                };
+            };
+        };
+    };
+    list_records_api_ip_specialist_records_get: {
+        parameters: {
+            query: {
+                cursor?: string | null;
+                domain: "design" | "copyright" | "domain_name" | "licensing" | "enforcement" | "geographical_indication" | "plant_variety" | "semiconductor_layout" | "trade_secret" | "customs_enforcement";
+                include_closed?: boolean;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpecialistList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_record_api_ip_specialist_records_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpecialistFacts"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpecialistRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_record_api_ip_specialist_records__record_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpecialistRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    correct_record_api_ip_specialist_records__record_id__corrections_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpecialistCorrection"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpecialistRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_observations_api_ip_specialist_records__record_id__observations_get: {
+        parameters: {
+            query?: {
+                cursor?: number | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpecialistObservationList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_observation_api_ip_specialist_records__record_id__observations_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path: {
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpecialistObservation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpecialistObservationRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_version_api_ip_specialist_records__record_id__versions__version__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: string;
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpecialistRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_workflows_api_ip_specialist_records__record_id__workflows_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_workflow_api_ip_specialist_records__record_id__workflows_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path: {
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkflowSave"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_workflow_api_ip_specialist_records__record_id__workflows__workflow_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: string;
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_cost_api_ip_specialist_records__record_id__workflows__workflow_id__cost_evidence_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path: {
+                record_id: string;
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContractCostCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContractCostOption"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    void_cost_api_ip_specialist_records__record_id__workflows__workflow_id__cost_evidence__cost_id__void_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path: {
+                cost_id: string;
+                record_id: string;
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContractCostVoid"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContractCostOption"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cost_options_api_ip_specialist_records__record_id__workflows__workflow_id__cost_options_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                record_id: string;
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContractCostOptions"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_obligations_api_ip_specialist_records__record_id__workflows__workflow_id__obligations_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                record_id: string;
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContractObligationList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_obligation_api_ip_specialist_records__record_id__workflows__workflow_id__obligations_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path: {
+                record_id: string;
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContractObligation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["caseops_api__schemas__ip_specialist_workflows__ContractObligationRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_obligation_api_ip_specialist_records__record_id__workflows__workflow_id__obligations__obligation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                obligation_id: string;
+                record_id: string;
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["caseops_api__schemas__ip_specialist_workflows__ContractObligationRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    performance_history_api_ip_specialist_records__record_id__workflows__workflow_id__obligations__obligation_id__performance_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                obligation_id: string;
+                record_id: string;
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContractPerformanceList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_performance_api_ip_specialist_records__record_id__workflows__workflow_id__obligations__obligation_id__performance_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path: {
+                obligation_id: string;
+                record_id: string;
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContractPerformance"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContractPerformanceRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revise_workflow_api_ip_specialist_records__record_id__workflows__workflow_id__revisions_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path: {
+                record_id: string;
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkflowSave"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_version_api_ip_specialist_records__record_id__workflows__workflow_id__versions__version__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: string;
+                version: number;
+                workflow_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

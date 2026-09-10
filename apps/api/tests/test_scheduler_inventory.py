@@ -103,7 +103,7 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
         == "caseops-qa;caseops-ip-qa;test-legal"
     )
     assert tracking_job["scheduler_name"] == "caseops-case-tracking-poll-1800-ist"
-    assert tracking_job["schedule"] == "0 18 * * *"
+    assert tracking_job["schedule"] == "*/5 18-19 * * *"
     assert tracking_job["time_zone"] == "Asia/Kolkata"
     environment = tracking_job["bootstrap"]["environment"]
     assert environment["CASEOPS_CASE_TRACKING_DAILY_WINDOW_START"] == "18:00"

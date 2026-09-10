@@ -57,6 +57,8 @@ describe("TenantBillingUsagePage", () => {
     const providerTable = screen.getByTestId("provider-spend-by-account");
     expect(within(providerTable).getByText("eCourtsIndia")).toBeInTheDocument();
     expect(within(providerTable).getByText("Indian Kanoon")).toBeInTheDocument();
+    expect(within(providerTable).getByRole("columnheader", { name: "Estimated provider spend" })).toBeVisible();
+    expect(within(providerTable).getByRole("columnheader", { name: "Budget reserved" })).toBeVisible();
     expect(within(providerTable).getAllByText("₹25")).toHaveLength(2);
     expect(within(providerTable).getByText("Shared account")).toBeInTheDocument();
     expect(within(providerTable).getAllByText("Unlimited")).toHaveLength(2);
@@ -91,6 +93,33 @@ describe("TenantBillingUsagePage", () => {
     );
     expect(loading.querySelectorAll(".animate-pulse")).toHaveLength(7);
     expect(screen.queryByText("No usage in this period.")).not.toBeInTheDocument();
+  });
+
+  it("keeps unconfirmed request holds separate from estimated spend and remaining budget", async () => {
+    const delegate = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      if (new URL(String(input), "http://localhost").pathname === "/api/billing/reports/spend") {
+        return Promise.resolve(jsonResponse({
+          ...usageReport,
+          by_provider: usageReport.by_provider.map(row => ({
+            ...row,
+            spent_minor: row.provider_key === "ecourtsindia" ? 15 : row.spent_minor,
+            budget_spent_minor: row.provider_key === "ecourtsindia" ? 15 : row.budget_spent_minor,
+            reserved_minor: row.provider_key === "ecourtsindia" ? 7 : 0,
+            remaining_minor: row.provider_key === "ecourtsindia" ? 99978 : null,
+          })),
+        }));
+      }
+      return delegate(input, init);
+    });
+    renderWithQuery(<TenantBillingUsagePage />);
+    const table = await screen.findByTestId("provider-spend-by-account");
+    const row = within(table).getByRole("row", { name: /eCourtsIndia/ });
+    expect(within(row).getByText("₹0.07")).toHaveAttribute(
+      "title", "Pending provider confirmation, including interrupted requests",
+    );
+    expect(within(row).getAllByText("₹0.15")).toHaveLength(2);
+    expect(within(row).getByText("₹999.78")).toBeVisible();
   });
 
   it("keeps a resolved empty fallback hidden while the spend report is initially pending", async () => {

@@ -21,6 +21,7 @@ import { toast } from "sonner";
 
 import { NewMatterDialog } from "@/components/app/NewMatterDialog";
 import { MatterLifecycleDialog } from "@/components/matters/MatterLifecycleDialog";
+import { NextHearingCell } from "@/components/matters/NextHearingCell";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/DataTable";
@@ -261,7 +262,7 @@ export default function MattersPage() {
       {
         accessorKey: "next_hearing_on",
         header: "Next hearing",
-        cell: (ctx) => formatDate(ctx.getValue<string | null>()),
+        cell: (ctx) => <NextHearingCell matter={ctx.row.original} date={formatDate(ctx.getValue<string | null>())} />,
       },
       {
         accessorKey: "claim_amount_minor",

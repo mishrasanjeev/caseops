@@ -1,0 +1,657 @@
+{
+  "schema_version": 1,
+  "reviewed_on": "2026-09-08",
+  "owner": "Codex",
+  "scope": "23 existing Acts, required tax successor and IP source packs. Acquisition is not extraction, applicability or user-visible acceptance. No catalogue-completion certification.",
+  "catalogue": [
+    {
+      "statute_id": "constitution-india",
+      "title": "The Constitution of India",
+      "source_candidates": [
+        {
+          "url": "https://www.legislative.gov.in/static/uploads/2025/08/7af1daa22d65f9d04c00ae9b9aa5a799.pdf",
+          "checked_at": "2026-09-08T05:07:03.6136620+00:00",
+          "status": "unverified_download",
+          "sha256": "d001a5b4a1546f6dcf4c6f9c136b63504289627b4e560046fdbc10ee5e59d4d5",
+          "bytes": 2404584,
+          "error": null
+        }
+      ],
+      "remaining_work": "Full articles, inserted/omitted articles, 12 schedules and appendices; only Article 14 currently admitted."
+    },
+    {
+      "statute_id": "bnss-2023",
+      "title": "Bharatiya Nagarik Suraksha Sanhita, 2023",
+      "source_candidates": [
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/20099/1/A202346.pdf",
+          "checked_at": "2026-09-07T12:21:08.753481+00:00",
+          "status": "retained_release_document",
+          "sha256": "54b27a4f2786dc5867c2cc23391e8359b3b29125684119acbc652d1630a716d6",
+          "file": "tests/fixtures/statutes/official/bnss-2023.pdf",
+          "source_version": "India Code consolidation as on 2025-10-06"
+        }
+      ],
+      "remaining_work": "Published-edition source units admitted in the candidate and reproduce from pinned PDF bytes. Fresh candidate Docker/browser acceptance and relevant-date applicability/source-pack reconciliation remain open."
+    },
+    {
+      "statute_id": "bns-2023",
+      "title": "Bharatiya Nyaya Sanhita, 2023",
+      "source_candidates": [
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/20062/1/a202345.pdf",
+          "checked_at": "2026-09-06T19:20:44.152126+00:00",
+          "status": "retained_release_document",
+          "sha256": "ff92dcc72778944011807644b6033b1140ddbe6d7e9f82ac32fd419dae03aa86",
+          "file": "tests/fixtures/statutes/official/bns-2023.pdf",
+          "source_version": "India Code consolidation as on 2025-10-06"
+        }
+      ],
+      "remaining_work": "Published-edition source units admitted in the candidate and reproduce from pinned PDF bytes. Fresh candidate Docker/browser acceptance and relevant-date applicability/source-pack reconciliation remain open."
+    },
+    {
+      "statute_id": "bsa-2023",
+      "title": "Bharatiya Sakshya Adhiniyam, 2023",
+      "source_candidates": [
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/20063/1/aa202347.pdf",
+          "checked_at": "2026-09-08T04:43:26.8072903+00:00",
+          "status": "retained_release_document",
+          "sha256": "993882ad0ae7ded6ae8087351edd61caeb6faa1a2d6c8fff8c269a9cf149b9ac",
+          "file": "tests/fixtures/statutes/official/bsa-2023.pdf",
+          "source_version": "India Code consolidation as on 2025-10-06"
+        }
+      ],
+      "remaining_work": "Published-edition source units admitted in the candidate and reproduce from pinned PDF bytes. Fresh candidate Docker/browser acceptance and relevant-date applicability/source-pack reconciliation remain open."
+    },
+    {
+      "statute_id": "crpc-1973",
+      "title": "Code of Criminal Procedure, 1973",
+      "source_candidates": [
+        {
+          "url": "https://www.indiacode.nic.in/bitstream/123456789/15272/1/the_code_of_criminal_procedure%2C_1973.pdf",
+          "checked_at": "2026-09-08T05:07:03.4221753+00:00",
+          "status": "acquisition_failed",
+          "sha256": null,
+          "bytes": null,
+          "error": "Response status code does not indicate success: 404 (Not Found)."
+        },
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/15272/1/the_code_of_criminal_procedure%2C_1973.pdf",
+          "checked_at": "2026-09-08T05:07:27.2984179+00:00",
+          "status": "unverified_download",
+          "sha256": "5bb6514251a9ec6375b2c894cef5280dab0d1c3cca1e0f4a1e57f29b54033d72",
+          "bytes": 1879339,
+          "error": null
+        }
+      ],
+      "remaining_work": "Retained complete edition with both schedules and forms, amendments, BNSS repeal/savings."
+    },
+    {
+      "statute_id": "ipc-1860",
+      "title": "Indian Penal Code, 1860",
+      "source_candidates": [
+        {
+          "url": "https://www.indiacode.nic.in/bitstream/123456789/11091/1/the_indian_penal_code%2C_1860.pdf",
+          "checked_at": "2026-09-08T05:07:03.3417290+00:00",
+          "status": "acquisition_failed",
+          "sha256": null,
+          "bytes": null,
+          "error": "Response status code does not indicate success: 404 (Not Found)."
+        },
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/11091/1/the_indian_penal_code%2C_1860.pdf",
+          "checked_at": "2026-09-08T05:07:27.1861159+00:00",
+          "status": "unverified_download",
+          "sha256": "c58676a3253a5454b62e4b4463ae811cb6efbb5ae0768fe5e1cf0d4db4da3055",
+          "bytes": 160262,
+          "error": null
+        },
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/repealedfileopen?rfilename=A1860-45.pdf",
+          "checked_at": "2026-09-08T05:52:43.0670597+00:00",
+          "status": "unverified_download",
+          "sha256": "ae8920ad726fbb6dfdec8d327c4bdda580ca175bcad1ef4212ca868fe4d1ea3a",
+          "error": null
+        }
+      ],
+      "remaining_work": "Full 119-page retained official edition acquired after rejecting the truncated mirror. Numbered/inserted/omitted identities and historical applicability are not yet admitted."
+    },
+    {
+      "statute_id": "ni-act-1881",
+      "title": "Negotiable Instruments Act, 1881",
+      "source_candidates": [
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/2189/1/a1881-26.pdf",
+          "checked_at": "2026-09-08T10:37:25.6164007+05:30",
+          "status": "retained_release_document",
+          "sha256": "fcdc5f55f34d1f30f95267337c8e5c4339fdd0d5e326facf35aa552febfb8357",
+          "file": "tests/fixtures/statutes/official/ni-act-1881.pdf",
+          "source_version": "India Code A1881-26; retrieved 2026-09-08; cutoff unstated"
+        },
+        {
+          "url": "https://www.indiacode.nic.in/bitstream/123456789/2189/1/a1881-26.pdf",
+          "checked_at": "2026-09-08T05:07:02.0813684+00:00",
+          "status": "acquisition_failed",
+          "sha256": null,
+          "bytes": null,
+          "error": "Response status code does not indicate success: 404 (Not Found)."
+        },
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/2189/1/a1881-26.pdf",
+          "checked_at": "2026-09-08T05:07:25.6164007+00:00",
+          "status": "unverified_download",
+          "sha256": "fcdc5f55f34d1f30f95267337c8e5c4339fdd0d5e326facf35aa552febfb8357",
+          "bytes": 397176,
+          "error": null
+        }
+      ],
+      "remaining_work": "Published-edition source units admitted in the candidate and reproduce from pinned PDF bytes. Fresh candidate Docker/browser acceptance and relevant-date applicability/source-pack reconciliation remain open."
+    },
+    {
+      "statute_id": "iea-1872",
+      "title": "The Indian Evidence Act, 1872",
+      "source_candidates": [
+        {
+          "url": "https://www.indiacode.nic.in/bitstream/123456789/4218/1/THE-INDIAN-EVIDENCE-ACT-1872.pdf",
+          "checked_at": "2026-09-08T05:07:03.2441113+00:00",
+          "status": "acquisition_failed",
+          "sha256": null,
+          "bytes": null,
+          "error": "Response status code does not indicate success: 404 (Not Found)."
+        },
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/4218/1/THE-INDIAN-EVIDENCE-ACT-1872.pdf",
+          "checked_at": "2026-09-08T05:07:27.0590507+00:00",
+          "status": "unverified_download",
+          "sha256": "c72ca25e00d014dbe3a98a15ab7d923c39b637688b649c77c85f0f714e478037",
+          "bytes": 351086,
+          "error": null
+        },
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/repealedfileopen?rfilename=A1872-1.pdf",
+          "checked_at": "2026-09-08T06:24:33.1137018+00:00",
+          "status": "unverified_download",
+          "sha256": "03958dcbfb98e714e9b0b432a671a5f874df9ff5beaa4f69fe0931dbc8ea1c8f",
+          "error": null
+        }
+      ],
+      "remaining_work": "Full 61-page retained official edition acquired; external extraction is not source admission or historical applicability acceptance."
+    },
+    {
+      "statute_id": "ndps-1985",
+      "title": "Narcotic Drugs and Psychotropic Substances Act, 1985",
+      "source_candidates": [
+        {
+          "url": "https://www.indiacode.nic.in/bitstream/123456789/1791/5/a1985-61.pdf",
+          "checked_at": "2026-09-08T05:07:02.9442309+00:00",
+          "status": "acquisition_failed",
+          "sha256": null,
+          "bytes": null,
+          "error": "Response status code does not indicate success: 404 (Not Found)."
+        },
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/1791/5/a1985-61.pdf",
+          "checked_at": "2026-09-08T05:07:26.7817458+00:00",
+          "status": "unverified_download",
+          "sha256": "ef1b399172971dc8bc6e4da0ae67444f62ee2ea05a983ac26821e96a4e866bd6",
+          "bytes": 719612,
+          "error": null
+        }
+      ],
+      "remaining_work": "54-page edition acquired, labelled last update 2022-01-03. External reconciliation finds 129 numbered sections and one Schedule; not admitted. The four-column Schedule on pages 46-54 needs verified row/column and multiline-cell preservation, not flattened lines. Reconcile subsequent notifications and relevant-date applicability."
+    },
+    {
+      "statute_id": "companies-2013",
+      "title": "Companies Act, 2013",
+      "source_candidates": [
+        {
+          "url": "https://www.indiacode.nic.in/bitstream/123456789/2114/5/A2013-18.pdf",
+          "checked_at": "2026-09-06T19:15:44.152156+00:00",
+          "status": "retained_release_document",
+          "sha256": "d6e286d2a3feec89a7d432a5a572e91af9f0135411b03e57f72b7a8ef72139af",
+          "file": "tests/fixtures/statutes/official/companies-2013.pdf",
+          "source_version": "India Code A2013-18; retrieved 2026-09-07; cutoff unstated"
+        }
+      ],
+      "remaining_work": "Numbered sections admitted; all seven schedules still require complete source-unit reconciliation and acceptance."
+    },
+    {
+      "statute_id": "income-tax-1961",
+      "title": "Income-tax Act, 1961",
+      "source_candidates": [
+        {
+          "url": "https://www.incometaxindia.gov.in/en/income-tax-act",
+          "checked_at": "2026-09-08",
+          "status": "official_listing_identified",
+          "sha256": null
+        },
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/repealedfileopen?rfilename=A1961-43.pdf",
+          "checked_at": "2026-09-08T06:34:34.5002065+00:00",
+          "status": "acquisition_failed",
+          "sha256": null,
+          "error": "Response status code does not indicate success: 500 (Internal Server Error)."
+        }
+      ],
+      "remaining_work": "Official archive download still returns HTTP 500; CBDT consolidation access also failed. Full historical edition, 2025 successor and 2026 amendment/transition packs remain open."
+    },
+    {
+      "statute_id": "gst-cgst-2017",
+      "title": "Central Goods and Services Tax Act, 2017",
+      "source_candidates": [
+        {
+          "url": "https://www.indiacode.nic.in/bitstream/123456789/7771/1/cgst-act.pdf",
+          "checked_at": "2026-09-08T05:07:03.5251691+00:00",
+          "status": "acquisition_failed",
+          "sha256": null,
+          "bytes": null,
+          "error": "Response status code does not indicate success: 404 (Not Found)."
+        },
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/7771/1/cgst-act.pdf",
+          "checked_at": "2026-09-08T05:07:27.5355667+00:00",
+          "status": "unverified_download",
+          "sha256": "37895301acbb99a37dfbc5c60741feb5541745a2f985f4381d59a90e715e34f6",
+          "bytes": 3456065,
+          "error": null
+        },
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/15689/1/A2017-12.pdf",
+          "checked_at": "2026-09-08T06:17:04.5551922+00:00",
+          "status": "retained_release_document",
+          "sha256": "c4dbd51f0355360e63d8a25560547f9e7e00b3af349d8666265ab60b4610cf24",
+          "file": "tests/fixtures/statutes/official/gst-cgst-2017-central-2026.pdf",
+          "source_version": "India Code A2017-12; as on 11 June 2026"
+        }
+      ],
+      "remaining_work": "Published-edition source units admitted in the candidate and reproduce from pinned PDF bytes. Fresh candidate Docker/browser acceptance and relevant-date applicability/source-pack reconciliation remain open."
+    },
+    {
+      "statute_id": "arbitration-1996",
+      "title": "Arbitration and Conciliation Act, 1996",
+      "source_candidates": [
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/1978/1/A199626.pdf",
+          "checked_at": "2026-09-06T19:20:44.866427+00:00",
+          "status": "retained_release_document",
+          "sha256": "85caeeda710bda215e7bfb169a05617f301be6f3698280fb2b595cf6cb9ecf94",
+          "file": "tests/fixtures/statutes/official/arbitration-1996.pdf",
+          "source_version": "India Code consolidation as on 2025-05-14"
+        }
+      ],
+      "remaining_work": "Published-edition source units admitted in the candidate and reproduce from pinned PDF bytes. Fresh candidate Docker/browser acceptance and relevant-date applicability/source-pack reconciliation remain open."
+    },
+    {
+      "statute_id": "contract-1872",
+      "title": "Indian Contract Act, 1872",
+      "source_candidates": [
+        {
+          "url": "https://www.indiacode.nic.in/bitstream/123456789/2187/2/A187209.pdf",
+          "checked_at": "2026-09-08T05:07:01.7158745+00:00",
+          "status": "retained_release_document",
+          "sha256": "d756d45a58c4cd8440e70a0189ea1fda9d7c5dfcdd6ef31a5f2ecd9cb209c59d",
+          "bytes": 568075,
+          "error": null,
+          "file": "tests/fixtures/statutes/official/contract-1872.pdf",
+          "source_version": "India Code A187209; retrieved 08 September 2026"
+        }
+      ],
+      "remaining_work": "Published-edition source units admitted in the candidate and reproduce from pinned PDF bytes. Fresh candidate Docker/browser acceptance and relevant-date applicability/source-pack reconciliation remain open."
+    },
+    {
+      "statute_id": "specific-relief-1963",
+      "title": "Specific Relief Act, 1963",
+      "source_candidates": [
+        {
+          "url": "https://www.indiacode.nic.in/bitstream/123456789/1583/7/A1963-47.pdf",
+          "checked_at": "2026-09-08T05:07:02.4048686+00:00",
+          "status": "acquisition_failed",
+          "sha256": null,
+          "bytes": null,
+          "error": "Response status code does not indicate success: 404 (Not Found)."
+        },
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/1583/7/A1963-47.pdf",
+          "checked_at": "2026-09-08T05:07:26.0047401+00:00",
+          "status": "unverified_download",
+          "sha256": "7b90aae6b01d7c9533f5b69a8ccbf00c16ba439e4624561204de236d5cb7f43d",
+          "bytes": 259229,
+          "error": null
+        }
+      ],
+      "remaining_work": "48 numbered identities plus Schedule. Sections 43/44 are represented only by a repeal footnote; extractor must preserve exact omission evidence without inventing bodies."
+    },
+    {
+      "statute_id": "limitation-1963",
+      "title": "Limitation Act, 1963",
+      "source_candidates": [
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/1565/5/A1963-36.pdf",
+          "checked_at": "2026-09-08T10:37:26.1202767+05:30",
+          "status": "retained_release_document",
+          "sha256": "1ad1f2964881272f5ae8769b238ea6ee2bb3e126edbae39dd6bb00794d9f2d82",
+          "file": "tests/fixtures/statutes/official/limitation-1963.pdf",
+          "source_version": "India Code A1963-36; retrieved 2026-09-08; cutoff unstated"
+        },
+        {
+          "url": "https://www.indiacode.nic.in/bitstream/123456789/1565/5/A1963-36.pdf",
+          "checked_at": "2026-09-08T05:07:02.4999065+00:00",
+          "status": "acquisition_failed",
+          "sha256": null,
+          "bytes": null,
+          "error": "Response status code does not indicate success: 404 (Not Found)."
+        },
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/1565/5/A1963-36.pdf",
+          "checked_at": "2026-09-08T05:07:26.1202767+00:00",
+          "status": "unverified_download",
+          "sha256": "1ad1f2964881272f5ae8769b238ea6ee2bb3e126edbae39dd6bb00794d9f2d82",
+          "bytes": 353329,
+          "error": null
+        }
+      ],
+      "remaining_work": "Published-edition source units admitted in the candidate and reproduce from pinned PDF bytes. Fresh candidate Docker/browser acceptance and relevant-date applicability/source-pack reconciliation remain open."
+    },
+    {
+      "statute_id": "cpc-1908",
+      "title": "Code of Civil Procedure, 1908",
+      "source_candidates": [
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/2191/1/A190805.pdf",
+          "checked_at": "2026-09-06T19:20:44.548938+00:00",
+          "status": "retained_release_document",
+          "sha256": "8849fc32fdca660d16cf64b0f0ccdc97c453d54006947f67f73420765bd03946",
+          "file": "tests/fixtures/statutes/official/cpc-1908.pdf",
+          "source_version": "India Code consolidation as on 2026-01-10"
+        }
+      ],
+      "remaining_work": "Numbered sections admitted; full Orders, forms and appendices still require complete source-unit reconciliation and acceptance."
+    },
+    {
+      "statute_id": "transfer-of-property-1882",
+      "title": "Transfer of Property Act, 1882",
+      "source_candidates": [
+        {
+          "url": "https://www.indiacode.nic.in/bitstream/123456789/14648/1/tpa.pdf",
+          "checked_at": "2026-09-08T05:07:02.6300847+00:00",
+          "status": "acquisition_failed",
+          "sha256": null,
+          "bytes": null,
+          "error": "Response status code does not indicate success: 404 (Not Found)."
+        },
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/14648/1/tpa.pdf",
+          "checked_at": "2026-09-08T05:07:26.2770217+00:00",
+          "status": "unverified_download",
+          "sha256": "a80873b01928d8c5bddd51fae7d390f8b1c1c3ed1add3ce4590adb0ed5648c45",
+          "bytes": 417300,
+          "error": null
+        },
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/2338/1/A1882-04.pdf",
+          "checked_at": "2026-09-08T06:24:31.5410489+00:00",
+          "status": "retained_release_document",
+          "sha256": "5223fdf06a0aa3ed14ca62cb2b6b923d42e14a159d7f2c8b8f96cbe1800a7a3a",
+          "file": "tests/fixtures/statutes/official/transfer-of-property-1882-publisher.pdf",
+          "source_version": "India Code A1882-04; retrieved 08 September 2026"
+        }
+      ],
+      "remaining_work": "Published-edition source units admitted in the candidate and reproduce from pinned PDF bytes. Fresh candidate Docker/browser acceptance and relevant-date applicability/source-pack reconciliation remain open."
+    },
+    {
+      "statute_id": "hindu-marriage-1955",
+      "title": "Hindu Marriage Act, 1955",
+      "source_candidates": [
+        {
+          "url": "https://www.indiacode.nic.in/bitstream/123456789/1560/1/A1955-25.pdf",
+          "checked_at": "2026-09-08T05:07:02.2525195+00:00",
+          "status": "acquisition_failed",
+          "sha256": null,
+          "bytes": null,
+          "error": "Response status code does not indicate success: 404 (Not Found)."
+        },
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/1560/1/A1955-25.pdf",
+          "checked_at": "2026-09-08T05:07:25.9080687+00:00",
+          "status": "acquisition_failed",
+          "sha256": null,
+          "bytes": null,
+          "error": "Response status code does not indicate success: 302 (Moved Temporarily)."
+        },
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/1560/1/A1955-25Eng.pdf",
+          "checked_at": "2026-09-08T05:55:54.4006902+00:00",
+          "status": "retained_release_document",
+          "sha256": "e0989d90e686ef3eab7a780fbcb745fc3373b534e280fd0cf2e8401ee56725ec",
+          "file": "tests/fixtures/statutes/official/hindu-marriage-1955-publisher.pdf",
+          "source_version": "India Code A1955-25Eng; as on 15 April 2026"
+        }
+      ],
+      "remaining_work": "Published-edition source units admitted in the candidate and reproduce from pinned PDF bytes. Fresh candidate Docker/browser acceptance and relevant-date applicability/source-pack reconciliation remain open."
+    },
+    {
+      "statute_id": "consumer-protection-2019",
+      "title": "Consumer Protection Act, 2019",
+      "source_candidates": [
+        {
+          "url": "https://www.indiacode.nic.in/bitstream/123456789/15276/1/210422.pdf",
+          "checked_at": "2026-09-08T05:07:02.8442382+00:00",
+          "status": "acquisition_failed",
+          "sha256": null,
+          "bytes": null,
+          "error": "Response status code does not indicate success: 404 (Not Found)."
+        },
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/15276/1/210422.pdf",
+          "checked_at": "2026-09-08T05:07:26.5648142+00:00",
+          "status": "unverified_download",
+          "sha256": "0ae7f82ab5b77d50087cd4cd2dd2dbc12755c0bdb31371fdefd042b020d50756",
+          "bytes": 1236998,
+          "error": null
+        },
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/15256/1/eng201935.pdf",
+          "checked_at": "2026-09-08T06:31:36.9660461+00:00",
+          "status": "retained_release_document",
+          "sha256": "414fb1edd9b0f7fbc2839ad92fb2b29ebfa3b557e70e928ab4a535802199e3e7",
+          "file": "tests/fixtures/statutes/official/consumer-protection-2019-central-2026.pdf",
+          "source_version": "India Code eng201935; retrieved 08 September 2026"
+        }
+      ],
+      "remaining_work": "Published-edition source units admitted in the candidate and reproduce from pinned PDF bytes. Fresh candidate Docker/browser acceptance and relevant-date applicability/source-pack reconciliation remain open."
+    },
+    {
+      "statute_id": "rti-2005",
+      "title": "Right to Information Act, 2005",
+      "source_candidates": [
+        {
+          "url": "https://www.indiacode.nic.in/bitstream/123456789/13072/1/rti_act_2005.pdf",
+          "checked_at": "2026-09-08T05:07:02.7465555+00:00",
+          "status": "acquisition_failed",
+          "sha256": null,
+          "bytes": null,
+          "error": "Response status code does not indicate success: 404 (Not Found)."
+        },
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/13072/1/rti_act_2005.pdf",
+          "checked_at": "2026-09-08T05:07:26.4149924+00:00",
+          "status": "unverified_download",
+          "sha256": "0246a50b7d5a2763d0b0faf3bf49a15a8023465adfc1bd42310f0bee231ce5f3",
+          "bytes": 398502,
+          "error": null
+        },
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/2065/1/aa2005.pdf",
+          "checked_at": "2026-09-08T06:25:44.1826365+00:00",
+          "status": "retained_release_document",
+          "sha256": "8956eaba5db4079674bc16e50c14b210e8872c28e8a18f458f01a8fbcdde1479",
+          "file": "tests/fixtures/statutes/official/rti-2005-publisher-aa.pdf",
+          "source_version": "India Code aa2005; as on 18 November 2025"
+        }
+      ],
+      "remaining_work": "Published-edition source units admitted in the candidate and reproduce from pinned PDF bytes. Fresh candidate Docker/browser acceptance and relevant-date applicability/source-pack reconciliation remain open."
+    },
+    {
+      "statute_id": "motor-vehicles-1988",
+      "title": "Motor Vehicles Act, 1988",
+      "source_candidates": [
+        {
+          "url": "https://www.indiacode.nic.in/bitstream/123456789/1798/1/A1988-59.pdf",
+          "checked_at": "2026-09-08T05:07:03.1565788+00:00",
+          "status": "acquisition_failed",
+          "sha256": null,
+          "bytes": null,
+          "error": "Response status code does not indicate success: 404 (Not Found)."
+        },
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/1798/1/A1988-59.pdf",
+          "checked_at": "2026-09-08T05:07:27.0015544+00:00",
+          "status": "acquisition_failed",
+          "sha256": null,
+          "bytes": null,
+          "error": "Response status code does not indicate success: 302 (Moved Temporarily)."
+        },
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/1798/1/aA1988-59.pdf",
+          "checked_at": "2026-09-08T05:52:45.2372690+00:00",
+          "status": "unverified_download",
+          "sha256": "be5bac906607cb2ac902d5c113c42c7f89142be3591a81ccb825cfbb7ee5d50d",
+          "error": null
+        }
+      ],
+      "remaining_work": "Current 175-page publisher edition acquired, dated 21 May 2025. Reconcile inserted/omitted sections, full first-schedule signs/graphics and retired second schedule; text-only extraction cannot certify its visual contents."
+    },
+    {
+      "statute_id": "prevention-of-corruption-1988",
+      "title": "Prevention of Corruption Act, 1988",
+      "source_candidates": [
+        {
+          "url": "https://www.indiacode.nic.in/bitstream/123456789/1558/1/aA1988-49.pdf",
+          "checked_at": "2026-09-08T05:07:03.0289324+00:00",
+          "status": "acquisition_failed",
+          "sha256": null,
+          "bytes": null,
+          "error": "Response status code does not indicate success: 404 (Not Found)."
+        },
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/1558/1/aA1988-49.pdf",
+          "checked_at": "2026-09-08T05:07:26.9325289+00:00",
+          "status": "acquisition_failed",
+          "sha256": null,
+          "bytes": null,
+          "error": "Response status code does not indicate success: 302 (Moved Temporarily)."
+        },
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/1558/1/A1988-49.pdf",
+          "checked_at": "2026-09-08T05:55:56.8526637+00:00",
+          "status": "retained_release_document",
+          "sha256": "57a0d7960125d42dd392480b18a3fc2ea2ef5d7b134faa9171d82a79ed7c5aaf",
+          "file": "tests/fixtures/statutes/official/prevention-of-corruption-1988-publisher.pdf",
+          "source_version": "India Code A1988-49; as on 21 May 2025"
+        }
+      ],
+      "remaining_work": "Published-edition source units admitted in the candidate and reproduce from pinned PDF bytes. Fresh candidate Docker/browser acceptance and relevant-date applicability/source-pack reconciliation remain open."
+    }
+  ],
+  "additional_required_sources": [
+    {
+      "key": "income-tax-2025",
+      "url": "https://www.incometaxindia.gov.in/en/income-tax-act-202511",
+      "document_url": "https://www.incometaxindia.gov.in/documents/d/guest/income_tax_act_2025_as_amended_by_fa_act_2026-pdf",
+      "status": "source_documents_acquired_pack_not_complete_or_activated",
+      "requirement": "Full Act, schedules, 2026 Rules/Finance Act and 1961 transition mapping",
+      "acquisitions": [
+        {
+          "url": "https://egazette.gov.in/WriteReadData/2025/265620.pdf",
+          "retrieved_at": "2026-09-08T06:15:13.5914616+00:00",
+          "status": "unverified_download",
+          "sha256": "7acfb16fd7f3db8b4f85fc532b6d6924478ef86fa2e5b7683d282f8825f8017c"
+        },
+        {
+          "url": "https://egazette.gov.in/WriteReadData/2026/271439.pdf",
+          "retrieved_at": "2026-09-08T06:14:31.4578753+00:00",
+          "status": "unverified_download",
+          "sha256": "f01136356e61b2534328153941a68f13afd06fe8587d347757c89101d9cc564f"
+        }
+      ]
+    },
+    {
+      "key": "patents",
+      "url": "https://www.ipindia.gov.in/acts/patent-act-1970",
+      "status": "source_documents_acquired_pack_not_complete_or_activated",
+      "requirement": "Complete Act, operative rules/amendments, forms/fees, office notices; distinguish drafts and administrative manuals; PCT and WIPO national-phase sources",
+      "acquisitions": [
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/1392/1/a197039.pdf",
+          "retrieved_at": "2026-09-08T06:24:43.4172321+00:00",
+          "status": "unverified_download",
+          "sha256": "759fc6f2833eaf2eab8f7f66b0441246bcb543ef5283682eb6427fbff725e135"
+        },
+        {
+          "url": "https://egazette.gov.in/WriteReadData/2026/271642.pdf",
+          "retrieved_at": "2026-09-08T06:16:19.6720484+00:00",
+          "status": "unverified_download",
+          "sha256": "d38327aac56a1dd06d44caed79eba8c328c82d981f9060edb6f8232176fb3ea6"
+        }
+      ]
+    },
+    {
+      "key": "trademarks",
+      "url": "https://www.ipindia.gov.in/tm-act-1999",
+      "status": "official_listing_identified",
+      "requirement": "Act, 2017 Rules, forms/fees, registry notices, Madrid and Nice/Vienna classifications"
+    },
+    {
+      "key": "designs",
+      "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/1917/1/A2000-16.pdf",
+      "status": "downloaded_not_admitted",
+      "sha256": "feb73c760a844ae61cc25d95215eda5fab78896aa38b31663868188995c98f55",
+      "requirement": "Full Act, rules/amendments, forms/fees and Locarno classification"
+    },
+    {
+      "key": "copyright",
+      "url": "https://www.indiacode.nic.in/indiacode/handle/123456789/1367?view_type=browse",
+      "status": "source_documents_acquired_pack_not_complete_or_activated",
+      "requirement": "Act, operative rules/amendments, forms/fees",
+      "acquisitions": [
+        {
+          "url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/1367/1/A195714.pdf",
+          "retrieved_at": "2026-09-08T05:43:55.3603182+00:00",
+          "status": "unverified_download",
+          "sha256": "da4144b68419cf81bbf10979183ed1cf3fbe3795188995d1efc85fd7d65713bd"
+        }
+      ]
+    },
+    {
+      "key": "geographical-indications",
+      "url": "https://www.ipindia.gov.in/geographical-indications-resources-rules",
+      "status": "official_listing_identified",
+      "requirement": "1999 Act, 2002 Rules and amendments including 2025, forms, fees and authorised-user procedures"
+    },
+    {
+      "key": "plant-varieties",
+      "url": "https://plantauthority.gov.in/acts-rules",
+      "status": "official_listing_identified",
+      "requirement": "2001 Act, 2003 Rules, operative crop-specific notifications, DUS guidelines, forms and fees"
+    },
+    {
+      "key": "semiconductor-layouts",
+      "url": "https://sicldr.gov.in/sicw/actsrules",
+      "status": "official_listing_identified",
+      "requirement": "SICLD Act 2000, Rules 2001, amendments, forms and fees"
+    },
+    {
+      "key": "domain-disputes",
+      "url": "https://www.registry.in/domaindisputeresolution",
+      "rules_url": "https://www.registry.in/indrprulesprocedure",
+      "status": "official_listing_identified",
+      "requirement": "Versioned INDRP policy, procedure and fees; ICANN/WIPO sources separately for non-.IN disputes"
+    },
+    {
+      "key": "customs-trade-secrets-title",
+      "status": "source_inventory_incomplete",
+      "requirement": "CBIC IPR recordal rules/notifications and applicable trade-secret/title/licensing authorities require separate complete source inventories. No invented standalone trade-secret Act or generic trademark rules."
+    }
+  ]
+}

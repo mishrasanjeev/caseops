@@ -206,8 +206,8 @@ test.describe("Ram September 05 reported workflows", () => {
     }
   });
 
-  for (const width of [393, 1280]) {
-  test(`BUG-010: complete reported Act catalog, attach, source detail and reload (${width}px)`, async ({
+  for (const width of [393, 768, 1280]) {
+  test(`BUG-010: release-owned Act catalog, attach, source detail and reload (${width}px)`, async ({
     page,
   }, testInfo) => {
     await page.setViewportSize({ width, height: 900 });
@@ -237,6 +237,20 @@ test.describe("Ram September 05 reported workflows", () => {
       "bnss-2023",
       "companies-2013",
       "cpc-1908",
+      "bsa-2023",
+      "ni-act-1881",
+      "limitation-1963",
+      "hindu-marriage-1955",
+      "prevention-of-corruption-1988",
+      "rti-2005",
+      "gst-cgst-2017",
+      "transfer-of-property-1882",
+      "contract-1872",
+      "consumer-protection-2019",
+      "ndps-1985",
+      "specific-relief-1963",
+      "ipc-1860",
+      "iea-1872",
     ]) {
       const option = picker.locator(`option[value="${id}"]`);
       await expect.soft(option, `${id}: the catalog entry must exist`).toBeAttached();
@@ -247,14 +261,35 @@ test.describe("Ram September 05 reported workflows", () => {
       expect(sectionsResponse.status(), await sectionsResponse.text()).toBe(200);
       const payload = await sectionsResponse.json();
       const expectedCounts: Record<string, [number, number]> = {
-        "arbitration-1996": [106, 104], "bns-2023": [358, 358], "bnss-2023": [531, 531],
-        "companies-2013": [523, 480], "cpc-1908": [171, 158],
+        "arbitration-1996": [115, 112], "bns-2023": [358, 358], "bnss-2023": [591, 591],
+        "companies-2013": [543, 480], "cpc-1908": [171, 158],
+        "bsa-2023": [171, 171],
+        "ni-act-1881": [156, 154], "limitation-1963": [33, 31],
+        "hindu-marriage-1955": [37, 35], "prevention-of-corruption-1988": [35, 33],
+        "rti-2005": [33, 33], "gst-cgst-2017": [193, 190],
+        "transfer-of-property-1882": [149, 136], "contract-1872": [269, 192],
+        "consumer-protection-2019": [107, 107],
+        "ndps-1985": [136, 129], "specific-relief-1963": [49, 47],
+        "ipc-1860": [575, 554], "iea-1872": [186, 184],
       };
-      expect.soft(payload.catalog_section_count, `${id}: full official numbered inventory`).toBe(expectedCounts[id][0]);
+      expect.soft(payload.catalog_section_count, `${id}: retained catalog identity inventory`).toBe(expectedCounts[id][0]);
       expect.soft(payload.verified_section_count, `${id}: verified/non-retired inventory`).toBe(expectedCounts[id][1]);
       expect.soft(payload.sections.length, `${id}: real verified sections are required`).toBeGreaterThan(0);
       if (payload.sections.length === 0) continue;
-      const section = payload.sections[0];
+      const targets: Record<string, string> = {
+        "bsa-2023": "Schedule", "limitation-1963": "Schedule", "ni-act-1881": "Section 148",
+        "bnss-2023": "Second Schedule - Form 58", "arbitration-1996": "Appendix", "rti-2005": "Second Schedule",
+        "gst-cgst-2017": "Schedule III", "transfer-of-property-1882": "Schedule",
+        "contract-1872": "Section 238", "hindu-marriage-1955": "Section 29",
+        "prevention-of-corruption-1988": "Section 17A", "consumer-protection-2019": "Section 107",
+        "ndps-1985": "Schedule", "specific-relief-1963": "Schedule",
+        "ipc-1860": "Section 302", "iea-1872": "Section 65B",
+      };
+      const targetNumber = targets[id];
+      const section = targetNumber
+        ? payload.sections.find((row: { section_number: string }) => row.section_number === targetNumber)
+        : payload.sections[0];
+      expect(section, `${id}: expected usable provision`).toBeDefined();
       expect(section.verification_status).toBe("verified_official");
       await picker.selectOption(id);
       const sections = page.getByTestId("matter-statute-section-select");
@@ -279,12 +314,26 @@ test.describe("Ram September 05 reported workflows", () => {
       await savedLink.click();
       await expect(page).toHaveURL(new RegExp(`/app/statutes/${id}/sections/`));
       await expect(page.getByRole("heading", { name: section.section_number, exact: true })).toBeVisible();
-      await expect(page.getByTestId("statute-section-text")).toBeVisible();
       const detail = await api.get(`${API}/api/statutes/${id}/sections/${encodeURIComponent(section.section_number)}`, {
         headers: headers(),
       });
       expect(detail.status(), await detail.text()).toBe(200);
       const official = (await detail.json()).section;
+      if (id === "ndps-1985" || id === "specific-relief-1963") {
+        const table = page.getByTestId("statute-structured-tables").getByRole("table");
+        await expect(table).toBeVisible();
+        await expect(table.getByRole("columnheader")).toHaveCount(id === "ndps-1985" ? 4 : 3);
+        await expect(table.locator("tbody tr")).toHaveCount(id === "ndps-1985" ? 162 : 5);
+        for (const row of official.structured_tables[0].rows) {
+          const cells = table.locator(`tr[data-source-serial="${row.serial}"]`).locator("th, td");
+          expect(await cells.allTextContents()).toEqual(row.cells);
+        }
+        await page.getByText("Published text transcription", { exact: true }).click();
+      }
+      if (id === "ipc-1860" || id === "iea-1872") {
+        await expect(page.getByText(/Historical repealed-law edition/)).toBeVisible();
+      }
+      await expect(page.getByTestId("statute-section-text")).toBeVisible();
       await expect(page.getByTestId("statute-section-text")).toHaveText(official.section_text);
       const sourceLink = page.getByRole("link", { name: "Open source", exact: true });
       await expect(sourceLink).toBeVisible();

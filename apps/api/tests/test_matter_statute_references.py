@@ -86,8 +86,8 @@ def test_unverified_catalog_section_cannot_bypass_picker_through_api(
     with get_session_factory()() as session:
         section_id = session.scalar(
             select(StatuteSection.id).where(
-                StatuteSection.statute_id == "crpc-1973",
-                StatuteSection.section_number == "Section 482",
+                StatuteSection.statute_id == "income-tax-1961",
+                StatuteSection.section_number == "Section 4",
             )
         )
     assert section_id is not None

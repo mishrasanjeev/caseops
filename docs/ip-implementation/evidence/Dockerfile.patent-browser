@@ -1,0 +1,8 @@
+FROM caseops-web-test-tools:20260906 AS webtools
+FROM caseops-offline-test-tools:20260908-statute-compiler-isolated
+LABEL caseops.track="patent-closure-20260909"
+RUN apt-get update
+RUN apt-get install -y --no-install-recommends chromium
+COPY --from=webtools /app/node_modules /tools/node_modules
+ENV NODE_PATH=/tools/node_modules
+ENTRYPOINT ["bash"]

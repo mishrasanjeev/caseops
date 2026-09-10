@@ -220,8 +220,13 @@ def _validate_target(
         docket = _authorized_lifecycle_docket(
             session, context=context, docket_id=docket_id, for_update=False
         )
-        # Read-only patent history does not change trademark or mutation policy.
-        if docket.record_type in {"patent_family", "patent_application"} and docket.restricted:
+        from caseops_api.services.ip_specialist_contracts import RECORD_TYPES as specialist_types
+
+        # Explicit history reads never enable document or lifecycle mutations.
+        if (
+            docket.record_type in {"patent_family", "patent_application", *specialist_types}
+            and docket.restricted
+        ):
             return
     _docket_or_404(session, context=context, docket_id=docket_id)
 

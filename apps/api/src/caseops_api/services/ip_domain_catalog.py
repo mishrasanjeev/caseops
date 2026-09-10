@@ -23,6 +23,13 @@ from caseops_api.schemas.ip_domains import (
     IpDomainCatalogue,
     IpDomainReleaseEvidence,
 )
+from caseops_api.services.ip_specialist_contracts import (
+    CHILD_PRD_HASHES,
+    JOURNEYS,
+    LABELS,
+    contract_path,
+    contract_version,
+)
 
 CATALOGUE_VERSION = "2026-09-06.1"
 BASE_CHECKS = frozenset(
@@ -59,11 +66,44 @@ class IpDomainDefinition:
     offices: tuple[str, ...]
     journeys: tuple[str, ...]
     child_prd_sha256: str | None = None
+    workflow_implemented: bool = False
+    required_source_checks: tuple[str, ...] = ()
 
     @property
     def contract_sha256(self) -> str:
         return sha256(json.dumps(asdict(self), sort_keys=True).encode()).hexdigest()
 
+
+SPECIALIST_DOMAINS = (
+    "design",
+    "copyright",
+    "domain_name",
+    "licensing",
+    "enforcement",
+    "geographical_indication",
+    "plant_variety",
+    "semiconductor_layout",
+    "trade_secret",
+    "customs_enforcement",
+)
+SPECIALIST_WORKFLOW_DOMAINS = frozenset(
+    {"design", "copyright", "licensing", "semiconductor_layout"}
+)
+SPECIALIST_DEFINITIONS = tuple(
+    IpDomainDefinition(
+        domain,
+        LABELS[domain],
+        contract_version(domain),
+        contract_path(domain),
+        True,
+        (),
+        (),
+        JOURNEYS[domain],
+        child_prd_sha256=CHILD_PRD_HASHES[domain],
+        workflow_implemented=domain in SPECIALIST_WORKFLOW_DOMAINS,
+    )
+    for domain in SPECIALIST_DOMAINS
+)
 
 DOMAIN_DEFINITIONS = (
     IpDomainDefinition(
@@ -75,47 +115,29 @@ DOMAIN_DEFINITIONS = (
         ("IN",),
         ("IP India",),
         tuple(f"UJ-{value:02d}" for value in (2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 31, 32)),
-        child_prd_sha256="96b655bc84dd8ae705c036de04f1cd3b12128c325d673c6cfa8d68485a874cf3",
+        child_prd_sha256="f5d16609f9836bd4e1f61b518902439c954126134aea73cda1e06f84832ce9a1",
+        workflow_implemented=True,
     ),
     IpDomainDefinition(
         "patent",
         "Patents",
-        "PAT-2026-09-06.1",
+        "PAT-2026-09-10.2",
         "docs/PRD_PATENT_DOMAIN_2026-09-06.md",
         True,
         ("IN",),
         ("IP India",),
         ("UJ-29", "UJ-39", "UJ-40"),
-        child_prd_sha256="af9ee6ffa14d573bd164b2475aab6b1443b047b0f542edba4d1e6ecc90b3806c",
+        child_prd_sha256="881284d5d494dd6b19fa68448d7a9315522391828dc9a621b50ec43613b0121c",
+        required_source_checks=(
+            "patent_examination_source_fixtures",
+            "patent_response_source_fixtures",
+            "patent_annuity_source_fixtures",
+            "patent_working_source_fixtures",
+            "patent_restoration_source_fixtures",
+            "patent_pregrant_proceeding_source_fixtures",
+        ),
     ),
-    IpDomainDefinition("design", "Designs", "pending", None, False, (), (), ("UJ-30", "UJ-41")),
-    IpDomainDefinition(
-        "copyright", "Copyright", "pending", None, False, (), (), ("UJ-30", "UJ-42")
-    ),
-    IpDomainDefinition("domain_name", "Domain names", "pending", None, False, (), (), ("UJ-45",)),
-    IpDomainDefinition(
-        "licensing", "Licensing", "pending", None, False, (), (), ("UJ-43", "UJ-60", "UJ-61")
-    ),
-    IpDomainDefinition(
-        "geographical_indication",
-        "Geographical indications",
-        "pending",
-        None,
-        False,
-        (),
-        (),
-        ("UJ-44",),
-    ),
-    IpDomainDefinition(
-        "plant_variety", "Plant varieties", "pending", None, False, (), (), ("UJ-44",)
-    ),
-    IpDomainDefinition(
-        "semiconductor_layout", "Semiconductor layouts", "pending", None, False, (), (), ("UJ-44",)
-    ),
-    IpDomainDefinition("trade_secret", "Trade secrets", "pending", None, False, (), (), ("UJ-44",)),
-    IpDomainDefinition(
-        "customs_enforcement", "Customs and enforcement", "pending", None, False, (), (), ("UJ-45",)
-    ),
+    *SPECIALIST_DEFINITIONS,
 )
 DOMAIN_BY_ID = {definition.domain: definition for definition in DOMAIN_DEFINITIONS}
 
@@ -142,6 +164,8 @@ def evaluate_domain(
     if evidence is None:
         blockers.append("release_evidence_missing")
     else:
+        if not definition.workflow_implemented:
+            blockers.append("domain_workflow_implementation_missing")
         if evidence.domain != definition.domain:
             blockers.append("evidence_domain_mismatch")
         if evidence.contract_sha256 != definition.contract_sha256:
@@ -169,7 +193,7 @@ def evaluate_domain(
         checks = {check.check_id: check for check in evidence.checks}
         if len(checks) != len(evidence.checks):
             blockers.append("duplicate_check")
-        required = BASE_CHECKS | set(definition.journeys)
+        required = BASE_CHECKS | set(definition.journeys) | set(definition.required_source_checks)
         if evidence.stage == "ga":
             required |= GA_CHECKS
         for check_id in sorted(required):

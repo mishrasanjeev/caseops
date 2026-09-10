@@ -5,6 +5,11 @@ param(
     [switch]$KeepRunning,
     [switch]$SkipBuild,
     [switch]$PreCommit,
+    [ValidatePattern('^[0-9.]+/[0-9]{1,2}$')]
+    [string]$NetworkSubnet,
+    [ValidatePattern('^[0-9.]+/[0-9]{1,2}$')]
+    [string]$WorkerNetworkSubnet,
+    [string]$ResultsDirectory,
     [Parameter(ValueFromRemainingArguments=$true)]
     [string[]]$PlaywrightArgs = @()
 )
@@ -18,6 +23,12 @@ $TestApiProxyScript = Join-Path $RepoRoot "scripts\docker-acceptance-api-proxy.m
 $TestApiProxyProcess = $null
 $TestApiProxyStdout = $null
 $TestApiProxyStderr = $null
+if (-not $ResultsDirectory) {
+    $ResultsDirectory = Join-Path $RepoRoot (".tmp\docker-acceptance\" + [Guid]::NewGuid().ToString("N"))
+}
+$ResultsDirectory = [IO.Path]::GetFullPath($ResultsDirectory)
+New-Item -ItemType Directory -Path $ResultsDirectory -Force | Out-Null
+Write-Host "[docker-acceptance] retained reports: $ResultsDirectory"
 
 function Get-WorkingTreeFingerprint {
     $Entries = @{}
@@ -190,6 +201,7 @@ $AcceptanceEnvironment = @{
     COMPOSE_PROFILES = "acceptance"
     CASEOPS_RELEASE_SHA = $ReleaseSha
     CASEOPS_DOCKER_ENV = "e2e"
+    CASEOPS_DOCKER_INTERNAL_WORKER_NETWORK = "true"
     CASEOPS_DOCKER_API_PORT = $ApiPort
     CASEOPS_DOCKER_WEB_PORT = $WebPort
     CASEOPS_DOCKER_POSTGRES_PORT = $PostgresPort
@@ -205,6 +217,10 @@ $AcceptanceEnvironment = @{
     CASEOPS_CASE_TRACKING_PROVIDER = "ecourtsindia"
     CASEOPS_ECOURTSINDIA_API_BASE_URL = "http://acceptance-case-provider:8080"
     CASEOPS_ECOURTSINDIA_API_TOKEN = "docker-acceptance-provider-token"
+    CASEOPS_LLM_PROVIDER = "mock"
+    CASEOPS_LLM_MODEL = "caseops-mock-1"
+    CASEOPS_SUMMARY_ACCEPTANCE = "1"
+    CASEOPS_E2E_HEARING_PROVIDER = "sep10-offline"
     # Playwright's Node control-plane and browser calls go through a loopback
     # proxy that opens one fresh Windows-to-Docker connection per request.
     CASEOPS_E2E_API_PORT = $TestApiPort
@@ -212,6 +228,7 @@ $AcceptanceEnvironment = @{
     CASEOPS_E2E_DOCKER_PROJECT = $ComposeProject
     CASEOPS_E2E_DOCKER_COMPOSE_FILE = $ComposeFile
     CASEOPS_TEST_POSTGRES_URL = "postgresql+psycopg://caseops:caseops@127.0.0.1:$PostgresPort/caseops"
+    CASEOPS_TEST_RESULT_JOURNAL = (Join-Path $ResultsDirectory "postgres-results.jsonl")
     CASEOPS_DATABASE_URL = "postgresql+psycopg://caseops:caseops@127.0.0.1:$PostgresPort/caseops"
     CASEOPS_ENV = "ci"
     CASEOPS_AUTH_SECRET = "docker-postgres-validation-secret-at-least-32-bytes"
@@ -253,6 +270,23 @@ try {
     Write-Host "[docker-acceptance] resetting isolated project $ComposeProject"
     & docker compose --project-name $ComposeProject --file $ComposeFile down --volumes --remove-orphans
     if ($LASTEXITCODE -ne 0) { throw "Could not reset the isolated Compose project." }
+
+    # Retained acceptance projects can exhaust Docker's default address pools.
+    # An explicit free subnet avoids pruning another task's networks or data.
+    if ($NetworkSubnet) {
+        & docker network create --subnet $NetworkSubnet `
+            --label "com.docker.compose.project=$ComposeProject" `
+            --label "com.docker.compose.network=default" `
+            "${ComposeProject}_default"
+        if ($LASTEXITCODE -ne 0) { throw "Could not create the isolated acceptance subnet." }
+    }
+    if ($WorkerNetworkSubnet) {
+        & docker network create --internal --subnet $WorkerNetworkSubnet `
+            --label "com.docker.compose.project=$ComposeProject" `
+            --label "com.docker.compose.network=worker-offline" `
+            "${ComposeProject}_worker-offline"
+        if ($LASTEXITCODE -ne 0) { throw "Could not create the offline worker subnet." }
+    }
 
     if (-not $SkipBuild) {
         Write-Host "[docker-acceptance] building API and web production images"
@@ -332,7 +366,11 @@ try {
     Write-Host "[docker-acceptance] running the complete PostgreSQL + pgvector validation suite"
     Push-Location $ApiDir
     try {
-        & $ApiPython -m pytest -q -m postgres
+        $PostgresReport = Join-Path $ResultsDirectory "postgres.xml"
+        & $ApiPython -m pytest -q -m postgres "--junitxml=$PostgresReport"
+        if (-not (Test-Path -LiteralPath $AcceptanceEnvironment.CASEOPS_TEST_RESULT_JOURNAL)) {
+            throw "PostgreSQL validation did not retain its incremental result journal."
+        }
         if ($LASTEXITCODE -ne 0) { throw "PostgreSQL + pgvector validation failed." }
     }
     finally {
@@ -361,8 +399,8 @@ try {
 
     Assert-CandidateSourceUnchanged -Stage "before browser acceptance"
     Write-Host "[docker-acceptance] running Playwright against Docker + PostgreSQL"
-    $TestApiProxyStdout = [IO.Path]::GetTempFileName()
-    $TestApiProxyStderr = [IO.Path]::GetTempFileName()
+    $TestApiProxyStdout = Join-Path $ResultsDirectory "api-proxy.stdout.log"
+    $TestApiProxyStderr = Join-Path $ResultsDirectory "api-proxy.stderr.log"
     $TestApiProxyProcess = Start-Process `
         -FilePath $NodePath `
         -ArgumentList @("`"$TestApiProxyScript`"", $TestApiPort, $ApiPort) `
@@ -440,10 +478,9 @@ finally {
     foreach ($Name in $AcceptanceEnvironment.Keys) {
         [Environment]::SetEnvironmentVariable($Name, $PreviousEnvironment[$Name], "Process")
     }
-    foreach ($LogPath in @($TestApiProxyStdout, $TestApiProxyStderr)) {
-        if ($LogPath -and (Test-Path -LiteralPath $LogPath)) {
-            Remove-Item -LiteralPath $LogPath -Force
-        }
+    if ($null -ne $TestApiProxyProcess) {
+        $TestApiProxyProcess.WaitForExit()
+        $TestApiProxyProcess.Dispose()
     }
 }
 

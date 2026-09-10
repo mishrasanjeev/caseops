@@ -1,5 +1,105 @@
 # CaseOps  - Work To Be Done
 
+## September 10 Workbook In Progress
+
+BUG-013 and BUG-014 remain **Inconclusive** pending complete local Docker and
+exact-release production Playwright acceptance. They extend the existing
+catalogue and hearing work; they do not create duplicate modules. Fresh
+production inspection confirms 17 of 23 Acts have zero selectable provisions,
+and three screenshot Matters lack both CNR and court identity. Never enable
+unverified provisions or guess a court from party names. Source reconciliation,
+journey/test mappings, root causes and release gates are in
+`docs/bugfix-ram10sep-2026.md`. Release remains **NO-GO**.
+
+Local checkpoints now include 1,012 integrated frontend tests, 308 combined
+hearing/provider tests, 102 catalogue API tests, 12 isolated compiler tests and
+289 preservation/governance tests. These overlapping, source-pinned inventories
+are not one final release gate. Hearing concurrency follow-ups and the complete
+Docker browser candidate still require acceptance; neither workbook issue nor
+any of the 25 IP slices is closed by these counts.
+
+## September 09 Execution In Progress
+
+Owner: Codex, with user-authorized parallel implementation agents. Release remains
+**NO-GO**. The catalogue and 25 IP slices are not relabelled complete while their
+requirements and integrated proof remain outstanding. Provider repair now includes
+durable leases, post-transport authorization, conservative spend reservations,
+free asynchronous refresh-status recovery and a bounded 18:00-20:00 cadence.
+The first PostgreSQL provider gate passed 8 tests. A broader offline provider
+run passed 68 tests and exposed one obsolete cost assertion; its correction and
+new adjacent-path tests are still being verified. Cold-start changes and tests
+are integrated, with three sidecar local HTTP runs below 30 seconds; this is not
+production or integrated release-image certification. Exact ownership, milestones
+and gates: `docs/ip-implementation/closure-execution-2026-09-09.md`.
+
+## September 08 Workbook And Expanded Candidate (Historical Snapshot)
+
+Owner: Codex. Release verdict: **NO-GO**. BUG-011 remains **Partially fixed**
+under the existing BUG-010 catalogue scope (J05/J07, MOD-TS-017, US-046A-D,
+IPLF-006). BUG-012 remains **Inconclusive** (J08, MOD-TS-006, FT-078-082).
+The two workbook rows do not create duplicate programme work.
+
+The uncommitted runtime fingerprint `f0a13e53a55d6c52d9f8530764777e1d9cadc6c3`
+passed fresh Docker acceptance: all 204 PostgreSQL tests and 310 Playwright
+tests, with five explicit browser skips (four production-only and one payment
+provider). The hearing journeys cover CNR, case-number/court and a supported
+record beyond 50 rejected records, with actual dates and reload at three widths.
+All 2,941 current source records were checked; this does not prove a complete
+catalogue. Source selection, attachment and reload passed at 393/768/1280px.
+
+The full offline API run had 4,276 passes, 200 skips and ten storage-exhaustion
+failures/errors. Every affected node passed with corrected executable storage.
+Together with PostgreSQL, native-model, Windows and focused supplements, all
+4,496 currently collected identities have passing observations. This is composed
+evidence, not a clean single current-source full run or release approval.
+
+Open: eight existing Act editions and wider source packs; provider transaction,
+durable-claim and crash-recovery repair; whole-tenant nightly throughput;
+party-only identity discovery; all 25 unfinished IP slices; production acceptance.
+Real-scanner HTTP upload/download, rejection, outage and recovery passed locally,
+but cold readiness varied from a failed 30-second gate to a 29.66-second pass.
+The earlier 19.36-second result was a scanner-service check, not HTTP upload
+proof. The reported 53-second production latency remains open.
+
+Canonical detail, failed attempts, source provenance and next acceptance:
+`docs/bugfix-ram08sep-2026.md`. Programme ownership and remaining work:
+`docs/ip-implementation/catalogue-ip-completion-2026-09-08.md`.
+
+## Earlier September 08 Expanded Catalogue Checkpoint
+
+Codex owns the expanded BUG-010 / RAM05-STATUTES scope (J05/J07, MOD-TS-017,
+US-046A-D, IPLF-006) and all 25 unfinished IP slices. Baseline production is
+`5145fb3a4b51b26af116220ff10a7389bde6324d`; older pre-deployment notes below
+are historical, not the current serving identity. This new candidate is not
+committed, deployed or certified.
+
+The source audit found a real retained-data defect: BNS section 358 omitted
+subsection (4) on PDF page 111. The candidate restores it and adds a regression.
+BSA's 170 sections and complete certificate Schedule, NI's 155 numbered
+identities and retired Schedule, and the Limitation Act's 32 sections plus
+complete Schedule are compiled from retained official bytes. Eight source
+documents yield 2,049 identities (1,987 verified, 60 retired, two quarantined).
+These are source-bundle counts, not fresh database or global-completeness proof.
+Fifteen existing Act editions and four retained editions' wider page inventories
+remain incomplete. The Income-tax Act, 2025 successor and IP source packs are
+additional required scope. Incorrect, missing and incomplete publisher files
+are recorded, not admitted as complete law.
+
+A cold-start candidate removes duplicate route cloning and serial scanner/API
+initialization while preserving required scanner readiness. Its OpenAPI is
+byte-identical to baseline. Focused offline Docker startup/deployment checks
+pass 111 tests; full integrated acceptance and production latency remain open.
+All 25 IP slice statuses remain unchanged: no new IP workflow is complete in
+this checkpoint. Existing family/application/party/priority work must not be
+reimplemented just because older notes call it pending.
+
+Authoritative new work map: `docs/ip-implementation/catalogue-ip-completion-2026-09-08.md`.
+Source candidates and gaps: `docs/ip-implementation/catalogue-sources-2026-09-08.json`.
+`python scripts/audit_statute_catalogue.py --require-complete` must fail while
+this inventory is partial. BUG-010 is **Partially fixed**, not closed; the
+expanded release verdict is **NO-GO** pending implementation and full acceptance.
+
+
 September 08 follow-up pre-deployment checkpoint: PR #458's release
 `2664ee29` is deployed, but its production certification failed on three stale
 contracts and sixteen HTTPS-to-HTTP patent setup redirects. The repaired local

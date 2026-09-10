@@ -22,7 +22,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, or_, select
 
 from caseops_api.api.dependencies import (
     DbSession,
@@ -52,6 +52,7 @@ from caseops_api.schemas.legal_updates import (
     StatuteAmendmentHistoryResponse,
 )
 from caseops_api.schemas.source_actions import SourceActionRecord
+from caseops_api.schemas.statute_content import StatuteTable
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.legal_update_sources import (
     list_source_records,
@@ -98,16 +99,22 @@ def _selectable_statute_section_sql():
     """One server-owned definition of an attachable statutory provision."""
     return and_(
         StatuteSection.is_active.is_(True),
-        StatuteSection.section_text.is_not(None),
-        StatuteSection.legal_status == "enacted",
-        StatuteSection.verification_status.in_(
-            {"verified_official", "verified_licensed"}
+        StatuteSection.section_text != "",
+        or_(
+            StatuteSection.legal_status == "enacted",
+            and_(
+                StatuteSection.legal_status == "repealed",
+                StatuteSection.verification_status == "verified_official",
+                StatuteSection.source_policy_json["edition_scope"].as_string()
+                == "historical_repealed_law",
+            ),
         ),
-        StatuteSection.source_sha256.is_not(None),
-        StatuteSection.source_publisher.is_not(None),
-        StatuteSection.issuing_body.is_not(None),
+        StatuteSection.verification_status.in_({"verified_official", "verified_licensed"}),
+        StatuteSection.source_sha256 != "",
+        StatuteSection.source_publisher != "",
+        StatuteSection.issuing_body != "",
         StatuteSection.section_text_fetched_at.is_not(None),
-        StatuteSection.exact_source_version.is_not(None),
+        StatuteSection.exact_source_version != "",
         StatuteSection.source_locator_type == "section_deep_link",
         StatuteSection.link_health_status == "available",
     )
@@ -116,7 +123,15 @@ def _selectable_statute_section_sql():
 def _is_selectable_statute_section(section: StatuteSection) -> bool:
     return bool(
         section.is_active
-        and section.legal_status == "enacted"
+        and (
+            section.legal_status == "enacted"
+            or (
+                section.legal_status == "repealed"
+                and section.verification_status == "verified_official"
+                and (section.source_policy_json or {}).get("edition_scope")
+                == "historical_repealed_law"
+            )
+        )
         and section.section_text
         and section.verification_status in {"verified_official", "verified_licensed"}
         and section.source_sha256
@@ -202,6 +217,7 @@ class StatuteSectionRecord(BaseModel):
     exact_source_version: str | None = None
     source_locator_type: str = "unavailable"
     source_policy_json: dict = Field(default_factory=dict, exclude=True)
+    structured_tables: list[StatuteTable] = Field(default_factory=list, max_length=20)
     link_health_status: str = "not_checked"
     link_last_checked_at: datetime | None = None
     link_last_error: str | None = None
@@ -236,6 +252,11 @@ class StatuteSectionRecord(BaseModel):
         quarantined = self.verification_status in {"quarantined", "retired"}
         if not authoritative:
             self.section_text = None
+        # Only verified source-owned content can populate the public table DTO.
+        tables = self.source_policy_json.get("structured_tables", []) if authoritative else []
+        if not isinstance(tables, list) or len(tables) > 20:
+            raise ValueError("Statutory table inventory exceeds source bound")
+        self.structured_tables = [StatuteTable.model_validate(table) for table in tables]
         self.source_action = inspect_source_target_action(
             self.section_url if self.source_locator_type == "section_deep_link" else None,
             target_type="statute_section",
@@ -260,6 +281,7 @@ class StatuteSectionListItem(BaseModel):
 
     id: str
     statute_id: str
+    legal_status: str = "enacted"
     section_number: str
     section_label: str | None
     section_text_source: str | None = None
@@ -295,6 +317,7 @@ class StatuteSectionCatalogListItem(BaseModel):
 
     id: str
     statute_id: str
+    legal_status: str = "enacted"
     section_number: str
     section_label: str | None
     ordinal: int
@@ -698,8 +721,7 @@ def audit_statute_verification(
         quarantined=sum(s.verification_status == "quarantined" for s in sections),
         provisional=sum(bool(s.is_provisional) for s in sections),
         ai_generated=sum(
-            s.section_text_source in {"model_generated", "haiku_generated"}
-            for s in sections
+            s.section_text_source in {"model_generated", "haiku_generated"} for s in sections
         ),
         suspect_records=suspect,
     )
@@ -831,6 +853,8 @@ def list_statute_verification_sections(
     return StatuteVerificationSectionListResponse(
         sections=[StatuteSectionRecord.model_validate(row) for row in rows]
     )
+
+
 @router.get(
     "/verification/sections/{section_id}/source-versions",
     response_model=StatuteSourceVersionListResponse,
@@ -886,9 +910,7 @@ def post_statute_section_link_check(
     context: LegalUpdateAdmin,
     session: DbSession,
 ) -> StatuteLinkHealthRecord:
-    section = check_statute_section_link(
-        session, context=context, section_id=section_id
-    )
+    section = check_statute_section_link(session, context=context, section_id=section_id)
     return StatuteLinkHealthRecord(
         section_id=section.id,
         source_version=section.source_version,
@@ -1028,6 +1050,7 @@ def list_statute_sections(
             section_number=row.section_number,
             section_label=row.section_label,
             ordinal=row.ordinal,
+            legal_status=row.legal_status,
             selection_state=selection_state,
         )
 
@@ -1037,9 +1060,7 @@ def list_statute_sections(
         catalog_sections=[catalog_item(s) for s in catalog_sections],
         verified_section_count=len(sections),
         catalog_section_count=len(catalog_sections),
-        coverage_label=(
-            f"{len(sections)} verified of {len(catalog_sections)} catalogued sections"
-        ),
+        coverage_label=(f"{len(sections)} verified of {len(catalog_sections)} catalogued sections"),
     )
 
 

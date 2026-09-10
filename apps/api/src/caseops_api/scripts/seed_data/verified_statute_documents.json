@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
-  "retrieved_on": "2026-09-07",
-  "scope": "All numbered central sections in the five named official editions, including inserted and omitted identities. Schedules, Orders, appendices and standalone state-law records are not separate selectable provisions in this bundle. Published text verification is not a claim of universal commencement, applicability or current judicial treatment.",
+  "retrieved_on": "2026-09-08",
+  "scope": "Release-owned official provisions, including inserted/omitted identities and explicitly inventoried schedules. This is an expanding source bundle, not catalogue-wide completion. Published text verification is not a claim of universal commencement, applicability or current judicial treatment.",
   "documents": [
     {
       "statute_id": "arbitration-1996",
-      "retrieved_at": "2026-09-06T19:20:44.866427+00:00",
+      "retrieved_at": "2026-09-07T00:50:44.866427+05:30",
       "treatment_evidence": {
         "87": {
           "file": "hcc-2019-sci.pdf",
@@ -27,7 +27,7 @@
       ],
       "body_pages": [
         7,
-        39
+        53
       ],
       "section_count": 106,
       "label_variants": {
@@ -37,11 +37,109 @@
       "blocked_sections": {
         "26": "Publisher conflict: arrangement lists this section as omitted, but page 18 retains its substantive text. Not admitted as a verified selectable provision.",
         "87": "Not admitted as current operative law: constitutional invalidation in Hindustan Construction Company Ltd. v Union of India (27 November 2019) requires treatment distinct from the retained India Code text."
-      }
+      },
+      "non_provision_pages": [
+        {
+          "pages": [
+            1,
+            2
+          ],
+          "kind": "cover_and_amending_acts"
+        },
+        {
+          "pages": [
+            3,
+            6
+          ],
+          "kind": "arrangement"
+        },
+        {
+          "pages": [
+            54,
+            55
+          ],
+          "kind": "statement_of_objects"
+        }
+      ],
+      "supplements": [
+        {
+          "key": "schedule_1",
+          "kind": "schedule",
+          "section_number": "First Schedule",
+          "label": "THE FIRST SCHEDULE",
+          "heading": "THE FIRST SCHEDULE",
+          "page": 40
+        },
+        {
+          "key": "schedule_2",
+          "kind": "schedule",
+          "section_number": "Second Schedule",
+          "label": "THE SECOND SCHEDULE",
+          "heading": "THE SECOND SCHEDULE",
+          "page": 44
+        },
+        {
+          "key": "schedule_3",
+          "kind": "schedule",
+          "section_number": "Third Schedule",
+          "label": "THE THIRD SCHEDULE",
+          "heading": "THE THIRD SCHEDULE",
+          "page": 45
+        },
+        {
+          "key": "schedule_4",
+          "kind": "schedule",
+          "section_number": "Fourth Schedule",
+          "label": "1[THE FOURTH SCHEDULE",
+          "heading": "1[THE FOURTH SCHEDULE",
+          "page": 47
+        },
+        {
+          "key": "schedule_5",
+          "kind": "schedule",
+          "section_number": "Fifth Schedule",
+          "label": "THE FIFTH SCHEDULE",
+          "heading": "THE FIFTH SCHEDULE",
+          "page": 48
+        },
+        {
+          "key": "schedule_6",
+          "kind": "schedule",
+          "section_number": "Sixth Schedule",
+          "label": "THE SIXTH SCHEDULE",
+          "heading": "THE SIXTH SCHEDULE",
+          "page": 50
+        },
+        {
+          "key": "schedule_7",
+          "kind": "schedule",
+          "section_number": "Seventh Schedule",
+          "label": "THE SEVENTH SCHEDULE",
+          "heading": "THE SEVENTH SCHEDULE",
+          "page": 51
+        },
+        {
+          "key": "schedule_8",
+          "kind": "schedule",
+          "section_number": "Eighth Schedule",
+          "label": "[Omitted.]",
+          "heading": "[THE EIGHTH SCHEDULE.] Omitted by the Arbitration and Conciliation (Amendment) Act, 2021 (3 of",
+          "page": 52
+        },
+        {
+          "key": "appendix",
+          "kind": "appendix",
+          "section_number": "Appendix",
+          "label": "APPENDIX",
+          "heading": "APPENDIX",
+          "page": 53
+        }
+      ],
+      "complete_arrangement_labels": true
     },
     {
       "statute_id": "bns-2023",
-      "retrieved_at": "2026-09-06T19:20:44.152126+00:00",
+      "retrieved_at": "2026-09-07T00:50:44.152126+05:30",
       "file": "bns-2023.pdf",
       "source_url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/20062/1/a202345.pdf",
       "act_url": "https://www.indiacode.nic.in/indiacode/handle/123456789/20062?view_type=browse",
@@ -54,16 +152,39 @@
       ],
       "body_pages": [
         16,
-        110
+        111
       ],
       "section_count": 358,
+      "non_provision_pages": [
+        {
+          "pages": [
+            1,
+            2
+          ],
+          "kind": "edition_and_abbreviations"
+        },
+        {
+          "pages": [
+            3,
+            15
+          ],
+          "kind": "arrangement"
+        },
+        {
+          "pages": [
+            112,
+            112
+          ],
+          "kind": "statement_of_objects_and_reasons"
+        }
+      ],
       "source_discrepancies": {
         "106": "Commencement limitation in this published edition: the publisher's footnote on PDF page 16 expressly excludes section 106(2) from the 1 July 2024 commencement notification (S.O. 850(E), 23 February 2024). Verification of the printed section does not certify commencement of subsection (2). Check subsequent official notifications for the relevant date. Source: https://www.indiacode.nic.in/indiacode/bitstream/123456789/20062/1/a202345.pdf#page=16"
       }
     },
     {
       "statute_id": "bnss-2023",
-      "retrieved_at": "2026-09-07T12:21:08.753481+00:00",
+      "retrieved_at": "2026-09-07T17:51:08.753481+05:30",
       "file": "bnss-2023.pdf",
       "source_url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/20099/1/A202346.pdf",
       "act_url": "https://www.indiacode.nic.in/indiacode/handle/123456789/20099?view_type=browse",
@@ -76,13 +197,600 @@
       ],
       "body_pages": [
         18,
-        174
+        281
       ],
-      "section_count": 531
+      "section_count": 531,
+      "non_provision_pages": [
+        {
+          "pages": [
+            1,
+            2
+          ],
+          "kind": "cover_and_abbreviations"
+        },
+        {
+          "pages": [
+            3,
+            17
+          ],
+          "kind": "arrangement"
+        },
+        {
+          "pages": [
+            282,
+            282
+          ],
+          "kind": "statement_of_objects"
+        }
+      ],
+      "supplements": [
+        {
+          "key": "schedule_1",
+          "kind": "schedule",
+          "section_number": "First Schedule",
+          "label": "CLASSIFICATION OF OFFENCES",
+          "heading": "THE FIRST SCHEDULE",
+          "page": 175
+        },
+        {
+          "key": "schedule_2",
+          "kind": "schedule",
+          "section_number": "Second Schedule",
+          "label": "THE SECOND SCHEDULE",
+          "heading": "THE SECOND SCHEDULE",
+          "page": 222,
+          "span_through_key": "form_58"
+        },
+        {
+          "key": "form_1",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 1",
+          "label": "NOTICE FOR APPEARANCE BY THE POLICE",
+          "heading": "FORM No.1",
+          "page": 222
+        },
+        {
+          "key": "form_2",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 2",
+          "label": "SUMMONS TO AN ACCUSED PERSON",
+          "heading": "FORM No. 2",
+          "page": 223
+        },
+        {
+          "key": "form_3",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 3",
+          "label": "WARRANT OF ARREST",
+          "heading": "FORM No. 3",
+          "page": 224
+        },
+        {
+          "key": "form_4",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 4",
+          "label": "BOND AND BAIL-BOND AFTER ARREST UNDER A WARRANT",
+          "heading": "FORM No. 4",
+          "page": 225
+        },
+        {
+          "key": "form_5",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 5",
+          "label": "PROCLAMATION REQUIRING THE APPEARANCE OF A PERSON ACCUSED",
+          "heading": "FORM No. 5",
+          "page": 226
+        },
+        {
+          "key": "form_6",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 6",
+          "label": "PROCLAMATION REQUIRING THE ATTENDANCE OF A WITNESS",
+          "heading": "FORM No. 6",
+          "page": 227
+        },
+        {
+          "key": "form_7",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 7",
+          "label": "ORDER OF ATTACHMENT TO COMPEL THE ATTENDANCE OF A WITNESS",
+          "heading": "FORM No. 7",
+          "page": 228
+        },
+        {
+          "key": "form_8",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 8",
+          "label": "ORDER OF ATTACHMENT TO COMPEL THE APPEARANCE OF A PERSON ACCUSED",
+          "heading": "FORM No. 8",
+          "page": 229
+        },
+        {
+          "key": "form_9",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 9",
+          "label": "ORDER AUTHORISING AN ATTACHMENT BY THE DISTRICT MAGISTRATE OR COLLECTOR",
+          "heading": "FORM No. 9",
+          "page": 230
+        },
+        {
+          "key": "form_10",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 10",
+          "label": "WARRANT IN THE FIRST INSTANCE TO BRING UP A WITNESS",
+          "heading": "FORM No. 10",
+          "page": 231
+        },
+        {
+          "key": "form_11",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 11",
+          "label": "WARRANT TO SEARCH AFTER INFORMATION OF A PARTICULAR OFFENCE",
+          "heading": "FORM No. 11",
+          "page": 232
+        },
+        {
+          "key": "form_12",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 12",
+          "label": "WARRANT TO SEARCH SUSPECTED PLACE OF DEPOSIT",
+          "heading": "FORM No. 12",
+          "page": 233
+        },
+        {
+          "key": "form_13",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 13",
+          "label": "BOND TO KEEP THE PEACE",
+          "heading": "FORM No. 13",
+          "page": 234
+        },
+        {
+          "key": "form_14",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 14",
+          "label": "BOND FOR GOOD BEHAVIOUR",
+          "heading": "FORM No. 14",
+          "page": 235
+        },
+        {
+          "key": "form_15",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 15",
+          "label": "SUMMONS ON INFORMATION OF A PROBABLE BREACH OF THE PEACE",
+          "heading": "FORM No. 15",
+          "page": 236
+        },
+        {
+          "key": "form_16",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 16",
+          "label": "WARRANT OF COMMITMENT ON FAILURE TO FIND SECURITY TO KEEP THE PEACE",
+          "heading": "FORM No. 16",
+          "page": 237
+        },
+        {
+          "key": "form_17",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 17",
+          "label": "WARRANT OF COMMITMENT ON FAILURE TO FIND SECURITY FOR GOOD BEHAVIOUR",
+          "heading": "FORM No. 17",
+          "page": 238
+        },
+        {
+          "key": "form_18",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 18",
+          "label": "WARRANT TO DISCHARGE A PERSON IMPRISONED ON FAILURE TO GIVE SECURITY",
+          "heading": "FORM No. 18",
+          "page": 239
+        },
+        {
+          "key": "form_19",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 19",
+          "label": "WARRANT OF IMPRISONMENT ON FAILURE TO PAY MAINTENANCE",
+          "heading": "FORM No. 19",
+          "page": 240
+        },
+        {
+          "key": "form_20",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 20",
+          "label": "WARRANT TO ENFORCE THE PAYMENT OF MAINTENANCE BY ATTACHMENT AND SALE",
+          "heading": "FORM No. 20",
+          "page": 241
+        },
+        {
+          "key": "form_21",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 21",
+          "label": "ORDER FOR THE REMOVAL OF NUISANCES",
+          "heading": "FORM No. 21",
+          "page": 242
+        },
+        {
+          "key": "form_22",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 22",
+          "label": "MAGISTRATE'S NOTICE AND PEREMPTORY ORDER",
+          "heading": "FORM No. 22",
+          "page": 243
+        },
+        {
+          "key": "form_23",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 23",
+          "label": "INJUNCTION TO PROVIDE AGAINST IMMINENT DANGER PENDING INQUIRY",
+          "heading": "FORM No. 23",
+          "page": 244
+        },
+        {
+          "key": "form_24",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 24",
+          "label": "MAGISTRATE’S ORDER PROHIBITING THE REPETITION, ETC., OF A NUISANCE",
+          "heading": "FORM No. 24",
+          "page": 245
+        },
+        {
+          "key": "form_25",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 25",
+          "label": "MAGISTRATE’S ORDER TO PREVENT OBSTRUCTION, RIOT, ETC.",
+          "heading": "FORM No. 25",
+          "page": 246
+        },
+        {
+          "key": "form_26",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 26",
+          "label": "MAGISTRATE'S ORDER DECLARING PARTY ENTITLED TO RETAIN POSSESSION OF LAND, ETC., IN DISPUTE",
+          "heading": "FORM No. 26",
+          "page": 247
+        },
+        {
+          "key": "form_27",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 27",
+          "label": "WARRANT OF ATTACHMENT IN THE CASE OF A DISPUTE AS TO THE POSSESSION OF LAND, ETC.",
+          "heading": "FORM No. 27",
+          "page": 248
+        },
+        {
+          "key": "form_28",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 28",
+          "label": "MAGISTRATE'S ORDER PROHIBITING THE DOING OF ANYTHING ON LAND OR WATER",
+          "heading": "FORM No. 28",
+          "page": 249
+        },
+        {
+          "key": "form_29",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 29",
+          "label": "BOND AND BAIL-BOND ON A PRELIMINARY INQUIRY BEFORE A POLICE OFFICER",
+          "heading": "FORM No. 29",
+          "page": 250
+        },
+        {
+          "key": "form_30",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 30",
+          "label": "BOND TO PROSECUTE OR GIVE EVIDENCE",
+          "heading": "FORM No. 30",
+          "page": 251
+        },
+        {
+          "key": "form_31",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 31",
+          "label": "SPECIAL SUMMONS TO A PERSON ACCUSED OF A PETTY OFFENCE",
+          "heading": "FORM No. 31",
+          "page": 252
+        },
+        {
+          "key": "form_32",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 32",
+          "label": "NOTICE OF COMMITMENT BY MAGISTRATE TO PUBLIC PROSECUTOR",
+          "heading": "FORM No. 32",
+          "page": 253
+        },
+        {
+          "key": "form_33",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 33",
+          "label": "CHARGES",
+          "heading": "FORM No. 33",
+          "page": 254
+        },
+        {
+          "key": "form_34",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 34",
+          "label": "SUMMONS TO WITNESS",
+          "heading": "FORM No. 34",
+          "page": 257
+        },
+        {
+          "key": "form_35",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 35",
+          "label": "WARRANT OF COMMITMENT ON A SENTENCE OF IMPRISONMENT OR FINE IF PASSED BY A COURT",
+          "heading": "FORM No. 35",
+          "page": 258
+        },
+        {
+          "key": "form_36",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 36",
+          "label": "WARRANT OF IMPRISONMENT ON FAILURE TO PAY COMPENSATION",
+          "heading": "FORM No. 36",
+          "page": 259
+        },
+        {
+          "key": "form_37",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 37",
+          "label": "ORDER REQUIRING PRODUCTION IN COURT OF PERSON IN PRISON FOR ANSWERING TO CHARGE OF OFFENCE",
+          "heading": "FORM No. 37",
+          "page": 260
+        },
+        {
+          "key": "form_38",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 38",
+          "label": "ORDER REQUIRING PRODUCTION IN COURT OF PERSON IN PRISON FOR GIVING EVIDENCE",
+          "heading": "FORM No. 38",
+          "page": 261
+        },
+        {
+          "key": "form_39",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 39",
+          "label": "WARRANT OF COMMITMENT IN CERTAIN CASES OF CONTEMPT WHEN A FINE IS IMPOSED",
+          "heading": "FORM No. 39",
+          "page": 262
+        },
+        {
+          "key": "form_40",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 40",
+          "label": "MAGISTRATE'S OR JUDGE'S WARRANT OF COMMITMENT OF WITNESS REFUSING TO ANSWER OR TO PRODUCE DOCUMENT",
+          "heading": "FORM No. 40",
+          "page": 263
+        },
+        {
+          "key": "form_41",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 41",
+          "label": "WARRANT OF COMMITMENT UNDER SENTENCE OF DEATH",
+          "heading": "FORM No. 41",
+          "page": 264
+        },
+        {
+          "key": "form_42",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 42",
+          "label": "WARRANT AFTER A COMMUTATION OF A SENTENCE",
+          "heading": "FORM No. 42",
+          "page": 265
+        },
+        {
+          "key": "form_43",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 43",
+          "label": "WARRANT OF EXECUTION OF A SENTENCE OF DEATH",
+          "heading": "FORM No. 43",
+          "page": 266
+        },
+        {
+          "key": "form_44",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 44",
+          "label": "WARRANT TO LEVY A FINE BY ATTACHMENT AND SALE",
+          "heading": "FORM No. 44",
+          "page": 267
+        },
+        {
+          "key": "form_45",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 45",
+          "label": "WARRANT FOR RECOVERY OF FINE",
+          "heading": "FORM No. 45",
+          "page": 268
+        },
+        {
+          "key": "form_46",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 46",
+          "label": "BOND FOR APPEARANCE OF OFFENDER RELEASED PENDING REALISATION OF FINE",
+          "heading": "FORM No. 46",
+          "page": 269
+        },
+        {
+          "key": "form_47",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 47",
+          "label": "BOND AND BAIL-BOND FOR ATTENDANCE BEFORE OFFICER IN CHARGE OF POLICE STATION OR COURT",
+          "heading": "FORM No. 47",
+          "page": 270
+        },
+        {
+          "key": "form_48",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 48",
+          "label": "WARRANT TO DISCHARGE A PERSON IMPRISONED ON FAILURE TO GIVE SECURITY",
+          "heading": "FORM No. 48",
+          "page": 271
+        },
+        {
+          "key": "form_49",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 49",
+          "label": "WARRANT OF ATTACHMENT TO ENFORCE A BOND",
+          "heading": "FORM No. 49",
+          "page": 272
+        },
+        {
+          "key": "form_50",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 50",
+          "label": "NOTICE TO SURETY ON BREACH OF A BOND",
+          "heading": "FORM No. 50",
+          "page": 273
+        },
+        {
+          "key": "form_51",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 51",
+          "label": "NOTICE TO SURETY OF FORFEITURE OF BOND FOR GOOD BEHAVIOUR",
+          "heading": "FORM No. 51",
+          "page": 274
+        },
+        {
+          "key": "form_52",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 52",
+          "label": "WARRANT OF ATTACHMENT AGAINST A SURETY",
+          "heading": "FORM No. 52",
+          "page": 275
+        },
+        {
+          "key": "form_53",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 53",
+          "label": "WARRANT OF COMMITMENT OF THE SURETY OF AN ACCUSED PERSON ADMITTED TO BAIL",
+          "heading": "FORM No. 53",
+          "page": 276
+        },
+        {
+          "key": "form_54",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 54",
+          "label": "NOTICE TO THE PRINCIPAL OF FORFEITURE OF BOND TO KEEP THE PEACE",
+          "heading": "FORM No. 54",
+          "page": 277
+        },
+        {
+          "key": "form_55",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 55",
+          "label": "WARRANT TO ATTACH THE PROPERTY OF THE PRINCIPAL ON BREACH OF A BOND TO KEEP THE PEACE",
+          "heading": "FORM No. 55",
+          "page": 278
+        },
+        {
+          "key": "form_56",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 56",
+          "label": "WARRANT OF IMPRISONMENT ON BREACH OF A BOND TO KEEP THE PEACE",
+          "heading": "FORM No. 56",
+          "page": 279
+        },
+        {
+          "key": "form_57",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 57",
+          "label": "WARRANT OF ATTACHMENT AND SALE ON FORFEITURE OF BOND FOR GOOD BEHAVIOUR",
+          "heading": "FORM No. 57",
+          "page": 280
+        },
+        {
+          "key": "form_58",
+          "kind": "form",
+          "parent_key": "schedule_2",
+          "section_number": "Second Schedule - Form 58",
+          "label": "WARRANT OF IMPRISONMENT ON FORFEITURE OF BOND FOR GOOD BEHAVIOUR",
+          "heading": "FORM No. 58",
+          "page": 281
+        }
+      ],
+      "complete_arrangement_labels": true
     },
     {
       "statute_id": "companies-2013",
-      "retrieved_at": "2026-09-06T19:15:44.152156+00:00",
+      "blocked_supplements": {
+        "schedule-I": "Retained transcription; complete form and table layout reconciliation pending.",
+        "table-A": "Retained transcription; complete form and table layout reconciliation pending.",
+        "table-B": "Retained transcription; complete form and table layout reconciliation pending.",
+        "table-C": "Retained transcription; complete form and table layout reconciliation pending.",
+        "table-D": "Retained transcription; complete form and table layout reconciliation pending.",
+        "table-E": "Retained transcription; complete form and table layout reconciliation pending.",
+        "table-F": "Retained transcription; complete form and table layout reconciliation pending.",
+        "table-G": "Retained transcription; complete form and table layout reconciliation pending.",
+        "table-H": "Retained transcription; complete form and table layout reconciliation pending.",
+        "table-I": "Retained transcription; complete form and table layout reconciliation pending.",
+        "table-J": "Retained transcription; complete form and table layout reconciliation pending.",
+        "schedule-II": "Retained transcription; complete depreciation table cell reconciliation pending.",
+        "schedule-III": "Retained transcription; complete financial statement table cell reconciliation pending.",
+        "division-I": "Retained transcription; complete financial statement table cell reconciliation pending.",
+        "division-II": "Retained transcription; complete financial statement table cell reconciliation pending.",
+        "division-III": "Retained transcription; complete financial statement table cell reconciliation pending.",
+        "schedule-IV": "Retained transcription; complete supplemental source review pending.",
+        "schedule-V": "Retained transcription; complete remuneration table cell reconciliation pending.",
+        "schedule-VI": "Retained transcription; complete supplemental source review pending.",
+        "schedule-VII": "Retained transcription; complete supplemental source review pending."
+      },
+      "retrieved_at": "2026-09-07T00:45:44.152156+05:30",
       "file": "companies-2013.pdf",
       "source_url": "https://www.indiacode.nic.in/bitstream/123456789/2114/5/A2013-18.pdf",
       "act_url": "https://www.indiacode.nic.in/indiacode/handle/123456789/2114?view_type=browse",
@@ -95,9 +803,211 @@
       ],
       "body_pages": [
         16,
-        252
+        370
       ],
       "section_count": 523,
+      "non_provision_pages": [
+        {
+          "pages": [
+            1,
+            15
+          ],
+          "kind": "arrangement"
+        }
+      ],
+      "publisher_note_styles": [
+        {
+          "pages": [
+            253,
+            357
+          ],
+          "x0": 41.04
+        },
+        {
+          "pages": [
+            369,
+            370
+          ],
+          "x0": 90.024
+        }
+      ],
+      "supplements": [
+        {
+          "key": "schedule-I",
+          "kind": "schedule",
+          "section_number": "Schedule I",
+          "label": "SCHEDULE I",
+          "heading": "SCHEDULE I",
+          "page": 253,
+          "span_through_key": "table-J"
+        },
+        {
+          "key": "table-A",
+          "kind": "form",
+          "section_number": "Schedule I Table A",
+          "label": "MEMORANDUM OF ASSOCIATION OF A COMPANY LIMITED BY SHARES",
+          "heading": "TABLE –A",
+          "page": 253,
+          "parent_key": "schedule-I"
+        },
+        {
+          "key": "table-B",
+          "kind": "form",
+          "section_number": "Schedule I Table B",
+          "label": "MEMORANDUM OF ASSOCIATION OF A COMPANY LIMITED BY GUARANTEE AND NOT HAVING A SHARE CAPITAL",
+          "heading": "TABLE –B",
+          "page": 254,
+          "parent_key": "schedule-I"
+        },
+        {
+          "key": "table-C",
+          "kind": "form",
+          "section_number": "Schedule I Table C",
+          "label": "MEMORANDUM OF ASSOCIATION OF A COMPANY LIMITED BY GUARANTEE AND HAVING A SHARE CAPITAL",
+          "heading": "TABLE -C",
+          "page": 255,
+          "parent_key": "schedule-I"
+        },
+        {
+          "key": "table-D",
+          "kind": "form",
+          "section_number": "Schedule I Table D",
+          "label": "MEMORANDUM OF ASSOCIATION OF AN UNLIMITED COMPANY AND NOT HAVING SHARE CAPITAL",
+          "heading": "TABLE -D",
+          "page": 256,
+          "parent_key": "schedule-I"
+        },
+        {
+          "key": "table-E",
+          "kind": "form",
+          "section_number": "Schedule I Table E",
+          "label": "MEMORANDUM OF ASSOCIATION OF AN UNLIMITED COMPANY AND HAVING SHARE CAPITAL",
+          "heading": "TABLE -E",
+          "page": 257,
+          "parent_key": "schedule-I"
+        },
+        {
+          "key": "table-F",
+          "kind": "form",
+          "section_number": "Schedule I Table F",
+          "label": "ARTICLES OF ASSOCIATION OF A COMPANY LIMITED BY SHARES",
+          "heading": "TABLE -F",
+          "page": 259,
+          "parent_key": "schedule-I"
+        },
+        {
+          "key": "table-G",
+          "kind": "form",
+          "section_number": "Schedule I Table G",
+          "label": "ARTICLES OF ASSOCIATION OF A COMPANY LIMITED BY GUARANTEE AND HAVING A SHARE CAPITAL",
+          "heading": "TABLE – G",
+          "page": 271,
+          "parent_key": "schedule-I"
+        },
+        {
+          "key": "table-H",
+          "kind": "form",
+          "section_number": "Schedule I Table H",
+          "label": "ARTICLES OF ASSOCIATION OF A COMPANY LIMITED BY GUARANTEE AND NOT HAVING SHARE CAPITAL",
+          "heading": "TABLE - H",
+          "page": 271,
+          "parent_key": "schedule-I"
+        },
+        {
+          "key": "table-I",
+          "kind": "form",
+          "section_number": "Schedule I Table I",
+          "label": "ARTICLES OF ASSOCIATION OF AN UNLIMITED COMPANY AND HAVING A SHARE CAPITAL",
+          "heading": "TABLE – I",
+          "page": 275,
+          "parent_key": "schedule-I"
+        },
+        {
+          "key": "table-J",
+          "kind": "form",
+          "section_number": "Schedule I Table J",
+          "label": "ARTICLES OF ASSOCIATION OF AN UNLIMITED COMPANY AND NOT HAVING SHARE CAPITAL",
+          "heading": "TABLE - J",
+          "page": 275,
+          "parent_key": "schedule-I"
+        },
+        {
+          "key": "schedule-II",
+          "kind": "schedule",
+          "section_number": "Schedule II",
+          "label": "SCHEDULE II",
+          "heading": "SCHEDULE II",
+          "page": 276
+        },
+        {
+          "key": "schedule-III",
+          "kind": "schedule",
+          "section_number": "Schedule III",
+          "label": "SCHEDULE III",
+          "heading": "SCHEDULE III",
+          "page": 283,
+          "span_through_key": "division-III"
+        },
+        {
+          "key": "division-I",
+          "kind": "division",
+          "section_number": "Schedule III Division I",
+          "label": "FINANCIAL STATEMENTS FOR A COMPANY WHOSE FINANCIAL STATEMENTS ARE REQUIRED TO COMPLY WITH THE COMPANIES (ACCOUNTING STANDARDS) RULES, 2006",
+          "heading": "1[Division I",
+          "page": 283,
+          "parent_key": "schedule-III"
+        },
+        {
+          "key": "division-II",
+          "kind": "division",
+          "section_number": "Schedule III Division II",
+          "label": "Financial Statements for a company whose financial statements are drawn up in compliance of the Companies (Indian Accounting Standards) Rules, 2015",
+          "heading": "1[Division II",
+          "page": 306,
+          "parent_key": "schedule-III"
+        },
+        {
+          "key": "division-III",
+          "kind": "division",
+          "section_number": "Schedule III Division III",
+          "label": "Financial Statements for a Non-Banking Financial Company (NBFC) whose financial statements are drawn up in compliance of the Companies (Indian Accounting Standards) Rules, 2015",
+          "heading": "1[Division III",
+          "page": 330,
+          "parent_key": "schedule-III"
+        },
+        {
+          "key": "schedule-IV",
+          "kind": "schedule",
+          "section_number": "Schedule IV",
+          "label": "SCHEDULE IV",
+          "heading": "SCHEDULE IV",
+          "page": 358
+        },
+        {
+          "key": "schedule-V",
+          "kind": "schedule",
+          "section_number": "Schedule V",
+          "label": "SCHEDULE V",
+          "heading": "SCHEDULE V",
+          "page": 361
+        },
+        {
+          "key": "schedule-VI",
+          "kind": "schedule",
+          "section_number": "Schedule VI",
+          "label": "SCHEDULE VI",
+          "heading": "SCHEDULE VI",
+          "page": 367
+        },
+        {
+          "key": "schedule-VII",
+          "kind": "schedule",
+          "section_number": "Schedule VII",
+          "label": "SCHEDULE VII",
+          "heading": "SCHEDULE VII",
+          "page": 369
+        }
+      ],
       "label_variants": {
         "48": "Variations of shareholders",
         "54": "Issue of sweat equity",
@@ -119,7 +1029,7 @@
     },
     {
       "statute_id": "cpc-1908",
-      "retrieved_at": "2026-09-06T19:20:44.548938+00:00",
+      "retrieved_at": "2026-09-07T00:50:44.548938+05:30",
       "file": "cpc-1908.pdf",
       "source_url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/2191/1/A190805.pdf",
       "act_url": "https://www.indiacode.nic.in/indiacode/handle/123456789/2191?view_type=browse",
@@ -155,6 +1065,1754 @@
         "92": "Printed superscript footnote 3 precedes section 92.",
         "115": "Central section begins on page 71; separately labelled state amendments on pages 72-73 remain contextual text, not duplicate central provisions."
       }
+    },
+    {
+      "statute_id": "bsa-2023",
+      "retrieved_at": "2026-09-08T10:13:26.8072903+05:30",
+      "file": "bsa-2023.pdf",
+      "source_url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/20063/1/aa202347.pdf",
+      "act_url": "https://www.indiacode.nic.in/indiacode/handle/123456789/20063?view_type=browse",
+      "sha256": "993882ad0ae7ded6ae8087351edd61caeb6faa1a2d6c8fff8c269a9cf149b9ac",
+      "source_version": "India Code consolidation as on 2025-10-06",
+      "issuing_body": "Ministry of Home Affairs, Government of India",
+      "toc_pages": [
+        3,
+        9
+      ],
+      "body_pages": [
+        10,
+        53
+      ],
+      "section_count": 170,
+      "supplements": [
+        {
+          "key": "schedule-certificate",
+          "kind": "schedule",
+          "section_number": "Schedule",
+          "label": "Certificate under section 63(4)(c), Parts A and B",
+          "heading": "THE SCHEDULE",
+          "page": 52
+        }
+      ],
+      "non_provision_pages": [
+        {
+          "pages": [
+            1,
+            2
+          ],
+          "kind": "edition_and_abbreviations"
+        },
+        {
+          "pages": [
+            3,
+            9
+          ],
+          "kind": "arrangement"
+        },
+        {
+          "pages": [
+            54,
+            54
+          ],
+          "kind": "statement_of_objects_and_reasons"
+        }
+      ]
+    },
+    {
+      "statute_id": "ni-act-1881",
+      "toc_pages": [
+        1,
+        7
+      ],
+      "body_pages": [
+        8,
+        32
+      ],
+      "section_count": 155,
+      "issuing_body": "Ministry of Finance, Government of India",
+      "source_version": "India Code A1881-26; retrieved 2026-09-08; cutoff unstated",
+      "supplements": [
+        {
+          "key": "schedule",
+          "kind": "schedule",
+          "section_number": "Schedule",
+          "label": "[Repealed.] Enactments repealed",
+          "heading": "SCHEDULE.—[Enactments repealed].—Rep. by the Repealing and Amending Act, 1891",
+          "page": 32
+        }
+      ],
+      "file": "ni-act-1881.pdf",
+      "sha256": "fcdc5f55f34d1f30f95267337c8e5c4339fdd0d5e326facf35aa552febfb8357",
+      "retrieved_at": "2026-09-08T10:37:25.6164007+05:30",
+      "source_url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/2189/1/a1881-26.pdf",
+      "act_url": "https://www.indiacode.nic.in/indiacode/handle/123456789/2189?view_type=browse",
+      "non_provision_pages": [
+        {
+          "pages": [
+            1,
+            7
+          ],
+          "kind": "arrangement"
+        }
+      ]
+    },
+    {
+      "statute_id": "limitation-1963",
+      "toc_pages": [
+        1,
+        2
+      ],
+      "body_pages": [
+        3,
+        24
+      ],
+      "section_count": 32,
+      "issuing_body": "Ministry of Law and Justice, Government of India",
+      "source_version": "India Code A1963-36; retrieved 2026-09-08; cutoff unstated",
+      "supplements": [
+        {
+          "key": "schedule",
+          "kind": "schedule",
+          "section_number": "Schedule",
+          "label": "Periods of limitation, Articles 1 to 137",
+          "heading": "THE SCHEDULE",
+          "page": 12
+        }
+      ],
+      "file": "limitation-1963.pdf",
+      "sha256": "1ad1f2964881272f5ae8769b238ea6ee2bb3e126edbae39dd6bb00794d9f2d82",
+      "retrieved_at": "2026-09-08T10:37:26.1202767+05:30",
+      "source_url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/1565/5/A1963-36.pdf",
+      "act_url": "https://www.indiacode.nic.in/indiacode/handle/123456789/1565?view_type=browse",
+      "non_provision_pages": [
+        {
+          "pages": [
+            1,
+            2
+          ],
+          "kind": "arrangement"
+        }
+      ]
+    },
+    {
+      "statute_id": "hindu-marriage-1955",
+      "file": "hindu-marriage-1955-publisher.pdf",
+      "toc_pages": [
+        3,
+        4
+      ],
+      "body_pages": [
+        5,
+        16
+      ],
+      "section_count": 37,
+      "non_provision_pages": [
+        {
+          "pages": [
+            1,
+            2
+          ],
+          "kind": "cover_and_amending_acts"
+        },
+        {
+          "pages": [
+            3,
+            4
+          ],
+          "kind": "arrangement"
+        },
+        {
+          "pages": [
+            17,
+            17
+          ],
+          "kind": "statement_of_objects"
+        }
+      ],
+      "source_url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/1560/1/A1955-25Eng.pdf",
+      "act_url": "https://www.indiacode.nic.in/indiacode/handle/123456789/1560?view_type=browse",
+      "issuing_body": "Ministry of Law and Justice, Government of India",
+      "source_version": "India Code A1955-25Eng; as on 15 April 2026",
+      "sha256": "e0989d90e686ef3eab7a780fbcb745fc3373b534e280fd0cf2e8401ee56725ec",
+      "retrieved_at": "2026-09-08T11:25:54.4006902+05:30",
+      "complete_arrangement_labels": true
+    },
+    {
+      "statute_id": "prevention-of-corruption-1988",
+      "file": "prevention-of-corruption-1988-publisher.pdf",
+      "toc_pages": [
+        3,
+        4
+      ],
+      "body_pages": [
+        5,
+        19
+      ],
+      "section_count": 35,
+      "label_variants": {
+        "11": "Public servant obtaining 1[undue advantage], without consideration from person concerned"
+      },
+      "non_provision_pages": [
+        {
+          "pages": [
+            1,
+            2
+          ],
+          "kind": "cover_and_amending_acts"
+        },
+        {
+          "pages": [
+            3,
+            4
+          ],
+          "kind": "arrangement"
+        },
+        {
+          "pages": [
+            20,
+            20
+          ],
+          "kind": "statement_of_objects"
+        }
+      ],
+      "source_url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/1558/1/A1988-49.pdf",
+      "act_url": "https://www.indiacode.nic.in/indiacode/handle/123456789/1558?view_type=browse",
+      "issuing_body": "Department of Personnel and Training, Ministry of Personnel, Public Grievances and Pensions, Government of India",
+      "source_version": "India Code A1988-49; as on 21 May 2025",
+      "sha256": "57a0d7960125d42dd392480b18a3fc2ea2ef5d7b134faa9171d82a79ed7c5aaf",
+      "retrieved_at": "2026-09-08T11:25:56.8526637+05:30",
+      "complete_arrangement_labels": true
+    },
+    {
+      "statute_id": "rti-2005",
+      "file": "rti-2005-publisher-aa.pdf",
+      "toc_pages": [
+        3,
+        4
+      ],
+      "body_pages": [
+        5,
+        24
+      ],
+      "source_version": "India Code aa2005; as on 18 November 2025",
+      "issuing_body": "Department of Personnel and Training, Government of India",
+      "supplements": [
+        {
+          "key": "schedule_1",
+          "kind": "schedule",
+          "section_number": "First Schedule",
+          "label": "THE FIRST SCHEDULE",
+          "heading": "THE FIRST SCHEDULE",
+          "page": 23
+        },
+        {
+          "key": "schedule_2",
+          "kind": "schedule",
+          "section_number": "Second Schedule",
+          "label": "THE SECOND SCHEDULE",
+          "heading": "THE SECOND SCHEDULE",
+          "page": 24
+        }
+      ],
+      "sha256": "8956eaba5db4079674bc16e50c14b210e8872c28e8a18f458f01a8fbcdde1479",
+      "retrieved_at": "2026-09-08T11:55:44.1826365+05:30",
+      "source_url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/2065/1/aa2005.pdf",
+      "label_variants": {
+        "13": "Term of office and conditions of service."
+      },
+      "source_discrepancies": {
+        "13": "The publisher arrangement and body heading differ; the arrangement label and complete body are retained verbatim."
+      },
+      "section_count": 31,
+      "non_provision_pages": [
+        {
+          "pages": [
+            1,
+            2
+          ],
+          "kind": "cover_and_amending_acts"
+        },
+        {
+          "pages": [
+            3,
+            4
+          ],
+          "kind": "arrangement"
+        },
+        {
+          "pages": [
+            25,
+            25
+          ],
+          "kind": "statement_of_objects"
+        }
+      ],
+      "complete_arrangement_labels": true,
+      "act_url": "https://www.indiacode.nic.in/indiacode/handle/123456789/2065?view_type=browse"
+    },
+    {
+      "statute_id": "gst-cgst-2017",
+      "file": "gst-cgst-2017-central-2026.pdf",
+      "toc_pages": [
+        3,
+        9
+      ],
+      "body_pages": [
+        10,
+        129
+      ],
+      "source_version": "India Code A2017-12; as on 11 June 2026",
+      "issuing_body": "Department of Revenue, Ministry of Finance, Government of India",
+      "supplements": [
+        {
+          "key": "schedule_1",
+          "kind": "schedule",
+          "section_number": "Schedule I",
+          "label": "SCHEDULE I",
+          "heading": "SCHEDULE I",
+          "page": 125
+        },
+        {
+          "key": "schedule_2",
+          "kind": "schedule",
+          "section_number": "Schedule II",
+          "label": "SCHEDULE II",
+          "heading": "SCHEDULE II",
+          "page": 126
+        },
+        {
+          "key": "schedule_3",
+          "kind": "schedule",
+          "section_number": "Schedule III",
+          "label": "SCHEDULE III",
+          "heading": "SCHEDULE III",
+          "page": 128
+        }
+      ],
+      "sha256": "c4dbd51f0355360e63d8a25560547f9e7e00b3af349d8666265ab60b4610cf24",
+      "retrieved_at": "2026-09-08T11:47:04.5551922+05:30",
+      "source_url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/15689/1/A2017-12.pdf",
+      "label_variants": {
+        "29": "Cancellation 1[or suspension] of registration.",
+        "51": "Tax deduction at source.",
+        "73": "Determination of tax 1[, pertaining to the period up to Financial Year 2023-24,] not paid or",
+        "74": "Determination of tax 2[, pertaining to the period up to Financial Year 2023-24,] not paid or",
+        "105": "5[Powers of Authority, Appellate Authority and National Appellate Authority.]",
+        "106": "2[Procedure of Authority, Appellate Authority and National Appellate Authority.]",
+        "157": "Protection of action taken under this Act."
+      },
+      "number_aliases": {},
+      "source_discrepancies": {
+        "29": "The publisher arrangement and body heading differ; the arrangement label and complete body are retained verbatim.",
+        "51": "The publisher arrangement and body heading differ; the arrangement label and complete body are retained verbatim.",
+        "73": "The publisher arrangement and body heading differ; the arrangement label and complete body are retained verbatim.",
+        "74": "The publisher arrangement and body heading differ; the arrangement label and complete body are retained verbatim.",
+        "105": "The publisher arrangement and body heading differ; the arrangement label and complete body are retained verbatim.",
+        "106": "The publisher arrangement and body heading differ; the arrangement label and complete body are retained verbatim.",
+        "157": "The publisher arrangement and body heading differ; the arrangement label and complete body are retained verbatim."
+      },
+      "section_count": 190,
+      "non_provision_pages": [
+        {
+          "pages": [
+            1,
+            2
+          ],
+          "kind": "cover_and_amending_acts"
+        },
+        {
+          "pages": [
+            3,
+            9
+          ],
+          "kind": "arrangement"
+        },
+        {
+          "pages": [
+            130,
+            131
+          ],
+          "kind": "statement_of_objects"
+        }
+      ],
+      "complete_arrangement_labels": true,
+      "act_url": "https://www.indiacode.nic.in/indiacode/handle/123456789/15689?view_type=browse"
+    },
+    {
+      "statute_id": "transfer-of-property-1882",
+      "file": "transfer-of-property-1882-publisher.pdf",
+      "toc_pages": [
+        1,
+        6
+      ],
+      "body_pages": [
+        7,
+        46
+      ],
+      "source_version": "India Code A1882-04; retrieved 08 September 2026",
+      "issuing_body": "Ministry of Law and Justice, Government of India",
+      "supplements": [
+        {
+          "key": "schedule",
+          "kind": "schedule",
+          "section_number": "Schedule",
+          "label": "THE SCHEDULE",
+          "heading": "THE SCHEDULE",
+          "page": 46
+        }
+      ],
+      "sha256": "5223fdf06a0aa3ed14ca62cb2b6b923d42e14a159d7f2c8b8f96cbe1800a7a3a",
+      "retrieved_at": "2026-09-08T11:54:31.5410489+05:30",
+      "source_url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/2338/1/A1882-04.pdf",
+      "label_variants": {
+        "77": "Receipts in lieu of interest.",
+        "130A": "Transfer of policy of marine insurance."
+      },
+      "number_aliases": {
+        "297": "97"
+      },
+      "source_discrepancies": {
+        "77": "The publisher arrangement and body heading differ; the arrangement label and complete body are retained verbatim.",
+        "130A": "The publisher arrangement and body heading differ; the arrangement label and complete body are retained verbatim."
+      },
+      "section_count": 148,
+      "non_provision_pages": [
+        {
+          "pages": [
+            1,
+            6
+          ],
+          "kind": "arrangement"
+        }
+      ],
+      "complete_arrangement_labels": true,
+      "act_url": "https://www.indiacode.nic.in/indiacode/handle/123456789/2338?view_type=browse"
+    },
+    {
+      "statute_id": "contract-1872",
+      "file": "contract-1872.pdf",
+      "toc_pages": [
+        1,
+        9
+      ],
+      "body_pages": [
+        10,
+        53
+      ],
+      "source_version": "India Code A187209; retrieved 08 September 2026",
+      "issuing_body": "Ministry of Law and Justice, Government of India",
+      "supplements": [
+        {
+          "key": "schedule",
+          "kind": "schedule",
+          "section_number": "Schedule",
+          "label": "[Repealed.]",
+          "heading": "SCHEDULE.—[Enactments repealed.] Rep. by the Repealing and Amending Act, 1914 (10 of 1914),",
+          "page": 53
+        }
+      ],
+      "sha256": "d756d45a58c4cd8440e70a0189ea1fda9d7c5dfcdd6ef31a5f2ecd9cb209c59d",
+      "retrieved_at": "2026-09-08T10:37:01.7158745+05:30",
+      "source_url": "https://www.indiacode.nic.in/bitstream/123456789/2187/2/A187209.pdf",
+      "label_variants": {
+        "24": "Agreements void, if considerations and objects unlawful in part.",
+        "139": "Discharge of surety by creditor’s act or omission impairing surety’s eventual remedy.",
+        "177": "Defaulting pawner’s right to redeem.",
+        "1": "Short title."
+      },
+      "number_aliases": {
+        "1151": "151",
+        "1161": "161"
+      },
+      "source_discrepancies": {
+        "24": "The publisher arrangement and body heading differ; the arrangement label and complete body are retained verbatim.",
+        "139": "The publisher arrangement and body heading differ; the arrangement label and complete body are retained verbatim.",
+        "177": "The publisher arrangement and body heading differ; the arrangement label and complete body are retained verbatim.",
+        "1": "The complete arrangement includes the extent, commencement and saving subheadings; the body begins with Short title and all subheadings remain in its complete text."
+      },
+      "section_count": 268,
+      "non_provision_pages": [
+        {
+          "pages": [
+            1,
+            9
+          ],
+          "kind": "arrangement"
+        }
+      ],
+      "complete_arrangement_labels": true,
+      "act_url": "https://www.indiacode.nic.in/indiacode/handle/123456789/2187?view_type=browse"
+    },
+    {
+      "statute_id": "consumer-protection-2019",
+      "file": "consumer-protection-2019-central-2026.pdf",
+      "sha256": "414fb1edd9b0f7fbc2839ad92fb2b29ebfa3b557e70e928ab4a535802199e3e7",
+      "source_url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/15256/1/eng201935.pdf",
+      "retrieved_at": "2026-09-08T12:01:36.9660461+05:30",
+      "source_version": "India Code eng201935; retrieved 08 September 2026",
+      "issuing_body": "Department of Consumer Affairs, Government of India",
+      "toc_pages": [
+        1,
+        3
+      ],
+      "body_pages": [
+        4,
+        39
+      ],
+      "section_count": 107,
+      "non_provision_pages": [
+        {
+          "pages": [
+            1,
+            3
+          ],
+          "kind": "arrangement"
+        }
+      ],
+      "complete_arrangement_labels": true,
+      "act_url": "https://www.indiacode.nic.in/indiacode/handle/123456789/15256?view_type=browse"
+    },
+    {
+      "statute_id": "ndps-1985",
+      "retrieved_at": "2026-09-08T10:37:26.7817458+05:30",
+      "file": "ndps-1985-central.pdf",
+      "source_url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/1791/5/a1985-61.pdf",
+      "act_url": "https://www.indiacode.nic.in/indiacode/handle/123456789/1791?view_type=browse",
+      "sha256": "ef1b399172971dc8bc6e4da0ae67444f62ee2ea05a983ac26821e96a4e866bd6",
+      "source_version": "India Code A1985-61; last update 3 January 2022",
+      "issuing_body": "Ministry of Finance, Government of India",
+      "toc_pages": [
+        1,
+        4
+      ],
+      "body_pages": [
+        5,
+        54
+      ],
+      "section_count": 129,
+      "retained_legacy_placeholders": [
+        "Section 84",
+        "Section 85",
+        "Section 86",
+        "Section 87",
+        "Section 88",
+        "Section 89"
+      ],
+      "legacy_placeholder_evidence": "The retained seed contains six empty identities beyond Section 83, the final numbered section in the pinned arrangement on PDF page 4. These are not provisions in this official edition and remain unverified catalog placeholders, never source rows.",
+      "non_provision_pages": [
+        {
+          "pages": [
+            1,
+            4
+          ],
+          "kind": "arrangement"
+        }
+      ],
+      "complete_arrangement_labels": true,
+      "supplements": [
+        {
+          "key": "schedule",
+          "kind": "schedule",
+          "section_number": "Schedule",
+          "label": "THE SCHEDULE",
+          "heading": "THE SCHEDULE",
+          "page": 46
+        }
+      ],
+      "structured_tables": {
+        "schedule": [
+          {
+            "title": "LIST OF PSYCHOTROPIC SUBSTANCES",
+            "columns": [
+              "Sl. No.",
+              "International non-proprietary names",
+              "Other nonproprietary names",
+              "Chemical name"
+            ],
+            "sha256": "5f3377b7069049b105eae86b3dcb592becc7d829c683762c806315ddbce4a289",
+            "physical_row_count": 164,
+            "serials": [
+              "1",
+              "2",
+              "3",
+              "4",
+              "5",
+              "6",
+              "7",
+              "8",
+              "9",
+              "10",
+              "11",
+              "12",
+              "13",
+              "14",
+              "15",
+              "16",
+              "17",
+              "18",
+              "19",
+              "20",
+              "21",
+              "22",
+              "23",
+              "24",
+              "25",
+              "26",
+              "27",
+              "28",
+              "29",
+              "30",
+              "31",
+              "32",
+              "33",
+              "34",
+              "35",
+              "36",
+              "37",
+              "38",
+              "39",
+              "40",
+              "41",
+              "42",
+              "43",
+              "44",
+              "45",
+              "46",
+              "47",
+              "48",
+              "49",
+              "50",
+              "51",
+              "52",
+              "53",
+              "54",
+              "55",
+              "56",
+              "57",
+              "58",
+              "59",
+              "60",
+              "61",
+              "62",
+              "63",
+              "64",
+              "65",
+              "66",
+              "67",
+              "68",
+              "69",
+              "70",
+              "71",
+              "72",
+              "73",
+              "74",
+              "75",
+              "76",
+              "77",
+              "78",
+              "79",
+              "80",
+              "81",
+              "82",
+              "83",
+              "84",
+              "85",
+              "86",
+              "87",
+              "88",
+              "89",
+              "90",
+              "91",
+              "92",
+              "93",
+              "94",
+              "95",
+              "96",
+              "97",
+              "98",
+              "99",
+              "100",
+              "101",
+              "102",
+              "103",
+              "104",
+              "105",
+              "105A",
+              "105B",
+              "105C",
+              "105D",
+              "105E",
+              "105F",
+              "106",
+              "107",
+              "108",
+              "109",
+              "110",
+              "110A",
+              "110B",
+              "110C",
+              "110D",
+              "110E",
+              "110F",
+              "110G",
+              "110H",
+              "110I",
+              "110J",
+              "110K",
+              "110L",
+              "110M",
+              "110N",
+              "110O",
+              "110P",
+              "110Q",
+              "110R",
+              "110S",
+              "110T",
+              "110U",
+              "110V",
+              "110W",
+              "110X",
+              "110Y",
+              "110Z",
+              "110ZA",
+              "110ZB",
+              "110ZC",
+              "110ZD",
+              "110ZE",
+              "110ZF",
+              "110ZG",
+              "110ZH",
+              "110ZI",
+              "110ZJ",
+              "110ZK",
+              "110ZL",
+              "110ZM",
+              "110ZN",
+              "110ZO",
+              "110ZP",
+              "110ZQ",
+              "110ZR",
+              "110ZS",
+              "110ZT"
+            ],
+            "continuations": [
+              {
+                "serial": "110C",
+                "page": 52
+              },
+              {
+                "serial": "110ZS",
+                "page": 54
+              }
+            ],
+            "pages": [
+              {
+                "page": 46,
+                "columns": [
+                  66,
+                  104,
+                  248,
+                  365,
+                  547
+                ],
+                "top": 120,
+                "bottom": 770,
+                "serials": [
+                  "1",
+                  "2",
+                  "3",
+                  "4",
+                  "5",
+                  "6",
+                  "7",
+                  "8",
+                  "9",
+                  "10",
+                  "11",
+                  "12",
+                  "13",
+                  "14",
+                  "15",
+                  "16",
+                  "17",
+                  "18",
+                  "19",
+                  "20",
+                  "21",
+                  "22",
+                  "23"
+                ]
+              },
+              {
+                "page": 47,
+                "columns": [
+                  66,
+                  104,
+                  248,
+                  365,
+                  547
+                ],
+                "top": 0,
+                "bottom": 770,
+                "serials": [
+                  "24",
+                  "25",
+                  "26",
+                  "27",
+                  "28",
+                  "29",
+                  "30",
+                  "31",
+                  "32",
+                  "33",
+                  "34",
+                  "35",
+                  "36",
+                  "37",
+                  "38",
+                  "39",
+                  "40",
+                  "41",
+                  "42"
+                ]
+              },
+              {
+                "page": 48,
+                "columns": [
+                  66,
+                  104,
+                  248,
+                  365,
+                  547
+                ],
+                "top": 0,
+                "bottom": 770,
+                "serials": [
+                  "43",
+                  "44",
+                  "45",
+                  "46",
+                  "47",
+                  "48",
+                  "49",
+                  "50",
+                  "51",
+                  "52",
+                  "53",
+                  "54",
+                  "55",
+                  "56",
+                  "57",
+                  "58"
+                ]
+              },
+              {
+                "page": 49,
+                "left_rule_max": 67,
+                "header_first_cell": "Sl.\nNo."
+              },
+              {
+                "page": 50,
+                "left_rule_max": 67,
+                "header_first_cell": "Sl.\nNo."
+              },
+              {
+                "page": 51,
+                "left_rule_max": 67,
+                "header_first_cell": "Sl.\nNo."
+              },
+              {
+                "page": 52,
+                "left_rule_max": 67,
+                "header_first_cell": "Sl.\nNo."
+              },
+              {
+                "page": 53,
+                "left_rule_max": 67,
+                "header_first_cell": "Sl.\nNo."
+              },
+              {
+                "page": 54,
+                "left_rule_max": 67,
+                "header_first_cell": "Sl.\nNo."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "statute_id": "iea-1872",
+      "file": "iea-1872-repealed-edition.pdf",
+      "toc_pages": [
+        1,
+        8
+      ],
+      "body_pages": [
+        9,
+        61
+      ],
+      "source_version": "India Code A1872-1; retained repealed-law edition",
+      "issuing_body": "Ministry of Law and Justice, Government of India",
+      "supplements": [
+        {
+          "key": "schedule",
+          "kind": "schedule",
+          "section_number": "Schedule",
+          "label": "[Repealed.]",
+          "heading": "THE SCHEDULE.––[Enactments repealed.] Rep. by the Repealing Act, 1938 (1 of 1938), s. 2 and",
+          "page": 61
+        }
+      ],
+      "sha256": "03958dcbfb98e714e9b0b432a671a5f874df9ff5beaa4f69fe0931dbc8ea1c8f",
+      "retrieved_at": "2026-09-08T11:54:33.1137018+05:30",
+      "source_url": "https://www.indiacode.nic.in/indiacode/repealedfileopen?rfilename=A1872-1.pdf",
+      "label_variants": {
+        "85": "Presumption as to powers-of-attorney.",
+        "47A": "Opinion as to 2[electronic signature], when relevant.",
+        "67A": "Proof as to 2[electronic signature].",
+        "85C": "Presumption as to 6[Electronic Signature Certificates]."
+      },
+      "number_aliases": {
+        "1145": "145",
+        "1161": "161"
+      },
+      "source_discrepancies": {
+        "85": "The publisher arrangement and body heading differ; the arrangement label and complete body are retained verbatim.",
+        "47A": "The publisher arrangement and body heading differ; the arrangement label and complete body are retained verbatim.",
+        "67A": "The publisher arrangement and body heading differ; the arrangement label and complete body are retained verbatim.",
+        "85C": "The publisher arrangement and body heading differ; the arrangement label and complete body are retained verbatim."
+      },
+      "section_count": 185,
+      "non_provision_pages": [
+        {
+          "pages": [
+            1,
+            8
+          ],
+          "kind": "arrangement"
+        }
+      ],
+      "act_url": "https://www.indiacode.nic.in/indiacode/repealedfileopen?rfilename=A1872-1.pdf",
+      "complete_arrangement_labels": true,
+      "legal_status": "repealed",
+      "historical_context": "Retained repealed-law edition. The Bharatiya Sakshya Adhiniyam, 2023 section 170 repeal-and-savings boundary must be checked for the relevant proceeding; source verification does not establish present applicability.",
+      "stop_arrangement_at_sentence_end": true,
+      "body_heading_evidence": {
+        "3": {
+          "page": 9,
+          "text": "3. Interpretation-clause.––In this Act the following words and expressions are used in the following"
+        },
+        "4": {
+          "page": 11,
+          "text": "4. “May presume.”––Whenever it is provided by this Act that the Court may presume a fact, it may"
+        }
+      }
+    },
+    {
+      "statute_id": "specific-relief-1963",
+      "file": "specific-relief-1963-central.pdf",
+      "retrieved_at": "2026-09-08T10:37:26.0047401+05:30",
+      "source_url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/1583/7/A1963-47.pdf",
+      "act_url": "https://www.indiacode.nic.in/indiacode/handle/123456789/1583?view_type=browse",
+      "sha256": "7b90aae6b01d7c9533f5b69a8ccbf00c16ba439e4624561204de236d5cb7f43d",
+      "source_version": "India Code A1963-47; retrieved 08 September 2026",
+      "issuing_body": "Ministry of Law and Justice, Government of India",
+      "toc_pages": [
+        1,
+        3
+      ],
+      "body_pages": [
+        4,
+        17
+      ],
+      "section_count": 48,
+      "non_provision_pages": [
+        {
+          "pages": [
+            1,
+            3
+          ],
+          "kind": "arrangement"
+        }
+      ],
+      "complete_arrangement_labels": true,
+      "omission_evidence": {
+        "43": {
+          "page": 15,
+          "first_line": 1,
+          "end_line": 3,
+          "text": "2. Sections 43 and 44 rep. by the Repealing and Amending Act, 1974 (56 of 1974), s. 2 and the First Schedule\n(w.e.f. 20-12-1974)."
+        },
+        "44": {
+          "page": 15,
+          "first_line": 1,
+          "end_line": 3,
+          "text": "2. Sections 43 and 44 rep. by the Repealing and Amending Act, 1974 (56 of 1974), s. 2 and the First Schedule\n(w.e.f. 20-12-1974)."
+        }
+      },
+      "supplements": [
+        {
+          "key": "schedule",
+          "kind": "schedule",
+          "section_number": "Schedule",
+          "label": "1[THE SCHEDULE",
+          "heading": "1[THE SCHEDULE",
+          "page": 16
+        }
+      ],
+      "structured_tables": {
+        "schedule": [
+          {
+            "title": "Category of projects and Infrastructure Sub-Sectors",
+            "columns": [
+              "Sl. No.",
+              "Category",
+              "Infrastructure Sub-Sectors"
+            ],
+            "sha256": "60e2f3994b9ae0e950f4ca26b5b117934aae16c1f1520b10113d30f40470ead6",
+            "physical_row_count": 5,
+            "serials": [
+              "1",
+              "2",
+              "3",
+              "4",
+              "5"
+            ],
+            "continuations": [],
+            "pages": [
+              {
+                "page": 16,
+                "grid": true,
+                "header_rows": [
+                  [
+                    "Sl. No.",
+                    "Category",
+                    "Infrastructure Sub-Sectors"
+                  ],
+                  [
+                    "1",
+                    "2",
+                    "3"
+                  ]
+                ]
+              },
+              {
+                "page": 17,
+                "grid": true,
+                "header_rows": [
+                  [
+                    "Sl. No.",
+                    "Category",
+                    "Infrastructure Sub-Sectors"
+                  ],
+                  [
+                    "1",
+                    "2",
+                    "3"
+                  ]
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "statute_id": "ipc-1860",
+      "file": "ipc-1860-repealed-edition.pdf",
+      "toc_pages": [
+        1,
+        13
+      ],
+      "body_pages": [
+        14,
+        119
+      ],
+      "source_version": "India Code A1860-45; retained repealed-law edition",
+      "issuing_body": "Ministry of Home Affairs, Government of India",
+      "sha256": "ae8920ad726fbb6dfdec8d327c4bdda580ca175bcad1ef4212ca868fe4d1ea3a",
+      "retrieved_at": "2026-09-08T11:22:43.0670597+05:30",
+      "source_url": "https://www.indiacode.nic.in/indiacode/repealedfileopen?rfilename=A1860-45.pdf",
+      "act_url": "https://www.indiacode.nic.in/indiacode/repealedfileopen?rfilename=A1860-45.pdf",
+      "section_count": 575,
+      "non_provision_pages": [
+        {
+          "pages": [
+            1,
+            13
+          ],
+          "kind": "arrangement"
+        }
+      ],
+      "complete_arrangement_labels": true,
+      "stop_arrangement_at_sentence_end": true,
+      "body_heading_evidence": {
+        "17": {
+          "page": 16,
+          "text": "1[17 “Government”.—The word “Government” denotes the Central Government or the Government"
+        },
+        "22": {
+          "page": 18,
+          "text": "22. “Movable property”.—The words “movable property” are intended to include corporeal property of every"
+        },
+        "23": {
+          "page": 18,
+          "text": "23. “Wrongful gain”.—“Wrongful gain” is gain by unlawful means of property to which the person gaining is"
+        },
+        "109": {
+          "page": 31,
+          "text": "109. Punishment of abetment if the act abetted is committed in consequence and where no"
+        },
+        "156": {
+          "page": 42,
+          "text": "156. Liability of agent of owner or occupier for whose benefit riot is committed.—Whenever a"
+        },
+        "209": {
+          "page": 55,
+          "text": "209. Dishonesty making false claim in Court.—Whoever fraudulently or dishonestly, or with intent"
+        },
+        "230": {
+          "page": 61,
+          "text": "230. “Coin” defined.— 2[Coin is metal used for the time being as money, and stamped and issued by"
+        },
+        "300": {
+          "page": 73,
+          "text": "300. Murder.—Except in the cases hereinafter excepted, culpable homicide is murder, if the act by"
+        },
+        "307": {
+          "page": 76,
+          "text": "307. Attempt to murder.—Whoever does any act with such intention or knowledge, and under such"
+        },
+        "312": {
+          "page": 76,
+          "text": "312. Causing miscarraige.—Whoever voluntarily causes a woman with child to miscarry, shall, if"
+        },
+        "354": {
+          "page": 83,
+          "text": "354. Assault or criminal force to woman with intent to outrage her modesty.—Whoever assaults"
+        },
+        "389": {
+          "page": 97,
+          "text": "389. Putting person in fear or accusation of offence, in order to commit extortion.—Whoever, in"
+        },
+        "390": {
+          "page": 97,
+          "text": "390. Robbery.—In all robbery there is either theft or extortion."
+        },
+        "452": {
+          "page": 107,
+          "text": "452. House-trespass alter preparation for hurt, assault or wrongful restraint.—Whoever"
+        },
+        "499": {
+          "page": 114,
+          "text": "499. Defamation.—Whoever, by words either spoken or intended to be read, or by signs or by visible"
+        },
+        "108A": {
+          "page": 31,
+          "text": "1[108A. Abetment in India of offences outside India.—A person abets an offence within the"
+        },
+        "153B": {
+          "page": 41,
+          "text": "1[153B. Imputations, assertions prejudicial to national integration.—(1) Whoever, by words"
+        },
+        "216B": {
+          "page": 57,
+          "text": "7[216B. Definition of “harbour” in sections 212, 216 and 216A.] Rep. by the Indian Penal Code"
+        }
+      },
+      "legal_status": "repealed",
+      "historical_context": "Retained repealed-law edition. BNS section 358 repeal and savings, commencement, and judicial treatment must be checked for the relevant event and proceeding. This is source verification, not a determination that a historical offence remains operative."
+    },
+    {
+      "statute_id": "crpc-1973",
+      "blocked_supplements": {
+        "schedule-I": "Retained transcription; six-column offence classification table cell reconciliation pending."
+      },
+      "file": "crpc-1973-central.pdf",
+      "act_url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/15272/1/the_code_of_criminal_procedure%2C_1973.pdf",
+      "sha256": "5bb6514251a9ec6375b2c894cef5280dab0d1c3cca1e0f4a1e57f29b54033d72",
+      "source_url": "https://www.indiacode.nic.in/indiacode/bitstream/123456789/15272/1/the_code_of_criminal_procedure%2C_1973.pdf",
+      "retrieved_at": "2026-09-08T10:37:27.2984179+05:30",
+      "source_version": "India Code CrPC central/state edition; retrieved 2026-09-08",
+      "issuing_body": "Ministry of Home Affairs, Government of India",
+      "legal_status": "repealed",
+      "historical_context": "Historical CrPC edition. Check the repeal and savings in BNSS section 531 and the applicable proceeding date; no current-law applicability is certified.",
+      "toc_pages": [
+        1,
+        20
+      ],
+      "body_pages": [
+        21,
+        263
+      ],
+      "section_count": 535,
+      "label_variants": {
+        "482": "Saving of inherent powers of High Court"
+      },
+      "complete_arrangement_labels": true,
+      "stop_arrangement_at_sentence_end": true,
+      "non_provision_pages": [
+        {
+          "pages": [
+            1,
+            20
+          ],
+          "kind": "arrangement"
+        }
+      ],
+      "publisher_note_styles": [
+        {
+          "pages": [
+            21,
+            263
+          ],
+          "x0_range": [
+            53,
+            57
+          ]
+        }
+      ],
+      "supplements": [
+        {
+          "key": "schedule-I",
+          "kind": "schedule",
+          "section_number": "First Schedule",
+          "label": "CLASSIFICATION OF OFFENCES",
+          "heading": "THE FIRST SCHEDULE",
+          "page": 196
+        },
+        {
+          "key": "schedule-II",
+          "kind": "schedule",
+          "section_number": "Second Schedule",
+          "label": "FORMS",
+          "heading": "THE SECOND SCHEDULE",
+          "page": 231,
+          "span_through_key": "form-56"
+        },
+        {
+          "key": "form-1",
+          "kind": "form",
+          "section_number": "Second Schedule Form 1",
+          "label": "SUMMONS TO AN ACCUSED PERSON",
+          "heading": "FORM No. 1",
+          "page": 231,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-2",
+          "kind": "form",
+          "section_number": "Second Schedule Form 2",
+          "label": "WARRRANT OF ARREST",
+          "heading": "FORM No. 2",
+          "page": 231,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-3",
+          "kind": "form",
+          "section_number": "Second Schedule Form 3",
+          "label": "BOND AND BAIL-BOND AFTER ARREST UNDER A WARRANT",
+          "heading": "FORM No. 3",
+          "page": 232,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-4",
+          "kind": "form",
+          "section_number": "Second Schedule Form 4",
+          "label": "PROCLAMATION REQUIRING THE APPEARANCE OF A PERSON ACCUSED",
+          "heading": "FORM No. 4",
+          "page": 232,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-5",
+          "kind": "form",
+          "section_number": "Second Schedule Form 5",
+          "label": "PROCLAMATION REQUIRING THE ATTENDANCE OF A WITNESS",
+          "heading": "FORM No. 5",
+          "page": 233,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-6",
+          "kind": "form",
+          "section_number": "Second Schedule Form 6",
+          "label": "ORDER OF ATTACHMENT TO COMPEL THE ATTENDANCE OF A WITNESS",
+          "heading": "FORM No. 6",
+          "page": 233,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-7",
+          "kind": "form",
+          "section_number": "Second Schedule Form 7",
+          "label": "ORDER OF ATTACHMENT TO COMPEL THE APPEARANCE OF A PERSON ACCUSED",
+          "heading": "FORM No. 7",
+          "page": 234,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-8",
+          "kind": "form",
+          "section_number": "Second Schedule Form 8",
+          "label": "ORDER AUTHORISING AN ATTACHMENT BY THE DISTRICT MAGISTRATE OR COLLECTOR",
+          "heading": "FORM No. 8",
+          "page": 234,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-9",
+          "kind": "form",
+          "section_number": "Second Schedule Form 9",
+          "label": "WARRANT IN THE FIRST INSTANCE TO BRING UP A WITNESS",
+          "heading": "FORM No. 9",
+          "page": 235,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-10",
+          "kind": "form",
+          "section_number": "Second Schedule Form 10",
+          "label": "WARRANT TO SEARCH AFTER INFORMATION OF A PARTICULAR OFFENCE",
+          "heading": "FORM No. 10",
+          "page": 235,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-11",
+          "kind": "form",
+          "section_number": "Second Schedule Form 11",
+          "label": "WARRANT TO SEARCH SUSPECTED PLACE OF DEPOSIT",
+          "heading": "FORM No. 11",
+          "page": 236,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-12",
+          "kind": "form",
+          "section_number": "Second Schedule Form 12",
+          "label": "BOND TO KEEP THE PEACE",
+          "heading": "FORM No. 12",
+          "page": 236,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-13",
+          "kind": "form",
+          "section_number": "Second Schedule Form 13",
+          "label": "BOND FOR GOOD BEHAVIOUR",
+          "heading": "FORM No. 13",
+          "page": 237,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-14",
+          "kind": "form",
+          "section_number": "Second Schedule Form 14",
+          "label": "SUMMONS ON INFORMATION OF A PROBABLE BREACH OF THE PEACE",
+          "heading": "FORM No. 14",
+          "page": 237,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-15",
+          "kind": "form",
+          "section_number": "Second Schedule Form 15",
+          "label": "WARRANT OF COMMITMENT ON FAILURE TO FIND SECURITY TO KEEP THE PEACE",
+          "heading": "FORM No. 15",
+          "page": 238,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-16",
+          "kind": "form",
+          "section_number": "Second Schedule Form 16",
+          "label": "WARRANT OF COMMITMENT ON FAILURE TO FIND SECURITY FOR GOOD BEHAVIOUR",
+          "heading": "FORM No. 16",
+          "page": 238,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-17",
+          "kind": "form",
+          "section_number": "Second Schedule Form 17",
+          "label": "WARRANT TO DISCHARGE A PERSON IMPRISONED ON FAILURE TO GIVE SECURITY",
+          "heading": "FORM No. 17",
+          "page": 239,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-18",
+          "kind": "form",
+          "section_number": "Second Schedule Form 18",
+          "label": "WARRANT OF IMPRISONMENT ON FAILURE TO PAY MAINTENANCE",
+          "heading": "FORM No. 18",
+          "page": 239,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-19",
+          "kind": "form",
+          "section_number": "Second Schedule Form 19",
+          "label": "WARRANT TO ENFORCE THE PAYMENT OF MAINTENANCE BY ATTACHMENT AND SALE",
+          "heading": "FORM No. 19",
+          "page": 240,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-20",
+          "kind": "form",
+          "section_number": "Second Schedule Form 20",
+          "label": "ORDER FOR THE REMOVAL OF NUISANCES",
+          "heading": "FORM No. 20",
+          "page": 240,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-21",
+          "kind": "form",
+          "section_number": "Second Schedule Form 21",
+          "label": "MAGISTRATE’S NOTICE AND PEREMPTORY ORDER",
+          "heading": "FORM No. 21",
+          "page": 241,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-22",
+          "kind": "form",
+          "section_number": "Second Schedule Form 22",
+          "label": "INJUNCTION TO PROVIDE AGAINST IMMINENT DANGER PENDING INQUIRY",
+          "heading": "FORM No. 22",
+          "page": 241,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-23",
+          "kind": "form",
+          "section_number": "Second Schedule Form 23",
+          "label": "MAGISTRATE’S ORDER PROHIBITING THE REPETITION, ETC., OF A NUISANCE",
+          "heading": "FORM No. 23",
+          "page": 242,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-24",
+          "kind": "form",
+          "section_number": "Second Schedule Form 24",
+          "label": "MAGISTRATE’S ORDER TO PREVENT OBSTRUCTION, RIOT, ETC.",
+          "heading": "FORM No. 24",
+          "page": 242,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-25",
+          "kind": "form",
+          "section_number": "Second Schedule Form 25",
+          "label": "MAGISTRATE’S ORDER DECLARING PARTY ENTITLED TO RETAIN POSSESSION OF LAND, ETC., IN DISPUTE",
+          "heading": "FORM No. 25",
+          "page": 243,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-26",
+          "kind": "form",
+          "section_number": "Second Schedule Form 26",
+          "label": "WARRANT OF ATTACHMENT IN THE CASE OF A DISPUTE AS TO THE POSSESSION OF LAND, ETC.",
+          "heading": "FORM No. 26",
+          "page": 243,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-27",
+          "kind": "form",
+          "section_number": "Second Schedule Form 27",
+          "label": "MAGISTRATE’S ORDER PROHIBITING THE DOING OF ANYTHING ON LAND OR WATER",
+          "heading": "FORM No. 27",
+          "page": 244,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-28",
+          "kind": "form",
+          "section_number": "Second Schedule Form 28",
+          "label": "BOND AND BAIL-BOND ON A PRELIMINARY INQUIRY BEFORE A POLICE OFFICER",
+          "heading": "FORM No. 28",
+          "page": 244,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-29",
+          "kind": "form",
+          "section_number": "Second Schedule Form 29",
+          "label": "BOND TO PROSECUTE OR GIVE EVIDENCE",
+          "heading": "FORM No. 29",
+          "page": 245,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-30",
+          "kind": "form",
+          "section_number": "Second Schedule Form 30",
+          "label": "SPECIAL SUMMONS TO A PERSON ACCUSED OF A PETTY OFFENCE",
+          "heading": "FORM No. 30",
+          "page": 245,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-31",
+          "kind": "form",
+          "section_number": "Second Schedule Form 31",
+          "label": "NOTICE OF COMMITMENT BY MAGISTRATE TO PUBLIC PROSECUTOR",
+          "heading": "FORM No. 31",
+          "page": 245,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-32",
+          "kind": "form",
+          "section_number": "Second Schedule Form 32",
+          "label": "CHARGES",
+          "heading": "FORM No. 32",
+          "page": 246,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-33",
+          "kind": "form",
+          "section_number": "Second Schedule Form 33",
+          "label": "SUMMONS TO WITNESS",
+          "heading": "FORM No. 33",
+          "page": 248,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-34",
+          "kind": "form",
+          "section_number": "Second Schedule Form 34",
+          "label": "WARRANT OF COMMITMENT ON A SENTENCE OF IMPRISONMENT OR FINE IF PASSED BY A 1[COURT]",
+          "heading": "FORM No. 34",
+          "page": 248,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-35",
+          "kind": "form",
+          "section_number": "Second Schedule Form 35",
+          "label": "WARRANT OF IMPRISONMENT ON FAILURE TO PAY COMPENSATION",
+          "heading": "FORM No. 35",
+          "page": 249,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-36",
+          "kind": "form",
+          "section_number": "Second Schedule Form 36",
+          "label": "ORDER REQUIRING PRODUCTION IN COURT OF PERSON IN PRISON FOR ANSWERING TO CHARGE OF OFFENCE",
+          "heading": "FORM No. 36",
+          "page": 249,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-37",
+          "kind": "form",
+          "section_number": "Second Schedule Form 37",
+          "label": "ORDER REQUIRING PRODUCTION IN COURT OF PERSON IN PRISON FOR GIVING EVIDENCE",
+          "heading": "FORM No. 37",
+          "page": 250,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-38",
+          "kind": "form",
+          "section_number": "Second Schedule Form 38",
+          "label": "WARRANT OF COMMITMENT IN CERTAIN CASES OF CONTEMPT WHEN A FINE IS IMPOSED",
+          "heading": "FORM No. 38",
+          "page": 250,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-39",
+          "kind": "form",
+          "section_number": "Second Schedule Form 39",
+          "label": "MAGISTRATE’S OR JUDGE’S WARRANT OF COMMITMENT OF WITNESS REFUSING TO ANSWER OR TO PRODUCE DOCUMENT",
+          "heading": "FORM No. 39",
+          "page": 251,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-40",
+          "kind": "form",
+          "section_number": "Second Schedule Form 40",
+          "label": "WARRANT OF COMMITMENT UNDER SENTENCE OF DEATH",
+          "heading": "FORM No. 40",
+          "page": 251,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-41",
+          "kind": "form",
+          "section_number": "Second Schedule Form 41",
+          "label": "WARRANT AFTER A COMMUTATION OF A SENTENCE",
+          "heading": "FORM No. 41",
+          "page": 252,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-42",
+          "kind": "form",
+          "section_number": "Second Schedule Form 42",
+          "label": "WARRANT OF EXECUTION OF A SENTENCE OF DEATH",
+          "heading": "FORM No. 42",
+          "page": 252,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-43",
+          "kind": "form",
+          "section_number": "Second Schedule Form 43",
+          "label": "WARRANT TO LEVY A FINE BY ATTACHMENT AND SALE",
+          "heading": "FORM No. 43",
+          "page": 253,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-44",
+          "kind": "form",
+          "section_number": "Second Schedule Form 44",
+          "label": "WARRANT FOR RECOVERY OF FINE",
+          "heading": "FORM No. 44",
+          "page": 253,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-44A",
+          "kind": "form",
+          "section_number": "Second Schedule Form 44A",
+          "label": "BOND FOR APPEARANCE OF OFFENDER RELEASED PENDING REALISATION OF FINE",
+          "heading": "1[FORM No. 44A",
+          "page": 254,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-45",
+          "kind": "form",
+          "section_number": "Second Schedule Form 45",
+          "label": "BOND AND BAIL-BOND FOR ATTENDANCE BEFORE OFFICER IN CHARGE OF POLICE STATION OR COURT",
+          "heading": "FORM No. 45",
+          "page": 254,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-46",
+          "kind": "form",
+          "section_number": "Second Schedule Form 46",
+          "label": "WARRANT TO DISCHARGE A PERSON IMPRISONED ON FAILURE TO GIVE SECURITY",
+          "heading": "FORM No. 46",
+          "page": 255,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-47",
+          "kind": "form",
+          "section_number": "Second Schedule Form 47",
+          "label": "WARRANT OF ATTACHMENT TO ENFORCE A BOND",
+          "heading": "1[FORM No. 47",
+          "page": 255,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-48",
+          "kind": "form",
+          "section_number": "Second Schedule Form 48",
+          "label": "NOTICE TO SURETY ON BREACH OF A BOND",
+          "heading": "FORM No. 48",
+          "page": 256,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-49",
+          "kind": "form",
+          "section_number": "Second Schedule Form 49",
+          "label": "NOTICE TO SURETY OF FORFEITURE OF BOND FOR GOOD BEHAVIOUR",
+          "heading": "FORM No. 49",
+          "page": 256,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-50",
+          "kind": "form",
+          "section_number": "Second Schedule Form 50",
+          "label": "WARRANT OF ATTACHMENT AGAINST A SURETY",
+          "heading": "FORM No. 50",
+          "page": 257,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-51",
+          "kind": "form",
+          "section_number": "Second Schedule Form 51",
+          "label": "WARRANT OF COMMITMENT OF THE SURETY OF AN ACCUSED PERSON ADMITTED TO BAIL",
+          "heading": "FORM No. 51",
+          "page": 257,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-52",
+          "kind": "form",
+          "section_number": "Second Schedule Form 52",
+          "label": "NOTICE TO THE PRINCIPAL OF FORFEITURE OF BOND TO KEEP THE PEACE",
+          "heading": "FORM No. 52",
+          "page": 258,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-53",
+          "kind": "form",
+          "section_number": "Second Schedule Form 53",
+          "label": "WARRANT TO ATTACH THE PROPERTY OF THE PRINCIPAL ON BREACH OF A BOND TO KEEP THE PEACE",
+          "heading": "FORM No. 53",
+          "page": 258,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-54",
+          "kind": "form",
+          "section_number": "Second Schedule Form 54",
+          "label": "WARRANT OF IMPRISONMENT ON BREACH OF A BOND TO KEEP THE PEACE",
+          "heading": "FORM No. 54",
+          "page": 259,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-55",
+          "kind": "form",
+          "section_number": "Second Schedule Form 55",
+          "label": "WARRANT OF ATTACHMENT AND SALE ON FORFEITURE OF BOND FOR GOOD BEHAVIOUR",
+          "heading": "FORM No. 55",
+          "page": 259,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "form-56",
+          "kind": "form",
+          "section_number": "Second Schedule Form 56",
+          "label": "WARRANT OF IMPRISONMENT ON FORFEITURE OF BOND FOR GOOD BEHAVIOUR",
+          "heading": "FORM No. 56",
+          "page": 260,
+          "parent_key": "schedule-II"
+        },
+        {
+          "key": "appendix",
+          "kind": "appendix",
+          "section_number": "Appendix I",
+          "label": "EXTRACTS FROM THE CODE OF CRIMINAL PROCEDURE (AMENDMENT) ACT, 2005",
+          "heading": "APPENDIX",
+          "page": 261
+        }
+      ]
     }
   ]
 }

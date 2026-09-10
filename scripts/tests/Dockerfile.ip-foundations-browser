@@ -1,0 +1,3 @@
+FROM caseops-patent-browser-tools:20260909
+COPY --from=caseops-web-test-tools:20260906 /app/apps/web/node_modules/nodemailer /tools/node_modules/nodemailer
+LABEL caseops.track="ip-foundations-ops"

@@ -44,7 +44,8 @@ RUN uv export \
       --no-hashes \
       --output-file /tmp/requirements.lock \
   && uv pip install --system --requirements /tmp/requirements.lock \
-  && rm /tmp/requirements.lock
+  && rm /tmp/requirements.lock \
+  && python -m compileall -q --invalidation-mode checked-hash /usr/local/lib/python3.13/site-packages
 
 # Voyage token counting uses Hugging Face's tokenizer cache before every
 # embedding request. Download the production tokenizer while the image is
@@ -64,7 +65,9 @@ RUN python -c "from fastembed.rerank.cross_encoder import TextCrossEncoder; Text
 COPY alembic.ini ./
 COPY src ./src
 COPY alembic ./alembic
-RUN uv pip install --system --no-deps .
+RUN uv pip install --system --no-deps . \
+  && python -m compileall -q --invalidation-mode checked-hash \
+       /app/src /usr/local/lib/python3.13/site-packages/caseops_api
 
 # Both model families are now baked into immutable image layers. Force runtime
 # resolution through those caches so cold workers never probe the public Hub.

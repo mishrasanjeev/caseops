@@ -11,6 +11,8 @@ import { PatentRecordLifecycle } from "@/components/ip/PatentFamilyLifecycle";
 import { PatentSourceDownload } from "@/components/ip/PatentSourceDownload";
 import { PatentParties } from "@/components/ip/PatentParties";
 import { PatentPriorities } from "@/components/ip/PatentPriorities";
+import { PatentProsecutionWorkspace } from "@/components/ip/PatentProsecutionWorkspace";
+import { PatentProceedingsWorkspace } from "@/components/ip/PatentProceedingsWorkspace";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -117,6 +119,9 @@ export function PatentApplicationDetail({ applicationId }: { applicationId: stri
           <TabsTrigger value="application">Application</TabsTrigger>
           <TabsTrigger value="parties">Parties</TabsTrigger>
           <TabsTrigger value="priorities">Priorities</TabsTrigger>
+          <TabsTrigger value="evidence">Work product</TabsTrigger>
+          <TabsTrigger value="prosecution">Prosecution</TabsTrigger>
+          <TabsTrigger value="proceedings">Proceedings</TabsTrigger>
           <TabsTrigger value="documents"><FileText size={16} />Documents</TabsTrigger>
           <TabsTrigger value="lifecycle">Lifecycle</TabsTrigger>
         </TabsList>
@@ -128,6 +133,8 @@ export function PatentApplicationDetail({ applicationId }: { applicationId: stri
     {area === "lifecycle" ? <PatentRecordLifecycle record={current} canReview={canReview} />
       : area === "parties" ? <PatentParties record={current} canWrite={canWrite} onOpenDocuments={() => setArea("documents")} />
       : area === "priorities" ? <PatentPriorities record={current} canWrite={canWrite} onOpenDocuments={() => setArea("documents")} />
+      : area === "evidence" || area === "prosecution" ? <PatentProsecutionWorkspace key={area} application={current} area={area} canWrite={canWrite} onOpenDocuments={() => setArea("documents")} />
+      : area === "proceedings" ? <PatentProceedingsWorkspace application={current} canWrite={canWrite} onOpenDocuments={() => setArea("documents")} />
       : area === "documents" ? <IpDocumentWorkspace assetType="Patent" scopeDocketId={current.docket_id}
         dockets={[{ id: current.docket_id, title: current.facts.title }]}
         canUpload={current.is_active && canWrite && canUpload} canManage={current.is_active && canWrite && canManage}

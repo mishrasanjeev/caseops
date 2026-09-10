@@ -34,11 +34,11 @@ const API_BASE_URL = envOr(
 const RUN_ID = `${Date.now().toString(36)}-${Math.random()
   .toString(36)
   .slice(2, 8)}`.toLowerCase();
-const COMPANY_SLUG = envOr(
+let COMPANY_SLUG = envOr(
   "CASEOPS_RAM_PROD_SLUG",
   IS_LOCAL ? `ram-sep04-${RUN_ID}` : "legal",
 );
-const TESTER_EMAIL = envOr(
+let TESTER_EMAIL = envOr(
   "CASEOPS_RAM_PROD_EMAIL",
   IS_LOCAL ? `ram-sep04-${RUN_ID}@example.com` : "hari.gupta@gmail.com",
 );
@@ -60,6 +60,7 @@ type Matter = {
 
 let api: APIRequestContext;
 let identity: Identity;
+let localFixtureIndex = 0;
 
 function password(): string {
   const value = envOr(
@@ -139,7 +140,12 @@ test.describe.serial("Ram 2026-09-04 automatic next-hearing sync", () => {
     api = await playwrightRequest.newContext({
       extraHTTPHeaders: noPaidProviderHeaders,
     });
+  });
+  test.beforeEach(async () => {
     if (IS_LOCAL) {
+      localFixtureIndex += 1;
+      COMPANY_SLUG = `ram-sep04-${RUN_ID}-${localFixtureIndex}`;
+      TESTER_EMAIL = `ram-sep04-${RUN_ID}-${localFixtureIndex}@example.com`;
       const bootstrap = await api.post(
         `${API_BASE_URL}/api/bootstrap/company`,
         {
@@ -162,14 +168,28 @@ test.describe.serial("Ram 2026-09-04 automatic next-hearing sync", () => {
     await api.dispose();
   });
 
-  test("older eligible matter is linked and updated by the Docker poll without lifecycle mutation", async ({
+  for (const identityMode of ["cnr", "case-number", "backfill-bound"] as const) {
+  test(`BUG-012 older ${identityMode} matter shows its scheduled hearing date without lifecycle mutation`, async ({
     page,
   }) => {
     test.skip(
       !HAS_DOCKER_POLL,
       "The paid-call-free behavioral proof requires the Docker provider emulator.",
     );
-    const matterCode = `NHD-${RUN_ID}`.toUpperCase().slice(0, 78);
+    if (identityMode === "backfill-bound") {
+      for (let index = 0; index < 50; index += 1) {
+        const incomplete = await api.post(`${API_BASE_URL}/api/matters/`, {
+          headers: headers(),
+          data: {
+            title: `Incomplete older intake ${index}`,
+            matter_code: `WAIT-${index}-${RUN_ID}`.toUpperCase(),
+            practice_area: "litigation", forum_level: "high_court", status: "intake",
+          },
+        });
+        await expectStatus(incomplete, 200, `create valid incomplete intake ${index}`);
+      }
+    }
+    const matterCode = `NHD-${identityMode}-${RUN_ID}`.toUpperCase().slice(0, 78);
     const create = await api.post(`${API_BASE_URL}/api/matters/`, {
       headers: headers(),
       data: {
@@ -193,7 +213,7 @@ test.describe.serial("Ram 2026-09-04 automatic next-hearing sync", () => {
         headers: headers(),
         data: {
           case_number: "WP(C) 9123/2026",
-          cnr_number: "DLHC010091232026",
+          ...(identityMode === "cnr" ? { cnr_number: "DLHC010091232026" } : {}),
           expected_updated_at: original.updated_at,
         },
       },
@@ -206,9 +226,24 @@ test.describe.serial("Ram 2026-09-04 automatic next-hearing sync", () => {
       { headers: headers() },
     );
     await expectStatus(beforeBookmarks, 200, "bookmarks before backfill");
-    expect((await beforeBookmarks.json()).bookmarks).toHaveLength(0);
+    expect((await beforeBookmarks.json()).bookmarks.filter(
+      (row: { matter_id: string }) => row.matter_id === original.id,
+    )).toHaveLength(0);
 
     runDockerPoll();
+    if (identityMode === "backfill-bound") {
+      const firstRead = await api.get(`${API_BASE_URL}/api/matters/${original.id}`, {
+        headers: headers(),
+      });
+      await expectStatus(firstRead, 200, "matter outside first bounded page");
+      expect((await firstRead.json()).next_hearing_on).toBe(before.next_hearing_on);
+      const firstBookmarks = await api.get(`${API_BASE_URL}/api/case-tracking/bookmarks`, {
+        headers: headers(),
+      });
+      await expectStatus(firstBookmarks, 200, "first page creates no guessed tracking identity");
+      expect((await firstBookmarks.json()).bookmarks).toHaveLength(0);
+      runDockerPoll();
+    }
 
     const read = await api.get(`${API_BASE_URL}/api/matters/${original.id}`, {
       headers: headers(),
@@ -232,24 +267,40 @@ test.describe.serial("Ram 2026-09-04 automatic next-hearing sync", () => {
       matter_id: string;
       tracked_case: { next_hearing_on: string | null };
     }>;
-    expect(rows).toHaveLength(1);
-    expect(rows[0].matter_id).toBe(original.id);
-    expect(rows[0].tracked_case.next_hearing_on).toBe(plusDays(21));
+    const matchingRows = rows.filter((row) => row.matter_id === original.id);
+    expect(matchingRows).toHaveLength(1);
+    expect(matchingRows[0].tracked_case.next_hearing_on).toBe(plusDays(21));
 
     await signIn(page);
+    const formattedDate = await page.evaluate((value) => new Date(`${value}T00:00:00`).toLocaleDateString(undefined, {
+      day: "2-digit", month: "short", year: "numeric",
+    }), after.next_hearing_on);
+    for (const width of [393, 768, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
     await page.goto(`${BASE_URL}/app/matters`);
     await page.locator("#matter-filter-q").fill(matterCode);
     await page.getByRole("button", { name: /Apply/i }).click();
-    await expect(page.getByText(matterCode)).toBeVisible();
-    await expect(page.getByText(/Next hearing/i).first()).toBeVisible();
+    const matterRow = page.locator("tbody tr").filter({ hasText: matterCode });
+    await expect(matterRow).toHaveCount(1);
+    await expect(matterRow).toHaveAttribute("role", "button");
+    const hearingCell = matterRow.getByText(formattedDate, { exact: true });
+    await hearingCell.scrollIntoViewIfNeeded();
+    await expect(hearingCell).toBeVisible();
+    await page.reload();
+    await page.locator("#matter-filter-q").fill(matterCode);
+    await page.getByRole("button", { name: /Apply/i }).click();
+    await hearingCell.scrollIntoViewIfNeeded();
+    await expect(hearingCell).toBeVisible();
+    await page.screenshot({ path: test.info().outputPath(`hearing-${identityMode}-${width}.png`), fullPage: true });
+    }
 
     await page.goto(`${BASE_URL}/app/case-tracking`);
-    const bookmark = page.getByTestId(`case-tracking-bookmark-${rows[0].id}`);
+    const bookmark = page.getByTestId(`case-tracking-bookmark-${matchingRows[0].id}`);
     await expect(bookmark).toBeVisible();
     const refreshed = page.waitForResponse(
       (response) =>
         new URL(response.url()).pathname ===
-          `/api/case-tracking/bookmarks/${rows[0].id}/refresh` &&
+          `/api/case-tracking/bookmarks/${matchingRows[0].id}/refresh` &&
         response.request().method() === "POST",
     );
     await bookmark.getByRole("button", { name: /^Refresh$/ }).click();
@@ -269,6 +320,7 @@ test.describe.serial("Ram 2026-09-04 automatic next-hearing sync", () => {
     expect(finalMatter.next_hearing_on).toBe(after.next_hearing_on);
     expect(finalMatter.lifecycle_version).toBe(after.lifecycle_version);
   });
+  }
 
   test("production surface is exact-release ready and regular verification spends zero provider credits", async ({
     page,

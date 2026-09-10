@@ -674,9 +674,22 @@ def test_ecourts_provider_uses_partner_paths_and_normalizes_payloads() -> None:
                     }
                 },
             )
-        if request.method == "POST" and request.url.path == "/api/partner/case/bulk-refresh":
+        if request.method == "POST" and request.url.path == "/api/partner/case/bulk-refresh-status":
             assert json.loads(request.content) == {"cnrs": ["DLHC010012342026"]}
-            return httpx.Response(200, json={"ok": True})
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "results": [
+                            {
+                                "cnr": "DLHC010012342026",
+                                "status": "COMPLETED",
+                                "requestedAt": datetime.now(UTC).isoformat(),
+                            }
+                        ]
+                    }
+                },
+            )
         return httpx.Response(404, json={"detail": request.url.path})
 
     provider = EcourtsIndiaApiProvider(
@@ -713,7 +726,8 @@ def test_ecourts_provider_uses_partner_paths_and_normalizes_payloads() -> None:
     assert refresh.errors == {}
     assert len(refresh.snapshots) == 1
     assert requests[2].method == "POST"
-    assert requests[2].url.path == "/api/partner/case/bulk-refresh"
+    assert requests[2].url.path == "/api/partner/case/bulk-refresh-status"
+    assert refresh.confirmed_cost_minor_by_cnr == {"DLHC010012342026": 150}
 
 
 def test_ecourts_case_detail_round_trips_through_exact_case_number_search() -> None:
@@ -1635,7 +1649,7 @@ def test_scheduler_settles_only_successful_case_costs_for_partial_batch(
             assert run.checked_count == 1
             assert run.error_count == 1
             assert run.metadata["charged_case_count"] == 1
-            assert run.metadata["charged_cost_minor"] == 15
+            assert run.metadata["charged_cost_minor"] == 165
             usage_rows = list(
                 session.scalars(
                     select(BillingUsageEvent).where(
@@ -1644,11 +1658,13 @@ def test_scheduler_settles_only_successful_case_costs_for_partial_batch(
                 )
             )
             assert len(usage_rows) == 1
-            assert usage_rows[0].estimated_cost_minor == 15
-            reservation = session.scalar(select(ProviderSpendReservation))
-            assert reservation is not None
-            assert reservation.status == "settled"
-            assert reservation.amount_minor == 15
+            assert usage_rows[0].estimated_cost_minor == 165
+            reservations = list(session.scalars(select(ProviderSpendReservation)))
+            assert sorted((row.status, row.amount_minor) for row in reservations) == [
+                ("reserved", 165),
+                ("settled", 165),
+            ]
+            assert all(row.dispatched_at is not None for row in reservations)
     finally:
         get_settings.cache_clear()
 

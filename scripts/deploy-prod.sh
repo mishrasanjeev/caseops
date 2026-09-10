@@ -239,6 +239,13 @@ echo "  api + web images built."
 # while images were building must stop before migration or job mutation.
 assert_current_main "post-build pre-migration gate"
 
+# An image repin does not stop executions already using the previous protocol.
+# Keep this paid scheduler paused on failure; never launch a paid release canary.
+echo "--- drain tracked-case provider workers before migration ---"
+python scripts/scheduler_inventory.py quiesce \
+  --scheduler caseops-case-tracking-poll-1800-ist \
+  --project "${PROJECT}" --region "${REGION}" --wait-seconds 180
+
 # Resolve the API tag while it is known to exist and pin every long-lived job
 # to the digest. Artifact Registry cleanup may delete tags; digest references
 # keep scheduled jobs runnable and prevent a repeat of the July 2026 report outage.
@@ -388,7 +395,7 @@ echo "  verified Indian Kanoon prices seeded from ${API_IMMUTABLE_IMAGE}."
 # source, verifies the canonical configuration, and only then pauses
 # superseded scheduler names.
 echo "--- 3/6 reconcile recurring-job inventory ---"
-SCHEDULER_HOLD_ARGS=()
+SCHEDULER_HOLD_ARGS=(--hold-scheduler-paused caseops-case-tracking-poll-1800-ist)
 if [[ "${PRIVATE_PROJECTION_SCHEDULER_HOLD}" == "true" ]]; then
   SCHEDULER_HOLD_ARGS+=(
     --hold-scheduler-paused
@@ -614,6 +621,18 @@ if [[ -z "${CLAMAV_IMAGE}" ]]; then
   echo "EG-003 REGRESSION: cannot resolve the deployed ClamAV image; refusing a partial multi-container deploy."
   exit 1
 fi
+# This image fences serving in lifespan until clamd answers PONG. Start the
+# scanner and API together instead of serializing their cold initialization.
+# gcloud's empty dependency update deletes a map key, so omit it on reruns
+# where the canonical release already removed that key.
+API_DEPENDENCY_FLAGS=()
+CURRENT_CONTAINER_DEPENDENCIES=$(gcloud run services describe caseops-api \
+  --region "${REGION}" --project "${PROJECT}" \
+  --format="value(spec.template.metadata.annotations.'run.googleapis.com/container-dependencies')")
+API_HAS_STARTUP_DEPENDENCY=$(python -c 'import json,sys; data=json.loads(sys.argv[1] or "{}"); assert isinstance(data,dict), "Invalid container dependency map"; print("yes" if "api" in data else "no")' "${CURRENT_CONTAINER_DEPENDENCIES}")
+if [[ "${API_HAS_STARTUP_DEPENDENCY}" == "yes" ]]; then
+  API_DEPENDENCY_FLAGS=(--depends-on '')
+fi
 gcloud run deploy caseops-api \
   --region "${REGION}" \
   --project "${PROJECT}" \
@@ -627,8 +646,10 @@ gcloud run deploy caseops-api \
   --container api \
   --port 8080 \
   --image "${API_IMAGE}" \
+  "${API_DEPENDENCY_FLAGS[@]}" \
+  --startup-probe "tcpSocket.port=8080,initialDelaySeconds=0,periodSeconds=2,timeoutSeconds=1,failureThreshold=120" \
   --update-secrets "CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET=${MACHINE_READINESS_EVIDENCE_SECRET}:latest,CASEOPS_LLM_API_KEY=${LLM_API_KEY_SECRET}:latest,CASEOPS_INDIAN_KANOON_API_TOKEN=${INDIAN_KANOON_API_TOKEN_SECRET}:latest" \
-  --update-env-vars "^|^CASEOPS_RELEASE_SHA=${HEAD_SHA}|CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false|CASEOPS_LLM_PROVIDER=${LLM_PROVIDER}|CASEOPS_LLM_MODEL=${LLM_MODEL}|CASEOPS_LLM_MODEL_RECOMMENDATIONS=${LLM_RECOMMENDATIONS_MODEL}|CASEOPS_DB_STATEMENT_TIMEOUT_MS=60000|CASEOPS_DB_LOCK_TIMEOUT_MS=5000|CASEOPS_DB_IDLE_TRANSACTION_TIMEOUT_MS=60000|CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS=${PAID_PROVIDER_BLOCKED_COMPANY_SLUGS}|CASEOPS_INDIAN_KANOON_ENABLED=true|CASEOPS_INDIAN_KANOON_API_BASE_URL=https://api.indiankanoon.org|CASEOPS_INDIAN_KANOON_TERMS_OWNER=${INDIAN_KANOON_TERMS_OWNER}|CASEOPS_INDIAN_KANOON_TERMS_APPROVED_AT=${INDIAN_KANOON_TERMS_APPROVED_AT}|CASEOPS_INDIAN_KANOON_TERMS_EXPIRES_AT=${INDIAN_KANOON_TERMS_EXPIRES_AT}|CASEOPS_INDIAN_KANOON_PERMITTED_USES=${INDIAN_KANOON_PERMITTED_USES}|CASEOPS_INDIAN_KANOON_DAILY_BUDGET_MINOR=${INDIAN_KANOON_DAILY_BUDGET_MINOR}|CASEOPS_INDIAN_KANOON_MONTHLY_BUDGET_MINOR=${INDIAN_KANOON_MONTHLY_BUDGET_MINOR}|CASEOPS_INDIAN_KANOON_RETENTION_DAYS=${INDIAN_KANOON_RETENTION_DAYS}|CASEOPS_INDIAN_KANOON_MAX_SEARCH_PAGE=${INDIAN_KANOON_MAX_SEARCH_PAGE}|CASEOPS_INDIAN_KANOON_MAX_RESULTS=${INDIAN_KANOON_MAX_RESULTS}" \
+  --update-env-vars "^|^CASEOPS_RELEASE_SHA=${HEAD_SHA}|CASEOPS_IP_RULE_GOVERNANCE_ENABLED=false|CASEOPS_CLAMAV_REQUIRED=true|CASEOPS_LLM_PROVIDER=${LLM_PROVIDER}|CASEOPS_LLM_MODEL=${LLM_MODEL}|CASEOPS_LLM_MODEL_RECOMMENDATIONS=${LLM_RECOMMENDATIONS_MODEL}|CASEOPS_DB_STATEMENT_TIMEOUT_MS=60000|CASEOPS_DB_LOCK_TIMEOUT_MS=5000|CASEOPS_DB_IDLE_TRANSACTION_TIMEOUT_MS=60000|CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS=${PAID_PROVIDER_BLOCKED_COMPANY_SLUGS}|CASEOPS_INDIAN_KANOON_ENABLED=true|CASEOPS_INDIAN_KANOON_API_BASE_URL=https://api.indiankanoon.org|CASEOPS_INDIAN_KANOON_TERMS_OWNER=${INDIAN_KANOON_TERMS_OWNER}|CASEOPS_INDIAN_KANOON_TERMS_APPROVED_AT=${INDIAN_KANOON_TERMS_APPROVED_AT}|CASEOPS_INDIAN_KANOON_TERMS_EXPIRES_AT=${INDIAN_KANOON_TERMS_EXPIRES_AT}|CASEOPS_INDIAN_KANOON_PERMITTED_USES=${INDIAN_KANOON_PERMITTED_USES}|CASEOPS_INDIAN_KANOON_DAILY_BUDGET_MINOR=${INDIAN_KANOON_DAILY_BUDGET_MINOR}|CASEOPS_INDIAN_KANOON_MONTHLY_BUDGET_MINOR=${INDIAN_KANOON_MONTHLY_BUDGET_MINOR}|CASEOPS_INDIAN_KANOON_RETENTION_DAYS=${INDIAN_KANOON_RETENTION_DAYS}|CASEOPS_INDIAN_KANOON_MAX_SEARCH_PAGE=${INDIAN_KANOON_MAX_SEARCH_PAGE}|CASEOPS_INDIAN_KANOON_MAX_RESULTS=${INDIAN_KANOON_MAX_RESULTS}" \
   --cpu "${API_CPU}" \
   --memory "${API_MEMORY}" \
   --container clamav \
@@ -764,11 +785,29 @@ else:
         errors.append("status.traffic still has a tag")
 
 containers = ((spec.get("template") or {}).get("spec") or {}).get("containers") or []
+template_annotations = ((spec.get("template") or {}).get("metadata") or {}).get("annotations") or {}
+try:
+    dependencies = json.loads(template_annotations.get("run.googleapis.com/container-dependencies") or "{}")
+except (TypeError, ValueError):
+    dependencies = None
+if not isinstance(dependencies, dict) or dependencies.get("api"):
+    errors.append("API startup is not independent of sidecar initialization")
 api = next((row for row in containers if row.get("name") == "api"), None)
 if api is None:
     errors.append("api container is missing")
 else:
     env = {str(row.get("name")): row for row in api.get("env") or []}
+    if str((env.get("CASEOPS_CLAMAV_REQUIRED") or {}).get("value")) != "true":
+        errors.append("required scanner lifespan readiness is not enabled")
+    probe = api.get("startupProbe") or {}
+    if (
+        (probe.get("tcpSocket") or {}).get("port") != 8080
+        or int(probe.get("initialDelaySeconds") or 0) != 0
+        or probe.get("periodSeconds") != 2
+        or probe.get("timeoutSeconds") != 1
+        or probe.get("failureThreshold") != 120
+    ):
+        errors.append("API startup probe does not match the bounded readiness contract")
     if str((env.get("CASEOPS_RELEASE_SHA") or {}).get("value")) != expected_sha:
         errors.append("CASEOPS_RELEASE_SHA does not match exact HEAD")
     if str((env.get("CASEOPS_IP_RULE_GOVERNANCE_ENABLED") or {}).get("value")) != "false":
@@ -1030,6 +1069,10 @@ A0_QA_EXECUTION=""
 
 # A push to main is not proof that a release started. Dispatch the exact-SHA
 # browser gate only after both services pass every synchronous deploy gate.
+assert_current_main "pre-provider-scheduler-resume gate"
+python scripts/scheduler_inventory.py resume \
+  --scheduler caseops-case-tracking-poll-1800-ist \
+  --project "${PROJECT}" --region "${REGION}" --image "${API_IMMUTABLE_IMAGE}"
 echo "--- dispatch exact-release production verification ---"
 gh workflow run prod-verify.yml \
   --repo mishrasanjeev/caseops \

@@ -102,6 +102,7 @@ CAPABILITY_ROLES: dict[str, frozenset[MembershipRole]] = {
     # --- governance ---
     "workspace:admin": _OWNER_ADMIN,
     "audit:export": _OWNER_ONLY,
+    "legal_holds:manage": _OWNER_ADMIN,
     "matter_access:manage": _OWNER_ADMIN,
     # --- intake (Sprint 8b BG-025) ---
     # Submit: anyone authenticated so a business-unit manager with

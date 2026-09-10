@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
     AuditActorType,
+    Company,
     DataRetentionPolicyVersion,
     DataRetentionPolicyVersionStatus,
     PrivateIndexProjection,
@@ -61,8 +62,16 @@ def _approved_private_operation(
     *,
     operation_id: str,
 ) -> tuple[TenantDataOperation, TenantDataOperationItem]:
+    company_id = session.scalar(
+        select(TenantDataOperation.company_id).where(TenantDataOperation.id == operation_id)
+    )
+    if company_id is None:
+        raise DataDispositionInvariantError("Approved data operation does not exist.")
+    # Preservation and disposition share this tenant-first serialization point.
+    session.scalar(select(Company.id).where(Company.id == company_id).with_for_update())
     operation = session.scalar(
         select(TenantDataOperation).where(TenantDataOperation.id == operation_id).with_for_update()
+        .execution_options(populate_existing=True)
     )
     if operation is None:
         raise DataDispositionInvariantError("Approved data operation does not exist.")

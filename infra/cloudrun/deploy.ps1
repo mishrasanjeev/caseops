@@ -36,7 +36,7 @@ param(
     [string]$LegalUpdateSchedulerJobName = "caseops-legal-update-sync-midnight",
     [string]$LegalUpdateSchedulerSchedule = "0 0 * * *",
     [string]$CaseTrackingSchedulerJobName = "caseops-case-tracking-poll-1800-ist",
-    [string]$CaseTrackingSchedulerSchedule = "0 18 * * *",
+    [string]$CaseTrackingSchedulerSchedule = "*/5 18-19 * * *",
     [string]$ActivityReportSchedulerJobName = "caseops-activity-report-0800-ist",
     [string]$ActivityReportSchedulerSchedule = "0 8 * * *",
     [string]$IpJournalWatchSchedulerJobName = "caseops-ip-journal-watch-publication-cadence",

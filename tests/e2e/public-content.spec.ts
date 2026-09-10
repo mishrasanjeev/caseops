@@ -289,6 +289,43 @@ test.describe("Public landing page and user guide", () => {
   });
 
   for (const viewport of VIEWPORTS) {
+    test(`${viewport.name} September 10 guide and sales copy preserve source and provider limits`, async ({
+      page,
+    }, testInfo) => {
+      await page.setViewportSize(viewport);
+      await page.goto("/guide", { waitUntil: "domcontentloaded" });
+      const statutes = page.locator("#statutes");
+      await statutes.scrollIntoViewIfNeeded();
+      await expect(statutes).toContainText("Catalog coverage remains incomplete.");
+      await expect(statutes).toContainText("exact source version");
+      await expect(statutes).toContainText("checked provision-level link");
+      await expect(statutes).not.toContainText("3,393 sections");
+      await expect(statutes).not.toContainText("Complete catalog visibility");
+      await testInfo.attach("statute-coverage", {
+        body: await statutes.screenshot(), contentType: "image/png",
+      });
+      const tracking = page.locator("#case-tracking");
+      await tracking.scrollIntoViewIfNeeded();
+      await expect(tracking).toContainText("Party names alone never identify a case.");
+      await expect(tracking).toContainText("queued provider refresh");
+      await expect(tracking).toContainText("processed asynchronously");
+      await expect(tracking).toContainText("does not undo the saved provider update");
+      await expect(tracking).toContainText("persistent QA");
+      await expect(tracking).toContainText("never reopens");
+      await testInfo.attach("hearing-recovery", {
+        body: await tracking.screenshot(), contentType: "image/png",
+      });
+      await page.goto("/law-firms", { waitUntil: "domcontentloaded" });
+      const sourceControls = page.getByText("Licensed Indian Kanoon research and eCourts case tracking require", { exact: false });
+      await sourceControls.scrollIntoViewIfNeeded();
+      await expect(sourceControls).toBeVisible();
+      await expect(sourceControls).toContainText("unconfirmed reservations");
+      await expect(sourceControls).toContainText("credentials alone do not establish provider availability");
+      await testInfo.attach("licensed-provider-claims", {
+        body: await sourceControls.screenshot(), contentType: "image/png",
+      });
+    });
+
     test(`${viewport.name} public pages have no overflow or serious accessibility issues`, async ({
       page,
     }) => {

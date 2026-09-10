@@ -72,24 +72,28 @@ def _approval_pair(session: Session, company_id: str) -> tuple[str, str]:
     return ids[0], ids[1]
 
 
-def _hold(session: Session, company_id: str, status: str = LegalHoldStatus.ACTIVE) -> LegalHold:
+def _hold(
+    session: Session, company_id: str, status: str = LegalHoldStatus.ACTIVE,
+    *, draft_scope: bool = False,
+) -> LegalHold:
     now = datetime.now(UTC)
     creator, approver = _approval_pair(session, company_id)
     active = status == LegalHoldStatus.ACTIVE
+    needs_approval = active or (draft_scope and status == LegalHoldStatus.RELEASED)
     hold = LegalHold(
         company_id=company_id,
         key=f"scan-{uuid4().hex[:8]}",
         title="Preservation order",
         authority_reference="Court order 2026/11",
-        status=status,
-        activated_at=now if active else None,
-        released_at=now if status == LegalHoldStatus.RELEASED else None,
+        status=LegalHoldStatus.DRAFT if draft_scope else status,
+        activated_at=now if active and not draft_scope else None,
+        released_at=now if status == LegalHoldStatus.RELEASED and not draft_scope else None,
         created_by_membership_id=creator,
         created_by_membership_company_id=company_id,
         creator_label_snapshot="Records owner",
-        approved_by_membership_id=approver if active else None,
-        approved_by_membership_company_id=company_id if active else None,
-        approver_label_snapshot="Approver" if active else None,
+        approved_by_membership_id=approver if needs_approval else None,
+        approved_by_membership_company_id=company_id if needs_approval else None,
+        approver_label_snapshot="Approver" if needs_approval else None,
         created_at=now,
         updated_at=now,
     )
@@ -99,6 +103,7 @@ def _hold(session: Session, company_id: str, status: str = LegalHoldStatus.ACTIV
 
 
 def _item(session: Session, hold: LegalHold, data_class_id: str) -> LegalHoldItem:
+    assert hold.status == LegalHoldStatus.DRAFT
     item = LegalHoldItem(
         company_id=hold.company_id,
         legal_hold_id=hold.id,
@@ -110,6 +115,17 @@ def _item(session: Session, hold: LegalHold, data_class_id: str) -> LegalHoldIte
     session.add(item)
     session.flush()
     return item
+
+
+def _activate_fixture(session: Session, hold: LegalHold, *, release: bool = False) -> None:
+    assert hold.status == LegalHoldStatus.DRAFT
+    hold.status = LegalHoldStatus.ACTIVE
+    hold.activated_at = datetime.now(UTC)
+    session.flush()
+    if release:
+        hold.status = LegalHoldStatus.RELEASED
+        hold.released_at = datetime.now(UTC)
+        session.flush()
 
 
 class TestUnavailableIsNotHealthy:
@@ -177,8 +193,9 @@ class TestChecksThatDoRun:
     def test_an_unresolvable_hold_class_is_reported(
         self, session: Session, company_id: str
     ) -> None:
-        hold = _hold(session, company_id)
+        hold = _hold(session, company_id, draft_scope=True)
         _item(session, hold, "a_class_the_registry_does_not_know")
+        _activate_fixture(session, hold)
 
         check = _by_id(run_integrity_scan(session, company_id=company_id))["held_at_risk"]
 
@@ -188,8 +205,9 @@ class TestChecksThatDoRun:
     def test_a_registered_hold_class_is_clean(
         self, session: Session, company_id: str
     ) -> None:
-        hold = _hold(session, company_id)
+        hold = _hold(session, company_id, draft_scope=True)
         _item(session, hold, "legal_holds")
+        _activate_fixture(session, hold)
 
         check = _by_id(run_integrity_scan(session, company_id=company_id))["held_at_risk"]
 
@@ -200,8 +218,11 @@ class TestChecksThatDoRun:
     ) -> None:
         # Preservation evidence pointing at a released hold protects nothing and
         # inflates any count of what is preserved.
-        released = _hold(session, company_id, status=LegalHoldStatus.RELEASED)
+        released = _hold(
+            session, company_id, status=LegalHoldStatus.RELEASED, draft_scope=True,
+        )
         item = _item(session, released, "legal_holds")
+        _activate_fixture(session, released, release=True)
 
         check = _by_id(run_integrity_scan(session, company_id=company_id))["orphan_hold_items"]
 
@@ -211,8 +232,9 @@ class TestChecksThatDoRun:
     def test_items_under_an_active_hold_are_not_orphans(
         self, session: Session, company_id: str
     ) -> None:
-        hold = _hold(session, company_id)
+        hold = _hold(session, company_id, draft_scope=True)
         _item(session, hold, "legal_holds")
+        _activate_fixture(session, hold)
 
         check = _by_id(run_integrity_scan(session, company_id=company_id))["orphan_hold_items"]
 
@@ -226,8 +248,9 @@ class TestContentIsNotExposed:
         # The requirement says "without exposing content". A hold's title and
         # authority reference must not travel into a nightly report that is read
         # far more widely than the hold itself.
-        hold = _hold(session, company_id)
+        hold = _hold(session, company_id, draft_scope=True)
         _item(session, hold, "a_class_the_registry_does_not_know")
+        _activate_fixture(session, hold)
 
         report = run_integrity_scan(session, company_id=company_id)
         blob = " ".join(

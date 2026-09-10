@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import httpx
 from fastapi import HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, func, or_, select, text
+from sqlalchemy import and_, func, or_, select, text, tuple_
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from caseops_api.core.settings import get_settings, is_non_local_env
@@ -25,9 +25,9 @@ from caseops_api.db.models import (
     CompanyMembership,
     Matter,
     MatterActivity,
-    ModelRun,
     NotificationDeliveryChannel,
     TrackedCase,
+    TrackedCaseBackfillCursor,
     TrackedCaseBookmark,
     TrackedCasePollRun,
     TrackedCaseProviderOperation,
@@ -59,19 +59,26 @@ from caseops_api.services.case_tracking_providers import (
     CaseTrackingProviderUnavailable,
     ProviderCaseEvent,
     ProviderCaseSnapshot,
+    case_tracking_transport_budget,
+    download_provider_source,
     get_case_tracking_provider,
     provider_status,
 )
-from caseops_api.services.http_retries import request_with_retries
-from caseops_api.services.llm import (
-    LLMCallContext,
-    LLMMessage,
-    LLMProvider,
-    LLMProviderError,
-    build_provider,
-    generate_structured,
+from caseops_api.services.hearing_matching import (
+    IDENTITY_REQUIRED,
+    MAX_MATCH_CANDIDATES,
+    HearingIdentity,
+    identity_matches,
+    reliable_identity,
 )
-from caseops_api.services.matter_access import assert_access
+from caseops_api.services.hearing_matching_scopes import (
+    HearingScope,
+    automatic_matter_link,
+    capture_hearing_scopes,
+    matter_identity,
+)
+from caseops_api.services.llm import LLMProvider
+from caseops_api.services.matter_access import assert_access, visible_matters_filter
 from caseops_api.services.matter_operational_guard import (
     matter_is_operational,
     require_operational_matter,
@@ -86,16 +93,18 @@ from caseops_api.services.paid_provider_safety import (
     paid_provider_block_reason,
 )
 from caseops_api.services.provider_spend import (
+    dispatch_provider_spend,
     provider_spend_rows,
     release_provider_spend,
     release_provider_spend_in_session,
-    reserve_provider_spend,
     reserve_provider_spend_in_session,
+    retain_unconfirmed_provider_spend,
     settle_provider_spend,
 )
 from caseops_api.services.session_context import SessionContext
 
 _MAX_BODY_LENGTH = 500
+_PROVIDER_LEASE = timedelta(seconds=180)
 _RELEASE_SMOKE_MAX_SNAPSHOT_EVENTS = 200
 _RED_PROVIDER_RESPONSE_CLASSES = {
     "ambiguous_match",
@@ -109,6 +118,7 @@ _RED_PROVIDER_RESPONSE_CLASSES = {
     "timeout",
 }
 _TRANSIENT_PROVIDER_RESPONSE_CLASSES = {
+    "provider_pending",
     "ambiguous_match",
     "billing",
     "case_not_found",
@@ -328,6 +338,7 @@ def _case_tracking_call_cost(
     provider: str,
     court_code: str | None,
     court_name: str | None,
+    operation: str = "detail",
 ) -> tuple[int, str]:
     from caseops_api.services.production_safety import support_matrix_match
 
@@ -360,6 +371,17 @@ def _case_tracking_call_cost(
                 "provider": provider,
             },
         )
+    # PAYG is the published upper rate when a reviewed subscription price is
+    # unavailable. These are estimates, not claims about the provider invoice.
+    # A scrape request and the subsequent case-detail read are separate charges.
+    if provider == "ecourtsindia":
+        upper_rate_minor = {
+            "search": 60,
+            "detail": 150,
+            "refresh_and_detail": 165,
+            "source_download": 375,
+        }
+        amount = max(amount, upper_rate_minor[operation])
     return amount, currency
 
 
@@ -369,6 +391,7 @@ def _manual_refresh_cost(session: Session, tracked_case: TrackedCase) -> tuple[i
         provider=tracked_case.provider,
         court_code=tracked_case.court_code,
         court_name=tracked_case.court_name,
+        operation="detail" if tracked_case.cnr_number else "search",
     )
 
 
@@ -455,6 +478,13 @@ def _new_operation(
             .limit(1)
         )
         if queued is not None:
+            queued.cost_minor, queued.currency = _case_tracking_call_cost(
+                session,
+                provider=tracked_case.provider,
+                court_code=tracked_case.court_code,
+                court_name=tracked_case.court_name,
+                operation="refresh_and_detail" if tracked_case.cnr_number else "search",
+            )
             queued.status = "running"
             queued.operation_type = "replay"
             queued.poll_run_id = poll_run_id
@@ -462,6 +492,8 @@ def _new_operation(
             queued.completed_at = None
             queued.next_attempt_at = None
             queued.attempts += 1
+            queued.lease_token = str(uuid4())
+            queued.lease_expires_at = _now() + _PROVIDER_LEASE
             session.add(queued)
             session.flush()
             tracked_case.last_provider_attempted_at = queued.started_at
@@ -482,7 +514,19 @@ def _new_operation(
             .order_by(TrackedCaseProviderOperation.created_at.desc())
             .limit(1)
         )
-    cost_minor, currency = _manual_refresh_cost(session, tracked_case)
+    cost_minor, currency = _case_tracking_call_cost(
+        session,
+        provider=tracked_case.provider,
+        court_code=tracked_case.court_code,
+        court_name=tracked_case.court_name,
+        operation=(
+            "refresh_and_detail"
+            if operation_type == "scheduled" and tracked_case.cnr_number
+            else "detail"
+            if tracked_case.cnr_number
+            else "search"
+        ),
+    )
     operation = TrackedCaseProviderOperation(
         company_id=context.company.id,
         tracked_case_id=tracked_case.id,
@@ -499,6 +543,8 @@ def _new_operation(
         cost_minor=cost_minor,
         currency=currency,
         started_at=_now(),
+        lease_token=str(uuid4()),
+        lease_expires_at=_now() + _PROVIDER_LEASE,
         metadata_json={
             "scope": "single_tracked_case",
             "cost_disclosed": True,
@@ -525,6 +571,392 @@ def _new_operation(
     )
     session.add(tracked_case)
     return operation
+
+
+@dataclass(frozen=True, slots=True)
+class _ProviderAttempt:
+    company_id: str
+    membership_id: str
+    token_issued_at: float | None
+    tracked_case_id: str
+    operation_id: str
+    lease_token: str
+    cnr_number: str | None
+    case_number: str | None
+    court_code: str | None
+    court_name: str | None
+    reservation_id: str | None
+    cost_minor: int
+    provider_key: str
+    hearing_scopes: tuple[HearingScope, ...]
+    search_case_number: str | None
+
+
+def _lock_provider_company(session: Session, company_id: str) -> None:
+    if (
+        session.scalar(
+            select(Company.id).where(Company.id == company_id).with_for_update(key_share=True)
+        )
+        is None
+    ):
+        raise HTTPException(status_code=404, detail="Company not found.")
+
+
+def _capture_provider_attempt(
+    session: Session,
+    *,
+    context: SessionContext,
+    tracked_case: TrackedCase,
+    operation: TrackedCaseProviderOperation,
+    reservation_id: str | None,
+) -> _ProviderAttempt:
+    hearing_scopes = capture_hearing_scopes(session, context=context, tracked_case=tracked_case)
+    if (
+        tracked_case.cnr_number
+        and not reliable_identity(HearingIdentity(cnr=tracked_case.cnr_number))
+    ) or (
+        not tracked_case.cnr_number
+        and (
+            not hearing_scopes
+            or any(not reliable_identity(scope.identity) for scope in hearing_scopes)
+        )
+    ):
+        raise HTTPException(409, IDENTITY_REQUIRED)
+    operation.spend_reservation_id = reservation_id
+    operation.metadata_json = {
+        **(operation.metadata_json or {}),
+        "hearing_match_scope_sha256": _hash_value([asdict(scope) for scope in hearing_scopes]),
+        "hearing_match_scope_count": len(hearing_scopes),
+        "hearing_match_policy": "cnr_primary_combined_exact_v1",
+    }
+    dispatch_provider_spend(session, reservation_id=reservation_id, company_id=context.company.id)
+    assert operation.lease_token is not None
+    return _ProviderAttempt(
+        company_id=context.company.id,
+        membership_id=context.membership.id,
+        token_issued_at=context.token_issued_at,
+        tracked_case_id=tracked_case.id,
+        operation_id=operation.id,
+        lease_token=operation.lease_token,
+        cnr_number=tracked_case.cnr_number,
+        case_number=tracked_case.case_number,
+        court_code=tracked_case.court_code,
+        court_name=tracked_case.court_name,
+        reservation_id=reservation_id,
+        cost_minor=operation.cost_minor,
+        provider_key=tracked_case.provider,
+        hearing_scopes=hearing_scopes,
+        search_case_number=(
+            hearing_scopes[0].identity.case_number or hearing_scopes[0].identity.filing_number
+        )
+        if hearing_scopes
+        else None,
+    )
+
+
+def _refresh_automatic_source_identity(
+    session: Session,
+    *,
+    context: SessionContext,
+    tracked_case: TrackedCase,
+) -> None:
+    if not automatic_matter_link(tracked_case):
+        return
+    scopes = capture_hearing_scopes(session, context=context, tracked_case=tracked_case)
+    identities = tuple(scope.identity for scope in scopes)
+    if not identities or any(not reliable_identity(identity) for identity in identities):
+        raise HTTPException(409, IDENTITY_REQUIRED)
+    first = identities[0]
+    if any(
+        (item.cnr, item.case_number, item.filing_number, item.court_name)
+        != (first.cnr, first.case_number, first.filing_number, first.court_name)
+        for item in identities
+    ):
+        if tracked_case.cnr_number and not any(
+            item.cnr and normalize_cnr(item.cnr) != normalize_cnr(tracked_case.cnr_number)
+            for item in identities
+        ):
+            # Canonical convergence can retain registration-only and filing-only
+            # Matters for one CNR. Recheck every source against fresh details.
+            return
+        raise HTTPException(409, "The linked Matters have conflicting case identities.")
+    source_hash = _hash_value([asdict(identity) for identity in identities])
+    previous = (tracked_case.metadata_json or {}).get("hearing_source_identity_sha256")
+    if first.cnr:
+        tracked_case.cnr_number = normalize_cnr(first.cnr)
+    elif previous != source_hash:
+        # A corrected source invalidates a previously learned CNR. Discovery
+        # starts again under the same bookmark and existing paid-work claim.
+        tracked_case.cnr_number = None
+    tracked_case.normalized_cnr_number = normalize_cnr(tracked_case.cnr_number)
+    tracked_case.case_number = first.case_number or first.filing_number
+    tracked_case.normalized_case_number = normalize_case_number(tracked_case.case_number)
+    if tracked_case.court_name != first.court_name:
+        tracked_case.court_code = None
+    tracked_case.court_name = first.court_name
+    tracked_case.metadata_json = {
+        **(tracked_case.metadata_json or {}),
+        "hearing_source_identity_sha256": source_hash,
+    }
+
+
+def _lock_provider_attempt(
+    session: Session, attempt: _ProviderAttempt
+) -> TrackedCaseProviderOperation:
+    _lock_provider_company(session, attempt.company_id)
+    operation = session.scalar(
+        select(TrackedCaseProviderOperation)
+        .where(
+            TrackedCaseProviderOperation.id == attempt.operation_id,
+            TrackedCaseProviderOperation.company_id == attempt.company_id,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    expires = _aware_utc(operation.lease_expires_at) if operation else None
+    if (
+        operation is None
+        or operation.status != "running"
+        or operation.lease_token != attempt.lease_token
+        or expires is None
+        or expires <= _now()
+    ):
+        raise CaseTrackingProviderError(
+            "This provider attempt is no longer current; automatic recovery owns the work.",
+            response_class="concurrent_refresh",
+        )
+    return operation
+
+
+def _resume_provider_attempt(
+    session: Session,
+    attempt: _ProviderAttempt,
+) -> tuple[SessionContext, TrackedCase, TrackedCaseProviderOperation]:
+    from caseops_api.services.capabilities import membership_has_capability
+    from caseops_api.services.identity import get_session_context
+
+    session.expire_all()
+    operation = _lock_provider_attempt(session, attempt)
+    context = get_session_context(
+        session, attempt.membership_id, token_issued_at=attempt.token_issued_at
+    )
+    if context.company.id != attempt.company_id or not membership_has_capability(
+        session, context.membership, "authorities:search"
+    ):
+        raise HTTPException(status_code=403, detail="Case tracking access has changed.")
+    tracked_case = session.scalar(
+        select(TrackedCase)
+        .where(
+            TrackedCase.id == attempt.tracked_case_id,
+            TrackedCase.company_id == attempt.company_id,
+        )
+        .options(selectinload(TrackedCase.bookmarks))
+        .execution_options(populate_existing=True)
+    )
+    if tracked_case is None or (
+        tracked_case.provider,
+        tracked_case.cnr_number,
+        tracked_case.case_number,
+        tracked_case.court_code,
+        tracked_case.court_name,
+    ) != (
+        attempt.provider_key,
+        attempt.cnr_number,
+        attempt.case_number,
+        attempt.court_code,
+        attempt.court_name,
+    ):
+        raise HTTPException(
+            status_code=409, detail="Tracked case identity changed during provider work."
+        )
+    if not session.scalar(
+        select(TrackedCase.id).where(
+            TrackedCase.id == tracked_case.id,
+            _eligible_tracked_case_predicate(company_id=attempt.company_id),
+        )
+    ):
+        raise HTTPException(status_code=409, detail="No active case-tracking scope remains.")
+    current_scopes = capture_hearing_scopes(
+        session,
+        context=context,
+        tracked_case=tracked_case,
+        lock=True,
+    )
+    if current_scopes != attempt.hearing_scopes:
+        raise HTTPException(
+            409,
+            "Matter identity, access, lifecycle or bookmark scope changed during provider work.",
+        )
+    return context, tracked_case, operation
+
+
+def _settle_provider_attempt(
+    session: Session,
+    attempt: _ProviderAttempt,
+    *,
+    context: SessionContext,
+    succeeded: bool,
+    error: BaseException | None = None,
+    confirmed_cost_minor: int | None = None,
+    uncertain_charge: bool = False,
+) -> None:
+    try:
+        operation = _lock_provider_attempt(session, attempt)
+    except CaseTrackingProviderError as exc:
+        session.rollback()
+        raise _safe_provider_error(exc) from exc
+    metadata = dict(operation.metadata_json or {})
+    if not metadata.get("spend_finalized"):
+        paid_minor = attempt.cost_minor if succeeded else 0
+        if confirmed_cost_minor is not None:
+            if not 0 <= confirmed_cost_minor <= attempt.cost_minor:
+                raise ValueError("Provider receipt exceeds its reserved cost.")
+            paid_minor = confirmed_cost_minor
+        if paid_minor:
+            _record_case_tracking_provider_usage(
+                session,
+                context=context,
+                provider_key=attempt.provider_key,
+                usage_type="case_refresh",
+                feature_key="case_tracking_scheduled_refresh"
+                if operation.poll_run_id
+                else "case_tracking_manual_refresh",
+                display_label="Scheduled case refresh"
+                if operation.poll_run_id
+                else "Manual case refresh",
+                cost_minor=paid_minor,
+                tracked_case_id=attempt.tracked_case_id,
+                source_type="tracked_case_provider_operation",
+                source_id=attempt.operation_id,
+            )
+        if confirmed_cost_minor is not None and uncertain_charge:
+            retain_unconfirmed_provider_spend(
+                session,
+                reservation_id=attempt.reservation_id,
+                company_id=attempt.company_id,
+                confirmed_minor=paid_minor,
+            )
+            metadata["spend_outcome"] = "pending_confirmation"
+        elif paid_minor:
+            settle_provider_spend(
+                session, reservation_id=attempt.reservation_id, amount_minor=paid_minor
+            )
+            metadata["spend_outcome"] = "confirmed_estimate"
+        else:
+            # Published eCourts pricing excludes failed HTTP requests. A lost
+            # response is different: its hold survives the ordinary ten-minute TTL.
+            confirmed_no_charge = (
+                confirmed_cost_minor == 0
+                or error is None
+                or (
+                    isinstance(error, CaseTrackingProviderError)
+                    and (
+                        (error.http_status_code is not None and error.http_status_code >= 400)
+                        or error.response_class == "window_closed"
+                    )
+                )
+            )
+            release_provider_spend_in_session(
+                session,
+                reservation_id=attempt.reservation_id,
+                confirmed_no_charge=confirmed_no_charge,
+            )
+            metadata["spend_outcome"] = (
+                "not_charged" if confirmed_no_charge else "pending_confirmation"
+            )
+        operation.metadata_json = {**metadata, "spend_finalized": True}
+        operation.metadata_json = {**operation.metadata_json, "confirmed_cost_minor": paid_minor}
+    session.commit()
+
+
+def _cancel_provider_attempt(session: Session, attempt: _ProviderAttempt) -> None:
+    session.rollback()
+    try:
+        operation = _lock_provider_attempt(session, attempt)
+    except CaseTrackingProviderError:
+        session.rollback()
+        return
+    operation.status = "cancelled"
+    operation.response_class = "scope_changed"
+    operation.completed_at = _now()
+    operation.next_attempt_at = None
+    session.commit()
+
+
+def _recover_expired_provider_attempts(session: Session, *, company_id: str) -> int:
+    _lock_provider_company(session, company_id)
+    now = _now()
+    expired = list(
+        session.scalars(
+            select(TrackedCaseProviderOperation)
+            .where(
+                TrackedCaseProviderOperation.company_id == company_id,
+                TrackedCaseProviderOperation.status == "running",
+                or_(
+                    TrackedCaseProviderOperation.lease_expires_at <= now,
+                    and_(
+                        TrackedCaseProviderOperation.lease_expires_at.is_(None),
+                        TrackedCaseProviderOperation.started_at <= now - _PROVIDER_LEASE,
+                    ),
+                ),
+            )
+            .order_by(
+                TrackedCaseProviderOperation.lease_expires_at, TrackedCaseProviderOperation.id
+            )
+            .limit(50)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    )
+    for operation in expired:
+        operation.status = "failed"
+        operation.response_class = "timeout"
+        operation.completed_at = now
+        operation.next_attempt_at = now + (
+            _TRANSIENT_RECOVERY_COOLDOWN
+            if operation.attempts >= operation.max_attempts
+            else timedelta(0)
+        )
+        operation.error_redacted = "Provider worker lease expired; automatic recovery is scheduled."
+        operation.metadata_json = {**dict(operation.metadata_json or {}), "lease_expired": True}
+        tracked_case = session.get(TrackedCase, operation.tracked_case_id)
+        if tracked_case is not None and tracked_case.company_id == company_id:
+            tracked_case.next_provider_refresh_at = operation.next_attempt_at
+            tracked_case.last_response_class = "timeout"
+            tracked_case.last_error = operation.error_redacted
+    session.flush()
+    orphan_runs = list(
+        session.scalars(
+            select(TrackedCasePollRun)
+            .where(
+                TrackedCasePollRun.company_id == company_id,
+                TrackedCasePollRun.status == "running",
+                TrackedCasePollRun.started_at <= now - _PROVIDER_LEASE,
+                ~select(TrackedCaseProviderOperation.id)
+                .where(
+                    TrackedCaseProviderOperation.poll_run_id == TrackedCasePollRun.id,
+                    TrackedCaseProviderOperation.status == "running",
+                )
+                .exists(),
+            )
+            .order_by(TrackedCasePollRun.started_at, TrackedCasePollRun.id)
+            .limit(50)
+            .with_for_update()
+        )
+    )
+    for run in orphan_runs:
+        run.status = "interrupted"
+        run.completed_at = now
+        # Per-case commits survive, but a worker may disappear before persisting
+        # aggregate counters. Keep their last observation explicitly incomplete.
+        run.metadata_json = {
+            **dict(run.metadata_json or {}),
+            "worker_interrupted": True,
+            "counters_complete": False,
+            "operation_recovery": "automatic",
+        }
+    session.flush()
+    return len(expired)
 
 
 def _snapshot_payload(snapshot: ProviderCaseSnapshot) -> dict[str, object]:
@@ -785,6 +1217,20 @@ def _fail_operation(
     operation.response_class = response_class
     operation.error_redacted = error
     operation.completed_at = _now()
+    if response_class == "provider_pending":
+        operation.next_attempt_at = operation.completed_at + timedelta(minutes=2)
+        tracked_case.next_provider_refresh_at = operation.next_attempt_at
+        tracked_case.last_response_class = response_class
+        tracked_case.last_error = None
+        tracked_case.provider_freshness_status = (
+            "stale" if tracked_case.last_provider_successful_at else "never_succeeded"
+        )
+        operation.metadata_json = {
+            **dict(operation.metadata_json or {}),
+            "automatic_recovery_scheduled": True,
+        }
+        session.add_all([operation, tracked_case])
+        return
     exhausted = operation.attempts >= operation.max_attempts
     transient_failure = response_class in _TRANSIENT_PROVIDER_RESPONSE_CLASSES
     operation.status = "quarantined" if exhausted and not transient_failure else "failed"
@@ -902,6 +1348,8 @@ def _tracked_case_identity_key(
 def _verified_sync_snapshot_identity(
     tracked_case: TrackedCase,
     snapshots: list[ProviderCaseSnapshot],
+    *,
+    identities: tuple[HearingIdentity, ...] = (),
 ) -> ProviderCaseSnapshot:
     """Return exactly one identity-verified provider result or fail closed."""
 
@@ -918,27 +1366,37 @@ def _verified_sync_snapshot_identity(
                 "The provider CNR did not match the tracked matter.",
                 response_class="match_validation_failed",
             )
+        if identities and not all(
+            identity_matches(identity, _snapshot_matching_identity(snapshot))
+            for identity in identities
+            if reliable_identity(identity)
+        ):
+            raise CaseTrackingProviderError(
+                "The current Matter identity differs from the provider case.",
+                response_class="match_validation_failed",
+            )
         return snapshot
 
-    expected_case = normalize_case_number(tracked_case.case_number)
-    expected_court_code = _normalize_court_code(tracked_case.court_code)
-    expected_court_name = _normalize_court_name(tracked_case.court_name)
-    if not expected_case or not (expected_court_code or expected_court_name):
+    expected = identities or (
+        HearingIdentity(
+            case_number=tracked_case.case_number,
+            court_code=tracked_case.court_code,
+            court_name=tracked_case.court_name,
+        ),
+    )
+    if any(not reliable_identity(identity) for identity in expected):
         raise CaseTrackingProviderError(
             "The tracked matter lacks a reliable case-number and court identity.",
             response_class="match_validation_failed",
         )
     verified: list[ProviderCaseSnapshot] = []
+    if len(snapshots) > MAX_MATCH_CANDIDATES:
+        raise CaseTrackingProviderError(
+            "The bounded match inventory is incomplete.", response_class="ambiguous_match"
+        )
     for snapshot in snapshots:
-        if normalize_case_number(snapshot.case_number) != expected_case:
-            continue
-        candidate_code = _normalize_court_code(snapshot.court_code)
-        candidate_name = _normalize_court_name(snapshot.court_name)
-        if expected_court_code:
-            court_matches = candidate_code == expected_court_code
-        else:
-            court_matches = candidate_name == expected_court_name
-        if court_matches:
+        candidate = _snapshot_matching_identity(snapshot)
+        if all(identity_matches(identity, candidate) for identity in expected):
             verified.append(snapshot)
     if not snapshots:
         response_class = "case_not_found"
@@ -951,6 +1409,16 @@ def _verified_sync_snapshot_identity(
     raise CaseTrackingProviderError(
         "The provider search did not produce one verified tracked-matter match.",
         response_class=response_class,
+    )
+
+
+def _snapshot_matching_identity(snapshot: ProviderCaseSnapshot) -> HearingIdentity:
+    return snapshot.matching_identity or HearingIdentity(
+        cnr=snapshot.cnr_number,
+        case_number=snapshot.case_number,
+        court_code=snapshot.court_code,
+        court_name=snapshot.court_name,
+        parties=tuple(snapshot.party_names),
     )
 
 
@@ -993,9 +1461,11 @@ def _resolved_next_hearing_snapshot(
 def _validated_sync_snapshot(
     tracked_case: TrackedCase,
     snapshots: list[ProviderCaseSnapshot],
+    *,
+    identities: tuple[HearingIdentity, ...] = (),
 ) -> ProviderCaseSnapshot:
     return _resolved_next_hearing_snapshot(
-        _verified_sync_snapshot_identity(tracked_case, snapshots)
+        _verified_sync_snapshot_identity(tracked_case, snapshots, identities=identities)
     )
 
 
@@ -1009,6 +1479,18 @@ def provider_status_response(
     context: SessionContext,
 ) -> CaseTrackingProviderStatusResponse:
     enabled, provider, configured, reason = provider_status()
+    from caseops_api.services.paid_provider_safety import scheduled_paid_provider_tenant_reason
+
+    settings = get_settings()
+    scheduled_reason = (
+        "tracking_disabled"
+        if not enabled
+        else "provider_not_configured"
+        if not configured
+        else scheduled_paid_provider_tenant_reason(
+            context, base_url=settings.ecourtsindia_api_base_url
+        )
+    )
     spend = next(
         row
         for row in provider_spend_rows(session, company=context.company)
@@ -1019,7 +1501,13 @@ def provider_status_response(
         provider=provider,
         configured=configured,
         reason=reason,
+        scheduled_sync_eligible=scheduled_reason is None,
+        scheduled_sync_disabled_reason=scheduled_reason,
+        scheduled_sync_local_time=settings.case_tracking_daily_window_start,
+        scheduled_sync_window_end_local_time=settings.case_tracking_daily_window_end,
+        scheduled_sync_timezone=settings.case_tracking_daily_timezone,
         workspace_monthly_spend_minor=spend.budget_spent_minor,
+        workspace_monthly_reserved_minor=spend.reserved_minor,
         workspace_monthly_limit_minor=spend.monthly_limit_minor,
         workspace_monthly_remaining_minor=spend.remaining_minor,
         workspace_monthly_limit_unlimited=spend.unlimited,
@@ -1125,6 +1613,11 @@ def search_cases(
         court_name=payload.court_name,
     )
     reservation_id: str | None = None
+    company_id, membership_id, token_issued_at = (
+        context.company.id,
+        context.membership.id,
+        context.token_issued_at,
+    )
     try:
         active_provider = provider or get_case_tracking_provider()
         from caseops_api.services.production_safety import assert_case_tracking_supported
@@ -1146,32 +1639,65 @@ def search_cases(
             provider=active_provider.provider_key,
             court_code=payload.court_code,
             court_name=payload.court_name,
+            operation="detail" if payload.cnr_number else "search",
         )
-        reservation_id = reserve_provider_spend(
+        reservation_id = reserve_provider_spend_in_session(
+            session,
             company_id=context.company.id,
             actor_membership_id=context.membership.id,
             provider_key=active_provider.provider_key,
             operation_key="case_tracking_search",
             amount_minor=cost_minor,
         )
+        dispatch_provider_spend(session, reservation_id=reservation_id, company_id=company_id)
+        session.commit()
         snapshots = active_provider.search_cases(query=query)
     except (CaseTrackingProviderUnavailable, CaseTrackingProviderError, HTTPException) as exc:
-        release_provider_spend(reservation_id=reservation_id)
+        release_provider_spend_in_session(
+            session,
+            reservation_id=reservation_id,
+            confirmed_no_charge=isinstance(exc, CaseTrackingProviderError)
+            and exc.http_status_code is not None
+            and exc.http_status_code >= 400,
+        )
+        session.commit()
         if isinstance(exc, HTTPException):
             raise exc
         raise _safe_provider_error(exc) from exc
-    _record_case_tracking_provider_usage(
-        session,
+    _lock_provider_company(session, company_id)
+    if snapshots:
+        _record_case_tracking_provider_usage(
+            session,
+            context=context,
+            provider_key=active_provider.provider_key,
+            usage_type="case_tracking_search",
+            feature_key="case_tracking_search",
+            display_label="eCourts case search",
+            cost_minor=cost_minor,
+            source_type="case_tracking_provider",
+            source_id=active_provider.provider_key,
+        )
+        settle_provider_spend(session, reservation_id=reservation_id)
+    else:
+        release_provider_spend_in_session(
+            session, reservation_id=reservation_id, confirmed_no_charge=True
+        )
+    session.commit()
+    from caseops_api.services.capabilities import membership_has_capability
+    from caseops_api.services.identity import get_session_context
+
+    session.expire_all()
+    context = get_session_context(session, membership_id, token_issued_at=token_issued_at)
+    if context.company.id != company_id or not membership_has_capability(
+        session, context.membership, "authorities:search"
+    ):
+        raise HTTPException(status_code=403, detail="Case tracking access has changed.")
+    assert_paid_provider_call_allowed(
         context=context,
-        provider_key=active_provider.provider_key,
-        usage_type="case_tracking_search",
-        feature_key="case_tracking_search",
-        display_label="eCourts case search",
-        cost_minor=cost_minor,
-        source_type="case_tracking_provider",
-        source_id=active_provider.provider_key,
+        provider=active_provider.provider_key,
+        base_url=getattr(active_provider, "base_url", None),
+        transport_is_mocked=getattr(active_provider, "transport", None) is not None,
     )
-    settle_provider_spend(session, reservation_id=reservation_id)
     record_from_context(
         session,
         context,
@@ -1214,7 +1740,9 @@ def _matter_or_none(
     return matter
 
 
-def _tracked_case_record(session: Session, case: TrackedCase) -> TrackedCaseRecord:
+def _tracked_case_record(
+    session: Session, case: TrackedCase, *, matching_matter: Matter | None = None
+) -> TrackedCaseRecord:
     enabled, _provider, configured, provider_reason = provider_status()
     cost_minor, currency = _manual_refresh_cost(session, case)
     freshness = case.provider_freshness_status or "never_succeeded"
@@ -1234,8 +1762,19 @@ def _tracked_case_record(session: Session, case: TrackedCase) -> TrackedCaseReco
     provider_health_red = (
         case.last_response_class in _RED_PROVIDER_RESPONSE_CLASSES and not transient_failure
     )
+    identity_ready = reliable_identity(
+        matter_identity(matching_matter)
+        if matching_matter is not None and automatic_matter_link(case)
+        else HearingIdentity(
+            cnr=case.cnr_number,
+            case_number=case.case_number,
+            court_code=case.court_code,
+            court_name=case.court_name,
+        )
+    )
     manual_allowed = bool(
         enabled
+        and identity_ready
         and configured
         and not effective_quarantine
         and not provider_health_red
@@ -1244,6 +1783,8 @@ def _tracked_case_record(session: Session, case: TrackedCase) -> TrackedCaseReco
     disabled_reason = None
     if effective_quarantine:
         disabled_reason = "Provider work is quarantined; an administrator must review it."
+    elif case.last_response_class == "provider_pending" and not transient_recovery_due:
+        disabled_reason = "The court refresh is queued. Automatic status recovery is scheduled."
     elif transient_failure and not transient_recovery_due:
         recovery_at = _aware_utc(case.next_provider_refresh_at)
         disabled_reason = (
@@ -1257,6 +1798,8 @@ def _tracked_case_record(session: Session, case: TrackedCase) -> TrackedCaseReco
         )
     elif not enabled or not configured:
         disabled_reason = provider_reason or "Case tracking provider health is red."
+    elif not identity_ready:
+        disabled_reason = IDENTITY_REQUIRED
     return TrackedCaseRecord(
         id=case.id,
         provider=case.provider,
@@ -1315,7 +1858,9 @@ def _bookmark_record(session: Session, bookmark: TrackedCaseBookmark) -> CaseTra
         created_at=bookmark.created_at,
         updated_at=bookmark.updated_at,
         archived_at=bookmark.archived_at,
-        tracked_case=_tracked_case_record(session, bookmark.tracked_case),
+        tracked_case=_tracked_case_record(
+            session, bookmark.tracked_case, matching_matter=bookmark.matter
+        ),
         update_count=int(update_count or 0),
     )
 
@@ -1560,11 +2105,11 @@ def auto_link_matter_case_tracking(
 
     normalized_cnr = normalize_cnr(matter.cnr_number)
     cnr_number = matter.cnr_number if normalized_cnr and len(normalized_cnr) >= 8 else None
-    case_number = matter.case_number if normalize_case_number(matter.case_number) else None
-    if not cnr_number and not case_number:
+    case_number = matter.case_number or matter.filing_number
+    if not reliable_identity(matter_identity(matter)):
         return MatterCaseTrackingAutoLinkResult(
             status="skipped",
-            reason="missing_case_identity",
+            reason=IDENTITY_REQUIRED,
         )
 
     party_names = [
@@ -1664,7 +2209,9 @@ def list_bookmarks(
     rows = list(
         session.scalars(
             select(TrackedCaseBookmark)
-            .options(joinedload(TrackedCaseBookmark.tracked_case))
+            .options(
+                joinedload(TrackedCaseBookmark.tracked_case), joinedload(TrackedCaseBookmark.matter)
+            )
             .where(
                 TrackedCaseBookmark.company_id == context.company.id,
                 TrackedCaseBookmark.created_by_membership_id == context.membership.id,
@@ -1742,6 +2289,8 @@ def _summary_for_update(
     title: str,
     provider: LLMProvider | None = None,
 ) -> tuple[str | None, dict[str, object] | None, str | None]:
+    # Snapshot application owns lifecycle locks. Only a terms-authorized
+    # provider fallback belongs here; generation is an outbox consumer effect.
     source_text = event.text if event else None
     provider_summary_terms_permitted = bool(
         event and event.provider_summary and event.metadata.get("summary_terms_permitted") is True
@@ -1758,70 +2307,10 @@ def _summary_for_update(
         "risks_or_unknowns": ["Provider data may be incomplete or delayed."],
         "source_reference": source_url,
         "confidence": "medium" if provider_summary or source_text else "low",
-        "summary_source": "provider" if provider_summary and not source_text else "caseops",
+        "summary_source": "provider" if provider_summary else "caseops",
         "review_framing": "Source-backed case update summary for lawyer review.",
     }
-    if not source_text and not provider_summary:
-        return str(fallback["concise_summary"]), fallback, None
-    messages = [
-        LLMMessage(
-            role="system",
-            content=(
-                "Produce a source-backed case update summary for lawyer review. "
-                "Do not infer outcomes beyond the order or judgment text."
-            ),
-        ),
-        LLMMessage(
-            role="user",
-            content=(
-                "Respond with json matching this schema: "
-                '{"concise_summary": str, "procedural_impact": str, '
-                '"next_hearing_or_action_signals": [str], '
-                '"risks_or_unknowns": [str], "source_reference": str|null, '
-                '"confidence": "low|medium|high", "summary_source": str, '
-                '"review_framing": str}.\n'
-                f"CASE_TITLE: {tracked_case.case_title}\n"
-                f"UPDATE_TYPE: {update_type}\n"
-                f"TITLE: {title}\n"
-                f"SOURCE_URL: {source_url}\n"
-                f"PROVIDER_SUMMARY: {provider_summary}\n"
-                f"TEXT: {(source_text or '')[:4000]}"
-            ),
-        ),
-    ]
-    llm = provider or build_provider(purpose="case_tracking:update_summary")
-    prompt_hash = hashlib.sha256(
-        "\n".join(f"{message.role}:{message.content}" for message in messages).encode("utf-8")
-    ).hexdigest()
-    try:
-        payload, completion = generate_structured(
-            llm,
-            session=session,
-            schema=CaseUpdateSummaryPayload,
-            messages=messages,
-            context=LLMCallContext(purpose="case_tracking:update_summary"),
-            temperature=get_settings().llm_temperature,
-            max_tokens=1200,
-        )
-    except LLMProviderError:
-        return str(fallback["concise_summary"]), fallback, None
-    model_run = ModelRun(
-        company_id=tracked_case.company_id,
-        matter_id=None,
-        actor_membership_id=None,
-        purpose="case_tracking:update_summary",
-        provider=completion.provider,
-        model=completion.model,
-        prompt_hash=prompt_hash,
-        prompt_tokens=completion.prompt_tokens,
-        completion_tokens=completion.completion_tokens,
-        latency_ms=completion.latency_ms,
-        status="ok",
-    )
-    session.add(model_run)
-    session.flush()
-    summary = payload.model_dump()
-    return summary["concise_summary"], summary, model_run.id
+    return str(fallback["concise_summary"]), fallback, None
 
 
 def _update_record(
@@ -1954,6 +2443,8 @@ def _create_update(
     hearing_date=None,
     provider: LLMProvider | None = None,
 ) -> TrackedCaseUpdate | None:
+    from caseops_api.services.case_tracking_summary import enqueue_update_summary
+
     existing = session.scalar(
         select(TrackedCaseUpdate).where(
             TrackedCaseUpdate.tracked_case_id == tracked_case.id,
@@ -1989,6 +2480,17 @@ def _create_update(
                 },
             )
             session.add(existing)
+            # A complete backfill is a new immutable source request. Any older
+            # in-flight result is fenced by its pinned source hash.
+            existing.model_run_id = None
+            existing.summary, existing.ai_summary_json, _ = _summary_for_update(
+                session, tracked_case=tracked_case, update_type=update_type,
+                event=event, title=existing.title,
+            )
+        if existing.source_text and existing.model_run_id is None:
+            enqueue_update_summary(
+                session, context=context, tracked_case=tracked_case, update=existing,
+            )
         return None
     summary, ai_summary, model_run_id = _summary_for_update(
         session,
@@ -2021,6 +2523,7 @@ def _create_update(
     )
     session.add(update)
     session.flush()
+    enqueue_update_summary(session, context=context, tracked_case=tracked_case, update=update)
     record_from_context(
         session,
         context,
@@ -2068,6 +2571,7 @@ def apply_snapshot(
                 .where(
                     Matter.company_id == context.company.id,
                     Matter.id.in_(sorted(set(linked_matter_ids))),
+                    visible_matters_filter(session, context=context),
                 )
                 .order_by(Matter.id)
                 .with_for_update(of=Matter)
@@ -2077,6 +2581,17 @@ def apply_snapshot(
     operational_linked_matters = [
         matter for matter in locked_linked_matters if matter_is_operational(matter)
     ]
+    # Convergence may add canonical bookmarks after the transport-scope check.
+    # Their current source identifiers must also agree before any date is written.
+    for matter in operational_linked_matters:
+        identity = matter_identity(matter)
+        if reliable_identity(identity) and not identity_matches(
+            identity, _snapshot_matching_identity(snapshot)
+        ):
+            raise CaseTrackingProviderError(
+                "A linked Matter no longer identifies this provider case.",
+                response_class="match_validation_failed",
+            )
     if linked_matter_ids and not has_unlinked_bookmark:
         if not operational_linked_matters:
             record_from_context(
@@ -2236,6 +2751,8 @@ def refresh_bookmark(
     enforce_manual_limit: bool = True,
 ) -> CaseTrackingRefreshResponse:
     bookmark = _get_bookmark(session, context=context, bookmark_id=bookmark_id)
+    if bookmark.is_archived:
+        raise HTTPException(status_code=409, detail="Cannot refresh an archived bookmark.")
     tracked_case = bookmark.tracked_case
     transient_failure = _is_transient_provider_failure(tracked_case)
     if tracked_case.quarantined_at is not None and not transient_failure:
@@ -2282,6 +2799,16 @@ def refresh_bookmark(
             context=context,
             tracked_case_id=tracked_case.id,
         )
+    _refresh_automatic_source_identity(session, context=context, tracked_case=tracked_case)
+    if not reliable_identity(
+        HearingIdentity(
+            cnr=tracked_case.cnr_number,
+            case_number=tracked_case.case_number,
+            court_code=tracked_case.court_code,
+            court_name=tracked_case.court_name,
+        )
+    ):
+        raise HTTPException(409, IDENTITY_REQUIRED)
     reservation_id: str | None = None
     try:
         active_provider = provider or get_case_tracking_provider()
@@ -2300,7 +2827,8 @@ def refresh_bookmark(
             transport_is_mocked=getattr(active_provider, "transport", None) is not None,
         )
         cost_minor, _currency = _manual_refresh_cost(session, tracked_case)
-        reservation_id = reserve_provider_spend(
+        reservation_id = reserve_provider_spend_in_session(
+            session,
             company_id=context.company.id,
             actor_membership_id=context.membership.id,
             provider_key=active_provider.provider_key,
@@ -2314,6 +2842,7 @@ def refresh_bookmark(
         raise _safe_provider_error(exc) from exc
     tracked_case.last_provider_refresh_requested_at = _now()
     try:
+        _recover_expired_provider_attempts(session, company_id=context.company.id)
         operation = _new_operation(
             session,
             context=context,
@@ -2323,35 +2852,74 @@ def refresh_bookmark(
         )
     except CaseTrackingProviderError as exc:
         session.rollback()
-        release_provider_spend(reservation_id=reservation_id)
         raise _safe_provider_error(exc) from exc
+    attempt = _capture_provider_attempt(
+        session,
+        context=context,
+        tracked_case=tracked_case,
+        operation=operation,
+        reservation_id=reservation_id,
+    )
+    session.commit()
     try:
-        if tracked_case.cnr_number:
-            snapshot = _validated_sync_snapshot(
-                tracked_case,
-                [active_provider.get_case_by_cnr(cnr=tracked_case.cnr_number)],
-            )
+        if attempt.cnr_number:
+            results = [active_provider.get_case_by_cnr(cnr=attempt.cnr_number)]
         else:
             results = active_provider.search_cases(
                 query=CaseSearchQuery(
-                    case_number=tracked_case.case_number,
-                    court_code=tracked_case.court_code,
-                    court_name=tracked_case.court_name,
+                    case_number=attempt.search_case_number,
+                    court_code=attempt.court_code,
+                    court_name=attempt.court_name,
+                    require_complete_results=True,
                 )
             )
-            snapshot = _validated_sync_snapshot(tracked_case, results)
-    except (CaseTrackingProviderUnavailable, CaseTrackingProviderError, HTTPException) as exc:
-        release_provider_spend_in_session(session, reservation_id=reservation_id)
-        _fail_operation(
-            session,
-            context=context,
-            tracked_case=tracked_case,
-            operation=operation,
-            exc=exc,
-        )
-        session.commit()
+    except Exception as exc:
+        _settle_provider_attempt(session, attempt, context=context, succeeded=False, error=exc)
+        try:
+            context, tracked_case, operation = _resume_provider_attempt(session, attempt)
+            _fail_operation(
+                session, context=context, tracked_case=tracked_case, operation=operation, exc=exc
+            )
+            session.commit()
+        except HTTPException:
+            _cancel_provider_attempt(session, attempt)
         if isinstance(exc, HTTPException):
             raise exc
+        raise _safe_provider_error(exc) from exc
+    _settle_provider_attempt(session, attempt, context=context, succeeded=bool(results))
+    try:
+        context, tracked_case, operation = _resume_provider_attempt(session, attempt)
+        bookmark = _get_bookmark(session, context=context, bookmark_id=bookmark_id)
+        if bookmark.is_archived or bookmark.tracked_case_id != attempt.tracked_case_id:
+            raise HTTPException(
+                status_code=409, detail="Bookmark scope changed during provider work."
+            )
+        if bookmark.matter_id:
+            matter = _matter_or_none(session, context=context, matter_id=bookmark.matter_id)
+            assert matter is not None
+            require_operational_matter(session, matter=matter, operation="refresh case tracking")
+        assert_paid_provider_call_allowed(
+            context=context,
+            provider=active_provider.provider_key,
+            base_url=getattr(active_provider, "base_url", None),
+            transport_is_mocked=getattr(active_provider, "transport", None) is not None,
+        )
+        snapshot = _validated_sync_snapshot(
+            tracked_case,
+            results,
+            identities=tuple(scope.identity for scope in attempt.hearing_scopes),
+        )
+    except HTTPException:
+        _cancel_provider_attempt(session, attempt)
+        raise
+    except CaseTrackingProviderError as exc:
+        if _response_class(exc) == "concurrent_refresh":
+            session.rollback()
+            raise _safe_provider_error(exc) from exc
+        _fail_operation(
+            session, context=context, tracked_case=tracked_case, operation=operation, exc=exc
+        )
+        session.commit()
         raise _safe_provider_error(exc) from exc
     original_tracked_case = tracked_case
     try:
@@ -2411,21 +2979,6 @@ def refresh_bookmark(
             "currency": operation.currency,
         },
     )
-    _record_case_tracking_provider_usage(
-        session,
-        context=context,
-        provider_key=active_provider.provider_key,
-        usage_type="case_refresh",
-        feature_key=(
-            "case_tracking_manual_refresh" if enforce_manual_limit else "case_tracking_refresh"
-        ),
-        display_label=("Manual case refresh" if enforce_manual_limit else "Case tracking refresh"),
-        cost_minor=cost_minor,
-        tracked_case_id=tracked_case.id,
-        source_type="tracked_case",
-        source_id=tracked_case.id,
-    )
-    settle_provider_spend(session, reservation_id=reservation_id)
     session.commit()
     return CaseTrackingRefreshResponse(
         bookmark=_bookmark_record(session, bookmark),
@@ -3165,7 +3718,7 @@ def download_case_tracking_source(
     context: SessionContext,
     bookmark_id: str,
     update_id: str,
-    transport: httpx.BaseTransport | None = None,
+    transport: httpx.AsyncBaseTransport | None = None,
 ) -> CaseTrackingSourceDownload:
     bookmark = _get_bookmark(session, context=context, bookmark_id=bookmark_id)
     update = _get_update_for_bookmark(
@@ -3241,31 +3794,77 @@ def download_case_tracking_source(
             filename=_safe_markdown_filename(update),
             source_format="provider-markdown",
         )
-    download_cost_minor, _currency = _manual_refresh_cost(session, bookmark.tracked_case)
-    reservation_id = reserve_provider_spend(
+    company_id, membership_id, token_issued_at = (
+        context.company.id,
+        context.membership.id,
+        context.token_issued_at,
+    )
+    original_source = (
+        bookmark.tracked_case_id,
+        bookmark.matter_id,
+        bookmark.created_by_membership_id,
+        update.source_url,
+        update.source_text_sha256,
+        update.current_hash,
+    )
+
+    def reload_authorized_source() -> tuple[SessionContext, TrackedCaseBookmark, TrackedCaseUpdate]:
+        from caseops_api.services.capabilities import membership_has_capability
+        from caseops_api.services.identity import get_session_context
+
+        session.expire_all()
+        current = get_session_context(session, membership_id, token_issued_at=token_issued_at)
+        if current.company.id != company_id or not membership_has_capability(
+            session, current.membership, "authorities:search"
+        ):
+            raise HTTPException(status_code=403, detail="Case tracking access has changed.")
+        current_bookmark = _get_bookmark(session, context=current, bookmark_id=bookmark_id)
+        current_update = _get_update_for_bookmark(
+            session, context=current, bookmark=current_bookmark, update_id=update_id
+        )
+        if (
+            current_bookmark.tracked_case_id,
+            current_bookmark.matter_id,
+            current_bookmark.created_by_membership_id,
+            current_update.source_url,
+            current_update.source_text_sha256,
+            current_update.current_hash,
+        ) != original_source:
+            raise HTTPException(status_code=409, detail="The source changed during download.")
+        return current, current_bookmark, current_update
+
+    download_cost_minor, _currency = _case_tracking_call_cost(
+        session,
+        provider=provider,
+        court_code=bookmark.tracked_case.court_code,
+        court_name=bookmark.tracked_case.court_name,
+        operation="source_download",
+    )
+    reservation_id = reserve_provider_spend_in_session(
+        session,
         company_id=context.company.id,
         actor_membership_id=context.membership.id,
         provider_key=provider,
         operation_key="case_tracking_source_download",
         amount_minor=download_cost_minor,
     )
+    dispatch_provider_spend(session, reservation_id=reservation_id, company_id=company_id)
+    session.commit()
     try:
-        with httpx.Client(
-            timeout=30,
-            follow_redirects=True,
+        response = download_provider_source(
+            url=source_url,
+            token=settings.ecourtsindia_api_token,
             transport=transport,
-        ) as client:
-            response = request_with_retries(
-                "GET",
-                source_url,
-                client=client,
-                headers={
-                    "Authorization": f"Bearer {settings.ecourtsindia_api_token}",
-                    "Accept": "application/pdf,application/octet-stream,*/*",
-                },
-            )
+        )
     except httpx.HTTPError as exc:
-        release_provider_spend(reservation_id=reservation_id)
+        release_provider_spend_in_session(
+            session,
+            reservation_id=reservation_id,
+            confirmed_no_charge=isinstance(exc, httpx.HTTPStatusError)
+            and exc.response.status_code >= 400,
+        )
+        session.commit()
+        context, bookmark, update = reload_authorized_source()
         if _provider_payment_required(exc):
             cached_source = _verified_cached_source(update)
             if cached_source is not None:
@@ -3307,7 +3906,7 @@ def download_case_tracking_source(
         ) from exc
     content_type = response.headers.get("content-type") or "application/octet-stream"
     if "application/json" in content_type.lower():
-        release_provider_spend(reservation_id=reservation_id)
+        # An HTTP 200 error-shaped payload does not prove the call was free.
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Case tracking provider returned an error instead of a source document.",
@@ -3325,6 +3924,8 @@ def download_case_tracking_source(
         source_id=update.id,
     )
     settle_provider_spend(session, reservation_id=reservation_id)
+    session.commit()
+    context, bookmark, update = reload_authorized_source()
     record_from_context(
         session,
         context,
@@ -3404,42 +4005,83 @@ def backfill_existing_matter_case_tracking(
     context: SessionContext,
     provider_key: str,
 ) -> MatterCaseTrackingBackfillResult:
-    """Link a bounded batch of older eligible matters without provider calls.
-
-    The query plan is constant in the number of candidates: one candidate
-    query, one support-matrix query, one existing-case query, plus the billing
-    capacity lookup. Provider network calls remain owned by the poll phase.
-    """
+    """Advance a bounded cyclic scan without letting rejected rows starve it."""
 
     settings = get_settings()
-    active_link_exists = (
-        select(TrackedCaseBookmark.id)
-        .where(
-            TrackedCaseBookmark.company_id == context.company.id,
-            TrackedCaseBookmark.matter_id == Matter.id,
-            TrackedCaseBookmark.is_archived.is_(False),
-        )
-        .exists()
+    if session.get_bind().dialect.name == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert
+    else:
+        from sqlalchemy.dialects.sqlite import insert
+    session.execute(
+        insert(TrackedCaseBackfillCursor)
+        .values(company_id=context.company.id, provider=provider_key, updated_at=_now())
+        .on_conflict_do_nothing(index_elements=["company_id", "provider"])
     )
+    cursor = session.scalar(
+        select(TrackedCaseBackfillCursor)
+        .where(
+            TrackedCaseBackfillCursor.company_id == context.company.id,
+            TrackedCaseBackfillCursor.provider == provider_key,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    assert cursor is not None
+    statement = (
+        select(Matter.id, Matter.created_at)
+        .where(Matter.company_id == context.company.id)
+        .order_by(Matter.created_at, Matter.id)
+        .limit(settings.case_tracking_auto_link_limit)
+    )
+    page = list(
+        session.execute(
+            statement.where(
+                tuple_(Matter.created_at, Matter.id)
+                > tuple_(cursor.last_created_at, cursor.last_matter_id)
+            )
+            if cursor.last_matter_id is not None
+            else statement
+        )
+    )
+    if not page and cursor.last_matter_id is not None:
+        page = list(session.execute(statement))
+    cursor.last_created_at = (
+        page[-1].created_at if len(page) == settings.case_tracking_auto_link_limit else None
+    )
+    cursor.last_matter_id = (
+        page[-1].id if len(page) == settings.case_tracking_auto_link_limit else None
+    )
+    cursor.updated_at = _now()
+    if not page:
+        return MatterCaseTrackingBackfillResult()
+    # Lock only this bounded page, in the same deterministic parent order used
+    # by other bulk writers, then discover current links after those locks.
     candidates = list(
         session.scalars(
             select(Matter)
-            .where(
-                Matter.company_id == context.company.id,
-                Matter.is_active.is_(True),
-                Matter.status.notin_(("closed", "disposed")),
-                or_(
-                    Matter.cnr_number.is_not(None),
-                    and_(Matter.case_number.is_not(None), Matter.court_name.is_not(None)),
-                ),
-                ~active_link_exists,
-            )
-            .order_by(Matter.created_at.asc(), Matter.id.asc())
-            .limit(settings.case_tracking_auto_link_limit)
+            .where(Matter.company_id == context.company.id, Matter.id.in_([row.id for row in page]))
+            .order_by(Matter.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
         )
     )
     if not candidates:
-        return MatterCaseTrackingBackfillResult()
+        return MatterCaseTrackingBackfillResult(evaluated_count=len(page), skipped_count=len(page))
+    linked_matter_ids = set(
+        session.scalars(
+            select(Matter.id).where(
+                Matter.company_id == context.company.id,
+                Matter.id.in_([matter.id for matter in candidates]),
+                select(TrackedCaseBookmark.id)
+                .where(
+                    TrackedCaseBookmark.company_id == context.company.id,
+                    TrackedCaseBookmark.matter_id == Matter.id,
+                    TrackedCaseBookmark.is_archived.is_(False),
+                )
+                .exists(),
+            )
+        )
+    )
 
     support_rows = list(
         session.scalars(
@@ -3450,13 +4092,16 @@ def backfill_existing_matter_case_tracking(
         )
     )
     prepared: list[tuple[Matter, str, str | None, str | None]] = []
-    skipped = 0
+    skipped = len(page) - len(candidates)
     blocked = 0
     for matter in candidates:
+        if not matter_is_operational(matter) or matter.id in linked_matter_ids:
+            skipped += 1
+            continue
         normalized_cnr = normalize_cnr(matter.cnr_number)
         cnr = matter.cnr_number if normalized_cnr and len(normalized_cnr) >= 8 else None
-        case_number = matter.case_number if normalize_case_number(matter.case_number) else None
-        if not cnr and not (case_number and _normalize_court_name(matter.court_name)):
+        case_number = matter.case_number or matter.filing_number
+        if not reliable_identity(matter_identity(matter)):
             skipped += 1
             continue
         support_row = _support_row_for_matter(support_rows, court_name=matter.court_name)
@@ -3476,7 +4121,7 @@ def backfill_existing_matter_case_tracking(
         prepared.append((matter, identity_key, cnr, case_number))
     if not prepared:
         return MatterCaseTrackingBackfillResult(
-            evaluated_count=len(candidates),
+            evaluated_count=len(page),
             skipped_count=skipped,
             blocked_count=blocked,
         )
@@ -3574,7 +4219,7 @@ def backfill_existing_matter_case_tracking(
         linked += 1
     session.flush()
     return MatterCaseTrackingBackfillResult(
-        evaluated_count=len(candidates),
+        evaluated_count=len(page),
         linked_count=linked,
         existing_case_link_count=existing_case_links,
         skipped_count=skipped,
@@ -3740,13 +4385,19 @@ def poll_tracked_cases(
         return runs
 
     for context in contexts:
+        _lock_provider_company(session, context.company.id)
+        recovered_count = _recover_expired_provider_attempts(session, company_id=context.company.id)
         try:
-            backfill = backfill_existing_matter_case_tracking(
-                session,
-                context=context,
-                provider_key=active_provider.provider_key,
-            )
-            backfill_metadata: dict[str, object] = {"auto_link_backfill": backfill.metadata()}
+            with session.begin_nested():
+                backfill = backfill_existing_matter_case_tracking(
+                    session,
+                    context=context,
+                    provider_key=active_provider.provider_key,
+                )
+            backfill_metadata: dict[str, object] = {
+                "auto_link_backfill": backfill.metadata(),
+                "recovered_attempt_count": recovered_count,
+            }
         except Exception as exc:
             backfill_metadata = {
                 "auto_link_backfill": {
@@ -3782,6 +4433,7 @@ def poll_tracked_cases(
                 .options(selectinload(TrackedCase.bookmarks))
                 .where(
                     TrackedCase.company_id == context.company.id,
+                    TrackedCase.provider == active_provider.provider_key,
                     _eligible_tracked_case_predicate(company_id=context.company.id),
                     or_(
                         TrackedCase.quarantined_at.is_(None),
@@ -3798,40 +4450,12 @@ def poll_tracked_cases(
                     TrackedCase.last_provider_checked_at.asc().nullsfirst(),
                     TrackedCase.created_at.asc(),
                 )
-                .limit(settings.case_tracking_poll_limit)
+                .limit(min(50, settings.case_tracking_poll_limit))
             )
         )
-        scheduled_costs = {
-            tracked_case.id: _manual_refresh_cost(session, tracked_case)[0]
-            for tracked_case in cases
-        }
-        try:
-            provider_reservation_id = reserve_provider_spend_in_session(
-                session,
-                company_id=context.company.id,
-                actor_membership_id=None,
-                provider_key=active_provider.provider_key,
-                operation_key="case_tracking_scheduled_poll",
-                amount_minor=sum(scheduled_costs.values()),
-            )
-            session.commit()
-        except HTTPException as exc:
-            detail = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}
-            runs.append(
-                _record_safe_poll_run(
-                    session,
-                    context=context,
-                    status_value="blocked",
-                    reason=str(detail.get("code") or "provider_budget_exhausted"),
-                    window=window,
-                    provider_key=active_provider.provider_key,
-                    force=force,
-                )
-            )
-            continue
         run = TrackedCasePollRun(
             company_id=context.company.id,
-            status="completed",
+            status="running",
             started_at=_now(),
             metadata_json={
                 "provider": active_provider.provider_key,
@@ -3845,131 +4469,180 @@ def poll_tracked_cases(
         )
         session.add(run)
         session.flush()
-        run.metadata_json = {
-            **dict(run.metadata_json or {}),
-            "attempted_count": len(cases),
-        }
-        run.backlog_remaining_count = max(0, total_eligible - len(cases))
-        run.skipped_count = run.backlog_remaining_count
+        run_id = run.id
+        run_metadata = dict(run.metadata_json or {})
+        attempts: list[_ProviderAttempt] = []
+        concurrent_skips = 0
+        blocked_count = 0
+        from caseops_api.services.production_safety import assert_case_tracking_supported
+
+        for tracked_case in cases:
+            try:
+                with session.begin_nested():
+                    _refresh_automatic_source_identity(
+                        session, context=context, tracked_case=tracked_case
+                    )
+                    assert_case_tracking_supported(
+                        session,
+                        provider=active_provider.provider_key,
+                        court_code=tracked_case.court_code,
+                        court_name=tracked_case.court_name,
+                    )
+                    _release_legacy_transient_quarantine(tracked_case)
+                    operation = _new_operation(
+                        session,
+                        context=context,
+                        tracked_case=tracked_case,
+                        operation_type="scheduled",
+                        poll_run_id=run_id,
+                    )
+                    reservation_id = reserve_provider_spend_in_session(
+                        session,
+                        company_id=context.company.id,
+                        actor_membership_id=None,
+                        provider_key=active_provider.provider_key,
+                        operation_key="case_tracking_scheduled_poll",
+                        amount_minor=operation.cost_minor,
+                    )
+                    attempt = _capture_provider_attempt(
+                        session,
+                        context=context,
+                        tracked_case=tracked_case,
+                        operation=operation,
+                        reservation_id=reservation_id,
+                    )
+                attempts.append(attempt)
+            except CaseTrackingProviderError as exc:
+                if _response_class(exc) != "concurrent_refresh":
+                    raise
+                concurrent_skips += 1
+            except HTTPException:
+                blocked_count += 1
+        run.metadata_json = {**run_metadata, "attempted_count": len(attempts)}
+        session.commit()
+
+        # No ORM objects are inspected or mutated until all bounded transport
+        # has returned. Even assigning a mapped counter would autobegin a session.
         bulk_snapshots: dict[str, list[ProviderCaseSnapshot]] = {}
         bulk_errors: dict[str, str] = {}
-        charged_case_count = 0
-        charged_cost_minor = 0
-        cnrs = list(
-            dict.fromkeys(
-                normalized
-                for tracked_case in cases
-                if (normalized := normalize_cnr(tracked_case.cnr_number))
-            )
+        bulk_costs: dict[str, int] = {}
+        bulk_uncertain: set[str] = set()
+        provider_call_count = 0
+        cnrs = list(dict.fromkeys(attempt.cnr_number for attempt in attempts if attempt.cnr_number))
+        results_by_id: dict[str, list[ProviderCaseSnapshot]] = {}
+        failures: dict[str, Exception] = {}
+        window_closed = (
+            enforce_window and not force and not case_tracking_window_state().inside_window
         )
-        if cnrs:
-            if enforce_window and not force and not case_tracking_window_state().inside_window:
-                run.status = "partial"
-                run.backlog_remaining_count += len(cases)
-                run.skipped_count += len(cases)
-                run.metadata_json = {
-                    **dict(run.metadata_json or {}),
-                    "partial_reason": "window_closed_before_bulk_refresh",
-                }
-            else:
+        with case_tracking_transport_budget():
+            if cnrs and not window_closed:
                 try:
                     bulk_result = active_provider.refresh_cases(cnrs=cnrs)
-                    run.provider_call_count += max(1, bulk_result.provider_call_count)
+                    provider_call_count += max(1, bulk_result.provider_call_count)
                     for snapshot in bulk_result.snapshots:
                         normalized = normalize_cnr(snapshot.cnr_number)
                         if normalized:
                             bulk_snapshots.setdefault(normalized, []).append(snapshot)
                     bulk_errors = {
-                        normalized: message
-                        for raw_cnr, message in bulk_result.errors.items()
-                        if (normalized := normalize_cnr(raw_cnr))
+                        normalize_cnr(cnr) or cnr: message
+                        for cnr, message in bulk_result.errors.items()
                     }
+                    bulk_costs = bulk_result.confirmed_cost_minor_by_cnr
+                    bulk_uncertain = bulk_result.uncertain_charge_cnrs
                 except Exception as exc:
-                    run.provider_call_count += 1
-                    bulk_errors = {cnr: redact_provider_error(exc) for cnr in cnrs}
-        for index, tracked_case in enumerate(cases):
-            if (
-                run.status == "partial"
-                and dict(run.metadata_json or {}).get("partial_reason")
-                == "window_closed_before_bulk_refresh"
-            ):
-                break
-            if enforce_window and not force and not case_tracking_window_state().inside_window:
-                remaining = len(cases) - index
-                run.status = "partial"
-                run.backlog_remaining_count += remaining
-                run.skipped_count += remaining
-                run.metadata_json = {
-                    **dict(run.metadata_json or {}),
-                    "partial_reason": "window_closed_before_case_refresh",
-                }
-                break
-            if tracked_case.quarantined_at is not None and not _is_transient_provider_failure(
-                tracked_case
-            ):
-                run.skipped_count += 1
-                run.backlog_remaining_count += 1
-                continue
-            _release_legacy_transient_quarantine(tracked_case)
-            try:
-                operation = _new_operation(
-                    session,
-                    context=context,
-                    tracked_case=tracked_case,
-                    operation_type="scheduled",
-                    poll_run_id=run.id,
-                )
-            except CaseTrackingProviderError as exc:
-                if _response_class(exc) != "concurrent_refresh":
-                    raise
-                run.skipped_count += 1
-                run.backlog_remaining_count += 1
-                run.metadata_json = {
-                    **dict(run.metadata_json or {}),
-                    "concurrent_refresh_skip_count": int(
-                        dict(run.metadata_json or {}).get("concurrent_refresh_skip_count") or 0
+                    provider_call_count += 1
+                    failures.update(
+                        {attempt.operation_id: exc for attempt in attempts if attempt.cnr_number}
                     )
-                    + 1,
-                }
+            for attempt in attempts:
+                if attempt.operation_id in failures:
+                    continue
+                try:
+                    if window_closed or (
+                        enforce_window
+                        and not force
+                        and not case_tracking_window_state().inside_window
+                    ):
+                        raise CaseTrackingProviderError(
+                            "Refresh window closed before transport.",
+                            response_class="window_closed",
+                        )
+                    if attempt.cnr_number:
+                        error = bulk_errors.get(attempt.cnr_number)
+                        if error:
+                            classified = re.search(
+                                r"\[(authentication|billing|case_not_found|parse_error|provider_error|provider_pending|rate_limit|timeout)\]$",
+                                error,
+                            )
+                            raise CaseTrackingProviderError(
+                                error,
+                                response_class=classified.group(1)
+                                if classified
+                                else "provider_error",
+                            )
+                        results = bulk_snapshots.get(attempt.cnr_number, [])
+                        if not results:
+                            provider_call_count += 1
+                            results = [active_provider.get_case_by_cnr(cnr=attempt.cnr_number)]
+                    else:
+                        provider_call_count += 1
+                        results = active_provider.search_cases(
+                            query=CaseSearchQuery(
+                                case_number=attempt.search_case_number,
+                                court_code=attempt.court_code,
+                                court_name=attempt.court_name,
+                                require_complete_results=True,
+                            )
+                        )
+                    results_by_id[attempt.operation_id] = results
+                except Exception as exc:
+                    failures[attempt.operation_id] = exc
+
+        checked_count = update_count = error_count = charged_case_count = charged_cost_minor = 0
+        pending_count = 0
+        for attempt in attempts:
+            error = failures.get(attempt.operation_id)
+            results = results_by_id.get(attempt.operation_id, [])
+            try:
+                _settle_provider_attempt(
+                    session,
+                    attempt,
+                    context=context,
+                    succeeded=bool(results),
+                    error=error,
+                    confirmed_cost_minor=bulk_costs.get(attempt.cnr_number or ""),
+                    uncertain_charge=attempt.cnr_number in bulk_uncertain,
+                )
+                confirmed_minor = bulk_costs.get(
+                    attempt.cnr_number or "", attempt.cost_minor if results else 0
+                )
+                if confirmed_minor:
+                    charged_case_count += 1
+                    charged_cost_minor += confirmed_minor
+                current_context, tracked_case, operation = _resume_provider_attempt(
+                    session, attempt
+                )
+            except HTTPException:
+                _cancel_provider_attempt(session, attempt)
+                error_count += 1
+                continue
+            except CaseTrackingProviderError:
+                session.rollback()
+                error_count += 1
                 continue
             original_tracked_case = tracked_case
-            scheduled_cost_minor = scheduled_costs[tracked_case.id]
             try:
-                if tracked_case.cnr_number:
-                    normalized_cnr = normalize_cnr(tracked_case.cnr_number)
-                    if normalized_cnr and normalized_cnr in bulk_errors:
-                        bulk_error = bulk_errors[normalized_cnr]
-                        classified = re.search(
-                            r"\[(authentication|billing|case_not_found|parse_error|provider_error|rate_limit|timeout)\]$",
-                            bulk_error,
-                        )
-                        raise CaseTrackingProviderError(
-                            bulk_error,
-                            response_class=(
-                                classified.group(1) if classified else "provider_error"
-                            ),
-                        )
-                    snapshots = (
-                        bulk_snapshots.get(normalized_cnr or "", []) if normalized_cnr else []
-                    )
-                    if not snapshots:
-                        run.provider_call_count += 1
-                        snapshots = [active_provider.get_case_by_cnr(cnr=tracked_case.cnr_number)]
-                    snapshot = _validated_sync_snapshot(tracked_case, snapshots)
-                else:
-                    run.provider_call_count += 1
-                    results = active_provider.search_cases(
-                        query=CaseSearchQuery(
-                            case_number=tracked_case.case_number,
-                            court_code=tracked_case.court_code,
-                            court_name=tracked_case.court_name,
-                        )
-                    )
-                    snapshot = _validated_sync_snapshot(tracked_case, results)
+                if error is not None:
+                    raise error
+                snapshot = _validated_sync_snapshot(
+                    tracked_case,
+                    results,
+                    identities=tuple(scope.identity for scope in attempt.hearing_scopes),
+                )
                 with session.begin_nested():
                     tracked_case = _converge_snapshot_identity(
                         session,
-                        context=context,
+                        context=current_context,
                         tracked_case=tracked_case,
                         operation=operation,
                         snapshot=snapshot,
@@ -3982,47 +4655,57 @@ def poll_tracked_cases(
                     )
                     created = apply_snapshot(
                         session,
-                        context=context,
+                        context=current_context,
                         tracked_case=tracked_case,
                         snapshot=snapshot,
                     )
-                run.checked_count += 1
-                run.update_count += len(created)
+                checked_count += 1
+                update_count += len(created)
                 _complete_operation(
                     session,
                     tracked_case=tracked_case,
                     operation=operation,
                     created_update_count=len(created),
                 )
-                _record_case_tracking_provider_usage(
-                    session,
-                    context=context,
-                    provider_key=active_provider.provider_key,
-                    usage_type="case_refresh",
-                    feature_key="case_tracking_scheduled_refresh",
-                    display_label="Scheduled case refresh",
-                    cost_minor=scheduled_cost_minor,
-                    tracked_case_id=tracked_case.id,
-                    source_type="tracked_case_poll_run",
-                    source_id=run.id,
-                )
-                charged_case_count += 1
-                charged_cost_minor += scheduled_cost_minor
             except Exception as exc:
                 _fail_operation(
                     session,
-                    context=context,
+                    context=current_context,
                     tracked_case=original_tracked_case,
                     operation=operation,
                     exc=exc,
                 )
-                run.error_count += 1
-                continue
-        run.completed_at = _now()
-        if run.status != "partial":
-            run.status = (
-                "partial" if run.error_count or run.backlog_remaining_count else "completed"
+                if _response_class(exc) == "provider_pending":
+                    pending_count += 1
+                else:
+                    error_count += 1
+            session.commit()
+        run = session.get(TrackedCasePollRun, run_id)
+        assert run is not None
+        run.checked_count = checked_count
+        run.update_count = update_count
+        run.error_count = error_count
+        run.blocked_count = blocked_count
+        run.provider_call_count = provider_call_count
+        run.backlog_remaining_count = int(
+            session.scalar(
+                select(func.count(TrackedCase.id)).where(
+                    TrackedCase.provider == active_provider.provider_key,
+                    _eligible_tracked_case_predicate(company_id=context.company.id),
+                    or_(
+                        TrackedCase.next_provider_refresh_at.is_(None),
+                        TrackedCase.next_provider_refresh_at <= _now(),
+                        TrackedCase.last_response_class.in_(
+                            tuple(_KNOWN_PROVIDER_RESPONSE_CLASSES)
+                        ),
+                    ),
+                )
             )
+            or 0
+        )
+        run.skipped_count = max(0, total_eligible - len(attempts))
+        run.completed_at = _now()
+        run.status = "partial" if error_count or run.backlog_remaining_count else "completed"
         run.metadata_json = {
             **dict(run.metadata_json or {}),
             "checked_count": run.checked_count,
@@ -4035,18 +4718,9 @@ def poll_tracked_cases(
             "bulk_cnr_count": len(cnrs),
             "charged_case_count": charged_case_count,
             "charged_cost_minor": charged_cost_minor,
+            "concurrent_refresh_skip_count": concurrent_skips,
+            "provider_pending_count": pending_count,
         }
-        if charged_case_count:
-            settle_provider_spend(
-                session,
-                reservation_id=provider_reservation_id,
-                amount_minor=charged_cost_minor,
-            )
-        else:
-            release_provider_spend_in_session(
-                session,
-                reservation_id=provider_reservation_id,
-            )
         session.add(run)
         record_from_context(
             session,

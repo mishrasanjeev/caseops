@@ -16,6 +16,8 @@ import re
 import shutil
 import subprocess
 import sys
+import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -256,17 +258,27 @@ def _validate_bootstrap(bootstrap: object, *, label: str) -> list[str]:
     return errors
 
 
-def run_gcloud(arguments: list[str], *, expect_json: bool = False) -> Any:
+def _invoke_gcloud(arguments: list[str], *, timeout: float = 60) -> Any:
     executable = shutil.which("gcloud")
     if not executable:
         raise InventoryError("gcloud CLI is required")
-    completed = subprocess.run(
-        [executable, *arguments],
-        check=False,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-    )
+    try:
+        return subprocess.run(
+            [executable, *arguments],
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise InventoryError("gcloud control-plane deadline exceeded") from exc
+
+
+def run_gcloud(
+    arguments: list[str], *, expect_json: bool = False, timeout: float = 60
+) -> Any:
+    completed = _invoke_gcloud(arguments, timeout=timeout)
     if completed.returncode:
         detail = (completed.stderr or completed.stdout).strip()
         raise InventoryError(f"gcloud {' '.join(arguments)} failed: {detail}")
@@ -286,16 +298,7 @@ def scheduler_uri(project: str, region: str, run_job_name: str) -> str:
 
 
 def _gcloud_resource_exists(arguments: list[str]) -> bool:
-    executable = shutil.which("gcloud")
-    if not executable:
-        raise InventoryError("gcloud CLI is required")
-    completed = subprocess.run(
-        [executable, *arguments],
-        check=False,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-    )
+    completed = _invoke_gcloud(arguments)
     if completed.returncode == 0:
         return True
     detail = (completed.stderr or completed.stdout).strip()
@@ -803,11 +806,194 @@ def summarize_execution(executions: object) -> dict[str, str]:
     }
 
 
+def _selected_job(inventory: dict[str, Any], scheduler: str) -> dict[str, Any]:
+    for job in inventory["jobs"]:
+        if job["scheduler_name"] == scheduler:
+            return job
+    raise InventoryError("rollout guard requires a canonical scheduler")
+
+
+def _unfinished_executions(payload: object, *, job_name: str) -> list[str]:
+    # Read the unfiltered history: a newest-only sample can hide an older worker.
+    if not isinstance(payload, list) or len(payload) >= 1001:
+        raise InventoryError("execution inventory is invalid or truncated")
+    unfinished: list[str] = []
+    seen: set[str] = set()
+    for row in payload:
+        if not isinstance(row, dict):
+            raise InventoryError("invalid execution record")
+        metadata, status = row.get("metadata"), row.get("status", {})
+        if not isinstance(metadata, dict) or not isinstance(status, dict):
+            raise InventoryError("invalid execution metadata/status")
+        name = metadata.get("name")
+        labels = metadata.get("labels", {})
+        if (
+            not isinstance(name, str)
+            or not name
+            or name in seen
+            or not isinstance(labels, dict)
+            or labels.get("run.googleapis.com/job") != job_name
+        ):
+            raise InventoryError(
+                "execution identity is missing, duplicated or mismatched"
+            )
+        seen.add(name)
+        completed = status.get("completionTime")
+        running = status.get("runningCount", 0)
+        if isinstance(running, bool) or not isinstance(running, int) or running < 0:
+            raise InventoryError("invalid execution running count")
+        if completed:
+            try:
+                parsed = datetime.fromisoformat(completed.replace("Z", "+00:00"))
+                if parsed.tzinfo is None:
+                    raise ValueError("missing timezone")
+            except (AttributeError, TypeError, ValueError) as exc:
+                raise InventoryError("invalid execution completion time") from exc
+        if not completed or running:
+            unfinished.append(name)
+    return unfinished
+
+
+def quiesce(
+    inventory: dict[str, Any],
+    *,
+    scheduler: str,
+    project: str,
+    region: str,
+    wait_seconds: int = 180,
+) -> dict[str, Any]:
+    job = _selected_job(inventory, scheduler)
+    if not 5 <= wait_seconds <= 600:
+        raise InventoryError("drain wait must be between 5 and 600 seconds")
+    deadline = time.monotonic() + wait_seconds
+
+    def call(arguments: list[str], *, expect_json: bool = False) -> Any:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise InventoryError(
+                "execution drain deadline exceeded; scheduler remains paused; "
+                "rerun this release after inspecting the active executions"
+            )
+        return run_gcloud(
+            arguments, expect_json=expect_json, timeout=min(30, remaining)
+        )
+
+    location = ["--project", project, "--location", region]
+    call(["scheduler", "jobs", "pause", scheduler, *location, "--quiet"])
+    consecutive_clean = 0
+    observed: set[str] = set()
+    while True:
+        state = call(
+            ["scheduler", "jobs", "describe", scheduler, *location, "--format=json"],
+            expect_json=True,
+        )
+        if (
+            not isinstance(state, dict)
+            or state.get("state") != "PAUSED"
+            or state.get("httpTarget", {}).get("uri")
+            != scheduler_uri(project, region, job["run_job_name"])
+        ):
+            raise InventoryError("scheduler pause/target could not be verified")
+        executions = call(
+            [
+                "run",
+                "jobs",
+                "executions",
+                "list",
+                "--job",
+                job["run_job_name"],
+                "--project",
+                project,
+                "--region",
+                region,
+                "--limit=1001",
+                "--format=json",
+            ],
+            expect_json=True,
+        )
+        active = _unfinished_executions(executions, job_name=job["run_job_name"])
+        observed.update(active)
+        consecutive_clean = 0 if active else consecutive_clean + 1
+        if consecutive_clean == 2:
+            return {
+                "scheduler": scheduler,
+                "state": "PAUSED",
+                "drained": True,
+                "observed_executions": sorted(observed),
+                "clean_samples": 2,
+            }
+        time.sleep(min(5, max(0, deadline - time.monotonic())))
+
+
+def resume_verified(
+    inventory: dict[str, Any],
+    *,
+    scheduler: str,
+    project: str,
+    region: str,
+    image: str,
+) -> dict[str, Any]:
+    job = _selected_job(inventory, scheduler)
+    if not DIGEST_IMAGE.fullmatch(image) or job["desired_state"] != "ENABLED":
+        raise InventoryError(
+            "resume requires an immutable image and enabled canonical job"
+        )
+    selected = copy.deepcopy(inventory)
+    selected["jobs"] = [copy.deepcopy(job)]
+    selected["legacy_schedulers_to_pause"] = []
+    selected["jobs"][0]["desired_state"] = "PAUSED"
+    errors, _ = inspect_live(
+        selected, project=project, region=region, expected_image=image
+    )
+    if errors:
+        raise InventoryError(
+            "paused release job failed verification: " + "; ".join(errors)
+        )
+    try:
+        run_gcloud(
+            [
+                "scheduler",
+                "jobs",
+                "resume",
+                scheduler,
+                "--project",
+                project,
+                "--location",
+                region,
+                "--quiet",
+            ]
+        )
+        selected["jobs"][0]["desired_state"] = "ENABLED"
+        errors, summary = inspect_live(
+            selected, project=project, region=region, expected_image=image
+        )
+        if errors:
+            raise InventoryError(
+                "resumed release job failed verification: " + "; ".join(errors)
+            )
+    except InventoryError:
+        run_gcloud(
+            [
+                "scheduler",
+                "jobs",
+                "pause",
+                scheduler,
+                "--project",
+                project,
+                "--location",
+                region,
+                "--quiet",
+            ]
+        )
+        raise
+    return summary
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "command",
-        choices=("validate", "reconcile", "verify", "audit"),
+        choices=("validate", "reconcile", "verify", "audit", "quiesce", "resume"),
         nargs="?",
         default="validate",
     )
@@ -815,6 +1001,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--project")
     parser.add_argument("--region")
     parser.add_argument("--image")
+    parser.add_argument("--scheduler")
+    parser.add_argument("--wait-seconds", type=int, default=180)
     parser.add_argument(
         "--hold-scheduler-paused",
         action="append",
@@ -825,14 +1013,33 @@ def main(argv: list[str] | None = None) -> int:
     try:
         inventory = load_inventory(args.inventory)
         if args.hold_scheduler_paused and args.command != "reconcile":
-            raise InventoryError(
-                "--hold-scheduler-paused is valid only for reconcile"
-            )
+            raise InventoryError("--hold-scheduler-paused is valid only for reconcile")
         if args.command == "validate":
             print(f"scheduler inventory valid: {len(inventory['jobs'])} recurring jobs")
             return 0
         project = args.project or inventory["production_project"]
         region = args.region or inventory["location"]
+        if args.command in {"quiesce", "resume"}:
+            if not args.scheduler:
+                raise InventoryError("--scheduler is required for the rollout guard")
+            if args.command == "quiesce":
+                summary = quiesce(
+                    inventory,
+                    scheduler=args.scheduler,
+                    project=project,
+                    region=region,
+                    wait_seconds=args.wait_seconds,
+                )
+            else:
+                summary = resume_verified(
+                    inventory,
+                    scheduler=args.scheduler,
+                    project=project,
+                    region=region,
+                    image=args.image or "",
+                )
+            print(json.dumps(summary, indent=2, sort_keys=True))
+            return 0
         if not args.image:
             raise InventoryError("--image is required for reconcile, verify, and audit")
         if args.hold_scheduler_paused:

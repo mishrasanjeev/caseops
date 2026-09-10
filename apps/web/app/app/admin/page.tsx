@@ -173,6 +173,8 @@ export default function AdminPage() {
   const queryClient = useQueryClient();
   const canAdmin = useCapability("workspace:admin");
   const canAudit = useCapability("audit:export");
+  const canManageHolds = useCapability("legal_holds:manage");
+  const canReviewAccess = useCapability("matter_access:manage");
   const canManageUsers = useCapability("company:manage_users");
   const canTeamsManage = useCapability("teams:manage");
   const canPortalInvite = useCapability("portal:invite");
@@ -369,6 +371,18 @@ export default function AdminPage() {
                 className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-line)] bg-white px-3 py-1.5 text-sm font-medium text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)]"
               >
                 <CalendarCheck className="h-4 w-4" aria-hidden /> Outlook
+              </Link>
+            ) : null}
+            {canReviewAccess ? (
+              <Link href="/app/admin/access-reviews"
+                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-line)] bg-white px-3 py-1.5 text-sm font-medium text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)]">
+                <Shield className="h-4 w-4" aria-hidden /> Access reviews
+              </Link>
+            ) : null}
+            {canManageHolds ? (
+              <Link href="/app/admin/data-governance/holds"
+                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-line)] bg-white px-3 py-1.5 text-sm font-medium text-[var(--color-ink-2)] hover:bg-[var(--color-bg-2)]">
+                <Shield className="h-4 w-4" aria-hidden /> Legal holds
               </Link>
             ) : null}
             {canAudit ? (

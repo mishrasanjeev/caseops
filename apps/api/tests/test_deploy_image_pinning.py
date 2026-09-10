@@ -39,6 +39,21 @@ def test_api_image_preloads_production_embedding_tokenizer() -> None:
     assert "Tokenizer.from_pretrained('voyageai/voyage-4-large')" in dockerfile
 
 
+def test_api_image_bakes_hash_checked_bytecode_for_both_runtime_import_paths() -> None:
+    dockerfile = (REPO_ROOT / "apps" / "api" / "Dockerfile").read_text(encoding="utf-8")
+    dependency_compile = dockerfile.index(
+        "python -m compileall -q --invalidation-mode checked-hash "
+        "/usr/local/lib/python3.13/site-packages"
+    )
+    source_copy = dockerfile.index("COPY src ./src")
+    source_compile = dockerfile.index(
+        "/app/src /usr/local/lib/python3.13/site-packages/caseops_api"
+    )
+    assert dependency_compile < source_copy < source_compile
+    assert dockerfile.count("--invalidation-mode checked-hash") == 2
+    assert "PYTHONDONTWRITEBYTECODE=1" in dockerfile
+
+
 def test_api_image_forces_runtime_model_resolution_offline_after_preloads() -> None:
     dockerfile = (REPO_ROOT / "apps" / "api" / "Dockerfile").read_text(encoding="utf-8")
 

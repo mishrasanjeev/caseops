@@ -347,14 +347,13 @@ def test_iplf_028b_legal_hold_summary_is_tenant_scoped_and_content_minimized(
             key="summary-scoped",
             title="Do not disclose this title either",
             authority_reference="fixture://summary-scoped",
-            status="active",
+            status="draft",
             created_by_membership_id=context.membership.id,
             created_by_membership_company_id=context.company.id,
             creator_label_snapshot=context.user.email,
             approved_by_membership_id=approver.id,
             approved_by_membership_company_id=context.company.id,
             approver_label_snapshot=approver_user.email,
-            activated_at=now,
         )
         draft = LegalHold(
             company_id=context.company.id,
@@ -375,6 +374,9 @@ def test_iplf_028b_legal_hold_summary_is_tenant_scoped_and_content_minimized(
                 target_reference_hash="b" * 64,
             )
         )
+        session.flush()
+        scoped.status = "active"
+        scoped.activated_at = now
         session.commit()
 
     response = client.get(

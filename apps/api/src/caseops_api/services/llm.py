@@ -855,7 +855,7 @@ class GeminiProvider:
 
     name = "gemini"
 
-    def __init__(self, *, model: str, api_key: str) -> None:
+    def __init__(self, *, model: str, api_key: str, timeout_seconds: float | None = None) -> None:
         try:
             from google import genai  # type: ignore[import-not-found]
         except ImportError as exc:
@@ -863,7 +863,13 @@ class GeminiProvider:
                 "The 'google-genai' package is not installed. Run "
                 "'uv add google-genai' and set CASEOPS_LLM_PROVIDER=gemini.",
             ) from exc
-        self._client = genai.Client(api_key=api_key)
+        client_options = {}
+        if timeout_seconds is not None:
+            client_options["http_options"] = {
+                "timeout": int(timeout_seconds * 1000),
+                "retry_options": {"attempts": 1},
+            }
+        self._client = genai.Client(api_key=api_key, **client_options)
         self.model = model
 
     def generate(
@@ -1001,6 +1007,7 @@ def _build_inner_provider(settings: object, purpose: str | None) -> LLMProvider:
     # and response serialization. Other purposes retain their independently
     # measured budgets.
     per_purpose_timeout: dict[str, float] = {
+        "case_tracking:update_summary": 45.0,
         PURPOSE_ASSISTANT: 60.0,
         PURPOSE_RECOMMENDATIONS: 100.0,
         PURPOSE_HEARING_PACK: 90.0,
@@ -1011,6 +1018,7 @@ def _build_inner_provider(settings: object, purpose: str | None) -> LLMProvider:
         PURPOSE_EVAL: 60.0,
     }
     per_purpose_retries: dict[str, int] = {
+        "case_tracking:update_summary": 0,
         PURPOSE_ASSISTANT: 1,
         PURPOSE_RECOMMENDATIONS: 0,
         PURPOSE_HEARING_PACK: 1,
@@ -1031,6 +1039,7 @@ def _build_inner_provider(settings: object, purpose: str | None) -> LLMProvider:
         return GeminiProvider(
             model=model or "gemini-2.5-pro",
             api_key=settings.llm_api_key,
+            timeout_seconds=45.0 if purpose == "case_tracking:update_summary" else None,
         )
     if provider_name == "openai":
         return OpenAIProvider(

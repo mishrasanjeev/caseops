@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
@@ -127,6 +127,31 @@ def _provider_scope_spend_minor(
     )
 
 
+def _held_spend_predicate(now: datetime):
+    return and_(
+        ProviderSpendReservation.status == "reserved",
+        or_(
+            ProviderSpendReservation.expires_at > now,
+            ProviderSpendReservation.dispatched_at >= _month_start(now),
+        ),
+    )
+
+
+def _reserved_spend_minor(
+    session: Session, *, company_id: str, provider_keys: tuple[str, ...], now: datetime
+) -> int:
+    return int(
+        session.scalar(
+            select(func.coalesce(func.sum(ProviderSpendReservation.amount_minor), 0)).where(
+                ProviderSpendReservation.company_id == company_id,
+                ProviderSpendReservation.provider_key.in_(provider_keys),
+                _held_spend_predicate(now),
+            )
+        )
+        or 0
+    )
+
+
 def provider_spend_rows(
     session: Session,
     *,
@@ -153,10 +178,13 @@ def provider_spend_rows(
             provider_keys=policy.scope_provider_keys,
             period_start=period_start,
         )
+        reserved = _reserved_spend_minor(
+            session, company_id=company.id, provider_keys=policy.scope_provider_keys, now=_now()
+        )
         remaining = (
             None
             if policy.unlimited
-            else max(int(policy.monthly_limit_minor or 0) - budget_spent, 0)
+            else max(int(policy.monthly_limit_minor or 0) - budget_spent - reserved, 0)
         )
         rows.append(
             BillingProviderSpendRow(
@@ -164,6 +192,7 @@ def provider_spend_rows(
                 label=PROVIDER_LABELS[provider_key],
                 spent_minor=spent,
                 budget_spent_minor=budget_spent,
+                reserved_minor=reserved,
                 budget_scope=policy.budget_scope,
                 monthly_limit_minor=policy.monthly_limit_minor,
                 remaining_minor=remaining,
@@ -189,7 +218,9 @@ def _reserve_provider_spend(
     if provider_key not in PROVIDER_KEYS:
         raise ValueError(f"Unsupported paid provider: {provider_key}")
     now = _now()
-    company = session.scalar(select(Company).where(Company.id == company_id).with_for_update())
+    company = session.scalar(
+        select(Company).where(Company.id == company_id).with_for_update(key_share=True)
+    )
     if company is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found.")
     policy = resolve_provider_spend_policy(
@@ -203,16 +234,8 @@ def _reserve_provider_spend(
         provider_keys=policy.scope_provider_keys,
         period_start=_month_start(now),
     )
-    reserved = int(
-        session.scalar(
-            select(func.coalesce(func.sum(ProviderSpendReservation.amount_minor), 0)).where(
-                ProviderSpendReservation.company_id == company.id,
-                ProviderSpendReservation.provider_key.in_(policy.scope_provider_keys),
-                ProviderSpendReservation.status == "reserved",
-                ProviderSpendReservation.expires_at > now,
-            )
-        )
-        or 0
+    reserved = _reserved_spend_minor(
+        session, company_id=company.id, provider_keys=policy.scope_provider_keys, now=now
     )
     if (
         policy.monthly_limit_minor is not None
@@ -318,10 +341,59 @@ def settle_provider_spend(
     session.add(row)
 
 
+def dispatch_provider_spend(
+    session: Session, *, reservation_id: str | None, company_id: str
+) -> None:
+    """Retain an uncertain paid outcome across worker loss and reservation TTL."""
+    if reservation_id is None:
+        return
+    row = session.scalar(
+        select(ProviderSpendReservation)
+        .where(
+            ProviderSpendReservation.id == reservation_id,
+            ProviderSpendReservation.company_id == company_id,
+        )
+        .with_for_update()
+    )
+    if row is None or row.status != "reserved":
+        raise ValueError("The provider reservation is not available for this tenant.")
+    row.dispatched_at = _now()
+    session.add(row)
+
+
+def retain_unconfirmed_provider_spend(
+    session: Session,
+    *,
+    reservation_id: str | None,
+    company_id: str,
+    confirmed_minor: int,
+) -> None:
+    if reservation_id is None:
+        return
+    row = session.scalar(
+        select(ProviderSpendReservation)
+        .where(
+            ProviderSpendReservation.id == reservation_id,
+            ProviderSpendReservation.company_id == company_id,
+        )
+        .with_for_update()
+    )
+    if row is None or row.status != "reserved" or row.dispatched_at is None:
+        raise ValueError("No dispatched provider hold exists for this tenant.")
+    if not 0 <= confirmed_minor <= row.amount_minor:
+        raise ValueError("Confirmed spend exceeds the reserved provider budget.")
+    row.amount_minor -= confirmed_minor
+    if row.amount_minor == 0:
+        row.status = "settled"
+        row.settled_at = _now()
+    session.add(row)
+
+
 def release_provider_spend_in_session(
     session: Session,
     *,
     reservation_id: str | None,
+    confirmed_no_charge: bool = False,
 ) -> None:
     if reservation_id is None:
         return
@@ -331,6 +403,8 @@ def release_provider_spend_in_session(
         .with_for_update()
     )
     if row is None or row.status != "reserved":
+        return
+    if row.dispatched_at is not None and not confirmed_no_charge:
         return
     row.status = "released"
     row.released_at = _now()
@@ -349,6 +423,8 @@ def release_provider_spend(*, reservation_id: str | None) -> None:
         )
         if row is None or row.status != "reserved":
             return
+        if row.dispatched_at is not None:
+            return
         row.status = "released"
         row.released_at = _now()
         budget_session.add(row)
@@ -366,4 +442,6 @@ __all__ = [
     "reserve_provider_spend_in_session",
     "resolve_provider_spend_policy",
     "settle_provider_spend",
+    "dispatch_provider_spend",
+    "retain_unconfirmed_provider_spend",
 ]

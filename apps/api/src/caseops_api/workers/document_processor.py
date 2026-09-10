@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from caseops_api.core.settings import get_settings
 from caseops_api.db.migrations import run_migrations
+from caseops_api.services.case_tracking_summary import drain_update_summaries
 from caseops_api.services.court_sync_jobs import (
     drain_matter_court_sync_jobs,
     recover_stale_matter_court_sync_jobs,
@@ -24,6 +25,7 @@ class WorkerRunSummary:
     processed_jobs: int
     recovered_stale_court_sync_jobs: int
     processed_court_sync_jobs: int
+    processed_case_summaries: int = 0
 
     @property
     def touched_any_work(self) -> bool:
@@ -33,6 +35,7 @@ class WorkerRunSummary:
             or self.processed_jobs > 0
             or self.recovered_stale_court_sync_jobs > 0
             or self.processed_court_sync_jobs > 0
+            or self.processed_case_summaries > 0
         )
 
 
@@ -45,6 +48,7 @@ def run_worker_iteration(
     reprocessing_batch_size: int,
     court_sync_batch_size: int,
     court_sync_stale_after_minutes: int,
+    summary_batch_size: int = 5,
 ) -> WorkerRunSummary:
     recovered_stale_jobs = recover_stale_document_processing_jobs(
         stale_after_minutes=stale_after_minutes
@@ -65,6 +69,7 @@ def run_worker_iteration(
         processed_jobs=processed_jobs,
         recovered_stale_court_sync_jobs=recovered_stale_court_sync_jobs,
         processed_court_sync_jobs=processed_court_sync_jobs,
+        processed_case_summaries=drain_update_summaries(limit=summary_batch_size),
     )
 
 
@@ -75,6 +80,8 @@ def _build_parser() -> argparse.ArgumentParser:
         description="Drain CaseOps document processing jobs and schedule maintenance reprocessing.",
     )
     parser.add_argument("--once", action="store_true", help="Run one iteration and exit.")
+    parser.add_argument("--summary-batch-size", type=int, choices=range(1, 26), default=5,
+                        help="Maximum case update summaries per iteration.")
     parser.add_argument(
         "--batch-size",
         type=int,
@@ -154,6 +161,7 @@ def main(argv: list[str] | None = None) -> int:
                 processed_court_sync_jobs=drain_matter_court_sync_jobs(
                     limit=args.court_sync_batch_size
                 ),
+                processed_case_summaries=drain_update_summaries(limit=args.summary_batch_size),
             )
         else:
             summary = run_worker_iteration(
@@ -164,6 +172,7 @@ def main(argv: list[str] | None = None) -> int:
                 reprocessing_batch_size=args.reprocessing_batch_size,
                 court_sync_batch_size=args.court_sync_batch_size,
                 court_sync_stale_after_minutes=args.court_sync_stale_after_minutes,
+                summary_batch_size=args.summary_batch_size,
             )
 
         print(
@@ -172,7 +181,8 @@ def main(argv: list[str] | None = None) -> int:
             f"queued={summary.queued_reprocessing_jobs} "
             f"processed={summary.processed_jobs} "
             f"court_sync_recovered={summary.recovered_stale_court_sync_jobs} "
-            f"court_sync_processed={summary.processed_court_sync_jobs}",
+            f"court_sync_processed={summary.processed_court_sync_jobs} "
+            f"case_summaries_processed={summary.processed_case_summaries}",
             flush=True,
         )
 
