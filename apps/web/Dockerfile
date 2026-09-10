@@ -40,6 +40,9 @@ ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
 ENV NEXT_PUBLIC_GA_MEASUREMENT_ID=$NEXT_PUBLIC_GA_MEASUREMENT_ID
 
 COPY apps/web ./
+# One colocated page test imports this canonical fixture during Next's type
+# check. Keep it in the builder context only; the runner copies no test files.
+COPY tests/fixtures/statutes/structured-schedule-api.json /app/tests/fixtures/statutes/structured-schedule-api.json
 
 RUN npm run build
 

@@ -4,6 +4,10 @@
 !apps/
 !apps/web/
 !apps/web/**
+!tests/
+!tests/fixtures/
+!tests/fixtures/statutes/
+!tests/fixtures/statutes/structured-schedule-api.json
 
 apps/web/node_modules/
 apps/web/.next/
