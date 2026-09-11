@@ -87,11 +87,15 @@ export function SpecialistForm({ contract, initial: serverInitial, onSaved, onCa
         <option value="" disabled>Select a client</option>{clients.data?.clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></div>
         <div className="min-w-0"><Label htmlFor="specialist-jurisdiction">Jurisdiction as supplied</Label><Input id="specialist-jurisdiction" name="jurisdiction_as_supplied" required maxLength={500} defaultValue={initial?.facts.jurisdiction_as_supplied} /></div></div>
       <div className="grid min-w-0 gap-4 sm:grid-cols-2">{contract.fields.map((field) => <div key={field.key} className={`min-w-0 ${field.kind === "textarea" ? "sm:col-span-2" : ""}`}>
-        <Label htmlFor={`specialist-${field.key}`}>{field.label}</Label>
-        {field.kind === "boolean" ? <input id={`specialist-${field.key}`} name={field.key} type="checkbox" className="ml-3" defaultChecked={Boolean(initialDetails?.[field.key])} />
-          : field.kind === "select" ? <select className={selectClass} id={`specialist-${field.key}`} name={field.key} defaultValue={String(initialDetails?.[field.key] ?? field.options[0])}>{field.options.map((value) => <option key={value} value={value}>{label(value)}</option>)}</select>
+        {field.kind === "boolean" ? <label className="flex min-w-0 items-center gap-2 text-sm">
+          <input id={`specialist-${field.key}`} name={field.key} type="checkbox" className="h-4 w-4 shrink-0" defaultChecked={Boolean(initialDetails?.[field.key])} />
+          <span className="min-w-0 break-words">{field.label}</span>
+        </label> : <>
+          <Label htmlFor={`specialist-${field.key}`}>{field.label}</Label>
+          {field.kind === "select" ? <select className={selectClass} id={`specialist-${field.key}`} name={field.key} defaultValue={String(initialDetails?.[field.key] ?? field.options[0])}>{field.options.map((value) => <option key={value} value={value}>{label(value)}</option>)}</select>
             : field.kind === "textarea" ? <Textarea id={`specialist-${field.key}`} name={field.key} required={field.required} maxLength={field.max_length ?? undefined} defaultValue={String(initialDetails?.[field.key] ?? "")} />
               : <Input id={`specialist-${field.key}`} name={field.key} type={field.kind === "date" ? "date" : "text"} required={field.required} maxLength={field.max_length ?? undefined} defaultValue={String(initialDetails?.[field.key] ?? "")} />}
+        </>}
       </div>)}</div>
       {initial && <div><Label htmlFor="specialist-reason">Correction reason</Label><Input id="specialist-reason" name="reason" required maxLength={500} /></div>}
       <div className="flex flex-wrap gap-3"><Button type="submit"><Check size={16} />{save.isPending ? "Saving..." : "Save intake"}</Button><Button variant="ghost" type="button" onClick={onCancel}>Cancel</Button></div>

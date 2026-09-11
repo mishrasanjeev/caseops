@@ -7,8 +7,8 @@ vi.mock("@/lib/api/client", () => ({ apiRequest: mocks.api }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock("@/lib/capabilities", () => ({ useCapability: mocks.capability }));
 
-import { specialistRecordSchema } from "@/lib/api/ip-specialist";
-import { SpecialistDetail, SpecialistIndex } from "./SpecialistWorkspace";
+import { specialistRecordSchema, type SpecialistContract } from "@/lib/api/ip-specialist";
+import { SpecialistDetail, SpecialistForm, SpecialistIndex } from "./SpecialistWorkspace";
 
 const id = "10000000-0000-4000-8000-000000000001";
 const clientId = "10000000-0000-4000-8000-000000000002";
@@ -18,7 +18,7 @@ const record = specialistRecordSchema.parse({ id, docket_id: "10000000-0000-4000
   facts: { title: "Lamp representation", client_id: clientId, jurisdiction_as_supplied: "India as supplied",
     details: { domain: "design", applicant: "Client applicant", article: "Lamp casing",
       classification_as_supplied: null, novelty_statement: null, representation_description: null, publication_instruction: "unknown" } } });
-const contract = { domain: "design", label: "Designs", contract_version: "OTHER-IP-2026-09-09.1",
+const contract: SpecialistContract = { domain: "design", label: "Designs", contract_version: "OTHER-IP-2026-09-09.1",
   contract_path: "docs/ip-implementation/child-prds/design-2026-09-09.md", child_prd_sha256: "a".repeat(64),
   intake_available: true, blockers: ["release_evidence_missing"], observation_kinds: ["representation_set"],
   fields: [{ key: "applicant", label: "Applicant", kind: "text", required: true, max_length: 500, options: [] },
@@ -70,6 +70,16 @@ describe("Specialist IP typed intake", () => {
     expect(await screen.findByRole("link", { name: "Lamp representation" })).toBeVisible();
     expect(screen.getByRole("button", { name: "New intake" })).toBeDisabled();
     expect(screen.getByText("Intake unavailable")).toBeVisible();
+  });
+
+  it("renders boolean contract fields as labelled, shrink-resistant controls", async () => {
+    const booleanContract = { ...contract, domain: "copyright" as const,
+      fields: [...contract.fields, { key: "ownership_disputed", label: "Ownership disputed", kind: "boolean" as const,
+        required: false, max_length: null, options: [] }] };
+    mount(<SpecialistForm contract={booleanContract} onSaved={vi.fn()} onCancel={vi.fn()} />);
+    const checkbox = await screen.findByRole("checkbox", { name: "Ownership disputed" });
+    expect(checkbox).toHaveClass("h-4", "w-4", "shrink-0");
+    expect(checkbox.closest("label")).toHaveTextContent("Ownership disputed");
   });
 
   it("waits for authoritative hydration and freezes the edit concurrency token across a background read", async () => {
