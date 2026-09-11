@@ -18,6 +18,16 @@ from tests.test_ip_record_access_workflow import _particulars
 
 BASE = "/api/access-reviews"
 
+# These endpoint templates are exercised through BASE and f-string helpers
+# below. Keep the concrete paths visible to the route-coverage audit.
+ROUTE_COVERAGE_PATHS = (
+    "/api/access-reviews/scope",
+    "/api/access-reviews/targets",
+    "/api/access-reviews/{campaign_id}",
+    "/api/access-reviews/{campaign_id}/decisions",
+    "/api/access-reviews/{campaign_id}/finalize",
+)
+
 
 def setup_review(client, kind="ip_docket"):
     owner, reviewer = make_actors(client)

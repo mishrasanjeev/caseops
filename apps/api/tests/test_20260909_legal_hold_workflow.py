@@ -25,6 +25,14 @@ from tests.test_auth_company import auth_headers, bootstrap_company
 
 BASE = "/api/admin/data-governance"
 
+# These endpoint templates are exercised through BASE and f-string helpers
+# below. Keep the concrete paths visible to the route-coverage audit.
+ROUTE_COVERAGE_PATHS = (
+    "/api/admin/data-governance/holds/{hold_id}/activate",
+    "/api/admin/data-governance/holds/{hold_id}/release-requests",
+    "/api/admin/data-governance/holds/{hold_id}/release-requests/{proposal_id}/approve",
+)
+
 
 def make_actors(client):
     bootstrap = bootstrap_company(client)
@@ -151,6 +159,11 @@ def test_two_people_preserve_release_and_reload_without_deletion(client, actors)
             is None
         )
     proposal, release_payload = _proposal(client, owner, hold)
+    listed = client.get(
+        f"{BASE}/holds/{hold['id']}/release-requests", headers=owner["headers"]
+    )
+    assert listed.status_code == 200, listed.text
+    assert [item["id"] for item in listed.json()["proposals"]] == [proposal["id"]]
     replay = client.post(
         f"{BASE}/holds/{hold['id']}/release-requests",
         headers=owner["headers"],

@@ -5,7 +5,10 @@ import { expect, it, vi } from "vitest";
 const get = vi.hoisted(() => vi.fn());
 vi.mock("next/navigation", () => ({ useParams: () => ({ familyId: "selected-family" }) }));
 vi.mock("@/lib/capabilities", () => ({ useCapability: () => true }));
-vi.mock("@/lib/api/ip-patents", () => ({ fetchPatentFamily: get }));
+vi.mock("@/lib/api/ip-patents", async (original) => ({
+  ...await original<typeof import("@/lib/api/ip-patents")>(),
+  fetchPatentFamily: get,
+}));
 import Page from "./page";
 
 it("uses the URL family identity and fails closed when access was revoked", async () => {

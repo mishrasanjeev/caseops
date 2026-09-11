@@ -9,7 +9,8 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock("@/lib/capabilities", () => ({ useCapability: mocks.capability }));
-vi.mock("@/lib/api/ip-patents", () => ({
+vi.mock("@/lib/api/ip-patents", async (original) => ({
+  ...await original<typeof import("@/lib/api/ip-patents")>(),
   fetchPatentFamilies: mocks.list, fetchPatentFamily: mocks.get,
   createPatentFamily: mocks.create, correctPatentFamily: mocks.correct,
 }));

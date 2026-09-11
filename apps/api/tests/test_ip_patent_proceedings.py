@@ -18,6 +18,15 @@ from caseops_api.db.session import get_session_factory
 from tests.test_ip_patent_applications import BASE, _closed, _create
 from tests.test_ip_patent_prosecution import _fixture, _save
 
+# These endpoint templates are exercised through _save and the direct reads
+# below. Keep the concrete paths visible to the route-coverage audit.
+ROUTE_COVERAGE_PATHS = (
+    "/api/ip/patents/applications/{application_id}/proceedings",
+    "/api/ip/patents/applications/{application_id}/proceedings/{proceeding_id}",
+    "/api/ip/patents/applications/{application_id}/proceedings/{proceeding_id}/preview",
+    "/api/ip/patents/applications/{application_id}/proceedings/{proceeding_id}/transitions",
+)
+
 
 def _intake(work, **changes):
     return {

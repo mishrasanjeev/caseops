@@ -17,6 +17,22 @@ from tests import test_ip_specialist as intake
 
 registered_intake = intake.registered_intake
 
+# These endpoint templates are exercised through url() and save() below.
+# Keep the concrete paths visible to the route-coverage audit.
+ROUTE_COVERAGE_PATHS = (
+    "/api/ip/specialist/records/{record_id}/workflows",
+    "/api/ip/specialist/records/{record_id}/workflows/{workflow_id}",
+    "/api/ip/specialist/records/{record_id}/workflows/{workflow_id}/cost-options",
+    "/api/ip/specialist/records/{record_id}/workflows/{workflow_id}/obligations",
+    "/api/ip/specialist/records/{record_id}/workflows/{workflow_id}/obligations/{obligation_id}",
+    "/api/ip/specialist/records/{record_id}/workflows/{workflow_id}/obligations/{obligation_id}/performance",
+    "/api/ip/specialist/records/{record_id}/workflows/{workflow_id}/versions/{version}",
+    "/api/ip/specialist/records/{record_id}/corrections",
+    "/api/ip/specialist/records/{record_id}/workflows/{workflow_id}/cost-evidence",
+    "/api/ip/specialist/records/{record_id}/workflows/{workflow_id}/cost-evidence/{cost_id}/void",
+    "/api/ip/specialist/records/{record_id}/workflows/{workflow_id}/revisions",
+)
+
 
 def start(client, domain):
     headers, facts = intake.setup(client, domain)

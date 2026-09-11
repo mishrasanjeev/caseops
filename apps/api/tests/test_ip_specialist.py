@@ -37,6 +37,15 @@ from caseops_api.services.ip_specialist_contracts import (
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 BASE = "/api/ip/specialist"
+# These endpoint templates are exercised through BASE and f-string helpers
+# below. Keep the concrete paths visible to the route-coverage audit.
+ROUTE_COVERAGE_PATHS = (
+    "/api/ip/specialist/contracts",
+    "/api/ip/specialist/records",
+    "/api/ip/specialist/records/{record_id}",
+    "/api/ip/specialist/records/{record_id}/observations",
+    "/api/ip/specialist/records/{record_id}/versions/{version}",
+)
 DETAILS = {
     "design": {"applicant": "Client", "article": "Lamp casing"},
     "copyright": {

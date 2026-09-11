@@ -5,7 +5,10 @@ import { expect, it, vi } from "vitest";
 const list = vi.hoisted(() => vi.fn());
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock("@/lib/capabilities", () => ({ useCapability: () => true }));
-vi.mock("@/lib/api/ip-patents", () => ({ fetchPatentFamilies: list }));
+vi.mock("@/lib/api/ip-patents", async (original) => ({
+  ...await original<typeof import("@/lib/api/ip-patents")>(),
+  fetchPatentFamilies: list,
+}));
 import Page from "./page";
 
 it("renders the authorized family index and its empty state", async () => {

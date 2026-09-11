@@ -1,5 +1,6 @@
 import { defineConfig } from "@playwright/test";
 import baseConfig from "./playwright.config";
+import { noPaidProviderHeaders } from "./tests/e2e/support/cost-controls";
 
 export default defineConfig({
   ...baseConfig,
@@ -10,7 +11,7 @@ export default defineConfig({
     ["junit", { outputFile: `/output/${process.env.RUN_LABEL}.xml` }],
   ],
   outputDir: `/output/${process.env.RUN_LABEL}-artifacts`,
-  use: { ...baseConfig.use, video: "off" },
+  use: { ...baseConfig.use, extraHTTPHeaders: noPaidProviderHeaders, video: "off" },
   projects: [{
     name: "isolated-chromium",
     use: {
