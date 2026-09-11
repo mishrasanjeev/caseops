@@ -19,12 +19,12 @@ export function NextHearingCell({ matter, date }: { matter: HearingMatter; date:
   const incomplete = invalidCnr || missingCourt || missingNumber;
   const terminal = ["closed", "disposed"].includes(matter.status);
   return (
-    <div className="min-w-0 max-w-48 whitespace-normal">
+    <div className="min-w-[6rem] max-w-48 whitespace-normal">
       <span>{date}</span>
       {incomplete && !terminal && (
         <Link
           href={`/app/matters/${matter.id}`}
-          className="mt-1 block text-xs text-[var(--color-ink-2)] underline"
+          className="mt-1 block min-w-[6rem] max-w-full break-words text-xs text-[var(--color-ink-2)] underline"
           onClick={(event) => event.stopPropagation()}
           onKeyDown={(event) => event.stopPropagation()}
           onPointerDown={(event) => event.stopPropagation()}
