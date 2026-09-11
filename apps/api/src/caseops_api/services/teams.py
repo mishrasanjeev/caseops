@@ -787,7 +787,6 @@ def remove_team_member(
 def set_team_scoping(
     session: Session, *, context: SessionContext, enabled: bool
 ) -> bool:
-    session.scalar(select(Company.id).where(Company.id == context.company.id).with_for_update())
     discovered_enabled = session.scalar(
         select(Company.team_scoping_enabled).where(Company.id == context.company.id)
     )
@@ -819,6 +818,10 @@ def set_team_scoping(
             for entry in role_fence.values()
             for membership_id in entry.role_membership_ids
         }
+    # Serialize the mutation before locking memberships and parent records.
+    # The advisory snapshot intentionally precedes this lock so a role
+    # committed while the request waited is reported as a stale fence.
+    session.scalar(select(Company.id).where(Company.id == context.company.id).with_for_update())
     memberships = lock_company_memberships_for_assignment(
         session,
         company_id=context.company.id,

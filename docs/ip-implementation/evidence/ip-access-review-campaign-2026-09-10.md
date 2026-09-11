@@ -19,9 +19,10 @@ Canonical grant writes remain in `services/matter_access.py`: IP uses its existi
 preview/apply owner; Matter uses its existing remove owner. The opt-in `commit=False`
 adapter lets all revocations, private invalidation events, and campaign finalization
 commit atomically. Existing callers retain default commits. Both access responsibility
-fences now enter Company-first before memberships and record locks.
-The team-scoping entry also takes Company first, keeping the same order when a
-concurrent scoping change wins or waits for a campaign finalization.
+fences enter the Company lock before memberships and record locks. The
+team-scoping entry takes its advisory role snapshot first so a role committed
+while the request waits is reported as a stale fence; its Company lock still
+precedes every membership and record mutation lock.
 
 The UI is `/app/admin/access-reviews`, reached from Administration. It includes
 record-title search and bounded continuation, scope discovery, MFA step-up using
