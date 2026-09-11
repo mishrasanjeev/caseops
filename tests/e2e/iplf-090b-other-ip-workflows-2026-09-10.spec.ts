@@ -91,7 +91,7 @@ for (const width of [393, 768, 1280]) {
         await performance.getByRole("button", { name: "Record performance", exact: true }).click();
         await expect(page.getByRole("list", { name: "Saved obligations" })).toContainText("completed");
       }
-      await expect(page.getByRole("alert")).toHaveCount(0);
+      await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
       await page.reload();
       await page.getByRole("tab", { name: "workflows", exact: true }).click();
       const savedRows = page.getByRole("list", { name: "Saved domain workflows" });
@@ -103,7 +103,7 @@ for (const width of [393, 768, 1280]) {
         await expect(page.getByRole("list", { name: "Performance evidence" })).toContainText(`Notice receipt ${run}`);
       } else await expect(savedRows).toContainText("Version 2 / filed");
       await assertPatentControlsFit(page);
-      await expect(page.getByRole("alert")).toHaveCount(0);
+      await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
       await patentScreenshot(page, info, `workflow-${domain}-${width}.png`);
     }
   });

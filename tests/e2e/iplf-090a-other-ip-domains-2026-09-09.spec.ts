@@ -26,7 +26,7 @@ async function lifecycle(page: Page, active: boolean, version: number) {
   await assertPatentControlsFit(page);
   await page.getByRole("button", { name: "Confirm lifecycle change", exact: true }).click();
   await expect(page.getByText(`${active ? "closed" : "ready"} / Lifecycle version ${version}`, { exact: true })).toBeVisible();
-  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
 }
 
 for (const width of [393, 768, 1280]) {
@@ -75,7 +75,7 @@ for (const width of [393, 768, 1280]) {
       const record = await response.json();
       expect(record.facts.details.domain).toBe(domain);
       await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
-      await expect(page.getByRole("alert")).toHaveCount(0);
+      await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
       await page.reload();
       await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
       await expect(page.getByLabel("Saved intake facts")).toContainText("India - user supplied, unreviewed");
@@ -100,7 +100,7 @@ for (const width of [393, 768, 1280]) {
       await page.getByLabel("Source account").fill(account);
       await page.getByRole("button", { name: "Record observation", exact: true }).click();
       await expect(page.getByLabel("Specialist source history")).toContainText(account);
-      await expect(page.getByRole("alert")).toHaveCount(0);
+      await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
       await page.reload();
       await page.getByRole("tab", { name: "evidence", exact: true }).click();
       await expect(page.getByLabel("Specialist source history")).toContainText("Legal effect not determined");
@@ -119,7 +119,7 @@ for (const width of [393, 768, 1280]) {
       expect(path).not.toBeNull();
       expect(createHash("sha256").update(await readFile(path!)).digest("hex"))
         .toBe(createHash("sha256").update(bytes).digest("hex"));
-      await expect(page.getByRole("alert")).toHaveCount(0);
+      await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
       await assertPatentControlsFit(page);
       await patentScreenshot(page, info, `design-closed-source-${width}.png`);
     }

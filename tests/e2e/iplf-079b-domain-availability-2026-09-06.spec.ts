@@ -52,7 +52,7 @@ for (const width of [360, 768, 1280]) {
     const response = await request.get(`${apiBaseUrl}/api/ip-domains`, { headers: noPaidProviderHeaders });
     expect(response.status()).toBe(200);
     const catalogue = ipDomainCatalogueSchema.parse(await response.json());
-    expect(catalogue.domains).toHaveLength(11);
+    expect(catalogue.domains).toHaveLength(12);
     await page.goto("/");
     await assertRows(page, catalogue.domains);
     await page.getByRole("region", { name: "IP domain availability" }).screenshot({ path: testInfo.outputPath(`domains-${width}.png`) });
