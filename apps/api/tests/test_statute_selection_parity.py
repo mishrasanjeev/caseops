@@ -82,3 +82,15 @@ def test_empty_provenance_cannot_inflate_catalogue_or_allow_attachment(client):
             setattr(session.get(StatuteSection, section_id), field, prior)
             session.commit()
     counts(1)
+
+
+def test_verified_release_timestamp_is_normalized_to_utc():
+    _, sources = load_release_bundle()
+    source = sources["bsa-2023", "Section 63"]
+    row = StatuteSection(statute_id="bsa-2023", section_number="Section 63", ordinal=1)
+
+    assert _apply_verified_release_source(row, source, now=datetime.now(UTC))
+    expected = datetime.fromisoformat(str(source["source_retrieved_at"])).astimezone(UTC)
+    assert row.source_retrieved_at == expected
+    assert row.section_text_fetched_at == expected
+    assert row.link_last_checked_at == expected

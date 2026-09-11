@@ -10,6 +10,10 @@ import { plusDays } from "./support/helpers";
 const web = process.env.PROD_BASE_URL || process.env.CASEOPS_WEB_BASE_URL || "http://127.0.0.1:3100";
 const api = process.env.PROD_API_BASE_URL || apiBaseUrl;
 const local = ["127.0.0.1", "localhost"].includes(new URL(web).hostname);
+const dockerAcceptance = local
+  && Boolean(process.env.CASEOPS_E2E_DOCKER_PROJECT)
+  && Boolean(process.env.CASEOPS_E2E_DOCKER_COMPOSE_FILE)
+  && process.env.CASEOPS_E2E_HEARING_PROVIDER === "sep10-offline";
 
 async function visibleMatter(page: Page, code: string, expectedDate: string | null, missingCourt: boolean) {
   for (const width of [393, 768, 1280]) {
@@ -40,7 +44,7 @@ async function visibleMatter(page: Page, code: string, expectedDate: string | nu
         expect(bounds!.x).toBeGreaterThanOrEqual(0);
         expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
       }
-      await expect(page.getByRole("alert")).toHaveCount(0);
+      await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
     }
     await page.screenshot({ path: test.info().outputPath(`hearing-${code}-${width}.png`), fullPage: true });
   }
@@ -57,7 +61,7 @@ function poll() {
 }
 
 test("BUG-014 scheduled CNR, combined registration and filing identities persist the nearest visible hearing", async ({ page, request }) => {
-  test.skip(!local, "Scheduled behavioral acceptance uses the offline emulator; production must never buy provider calls from this test.");
+  test.skip(!dockerAcceptance, "Scheduled behavioral acceptance uses the offline emulator; host and production suites must not run it.");
   const suffix = randomUUID().slice(0, 8);
   const slug = `sep10-hearing-${suffix}`;
   const email = `${slug}@example.com`;

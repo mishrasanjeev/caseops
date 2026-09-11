@@ -92,11 +92,15 @@ def _apply_verified_release_source(
         return False
     expected_hash = str(source["source_sha256"])
     prior_hash = row.source_sha256
-    retrieved_at = (
-        datetime.fromisoformat(str(source["source_retrieved_at"]))
-        if source.get("source_retrieved_at")
-        else now
-    )
+    if source.get("source_retrieved_at"):
+        parsed_retrieved_at = datetime.fromisoformat(str(source["source_retrieved_at"]))
+        if parsed_retrieved_at.tzinfo is None or parsed_retrieved_at.utcoffset() is None:
+            raise ValueError("verified source retrieval timestamp must include a timezone")
+        # SQLite drops timezone metadata from DateTime columns. Store the instant
+        # in UTC so every supported database backend exposes the same timestamp.
+        retrieved_at = parsed_retrieved_at.astimezone(UTC)
+    else:
+        retrieved_at = now
     row.section_label = str(source["section_label"])
     row.section_text = str(source["section_text"])
     row.section_text_source = str(source["section_text_source"])
