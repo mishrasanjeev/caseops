@@ -498,6 +498,23 @@ def _matching_embedded_order_file(
     return matches[0] if len(matches) == 1 else None
 
 
+def _case_number_from_payload(case: dict[str, object]) -> str | None:
+    """Keep readable provider case numbers while handling packed detail IDs."""
+
+    explicit = _compact(case.get("case_number"), limit=120)
+    if explicit:
+        return explicit
+    case_number = _compact(case.get("caseNumber"), limit=120)
+    registration = _compact(
+        case.get("registrationNumber") or case.get("filingNumber"), limit=120
+    )
+    # Some historical detail payloads expose a packed numeric identifier in
+    # caseNumber and the user-facing registration number separately.
+    if case_number and (not case_number.isdigit() or not registration):
+        return case_number
+    return registration or case_number
+
+
 def _snapshot_from_payload(
     payload: dict[str, object],
     *,
@@ -586,13 +603,7 @@ def _snapshot_from_payload(
     return ProviderCaseSnapshot(
         provider=provider,
         cnr_number=cnr,
-        case_number=_compact(
-            case.get("case_number")
-            or case.get("registrationNumber")
-            or case.get("filingNumber")
-            or case.get("caseNumber"),
-            limit=120,
-        ),
+        case_number=_case_number_from_payload(case),
         court_code=provider_court_code,
         court_name=_court_name(
             case,
@@ -626,10 +637,7 @@ def _snapshot_from_payload(
             provider_identity(case, descriptions_dict),
             cnr=cnr,
             court_code=provider_court_code,
-            case_number=_compact(
-                case.get("registrationNumber") or case.get("case_number") or case.get("caseNumber"),
-                limit=120,
-            ),
+            case_number=_case_number_from_payload(case),
             court_name=_court_name(
                 case, descriptions_dict, court_code_override=provider_court_code
             ),

@@ -817,6 +817,40 @@ def test_ecourts_case_detail_round_trips_through_exact_case_number_search() -> N
     assert len(requests) == 2
 
 
+def test_ecourts_readable_case_number_wins_over_registration_number() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/partner/search"
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "results": [
+                        {
+                            "cnr": "DLHC0108471512026",
+                            "caseNumber": "WP(C) 847151/2026",
+                            "registrationNumber": "847151/2026",
+                            "courtCode": "DLHC",
+                        }
+                    ]
+                }
+            },
+        )
+
+    provider = EcourtsIndiaApiProvider(
+        base_url="https://webapi.ecourtsindia.com",
+        token="test-token",
+        transport=httpx.MockTransport(handler),
+    )
+
+    result = provider.search_cases(
+        query=CaseSearchQuery(case_number="WP(C) 847151/2026", court_code="DLHC")
+    )
+
+    assert result[0].case_number == "WP(C) 847151/2026"
+    assert result[0].matching_identity is not None
+    assert result[0].matching_identity.case_number == "WP(C) 847151/2026"
+
+
 def test_ecourts_provider_classifies_payment_required_without_exposing_body() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(

@@ -79,6 +79,12 @@ def test_design_application_rejects_incomplete_source_facts(
         DesignApplication.model_validate(sourced_design(**overrides))
 
 
+def test_design_application_accepts_a_prepared_source_record() -> None:
+    application = DesignApplication.model_validate(sourced_design())
+
+    assert application.stage == "prepared"
+
+
 def test_specialist_source_schema_remains_strict() -> None:
     with pytest.raises(ValidationError):
         SpecialistSource.model_validate({**source(), "unreviewed": True})

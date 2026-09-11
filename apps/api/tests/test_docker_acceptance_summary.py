@@ -213,6 +213,12 @@ def test_fixture_enqueues_canonical_source_and_retains_marker(
     summaries.get_settings.cache_clear()
     try:
         assert document_processor.main(["--once", "--skip-migrations", "--skip-maintenance"]) == 0
+        updates_response = client.get(
+            f"/api/case-tracking/bookmarks/{seeded['bookmark_id']}/updates",
+            headers=headers,
+        )
+        assert updates_response.status_code == 200, updates_response.text
+        assert updates_response.json()["updates"][0]["id"] == seeded["update_id"]
         with get_session_factory()() as session:
             after = fixture.inspect_fixture(
                 session, actor_id=seeded["actor_id"], update_id=seeded["update_id"]
