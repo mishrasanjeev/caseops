@@ -10,6 +10,7 @@ from caseops_api.scripts.docker_acceptance_case_provider import AcceptanceProvid
 
 HEARING_CNR = "DLHC010081232026"
 HEARING_CASE_NUMBER = "8123/2026"
+SECOND_HEARING_CASE_NUMBER = "8124/2026"
 HEARING_FILING_NUMBER = "421/2026"
 AMBIGUOUS_NUMBER = "889/2026"
 AMBIGUOUS_CNRS = ("DLHC010008892026", "DLHC020008892026")
@@ -18,8 +19,8 @@ AMBIGUOUS_CNRS = ("DLHC010008892026", "DLHC020008892026")
 def hearing_case(number: str, *, cnr: str = HEARING_CNR) -> dict[str, object]:
     return {
         "cnr": cnr,
-        "caseNumber": "2026000081232026",
-        "registrationNumber": HEARING_CASE_NUMBER,
+        "caseNumber": f"WP(C) {number}",
+        "registrationNumber": number,
         "filingNumber": HEARING_FILING_NUMBER,
         "caseType": "WP_C",
         "courtCode": "DLHC01",
@@ -51,7 +52,12 @@ class HearingAcceptanceHandler(AcceptanceProviderHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/api/partner/search":
             number = parse_qs(parsed.query).get("caseNumbers", [""])[0]
-            if number not in {HEARING_CASE_NUMBER, HEARING_FILING_NUMBER, AMBIGUOUS_NUMBER}:
+            if number not in {
+                HEARING_CASE_NUMBER,
+                SECOND_HEARING_CASE_NUMBER,
+                HEARING_FILING_NUMBER,
+                AMBIGUOUS_NUMBER,
+            }:
                 super().do_GET()
                 return
             if not self._authorized():

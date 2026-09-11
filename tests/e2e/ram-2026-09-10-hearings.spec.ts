@@ -91,7 +91,9 @@ test("BUG-014 scheduled CNR, combined registration and filing identities persist
               case_number:
                 mode === "ambiguous"
                   ? "WP(C) 889/2026"
-                  : "WP(C) 8123/2026",
+                  : mode === "missing-court"
+                    ? "WP(C) 8123/2026"
+                    : "WP(C) 8124/2026",
             }),
     } });
     expect(edited.status(), await edited.text()).toBe(200);
