@@ -67,7 +67,6 @@ COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next ./.next
 # app/icon.tsx, app/opengraph-image.tsx, app/robots.txt, app/sitemap.xml
 # (file-based conventions). Nothing to copy.
 COPY --from=prod-deps --chown=nextjs:nodejs /app/node_modules /app/node_modules
-COPY --from=prod-deps --chown=nextjs:nodejs /app/apps/web/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/package.json ./package.json
 
 ARG CASEOPS_RELEASE_SHA=unavailable
