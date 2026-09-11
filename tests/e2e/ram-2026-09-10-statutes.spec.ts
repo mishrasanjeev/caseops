@@ -18,7 +18,7 @@ const REPORTED = [
   ["consumer-protection-2019", "Section 107"], ["contract-1872", "Section 238"],
   ["crpc-1973", "Section 482"], ["hindu-marriage-1955", "Section 29"],
   ["iea-1872", "Section 65B"], ["ipc-1860", "Section 302"],
-  ["income-tax-1961", "Section 4"],
+  // Positive journeys are restricted to the exact release-owned verified bundle.
 ] as const;
 type Source = { statute_id: string; section_number: string; section_text: string; source_sha256: string; source_url: string; exact_source_version: string };
 const sources: Source[] = JSON.parse(readFileSync("apps/api/src/caseops_api/scripts/seed_data/verified_india_code_sources.json", "utf8"));

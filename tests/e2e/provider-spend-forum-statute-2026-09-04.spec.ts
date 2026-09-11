@@ -26,6 +26,7 @@ type ProviderSpendRow = {
   provider_key: string;
   spent_minor: number;
   budget_spent_minor: number;
+  reserved_minor: number;
   budget_scope: "account" | "provider";
   monthly_limit_minor: number | null;
   remaining_minor: number | null;
@@ -135,6 +136,7 @@ test.describe.serial("Ram 2026-09-04 provider, statute, and forum acceptance", (
         provider_key: provider,
         spent_minor: 0,
         budget_spent_minor: 0,
+        reserved_minor: 0,
         budget_scope: "account",
         monthly_limit_minor: 100_000,
         remaining_minor: 100_000,

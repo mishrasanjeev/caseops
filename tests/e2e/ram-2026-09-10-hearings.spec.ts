@@ -79,7 +79,18 @@ test("BUG-014 scheduled CNR, combined registration and filing identities persist
     const matter = await created.json();
     const edited = await request.patch(`${api}/api/matters/${matter.id}`, { headers, data: {
       expected_updated_at: matter.updated_at,
-      ...(mode === "cnr" ? { cnr_number: "DLHC010081232026" } : mode === "filing" ? { filing_number: "421/2026" } : { case_number: mode === "ambiguous" ? "WP(C) 889/2026" : "WP(C) 8123/2026" }),
+      ...(mode === "cnr"
+        ? { cnr_number: "DLHC010081232026" }
+        : mode === "filing"
+          ? { filing_number: "421/2026" }
+          : {
+              case_number:
+                mode === "ambiguous"
+                  ? "WP(C) 889/2026"
+                  : mode === "missing-court"
+                    ? "WP(C) 8124/2026"
+                    : "WP(C) 8123/2026",
+            }),
     } });
     expect(edited.status(), await edited.text()).toBe(200);
     fixtures.push({ id: matter.id, code, mode });
