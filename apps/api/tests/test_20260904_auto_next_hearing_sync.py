@@ -29,6 +29,7 @@ from caseops_api.services.case_tracking_providers import (
     ProviderCaseSnapshot,
     _snapshot_from_payload,
 )
+from caseops_api.services.hearing_matching import HearingIdentity
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 
@@ -180,6 +181,82 @@ def test_older_matter_is_backfilled_synced_and_idempotent_without_reopening(
             assert matter.status == "intake"
             assert matter.lifecycle_version == 0
         assert len(provider.bulk_calls) == 2
+    finally:
+        get_settings.cache_clear()
+
+
+def test_combined_case_identities_are_refreshed_in_one_scheduled_batch(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    boot = bootstrap_company(client)
+    token = str(boot["access_token"])
+    headers = auth_headers(token)
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_ENABLED", "false")
+    get_settings.cache_clear()
+    identities = (
+        ("CNR", {"cnr_number": "DLHC010091232026"}),
+        ("CASE", {"case_number": "WP(C) 9123/2026"}),
+        ("FILING", {"filing_number": "421/2026"}),
+    )
+    matter_ids: list[str] = []
+    for label, fields in identities:
+        created = client.post(
+            "/api/matters/",
+            headers=headers,
+            json={
+                "title": f"Combined identity {label}",
+                "matter_code": f"AUTO-NHD-COMBINED-{label}",
+                "practice_area": "litigation",
+                "forum_level": "high_court",
+                "court_name": "Delhi High Court",
+                "client_name": "Petitioner",
+                "opposing_party": "Respondent",
+                "status": "active",
+            },
+        )
+        assert created.status_code == 200, created.text
+        matter = created.json()
+        updated = client.patch(
+            f"/api/matters/{matter['id']}",
+            headers=headers,
+            json={"expected_updated_at": matter["updated_at"], **fields},
+        )
+        assert updated.status_code == 200, updated.text
+        matter_ids.append(str(matter["id"]))
+
+    _enable_tracking(monkeypatch)
+    upcoming = datetime.now(UTC).date() + timedelta(days=11)
+    snapshot = ProviderCaseSnapshot(
+        provider="ecourtsindia",
+        cnr_number="DLHC010091232026",
+        case_number="WP(C) 9123/2026",
+        court_code="DLHC",
+        court_name="Delhi High Court",
+        case_title="Petitioner v Respondent",
+        next_hearing_on=upcoming,
+        matching_identity=HearingIdentity(
+            cnr="DLHC010091232026",
+            case_number="WP(C) 9123/2026",
+            filing_number="421/2026",
+            case_type="WP(C)",
+            court_code="DLHC",
+            court_name="Delhi High Court",
+        ),
+    )
+    provider = DatedSyncProvider(snapshot)
+
+    try:
+        with get_session_factory()() as session:
+            runs = poll_tracked_cases(session, provider=provider, force=True)
+            assert len(runs) == 1
+            assert runs[0].checked_count == 3
+            assert runs[0].error_count == 0
+            assert len(provider.bulk_calls) == 1
+            assert len(provider.search_calls) == 2
+            assert {
+                session.get(Matter, matter_id).next_hearing_on for matter_id in matter_ids
+            } == {upcoming}
     finally:
         get_settings.cache_clear()
 

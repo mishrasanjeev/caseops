@@ -4447,6 +4447,12 @@ def poll_tracked_cases(
                     ),
                 )
                 .order_by(
+                    # Refresh canonical CNR rows before registration/filing
+                    # rows that may learn the same CNR in this batch. Provider
+                    # attempts are captured before transport, so a UUID-based
+                    # order can otherwise report a same-run merge as a live
+                    # concurrent refresh.
+                    TrackedCase.cnr_number.is_(None),
                     TrackedCase.last_provider_checked_at.asc().nullsfirst(),
                     TrackedCase.created_at.asc(),
                 )
