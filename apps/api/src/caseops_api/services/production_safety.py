@@ -1607,23 +1607,40 @@ def tenant_enterprise_readiness(
     *,
     context: SessionContext,
 ) -> TenantEnterpriseReadinessResponse:
+    default_required_evidence = [
+        "IdP metadata validated",
+        "OIDC/SAML UAT pass",
+        "SCIM provisioning UAT pass",
+        "Founder or workspace-owner enforcement approval",
+    ]
     identity = session.scalar(
         select(TenantEnterpriseIdentityConfiguration).where(
             TenantEnterpriseIdentityConfiguration.company_id == context.company.id
         )
     )
     if identity is None:
-        identity = TenantEnterpriseIdentityConfiguration(
-            company_id=context.company.id,
-            required_evidence_json=[
-                "IdP metadata validated",
-                "OIDC/SAML UAT pass",
-                "SCIM provisioning UAT pass",
-                "Founder or workspace-owner enforcement approval",
-            ],
+        # This endpoint is a read-only readiness projection. Do not create the
+        # optional configuration row here: a GET must not take a company FK
+        # lock or dirty tenant administration state during page discovery.
+        oidc_status = "disabled"
+        saml_status = "planned"
+        scim_status = "planned"
+        sso_enforcement_status = "disabled"
+        not_enabled_reason = (
+            "SSO, SAML, and SCIM are readiness-only until an IdP UAT pass is recorded."
         )
-        session.add(identity)
-        session.flush()
+        last_test_status = "not_run"
+        last_tested_at = None
+        required_evidence = default_required_evidence
+    else:
+        oidc_status = identity.oidc_status
+        saml_status = identity.saml_status
+        scim_status = identity.scim_status
+        sso_enforcement_status = identity.sso_enforcement_status
+        not_enabled_reason = identity.not_enabled_reason
+        last_test_status = identity.last_test_status
+        last_tested_at = identity.last_tested_at
+        required_evidence = [str(item) for item in identity.required_evidence_json or []]
 
     grant_count = int(
         session.scalar(
@@ -1684,18 +1701,17 @@ def tenant_enterprise_readiness(
         )
         or 0
     )
-    session.commit()
     return TenantEnterpriseReadinessResponse(
         enterprise_identity=EnterpriseIdentityReadinessResponse(
-            oidc_status=identity.oidc_status,
-            saml_status=identity.saml_status,
-            scim_status=identity.scim_status,
-            sso_enforcement_status=identity.sso_enforcement_status,
+            oidc_status=oidc_status,
+            saml_status=saml_status,
+            scim_status=scim_status,
+            sso_enforcement_status=sso_enforcement_status,
             enabled=False,
-            not_enabled_reason=identity.not_enabled_reason,
-            last_test_status=identity.last_test_status,
-            last_tested_at=identity.last_tested_at,
-            required_evidence=[str(item) for item in identity.required_evidence_json or []],
+            not_enabled_reason=not_enabled_reason,
+            last_test_status=last_test_status,
+            last_tested_at=last_tested_at,
+            required_evidence=required_evidence,
         ),
         agent_trust_plane=AgentTrustReadinessResponse(
             grant_count=grant_count,

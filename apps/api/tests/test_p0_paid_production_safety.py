@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import delete, select
 
 from caseops_api.core.machine_readiness_auth import machine_readiness_evidence_proof
+from caseops_api.core.security import decode_access_token
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     BillingProviderEvent,
@@ -18,6 +19,7 @@ from caseops_api.db.models import (
     PlatformOperationalReadinessEvidence,
     ProductionBillingSignoff,
     ProductionBillingSignoffEvidence,
+    TenantEnterpriseIdentityConfiguration,
     UserMFAStepUp,
 )
 from caseops_api.db.session import get_session_factory
@@ -561,6 +563,25 @@ def test_unified_readiness_and_secret_rotation_evidence_are_founder_only_and_sec
         assert "Bearer" not in (row.operator_notes or "")
         assert row.old_credential_revoked is True
         assert row.validation_performed is True
+
+
+def test_enterprise_readiness_get_does_not_create_identity_row(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    token = _founder_token(client, monkeypatch)
+    company_id = str(decode_access_token(token)["company_id"])
+
+    response = client.get("/api/admin/enterprise-readiness", headers=auth_headers(token))
+    assert response.status_code == 200, response.text
+    assert response.json()["enterprise_identity"]["required_evidence"]
+
+    with get_session_factory()() as session:
+        assert session.scalar(
+            select(TenantEnterpriseIdentityConfiguration).where(
+                TenantEnterpriseIdentityConfiguration.company_id == company_id
+            )
+        ) is None
 
 
 def test_finance_support_matrix_and_tenant_no_leak_paths(
