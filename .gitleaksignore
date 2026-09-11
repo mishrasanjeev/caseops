@@ -115,3 +115,12 @@ e2c2051b24f17d63a2905d4a014e6bb2553a0477:apps/api/tests/test_ip_rule_governance.
 08ae3ecd0a8eedd3d5f2bc2e994b48732fddfaf1:tests/e2e/ram-2026-08-01-bugs.spec.ts:generic-api-key:59
 ac941c0eeede3599f39417c6606ce22fe870a6ff:apps/web/app/app/ip/page.test.tsx:generic-api-key:200
 ac941c0eeede3599f39417c6606ce22fe870a6ff:apps/api/tests/test_ip_workspace_configuration.py:generic-api-key:24
+
+# 2026-09-10 reviewed IP and summary acceptance fixtures: exact historical
+# false positives on public schema field labels, catalog evidence keys, and a
+# frozen deterministic replay hash. New generic-key findings remain blocking.
+ba38bf5e5cb5adb08136b6b284851c7a99927405:apps/api/src/caseops_api/scripts/docker_acceptance_summary.py:generic-api-key:48
+ba38bf5e5cb5adb08136b6b284851c7a99927405:apps/api/src/caseops_api/services/ip_specialist_contracts.py:generic-api-key:35
+ba38bf5e5cb5adb08136b6b284851c7a99927405:docs/ip-implementation/catalogue-sources-2026-09-08.json:generic-api-key:559
+ba38bf5e5cb5adb08136b6b284851c7a99927405:docs/ip-implementation/child-prds/plant_variety-2026-09-09.md:generic-api-key:29
+ba38bf5e5cb5adb08136b6b284851c7a99927405:docs/ip-implementation/evidence/provider-summary-integration-2026-09-10.md:generic-api-key:184
