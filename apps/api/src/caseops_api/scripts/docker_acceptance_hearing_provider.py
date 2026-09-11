@@ -35,7 +35,7 @@ def hearing_case(number: str, *, cnr: str = HEARING_CNR) -> dict[str, object]:
         "historyOfCaseHearings": [
             {
                 "businessOnDate": (date.today() - timedelta(days=8)).isoformat(),
-                "hearingDate": (date.today() - timedelta(days=1)).isoformat(),
+                "hearingDate": (date.today() - timedelta(days=2)).isoformat(),
                 "purposeOfListing": "Arguments",
             },
             {
