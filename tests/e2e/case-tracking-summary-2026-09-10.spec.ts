@@ -3,7 +3,14 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
-import { expect, test, type BrowserContext, type Page } from "@playwright/test";
+import {
+  expect,
+  request as playwrightRequest,
+  test,
+  type APIRequestContext,
+  type BrowserContext,
+  type Page,
+} from "@playwright/test";
 
 import { noPaidProviderHeaders } from "./support/cost-controls";
 import { apiBaseUrl, repoRoot, webBaseUrl } from "./support/env";
@@ -31,7 +38,7 @@ type Container = {
 
 test.use({ extraHTTPHeaders: noPaidProviderHeaders });
 
-test("dated async summary: visible fallback, release-image worker, retained source and no-paid fences", async ({ browser, request }, info) => {
+test("dated async summary: visible fallback, release-image worker, retained source and no-paid fences", async ({ browser }, info) => {
   test.setTimeout(300_000);
   const project = process.env.CASEOPS_E2E_DOCKER_PROJECT;
   test.skip(!project, "Requires the isolated exact-image Docker worker stack; not host or production acceptance.");
@@ -94,7 +101,10 @@ test("dated async summary: visible fallback, release-image worker, retained sour
       path.join(repoRoot, "apps/api/src/caseops_api", file),
     )));
   }
-  const build = await request.get(`${apiBaseUrl}/api/build`, { headers: noPaidProviderHeaders });
+  const apiContexts: APIRequestContext[] = [];
+  const controlApi = await playwrightRequest.newContext({ extraHTTPHeaders: noPaidProviderHeaders });
+  apiContexts.push(controlApi);
+  const build = await controlApi.get(`${apiBaseUrl}/api/build`, { headers: noPaidProviderHeaders });
   expect(build.ok()).toBe(true);
   expect((await build.json()).release_sha).toBe(process.env.CASEOPS_RELEASE_SHA);
   record("image_verified", { api: api.Image, worker: worker.Image, contract });
@@ -102,7 +112,7 @@ test("dated async summary: visible fallback, release-image worker, retained sour
   const contexts: BrowserContext[] = [];
   const ownedRunners: string[] = [];
   const cases: { scenario: Scenario; slug: string; seed: Seed; page: Page;
-    headers: Record<string, string>; lifecycle: unknown; before: Inspection }[] = [];
+    api: APIRequestContext; headers: Record<string, string>; lifecycle: unknown; before: Inspection }[] = [];
   const missingMarkers: string[] = [];
   const paidActions: string[] = [];
   const override = info.outputPath("summary-worker.compose.json");
@@ -112,8 +122,8 @@ test("dated async summary: visible fallback, release-image worker, retained sour
   const inspect = (seed: Seed) => fixture<Inspection>("inspect", [
     "--actor-id", seed.actor_id, "--update-id", seed.update_id,
   ]);
-  const lifecycle = async (matterId: string, headers: Record<string, string>) => {
-    const response = await request.get(`${apiBaseUrl}/api/matters/${matterId}`, { headers });
+  const lifecycle = async (api: APIRequestContext, matterId: string, headers: Record<string, string>) => {
+    const response = await api.get(`${apiBaseUrl}/api/matters/${matterId}`, { headers });
     expect(response.ok(), await response.text()).toBe(true);
     const matter = await response.json();
     return { status: matter.status, is_active: matter.is_active, lifecycle_version: matter.lifecycle_version };
@@ -128,11 +138,16 @@ test("dated async summary: visible fallback, release-image worker, retained sour
     expect(service("worker").State.Running).toBe(false);
     record("worker_paused", { was_running: worker.State.Running });
     for (const scenario of ["positive", "marked", "persistent_qa"] as const) {
+      // Each bootstrap response sets the cookie-first session. Keep every
+      // tenant's API calls in its own context so a later tenant cannot shadow
+      // an earlier bearer token during post-worker assertions.
+      const tenantApi = await playwrightRequest.newContext({ extraHTTPHeaders: noPaidProviderHeaders });
+      apiContexts.push(tenantApi);
       const suffix = randomUUID().replaceAll("-", "");
       const slug = `${scenario === "persistent_qa" ? "summarypersistent" : "summaryacceptance"}-${suffix}`;
       const email = `summary-${suffix}@example.com`;
       const password = "SummarySep10Local!";
-      const boot = await request.post(`${apiBaseUrl}/api/bootstrap/company`, {
+      const boot = await tenantApi.post(`${apiBaseUrl}/api/bootstrap/company`, {
         headers: noPaidProviderHeaders,
         data: { company_name: `Summary ${scenario} ${suffix}`, company_slug: slug, company_type: "law_firm",
           owner_full_name: "Summary acceptance", owner_email: email, owner_password: password },
@@ -140,15 +155,15 @@ test("dated async summary: visible fallback, release-image worker, retained sour
       expect(boot.status(), await boot.text()).toBe(200);
       const identity = await boot.json();
       const headers = { ...noPaidProviderHeaders, Authorization: `Bearer ${identity.access_token}` };
-      const billing = await request.get(`${apiBaseUrl}/api/billing/current`, { headers });
+      const billing = await tenantApi.get(`${apiBaseUrl}/api/billing/current`, { headers });
       expect(billing.ok(), await billing.text()).toBe(true);
       expect((await billing.json()).subscription.plan_code).toBe("grandfathered_free");
-      const created = await request.post(`${apiBaseUrl}/api/matters/`, { headers,
+      const created = await tenantApi.post(`${apiBaseUrl}/api/matters/`, { headers,
         data: { title: `Summary worker ${scenario}`, matter_code: `SUM-${suffix.slice(0, 8)}`,
           practice_area: "litigation", forum_level: "high_court", status: "intake" } });
       expect(created.status(), await created.text()).toBe(200);
       const matterId = (await created.json()).id as string;
-      const originalLifecycle = await lifecycle(matterId, headers);
+      const originalLifecycle = await lifecycle(tenantApi, matterId, headers);
       expect(originalLifecycle.status).toBe("intake");
       expect(originalLifecycle.is_active).toBe(true);
       expect(typeof originalLifecycle.lifecycle_version).toBe("number");
@@ -187,7 +202,7 @@ test("dated async summary: visible fallback, release-image worker, retained sour
       await expect(row.getByText(fallback, { exact: true })).toBeVisible();
       await expect(row.getByText(generated, { exact: true })).toHaveCount(0);
       await page.screenshot({ path: info.outputPath(`${scenario}-before-worker.png`), fullPage: true });
-      cases.push({ scenario, slug, seed, page, headers, lifecycle: originalLifecycle, before });
+      cases.push({ scenario, slug, seed, page, api: tenantApi, headers, lifecycle: originalLifecycle, before });
       record("fallback_visible", { scenario, seed, before, lifecycle: originalLifecycle });
     }
 
@@ -236,7 +251,7 @@ test("dated async summary: visible fallback, release-image worker, retained sour
         expect(after.effects).toEqual([{ state: "completed", result_type: "case_summary_suppressed",
           result_id: current.scenario === "marked" ? "automated_request" : "automated_worker_or_tenant" }]);
       }
-      const response = await request.get(`${apiBaseUrl}/api/case-tracking/bookmarks/${current.seed.bookmark_id}/updates`, { headers: current.headers });
+      const response = await current.api.get(`${apiBaseUrl}/api/case-tracking/bookmarks/${current.seed.bookmark_id}/updates`, { headers: current.headers });
       expect(response.ok(), await response.text()).toBe(true);
       const update = (await response.json()).updates.find((item: { id: string }) => item.id === current.seed.update_id);
       const sourcePath = `/api/case-tracking/bookmarks/${current.seed.bookmark_id}/updates/${current.seed.update_id}/source`;
@@ -259,7 +274,7 @@ test("dated async summary: visible fallback, release-image worker, retained sour
         await expect(current.page.getByRole("alert").filter({ hasText: /failed|error|unable/i })).toHaveCount(0);
         await current.page.screenshot({ path: info.outputPath(`${current.scenario}-after-worker-${width}.png`), fullPage: true });
       }
-      expect(await lifecycle(current.seed.matter_id, current.headers)).toEqual(current.lifecycle);
+      expect(await lifecycle(current.api, current.seed.matter_id, current.headers)).toEqual(current.lifecycle);
       record("published_or_suppressed", { scenario: current.scenario, after, update });
     }
     runWorker(2);
@@ -269,7 +284,7 @@ test("dated async summary: visible fallback, release-image worker, retained sour
     for (const current of cases) {
       const row = await openUpdate(current.page, current.seed);
       const source = row.getByRole("link", { name: "Source", exact: true });
-      const response = await request.get((await source.getAttribute("href"))!, { headers: current.headers });
+      const response = await current.api.get((await source.getAttribute("href"))!, { headers: current.headers });
       expect(response.status(), await response.text()).toBe(200);
       expect(response.headers()["x-caseops-source-format"]).toBe("provider-document");
       expect(await response.text()).toBe(sourceText);
@@ -281,7 +296,7 @@ test("dated async summary: visible fallback, release-image worker, retained sour
       const downloadedPath = info.outputPath(`${current.scenario}-source.md`);
       await download.saveAs(downloadedPath);
       expect(hash(fs.readFileSync(downloadedPath))).toBe(hash(sourceText));
-      expect(await lifecycle(current.seed.matter_id, current.headers)).toEqual(current.lifecycle);
+      expect(await lifecycle(current.api, current.seed.matter_id, current.headers)).toEqual(current.lifecycle);
     }
     expect(missingMarkers).toEqual([]);
     expect(paidActions).toEqual([]);
@@ -300,6 +315,7 @@ test("dated async summary: visible fallback, release-image worker, retained sour
       }
     }
     for (const context of contexts) await context.close();
+    for (const api of apiContexts) await api.dispose();
     if (worker.State.Running) docker([...compose, "start", "worker"]);
     record("cleanup", { service_worker_restored: worker.State.Running, retained_runners: ownedRunners });
     await info.attach("summary-boundary-journal", { path: journal, contentType: "application/x-ndjson" });
