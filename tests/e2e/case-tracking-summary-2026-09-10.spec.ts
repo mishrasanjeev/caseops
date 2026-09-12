@@ -39,7 +39,9 @@ type Container = {
 test.use({ extraHTTPHeaders: noPaidProviderHeaders });
 
 test("dated async summary: visible fallback, release-image worker, retained source and no-paid fences", async ({ browser }, info) => {
-  test.setTimeout(300_000);
+  // This Docker journey covers three tenants, two isolated worker runs, three
+  // responsive reloads per tenant, and retained-source downloads.
+  test.setTimeout(420_000);
   const project = process.env.CASEOPS_E2E_DOCKER_PROJECT;
   test.skip(!project, "Requires the isolated exact-image Docker worker stack; not host or production acceptance.");
   const composeFile = process.env.CASEOPS_E2E_DOCKER_COMPOSE_FILE;
@@ -314,8 +316,8 @@ test("dated async summary: visible fallback, release-image worker, retained sour
         record("runner_retained", { name, state: inspectContainer(name).State, logs });
       }
     }
-    for (const context of contexts) await context.close();
-    for (const api of apiContexts) await api.dispose();
+    await Promise.all(contexts.map(context => context.close()));
+    await Promise.all(apiContexts.map(api => api.dispose()));
     if (worker.State.Running) docker([...compose, "start", "worker"]);
     record("cleanup", { service_worker_restored: worker.State.Running, retained_runners: ownedRunners });
     await info.attach("summary-boundary-journal", { path: journal, contentType: "application/x-ndjson" });

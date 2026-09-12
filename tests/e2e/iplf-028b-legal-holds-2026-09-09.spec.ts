@@ -45,8 +45,7 @@ async function enter(page: Page, auth: Record<string, unknown>) {
   await page.addInitScript((context) => {
     localStorage.setItem("caseops.session.context", JSON.stringify(context));
   }, { company: auth.company, user: auth.user, membership: auth.membership, capabilities: auth.capabilities });
-  await page.goto("/app/admin");
-  await page.getByRole("link", { name: "Legal holds", exact: true }).click();
+  await page.goto("/app/admin/data-governance/holds");
   await expect(page.getByRole("heading", { name: "Legal holds", exact: true })).toBeVisible();
 }
 
