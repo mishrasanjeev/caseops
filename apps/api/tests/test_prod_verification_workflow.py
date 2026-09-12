@@ -70,6 +70,14 @@ def test_prod_verification_is_deploy_triggered_not_push_triggered() -> None:
     assert "--wait-seconds 1500" not in workflow
 
 
+def test_prod_verification_cancels_superseded_runs() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "prod-verify.yml").read_text(encoding="utf-8")
+
+    concurrency = workflow.split("concurrency:", 1)[1].split("permissions:", 1)[0]
+    assert "group: prod-verify" in concurrency
+    assert "cancel-in-progress: true" in concurrency
+
+
 def test_prod_verification_runs_notice_suite_after_ram_failure() -> None:
     """The required Notice signal must not disappear behind another failure."""
 

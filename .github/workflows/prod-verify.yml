@@ -37,10 +37,10 @@ on:
 
 concurrency:
   # Two scheduled runs on the same prod surface contending for the QA
-  # Bot session would race the storageState file. Cancel in-progress
-  # to keep one run live at a time.
+  # Bot session would race the storageState file. Cancel the superseded
+  # run so it cannot continue mutating QA while a newer release is serving.
   group: prod-verify
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 permissions:
   contents: read

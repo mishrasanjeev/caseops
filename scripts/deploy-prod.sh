@@ -197,6 +197,62 @@ if [[ -n "${DIRTY_BUILD_CONTEXT}" ]]; then
   exit 1
 fi
 
+# A scheduled prod-verify run mutates the shared QA tenants while it exercises
+# the live services. If it survives into a deploy, it can keep running tests
+# from a retired checkout while the new release is routed, producing stale
+# expected-SHA failures and overlapping QA writes. Stop and drain every
+# non-completed verification run before the first image build; the workflow's
+# cancel-in-progress policy is a second boundary for runs started concurrently.
+cancel_active_prod_verification() {
+  local active_runs
+  local remaining_runs
+  local run_id
+
+  if ! active_runs=$(gh run list \
+    --repo mishrasanjeev/caseops \
+    --workflow prod-verify.yml \
+    --limit 50 \
+    --json databaseId,status \
+    --jq '.[] | select(.status != "completed") | .databaseId'); then
+    echo "ERROR: could not inspect prod-verify runs; refusing production mutation."
+    return 1
+  fi
+
+  if [[ -n "${active_runs}" ]]; then
+    echo "--- drain active prod-verify runs before build ---"
+    while IFS= read -r run_id; do
+      [[ -n "${run_id}" ]] || continue
+      echo "  cancelling prod-verify run ${run_id}"
+      if ! gh run cancel "${run_id}" --repo mishrasanjeev/caseops; then
+        echo "ERROR: could not cancel prod-verify run ${run_id}; refusing production mutation."
+        return 1
+      fi
+    done <<< "${active_runs}"
+  fi
+
+  for _ in {1..30}; do
+    if ! remaining_runs=$(gh run list \
+      --repo mishrasanjeev/caseops \
+      --workflow prod-verify.yml \
+      --limit 50 \
+      --json databaseId,status \
+      --jq '.[] | select(.status != "completed") | .databaseId'); then
+      echo "ERROR: could not confirm prod-verify drain; refusing production mutation."
+      return 1
+    fi
+    if [[ -z "${remaining_runs}" ]]; then
+      echo "  prod-verify run drain complete."
+      return 0
+    fi
+    sleep 2
+  done
+
+  echo "ERROR: prod-verify runs remained active after the bounded drain; refusing production mutation."
+  return 1
+}
+
+cancel_active_prod_verification
+
 TAG=$(git rev-parse --short=7 "${HEAD_SHA}")
 API_IMAGE="${REGISTRY}/caseops-api:${TAG}"
 WEB_IMAGE="${REGISTRY}/caseops-web:${TAG}"
@@ -609,6 +665,7 @@ fi
 # Migration, job reconciliation, alert/index checks and QA repinning can also
 # take several minutes. Recheck immediately before creating a serving revision.
 assert_current_main "final pre-route gate"
+cancel_active_prod_verification
 
 # Step 3 — deploy API. CASEOPS_AUTO_MIGRATE=false stays in the service
 # env from the manifest, so the new pods will NOT try to migrate again.

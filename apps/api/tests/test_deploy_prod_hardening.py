@@ -1359,6 +1359,7 @@ def _run_deploy_with_fakes(
     python_crlf: bool = False,
     main_drift_after_fetches: int | None = None,
     private_projection_scheduler_hold: str | None = None,
+    active_prod_verify_runs: str = "",
 ) -> subprocess.CompletedProcess[str]:
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir()
@@ -1602,6 +1603,16 @@ printf 'gh %s\n' "$*" >> "${FAKE_GCLOUD_LOG}"
 if [[ "${FAKE_GH_MODE}" == "fail" ]]; then
   exit 55
 fi
+if [[ "${1:-}" == "run" && "${2:-}" == "list" ]]; then
+  if [[ ! -f "${FAKE_GH_RUNS_CLEARED}" ]]; then
+    printf '%s\n' "${FAKE_GH_ACTIVE_RUNS}"
+  fi
+  exit 0
+fi
+if [[ "${1:-}" == "run" && "${2:-}" == "cancel" ]]; then
+  touch "${FAKE_GH_RUNS_CLEARED}"
+  exit 0
+fi
 """,
     )
     _write_fake_executable(
@@ -1770,6 +1781,8 @@ exec "${FAKE_REAL_PYTHON}" "$@"
             "FAKE_GIT_STATUS": git_status,
             "FAKE_MAIN_DRIFT_AFTER_FETCHES": str(main_drift_after_fetches or 0),
             "FAKE_GH_MODE": gh_mode,
+            "FAKE_GH_ACTIVE_RUNS": active_prod_verify_runs,
+            "FAKE_GH_RUNS_CLEARED": _bash_path(tmp_path / "gh-runs-cleared"),
             "FAKE_INDEX_HEALTH_MODE": index_health_mode,
             "FAKE_QA_AFTER_JSON": _a0_qa_job_json(
                 immutable_image,
@@ -1997,6 +2010,23 @@ def test_deploy_prod_accepts_clean_head_and_healthy_api(tmp_path: Path) -> None:
         "gh workflow run prod-verify.yml --repo mishrasanjeev/caseops --ref main "
         "-f expected_release_sha=abcdef1234567890abcdef1234567890abcdef12"
     ) in "\n".join(calls)
+
+
+def test_deploy_prod_drains_active_prod_verification_before_build(tmp_path: Path) -> None:
+    result = _run_deploy_with_fakes(
+        tmp_path,
+        "abcdef1",
+        active_prod_verify_runs="987654321",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+    cancel_index = next(
+        index for index, call in enumerate(calls) if "gh run cancel 987654321" in call
+    )
+    build_index = next(index for index, call in enumerate(calls) if "builds submit" in call)
+    assert cancel_index < build_index
+    assert "prod-verify run drain complete." in result.stdout
 
 
 def test_deploy_prod_keeps_private_projection_scheduler_paused_during_incident(
