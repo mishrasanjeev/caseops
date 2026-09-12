@@ -3,7 +3,7 @@ import { apiBaseUrl as localApiBaseUrl } from "./support/env";
 import { noPaidProviderHeaders } from "./support/cost-controls";
 
 const apiBaseUrl = process.env.PROD_API_BASE_URL || localApiBaseUrl;
-const webBaseUrl = process.env.PROD_BASE_URL || process.env.CASEOPS_WEB_BASE_URL || "http://127.0.0.1:13100";
+const webBaseUrl = process.env.PROD_BASE_URL || process.env.CASEOPS_WEB_BASE_URL || "http://127.0.0.1:3100";
 const local = ["127.0.0.1", "localhost"].includes(new URL(webBaseUrl).hostname);
 
 test("API slash correction preserves the caller origin and authentication boundary", async ({ request }) => {
