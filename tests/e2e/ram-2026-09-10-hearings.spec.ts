@@ -62,6 +62,9 @@ function poll() {
 
 test("BUG-014 scheduled CNR, combined registration and filing identities persist the nearest visible hearing", async ({ page, request }) => {
   test.skip(!dockerAcceptance, "Scheduled behavioral acceptance uses the offline emulator; host and production suites must not run it.");
+  // This Docker journey covers five identities across three widths and reloads,
+  // plus two isolated scheduler polls; keep the full acceptance bounded.
+  test.setTimeout(300_000);
   const suffix = randomUUID().slice(0, 8);
   const slug = `sep10-hearing-${suffix}`;
   const email = `${slug}@example.com`;
