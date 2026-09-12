@@ -478,7 +478,7 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
     }
   });
 
-  test("STATUTE-LOOP: source-verified BNS 318 is available while unverified IPC 420 remains withheld", async ({
+  test("STATUTE-LOOP: source-verified BNS 318 is available while retired IPC 13 remains withheld", async ({
     page,
   }) => {
     // The /api/statutes/{slug}/sections endpoint serializes every
@@ -498,6 +498,8 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
       }>;
     const expected = sourceRows.find(row => row.statute_id === "bns-2023" && row.section_number === "Section 318");
     expect(expected?.verification_status).toBe("verified_official");
+    const withheldExpected = sourceRows.find(row => row.statute_id === "ipc-1860" && row.section_number === "Section 13");
+    expect(withheldExpected?.verification_status).toBe("retired");
     const listUrl = `${PROD_API_BASE_URL}/api/statutes/bns-2023/sections`;
     const listResp = await page.request.get(listUrl, {
       timeout: 120_000,
@@ -525,13 +527,13 @@ test.describe("Ram batch 2026-04-26 — prod verification of c58305b fixes", () 
     const unverifiedList = await page.request.get(`${PROD_API_BASE_URL}/api/statutes/ipc-1860/sections`);
     expect(unverifiedList.status()).toBe(200);
     expect((await unverifiedList.json()).sections).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ section_number: "Section 420" }),
+      expect.objectContaining({ section_number: "Section 13" }),
     ]));
     const withheldResponse = await page.request.get(
-      `${PROD_API_BASE_URL}/api/statutes/ipc-1860/sections/Section%20420`);
+      `${PROD_API_BASE_URL}/api/statutes/ipc-1860/sections/Section%2013`);
     expect(withheldResponse.status()).toBe(200);
     expect((await withheldResponse.json()).section).toMatchObject({
-      verification_status: "unverified", section_text: null,
+      verification_status: "retired", section_text: null,
     });
   });
 

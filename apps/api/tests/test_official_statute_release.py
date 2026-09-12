@@ -567,6 +567,41 @@ def test_seed_preserves_reviewed_labels_and_pending_history_when_upgrading_legac
         assert session.get(Statute, "bnss-2023").source_url.endswith("20099?view_type=browse")
 
 
+def test_seed_reconciles_only_legacy_ai_quarantine_with_official_release(client):
+    bootstrap_company(client)
+    documents, sources = release.load_release_bundle()
+    with get_session_factory()() as session:
+        _seed(session)
+        row = session.scalar(
+            select(StatuteSection).where(
+                StatuteSection.statute_id == "ipc-1860",
+                StatuteSection.section_number == "Section 74",
+            )
+        )
+        assert row is not None
+        row.verification_status = "quarantined"
+        row.quarantine_reason = "AI-generated legal text is not authoritative"
+        row.section_text_source = "haiku_generated"
+        row.section_text = "Legacy generated text that must not be served."
+        row.source_sha256 = hashlib.sha256(row.section_text.encode()).hexdigest()
+        row.is_provisional = True
+        session.commit()
+
+        _seed(session)
+        session.expire_all()
+        session.refresh(row)
+        expected = sources["ipc-1860", "Section 74"]
+        assert row.verification_status == "verified_official"
+        assert row.section_text == expected["section_text"]
+        assert row.source_sha256 == expected["source_sha256"]
+        assert row.section_text_source == "official_release_manifest"
+        assert row.quarantine_reason is None
+        assert row.quarantined_at is None
+        assert row.verified_at is not None
+        assert row.section_url == expected["source_url"]
+        assert row.statute_id in documents
+
+
 @pytest.mark.parametrize("defect", ["unknown", "changed_text", "missing"])
 def test_legacy_placeholder_exception_never_admits_unreconciled_source_rows(
     tmp_path, monkeypatch, defect

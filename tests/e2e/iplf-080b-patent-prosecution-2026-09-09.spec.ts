@@ -73,8 +73,9 @@ for (const width of [393, 768, 1280]) {
     const endpoint = `${apiBaseUrl}/api/ip/patents/applications/${application.id}`;
     await signInPatentTenant(page, tenant);
     await page.setViewportSize({ width, height: 900 });
-    await page.goto("/app/ip/patents");
-    await page.getByRole("link", { name: family.facts.title, exact: true }).click();
+    // The API returned the authoritative family identity. The bounded,
+    // UUID-ordered list may not include a newly-created record on page one.
+    await page.goto(`/app/ip/patents/${family.id}`);
     await page.getByRole("tab", { name: "Applications", exact: true }).click();
     await page.getByRole("link", { name: application.facts.title, exact: true }).click();
     await page.getByRole("tab", { name: "Work product", exact: true }).click();

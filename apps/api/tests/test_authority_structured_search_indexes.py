@@ -66,3 +66,18 @@ def test_structured_mode_clauses_match_indexed_expressions() -> None:
         for field in fields:
             assert field in sql
         assert "summary" not in sql
+
+
+def test_recency_index_migration_is_concurrent_and_recovers_invalid_build() -> None:
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "alembic"
+        / "versions"
+        / "20260912_0001_authority_search_recency_index.py"
+    )
+    source = path.read_text(encoding="utf-8")
+    assert "down_revision = \"20260910_0001\"" in source
+    assert "CREATE INDEX CONCURRENTLY IF NOT EXISTS" in source
+    assert "(decision_date DESC, updated_at DESC)" in source
+    assert "indisvalid" in source
+    assert "DROP INDEX CONCURRENTLY IF EXISTS" in source

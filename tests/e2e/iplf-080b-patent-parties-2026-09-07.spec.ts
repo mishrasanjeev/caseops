@@ -62,8 +62,9 @@ for (const kind of ["family", "application"] as const) {
       const endpoint = `${apiBaseUrl}/api/ip/patents/dockets/${record.docket_id}/parties`;
       await signInPatentTenant(page, tenant);
       await page.setViewportSize({ width, height: 900 });
-      await page.goto("/app/ip/patents");
-      await page.getByRole("link", { name: family.facts.title, exact: true }).click();
+      // Open the exact server-returned family; the bounded index is not a
+      // reliable locator for a newly-created record in retained QA data.
+      await page.goto(`/app/ip/patents/${family.id}`);
       await expect(page).toHaveURL(`/app/ip/patents/${family.id}`);
       await expect(page.getByRole("heading", { name: family.facts.title, level: 1, exact: true })).toBeVisible();
       if (kind === "application") {

@@ -56,8 +56,9 @@ for (const width of [393, 768, 1280]) {
     expect(manifestResponse.status(), await manifestResponse.text()).toBe(201); const manifest = await manifestResponse.json();
     await signInPatentTenant(page, tenant);
     await page.setViewportSize({ width, height: 900 });
-    await page.goto("/app/ip/patents");
-    await page.getByRole("link", { name: family.facts.title, exact: true }).click();
+    // Navigate by the API's authoritative identity rather than assuming a
+    // bounded UUID-ordered list page contains this new family.
+    await page.goto(`/app/ip/patents/${family.id}`);
     await page.getByRole("tab", { name: "Applications", exact: true }).click();
     await page.getByRole("link", { name: application.facts.title, exact: true }).click();
     await page.getByRole("tab", { name: "Proceedings", exact: true }).click();

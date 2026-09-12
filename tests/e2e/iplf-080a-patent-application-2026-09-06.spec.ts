@@ -48,8 +48,9 @@ for (const width of [393, 768, 1280]) {
     expect(taxonomy.status(), await taxonomy.text()).toBe(200);
     await signInPatentTenant(page, tenant);
     await page.setViewportSize({ width, height: 900 });
-    await page.goto("/app/ip/patents");
-    await page.getByRole("link", { name: family.facts.title, exact: true }).click();
+    // The API returned the authoritative family identity. Do not assume a
+    // bounded, UUID-ordered list page contains a newly-created record.
+    await page.goto(`/app/ip/patents/${family.id}`);
     await page.getByRole("tab", { name: "Documents", exact: true }).click();
     const bytes = Buffer.from(`Original application number and filing evidence. ${run} `.repeat(30));
     await page.getByLabel("Original file", { exact: true }).setInputFiles({

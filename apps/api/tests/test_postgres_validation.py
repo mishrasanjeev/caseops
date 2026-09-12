@@ -2560,6 +2560,7 @@ def test_authority_structured_search_trigram_indexes_exist_after_head(pg_engine)
         "ix_authority_documents_court_name_trgm",
         "ix_authority_documents_judge_trgm",
         "ix_authority_documents_act_section_trgm",
+        "ix_authority_documents_decision_updated",
     }
     with pg_engine.connect() as conn:
         rows = conn.execute(
@@ -2574,9 +2575,13 @@ def test_authority_structured_search_trigram_indexes_exist_after_head(pg_engine)
         indexes = {str(row["indexname"]): str(row["indexdef"]) for row in rows}
 
     assert set(indexes) == expected
-    for indexdef in indexes.values():
-        assert "USING gin" in indexdef
-        assert "gin_trgm_ops" in indexdef
+    for name, indexdef in indexes.items():
+        if name == "ix_authority_documents_decision_updated":
+            assert "decision_date" in indexdef
+            assert "updated_at" in indexdef
+        else:
+            assert "USING gin" in indexdef
+            assert "gin_trgm_ops" in indexdef
 
 
 def test_authority_exact_name_prefilter_matches_party_tokens_on_postgres(pg_engine):

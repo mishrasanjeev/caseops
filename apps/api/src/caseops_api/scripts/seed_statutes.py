@@ -32,6 +32,8 @@ from caseops_api.scripts.official_statute_release import load_release_bundle
 
 logger = logging.getLogger("seed_statutes")
 
+_LEGACY_GENERATED_QUARANTINE_REASON = "AI-generated legal text is not authoritative"
+
 SEED_PATH = Path(__file__).resolve().parent / "seed_data" / "statutes.json"
 VERIFIED_SOURCE_PATH = (
     Path(__file__).resolve().parent / "seed_data" / "verified_statute_sources.json"
@@ -81,14 +83,17 @@ def _apply_verified_release_source(
     *,
     now: datetime,
 ) -> bool:
-    if row.verification_status in {
-        "verified_official",
-        "verified_licensed",
-        "quarantined",
-        "retired",
-    }:
+    if row.verification_status in {"verified_official", "verified_licensed", "retired"}:
         # A seed rerun is not a new source review or a new network link check.
         # Preserve all independently reviewed provenance, not only its text.
+        return False
+    if row.verification_status == "quarantined" and not (
+        row.quarantine_reason == _LEGACY_GENERATED_QUARANTINE_REASON
+        and row.section_text_source == "haiku_generated"
+    ):
+        # Only replace the known legacy AI-generated placeholder quarantine
+        # with the newer checked-in official release. Other quarantines remain
+        # fail-closed until their own source review is resolved.
         return False
     expected_hash = str(source["source_sha256"])
     prior_hash = row.source_sha256
