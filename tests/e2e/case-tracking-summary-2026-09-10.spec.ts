@@ -40,8 +40,10 @@ test.use({ extraHTTPHeaders: noPaidProviderHeaders });
 
 test("dated async summary: visible fallback, release-image worker, retained source and no-paid fences", async ({ browser }, info) => {
   // This Docker journey covers three tenants, two isolated worker runs, three
-  // responsive reloads per tenant, and retained-source downloads.
-  test.setTimeout(420_000);
+  // responsive reloads per tenant, and retained-source downloads. Keep the
+  // budget above the full-shard Docker contention envelope while retaining a
+  // finite bound for the complete journey and cleanup.
+  test.setTimeout(600_000);
   const project = process.env.CASEOPS_E2E_DOCKER_PROJECT;
   test.skip(!project, "Requires the isolated exact-image Docker worker stack; not host or production acceptance.");
   const composeFile = process.env.CASEOPS_E2E_DOCKER_COMPOSE_FILE;
