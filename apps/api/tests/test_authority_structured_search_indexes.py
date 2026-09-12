@@ -81,3 +81,6 @@ def test_recency_index_migration_is_concurrent_and_recovers_invalid_build() -> N
     assert "(decision_date DESC, updated_at DESC)" in source
     assert "indisvalid" in source
     assert "DROP INDEX CONCURRENTLY IF EXISTS" in source
+    downgrade_source = source.split("def downgrade()", 1)[1]
+    assert "DROP INDEX IF EXISTS" in downgrade_source
+    assert "autocommit_block" not in downgrade_source

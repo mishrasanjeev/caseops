@@ -61,5 +61,7 @@ def downgrade() -> None:
     bind = op.get_bind()
     if bind.dialect.name != "postgresql":
         return
-    with op.get_context().autocommit_block():
-        op.execute(f"DROP INDEX CONCURRENTLY IF EXISTS {_INDEX_NAME}")
+
+    # Keep this removal in Alembic's transaction.  A later restore-forward
+    # refusal must roll it back together with the rest of the downgrade path.
+    op.execute(f"DROP INDEX IF EXISTS {_INDEX_NAME}")
