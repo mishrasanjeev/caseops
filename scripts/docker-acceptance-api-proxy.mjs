@@ -20,14 +20,13 @@ const server = http.createServer((request, response) => {
   let downstreamAborted = false;
   const headers = {
     ...request.headers,
-    connection: "close",
   };
   delete headers["keep-alive"];
   delete headers["proxy-connection"];
 
   const upstream = http.request(
     {
-      agent: false,
+      agent: upstreamAgent,
       headers,
       host: "127.0.0.1",
       method: request.method,
@@ -77,7 +76,20 @@ const server = http.createServer((request, response) => {
   request.pipe(upstream);
 });
 
+// Keep the long acceptance run below the host's ephemeral-port budget while
+// bounding concurrent upstream work. Aborted responses still destroy only the
+// request in flight, leaving completed sockets reusable.
+const upstreamAgent = new http.Agent({
+  keepAlive: true,
+  keepAliveMsecs: 1_000,
+  maxFreeSockets: 8,
+  maxSockets: 32,
+  scheduling: "lifo",
+});
+
 server.requestTimeout = 130_000;
+server.keepAliveTimeout = 5_000;
+server.headersTimeout = 10_000;
 server.listen(listenPort, "127.0.0.1", () => {
   console.log(
     JSON.stringify({
@@ -89,7 +101,10 @@ server.listen(listenPort, "127.0.0.1", () => {
 });
 
 function shutdown() {
-  server.close(() => process.exit(0));
+  server.close(() => {
+    upstreamAgent.destroy();
+    process.exit(0);
+  });
 }
 
 process.on("SIGINT", shutdown);

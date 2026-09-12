@@ -226,7 +226,7 @@ $AcceptanceEnvironment = @{
     CASEOPS_SUMMARY_ACCEPTANCE = "1"
     CASEOPS_E2E_HEARING_PROVIDER = "sep10-offline"
     # Playwright's Node control-plane and browser calls go through a loopback
-    # proxy that opens one fresh Windows-to-Docker connection per request.
+    # proxy with a bounded keep-alive pool for the long multi-shard run.
     CASEOPS_E2E_API_PORT = $TestApiPort
     CASEOPS_E2E_DATABASE_URL = "postgresql+psycopg://caseops:caseops@127.0.0.1:$PostgresPort/caseops"
     CASEOPS_E2E_DOCKER_PROJECT = $ComposeProject

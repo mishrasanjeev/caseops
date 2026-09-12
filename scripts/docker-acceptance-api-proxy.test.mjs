@@ -38,7 +38,7 @@ test("forwards a complete mutation response exactly once", async (t) => {
   const { url, errors } = await fixture(t, async (request, response) => {
     calls += 1;
     assert.equal(request.method, "POST");
-    assert.equal(request.headers.connection, "close");
+    assert.match(request.headers.connection ?? "", /keep-alive/);
     let body = "";
     for await (const chunk of request) body += chunk.toString();
     assert.equal(body, "original mutation");
@@ -49,6 +49,26 @@ test("forwards a complete mutation response exactly once", async (t) => {
   assert.equal(response.status, 201);
   assert.equal(await response.text(), payload);
   assert.equal(calls, 1);
+  assert.equal(errors(), "");
+});
+
+test("reuses bounded upstream connections across a sustained request run", async (t) => {
+  const sockets = new Set();
+  const { url, errors } = await fixture(t, (request, response) => {
+    sockets.add(request.socket.remotePort);
+    response.end("ok");
+  });
+  const agent = new http.Agent({ keepAlive: true, maxSockets: 4, maxFreeSockets: 2 });
+  t.after(() => agent.destroy());
+  for (let index = 0; index < 300; index += 1) {
+    const response = await new Promise((resolve, reject) => {
+      const request = http.get(`${url}/health`, { agent }, resolve);
+      request.on("error", reject);
+    });
+    assert.equal(response.statusCode, 200);
+    for await (const _chunk of response) { /* drain before the next request */ }
+  }
+  assert.ok(sockets.size <= 2, `proxy opened ${sockets.size} upstream sockets`);
   assert.equal(errors(), "");
 });
 
