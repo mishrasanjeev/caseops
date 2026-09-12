@@ -1120,11 +1120,16 @@ def search_authority_catalog(
         if not merged_ids:
             return []
         stmt = stmt.where(AuthorityDocument.id.in_(merged_ids))
-    else:
+    elif not structured_mode:
         stmt = stmt.order_by(
             AuthorityDocument.decision_date.desc(),
             AuthorityDocument.updated_at.desc(),
         )
+    # Structured modes filter on immutable metadata expressions backed by
+    # trigram indexes. Do not combine that predicate with corpus-recency
+    # ordering: PostgreSQL can otherwise prefer a recency walk and inspect a
+    # large fraction of the corpus before finding a common term such as
+    # "State". The shared ranker orders the bounded metadata candidates below.
     if forum_level:
         stmt = stmt.where(AuthorityDocument.forum_level == forum_level)
     court_clause = _court_name_filter_clause(court_name)

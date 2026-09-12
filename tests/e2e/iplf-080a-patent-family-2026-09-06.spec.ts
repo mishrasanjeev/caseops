@@ -153,7 +153,11 @@ for (const width of [393, 768, 1280]) {
     await page.getByRole("link", { name: "Patent families", exact: true }).click();
     await expect(page.getByRole("link", { name: `Corrected substrate invention ${run}`, exact: true })).toHaveCount(0);
     await page.getByLabel("Lifecycle", { exact: true }).selectOption("terminal");
-    await page.getByRole("link", { name: `Corrected substrate invention ${run}`, exact: true }).click();
+    await page.getByLabel("Family title", { exact: true }).fill(`Corrected substrate invention ${run}`);
+    await page.getByRole("button", { name: "Search patent families", exact: true }).click();
+    const terminalFamilyLink = page.getByRole("link", { name: `Corrected substrate invention ${run}`, exact: true });
+    await expect(terminalFamilyLink).toBeVisible();
+    await terminalFamilyLink.click();
     await page.getByRole("tab", { name: "Lifecycle", exact: true }).click();
     await page.getByLabel("Effective date and time", { exact: true }).fill("2026-09-06T10:01");
     await page.getByLabel("Reason", { exact: true }).fill("Client explicitly renewed the disclosure instruction.");

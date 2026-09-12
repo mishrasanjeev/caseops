@@ -1282,6 +1282,47 @@ def test_all_seven_research_modes_share_a_bounded_interactive_path(
     assert perf_counter() - started < 5.0
 
 
+def test_structured_metadata_search_does_not_walk_recency_index_before_limit(
+    client: TestClient,  # noqa: ARG001 - fixture installs the isolated test database
+) -> None:
+    from caseops_api.services import authorities as svc
+
+    authority_id = _seed_madras_bail_authority()
+    with get_session_factory()() as session:
+        document = session.get(AuthorityDocument, authority_id)
+        assert document is not None
+        document.parties_json = json.dumps(["Common State Party"])
+        session.commit()
+
+    statements: list[str] = []
+    with get_session_factory()() as session:
+        assert session.bind is not None
+
+        def _capture_sql(*args, **kwargs):  # noqa: ARG001
+            statements.append(str(args[2]))
+
+        event.listen(session.bind, "before_cursor_execute", _capture_sql)
+        try:
+            results = svc.search_authority_catalog(
+                session,
+                query="State",
+                search_mode="party",
+                limit=10,
+                suppress_unreadable=False,
+            )
+        finally:
+            event.remove(session.bind, "before_cursor_execute", _capture_sql)
+
+    assert any(result.authority_document_id == authority_id for result in results)
+    document_sql = next(
+        sql.casefold()
+        for sql in statements
+        if "from authority_documents" in sql.casefold()
+        and "parties_json" in sql.casefold()
+    )
+    assert "order by authority_documents.decision_date" not in document_sql
+
+
 def test_keyword_research_loads_bounded_chunks_in_constant_queries(
     client: TestClient,  # noqa: ARG001 - fixture installs the isolated test database
     monkeypatch,

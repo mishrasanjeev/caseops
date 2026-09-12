@@ -133,7 +133,12 @@ for (const width of [393, 768, 1280]) {
     await page.getByRole("tab", { name: "Priorities", exact: true }).click();
     await page.getByRole("button", { name: "Add relationship", exact: true }).click();
     const cycle = page.getByRole("form", { name: "Add patent relationship", exact: true });
-    await cycle.getByLabel("Parent application", { exact: true }).selectOption(child.id);
+    await cycle.getByLabel("Parent title or exact identifier", { exact: true }).fill(child.facts.title);
+    await cycle.getByRole("button", { name: "Search parent applications", exact: true }).click();
+    const cycleParent = cycle.getByLabel("Parent application", { exact: true });
+    await expect(cycleParent).toBeEnabled();
+    await expect(cycleParent.locator(`option[value="${child.id}"]`)).toHaveCount(1);
+    await cycleParent.selectOption(child.id);
     await cycle.getByLabel("Recorded priority date", { exact: true }).fill("2026-09-05");
     await cycle.getByLabel("Relationship change reason", { exact: true }).fill("This reverse relationship must not form a cycle.");
     await cycle.getByRole("button", { name: "Save relationship", exact: true }).click();
