@@ -166,18 +166,22 @@ function Get-ComposeServiceState {
         [string]$Service
     )
 
-    $ContainerId = ((
+    $ContainerIds = @(
         & docker compose --project-name $Project --file $File ps --all --quiet $Service |
-            Out-String
-    ).Trim())
-    if ($LASTEXITCODE -ne 0 -or $ContainerId -notmatch "^[0-9a-f]+$") {
+            ForEach-Object { $_.Trim() } |
+            Where-Object { $_ -match "^[0-9a-f]+$" }
+    )
+    if ($LASTEXITCODE -ne 0 -or $ContainerIds.Count -eq 0) {
         throw "Could not resolve the $Service container in $Project."
     }
-    $State = ((& docker inspect --format "{{.State.Status}}" $ContainerId | Out-String).Trim())
-    if ($LASTEXITCODE -ne 0 -or -not $State) {
+    $States = @(& docker inspect --format "{{.State.Status}}" $ContainerIds)
+    if ($LASTEXITCODE -ne 0 -or $States.Count -eq 0 -or ($States | Where-Object { -not $_ }).Count -gt 0) {
         throw "Could not inspect the $Service container in $Project."
     }
-    return $State
+    if ($States -contains "running") {
+        return "running"
+    }
+    return [string]$States[0]
 }
 
 $PinnedNodeVersion = ((Get-Content -LiteralPath (Join-Path $RepoRoot ".nvmrc") -Raw).Trim() -replace "^v", "")
