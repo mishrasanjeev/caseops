@@ -72,6 +72,24 @@ test("reuses bounded upstream connections across a sustained request run", async
   assert.equal(errors(), "");
 });
 
+test("retires an idle upstream before the Docker server can close it", async (t) => {
+  let connections = 0;
+  const { url, errors } = await fixture(t, (request, response) => {
+    connections += 1;
+    response.setHeader("Keep-Alive", "timeout=5");
+    response.end("ok");
+    request.socket.setTimeout(4_500, () => request.socket.destroy());
+  });
+  const response = await fetch(`${url}/first`);
+  assert.equal(await response.text(), "ok");
+  await new Promise((resolve) => setTimeout(resolve, 4_100));
+  const second = await fetch(`${url}/second`);
+  assert.equal(second.status, 200);
+  assert.equal(await second.text(), "ok");
+  assert.equal(connections, 2);
+  assert.equal(errors(), "");
+});
+
 for (const phase of ["before headers", "during streaming"]) {
   test(`releases abandoned upstream ${phase}`, async (t) => {
     let releaseReceived;

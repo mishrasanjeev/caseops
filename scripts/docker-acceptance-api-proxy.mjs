@@ -38,6 +38,7 @@ const server = http.createServer((request, response) => {
       upstreamResponse.pipe(response);
     },
   );
+  upstream.on("socket", clearFreeSocketTimeout);
 
   upstream.setTimeout(125_000, () => {
     upstream.destroy(new Error("Docker API upstream timed out after 125 seconds."));
@@ -86,6 +87,31 @@ const upstreamAgent = new http.Agent({
   maxSockets: 32,
   scheduling: "lifo",
 });
+upstreamAgent.on("free", (socket) => {
+  armFreeSocketTimeout(socket);
+});
+
+const freeSocketTimeoutHandlers = new WeakMap();
+
+function clearFreeSocketTimeout(socket) {
+  const handler = freeSocketTimeoutHandlers.get(socket);
+  if (handler) {
+    socket.removeListener("timeout", handler);
+    freeSocketTimeoutHandlers.delete(socket);
+  }
+  socket.setTimeout(0);
+}
+
+function armFreeSocketTimeout(socket) {
+  clearFreeSocketTimeout(socket);
+  const handler = () => {
+    freeSocketTimeoutHandlers.delete(socket);
+    socket.destroy();
+  };
+  freeSocketTimeoutHandlers.set(socket, handler);
+  socket.setTimeout(4_000);
+  socket.once("timeout", handler);
+}
 
 server.requestTimeout = 130_000;
 server.keepAliveTimeout = 5_000;
