@@ -92,8 +92,8 @@ test("BUG-014 scheduled CNR, combined registration and filing identities persist
                 mode === "ambiguous"
                   ? "WP(C) 889/2026"
                   : mode === "missing-court"
-                    ? "WP(C) 8123/2026"
-                    : "WP(C) 8124/2026",
+                    ? "WP(C) 8124/2026"
+                    : "WP(C) 8123/2026",
             }),
     } });
     expect(edited.status(), await edited.text()).toBe(200);
@@ -101,7 +101,7 @@ test("BUG-014 scheduled CNR, combined registration and filing identities persist
   }
   const legacyMatter = fixtures.find(fixture => fixture.mode === "missing-court")!;
   const legacy = await request.post(`${api}/api/case-tracking/bookmarks`, { headers, data: {
-    provider: "ecourtsindia", case_number: "WP(C) 8123/2026", case_title: "Legacy incomplete auto-link",
+    provider: "ecourtsindia", case_number: "WP(C) 8124/2026", case_title: "Legacy incomplete auto-link",
     matter_id: legacyMatter.id, metadata: { source: "matter_create_auto_link" },
   } });
   expect(legacy.status(), await legacy.text()).toBe(201);

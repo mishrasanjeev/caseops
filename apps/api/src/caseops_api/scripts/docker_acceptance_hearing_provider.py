@@ -10,18 +10,25 @@ from caseops_api.scripts.docker_acceptance_case_provider import AcceptanceProvid
 
 HEARING_CNR = "DLHC010081232026"
 HEARING_CASE_NUMBER = "8123/2026"
+SECOND_HEARING_CNR = "DLHC010081242026"
 SECOND_HEARING_CASE_NUMBER = "8124/2026"
 HEARING_FILING_NUMBER = "421/2026"
+SECOND_HEARING_FILING_NUMBER = "422/2026"
 AMBIGUOUS_NUMBER = "889/2026"
 AMBIGUOUS_CNRS = ("DLHC010008892026", "DLHC020008892026")
 
 
-def hearing_case(number: str, *, cnr: str = HEARING_CNR) -> dict[str, object]:
+def hearing_case(
+    number: str,
+    *,
+    cnr: str = HEARING_CNR,
+    filing_number: str = HEARING_FILING_NUMBER,
+) -> dict[str, object]:
     return {
         "cnr": cnr,
         "caseNumber": f"WP(C) {number}",
         "registrationNumber": number,
-        "filingNumber": HEARING_FILING_NUMBER,
+        "filingNumber": filing_number,
         "caseType": "WP_C",
         "courtCode": "DLHC01",
         "courtName": "Delhi High Court",
@@ -62,7 +69,25 @@ class HearingAcceptanceHandler(AcceptanceProviderHandler):
                 return
             if not self._authorized():
                 return
-            rows = [hearing_case(number)]
+            if number == SECOND_HEARING_CASE_NUMBER:
+                rows = [
+                    hearing_case(
+                        SECOND_HEARING_CASE_NUMBER,
+                        cnr=SECOND_HEARING_CNR,
+                        filing_number=SECOND_HEARING_FILING_NUMBER,
+                    )
+                ]
+            elif number == HEARING_FILING_NUMBER:
+                # Registration and filing searches must resolve to the same
+                # provider record, even though the searched numbers differ.
+                rows = [
+                    hearing_case(
+                        HEARING_CASE_NUMBER,
+                        filing_number=HEARING_FILING_NUMBER,
+                    )
+                ]
+            else:
+                rows = [hearing_case(HEARING_CASE_NUMBER)]
             if number == AMBIGUOUS_NUMBER:
                 rows = [
                     dict(hearing_case(number, cnr=cnr), registrationNumber=number)
@@ -74,12 +99,24 @@ class HearingAcceptanceHandler(AcceptanceProviderHandler):
             )
             return
         cnr = parsed.path.removeprefix("/api/partner/case/")
-        if parsed.path.startswith("/api/partner/case/") and cnr in {HEARING_CNR, *AMBIGUOUS_CNRS}:
+        if parsed.path.startswith("/api/partner/case/") and cnr in {
+            HEARING_CNR,
+            SECOND_HEARING_CNR,
+            *AMBIGUOUS_CNRS,
+        }:
             if not self._authorized():
                 return
+            if cnr == SECOND_HEARING_CNR:
+                snapshot = hearing_case(
+                    SECOND_HEARING_CASE_NUMBER,
+                    cnr=SECOND_HEARING_CNR,
+                    filing_number=SECOND_HEARING_FILING_NUMBER,
+                )
+            else:
+                snapshot = hearing_case(HEARING_CASE_NUMBER, cnr=cnr)
             self._write_json(
                 HTTPStatus.OK,
-                {"data": {"courtCaseData": hearing_case(HEARING_CASE_NUMBER, cnr=cnr)}},
+                {"data": {"courtCaseData": snapshot}},
             )
             return
         # Includes Hume's SOURCE_PATH and every older fixture. Never treat an
