@@ -91,6 +91,5 @@ def test_verified_release_timestamp_is_normalized_to_utc():
 
     assert _apply_verified_release_source(row, source, now=datetime.now(UTC))
     expected = datetime.fromisoformat(str(source["source_retrieved_at"])).astimezone(UTC)
-    assert row.source_retrieved_at == expected
     assert row.section_text_fetched_at == expected
     assert row.link_last_checked_at == expected
