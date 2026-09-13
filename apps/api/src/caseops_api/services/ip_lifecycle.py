@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
+from hashlib import sha256
+from uuid import uuid4
 
 from fastapi import HTTPException
 from sqlalchemy import and_, func, or_, select
@@ -20,6 +23,7 @@ from caseops_api.db.models import (
     IpDeadlineIncident,
     IpDocketEvent,
     IpDocketRecord,
+    IpFilingTransaction,
     IpForeignAssociateInstruction,
     IpIdentifier,
     IpProceeding,
@@ -38,6 +42,10 @@ from caseops_api.db.models import (
     TrademarkApplication,
     UserCalendarConnection,
 )
+from caseops_api.schemas.ip_filing import (
+    IpFilingConfirmationTransactionRequest,
+    IpFilingPreparationTransactionRequest,
+)
 from caseops_api.schemas.ip_lifecycle import (
     IpChecklistItem,
     IpDocketEventCreateRequest,
@@ -55,6 +63,7 @@ from caseops_api.services.calendar_projection_safety import (
     calendar_sync_upsert_claim_state,
     materialize_expired_calendar_sync_upsert_claim,
 )
+from caseops_api.services.ip_capability_catalog import assert_ip_feature_available
 from caseops_api.services.ip_domain_policy import assert_trademark_docket
 from caseops_api.services.ip_records import assert_application_can_enter_filed_phase
 from caseops_api.services.matter_access import (
@@ -585,6 +594,7 @@ def _append_locked_event(
     docket: IpDocketRecord,
     payload: IpDocketEventCreateRequest,
     resulting_lifecycle_version: int | None = None,
+    authorized_filing_transaction_id: str | None = None,
 ) -> IpDocketEvent:
     if resulting_lifecycle_version is None:
         assert_trademark_docket(docket)
@@ -601,6 +611,22 @@ def _append_locked_event(
             status_code=409,
             detail="Terminal IP records are immutable; use the dedicated reopen transition.",
         )
+    if payload.event_kind == "filing":
+        requested_transaction_id = payload.payload.get("filing_transaction_id")
+        if (
+            authorized_filing_transaction_id is None
+            or requested_transaction_id != authorized_filing_transaction_id
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "ip_filing_transaction_required",
+                    "message": (
+                        "A filing event is created only by an accepted filing "
+                        "transaction; direct filing events are disabled."
+                    ),
+                },
+            )
     _active_membership(
         session,
         company_id=docket.company_id,
@@ -732,6 +758,22 @@ def _append_locked_event(
                 ),
             )
         before_phase = application.filing_phase
+        if (
+            apply_phase
+            and application.filing_phase in {"draft", "pre_filing"}
+            and proposed_phase == "filed"
+            and authorized_filing_transaction_id is None
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "ip_filing_transaction_required",
+                    "message": (
+                        "A pre-filing application can advance only through an accepted filing "
+                        "transaction."
+                    ),
+                },
+            )
         if proposed_phase is not None and apply_phase:
             if payload.event_kind == "filing":
                 identifiers = list(
@@ -850,21 +892,13 @@ def _append_locked_event(
     return row
 
 
-def append_ip_docket_event(
+def _record_ip_docket_event_audit(
     session: Session,
     *,
     context: SessionContext,
-    docket_id: str,
-    payload: IpDocketEventCreateRequest,
-    commit: bool = True,
-) -> IpDocketEvent:
-    docket = _authorized_lifecycle_docket(
-        session,
-        context=context,
-        docket_id=docket_id,
-        for_update=True,
-    )
-    row = _append_locked_event(session, context=context, docket=docket, payload=payload)
+    docket: IpDocketRecord,
+    row: IpDocketEvent,
+) -> None:
     record_from_context(
         session,
         context,
@@ -883,10 +917,375 @@ def append_ip_docket_event(
             "reconciles_event_id": row.reconciles_event_id,
         },
     )
+
+
+def append_ip_docket_event(
+    session: Session,
+    *,
+    context: SessionContext,
+    docket_id: str,
+    payload: IpDocketEventCreateRequest,
+    commit: bool = True,
+) -> IpDocketEvent:
+    docket = _authorized_lifecycle_docket(
+        session,
+        context=context,
+        docket_id=docket_id,
+        for_update=True,
+    )
+    row = _append_locked_event(session, context=context, docket=docket, payload=payload)
+    _record_ip_docket_event_audit(session, context=context, docket=docket, row=row)
     if commit:
         session.commit()
         session.refresh(row)
     return row
+
+
+IpFilingTransactionRequest = (
+    IpFilingPreparationTransactionRequest | IpFilingConfirmationTransactionRequest
+)
+
+
+def _filing_problem(code: str, message: str) -> HTTPException:
+    return HTTPException(status_code=409, detail={"code": code, "message": message})
+
+
+def _filing_request_fingerprint(payload: IpFilingTransactionRequest) -> str:
+    encoded = json.dumps(
+        payload.model_dump(mode="json"),
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    return sha256(encoded).hexdigest()
+
+
+def _filing_transaction(
+    session: Session,
+    *,
+    company_id: str,
+    application_id: str,
+    transaction_id: str | None,
+) -> IpFilingTransaction | None:
+    if transaction_id is None:
+        return None
+    row = session.scalar(
+        select(IpFilingTransaction).where(
+            IpFilingTransaction.id == transaction_id,
+            IpFilingTransaction.company_id == company_id,
+            IpFilingTransaction.application_id == application_id,
+        )
+    )
+    if row is None:
+        raise _filing_problem(
+            "ip_filing_related_transaction_invalid",
+            "The related filing transaction is outside this application.",
+        )
+    return row
+
+
+def _validate_filing_transaction_chain(
+    session: Session,
+    *,
+    application: TrademarkApplication,
+    payload: IpFilingTransactionRequest,
+) -> IpFilingTransaction | None:
+    related = _filing_transaction(
+        session,
+        company_id=application.company_id,
+        application_id=application.id,
+        transaction_id=payload.related_transaction_id,
+    )
+    kind = payload.transaction_kind
+    allowed_related_kinds: dict[str, frozenset[str]] = {
+        "fee_paid": frozenset({"submitted", "resubmitted"}),
+        "acknowledgement_received": frozenset({"submitted", "resubmitted"}),
+        "defect_recorded": frozenset({"submitted", "resubmitted", "acknowledgement_received"}),
+        "rejected": frozenset({"submitted", "resubmitted", "acknowledgement_received"}),
+        "resubmitted": frozenset({"defect_recorded", "rejected"}),
+        "accepted": frozenset({"acknowledgement_received"}),
+    }
+    if kind == "submitted":
+        if related is not None:
+            raise _filing_problem(
+                "ip_filing_initial_submission_has_parent",
+                "An initial submission cannot supersede another transaction.",
+            )
+        return None
+    if kind == "fee_paid" and related is None:
+        return None
+    if related is None or related.transaction_kind not in allowed_related_kinds[kind]:
+        raise _filing_problem(
+            "ip_filing_transaction_order_invalid",
+            f"{kind.replace('_', ' ')} does not follow the referenced filing transaction.",
+        )
+    if _as_utc(payload.occurred_at) < _as_utc(related.occurred_at):
+        raise _filing_problem(
+            "ip_filing_transaction_time_invalid",
+            "A filing transaction cannot predate the transaction it references.",
+        )
+    if kind == "resubmitted":
+        if payload.attempt_key == related.attempt_key:
+            raise _filing_problem(
+                "ip_filing_resubmission_attempt_reused",
+                "A corrective resubmission requires a new attempt key.",
+            )
+    elif payload.attempt_key != related.attempt_key:
+        raise _filing_problem(
+            "ip_filing_attempt_mismatch",
+            "Related filing transactions must use the same attempt key.",
+        )
+    return related
+
+
+def record_ip_filing_transaction(
+    session: Session,
+    *,
+    context: SessionContext,
+    application_id: str,
+    payload: IpFilingTransactionRequest,
+) -> tuple[TrademarkApplication, IpFilingTransaction, IpDocketEvent | None, bool]:
+    """Append one filing fact and advance to filed only from accepted evidence."""
+
+    feature_id = (
+        "filing_prepare"
+        if isinstance(payload, IpFilingPreparationTransactionRequest)
+        else "filing_confirm"
+    )
+    assert_ip_feature_available(session, context=context, feature_id=feature_id)
+    discovered = session.execute(
+        select(TrademarkApplication.docket_id).where(
+            TrademarkApplication.id == application_id,
+            TrademarkApplication.company_id == context.company.id,
+        )
+    ).one_or_none()
+    if discovered is None:
+        raise HTTPException(status_code=404, detail="Trademark application not found.")
+    docket = _authorized_lifecycle_docket(
+        session,
+        context=context,
+        docket_id=discovered.docket_id,
+        for_update=True,
+    )
+    application, _ = _owned_target(
+        session,
+        company_id=docket.company_id,
+        docket_id=docket.id,
+        application_id=application_id,
+        proceeding_id=None,
+        for_update=True,
+    )
+    assert application is not None
+    fingerprint = _filing_request_fingerprint(payload)
+    replay = session.scalar(
+        select(IpFilingTransaction).where(
+            IpFilingTransaction.company_id == docket.company_id,
+            IpFilingTransaction.application_id == application.id,
+            IpFilingTransaction.idempotency_key == payload.idempotency_key,
+        )
+    )
+    if replay is not None:
+        if replay.request_fingerprint != fingerprint:
+            raise _filing_problem(
+                "ip_filing_idempotency_conflict",
+                "The idempotency key was already used for different filing evidence.",
+            )
+        replay_event = (
+            session.get(IpDocketEvent, replay.filing_event_id)
+            if replay.filing_event_id is not None
+            else None
+        )
+        return application, replay, replay_event, True
+    if not docket.is_active:
+        raise _filing_problem(
+            "ip_filing_docket_terminal",
+            "Terminal IP records cannot accept filing transactions.",
+        )
+    if not application.is_active:
+        raise _filing_problem(
+            "ip_filing_application_terminal",
+            "Terminal trademark applications cannot accept filing transactions.",
+        )
+    if application.filing_phase != "pre_filing":
+        raise _filing_problem(
+            "ip_filing_phase_closed",
+            "Filing transactions are accepted only while the application is in pre-filing phase.",
+        )
+    if application.version != payload.expected_application_version:
+        raise _filing_problem(
+            "ip_filing_application_version_changed",
+            "Application version changed; reload before recording filing evidence.",
+        )
+    related = _validate_filing_transaction_chain(
+        session,
+        application=application,
+        payload=payload,
+    )
+    if payload.transaction_kind in {"submitted", "resubmitted"}:
+        duplicate_attempt = session.scalar(
+            select(IpFilingTransaction.id).where(
+                IpFilingTransaction.company_id == docket.company_id,
+                IpFilingTransaction.application_id == application.id,
+                IpFilingTransaction.attempt_key == payload.attempt_key,
+                IpFilingTransaction.transaction_kind.in_(("submitted", "resubmitted")),
+            )
+        )
+        if duplicate_attempt is not None:
+            raise _filing_problem(
+                "ip_filing_attempt_already_submitted",
+                "This filing attempt was already submitted; reuse its idempotency key "
+                "or start a corrective attempt.",
+            )
+    transaction_id = str(uuid4())
+    event: IpDocketEvent | None = None
+    details = dict(payload.details)
+    authorized_confirmation: str | None = None
+    if isinstance(payload, IpFilingConfirmationTransactionRequest):
+        details.update(
+            {
+                "document_refs": payload.document_refs,
+                "form_refs": payload.form_refs,
+                "fee_evidence_refs": payload.fee_evidence_refs,
+                "approval_reference": payload.approval_reference,
+            }
+        )
+    if payload.transaction_kind == "accepted":
+        assert isinstance(payload, IpFilingConfirmationTransactionRequest)
+        assert related is not None
+        if application.filing_phase != "pre_filing":
+            raise _filing_problem(
+                "ip_filing_pre_filing_phase_required",
+                "Acceptance can advance only an application in pre-filing phase.",
+            )
+        unresolved = session.scalar(
+            select(IpFilingTransaction.id).where(
+                IpFilingTransaction.company_id == docket.company_id,
+                IpFilingTransaction.application_id == application.id,
+                IpFilingTransaction.attempt_key == payload.attempt_key,
+                IpFilingTransaction.transaction_kind.in_(("defect_recorded", "rejected")),
+            )
+        )
+        if unresolved is not None:
+            raise _filing_problem(
+                "ip_filing_attempt_has_unresolved_defect",
+                "A defective or rejected attempt must be corrected and acknowledged again.",
+            )
+        accepted_already = session.scalar(
+            select(IpFilingTransaction.id).where(
+                IpFilingTransaction.company_id == docket.company_id,
+                IpFilingTransaction.application_id == application.id,
+                IpFilingTransaction.transaction_kind == "accepted",
+            )
+        )
+        if accepted_already is not None:
+            raise _filing_problem(
+                "ip_filing_acceptance_already_recorded",
+                "This application already has an accepted filing transaction.",
+            )
+        event = _append_locked_event(
+            session,
+            context=context,
+            docket=docket,
+            payload=IpDocketEventCreateRequest(
+                expected_lifecycle_version=payload.expected_lifecycle_version,
+                expected_application_version=payload.expected_application_version,
+                application_id=application.id,
+                event_kind="filing",
+                source="manual",
+                source_reference=payload.external_reference,
+                effective_at=payload.occurred_at,
+                responsible_membership_id=context.membership.id,
+                reason=payload.authorized_confirmation,
+                evidence_refs=[payload.evidence_reference, str(payload.approval_reference)],
+                document_refs=payload.document_refs,
+                candidate_status="confirmed",
+                payload={
+                    "filing_transaction_id": transaction_id,
+                    "attempt_key": payload.attempt_key,
+                    "form_refs": payload.form_refs,
+                    "fee_evidence_refs": payload.fee_evidence_refs,
+                    "approval_refs": [payload.approval_reference],
+                    "origin_external_reference": payload.external_reference,
+                },
+            ),
+            authorized_filing_transaction_id=transaction_id,
+        )
+        _record_ip_docket_event_audit(session, context=context, docket=docket, row=event)
+        authorized_confirmation = payload.authorized_confirmation
+    row = IpFilingTransaction(
+        id=transaction_id,
+        company_id=docket.company_id,
+        docket_id=docket.id,
+        application_id=application.id,
+        transaction_kind=payload.transaction_kind,
+        attempt_key=payload.attempt_key,
+        idempotency_key=payload.idempotency_key,
+        request_fingerprint=fingerprint,
+        related_transaction_id=related.id if related is not None else None,
+        filing_event_id=event.id if event is not None else None,
+        external_reference=payload.external_reference,
+        evidence_reference=payload.evidence_reference,
+        occurred_at=payload.occurred_at,
+        authorized_confirmation=authorized_confirmation,
+        details_json=details,
+        recorded_by_membership_id=context.membership.id,
+    )
+    session.add(row)
+    session.flush()
+    record_from_context(
+        session,
+        context,
+        action="ip_filing.transaction_recorded",
+        target_type="ip_filing_transaction",
+        target_id=row.id,
+        matter_id=docket.matter_id,
+        ip_docket_id=docket.id,
+        metadata={
+            "application_id": application.id,
+            "transaction_kind": row.transaction_kind,
+            "attempt_key": row.attempt_key,
+            "related_transaction_id": row.related_transaction_id,
+            "filing_event_id": row.filing_event_id,
+        },
+    )
+    session.commit()
+    session.refresh(application)
+    session.refresh(row)
+    if event is not None:
+        session.refresh(event)
+    return application, row, event, False
+
+
+def list_ip_filing_transactions(
+    session: Session,
+    *,
+    context: SessionContext,
+    application_id: str,
+) -> list[IpFilingTransaction]:
+    discovered = session.execute(
+        select(TrademarkApplication.docket_id).where(
+            TrademarkApplication.id == application_id,
+            TrademarkApplication.company_id == context.company.id,
+        )
+    ).one_or_none()
+    if discovered is None:
+        raise HTTPException(status_code=404, detail="Trademark application not found.")
+    docket = _authorized_lifecycle_docket(
+        session,
+        context=context,
+        docket_id=discovered.docket_id,
+        for_update=False,
+    )
+    return list(
+        session.scalars(
+            select(IpFilingTransaction)
+            .where(
+                IpFilingTransaction.company_id == docket.company_id,
+                IpFilingTransaction.docket_id == docket.id,
+                IpFilingTransaction.application_id == application_id,
+            )
+            .order_by(IpFilingTransaction.occurred_at, IpFilingTransaction.id)
+        )
+    )
 
 
 def _lifecycle_impacts(

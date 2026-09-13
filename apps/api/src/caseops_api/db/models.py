@@ -16102,6 +16102,125 @@ class TrademarkApplication(Base):
     )
 
 
+class IpFilingTransaction(Base):
+    """Append-only evidence for one human-controlled trademark filing attempt."""
+
+    __tablename__ = "ip_filing_transactions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["docket_id", "company_id"],
+            ["ip_docket_records.id", "ip_docket_records.company_id"],
+            name="fk_ip_filing_transaction_docket_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["application_id", "company_id"],
+            ["trademark_applications.id", "trademark_applications.company_id"],
+            name="fk_ip_filing_transaction_application_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["related_transaction_id", "company_id"],
+            ["ip_filing_transactions.id", "ip_filing_transactions.company_id"],
+            name="fk_ip_filing_transaction_related_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["filing_event_id", "company_id"],
+            ["ip_docket_events.id", "ip_docket_events.company_id"],
+            name="fk_ip_filing_transaction_event_company",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["recorded_by_membership_id", "company_id"],
+            ["company_memberships.id", "company_memberships.company_id"],
+            name="fk_ip_filing_transaction_recorder_company",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "company_id", name="uq_ip_filing_transaction_id_company"),
+        UniqueConstraint(
+            "company_id",
+            "application_id",
+            "idempotency_key",
+            name="uq_ip_filing_transaction_idempotency",
+        ),
+        Index(
+            "ix_ip_filing_transactions_company_application",
+            "company_id",
+            "application_id",
+            "occurred_at",
+        ),
+        Index(
+            "ix_ip_filing_transactions_attempt",
+            "company_id",
+            "application_id",
+            "attempt_key",
+            "occurred_at",
+        ),
+        Index(
+            "uq_ip_filing_transaction_one_acceptance",
+            "company_id",
+            "application_id",
+            unique=True,
+            postgresql_where=text("transaction_kind = 'accepted'"),
+            sqlite_where=text("transaction_kind = 'accepted'"),
+        ),
+        Index(
+            "uq_ip_filing_transaction_attempt_submission",
+            "company_id",
+            "application_id",
+            "attempt_key",
+            unique=True,
+            postgresql_where=text("transaction_kind IN ('submitted', 'resubmitted')"),
+            sqlite_where=text("transaction_kind IN ('submitted', 'resubmitted')"),
+        ),
+        CheckConstraint(
+            "transaction_kind IN ('submitted', 'fee_paid', "
+            "'acknowledgement_received', 'defect_recorded', 'rejected', "
+            "'resubmitted', 'accepted')",
+            name="ck_ip_filing_transaction_kind",
+        ),
+        CheckConstraint(
+            "(transaction_kind = 'submitted' AND related_transaction_id IS NULL) OR "
+            "(transaction_kind = 'fee_paid') OR "
+            "(transaction_kind NOT IN ('submitted', 'fee_paid') "
+            "AND related_transaction_id IS NOT NULL)",
+            name="ck_ip_filing_transaction_related_shape",
+        ),
+        CheckConstraint(
+            "(transaction_kind = 'accepted' AND filing_event_id IS NOT NULL "
+            "AND authorized_confirmation IS NOT NULL) OR "
+            "(transaction_kind <> 'accepted' AND filing_event_id IS NULL "
+            "AND authorized_confirmation IS NULL)",
+            name="ck_ip_filing_transaction_acceptance_shape",
+        ),
+        CheckConstraint(
+            "length(request_fingerprint) = 64",
+            name="ck_ip_filing_transaction_fingerprint",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    docket_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    application_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    transaction_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    attempt_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    related_transaction_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    filing_event_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    external_reference: Mapped[str] = mapped_column(String(255), nullable=False)
+    evidence_reference: Mapped[str] = mapped_column(String(500), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    authorized_confirmation: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    details_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    recorded_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+
+
 class TrademarkApplicationScope(Base):
     __tablename__ = "trademark_application_scopes"
     __table_args__ = (

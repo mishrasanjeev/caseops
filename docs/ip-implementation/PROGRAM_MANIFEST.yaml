@@ -1540,7 +1540,8 @@
         "IPLF-039E",
         "IPLF-039F",
         "IPLF-039G",
-        "IPLF-039H"
+        "IPLF-039H",
+        "IPLF-039I"
       ],
       "implementation_status": "in_progress",
       "verification_status": "not_run",
@@ -10302,6 +10303,70 @@
       "documentation_impact": [],
       "allocation_review": "Phase 0 mechanical allocation; scope and ownership reviewed against PRD Sections 11, 23, and 25.",
       "implementation_status": "not_started",
+      "verification_status": "not_run",
+      "release_status": "blocked"
+    },
+    {
+      "id": "IPLF-039I",
+      "title": "Integrated workflow, reconciliation, and production proof: Trademark operations integration: extend existing intake/conflict/promotion, daily task/hearing/docket, CompanyNotice/Communication, billing and report owners; add IP-specific instructions, clearance, filing/service, cost evidence links and controlled lifecycle. Portal is M5. Track independently reviewable concerns with suffix IDs and coherent commits inside the continuous integration campaign.",
+      "milestone_id": "M3",
+      "epic_id": "IPLF-039",
+      "source_kind": "derived",
+      "scope_source": "IPLF-039",
+      "primary_behavior": "Integrated workflow, reconciliation, and production proof",
+      "migration_boundary": "Additive migration creates tenant-scoped filing transaction records, append-only database guards, and indexes; no existing rows are rewritten and rollout remains disabled until release evidence is complete.",
+      "release_boundary": "The API contract, migration, exact-commit CI, staged rollout, and dated production-safe acceptance must prove that only an accepted evidence-complete transaction can create the filed event; normal filing, service, UI, and production proof remain open.",
+      "requirement_ids": [
+        "IP-FILE-03",
+        "IP-FILE-05"
+      ],
+      "journey_path_ids": [
+        "UJ-32-NORMAL"
+      ],
+      "ownership": [
+        {
+          "classification": "LINK",
+          "component": "IPLF-039 canonical scope: Trademark operations integration: extend existing intake/conflict/promotion, daily task/hearing/docket, CompanyNotice/Communication, billing and report owners; add IP-specific instructions, clearance, filing/service, cost evidence links and controlled lifecycle. Portal is M5. Track independently reviewable concerns with suffix IDs and coherent commits inside the continuous integration campaign.",
+          "canonical_writer": "The existing Section 11.2 owner, extended by the parent epic's typed adapter/service; any new record is owned by the PRD-named neutral or IP bounded context.",
+          "compatibility_path": "Existing Matter/platform routes and records remain canonical; additive adapters delegate to one writer and preserve legacy reads during rollout.",
+          "retirement_gate": "No compatibility path is retired until one-writer reconciliation, mixed-revision proof, rollback evidence, and exact deployed acceptance pass."
+        },
+        {
+          "classification": "NEW",
+          "component": "ip_filing_transactions and its filing transaction service/route adapter.",
+          "canonical_writer": "caseops_api.services.ip_lifecycle.record_ip_filing_transaction is the sole writer for filing transactions and the authorized filing-event path.",
+          "compatibility_path": "Existing trademark applications and lifecycle events remain readable; the additive route is capability- and rollout-gated and direct filing-event writes fail closed.",
+          "retirement_gate": "No filing-event compatibility path is retired until immutable-chain, duplicate, defect, rollback, mixed-revision, and exact deployed acceptance evidence passes."
+        }
+      ],
+      "dependencies": [
+        "IPLF-039G"
+      ],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260913_0001_ip_filing_transactions.py",
+        "apps/api/src/caseops_api/db/models.py:IpFilingTransaction",
+        "apps/api/src/caseops_api/schemas/ip_filing.py",
+        "apps/api/src/caseops_api/services/ip_lifecycle.py:record_ip_filing_transaction",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py:filing-transactions"
+      ],
+      "test_refs": [
+        "apps/api/tests/test_ip_filing_transactions.py"
+      ],
+      "evidence_refs": [],
+      "evidence_metadata": [],
+      "blockers": [],
+      "next_actions": [
+        "Add full normal/service/UI journeys and exact-release production evidence before enabling the filing rollout."
+      ],
+      "data_impact": [
+        "Adds append-only filing transaction evidence rows scoped to an application, docket, and tenant; no existing data is rewritten."
+      ],
+      "documentation_impact": [
+        "docs/ip-implementation/PROGRAM_MANIFEST.yaml",
+        "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
+      ],
+      "allocation_review": "2026-09-13: decomposed the filing-transaction evidence implemented on the current migration head from the broader IPLF-039H integration slice. Scope is limited to IP-FILE-03/IP-FILE-05 and the UJ-32 normal path; service, UI, and production proof remain on the residual slice.",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked"
     },
@@ -27502,12 +27567,19 @@
         "UJ-61",
         "UJ-62"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260913_0001_ip_filing_transactions.py",
+        "apps/api/src/caseops_api/db/models.py:IpFilingTransaction",
+        "apps/api/src/caseops_api/schemas/ip_filing.py",
+        "apps/api/src/caseops_api/services/ip_lifecycle.py:record_ip_filing_transaction",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py:filing-transactions"
+      ],
       "test_refs": [
         "apps/api/tests/test_ip_039f_cost_linkage.py::test_uj52_exc01_nonbillable_capture_survives_a_docket_with_no_matter#IPLF-UJ-52-EXC-01",
         "apps/api/tests/test_ip_039f_cost_linkage.py::test_uj52_exc02_conversion_preserves_original_amount_rate_source_and_time#IPLF-UJ-52-EXC-02",
         "apps/api/tests/test_ip_039f_cost_linkage.py::test_uj52_exc04_a_provider_estimate_is_not_an_actual_expense#IPLF-UJ-52-EXC-04",
         "apps/api/tests/test_ip_039f_cost_linkage.py::test_uj52_exc05_confidential_rates_are_permissioned#IPLF-UJ-52-EXC-05",
+        "apps/api/tests/test_ip_filing_transactions.py",
         "planned:IPLF-REQ-IP-FILE-03",
         "planned:IPLF-UJ-03-EXC-01",
         "planned:IPLF-UJ-03-EXC-02",
@@ -27590,11 +27662,12 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
-        "IPLF-039H"
+        "IPLF-039H",
+        "IPLF-039I"
       ],
       "allocation_rationale": "IP-FILE allocation reviewed against PRD requirement family and parent epic scope: IPLF-039."
     },
@@ -27738,12 +27811,19 @@
         "UJ-61",
         "UJ-62"
       ],
-      "implementation_refs": [],
+      "implementation_refs": [
+        "apps/api/alembic/versions/20260913_0001_ip_filing_transactions.py",
+        "apps/api/src/caseops_api/db/models.py:IpFilingTransaction",
+        "apps/api/src/caseops_api/schemas/ip_filing.py",
+        "apps/api/src/caseops_api/services/ip_lifecycle.py:record_ip_filing_transaction",
+        "apps/api/src/caseops_api/api/routes/ip_operations.py:filing-transactions"
+      ],
       "test_refs": [
         "apps/api/tests/test_ip_039f_cost_linkage.py::test_uj52_exc01_nonbillable_capture_survives_a_docket_with_no_matter#IPLF-UJ-52-EXC-01",
         "apps/api/tests/test_ip_039f_cost_linkage.py::test_uj52_exc02_conversion_preserves_original_amount_rate_source_and_time#IPLF-UJ-52-EXC-02",
         "apps/api/tests/test_ip_039f_cost_linkage.py::test_uj52_exc04_a_provider_estimate_is_not_an_actual_expense#IPLF-UJ-52-EXC-04",
         "apps/api/tests/test_ip_039f_cost_linkage.py::test_uj52_exc05_confidential_rates_are_permissioned#IPLF-UJ-52-EXC-05",
+        "apps/api/tests/test_ip_filing_transactions.py",
         "planned:IPLF-REQ-IP-FILE-05",
         "planned:IPLF-UJ-03-EXC-01",
         "planned:IPLF-UJ-03-EXC-02",
@@ -27826,11 +27906,12 @@
       ],
       "evidence_refs": [],
       "blockers": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
-        "IPLF-039H"
+        "IPLF-039H",
+        "IPLF-039I"
       ],
       "allocation_rationale": "IP-FILE allocation reviewed against PRD requirement family and parent epic scope: IPLF-039."
     },
@@ -43407,11 +43488,12 @@
         "planned:IPLF-UJ-32-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
-        "IPLF-039H"
+        "IPLF-039H",
+        "IPLF-039I"
       ]
     },
     {
@@ -51915,11 +51997,12 @@
         "planned:IPLF-UJ-32-NORMAL"
       ],
       "evidence_refs": [],
-      "implementation_status": "not_started",
+      "implementation_status": "in_progress",
       "verification_status": "not_run",
       "release_status": "blocked",
       "slice_ids": [
-        "IPLF-039H"
+        "IPLF-039H",
+        "IPLF-039I"
       ],
       "allocation_rationale": "UJ-32 path allocation reviewed against its PRD flow/exceptions and parent epic scope: IPLF-039."
     },

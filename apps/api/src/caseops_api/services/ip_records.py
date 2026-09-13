@@ -12,6 +12,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     IpAsset,
     IpIdentifier,
@@ -801,6 +802,27 @@ def update_trademark_application_phase(
         )
     if row.version != payload.expected_version:
         raise HTTPException(status_code=409, detail="Application version changed; reload.")
+    if payload.filing_phase == "filed" and get_settings().ip_filing_operations_enabled:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "ip_filing_transaction_required",
+                "message": (
+                    "Filed phase is created only by an accepted filing transaction; "
+                    "record submission and acknowledgement evidence first."
+                ),
+            },
+        )
+    if row.filing_phase not in {"draft", "pre_filing"}:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "ip_application_phase_event_required",
+                "message": (
+                    "A legal filing phase cannot be rewritten through the generic phase route."
+                ),
+            },
+        )
     row.source_pending_identifier_allocation = payload.source_pending_identifier_allocation
     identifiers = list(
         session.scalars(
