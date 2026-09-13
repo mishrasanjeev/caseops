@@ -328,7 +328,7 @@ def test_conflict_quarantines_immediately_and_decision_does_not_reactivate(
 
 
 def test_seed_job_cannot_downgrade_verified_provision(client: TestClient) -> None:
-    bootstrap_company(client)
+    bootstrap = bootstrap_company(client)
     with get_session_factory()() as session:
         _seed(session)
         section = session.scalar(
@@ -342,6 +342,7 @@ def test_seed_job_cannot_downgrade_verified_provision(client: TestClient) -> Non
         section.verification_status = "verified_official"
         section.source_version = 9
         section.source_sha256 = "a" * 64
+        section.verified_by_membership_id = str(bootstrap["membership"]["id"])
         section.section_url = (
             "https://www.indiacode.nic.in/show-data?actid=ipc&orderno=302"
         )

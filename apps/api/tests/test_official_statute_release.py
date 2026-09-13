@@ -510,7 +510,7 @@ def test_complete_release_seed_details_history_and_idempotence(client):
 
 
 def test_seed_preserves_reviewed_labels_and_pending_history_when_upgrading_legacy_rows(client):
-    bootstrap_company(client)
+    bootstrap = bootstrap_company(client)
     with get_session_factory()() as session:
         _seed(session)
         first = session.scalar(
@@ -545,6 +545,7 @@ def test_seed_preserves_reviewed_labels_and_pending_history_when_upgrading_legac
         )
         other.section_label = "Independently reviewed label"
         other.exact_source_version = "Independent reviewed source version"
+        other.verified_by_membership_id = str(bootstrap["membership"]["id"])
         session.commit()
         pending_id = pending.id
         _seed(session)
@@ -565,6 +566,38 @@ def test_seed_preserves_reviewed_labels_and_pending_history_when_upgrading_legac
         assert other.section_label == "Independently reviewed label"
         assert other.exact_source_version == "Independent reviewed source version"
         assert session.get(Statute, "bnss-2023").source_url.endswith("20099?view_type=browse")
+
+
+def test_seed_reconciles_stale_release_manifest_rows_without_a_human_reviewer(client):
+    bootstrap_company(client)
+    _, sources = release.load_release_bundle()
+    with get_session_factory()() as session:
+        _seed(session)
+        row = session.scalar(
+            select(StatuteSection).where(
+                StatuteSection.statute_id == "bnss-2023",
+                StatuteSection.section_number == "Section 191",
+            )
+        )
+        expected = sources["bnss-2023", "Section 191"]
+        row.section_label = str(expected["section_label"])[:-12]
+        row.section_text = "Stale first-release text"
+        row.source_sha256 = hashlib.sha256(row.section_text.encode()).hexdigest()
+        row.verified_by_membership_id = None
+        session.commit()
+
+        _seed(session)
+        session.expire_all()
+        session.refresh(row)
+        assert row.section_label == expected["section_label"]
+        assert row.section_text == expected["section_text"]
+        assert row.source_sha256 == expected["source_sha256"]
+        assert row.source_version == 2
+        assert session.scalar(
+            select(func.count()).select_from(StatuteSourceVersion).where(
+                StatuteSourceVersion.section_id == row.id,
+            )
+        ) == 2
 
 
 def test_seed_reconciles_only_legacy_ai_quarantine_with_official_release(client):

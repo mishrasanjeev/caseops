@@ -33,6 +33,19 @@ from caseops_api.scripts.official_statute_release import load_release_bundle
 logger = logging.getLogger("seed_statutes")
 
 _LEGACY_GENERATED_QUARANTINE_REASON = "AI-generated legal text is not authoritative"
+_RELEASE_MANIFEST_SOURCE = "official_release_manifest"
+_RELEASE_MANAGED_STATUSES = {"verified_official", "verified_licensed", "retired"}
+
+
+def _same_utc_instant(left: datetime | None, right: datetime | None) -> bool:
+    """Compare database timestamps consistently across timezone-aware backends."""
+    if left is None or right is None:
+        return left is right
+    if left.tzinfo is None or left.utcoffset() is None:
+        left = left.replace(tzinfo=UTC)
+    if right.tzinfo is None or right.utcoffset() is None:
+        right = right.replace(tzinfo=UTC)
+    return left.astimezone(UTC) == right.astimezone(UTC)
 
 SEED_PATH = Path(__file__).resolve().parent / "seed_data" / "statutes.json"
 VERIFIED_SOURCE_PATH = (
@@ -83,10 +96,18 @@ def _apply_verified_release_source(
     *,
     now: datetime,
 ) -> bool:
-    if row.verification_status in {"verified_official", "verified_licensed", "retired"}:
-        # A seed rerun is not a new source review or a new network link check.
-        # Preserve all independently reviewed provenance, not only its text.
-        return False
+    if row.verification_status in _RELEASE_MANAGED_STATUSES:
+        # Release-owned rows have no human reviewer and retain the signed
+        # manifest marker. Reconcile them when a later extractor correction
+        # changes the pinned text or label, but never replace curator-owned
+        # provenance merely because a seed bundle changed.
+        release_owned = (
+            row.verified_by_membership_id is None
+            and row.section_text_source == _RELEASE_MANIFEST_SOURCE
+            and bool((row.source_policy_json or {}).get("release_manifest_verified"))
+        )
+        if not release_owned:
+            return False
     if row.verification_status == "quarantined" and not (
         row.quarantine_reason == _LEGACY_GENERATED_QUARANTINE_REASON
         and row.section_text_source == "haiku_generated"
@@ -95,8 +116,6 @@ def _apply_verified_release_source(
         # with the newer checked-in official release. Other quarantines remain
         # fail-closed until their own source review is resolved.
         return False
-    expected_hash = str(source["source_sha256"])
-    prior_hash = row.source_sha256
     if source.get("source_retrieved_at"):
         parsed_retrieved_at = datetime.fromisoformat(str(source["source_retrieved_at"]))
         if parsed_retrieved_at.tzinfo is None or parsed_retrieved_at.utcoffset() is None:
@@ -105,12 +124,45 @@ def _apply_verified_release_source(
         # in UTC so every supported database backend exposes the same timestamp.
         retrieved_at = parsed_retrieved_at.astimezone(UTC)
     else:
-        retrieved_at = now
+        # Older release manifests did not pin a retrieval instant. Preserve an
+        # existing release row's timestamp so rerunning the seed remains
+        # idempotent while still using ``now`` for a newly created row.
+        retrieved_at = row.section_text_fetched_at or now
+    expected_hash = str(source["source_sha256"])
+    prior_hash = row.source_sha256
+    editorial_notes = str(source["editorial_notes"]) if source.get("editorial_notes") else None
+    effective_from = (
+        date.fromisoformat(str(source["effective_from"])) if source.get("effective_from") else None
+    )
+    if (
+        row.section_label == str(source["section_label"])
+        and row.section_text == str(source["section_text"])
+        and row.section_text_source == str(source["section_text_source"])
+        and _same_utc_instant(row.section_text_fetched_at, retrieved_at)
+        and row.source_sha256 == expected_hash
+        and row.source_publisher == str(source["source_publisher"])
+        and row.issuing_body == str(source["issuing_body"])
+        and row.source_category == str(source["source_category"])
+        and row.source_status == str(source["source_status"])
+        and row.legal_status == str(source["legal_status"])
+        and row.effective_from == effective_from
+        and row.exact_source_version == str(source["exact_source_version"])
+        and row.source_locator_type == str(source["source_locator_type"])
+        and row.source_policy_json == dict(source["source_policy"])
+        and (editorial_notes is None or row.editorial_notes == editorial_notes)
+        and row.link_health_status == str(source["link_health_status"])
+        and _same_utc_instant(row.link_last_checked_at, retrieved_at)
+        and row.link_last_error is None
+        and row.section_url == str(source["source_url"])
+        and row.verification_status == str(source.get("verification_status", "verified_official"))
+        and row.quarantine_reason == source.get("quarantine_reason")
+        and row.is_provisional is False
+    ):
+        return False
     row.section_label = str(source["section_label"])
     row.section_text = str(source["section_text"])
     row.section_text_source = str(source["section_text_source"])
     row.section_text_fetched_at = retrieved_at
-    row.source_retrieved_at = retrieved_at
     row.is_provisional = False
     row.verification_status = str(source.get("verification_status", "verified_official"))
     row.source_sha256 = expected_hash
@@ -119,14 +171,12 @@ def _apply_verified_release_source(
     row.source_category = str(source["source_category"])
     row.source_status = str(source["source_status"])
     row.legal_status = str(source["legal_status"])
-    row.effective_from = (
-        date.fromisoformat(str(source["effective_from"])) if source.get("effective_from") else None
-    )
+    row.effective_from = effective_from
     row.exact_source_version = str(source["exact_source_version"])
     row.source_locator_type = str(source["source_locator_type"])
     row.source_policy_json = dict(source["source_policy"])
-    if source.get("editorial_notes"):
-        row.editorial_notes = str(source["editorial_notes"])
+    if editorial_notes is not None:
+        row.editorial_notes = editorial_notes
     row.link_health_status = str(source["link_health_status"])
     row.link_last_checked_at = retrieved_at
     row.link_last_error = None
@@ -163,7 +213,7 @@ def _record_release_version(
             legal_status=row.legal_status,
             source_locator_type=row.source_locator_type,
             exact_source_version=row.exact_source_version,
-            retrieved_at=row.source_retrieved_at,
+            retrieved_at=row.section_text_fetched_at,
             effective_from=row.effective_from,
             source_policy_json=dict(row.source_policy_json),
             diff_unified="".join(
