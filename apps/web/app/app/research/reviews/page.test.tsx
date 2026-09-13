@@ -249,6 +249,14 @@ describe("IntelligentReviewsPage", () => {
     expect(screen.getByText(/caseops-intelligent-review-v1/)).toBeInTheDocument();
   });
 
+  it("refreshes a listed review while generation is still running", async () => {
+    mocks.listReviews.mockResolvedValue({ reviews: [reviewFixture({ state: "running", progress: 50 })] });
+    mocks.getReview.mockResolvedValue(reviewFixture());
+    renderPage();
+    expect(await screen.findByText("Supporting and contrary authorities")).toBeInTheDocument();
+    expect(mocks.getReview).toHaveBeenCalledWith("review-1");
+  });
+
   it("queues a review using server-owned Matter, report, and authority identifiers", async () => {
     const user = userEvent.setup();
     mocks.listReviews.mockResolvedValue({ reviews: [] });

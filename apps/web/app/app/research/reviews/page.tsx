@@ -566,7 +566,10 @@ function ReviewDetail({
     // The bounded history response already contains the complete review
     // record. Avoid a second request on the concurrency-one API; deep links
     // outside that bounded history still use the single-record endpoint.
-    enabled: Boolean(reviewId) && reviewHistoryReady && !historyReview,
+    enabled:
+      Boolean(reviewId) &&
+      reviewHistoryReady &&
+      (!historyReview || ["queued", "running"].includes(historyReview.state)),
     initialData: historyReview,
     refetchInterval: (query) =>
       ["queued", "running"].includes(query.state.data?.state ?? "") ? 1_500 : false,
