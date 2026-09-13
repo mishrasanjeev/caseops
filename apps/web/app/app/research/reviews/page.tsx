@@ -449,6 +449,8 @@ export default function IntelligentReviewsPage() {
 
         <ReviewDetail
           reviewId={selectedReviewId}
+          reviewHistory={reviewsQuery.data?.reviews ?? null}
+          reviewHistoryReady={reviewsQuery.isFetched}
           canDecide={hasCapability("recommendations:decide")}
           canPublish={hasCapability("drafts:review")}
         />
@@ -545,18 +547,27 @@ function SourceSelection({
 
 function ReviewDetail({
   reviewId,
+  reviewHistory,
+  reviewHistoryReady,
   canDecide,
   canPublish,
 }: {
   reviewId: string | null;
+  reviewHistory: IntelligentReview[] | null;
+  reviewHistoryReady: boolean;
   canDecide: boolean;
   canPublish: boolean;
 }) {
   const queryClient = useQueryClient();
+  const historyReview = reviewHistory?.find((item) => item.id === reviewId);
   const reviewQuery = useQuery({
     queryKey: ["research", "intelligent-review", reviewId],
     queryFn: () => getIntelligentReview(reviewId ?? ""),
-    enabled: Boolean(reviewId),
+    // The bounded history response already contains the complete review
+    // record. Avoid a second request on the concurrency-one API; deep links
+    // outside that bounded history still use the single-record endpoint.
+    enabled: Boolean(reviewId) && reviewHistoryReady && !historyReview,
+    initialData: historyReview,
     refetchInterval: (query) =>
       ["queued", "running"].includes(query.state.data?.state ?? "") ? 1_500 : false,
   });

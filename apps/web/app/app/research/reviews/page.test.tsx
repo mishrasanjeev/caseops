@@ -237,6 +237,7 @@ describe("IntelligentReviewsPage", () => {
   it("renders both sides, exact source URLs, frozen metadata, gaps, and contradictions", async () => {
     renderPage();
     expect(await screen.findByText("Supporting and contrary authorities")).toBeInTheDocument();
+    expect(mocks.getReview).not.toHaveBeenCalled();
     const detail = within(screen.getByTestId("intelligent-review-detail"));
     expect(detail.getByText("Aster Brands v Nova")).toBeInTheDocument();
     expect(detail.getByText("Nova Products v Aster")).toBeInTheDocument();
