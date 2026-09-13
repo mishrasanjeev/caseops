@@ -29,7 +29,7 @@ def test_summary_derives_remaining_repository_implementation_count() -> None:
     summary_path = ip_program_manifest.GENERATED_ROOT / "SUMMARY.md"
     summary = ip_program_manifest.render_views(manifest)[summary_path]
 
-    assert remaining == 25
+    assert remaining == 26
     assert f"- Repository implementation remaining: {remaining}" in summary
     cost_slice = next(
         row for row in manifest["slices"] if row["id"] == "IPLF-039F"
