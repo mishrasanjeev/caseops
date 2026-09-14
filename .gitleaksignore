@@ -124,3 +124,7 @@ ba38bf5e5cb5adb08136b6b284851c7a99927405:apps/api/src/caseops_api/services/ip_sp
 ba38bf5e5cb5adb08136b6b284851c7a99927405:docs/ip-implementation/catalogue-sources-2026-09-08.json:generic-api-key:559
 ba38bf5e5cb5adb08136b6b284851c7a99927405:docs/ip-implementation/child-prds/plant_variety-2026-09-09.md:generic-api-key:29
 ba38bf5e5cb5adb08136b6b284851c7a99927405:docs/ip-implementation/evidence/provider-summary-integration-2026-09-10.md:generic-api-key:184
+
+# 2026-09-14: exact false positive on the low-entropy fixture HMAC key in the
+# EH-SGR-06 inbound-webhook signature regression (renamed in the next commit).
+9d1023bc9eef0064f60749b736ca28a77d50daaa:apps/api/tests/test_inbound_email_webhook_signature.py:generic-api-key:21
