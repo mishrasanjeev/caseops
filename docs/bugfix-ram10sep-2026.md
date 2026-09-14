@@ -221,3 +221,39 @@ writing the date. Archives and retargets cannot publish against stale scope.
 `hearing-integration-02` is the replacement gate; it is not assumed green from
 the earlier 308-test result. Its versioned handoffs and source archive remain
 separate from the first browser snapshot.
+
+## September 14 Production Drift Check
+
+Read-only re-observation on 2026-09-14 (UTC morning) with the authoritative
+no-paid-provider marker. No search, refresh, paid operation, lifecycle
+mutation or commit was performed against production. Verdicts are unchanged:
+BUG-013 **Inconclusive**, BUG-014 **Inconclusive**, release **NO-GO**.
+
+- Both surfaces now identify the serving release as
+  `3681517726993b7b59e2ab7bd342b86de729627f` (API revision
+  `caseops-api-00451-b57`, web revision `caseops-web-00428-77v`). That is one
+  commit behind `main` (`20e34129d58d4218849872cd8c22e76a5b2a631d`, PR #461),
+  whose delta carries migration `20260913_0001_ip_filing_transactions`. The
+  September 10 observations above were taken on `5145fb3a`; they are
+  historical for the current serving release, not re-proven and not refuted.
+- The "five-minute continuation window is not deployed" statement above is now
+  stale-doc. Cloud Scheduler in `asia-south1` shows
+  `caseops-case-tracking-poll-1800-ist` at `*/5 18-19 * * *` (`Asia/Kolkata`,
+  ENABLED, last attempt 2026-09-13T14:25Z) and the superseded
+  `caseops-case-tracking-poll-1630-ist` PAUSED. Scheduler dispatch remains no
+  proof of provider or per-Matter success.
+- The 17-of-23 zero-selectable-provision count was not re-observed: no QA
+  credential is available to this workstation, and it must not be inferred
+  from the seed. The recurring `Prod verification (Playwright)` statute-source
+  step passed 113/113 on the serving release in runs `34753951907`,
+  `34766559670` and `34780794244`; that proves the release-managed rows the
+  step covers, not the reported nine Acts' selectability.
+- `python scripts/audit_statute_catalogue.py --require-complete` on `20e34129`
+  reports `complete: false`: 23 Acts catalogued and inventoried, 20 retained
+  release documents, missing `constitution-india`, `income-tax-1961` and
+  `motor-vehicles-1988`, `cpc-1908` without a whole-document page inventory,
+  and ten IP source packs pending. RAM10-S1/S2 stay open; the gate must keep
+  failing until that inventory is complete.
+- BUG-014: no new evidence. The three Matters without CNR or court identity
+  still await the requested exact court/location or CNR clarification; nothing
+  was guessed and no bookmark was touched.

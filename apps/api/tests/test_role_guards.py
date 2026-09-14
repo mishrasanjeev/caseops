@@ -92,7 +92,8 @@ PUBLIC_MUTATING_ROUTES: set[tuple[str, str]] = {
     # before persistence and no browser session exists for Google.
     ("POST", "/api/mailbox/gmail/webhook"),
     # Inbound email provider webhook - verified by
-    # CASEOPS_INBOUND_EMAIL_WEBHOOK_SECRET outside mock mode and disabled
+    # CASEOPS_INBOUND_EMAIL_WEBHOOK_SECRET in every provider mode (EH-SGR-06
+    # removed the mock-mode bypass) and disabled
     # by default when CASEOPS_INBOUND_EMAIL_PROVIDER_MODE=disabled. No
     # browser session exists for provider delivery; accepted events store
     # metadata only and remain tenant-scoped through matched aliases.

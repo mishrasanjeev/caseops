@@ -303,6 +303,44 @@ def test_webhook_path_is_csrf_exempt(client: TestClient) -> None:
 
 
 @pytest.mark.parametrize(
+    "path",
+    [
+        "/api/payments/pine-labs/webhook",
+        "/api/mailbox/gmail/webhook",
+        "/api/mailbox/inbound/webhook",
+        "/api/webhooks/sendgrid/events",
+    ],
+)
+def test_each_provider_signed_webhook_is_exempt_by_exact_path(
+    client: TestClient, path: str
+) -> None:
+    """EH-SGR-06: exemption is granted per route, not per path suffix.
+
+    Each of these carries its own provider integrity check. A cookie with no
+    CSRF header is the exact shape of a cross-site post; it must still reach
+    the route (which then rejects it on ITS check, not on CSRF).
+    """
+    bootstrap_company(client)
+    resp = client.post(path, json={"event": "ping"})
+    assert not (resp.status_code == 403 and "CSRF" in resp.text), resp.text
+
+
+def test_a_path_that_merely_ends_in_webhook_is_not_exempt(
+    client: TestClient,
+) -> None:
+    """The old suffix rule exempted ANY route ending in ``/webhook``.
+
+    A future route with that name and no provider signature would have shipped
+    CSRF-exempt by accident. The middleware runs before routing, so the 403
+    here is proof the path was checked, whether or not a handler exists.
+    """
+    bootstrap_company(client)
+    resp = client.post("/api/matters/anything/webhook", json={"event": "ping"})
+    assert resp.status_code == 403, resp.text
+    assert "CSRF" in resp.text
+
+
+@pytest.mark.parametrize(
     "method,path",
     [
         ("get", "/api/health"),
