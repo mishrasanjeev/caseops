@@ -379,19 +379,24 @@ official section text/version evidence is required, not a verification toggle.
   provider jobs, see redacted errors, and request audited replay/ignore/resolve
   actions through `/app/admin/provider-operations`.
 
-Current overall verdict (2026-04-25): **`GO`**. Every stop-ship
-control gap (EG-001 through EG-007) is closed and live in prod with
-evidence. EG-001 (HttpOnly cookies + double-submit CSRF), EG-002
-(auto-migrate off + canonical deploy-prod.sh with migrate-job gate),
-EG-003 (clamav sidecar wired + fail-closed default + EICAR rejection
-prod smoke), EG-004 (per-route AI rate limits), EG-005 (matter
-summary cache + ModelRun audit + cross-provider cutover), EG-006
-(draft preview tenant policy gate + redacted 502 + ModelRun audit on
-both success + failure), EG-007 (every sensitive env in Secret
-Manager + 90-day rotation runbook + drill executed in
-`caseops-api-00052-5w2`), P1-009 (backup/restore drill). Structural
-hardening gaps EG-008 (hotspot decomposition) + EG-009 (exception
-discipline) remain `Partially implemented` but are not stop-ship.
+Superseded overall verdict (2026-04-25, historical): **`GO`**.
+**Superseded** - later dated entries in this file record `NO-GO`
+(2026-07-10 July controls, 2026-09-05, 2026-09-08 and the September 10
+block at the top of this file); the current verdict is always the newest
+dated entry, never this line. Retained because it records what EG-001
+through EG-007 closed. Every stop-ship control gap (EG-001 through
+EG-007) is closed and live in prod with evidence. EG-001 (HttpOnly
+cookies + double-submit CSRF), EG-002 (auto-migrate off + canonical
+deploy-prod.sh with migrate-job gate), EG-003 (clamav sidecar wired +
+fail-closed default + EICAR rejection prod smoke), EG-004 (per-route AI
+rate limits), EG-005 (matter summary cache + ModelRun audit +
+cross-provider cutover), EG-006 (draft preview tenant policy gate +
+redacted 502 + ModelRun audit on both success + failure), EG-007 (every
+sensitive env in Secret Manager + 90-day rotation runbook + drill
+executed in `caseops-api-00052-5w2`), P1-009 (backup/restore drill).
+Structural hardening gaps EG-008 (hotspot decomposition) + EG-009
+(exception discipline) remain `Partially implemented` but are not
+stop-ship.
 
 ## 2026-07-10 Whole-Repository Audit Addendum
 
@@ -848,11 +853,11 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
 - `WTD-4.2` `Partially implemented` Proper RAG.
   Remaining scope: full corpus ingestion, reranker, live Postgres integration
   tests, matter-attachment embeddings, and scoring calibration.
-  Evidence: `docs/WORK_TO_BE_DONE.md:327-342`.
+  Evidence: `docs/WORK_TO_BE_DONE.md` section 4.2 (Proper RAG).
 
 - `WTD-4.5` `Partially implemented` Hearing-pack automation and export.
   Remaining scope: scheduled auto-trigger, authority matching, DOCX/PDF export.
-  Evidence: `docs/WORK_TO_BE_DONE.md:389-392`.
+  Evidence: `docs/WORK_TO_BE_DONE.md` section 4.5 (Hearing preparation).
 
 - `WTD-5.1` `Partially implemented` Durable workflow foundation.
   `WTD-5.1a` adds disabled-by-default notification workflow config health,
@@ -878,7 +883,7 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
 
 - `WTD-5.2` `Missing` Agent identity, scoped grants, approval gates, and
   budgets.
-  Evidence: `docs/WORK_TO_BE_DONE.md:417-426`.
+  Evidence: `docs/WORK_TO_BE_DONE.md` section 5.2 (Grantex agent identity).
 
 - `WTD-5.3` `Partially implemented` Notification service with durable delivery
   and retry. The foundation persists tenant-scoped delivery intents, processes
@@ -892,7 +897,7 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
 
 - `WTD-6.5` `Partially implemented` OpenAPI maturity and generated web client
   rollout.
-  Evidence: `docs/WORK_TO_BE_DONE.md:512-517`,
+  Evidence: `docs/WORK_TO_BE_DONE.md` section 6.5 (OpenAPI quality),
   `apps/web/package.json:13`,
   `apps/web/lib/api/openapi-types.ts:1`.
 
@@ -911,7 +916,7 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   Remaining: admin task templates per practice-area remain missing.
 
 - `WTD-7.3` `Partially implemented` Model-evaluation admin gate and cost rollup.
-  Evidence: `docs/WORK_TO_BE_DONE.md:541-545`,
+  Evidence: `docs/WORK_TO_BE_DONE.md` section 7.3 (Model runs and evaluation),
   `apps/api/src/caseops_api/db/models.py:2704`,
   `apps/api/src/caseops_api/services/evaluation.py:12-137`.
 
@@ -935,35 +940,35 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   Remaining sub-items: cross-region backup export, per-tenant export
   drill (right-to-erasure / portability), application-level cutover
   drill (Cloud Run flip onto a restored instance).
-  Evidence: `docs/WORK_TO_BE_DONE.md:576-582`.
+  Evidence: `docs/WORK_TO_BE_DONE.md` section 8.3 (Backups and restore).
 
 - `WTD-8.4` `Partially implemented` Full CI/CD.
   Remaining scope: image build and push, staged deploy, branch protection.
-  Evidence: `docs/WORK_TO_BE_DONE.md:584-588`.
+  Evidence: `docs/WORK_TO_BE_DONE.md` section 8.4 (CI/CD).
 
 - `WTD-8.5` `Partially implemented` Secret-management completion.
-  Evidence: `docs/WORK_TO_BE_DONE.md:590-595`,
+  Evidence: `docs/WORK_TO_BE_DONE.md` section 8.5 (Secret management),
   `infra/cloudrun/api-service.yaml:14-66`.
 
 - `WTD-9.1` `Partially implemented` Broader parsing stack.
-  Evidence: `docs/WORK_TO_BE_DONE.md:601-609`.
+  Evidence: `docs/WORK_TO_BE_DONE.md` section 9.1 (Broader parsers).
 
 - `WTD-9.2` `Partially implemented` Structural extraction replacing heuristics.
-  Evidence: `docs/WORK_TO_BE_DONE.md:611-615`.
+  Evidence: `docs/WORK_TO_BE_DONE.md` section 9.2 (Structural extraction).
 
 - `WTD-9.3` `Partially implemented` Enterprise virus-scanning step.
-  Evidence: `docs/WORK_TO_BE_DONE.md:617-620`,
+  Evidence: `docs/WORK_TO_BE_DONE.md` section 9.3 (Virus scanning),
   `apps/api/src/caseops_api/services/virus_scan.py:80-82`,
   `apps/api/src/caseops_api/services/virus_scan.py:153-169`.
 
 - `WTD-10.1` `Missing` Company and tenant management console.
-  Evidence: `docs/WORK_TO_BE_DONE.md:626-629`.
+  Evidence: `docs/WORK_TO_BE_DONE.md` section 10.1 (Company / tenant management).
 
 - `WTD-10.2` `Missing` OIDC and SAML SSO.
-  Evidence: `docs/WORK_TO_BE_DONE.md:631-634`.
+  Evidence: `docs/WORK_TO_BE_DONE.md` section 10.2 (SSO).
 
 - `WTD-10.3` `Partially implemented` AI policy controls.
-  Evidence: `docs/WORK_TO_BE_DONE.md:636-642`,
+  Evidence: `docs/WORK_TO_BE_DONE.md` section 10.3 (AI policy controls),
   `apps/api/src/caseops_api/services/tenant_ai_policy.py:9-11`,
   `apps/api/src/caseops_api/services/llm.py:636-663`.
 
@@ -973,7 +978,7 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   profit/provider-event surfaces. Manual production signoff remains pending.
 
 - `WTD-11.2` `Missing` Authorization matrix tests.
-  Evidence: `docs/WORK_TO_BE_DONE.md:664-666`.
+  Evidence: `docs/WORK_TO_BE_DONE.md` section 11.2 (Authorization matrix tests).
 
 - `WTD-11.4` `Implemented` AI safety benchmark automation.
   Evidence: `apps/api/src/caseops_api/scripts/eval_ai_safety.py` supplies the
@@ -987,21 +992,21 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   independent legal/UAT approval remain separate release controls.
 
 - `WTD-11.5` `Partially implemented` Payment verification depth.
-  Evidence: `docs/WORK_TO_BE_DONE.md:678-680`,
+  Evidence: `docs/WORK_TO_BE_DONE.md` section 11.5 (Payment tests),
   `tests/e2e/billing-payment.spec.ts:39-46`.
 
 - `WTD-11.6` `Partially implemented` PRD-complete E2E coverage.
-  Evidence: `docs/WORK_TO_BE_DONE.md:682-685`.
+  Evidence: `docs/WORK_TO_BE_DONE.md` section 11.6 (E2E coverage).
 
 - `WTD-11.7` `Missing` Route-wide accessibility automation.
-  Evidence: `docs/WORK_TO_BE_DONE.md:687-689`.
+  Evidence: `docs/WORK_TO_BE_DONE.md` section 11.7 (Accessibility).
 
 - `WTD-12.1` `Missing` Broader jurisdiction adapters and per-tenant connector
   credentials.
-  Evidence: `docs/WORK_TO_BE_DONE.md:695-701`.
+  Evidence: `docs/WORK_TO_BE_DONE.md` section 12.1 (Jurisdiction coverage).
 
 - `WTD-12.2` `Missing` Connector health UI.
-  Evidence: `docs/WORK_TO_BE_DONE.md:703-705`.
+  Evidence: `docs/WORK_TO_BE_DONE.md` section 12.2 (Connector health UI).
 
 - `WTD-12.3a` `Implemented` Calendar sync.
   Evidence: bounded manual Outlook bulk sync is tracked as `EH-PROV-02` below;
@@ -1022,25 +1027,25 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
 ## Stale-Doc Items To Correct In docs/WORK_TO_BE_DONE.md
 
 - `DRIFT-001` `Stale-doc` Teams are no longer absent.
-  Evidence: `docs/WORK_TO_BE_DONE.md:473-476`,
+  Evidence: `docs/WORK_TO_BE_DONE.md` section 5.7 (Teams),
   `apps/api/src/caseops_api/db/models.py:3147-3204`,
   `apps/api/src/caseops_api/api/routes/teams.py:1-154`,
   `apps/web/app/app/admin/teams/page.tsx:67-188`,
   `apps/api/src/caseops_api/services/matter_access.py:190-192`.
 
 - `DRIFT-002` `Stale-doc` `EvaluationRun` is no longer a pending table.
-  Evidence: `docs/WORK_TO_BE_DONE.md:545`,
+  Evidence: `docs/WORK_TO_BE_DONE.md` section 7.3 (Model runs and evaluation),
   `apps/api/src/caseops_api/db/models.py:2704`,
   `apps/api/src/caseops_api/services/evaluation.py:12-137`.
 
 - `DRIFT-003` `Stale-doc` OpenTelemetry and structured JSON logging are no
   longer absent in code.
-  Evidence: `docs/WORK_TO_BE_DONE.md:562-574`,
+  Evidence: `docs/WORK_TO_BE_DONE.md` sections 8.1-8.2 (OpenTelemetry, structured logging),
   `apps/api/src/caseops_api/core/observability.py:1-277`.
 
 - `DRIFT-004` `Stale-doc` Generated OpenAPI TypeScript output already exists,
   even though rollout is still incomplete.
-  Evidence: `docs/WORK_TO_BE_DONE.md:512-517`,
+  Evidence: `docs/WORK_TO_BE_DONE.md` section 6.5 (OpenAPI quality),
   `apps/web/package.json:13`,
   `apps/web/lib/api/openapi-types.ts:1`.
 
@@ -1438,6 +1443,28 @@ work listed in `docs/EXECUTION_BACKLOG.md`.
   declaration and the migration replay only.
 - **Severity:** was stop-ship for GST invoicing.
 
+### 2026-09-14 re-verification of EH-SGR-05 through EH-SGR-16
+
+Every finding below was re-read against `main` at `20e34129` before any
+status was changed. Nine are byte-for-byte the code the 2026-08-16 entries
+describe (only line numbers moved); three moved partway; none had closed.
+Only EH-SGR-06 changes status in this pass, because only it was fixed.
+
+| ID | 2026-09-14 finding | Status |
+| --- | --- | --- |
+| EH-SGR-05 | `core/rate_limit.py:44-48` still has no `storage_uri`; 8 of 60 route modules carry `limiter.limit`, 24 of 857 decorators (2.8%, down from 3.7% as routes were added). Default limit and shared storage are a policy + infrastructure decision. | Partially implemented |
+| EH-SGR-06 | Mock-mode signature bypass and `/webhook` suffix exemption removed in commit `9d1023bc` (2026-09-14) with falsified regressions; sink redaction had landed earlier in `fad8d68e`. Not yet deployed. | Partially implemented until the fix is serving in production |
+| EH-SGR-07 | `scripts/replay_citation_gate.py` has still never been run; no results artifact exists. | Partially implemented |
+| EH-SGR-08 | `Security.tsx:83` still sells "Prompt-injection tests"; `addon_api_access` still seeded active with no API-key auth anywhere. Claims-vs-roadmap call. | Missing |
+| EH-SGR-09 | `observability` extra still not installed (`apps/api/Dockerfile:37`); `/api/health` still DB-free; log shape still `level` not `severity`. One alert policy now exists (`scripts/reconcile_monitoring_alerts.py`, private-projection failures only). | Partially implemented |
+| EH-SGR-10 | `services/ip_document_workflow.py:534-550` still loads every tenant document then loops an access check per row; no limit/offset. | Missing |
+| EH-SGR-11 | Advisory `_duplicate_identifiers` vs hard `uq_ip_docket_company_identifier` still disagree. Founder decision. | Partially implemented |
+| EH-SGR-12 | `ip_records.py:187-188` still keys on raw `office`. | Missing |
+| EH-SGR-13 | `ip_operations.py:894-895` still `.strip().upper()`; no derivation from the primary ledger row. | Partially implemented |
+| EH-SGR-14 | `ip_records.py:995` and `ip_lifecycle.py:76-81` still differ. Re-read: `TERMINAL_DOCKET_STATES` governs merge-blocking (a `registered` docket must not be auto-superseded), `TERMINAL_IP_DOCKET_STATUSES` governs lifecycle writes - different questions, so unifying them is a product decision, not a patch. Left unchanged. | Partially implemented |
+| EH-SGR-15 | `court_sync_sources.py:35-41` still presents a Chrome user-agent; no robots.txt consultation. Changing the UA can break the nightly legal-update sync, so it stays an operator-scheduled change with a rollback plan. | Missing |
+| EH-SGR-16 | `notification-preferences/page.tsx:21` still lists `sms`/`whatsapp` as togglable; badges show "disabled" but the checkbox is enabled; no `roadmap` marker in `schemas/notification_preferences.py`. | Partially implemented |
+
 ### EH-SGR-05 - Rate limiting covers 3.7% of the API and is per-instance
 
 - **Status:** Partially implemented.
@@ -1451,8 +1478,15 @@ work listed in `docs/EXECUTION_BACKLOG.md`.
 
 ### EH-SGR-06 - Two security controls fail open by construction
 
-- **Status:** Partially implemented.
-- **Gap found:** `services/inbound_email.py:224-225` bare-returns from
+- **Status:** Partially implemented. **2026-09-14:** both fail-open paths
+  are closed in repository commit `9d1023bc` - `_verify_signature` verifies
+  in every provider mode (a mode with no secret is 503, not open) and CSRF
+  exemption is granted per exact webhook route instead of any `/webhook`
+  suffix. Regressions: `tests/test_inbound_email_webhook_signature.py`,
+  `tests/test_auth_cookies.py` (falsified against the previous sources).
+  Sink redaction landed earlier (`fad8d68e`, `core/redaction.py`). Moves to
+  `Implemented` when the fix is the serving production release.
+- **Gap found (2026-08-16):** `services/inbound_email.py:224-225` bare-returns from
   `_verify_signature` in mock mode before the HMAC comparison;
   `core/csrf.py:72-80` exempts any path ending `/webhook` via
   `_EXEMPT_SUFFIXES`, by design. Separately there is no log redaction, so any

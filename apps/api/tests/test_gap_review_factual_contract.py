@@ -117,3 +117,25 @@ def test_gst_and_owner_contracts_are_scoped_and_collision_free() -> None:
     assert "Turn on useful observability and enforce legal holds/retention" in backlog
     assert "`EH-SGR-13`, `EH-SGR-14`" in backlog
     assert "one primary-identifier rule and one terminal-status definition" in backlog
+
+
+def test_ledger_evidence_anchors_survive_prepended_headers() -> None:
+    """Line-number anchors into WORK_TO_BE_DONE.md rot silently.
+
+    Every dated September block was prepended to that file, so by 2026-09-14
+    all 23 `Evidence: docs/WORK_TO_BE_DONE.md:NNN` anchors in the enterprise
+    ledger pointed 330-380 lines above the section they described. Anchors
+    now name the section heading, which moves with the text.
+    """
+    ledger = _read("docs/STRICT_ENTERPRISE_GAP_TASKLIST.md")
+    assert "WORK_TO_BE_DONE.md:" not in ledger, (
+        "anchor WORK_TO_BE_DONE.md by section heading, not line number"
+    )
+
+
+def test_superseded_overall_verdict_cannot_read_as_current() -> None:
+    """The 2026-04-25 `GO` sat unmarked under four later `NO-GO` entries."""
+    ledger = _compact(_read("docs/STRICT_ENTERPRISE_GAP_TASKLIST.md"))
+    assert "Current overall verdict (2026-04-25): **`GO`**" not in ledger
+    assert "Superseded overall verdict (2026-04-25, historical): **`GO`**" in ledger
+    assert "the current verdict is always the newest dated entry" in ledger
