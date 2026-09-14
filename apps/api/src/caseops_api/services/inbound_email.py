@@ -215,14 +215,21 @@ def update_inbound_email_alias(
 
 
 def _verify_signature(raw_body: bytes, signature: str | None) -> None:
+    """Every accepted inbound post is HMAC-verified, in every provider mode.
+
+    EH-SGR-06: ``mock`` used to return here before the signature check, so an
+    operator who selected mock mode outside a test would accept unsigned posts
+    from anyone who could reach the route. Mock mode now only describes the
+    provider (no real delivery); it never waives the integrity check. A mode
+    without a configured secret stays a 503, not an open door.
+    """
+
     settings = get_settings()
     if settings.inbound_email_provider_mode == "disabled":
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Inbound email provider is disabled.",
         )
-    if settings.inbound_email_provider_mode == "mock":
-        return
     if not settings.inbound_email_webhook_secret:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

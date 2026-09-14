@@ -60,6 +60,16 @@ _EXEMPT_PATHS = frozenset({
     "/api/internal/machine-readiness/evidence",
     "/api/billing/trials",
     "/api/billing/enrollments/demo-request",
+    # Provider-signed webhooks. Each carries its own integrity check
+    # (Pine Labs signature, Gmail Pub/Sub verification token, inbound
+    # email HMAC); CSRF would only break them. EH-SGR-06: these used to
+    # be matched by the suffix ``/webhook``, which exempted ANY future
+    # route whose path happened to end that way - including one with no
+    # provider signature at all. A new webhook is exempted by adding its
+    # exact path here, next to a note of what authenticates it.
+    "/api/payments/pine-labs/webhook",
+    "/api/mailbox/gmail/webhook",
+    "/api/mailbox/inbound/webhook",
 })
 _EXEMPT_PREFIXES = (
     # Catches any path under /api/webhooks/* if added in the future.
@@ -73,21 +83,12 @@ _EXEMPT_PREFIXES = (
     # caseops_portal_csrf cookie + X-Portal-CSRF-Token header.
     "/api/portal/auth/",
 )
-# Provider-signed webhooks (PineLabs, SendGrid event hooks, etc.)
-# have their own integrity check; CSRF would only break them. The
-# convention is that the route path ends with ``/webhook``, e.g.
-# /api/payments/pine-labs/webhook. Matching by suffix means a new
-# provider integration can be added without touching this exempt
-# list — as long as the route ends in /webhook.
-_EXEMPT_SUFFIXES = ("/webhook",)
 
 
 def _path_is_exempt(path: str) -> bool:
     if path in _EXEMPT_PATHS:
         return True
-    if any(path.startswith(prefix) for prefix in _EXEMPT_PREFIXES):
-        return True
-    return any(path.endswith(suffix) for suffix in _EXEMPT_SUFFIXES)
+    return any(path.startswith(prefix) for prefix in _EXEMPT_PREFIXES)
 
 
 class CSRFMiddleware(BaseHTTPMiddleware):
