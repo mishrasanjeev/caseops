@@ -2,8 +2,9 @@
 
 ## September 14 Release Engineering Checkpoint
 
-Owner: Claude (handover from Codex on 2026-09-14). Release verdict for the
-programme remains **NO-GO**: BUG-013 and BUG-014 stay **Inconclusive**, the
+Recorded 2026-09-14 by the release-engineering handover session; the
+Codex-owned queue and the ownership ledger are unchanged. Release verdict for
+the programme remains **NO-GO**: BUG-013 and BUG-014 stay **Inconclusive**, the
 catalogue inventory is incomplete, and the 25 IP slices are unchanged. This
 entry records what was proven about the current candidate, not a closure.
 
