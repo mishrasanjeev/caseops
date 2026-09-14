@@ -1,5 +1,60 @@
 # Strict Bug Task List - 2026-04-22
 
+## September 14 Release Engineering Checkpoint
+
+Owner: Claude (handover from Codex on 2026-09-14). Release verdict for the
+programme remains **NO-GO**: BUG-013 and BUG-014 stay **Inconclusive**, the
+catalogue inventory is incomplete, and the 25 IP slices are unchanged. This
+entry records what was proven about the current candidate, not a closure.
+
+- Candidate `20e34129d58d4218849872cd8c22e76a5b2a631d` (`main`, PR #461) is
+  validated but **not deployed**. Production still serves
+  `3681517726993b7b59e2ab7bd342b86de729627f` (API `caseops-api-00451-b57`,
+  web `caseops-web-00428-77v`). The delta is migration
+  `20260913_0001_ip_filing_transactions` plus the IP filing-transaction slice.
+- Gates passed on the candidate: CI `34766275625`, Security `34766275620`,
+  CodeQL `34766275618` (all `main`, 2026-09-13); nine contract validators and
+  both change gates green locally; migration graph single head. Fresh local
+  Docker acceptance (`scripts/verify-docker.ps1`, detached worktree, Node
+  22.14.0 hash-verified, source fingerprint unchanged across build, browser
+  and certification): PostgreSQL + pgvector suite **388 passed, 0 failed**;
+  Playwright against Docker + PostgreSQL **191 + 187 + 4 passed, 6 skipped**.
+  The six skips are local-inapplicable by design - one provider-gated Pine
+  Labs payment link and five exact-deployed-release/production-Matter
+  assertions - and are covered by the recurring production workflow instead.
+  Retained: `postgres.xml`, `postgres-results.jsonl`, proxy logs.
+- Recurring `Prod verification (Playwright)` on the serving release passed
+  three times (`34753951907`, `34766559670`, `34780794244`): ram-batch 122
+  passed / 7 skipped, statute sources 113/113, patent 23/23. The seven skips
+  (BUG-012 x3, BUG-016/018/019/021) and the always-skipped IPLF-037B renewal
+  step (no approved fixture IDs configured) are standing `Inconclusive` items.
+  The canary-survival property (retained answers, exports, search,
+  autocomplete, count, scope discovery all revoked without reopening the
+  terminal fixture) is exercised on every run by
+  `iplf-066b-private-retrieval-2026-08-31-prod.spec.ts`.
+- Every CI failure on `main` since 2026-09-12 was root-caused and is already
+  repaired by a later commit: stale release-managed statute rows (`ef809f21`),
+  IPLF-063B review detail (`36815177`), BUG-002 structured search latency
+  (`439fa1d6`), mid-run release flip (`a710263e`), one pytest attribute
+  (`0de9d641`). No recurring signature remains open on `main`.
+- `scripts/deploy-prod.sh 20e34129d58d...` was prepared from the validated
+  detached worktree and **not executed**: the workstation's automation policy
+  refused the production mutation. It is an operator action. Merging PR #462
+  first would advance `main` and invalidate this candidate's acceptance;
+  deploy `20e34129` first, then merge.
+- PR #462 (`claude/release-engineering-20260914`): EH-SGR-06 fail-open
+  controls closed with falsified regressions; enterprise-ledger integrity
+  repaired and pinned by tests; EH-SGR-05..16 re-verified (nine unchanged,
+  three partially fixed, only 06 closes). Codex automated review did not run
+  (reviewer usage limit). Its own Docker acceptance is still required before
+  it can be a release candidate.
+- Not started, with reasons: client-data catalogue acquisition for
+  `constitution-india`, `income-tax-1961`, `motor-vehicles-1988` and the
+  `cpc-1908` page inventory (official-source work under RAM10-S2, not code);
+  BUG-014 court identity (owner clarification outstanding since Sep 10);
+  EH-SGR-10 pagination (two web surfaces consume the unbounded list, so a
+  server bound alone would silently truncate - a bounded UI+API slice).
+
 ## September 10 Workbook In Progress
 
 BUG-013 and BUG-014 remain **Inconclusive** pending complete local Docker and
