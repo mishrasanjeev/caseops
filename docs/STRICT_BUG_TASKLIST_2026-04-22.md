@@ -1517,3 +1517,55 @@ Final closure evidence on 2026-09-05:
   `caseops-private-projection-maintenance-n8chm` and resumed scheduler executions
   `j2q6v` and `nc7fr` were clean steady-state cadences with `rebuild_count=0`,
   no pending or failed events, and `release_blocked=false` for all four tenants.
+
+## CaseOps ECOURTS-RESP-001 - eCourtsIndia success rendered as stale data (2026-09-15)
+
+Report: wherever CaseOps calls eCourtsIndia (reference route
+`/api/partner/case/DLND020389022025`), the provider succeeds but the UI keeps
+showing old case data.
+
+Reproduction against serving release `f4f39eb257fb17b12a103e17939de72debdfd71d`:
+
+- production logs on 2026-09-15 03:24-03:43 UTC show the provider returning
+  `HTTP/1.1 200 OK` (and `404`) while CaseOps answered
+  `POST /api/case-tracking/bookmarks/{id}/refresh` and
+  `POST /api/case-tracking/search` with `502` in under 0.7 s; later refreshes
+  returned `429` because the failure was stored as transient `provider_error`;
+- the live provider now sends `Content-Encoding: br`/`gzip` behind Cloudflare
+  when the client advertises it (httpx does by default);
+- the adapter streamed and decoded the body, then rebuilt an `httpx.Response`
+  that still carried `Content-Encoding`, so httpx decoded plain JSON a second
+  time and raised `DecodingError`. The unmodified adapter reproduced this
+  against the live, free refresh-status endpoint; the fixed adapter decoded it.
+  The real case payload for the reference CNR parses correctly once decoded.
+
+Root cause and scope: one buffering defect in
+`apps/api/src/caseops_api/services/case_tracking_providers.py` shared by case
+detail, search, manual refresh, scheduled bulk refresh/status and source
+download. Every eCourts-backed surface (Case Tracking search/refresh, matter
+auto-link, scheduled next-hearing sync, source download) was affected.
+Adjacent UI defect: the Case Tracking page never rendered a failed refresh and
+did not reload the bookmark after failure, so the row silently kept stale data
+and an enabled Refresh button.
+
+Correction:
+
+- buffered provider responses drop `Content-Encoding`, `Content-Length` and
+  `Transfer-Encoding` after decoding, for both JSON and source downloads;
+- the Case Tracking page shows refresh and bookmark-update errors and reloads
+  case-tracking data after a failed refresh;
+- the Docker acceptance eCourts emulator now gzip-compresses for clients that
+  accept it, so local acceptance exercises the live CDN contract.
+
+Regression evidence:
+
+- `apps/api/tests/test_20260915_ecourts_compressed_responses.py`: gzip, deflate
+  and zstd detail/search/404, scheduled bulk refresh, source download, emulator
+  compression, and a route-level refresh that replaces stale bookmark data. All
+  8 original tests failed on the unmodified adapter (refresh returned the exact
+  production 502 body) and pass with the fix;
+- `apps/web/app/app/case-tracking/page.test.tsx`: failed refresh is shown and
+  the bookmark reloads; fails without the page change, passes with it.
+
+Verdict: `Inconclusive` until local Docker acceptance, exact-main deployment
+and production evidence are recorded below.

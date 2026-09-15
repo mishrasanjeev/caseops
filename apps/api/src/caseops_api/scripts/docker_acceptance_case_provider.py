@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import json
 import os
 import re
@@ -32,13 +33,28 @@ def _case_payload(*, case_number: str, cnr: str) -> dict[str, object]:
 class AcceptanceProviderHandler(BaseHTTPRequestHandler):
     server_version = "CaseOpsDockerAcceptanceProvider/1.0"
 
-    def _write_json(self, status: HTTPStatus, payload: object) -> None:
-        body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    def _write_body(
+        self,
+        status: HTTPStatus,
+        body: bytes,
+        headers: dict[str, str],
+    ) -> None:
+        # The live provider CDN compresses for clients that accept it, as httpx
+        # does by default. Acceptance must exercise that decoded-once contract.
+        accepted = self.headers.get("Accept-Encoding", "").lower()
+        if "gzip" in accepted:
+            body = gzip.compress(body)
+            headers = {**headers, "Content-Encoding": "gzip", "Vary": "Accept-Encoding"}
         self.send_response(status.value)
-        self.send_header("Content-Type", "application/json")
+        for name, value in headers.items():
+            self.send_header(name, value)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _write_json(self, status: HTTPStatus, payload: object) -> None:
+        body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        self._write_body(status, body, {"Content-Type": "application/json"})
 
     def _authorized(self) -> bool:
         expected = os.environ.get(
@@ -60,13 +76,14 @@ class AcceptanceProviderHandler(BaseHTTPRequestHandler):
         from caseops_api.scripts.docker_acceptance_summary import SOURCE_PATH, SOURCE_TEXT
 
         if parsed.path == SOURCE_PATH:
-            body = SOURCE_TEXT.encode("utf-8")
-            self.send_response(HTTPStatus.OK.value)
-            self.send_header("Content-Type", "text/markdown; charset=utf-8")
-            self.send_header("Content-Disposition", 'attachment; filename="summary-20260910.md"')
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+            self._write_body(
+                HTTPStatus.OK,
+                SOURCE_TEXT.encode("utf-8"),
+                {
+                    "Content-Type": "text/markdown; charset=utf-8",
+                    "Content-Disposition": 'attachment; filename="summary-20260910.md"',
+                },
+            )
             return
         if parsed.path == "/api/partner/search":
             params = parse_qs(parsed.query)

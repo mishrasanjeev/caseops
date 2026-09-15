@@ -59,6 +59,25 @@ class CaseTrackingProviderUnavailable(RuntimeError):
     pass
 
 
+# ``aiter_bytes`` has already decoded the content encoding. Keeping these
+# headers makes the buffered response decode plain bytes a second time, which
+# turned every compressed provider reply (the provider CDN sends br/gzip/zstd)
+# into a DecodingError and a 502 even when the provider returned the case.
+_DECODED_BODY_HEADERS = ("content-encoding", "content-length", "transfer-encoding")
+
+
+def _buffered_response(streamed: httpx.Response, content: bytes) -> httpx.Response:
+    headers = streamed.headers.copy()
+    for name in _DECODED_BODY_HEADERS:
+        headers.pop(name, None)
+    return httpx.Response(
+        streamed.status_code,
+        headers=headers,
+        content=content,
+        request=streamed.request,
+    )
+
+
 def download_provider_source(
     *,
     url: str,
@@ -91,12 +110,7 @@ def download_provider_source(
                     if len(content) + len(chunk) > _MAX_PROVIDER_SOURCE_BYTES:
                         raise httpx.DecodingError("Provider source exceeds the supported size.")
                     content.extend(chunk)
-                return httpx.Response(
-                    response.status_code,
-                    headers=response.headers,
-                    content=bytes(content),
-                    request=response.request,
-                )
+                return _buffered_response(response, bytes(content))
         except TimeoutError as exc:
             raise httpx.ReadTimeout("Provider source total deadline exceeded.") from exc
 
@@ -700,12 +714,7 @@ class EcourtsIndiaApiProvider:
                             response_class="parse_error",
                         )
                     content.extend(chunk)
-                response = httpx.Response(
-                    streamed.status_code,
-                    headers=streamed.headers,
-                    content=bytes(content),
-                    request=streamed.request,
-                )
+                response = _buffered_response(streamed, bytes(content))
             if response.status_code not in RETRYABLE_READ_STATUS_CODES or attempt == attempts - 1:
                 response.raise_for_status()
                 return response

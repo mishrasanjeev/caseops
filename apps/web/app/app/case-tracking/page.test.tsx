@@ -329,6 +329,45 @@ describe("CaseTrackingPage", () => {
     expect(screen.getByText(/manual docketing/i)).toBeInTheDocument();
   });
 
+  it("shows a failed refresh and reloads the bookmark instead of keeping stale data", async () => {
+    const user = userEvent.setup();
+    const recoveryReason =
+      "The provider is temporarily unavailable. Automatic recovery is scheduled for 2026-09-15T04:24:25+00:00.";
+    listCaseTrackingBookmarksMock
+      .mockResolvedValueOnce({ bookmarks: [bookmark] })
+      .mockResolvedValue({
+        bookmarks: [
+          {
+            ...bookmark,
+            tracked_case: {
+              ...bookmark.tracked_case,
+              freshness_status: "stale",
+              provider_health: "degraded",
+              response_class: "provider_error",
+              manual_refresh_allowed: false,
+              manual_refresh_disabled_reason: recoveryReason,
+              last_error: "Case tracking provider refresh failed.",
+            },
+          },
+        ],
+      });
+    refreshCaseTrackingBookmarkMock.mockRejectedValue(
+      new ApiError(502, "Case tracking provider refresh failed.", null, null),
+    );
+    render(withClient(<CaseTrackingPage />));
+
+    await user.click(await screen.findByRole("button", { name: /^Refresh$/ }));
+
+    expect(await screen.findByTestId("case-tracking-refresh-error")).toHaveTextContent(
+      "Case tracking provider refresh failed.",
+    );
+    await waitFor(() => expect(listCaseTrackingBookmarksMock).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /^Refresh$/ })).toBeDisabled(),
+    );
+    expect(screen.getByText("provider_error")).toBeInTheDocument();
+  });
+
   it("BUG-042: shows an explicit empty-results message instead of nothing", async () => {
     const user = userEvent.setup();
     searchTrackedCasesMock.mockResolvedValue({ provider: "ecourtsindia", results: [] });
