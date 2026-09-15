@@ -1567,5 +1567,34 @@ Regression evidence:
 - `apps/web/app/app/case-tracking/page.test.tsx`: failed refresh is shown and
   the bookmark reloads; fails without the page change, passes with it.
 
-Verdict: `Inconclusive` until local Docker acceptance, exact-main deployment
-and production evidence are recorded below.
+Release evidence on 2026-09-15:
+
+- PR #463 merged as `3c23288380bbe9d9d8133ebabbd73e21685428da`; its tree is
+  identical to Docker-certified candidate `da39d1f6` (tree `6ba00a0e`). CI on
+  `da39d1f6` passed 33 checks after one rerun of an unrelated private-retrieval
+  timing assertion that passed 3/3 locally;
+- `scripts/verify-docker.ps1` printed `PASS da39d1f6`: 388 PostgreSQL tests,
+  191 and 187 desktop journeys and 4 mobile journeys, with 6 explicit
+  production-identity or Pine Labs provider skips;
+- `scripts/deploy-prod.sh` routed API revision `caseops-api-00453-xk8` and web
+  revision `caseops-web-00430-5pn` at 100% on `3c23288`, completed the migrate
+  job and index-health execution `caseops-db-index-health-gnqmh`;
+- the exact deployed API image
+  `sha256:d25343471bc9a56e751cc0f2cbf391b29268a9309a60d46e2f8fe413a3faa51a`
+  (revision label `3c23288`) decoded a live gzip reply from the free
+  eCourtsIndia refresh-status endpoint; the previous source failed the same
+  probe with `DecodingError`;
+- exact-release prod verification run `34947405170` succeeded with 261 passed,
+  0 failed and 7 pre-existing data/capability skips, including provider
+  freshness, tracked-case source evidence at 360 px, transient case-tracking
+  recovery and zero-spend automation. The first dispatched run `34942342996`
+  was cancelled at its 55-minute limit after intermittent BUG-010 timeouts at
+  two viewports (the 768 px variant passed); it is not counted as evidence.
+
+Verdict: `Inconclusive` under the production end-user rule. The decoding defect
+is proven fixed in the deployed artifact against the live provider, but
+automation is barred from paid calls, so no production user refresh of the
+reported CNR has yet been observed. Close as `Properly fixed` when a live-user
+refresh or the 18:00 Asia/Kolkata scheduled sync on release `3c23288` shows a
+provider 200 followed by a successful CaseOps response and current bookmark
+data.
