@@ -94,6 +94,9 @@ export default function CaseTrackingPage() {
         queryClient.invalidateQueries({ queryKey: ["matters"] }),
       ]);
     },
+    // A failed refresh still records provider health, the error and the
+    // recovery window on the tracked case; reload it so the row is not stale.
+    onError: () => queryClient.invalidateQueries({ queryKey: ["case-tracking"] }),
   });
   const updateMutation = useMutation({
     mutationFn: ({
@@ -351,7 +354,28 @@ export default function CaseTrackingPage() {
             </CardTitle>
             <CardDescription>In-app only notifications for bookmarked cases.</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
+            {refreshMutation.isError ? (
+              <p
+                className="text-sm text-[var(--color-danger)]"
+                role="alert"
+                data-testid="case-tracking-refresh-error"
+              >
+                {apiErrorMessage(
+                  refreshMutation.error,
+                  "Could not refresh this case. Check your connection and try again.",
+                )}
+              </p>
+            ) : null}
+            {updateMutation.isError ? (
+              <p
+                className="text-sm text-[var(--color-danger)]"
+                role="alert"
+                data-testid="case-tracking-bookmark-update-error"
+              >
+                {apiErrorMessage(updateMutation.error, "Could not update this bookmark. Try again.")}
+              </p>
+            ) : null}
             {bookmarks.data?.bookmarks.length ? (
               <div className="divide-y divide-[var(--color-line)] rounded-md border border-[var(--color-line)]">
                 {bookmarks.data.bookmarks.map((bookmark) => (
