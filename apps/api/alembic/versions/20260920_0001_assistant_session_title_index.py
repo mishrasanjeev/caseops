@@ -31,6 +31,8 @@ def upgrade() -> None:
                 )
             )
     else:
+        # MIGRATION-LOCK-RISK: acknowledged: SQLite acceptance has no
+        # concurrent DDL primitive; production PostgreSQL uses the branch above.
         op.create_index(
             _INDEX_NAME,
             "assistant_sessions",

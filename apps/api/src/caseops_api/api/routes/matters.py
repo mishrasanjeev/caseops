@@ -279,9 +279,9 @@ from caseops_api.services.matters import (
     create_matter_task,
     create_time_entry,
     get_matter,
-    get_matter_dashboard_summary,
     get_matter_attachment_bulk_download,
     get_matter_attachment_download,
+    get_matter_dashboard_summary,
     get_matter_invoice_pdf,
     get_matter_workspace,
     list_matter_hearing_follow_up,
@@ -382,7 +382,7 @@ async def current_company_matter_dashboard_summary(
 async def current_company_matter_hearing_portfolio(
     context: CurrentContext,
     session: DbSession,
-    hearing_date: date | None = Query(default=None, alias="date"),
+    hearing_date: Annotated[date | None, Query(alias="date")] = None,
     limit: int = Query(default=500, ge=1, le=1000),
 ) -> MatterHearingPortfolioResponse:
     return list_matter_hearing_portfolio(
