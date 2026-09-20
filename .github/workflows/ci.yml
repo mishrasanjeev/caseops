@@ -421,7 +421,13 @@ jobs:
   e2e:
     name: Playwright app suite
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The complete inventory is intentionally serial: it includes the dated
+    # browser journeys and the 4,496-row statute-source proof. The prior
+    # 30-minute ceiling canceled a still-progressing run and misreported the
+    # resulting cascade as a product failure. Keep a bounded budget that is
+    # above the observed full-run time while still failing a genuinely hung
+    # browser job.
+    timeout-minutes: 60
     needs: [api, web, postgres-validation]
     steps:
       - uses: actions/checkout@v4
