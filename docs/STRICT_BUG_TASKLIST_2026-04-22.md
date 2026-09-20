@@ -1591,10 +1591,39 @@ Release evidence on 2026-09-15:
   was cancelled at its 55-minute limit after intermittent BUG-010 timeouts at
   two viewports (the 768 px variant passed); it is not counted as evidence.
 
-Verdict: `Inconclusive` under the production end-user rule. The decoding defect
-is proven fixed in the deployed artifact against the live provider, but
-automation is barred from paid calls, so no production user refresh of the
-reported CNR has yet been observed. Close as `Properly fixed` when a live-user
-refresh or the 18:00 Asia/Kolkata scheduled sync on release `3c23288` shows a
-provider 200 followed by a successful CaseOps response and current bookmark
-data.
+Production end-user evidence on 2026-09-20, release `3c23288` serving since
+2026-09-15 07:31 UTC:
+
+- zero `502` responses on any `/api/case-tracking/*` route in five days. The
+  reported symptom is gone from production;
+- provider transport in the API service logged 65 x `200`, 10 x `404` and
+  2 x `500`; the `200` bodies are compressed and now decode once;
+- real browser users (non-automation source addresses) ran 37 manual refreshes:
+  13 x `200` across six bookmarks, 2 x `404`, and 22 x `409` across eighteen
+  bookmarks. One bookmark returned both, so the failure is per tracked case,
+  not global;
+- the scheduled 18:00 Asia/Kolkata poll job ran its five-minute cadence with
+  `exit(0)` and no warning or error output.
+
+Verdict for the decoding defect: `Properly fixed`. Provider success now reaches
+the tenant instead of failing closed, proven by the deployed-image live probe,
+the exact-release production suite, and five days of production traffic with no
+`502`.
+
+Verdict for the reported user workflow: `Partially fixed`. A distinct failure is
+now visible for the same user action. On 2026-09-19 17:41 UTC two refreshes on
+separate bookmarks each logged a provider `200 OK` followed by CaseOps `409`,
+and eighteen bookmarks are in that state. A `409` on this route after transport
+comes only from `ambiguous_match`, `concurrent_refresh` or
+`match_validation_failed`, so the identity verification in
+`_verified_sync_snapshot_identity` or the linked-Matter recheck in
+`apply_snapshot` is rejecting a provider record the tenant expects to accept.
+That guard exists to stop one case's hearing date being written onto another
+matter, so it must not be loosened blindly. The 2026-09-03 registration-versus
+filing-number correction is the nearest known cause family.
+
+Next step: read the exact `response_class` and `last_error` for one affected
+tracked case (both are already returned by `GET /api/case-tracking/bookmarks`
+and rendered on the page after the error-surfacing change), then reproduce that
+exact identity shape in a dated regression before changing any matching rule.
+Do not close this row while eighteen bookmarks cannot refresh.
