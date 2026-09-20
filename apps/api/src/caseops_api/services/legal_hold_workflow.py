@@ -21,6 +21,7 @@ from caseops_api.db.models import (
     LegalHoldReleaseRequest,
     TenantDataOperation,
     TenantDataOperationItem,
+    User,
 )
 from caseops_api.governance.data_class_projection import (
     require_admissible_data_class,
@@ -39,6 +40,7 @@ from caseops_api.services.assignment_memberships import (
     require_locked_membership_capability,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.capabilities import membership_has_capability
 from caseops_api.services.security import require_step_up_always
 from caseops_api.services.session_context import SessionContext
 
@@ -65,6 +67,46 @@ def _actor(
     participants: tuple[str, ...] = (),
     capability: str = "legal_holds:manage",
 ) -> tuple[SessionContext, dict[str, CompanyMembership]]:
+    if not mutate:
+        # Reads must not hold the tenant or identity fence while a browser is
+        # loading the page.  In particular, the legal-hold list and catalog
+        # load alongside MFA step-up; a read-side FOR UPDATE can make the
+        # step-up request fail with a lock timeout even though no writer is
+        # active.  Re-read the same authorization inputs under MVCC instead.
+        company = session.scalar(
+            select(Company)
+            .where(Company.id == context.company.id)
+            .execution_options(populate_existing=True)
+        )
+        member = session.scalar(
+            select(CompanyMembership)
+            .where(
+                CompanyMembership.company_id == context.company.id,
+                CompanyMembership.id == context.membership.id,
+            )
+            .execution_options(populate_existing=True)
+        )
+        user = session.get(User, member.user_id) if member is not None else None
+        if (
+            company is None
+            or not company.is_active
+            or member is None
+            or not member.is_active
+            or member.user_id != context.user.id
+            or user is None
+            or not user.is_active
+            or not membership_has_capability(session, member, capability)
+        ):
+            _reject("legal_hold_access_required", "Preservation administration is required.", 403)
+        member.user = user
+        fresh = SessionContext(
+            company=company,
+            membership=member,
+            user=user,
+            token_issued_at=context.token_issued_at,
+        )
+        return fresh, {member.id: member}
+
     # This tenant fence is also required by the disposition adapter before it
     # reads holds. Membership/User then hold locks cannot invert that order.
     company = session.scalar(
