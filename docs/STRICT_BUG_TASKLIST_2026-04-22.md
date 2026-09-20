@@ -1567,5 +1567,63 @@ Regression evidence:
 - `apps/web/app/app/case-tracking/page.test.tsx`: failed refresh is shown and
   the bookmark reloads; fails without the page change, passes with it.
 
-Verdict: `Inconclusive` until local Docker acceptance, exact-main deployment
-and production evidence are recorded below.
+Release evidence on 2026-09-15:
+
+- PR #463 merged as `3c23288380bbe9d9d8133ebabbd73e21685428da`; its tree is
+  identical to Docker-certified candidate `da39d1f6` (tree `6ba00a0e`). CI on
+  `da39d1f6` passed 33 checks after one rerun of an unrelated private-retrieval
+  timing assertion that passed 3/3 locally;
+- `scripts/verify-docker.ps1` printed `PASS da39d1f6`: 388 PostgreSQL tests,
+  191 and 187 desktop journeys and 4 mobile journeys, with 6 explicit
+  production-identity or Pine Labs provider skips;
+- `scripts/deploy-prod.sh` routed API revision `caseops-api-00453-xk8` and web
+  revision `caseops-web-00430-5pn` at 100% on `3c23288`, completed the migrate
+  job and index-health execution `caseops-db-index-health-gnqmh`;
+- the exact deployed API image
+  `sha256:d25343471bc9a56e751cc0f2cbf391b29268a9309a60d46e2f8fe413a3faa51a`
+  (revision label `3c23288`) decoded a live gzip reply from the free
+  eCourtsIndia refresh-status endpoint; the previous source failed the same
+  probe with `DecodingError`;
+- exact-release prod verification run `34947405170` succeeded with 261 passed,
+  0 failed and 7 pre-existing data/capability skips, including provider
+  freshness, tracked-case source evidence at 360 px, transient case-tracking
+  recovery and zero-spend automation. The first dispatched run `34942342996`
+  was cancelled at its 55-minute limit after intermittent BUG-010 timeouts at
+  two viewports (the 768 px variant passed); it is not counted as evidence.
+
+Production end-user evidence on 2026-09-20, release `3c23288` serving since
+2026-09-15 07:31 UTC:
+
+- zero `502` responses on any `/api/case-tracking/*` route in five days. The
+  reported symptom is gone from production;
+- provider transport in the API service logged 65 x `200`, 10 x `404` and
+  2 x `500`; the `200` bodies are compressed and now decode once;
+- real browser users (non-automation source addresses) ran 37 manual refreshes:
+  13 x `200` across six bookmarks, 2 x `404`, and 22 x `409` across eighteen
+  bookmarks. One bookmark returned both, so the failure is per tracked case,
+  not global;
+- the scheduled 18:00 Asia/Kolkata poll job ran its five-minute cadence with
+  `exit(0)` and no warning or error output.
+
+Verdict for the decoding defect: `Properly fixed`. Provider success now reaches
+the tenant instead of failing closed, proven by the deployed-image live probe,
+the exact-release production suite, and five days of production traffic with no
+`502`.
+
+Verdict for the reported user workflow: `Partially fixed`. A distinct failure is
+now visible for the same user action. On 2026-09-19 17:41 UTC two refreshes on
+separate bookmarks each logged a provider `200 OK` followed by CaseOps `409`,
+and eighteen bookmarks are in that state. A `409` on this route after transport
+comes only from `ambiguous_match`, `concurrent_refresh` or
+`match_validation_failed`, so the identity verification in
+`_verified_sync_snapshot_identity` or the linked-Matter recheck in
+`apply_snapshot` is rejecting a provider record the tenant expects to accept.
+That guard exists to stop one case's hearing date being written onto another
+matter, so it must not be loosened blindly. The 2026-09-03 registration-versus
+filing-number correction is the nearest known cause family.
+
+Next step: read the exact `response_class` and `last_error` for one affected
+tracked case (both are already returned by `GET /api/case-tracking/bookmarks`
+and rendered on the page after the error-surfacing change), then reproduce that
+exact identity shape in a dated regression before changing any matching rule.
+Do not close this row while eighteen bookmarks cannot refresh.
