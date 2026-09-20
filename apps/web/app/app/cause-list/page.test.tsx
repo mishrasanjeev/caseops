@@ -82,6 +82,7 @@ describe("CauseListPage", () => {
         matter_status: null,
         include_disposed: false,
         source: "both",
+        sort: "court",
       }),
     );
     expect(await screen.findByText("GBA-2026-001")).toBeInTheDocument();

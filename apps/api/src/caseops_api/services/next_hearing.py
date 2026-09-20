@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 from caseops_api.db.models import (
     AuditResult,
     Matter,
+    MatterHearing,
+    MatterHearingStatus,
     MatterNextHearingHistory,
     MatterNextHearingSource,
     MatterNextHearingSuggestion,
@@ -123,6 +125,71 @@ def _load_accessible_matter(
 
 def _today() -> date:
     return datetime.now(UTC).date()
+
+
+def _calendar_forum_name(matter: Matter) -> str:
+    return (
+        (matter.court_name or "").strip()
+        or (matter.court_forum_number or "").strip()
+        or (matter.forum_level or "").replace("_", " ").title()
+        or "Court"
+    )
+
+
+def _ensure_hearing_row_for_next_hearing(
+    session: Session,
+    *,
+    matter: Matter,
+    hearing_on: date,
+    source: str,
+    source_ref_type: str | None,
+    source_ref_id: str | None,
+) -> MatterHearing:
+    query = select(MatterHearing).where(
+        MatterHearing.company_id == matter.company_id,
+        MatterHearing.matter_id == matter.id,
+        MatterHearing.source == source,
+    )
+    if source_ref_type and source_ref_id:
+        query = query.where(
+            MatterHearing.source_ref_type == source_ref_type,
+            MatterHearing.source_ref_id == source_ref_id,
+        )
+    else:
+        query = query.where(
+            MatterHearing.hearing_on == hearing_on,
+            MatterHearing.source_ref_type.is_(None),
+            MatterHearing.source_ref_id.is_(None),
+        )
+
+    hearing = session.scalar(
+        query.order_by(MatterHearing.created_at.desc(), MatterHearing.id.desc()).limit(1)
+    )
+    if hearing is None:
+        hearing = MatterHearing(
+            company_id=matter.company_id,
+            matter_id=matter.id,
+            hearing_on=hearing_on,
+            time_status="time_not_published",
+            timezone="Asia/Kolkata",
+            source=source,
+            source_ref_type=source_ref_type,
+            source_ref_id=source_ref_id,
+            forum_name=_calendar_forum_name(matter),
+            judge_name=matter.judge_name,
+            purpose="Next hearing",
+            status=MatterHearingStatus.SCHEDULED,
+        )
+    else:
+        hearing.hearing_on = hearing_on
+        hearing.forum_name = _calendar_forum_name(matter)
+        hearing.judge_name = matter.judge_name
+        hearing.status = MatterHearingStatus.SCHEDULED
+        hearing.source_ref_type = source_ref_type
+        hearing.source_ref_id = source_ref_id
+    session.add(hearing)
+    session.flush()
+    return hearing
 
 
 def _audit_next_hearing(
@@ -262,6 +329,15 @@ def apply_next_hearing_update(
     source_value = str(source.value if isinstance(source, MatterNextHearingSource) else source)
     is_manual = source_value == MatterNextHearingSource.MANUAL
     if matter.next_hearing_on == new_date and matter.next_hearing_manual_lock == manual_lock:
+        if matter.status != MatterStatus.DISPOSED:
+            _ensure_hearing_row_for_next_hearing(
+                session,
+                matter=matter,
+                hearing_on=new_date,
+                source=source_value,
+                source_ref_type=source_ref_type,
+                source_ref_id=source_ref_id,
+            )
         return NextHearingApplyResult(applied=False, reason="unchanged")
 
     today = _today()
@@ -332,6 +408,16 @@ def apply_next_hearing_update(
     )
     session.add(history)
     session.flush()
+    materialized_hearing = None
+    if matter.status != MatterStatus.DISPOSED:
+        materialized_hearing = _ensure_hearing_row_for_next_hearing(
+            session,
+            matter=matter,
+            hearing_on=new_date,
+            source=source_value,
+            source_ref_type=source_ref_type,
+            source_ref_id=source_ref_id,
+        )
     _audit_next_hearing(
         session,
         context=context,
@@ -348,6 +434,9 @@ def apply_next_hearing_update(
             "source_ref_type": source_ref_type,
             "source_ref_id": source_ref_id,
             "manual_lock": matter.next_hearing_manual_lock,
+            "materialized_hearing_id": materialized_hearing.id
+            if materialized_hearing is not None
+            else None,
         },
     )
     return NextHearingApplyResult(applied=True, reason="updated")

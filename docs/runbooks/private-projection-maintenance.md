@@ -98,9 +98,19 @@ one successful rebuild cadence followed by a second clean cadence. A new event
 after a clean rebuild starts a new repair interval; it is not evidence that the
 preceding rebuild failed.
 
+An interrupted worker can leave an unreadable `building` or `ready` shadow behind
+before its normal exception cleanup runs. Once the next worker owns the tenant
+advisory lease, a shadow older than 15 minutes is treated as crashed residue: its
+payloads are deleted, the generation is retained as `failed` with
+`stale_rebuild_recovered`, and the active generation remains untouched. A recent
+shadow is never force-removed; the lease wait and epoch fence remain fail-closed.
+This recovery is bounded and must be covered by a subsequent clean cadence, not
+used to mask an active writer.
+
 The structured record contains a correlation ID, affected company IDs, event and
 repair lag, pending and failed counts, blockers, whether a bounded rebuild ran,
-and whether repair was safely deferred. It contains no source text, document
+the count of stale shadows recovered, and whether repair was safely deferred. It
+contains no source text, document
 names, matter names, user email, embedding, or source ID.
 
 ## Triage

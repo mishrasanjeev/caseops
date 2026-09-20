@@ -21790,6 +21790,12 @@ class AssistantSession(Base):
             "id",
         ),
         Index(
+            "ix_assistant_sessions_company_creator_title",
+            "company_id",
+            "created_by_membership_id",
+            "title",
+        ),
+        Index(
             "ix_assistant_sessions_creator_company",
             "created_by_membership_id",
             "company_id",

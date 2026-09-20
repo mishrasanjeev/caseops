@@ -29,7 +29,7 @@ export default function CauseListPage() {
   const [matterStatus, setMatterStatus] = useState("all");
   const [includeDisposed, setIncludeDisposed] = useState(false);
   const [source, setSource] = useState<"hearings" | "cause_list_entries" | "both">("both");
-  const [sort, setSort] = useState<"hearing_date" | "court" | "lawyer" | "serial">("hearing_date");
+  const [sort, setSort] = useState<"hearing_date" | "court" | "lawyer" | "serial">("court");
 
   const payload = (): CauseListPreviewInput => ({
     date_from: dateFrom,

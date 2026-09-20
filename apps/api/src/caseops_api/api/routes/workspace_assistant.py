@@ -91,6 +91,7 @@ def get_assistant_sessions(
     context: AssistantUser,
     session: DbSession,
     session_status: Annotated[Literal["active", "archived"] | None, Query(alias="status")] = None,
+    session_title: Annotated[str | None, Query(alias="title", min_length=1, max_length=160)] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 25,
     offset: Annotated[int, Query(ge=0, le=10000)] = 0,
 ) -> AssistantSessionListResponse:
@@ -98,6 +99,7 @@ def get_assistant_sessions(
         session,
         context=context,
         session_status=session_status,
+        session_title=session_title,
         limit=limit,
         offset=offset,
     )

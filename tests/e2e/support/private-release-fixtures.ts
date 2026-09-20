@@ -58,17 +58,14 @@ export async function verifyRetainedPrivateRevocation(
 ): Promise<void> {
   const { api, web, headers, matter, filename, evidenceToken } = input;
   expect(matter.status).toBe("disposed");
-  const matches: Array<{ id: string; title: string }> = [];
-  for (let offset = 0; offset < 500; offset += 100) {
-    const response = await page.request.get(`${api}/api/workspace-assistant/sessions`, {
-      headers, params: { limit: 100, offset },
-    });
-    await expectStatus(response, 200, "read bounded retained QA sessions");
-    const body = await response.json();
-    matches.push(...body.items.filter((item: { title: string }) => item.title === `Ask \u00b7 ${filename}`));
-    if (!body.has_more) break;
-    expect(offset, "retained-session scan exceeded its bound").toBeLessThan(400);
-  }
+  const sessionsResponse = await page.request.get(`${api}/api/workspace-assistant/sessions`, {
+    headers,
+    params: { title: `Ask \u00b7 ${filename}`, limit: 100, offset: 0 },
+  });
+  await expectStatus(sessionsResponse, 200, "read exact retained QA sessions");
+  const body = await sessionsResponse.json();
+  expect(body.has_more, "exact retained-session lookup must remain bounded").toBe(false);
+  const matches = body.items as Array<{ id: string; title: string }>;
   expect(matches.length, "a retired fixture needs retained answer evidence").toBeGreaterThan(0);
   for (const session of matches) {
     const response = await page.request.get(`${api}/api/workspace-assistant/sessions/${session.id}/turns`, { headers });

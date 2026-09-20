@@ -46,6 +46,7 @@ from caseops_api.services.private_retrieval import (
     PrivateRetrievalConcurrencyError,
     PrivateRetrievalInvariantError,
     ProjectionScopeInput,
+    _lock_private_company,
     activate_private_generation,
     apply_private_projection_event,
     create_shadow_private_generation,
@@ -78,6 +79,8 @@ PRIVATE_REBUILD_SERIALIZATION_POLL_SECONDS = 0.25
 PRIVATE_REBUILD_SERIALIZATION_TIMEOUT_DETAIL = (
     "Another private projection rebuild did not release its tenant lease within the bounded wait."
 )
+PRIVATE_REBUILD_STALE_SHADOW_SECONDS = 15 * 60
+PRIVATE_REBUILD_STALE_SHADOW_FAILURE_CODE = "stale_rebuild_recovered"
 PRIVATE_REBUILD_PENDING_EVENTS_DETAIL = (
     "Private rebuild requires every projection event to reach a terminal applied state."
 )
@@ -144,6 +147,7 @@ class PrivateRebuildSummary:
     provider_batch_count: int
     provider_text_count: int
     activated: bool
+    recovered_stale_shadow_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,6 +171,53 @@ class PrivateIntegrityReport:
     def release_blocked(self) -> bool:
         return bool(self.blockers)
 
+
+def _recover_stale_private_shadows(
+    session: Session,
+    *,
+    company_id: str,
+    now: datetime | None = None,
+) -> int:
+    """Retire crashed, unreadable shadows before starting the next rebuild.
+
+    The advisory lease serializes compliant rebuild workers. Once this worker
+    owns that lease, a building/ready shadow older than the bounded recovery
+    window cannot be an active worker; it is durable residue from a crashed or
+    interrupted rebuild. Keep the active generation untouched, remove only
+    the unreadable shadow payload, and retain the failed generation row as
+    evidence of recovery.
+    """
+
+    _lock_private_company(session, company_id=company_id)
+    current = now or datetime.now(UTC)
+    stale_before = current - timedelta(seconds=PRIVATE_REBUILD_STALE_SHADOW_SECONDS)
+    shadows = list(
+        session.scalars(
+            select(PrivateIndexGeneration)
+            .where(
+                PrivateIndexGeneration.company_id == company_id,
+                PrivateIndexGeneration.state.in_(("building", "ready")),
+                PrivateIndexGeneration.created_at < stale_before,
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).all()
+    )
+    for shadow in shadows:
+        session.execute(
+            delete(PrivateIndexProjection).where(
+                PrivateIndexProjection.company_id == company_id,
+                PrivateIndexProjection.generation_id == shadow.id,
+            )
+        )
+        shadow.state = "failed"
+        shadow.failure_code = PRIVATE_REBUILD_STALE_SHADOW_FAILURE_CODE
+        shadow.expected_projection_count = None
+        shadow.verified_projection_count = None
+        shadow.verification_sha256 = None
+        shadow.verified_at = None
+        session.flush()
+    return len(shadows)
 
 @dataclass(frozen=True, slots=True)
 class PrivateMaintenanceCandidates:
@@ -661,6 +712,10 @@ def _rebuild_private_index_owned(
     )
     if unresolved_event_count:
         raise PrivateRetrievalConcurrencyError(PRIVATE_REBUILD_PENDING_EVENTS_DETAIL)
+    recovered_stale_shadow_count = _recover_stale_private_shadows(
+        session,
+        company_id=company_id,
+    )
     active = ensure_active_private_generation(session, company_id=company_id)
     shadow = create_shadow_private_generation(session, company_id=company_id)
     previous_generation_id = str(active.id)
@@ -777,6 +832,7 @@ def _rebuild_private_index_owned(
         provider_batch_count=provider_batches,
         provider_text_count=len(payloads) if provider is not None else 0,
         activated=activate,
+        recovered_stale_shadow_count=recovered_stale_shadow_count,
     )
 
 
@@ -1216,6 +1272,8 @@ __all__ = [
     "MAX_PRIVATE_WRITE_BATCH",
     "MAX_PRIVATE_MAINTENANCE_COMPANIES",
     "MAX_PRIVATE_REBUILD_PROJECTIONS",
+    "PRIVATE_REBUILD_STALE_SHADOW_SECONDS",
+    "PRIVATE_REBUILD_STALE_SHADOW_FAILURE_CODE",
     "PRIVATE_REBUILD_LIMIT_DETAIL",
     "PRIVATE_REBUILD_PENDING_EVENTS_DETAIL",
     "PRIVATE_REBUILD_SERIALIZATION_TIMEOUT_DETAIL",

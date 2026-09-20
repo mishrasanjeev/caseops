@@ -852,3 +852,28 @@ requirements when using the fallback.
   Use ordinal sets and dictionaries when reconciling journals in PowerShell;
   its default hashtables and unique sorting collapse valid case variants.
   Regress distinct-case IDs, true duplicates and mismatched phase identities.
+- Dashboard and hearing portfolio counts must come from server-side aggregate
+  read models, never from the first page of `/api/matters/` or a raised
+  client-side limit. Prove active/intake/hearing counts beyond the visible
+  page, show truncation deliberately, and keep exact-date hearing filters
+  tied to `next_hearing_on`/hearing dates rather than created/updated dates.
+- An automated next-hearing update is incomplete until the calendar-facing
+  `MatterHearing` read model is materialized with provider provenance. A
+  green matter detail after eCourts sync can still leave Calendar blank.
+  Regress provider updates through `/api/calendar/events` and keep manual
+  hearing rows deduplicated by their source reference.
+- A reported "case reopened" symptom must be diagnosed from persisted
+  lifecycle state plus audit events before changing lifecycle code. Dashboard
+  miscounts, explicit audited `Disposed -> Intake` transitions, and mutable
+  historical access policy are not the same as accidental resurrection. Do
+  not weaken terminal-state guards to hide a count or display defect.
+- Matter document upload/view support must keep the browser accept list,
+  backend signature allowlist and viewer branches aligned. Do not advertise
+  formats the API rejects, do not force images or Word files through the PDF
+  annotation component, and do not send private tenant documents to third-party
+  viewers merely to make DOC/DOCX previews convenient.
+- Local browser acceptance must keep the web origin and API cookie host on the
+  same loopback hostname. A build that calls `localhost:8000` while Playwright
+  serves `127.0.0.1:3100` can pass login transport but lose SameSite cookies,
+  redirect back to sign-in and produce false product failures. Align the app
+  harness host, API base URL and CSP loopback aliases before trusting UI proof.

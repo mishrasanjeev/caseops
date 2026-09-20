@@ -487,6 +487,37 @@ class MatterListResponse(BaseModel):
     next_cursor: str | None = None
 
 
+class MatterDashboardSummaryResponse(BaseModel):
+    company_id: str
+    total_visible_count: int
+    active_matters_count: int
+    intake_matters_count: int
+    hearings_next_7_days_count: int
+    upcoming_hearings_total_count: int
+    upcoming_hearings: list[MatterRecord]
+    upcoming_hearings_limit: int
+    recent_matters: list[MatterRecord]
+    recent_matters_limit: int
+
+
+class MatterHearingPortfolioResponse(BaseModel):
+    company_id: str
+    matters: list[MatterRecord]
+    total_count: int
+    limit: int
+    truncated: bool
+
+
+class MatterHearingFollowUpResponse(BaseModel):
+    company_id: str
+    overdue_matters: list[MatterRecord]
+    missing_date_matters: list[MatterRecord]
+    overdue_count: int
+    missing_date_count: int
+    limit: int
+    truncated: bool
+
+
 class MatterNextHearingHistoryRecord(BaseModel):
     id: str
     company_id: str

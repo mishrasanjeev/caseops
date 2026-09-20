@@ -11,9 +11,9 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { fetchAuthorityCorpusStats, listMatters } from "@/lib/api/endpoints";
+import { fetchAuthorityCorpusStats, fetchMatterDashboardSummary } from "@/lib/api/endpoints";
 import type { Matter } from "@/lib/api/schemas";
-import { formatLegalDate, toLocalCalendarDate } from "@/lib/dates";
+import { formatLegalDate } from "@/lib/dates";
 import { useSession } from "@/lib/use-session";
 
 export default function DashboardPage() {
@@ -24,9 +24,9 @@ export default function DashboardPage() {
   // an `InfiniteData<MattersList>` when you navigate between them,
   // which throws ERR_ABORTED on the client-side transition. Keep the
   // dashboard on its own key.
-  const mattersQuery = useQuery({
-    queryKey: ["matters", "dashboard-overview"],
-    queryFn: () => listMatters({ limit: 50 }),
+  const dashboardQuery = useQuery({
+    queryKey: ["matters", "dashboard-summary"],
+    queryFn: () => fetchMatterDashboardSummary({ upcoming_limit: 50, recent_limit: 5 }),
     enabled: session.status === "authenticated",
   });
   const corpusStatsQuery = useQuery({
@@ -36,29 +36,9 @@ export default function DashboardPage() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const matters = mattersQuery.data?.matters ?? [];
-  const activeCount = matters.filter((m) => m.status === "active").length;
-
-  const upcoming = [...matters]
-    .filter((m) => !!m.next_hearing_on)
-    .sort((a, b) => (a.next_hearing_on ?? "").localeCompare(b.next_hearing_on ?? ""))
-    .slice(0, 5);
-  const recent = [...matters]
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))
-    .slice(0, 5);
-
-  // Hearings-this-week tile: count matters whose next_hearing_on falls
-  // in the next 7 calendar days. Backed by the portfolio we already
-  // fetched — no extra API call.
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const weekOut = new Date(today);
-  weekOut.setDate(weekOut.getDate() + 7);
-  const hearingsThisWeek = matters.filter((m) => {
-    if (!m.next_hearing_on) return false;
-    const d = toLocalCalendarDate(m.next_hearing_on);
-    return d !== null && d >= today && d <= weekOut;
-  }).length;
+  const summary = dashboardQuery.data;
+  const upcoming = summary?.upcoming_hearings ?? [];
+  const recent = summary?.recent_matters ?? [];
 
   const userFirstName = session.context?.user.full_name.split(" ")[0] ?? "there";
 
@@ -79,17 +59,25 @@ export default function DashboardPage() {
         <StatCard
           icon={Briefcase}
           label="Active matters"
-          value={mattersQuery.isPending ? "—" : String(activeCount)}
-          hint={mattersQuery.isPending ? "Loading" : `${matters.length} total in workspace`}
+          value={dashboardQuery.isPending ? "—" : String(summary?.active_matters_count ?? 0)}
+          hint={
+            dashboardQuery.isPending
+              ? "Loading"
+              : `${summary?.total_visible_count ?? 0} total in workspace`
+          }
         />
         <StatCard
           icon={Gavel}
           label="Hearings this week"
-          value={mattersQuery.isPending ? "—" : String(hearingsThisWeek)}
+          value={
+            dashboardQuery.isPending
+              ? "—"
+              : String(summary?.hearings_next_7_days_count ?? 0)
+          }
           hint={
-            mattersQuery.isPending
+            dashboardQuery.isPending
               ? "Loading"
-              : hearingsThisWeek > 0
+              : (summary?.hearings_next_7_days_count ?? 0) > 0
                 ? "Across your open matters"
                 : "Nothing scheduled in the next 7 days"
           }
@@ -97,11 +85,7 @@ export default function DashboardPage() {
         <StatCard
           icon={Sparkles}
           label="Matters in intake"
-          value={
-            mattersQuery.isPending
-              ? "—"
-              : String(matters.filter((m) => m.status === "intake").length)
-          }
+          value={dashboardQuery.isPending ? "—" : String(summary?.intake_matters_count ?? 0)}
           hint="Awaiting kickoff"
         />
         <StatCard
@@ -122,11 +106,11 @@ export default function DashboardPage() {
         />
       </section>
 
-      {mattersQuery.isError ? (
+      {dashboardQuery.isError ? (
         <QueryErrorState
           title="Could not load your portfolio"
-          error={mattersQuery.error}
-          onRetry={mattersQuery.refetch}
+          error={dashboardQuery.error}
+          onRetry={dashboardQuery.refetch}
         />
       ) : null}
 
@@ -139,12 +123,12 @@ export default function DashboardPage() {
                 Matters with a scheduled hearing, sorted by date.
               </CardDescription>
             </div>
-            <Button href="/app/matters" variant="outline" size="sm">
-              Open matters
+            <Button href="/app/hearings" variant="outline" size="sm">
+              Open hearings
             </Button>
           </CardHeader>
           <CardContent>
-            {mattersQuery.isPending ? (
+            {dashboardQuery.isPending ? (
               <div className="flex flex-col gap-3">
                 {Array.from({ length: 3 }).map((_, i) => (
                   <Skeleton key={i} className="h-12 w-full" />
@@ -165,6 +149,14 @@ export default function DashboardPage() {
                 ))}
               </ul>
             )}
+            {!dashboardQuery.isPending &&
+            summary &&
+            summary.upcoming_hearings_total_count > upcoming.length ? (
+              <div className="mt-3 text-xs text-[var(--color-mute)]">
+                Showing {upcoming.length} of {summary.upcoming_hearings_total_count} upcoming
+                hearings. Open Hearings for exact-date filtering.
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 
@@ -174,7 +166,7 @@ export default function DashboardPage() {
             <CardDescription>Your last five matters.</CardDescription>
           </CardHeader>
           <CardContent>
-            {mattersQuery.isPending ? (
+            {dashboardQuery.isPending ? (
               <div className="flex flex-col gap-3">
                 {Array.from({ length: 3 }).map((_, i) => (
                   <Skeleton key={i} className="h-10 w-full" />

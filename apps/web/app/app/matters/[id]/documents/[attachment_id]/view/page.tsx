@@ -18,9 +18,11 @@ import type { PDFAnnotation } from "@/components/document/PDFViewer";
 import { Button } from "@/components/ui/Button";
 import {
   type MatterAttachmentAnnotationRecord,
+  fetchMatterWorkspace,
   listMatterAttachmentAnnotations,
   matterAttachmentDownloadUrl,
 } from "@/lib/api/endpoints";
+import type { WorkspaceAttachment, WorkspaceResponse } from "@/lib/api/workspace-types";
 
 const PDFViewer = dynamic(
   () => import("@/components/document/PDFViewer").then((m) => m.PDFViewer),
@@ -64,6 +66,30 @@ export default function AttachmentViewerPage(): React.JSX.Element {
     () => (annotationsQuery.data ?? []).map(recordToAnnotation),
     [annotationsQuery.data],
   );
+  const workspaceQuery = useQuery({
+    queryKey: ["matter-workspace", matterId, "attachment-viewer"],
+    queryFn: () => fetchMatterWorkspace(matterId) as Promise<WorkspaceResponse>,
+    enabled: Boolean(matterId),
+  });
+  const attachment: WorkspaceAttachment | undefined = useMemo(
+    () =>
+      workspaceQuery.data?.attachments.find((item) => item.id === attachmentId),
+    [attachmentId, workspaceQuery.data?.attachments],
+  );
+  const filename =
+    attachment?.original_filename ?? attachment?.filename ?? `attachment-${attachmentId}`;
+  const contentType = (attachment?.content_type ?? attachment?.mime_type ?? "").toLowerCase();
+  const lowerName = filename.toLowerCase();
+  const isPdf = contentType.includes("pdf") || lowerName.endsWith(".pdf");
+  const isImage =
+    contentType.startsWith("image/") ||
+    lowerName.endsWith(".png") ||
+    lowerName.endsWith(".jpg") ||
+    lowerName.endsWith(".jpeg");
+  const isWord =
+    contentType.includes("word") ||
+    lowerName.endsWith(".doc") ||
+    lowerName.endsWith(".docx");
 
   useEffect(() => {
     if (!matterId || !attachmentId) {
@@ -83,13 +109,45 @@ export default function AttachmentViewerPage(): React.JSX.Element {
           ← Back to documents
         </Button>
       </div>
-      {url ? (
+      {url && isPdf ? (
         <PDFViewer
           url={url}
-          filename={`attachment-${attachmentId}.pdf`}
+          filename={filename}
           className="flex-1"
           annotations={annotations}
         />
+      ) : url && isImage ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] p-4">
+          <img
+            src={url}
+            alt={filename}
+            className="max-h-full max-w-full object-contain"
+          />
+        </div>
+      ) : url && isWord ? (
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
+          <div className="rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] px-3 py-2 text-sm text-[var(--color-ink-2)]">
+            Word files open with the browser's document handling when available. If the frame
+            stays blank, use Download to open the same authenticated file locally.
+          </div>
+          <iframe
+            title={filename}
+            src={url}
+            className="min-h-0 flex-1 rounded-md border border-[var(--color-line)] bg-white"
+          />
+          <Button type="button" variant="outline" href={url}>
+            Download
+          </Button>
+        </div>
+      ) : url ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] text-center">
+          <p className="text-sm text-[var(--color-ink-2)]">
+            This file type cannot be previewed inline.
+          </p>
+          <Button type="button" href={url}>
+            Download
+          </Button>
+        </div>
       ) : null}
     </main>
   );

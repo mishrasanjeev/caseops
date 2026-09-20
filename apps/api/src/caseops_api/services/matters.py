@@ -4,7 +4,7 @@ import hashlib
 import io
 import logging
 import zipfile
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from typing import BinaryIO, NamedTuple
 
 from fastapi import HTTPException, status
@@ -85,7 +85,10 @@ from caseops_api.schemas.matters import (
     MatterCourtSyncJobRecord,
     MatterCourtSyncRunRecord,
     MatterCreateRequest,
+    MatterDashboardSummaryResponse,
     MatterHearingCreateRequest,
+    MatterHearingFollowUpResponse,
+    MatterHearingPortfolioResponse,
     MatterHearingRecord,
     MatterLifecycleStatusRequest,
     MatterListFilters,
@@ -2323,6 +2326,199 @@ def list_matters(
         company_id=context.company.id,
         matters=[_matter_record(matter) for matter in rows],
         next_cursor=next_cursor,
+    )
+
+
+def get_matter_dashboard_summary(
+    session: Session,
+    *,
+    context: SessionContext,
+    today: date | None = None,
+    upcoming_limit: int = 50,
+    recent_limit: int = 5,
+) -> MatterDashboardSummaryResponse:
+    effective_today = today or date.today()
+    week_out = effective_today + timedelta(days=7)
+    upcoming_page_size = max(1, min(upcoming_limit, 100))
+    recent_page_size = max(1, min(recent_limit, 20))
+    visible_filter = visible_matters_filter(session, context=context)
+    tenant_filter = Matter.company_id == context.company.id
+    operational_filter = Matter.status.notin_(
+        (MatterStatus.DISPOSED.value, "closed")
+    )
+
+    total_visible_count = session.scalar(
+        select(func.count(Matter.id)).where(tenant_filter, visible_filter)
+    ) or 0
+    active_matters_count = session.scalar(
+        select(func.count(Matter.id)).where(
+            tenant_filter,
+            visible_filter,
+            Matter.status == MatterStatus.ACTIVE.value,
+        )
+    ) or 0
+    intake_matters_count = session.scalar(
+        select(func.count(Matter.id)).where(
+            tenant_filter,
+            visible_filter,
+            Matter.status == MatterStatus.INTAKE.value,
+        )
+    ) or 0
+    hearings_next_7_days_count = session.scalar(
+        select(func.count(Matter.id)).where(
+            tenant_filter,
+            visible_filter,
+            operational_filter,
+            Matter.next_hearing_on >= effective_today,
+            Matter.next_hearing_on <= week_out,
+        )
+    ) or 0
+    upcoming_hearings_total_count = session.scalar(
+        select(func.count(Matter.id)).where(
+            tenant_filter,
+            visible_filter,
+            operational_filter,
+            Matter.next_hearing_on >= effective_today,
+        )
+    ) or 0
+    upcoming_hearings = list(
+        session.scalars(
+            select(Matter)
+            .options(
+                selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
+                selectinload(Matter.court_orders),
+            )
+            .where(
+                tenant_filter,
+                visible_filter,
+                operational_filter,
+                Matter.next_hearing_on >= effective_today,
+            )
+            .order_by(Matter.next_hearing_on.asc(), Matter.matter_code.asc(), Matter.id.asc())
+            .limit(upcoming_page_size)
+        )
+    )
+    recent_matters = list(
+        session.scalars(
+            select(Matter)
+            .options(
+                selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
+                selectinload(Matter.court_orders),
+            )
+            .where(tenant_filter, visible_filter)
+            .order_by(Matter.created_at.desc(), Matter.id.desc())
+            .limit(recent_page_size)
+        )
+    )
+    return MatterDashboardSummaryResponse(
+        company_id=context.company.id,
+        total_visible_count=total_visible_count,
+        active_matters_count=active_matters_count,
+        intake_matters_count=intake_matters_count,
+        hearings_next_7_days_count=hearings_next_7_days_count,
+        upcoming_hearings_total_count=upcoming_hearings_total_count,
+        upcoming_hearings=[_matter_record(matter) for matter in upcoming_hearings],
+        upcoming_hearings_limit=upcoming_page_size,
+        recent_matters=[_matter_record(matter) for matter in recent_matters],
+        recent_matters_limit=recent_page_size,
+    )
+
+
+def list_matter_hearing_portfolio(
+    session: Session,
+    *,
+    context: SessionContext,
+    hearing_date: date | None = None,
+    limit: int = 500,
+) -> MatterHearingPortfolioResponse:
+    page_size = max(1, min(limit, 1000))
+    visible_filter = visible_matters_filter(session, context=context)
+    tenant_filter = Matter.company_id == context.company.id
+    operational_filter = Matter.status.notin_(
+        (MatterStatus.DISPOSED.value, "closed")
+    )
+    filters = [
+        tenant_filter,
+        visible_filter,
+        operational_filter,
+        Matter.next_hearing_on.is_not(None),
+    ]
+    if hearing_date is not None:
+        filters.append(Matter.next_hearing_on == hearing_date)
+    total_count = session.scalar(select(func.count(Matter.id)).where(*filters)) or 0
+    rows = list(
+        session.scalars(
+            select(Matter)
+            .options(
+                selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
+                selectinload(Matter.court_orders),
+            )
+            .where(*filters)
+            .order_by(Matter.next_hearing_on.asc(), Matter.matter_code.asc(), Matter.id.asc())
+            .limit(page_size)
+        )
+    )
+    return MatterHearingPortfolioResponse(
+        company_id=context.company.id,
+        matters=[_matter_record(matter) for matter in rows],
+        total_count=total_count,
+        limit=page_size,
+        truncated=total_count > len(rows),
+    )
+
+
+def list_matter_hearing_follow_up(
+    session: Session,
+    *,
+    context: SessionContext,
+    today: date | None = None,
+    limit: int = 200,
+) -> MatterHearingFollowUpResponse:
+    effective_today = today or date.today()
+    page_size = max(1, min(limit, 500))
+    visible_filter = visible_matters_filter(session, context=context)
+    active_filters = [
+        Matter.company_id == context.company.id,
+        visible_filter,
+        Matter.status == MatterStatus.ACTIVE.value,
+    ]
+    overdue_filters = [*active_filters, Matter.next_hearing_on < effective_today]
+    missing_filters = [*active_filters, Matter.next_hearing_on.is_(None)]
+
+    overdue_count = session.scalar(select(func.count(Matter.id)).where(*overdue_filters)) or 0
+    missing_count = session.scalar(select(func.count(Matter.id)).where(*missing_filters)) or 0
+    overdue = list(
+        session.scalars(
+            select(Matter)
+            .options(
+                selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
+                selectinload(Matter.court_orders),
+            )
+            .where(*overdue_filters)
+            .order_by(Matter.next_hearing_on.asc(), Matter.matter_code.asc(), Matter.id.asc())
+            .limit(page_size)
+        )
+    )
+    missing = list(
+        session.scalars(
+            select(Matter)
+            .options(
+                selectinload(Matter.tag_assignments).joinedload(MatterTagAssignment.tag),
+                selectinload(Matter.court_orders),
+            )
+            .where(*missing_filters)
+            .order_by(Matter.updated_at.desc(), Matter.id.desc())
+            .limit(page_size)
+        )
+    )
+    return MatterHearingFollowUpResponse(
+        company_id=context.company.id,
+        overdue_matters=[_matter_record(matter) for matter in overdue],
+        missing_date_matters=[_matter_record(matter) for matter in missing],
+        overdue_count=overdue_count,
+        missing_date_count=missing_count,
+        limit=page_size,
+        truncated=overdue_count > len(overdue) or missing_count > len(missing),
     )
 
 
@@ -4820,6 +5016,10 @@ def create_matter_hearing(
     session.add(hearing)
     session.add(matter)
     session.flush()
+    hearing.source = "manual"
+    hearing.source_ref_type = "matter_hearing"
+    hearing.source_ref_id = hearing.id
+    session.add(hearing)
     if hearing.status not in _CLOSED_HEARING_STATUSES:
         apply_next_hearing_update(
             session,

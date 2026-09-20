@@ -7,11 +7,30 @@ type ContentSecurityPolicyInput = {
   appUrl?: string;
 };
 
+function loopbackConnectSources(apiBaseUrl: string): string[] {
+  const sources = [apiBaseUrl];
+  try {
+    const parsed = new URL(apiBaseUrl);
+    if (parsed.protocol !== "http:") return sources;
+    if (parsed.hostname === "localhost") {
+      parsed.hostname = "127.0.0.1";
+      sources.push(parsed.toString().replace(/\/$/, ""));
+    } else if (parsed.hostname === "127.0.0.1") {
+      parsed.hostname = "localhost";
+      sources.push(parsed.toString().replace(/\/$/, ""));
+    }
+  } catch {
+    return sources;
+  }
+  return Array.from(new Set(sources));
+}
+
 export function buildContentSecurityPolicy({
   nonce,
   apiBaseUrl = DEFAULT_API_BASE_URL,
   appUrl = DEFAULT_APP_URL,
 }: ContentSecurityPolicyInput): string {
+  const apiConnectSources = loopbackConnectSources(apiBaseUrl).join(" ");
   const directives = [
     "default-src 'self'",
     "base-uri 'self'",
@@ -22,7 +41,7 @@ export function buildContentSecurityPolicy({
     `script-src 'self' 'nonce-${nonce}' https://www.googletagmanager.com`,
     "img-src 'self' data: blob: https://www.googletagmanager.com https://api.indiankanoon.org",
     "font-src 'self' data:",
-    `connect-src 'self' ${apiBaseUrl} ${appUrl} https://www.google-analytics.com https://analytics.google.com`,
+    `connect-src 'self' ${apiConnectSources} ${appUrl} https://www.google-analytics.com https://analytics.google.com`,
     "worker-src 'self' blob:",
     "media-src 'self'",
     "manifest-src 'self'",

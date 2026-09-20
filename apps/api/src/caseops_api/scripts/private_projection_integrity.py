@@ -132,6 +132,7 @@ def _maintain(
                 )
                 repair_deferred = False
                 repair_deferred_reason: str | None = None
+                recovered_stale_shadow_count = 0
                 if (
                     after.blockers
                     and set(after.blockers) <= repairable_blockers
@@ -139,10 +140,13 @@ def _maintain(
                 ):
                     for rebuild_attempt in range(2):
                         try:
-                            rebuild_private_index(
+                            rebuild_summary = rebuild_private_index(
                                 session,
                                 company_id=company_id,
                                 activate=True,
+                            )
+                            recovered_stale_shadow_count += int(
+                                getattr(rebuild_summary, "recovered_stale_shadow_count", 0)
                             )
                         except Exception as exc:
                             if not _is_retryable_rebuild_conflict(exc):
@@ -217,6 +221,7 @@ def _maintain(
                         "company_id": company_id,
                         "applied_event_count": len(applied),
                         "rebuilt": rebuilt,
+                        "recovered_stale_shadow_count": recovered_stale_shadow_count,
                         "lag_slo_breached_before_recovery": breached_before_recovery,
                         "oldest_pending_lag_seconds_before": oldest_pending_lag_seconds_before,
                         "pending_event_count_after": after.pending_event_count,
