@@ -182,7 +182,11 @@ def _ensure_hearing_row_for_next_hearing(
         )
     else:
         hearing.hearing_on = hearing_on
-        hearing.forum_name = _calendar_forum_name(matter)
+        # A manually scheduled hearing owns its entered forum label.  The
+        # derived Matter forum is only authoritative for provider/automatic
+        # rows; overwriting a manual row here loses the user's court identity.
+        if hearing.source != "manual":
+            hearing.forum_name = _calendar_forum_name(matter)
         hearing.judge_name = matter.judge_name
         hearing.status = MatterHearingStatus.SCHEDULED
         hearing.source_ref_type = source_ref_type

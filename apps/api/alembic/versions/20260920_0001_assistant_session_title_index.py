@@ -1,4 +1,7 @@
-"""Index exact retained assistant-session lookups used by production QA."""
+"""Index exact retained assistant-session lookups used by production QA.
+
+DATA-GOVERNANCE-MAP: updated
+"""
 
 from __future__ import annotations
 

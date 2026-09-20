@@ -10899,6 +10899,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/dashboard-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Return portfolio dashboard aggregates for the current company */
+        get: operations["current_company_matter_dashboard_summary_api_matters_dashboard_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/hearing-follow-up": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Return active matters needing hearing-date follow-up */
+        get: operations["current_company_matter_hearing_follow_up_api_matters_hearing_follow_up_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/hearing-portfolio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Return visible matters with next-hearing dates */
+        get: operations["current_company_matter_hearing_portfolio_api_matters_hearing_portfolio_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/imports/{job_id}": {
         parameters: {
             query?: never;
@@ -36406,6 +36457,29 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** MatterDashboardSummaryResponse */
+        MatterDashboardSummaryResponse: {
+            /** Active Matters Count */
+            active_matters_count: number;
+            /** Company Id */
+            company_id: string;
+            /** Hearings Next 7 Days Count */
+            hearings_next_7_days_count: number;
+            /** Intake Matters Count */
+            intake_matters_count: number;
+            /** Recent Matters */
+            recent_matters: components["schemas"]["MatterRecord"][];
+            /** Recent Matters Limit */
+            recent_matters_limit: number;
+            /** Total Visible Count */
+            total_visible_count: number;
+            /** Upcoming Hearings */
+            upcoming_hearings: components["schemas"]["MatterRecord"][];
+            /** Upcoming Hearings Limit */
+            upcoming_hearings_limit: number;
+            /** Upcoming Hearings Total Count */
+            upcoming_hearings_total_count: number;
+        };
         /** MatterDeadlineCreateRequest */
         MatterDeadlineCreateRequest: {
             /** Assignee Membership Id */
@@ -36862,6 +36936,36 @@ export interface components {
              * @default Asia/Kolkata
              */
             timezone: string;
+        };
+        /** MatterHearingFollowUpResponse */
+        MatterHearingFollowUpResponse: {
+            /** Company Id */
+            company_id: string;
+            /** Limit */
+            limit: number;
+            /** Missing Date Count */
+            missing_date_count: number;
+            /** Missing Date Matters */
+            missing_date_matters: components["schemas"]["MatterRecord"][];
+            /** Overdue Count */
+            overdue_count: number;
+            /** Overdue Matters */
+            overdue_matters: components["schemas"]["MatterRecord"][];
+            /** Truncated */
+            truncated: boolean;
+        };
+        /** MatterHearingPortfolioResponse */
+        MatterHearingPortfolioResponse: {
+            /** Company Id */
+            company_id: string;
+            /** Limit */
+            limit: number;
+            /** Matters */
+            matters: components["schemas"]["MatterRecord"][];
+            /** Total Count */
+            total_count: number;
+            /** Truncated */
+            truncated: boolean;
         };
         /** MatterHearingRecord */
         MatterHearingRecord: {
@@ -69684,6 +69788,101 @@ export interface operations {
             };
         };
     };
+    current_company_matter_dashboard_summary_api_matters_dashboard_summary_get: {
+        parameters: {
+            query?: {
+                recent_limit?: number;
+                upcoming_limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterDashboardSummaryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    current_company_matter_hearing_follow_up_api_matters_hearing_follow_up_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterHearingFollowUpResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    current_company_matter_hearing_portfolio_api_matters_hearing_portfolio_get: {
+        parameters: {
+            query?: {
+                date?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterHearingPortfolioResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     current_company_matter_import_api_matters_imports__job_id__get: {
         parameters: {
             query?: never;
@@ -74508,6 +74707,7 @@ export interface operations {
                 limit?: number;
                 offset?: number;
                 status?: ("active" | "archived") | null;
+                title?: string | null;
             };
             header?: never;
             path?: never;
