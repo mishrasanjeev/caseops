@@ -30,4 +30,24 @@ describe("buildContentSecurityPolicy", () => {
 
     expect(csp).not.toContain("upgrade-insecure-requests");
   });
+
+  it("allows localhost and 127.0.0.1 loopback aliases for local browser builds", () => {
+    const localhostCsp = buildContentSecurityPolicy({
+      nonce: "devnonce",
+      apiBaseUrl: "http://localhost:8000",
+      appUrl: "http://localhost:3000",
+    });
+    expect(localhostCsp).toContain(
+      "connect-src 'self' http://localhost:8000 http://127.0.0.1:8000",
+    );
+
+    const loopbackCsp = buildContentSecurityPolicy({
+      nonce: "devnonce",
+      apiBaseUrl: "http://127.0.0.1:8000",
+      appUrl: "http://localhost:3000",
+    });
+    expect(loopbackCsp).toContain(
+      "connect-src 'self' http://127.0.0.1:8000 http://localhost:8000",
+    );
+  });
 });

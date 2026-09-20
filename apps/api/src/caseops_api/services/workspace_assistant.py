@@ -545,6 +545,7 @@ def list_assistant_sessions(
     *,
     context: SessionContext,
     session_status: str | None,
+    session_title: str | None,
     limit: int,
     offset: int,
 ) -> AssistantSessionListResponse:
@@ -555,6 +556,8 @@ def list_assistant_sessions(
     )
     if session_status is not None:
         statement = statement.where(AssistantSession.status == session_status)
+    if session_title is not None:
+        statement = statement.where(AssistantSession.title == session_title)
     rows = list(
         session.scalars(
             statement.order_by(AssistantSession.updated_at.desc(), AssistantSession.id.desc())

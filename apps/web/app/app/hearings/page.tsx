@@ -3,7 +3,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { Calendar, CalendarCheck, Gavel } from "lucide-react";
 import Link from "next/link";
+import { type ReactNode, useState } from "react";
 
+import { Button } from "@/components/ui/Button";
 import {
   Card,
   CardContent,
@@ -12,11 +14,15 @@ import {
   CardTitle,
 } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Input } from "@/components/ui/Input";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { QueryErrorState } from "@/components/ui/QueryErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { listMatters } from "@/lib/api/endpoints";
+import {
+  fetchMatterHearingFollowUp,
+  fetchMatterHearingPortfolio,
+} from "@/lib/api/endpoints";
 import type { Matter } from "@/lib/api/schemas";
 import { useCapability } from "@/lib/capabilities";
 import { formatLegalDate, toLocalCalendarDate } from "@/lib/dates";
@@ -46,12 +52,21 @@ function bucketFor(hearingDate: string): BucketKey {
 
 export default function AllHearingsPage() {
   const canSyncOutlook = useCapability("calendar:sync");
-  const mattersQuery = useQuery({
-    queryKey: ["matters", "hearings-aggregate"],
-    queryFn: () => listMatters({ limit: 200 }),
+  const [exactDate, setExactDate] = useState("");
+  const hearingsQuery = useQuery({
+    queryKey: ["matters", "hearing-portfolio", exactDate || "all"],
+    queryFn: () =>
+      fetchMatterHearingPortfolio({
+        date: exactDate || undefined,
+        limit: 500,
+      }),
+  });
+  const followUpQuery = useQuery({
+    queryKey: ["matters", "hearing-follow-up"],
+    queryFn: () => fetchMatterHearingFollowUp({ limit: 200 }),
   });
 
-  const withHearings = (mattersQuery.data?.matters ?? [])
+  const withHearings = (hearingsQuery.data?.matters ?? [])
     .filter((m) => !!m.next_hearing_on)
     .sort((a, b) =>
       (a.next_hearing_on ?? "").localeCompare(b.next_hearing_on ?? ""),
@@ -75,23 +90,99 @@ export default function AllHearingsPage() {
         description="Every open matter with a scheduled hearing, bucketed by urgency. Open a matter to run court-sync or generate a hearing pack."
       />
 
-      {mattersQuery.isPending ? (
+      <Card>
+        <CardHeader>
+          <CardTitle as="h2" className="text-base">
+            Date filter
+          </CardTitle>
+          <CardDescription>
+            Choose one date to see only matters scheduled for that hearing date.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <Field label="Exact hearing date">
+            <Input
+              type="date"
+              value={exactDate}
+              onChange={(event) => setExactDate(event.target.value)}
+            />
+          </Field>
+          {exactDate ? (
+            <Button type="button" variant="outline" onClick={() => setExactDate("")}>
+              Clear date
+            </Button>
+          ) : null}
+          {hearingsQuery.data ? (
+            <div className="pb-2 text-sm text-[var(--color-mute)]">
+              {hearingsQuery.data.total_count} matching hearing
+              {hearingsQuery.data.total_count === 1 ? "" : "s"}
+              {hearingsQuery.data.truncated
+                ? `; showing first ${hearingsQuery.data.limit}`
+                : ""}
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      {followUpQuery.data &&
+      (followUpQuery.data.overdue_count > 0 || followUpQuery.data.missing_date_count > 0) ? (
+        <section className="grid gap-4 lg:grid-cols-2" aria-label="Hearing date follow-up">
+          <FollowUpCard
+            title={`Past listing date (${followUpQuery.data.overdue_count})`}
+            description="Active matters whose stored next-hearing date has passed."
+            matters={followUpQuery.data.overdue_matters}
+            canSyncOutlook={canSyncOutlook}
+          />
+          <FollowUpCard
+            title={`Missing hearing date (${followUpQuery.data.missing_date_count})`}
+            description="Active matters with no next-hearing date recorded."
+            matters={followUpQuery.data.missing_date_matters}
+            canSyncOutlook={canSyncOutlook}
+          />
+        </section>
+      ) : null}
+
+      {hearingsQuery.isPending ? (
         <div className="flex flex-col gap-3">
           <Skeleton className="h-10 w-full" />
           <Skeleton className="h-64 w-full" />
         </div>
-      ) : mattersQuery.isError ? (
+      ) : hearingsQuery.isError ? (
         <QueryErrorState
           title="Could not load hearings"
-          error={mattersQuery.error}
-          onRetry={mattersQuery.refetch}
+          error={hearingsQuery.error}
+          onRetry={hearingsQuery.refetch}
         />
       ) : withHearings.length === 0 ? (
         <EmptyState
           icon={Gavel}
-          title="No hearings scheduled"
-          description="Add a next-hearing date to any matter and it will show up here bucketed by urgency."
+          title={exactDate ? "No hearings on this date" : "No hearings scheduled"}
+          description={
+            exactDate
+              ? "Choose another date or clear the filter to see the full hearing portfolio."
+              : "Add a next-hearing date to any matter and it will show up here bucketed by urgency."
+          }
         />
+      ) : exactDate ? (
+        <Card>
+          <CardHeader>
+            <CardTitle as="h2" className="text-base">
+              {formatLegalDate(exactDate)} ({withHearings.length})
+            </CardTitle>
+            <CardDescription>
+              Matters whose stored next-hearing date exactly matches the selected date.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-y divide-[var(--color-line-2)]">
+              {withHearings.map((matter) => (
+                <li key={matter.id} className="py-3">
+                  <HearingRow matter={matter} canSyncOutlook={canSyncOutlook} />
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
       ) : (
         <div className="flex flex-col gap-5">
           {BUCKET_ORDER.map((key) => {
@@ -128,6 +219,51 @@ export default function AllHearingsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function FollowUpCard({
+  title,
+  description,
+  matters,
+  canSyncOutlook,
+}: {
+  title: string;
+  description: string;
+  matters: Matter[];
+  canSyncOutlook: boolean;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle as="h2" className="text-base">
+          {title}
+        </CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {matters.length === 0 ? (
+          <div className="text-sm text-[var(--color-mute)]">No matters in this follow-up queue.</div>
+        ) : (
+          <ul className="divide-y divide-[var(--color-line-2)]">
+            {matters.map((matter) => (
+              <li key={matter.id} className="py-3">
+                <HearingRow matter={matter} canSyncOutlook={canSyncOutlook} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm font-medium text-[var(--color-ink-2)]">
+      {label}
+      {children}
+    </label>
   );
 }
 

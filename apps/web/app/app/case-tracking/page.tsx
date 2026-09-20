@@ -46,10 +46,11 @@ export default function CaseTrackingPage() {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const matterId = searchParams.get("matterId");
-  const [query, setQuery] = useState("");
-  const [cnr, setCnr] = useState("");
-  const [caseNumber, setCaseNumber] = useState("");
-  const [courtCode, setCourtCode] = useState("");
+  const [query, setQuery] = useState(searchParams.get("query") ?? "");
+  const [cnr, setCnr] = useState(searchParams.get("cnr") ?? "");
+  const [caseNumber, setCaseNumber] = useState(searchParams.get("caseNumber") ?? "");
+  const [courtCode, setCourtCode] = useState(searchParams.get("courtCode") ?? "");
+  const initialCourtName = searchParams.get("court");
   const [selectedBookmarkId, setSelectedBookmarkId] = useState<string | null>(null);
 
   const status = useQuery({
@@ -169,6 +170,19 @@ export default function CaseTrackingPage() {
                 : "Scheduled updates are unavailable until the provider is enabled and configured."}
           </p>
         </section>
+      ) : null}
+
+      {matterId || initialCourtName ? (
+        <Card>
+          <CardHeader>
+            <CardTitle as="h2" className="text-base">Matter context</CardTitle>
+            <CardDescription>
+              {initialCourtName
+                ? `${initialCourtName} opened from the matter overview. Confirm the supported court code before provider search.`
+                : "Opened from the matter overview. Confirm the supported court code before provider search."}
+            </CardDescription>
+          </CardHeader>
+        </Card>
       ) : null}
 
       <Card data-testid="case-tracking-support-matrix">

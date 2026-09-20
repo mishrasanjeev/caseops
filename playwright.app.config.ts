@@ -15,7 +15,7 @@ const browserExecutablePath = browserExecutableCandidates.find((candidate) =>
   fs.existsSync(candidate),
 );
 
-const webBaseUrl = process.env.CASEOPS_WEB_BASE_URL ?? "http://127.0.0.1:3100";
+const webBaseUrl = process.env.CASEOPS_WEB_BASE_URL ?? "http://localhost:3100";
 
 export default defineConfig({
   testDir: path.join("tests", "e2e"),

@@ -9,6 +9,7 @@ import {
   Save,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
@@ -205,9 +206,11 @@ function hasMatterChanges(input: MatterUpdateInput): boolean {
 function MatterDetail({
   label,
   value,
+  href,
 }: {
   label: string;
   value: string | null | undefined;
+  href?: string | null;
 }) {
   return (
     <div>
@@ -215,10 +218,35 @@ function MatterDetail({
         {label}
       </div>
       <div className="mt-1 break-words text-sm text-[var(--color-ink)]">
-        {value || "-"}
+        {value && href ? (
+          <Link
+            href={href}
+            target="_blank"
+            rel="noreferrer"
+            className="font-medium text-[var(--color-brand-700)] underline-offset-2 hover:underline"
+          >
+            {value}
+          </Link>
+        ) : (
+          value || "-"
+        )}
       </div>
     </div>
   );
+}
+
+function caseTrackingHrefForMatter(matter: {
+  id: string;
+  court_name?: string | null;
+  cnr_number?: string | null;
+  case_number?: string | null;
+}): string | null {
+  if (!matter.court_name && !matter.cnr_number && !matter.case_number) return null;
+  const params = new URLSearchParams({ matterId: matter.id });
+  if (matter.cnr_number) params.set("cnr", matter.cnr_number);
+  if (matter.case_number) params.set("caseNumber", matter.case_number);
+  if (matter.court_name) params.set("court", matter.court_name);
+  return `/app/case-tracking?${params.toString()}`;
 }
 
 export default function MatterOverviewPage() {
@@ -697,6 +725,7 @@ export default function MatterOverviewPage() {
                 <MatterDetail
                   label="Court / forum"
                   value={data.matter.court_name}
+                  href={caseTrackingHrefForMatter(data.matter)}
                 />
                 <MatterDetail
                   label="Court / forum number"

@@ -143,6 +143,38 @@ export const mattersList = z.object({
   next_cursor: z.string().nullable().optional(),
 });
 
+export const matterDashboardSummary = z.object({
+  company_id: z.string(),
+  total_visible_count: z.number().int().nonnegative(),
+  active_matters_count: z.number().int().nonnegative(),
+  intake_matters_count: z.number().int().nonnegative(),
+  hearings_next_7_days_count: z.number().int().nonnegative(),
+  upcoming_hearings_total_count: z.number().int().nonnegative(),
+  upcoming_hearings: z.array(matter),
+  upcoming_hearings_limit: z.number().int().positive(),
+  recent_matters: z.array(matter),
+  recent_matters_limit: z.number().int().positive(),
+});
+
+export const matterHearingPortfolio = z.object({
+  company_id: z.string(),
+  matters: z.array(matter),
+  total_count: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+  truncated: z.boolean(),
+  date: z.string().nullable().optional(),
+});
+
+export const matterHearingFollowUp = z.object({
+  company_id: z.string(),
+  overdue_matters: z.array(matter),
+  missing_date_matters: z.array(matter),
+  overdue_count: z.number().int().nonnegative(),
+  missing_date_count: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+  truncated: z.boolean(),
+});
+
 export const matterComplianceExtractionRun = z.object({
   id: z.string(),
   company_id: z.string(),
@@ -413,6 +445,9 @@ export type AuthSession = z.infer<typeof authSession>;
 export type AuthContext = z.infer<typeof authContext>;
 export type Matter = z.infer<typeof matter>;
 export type MattersList = z.infer<typeof mattersList>;
+export type MatterDashboardSummary = z.infer<typeof matterDashboardSummary>;
+export type MatterHearingPortfolio = z.infer<typeof matterHearingPortfolio>;
+export type MatterHearingFollowUp = z.infer<typeof matterHearingFollowUp>;
 export type MatterComplianceExtractionRun = z.infer<typeof matterComplianceExtractionRun>;
 export type MatterComplianceItem = z.infer<typeof matterComplianceItem>;
 export type MatterComplianceListResponse = z.infer<typeof matterComplianceListResponse>;

@@ -112,12 +112,15 @@ from caseops_api.schemas.matters import (
     MatterCourtSyncPullRequest,
     MatterCourtSyncRunRecord,
     MatterCreateRequest,
+    MatterDashboardSummaryResponse,
     MatterDeadlineCreateRequest,
     MatterDeadlineListResponse,
     MatterDeadlineRecord,
     MatterDeadlineUpdateRequest,
     MatterDocumentTypeLiteral,
     MatterHearingCreateRequest,
+    MatterHearingFollowUpResponse,
+    MatterHearingPortfolioResponse,
     MatterHearingRecord,
     MatterHearingUpdateRequest,
     MatterLifecycleStageLiteral,
@@ -278,8 +281,11 @@ from caseops_api.services.matters import (
     get_matter,
     get_matter_attachment_bulk_download,
     get_matter_attachment_download,
+    get_matter_dashboard_summary,
     get_matter_invoice_pdf,
     get_matter_workspace,
+    list_matter_hearing_follow_up,
+    list_matter_hearing_portfolio,
     list_matter_tasks,
     list_matters,
     matter_code_available,
@@ -346,6 +352,61 @@ async def current_company_matters(
         limit=limit,
         cursor=cursor,
         filters=filters,
+    )
+
+
+@router.get(
+    "/dashboard-summary",
+    response_model=MatterDashboardSummaryResponse,
+    summary="Return portfolio dashboard aggregates for the current company",
+)
+async def current_company_matter_dashboard_summary(
+    context: CurrentContext,
+    session: DbSession,
+    upcoming_limit: int = Query(default=50, ge=1, le=100),
+    recent_limit: int = Query(default=5, ge=1, le=20),
+) -> MatterDashboardSummaryResponse:
+    return get_matter_dashboard_summary(
+        session,
+        context=context,
+        upcoming_limit=upcoming_limit,
+        recent_limit=recent_limit,
+    )
+
+
+@router.get(
+    "/hearing-portfolio",
+    response_model=MatterHearingPortfolioResponse,
+    summary="Return visible matters with next-hearing dates",
+)
+async def current_company_matter_hearing_portfolio(
+    context: CurrentContext,
+    session: DbSession,
+    hearing_date: Annotated[date | None, Query(alias="date")] = None,
+    limit: int = Query(default=500, ge=1, le=1000),
+) -> MatterHearingPortfolioResponse:
+    return list_matter_hearing_portfolio(
+        session,
+        context=context,
+        hearing_date=hearing_date,
+        limit=limit,
+    )
+
+
+@router.get(
+    "/hearing-follow-up",
+    response_model=MatterHearingFollowUpResponse,
+    summary="Return active matters needing hearing-date follow-up",
+)
+async def current_company_matter_hearing_follow_up(
+    context: CurrentContext,
+    session: DbSession,
+    limit: int = Query(default=200, ge=1, le=500),
+) -> MatterHearingFollowUpResponse:
+    return list_matter_hearing_follow_up(
+        session,
+        context=context,
+        limit=limit,
     )
 
 

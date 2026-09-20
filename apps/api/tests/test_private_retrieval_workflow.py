@@ -49,7 +49,9 @@ from caseops_api.services.matter_access import remove_access_grant
 from caseops_api.services.private_retrieval import (
     PrivateRetrievalInvariantError,
     capture_private_retrieval_fence,
+    create_shadow_private_generation,
     enqueue_private_projection_event,
+    ensure_active_private_generation,
     hydrate_private_projection_results,
     prefilter_private_projection_ids,
     private_retrieval_activation,
@@ -1382,6 +1384,65 @@ def test_maintenance_retries_one_stale_shadow_and_activates_cleanly(
             )
             == 0
         )
+        assert not inspect_private_index_integrity(session, company_id=company_id).blockers
+
+
+def test_maintenance_recovers_crashed_stale_shadow_and_converges(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    """A crashed worker must not strand every later repair attempt forever."""
+
+    bootstrap = bootstrap_company(client)
+    company_id = str(bootstrap["company"]["id"])
+    with get_session_factory()() as session:
+        active = ensure_active_private_generation(session, company_id=company_id)
+        stale_shadow = create_shadow_private_generation(session, company_id=company_id)
+        stale_shadow.created_at = datetime.now(UTC) - timedelta(
+            seconds=private_retrieval_jobs.PRIVATE_REBUILD_STALE_SHADOW_SECONDS + 1
+        )
+        active.expected_projection_count = None
+        active.verified_projection_count = None
+        active.verification_sha256 = None
+        session.commit()
+
+    monkeypatch.setattr(
+        private_projection_integrity,
+        "list_private_maintenance_companies",
+        lambda _session, *, limit: private_retrieval_jobs.PrivateMaintenanceCandidates(
+            company_ids=(company_id,),
+            truncated=False,
+        ),
+    )
+    result = private_projection_integrity._maintain(
+        max_companies=1,
+        max_rebuilds=1,
+        event_lag_slo_seconds=300,
+    )
+
+    assert result["status"] == "ok"
+    assert result["release_blocked"] is False
+    assert result["rebuild_count"] == 1
+    company_result = result["companies"][0]
+    assert company_result["rebuilt"] is True
+    assert company_result["recovered_stale_shadow_count"] == 1
+    assert company_result["blockers_after"] == []
+    with get_session_factory()() as session:
+        failed_shadow = session.get(PrivateIndexGeneration, stale_shadow.id)
+        active_after = session.scalar(
+            select(PrivateIndexGeneration).where(
+                PrivateIndexGeneration.company_id == company_id,
+                PrivateIndexGeneration.state == "active",
+            )
+        )
+        assert failed_shadow is not None
+        assert failed_shadow.state == "failed"
+        assert (
+            failed_shadow.failure_code
+            == private_retrieval_jobs.PRIVATE_REBUILD_STALE_SHADOW_FAILURE_CODE
+        )
+        assert active_after is not None
+        assert active_after.id != stale_shadow.id
         assert not inspect_private_index_integrity(session, company_id=company_id).blockers
 
 

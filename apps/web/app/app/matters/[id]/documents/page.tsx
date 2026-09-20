@@ -933,7 +933,7 @@ export default function MatterDocumentsPage() {
             type="file"
             className="sr-only"
             data-testid="matter-attachment-file-input"
-            accept=".pdf,.doc,.docx,.txt,.rtf,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,application/rtf"
+            accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,image/png,image/jpeg"
             onChange={handleFileChange}
           />
           <Button

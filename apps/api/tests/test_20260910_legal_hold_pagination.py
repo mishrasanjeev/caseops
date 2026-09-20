@@ -8,6 +8,7 @@ from sqlalchemy import event, select
 
 from caseops_api.db.models import LegalHold, LegalHoldItem, LegalHoldReleaseRequest
 from caseops_api.db.session import get_session_factory
+from caseops_api.services import data_governance, legal_hold_workflow
 from tests import test_20260909_legal_hold_workflow as workflow
 
 
@@ -42,6 +43,33 @@ def seed_holds(owner, count=105):
         )
         session.commit()
     return ids
+
+
+def test_preservation_page_reads_do_not_take_the_mutation_fence(client, monkeypatch):
+    owner, reviewer = workflow.make_actors(client)
+
+    def fail_if_read_path_takes_writer_fence(*_args, **_kwargs):
+        raise AssertionError("read path must not take the mutation identity fence")
+
+    monkeypatch.setattr(
+        legal_hold_workflow,
+        "lock_company_memberships_for_assignment",
+        fail_if_read_path_takes_writer_fence,
+    )
+    monkeypatch.setattr(
+        data_governance,
+        "_lock_dry_run_actor",
+        fail_if_read_path_takes_writer_fence,
+    )
+
+    holds = client.get(f"{workflow.BASE}/holds", headers=reviewer["headers"])
+    catalog = client.get(
+        f"{workflow.BASE}/data-classes",
+        headers=owner["headers"],
+    )
+
+    assert holds.status_code == 200, holds.text
+    assert catalog.status_code == 200, catalog.text
 
 
 def test_hold_pages_keep_tied_rows_and_bound_queries_during_new_inserts(client):

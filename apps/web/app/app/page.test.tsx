@@ -4,18 +4,18 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
+  fetchMatterDashboardSummaryMock,
   fetchAuthorityCorpusStatsMock,
-  listMattersMock,
   replaceMock,
 } = vi.hoisted(() => ({
+  fetchMatterDashboardSummaryMock: vi.fn(),
   fetchAuthorityCorpusStatsMock: vi.fn(),
-  listMattersMock: vi.fn(),
   replaceMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
+  fetchMatterDashboardSummary: fetchMatterDashboardSummaryMock,
   fetchAuthorityCorpusStats: fetchAuthorityCorpusStatsMock,
-  listMatters: listMattersMock,
 }));
 
 vi.mock("@/lib/use-session", () => ({
@@ -55,7 +55,7 @@ describe("DashboardPage", () => {
       document_count: 0,
       embedded_chunk_count: 0,
     });
-    listMattersMock.mockReset();
+    fetchMatterDashboardSummaryMock.mockReset();
     replaceMock.mockReset();
   });
 
@@ -66,8 +66,14 @@ describe("DashboardPage", () => {
   // via its own Sidebar nav item. This test is the regression guard
   // against re-introducing the redirect a third time.
   it("renders the dashboard for active workspaces and does not redirect", async () => {
-    listMattersMock.mockResolvedValue({
-      matters: [
+    fetchMatterDashboardSummaryMock.mockResolvedValue({
+      company_id: "company-1",
+      total_visible_count: 73,
+      active_matters_count: 61,
+      intake_matters_count: 12,
+      hearings_next_7_days_count: 18,
+      upcoming_hearings_total_count: 23,
+      upcoming_hearings: [
         {
           id: "m1",
           matter_code: "QA-1",
@@ -80,7 +86,9 @@ describe("DashboardPage", () => {
           updated_at: "2026-05-01T00:00:00Z",
         },
       ],
-      next_cursor: null,
+      upcoming_hearings_limit: 50,
+      recent_matters: [],
+      recent_matters_limit: 5,
     });
 
     render(withClient(<DashboardPage />));
@@ -88,19 +96,34 @@ describe("DashboardPage", () => {
     expect(
       await screen.findByRole("heading", { name: /Good to have you back/i }),
     ).toBeInTheDocument();
-    await waitFor(() => expect(listMattersMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchMatterDashboardSummaryMock).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("61")).toBeInTheDocument();
+    expect(screen.getByText("73 total in workspace")).toBeInTheDocument();
+    expect(screen.getByText("18")).toBeInTheDocument();
+    expect(screen.getByText("12")).toBeInTheDocument();
     expect(replaceMock).not.toHaveBeenCalled();
   });
 
   it("keeps first-time workspaces on the dashboard", async () => {
-    listMattersMock.mockResolvedValue({ matters: [], next_cursor: null });
+    fetchMatterDashboardSummaryMock.mockResolvedValue({
+      company_id: "company-1",
+      total_visible_count: 0,
+      active_matters_count: 0,
+      intake_matters_count: 0,
+      hearings_next_7_days_count: 0,
+      upcoming_hearings_total_count: 0,
+      upcoming_hearings: [],
+      upcoming_hearings_limit: 50,
+      recent_matters: [],
+      recent_matters_limit: 5,
+    });
 
     render(withClient(<DashboardPage />));
 
     expect(
       await screen.findByRole("heading", { name: /Good to have you back/i }),
     ).toBeInTheDocument();
-    await waitFor(() => expect(listMattersMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchMatterDashboardSummaryMock).toHaveBeenCalledTimes(1));
     expect(replaceMock).not.toHaveBeenCalled();
   });
 });

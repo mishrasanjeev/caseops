@@ -175,11 +175,12 @@ def test_maintenance_isolates_one_tenant_failure_and_continues(monkeypatch) -> N
             ),
             "blockers_after": ["tenant_maintenance_error"],
         },
-        {
-            "company_id": "healthy-company",
-            "applied_event_count": 0,
-            "rebuilt": False,
-            "lag_slo_breached_before_recovery": False,
+            {
+                "company_id": "healthy-company",
+                "applied_event_count": 0,
+                "rebuilt": False,
+                "recovered_stale_shadow_count": 0,
+                "lag_slo_breached_before_recovery": False,
             "oldest_pending_lag_seconds_before": None,
             "pending_event_count_after": 0,
             "failed_event_count_after": 0,

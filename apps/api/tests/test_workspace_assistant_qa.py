@@ -88,6 +88,33 @@ def _ask(
     )
 
 
+def test_assistant_session_title_lookup_is_exact_and_bounded(client: TestClient) -> None:
+    bootstrap = bootstrap_company(client)
+    token = str(bootstrap["access_token"])
+    _enable_assistant(client, token)
+    matter = _matter(client, token, "AI-SESSION-TITLE-LOOKUP")
+    first = _session(client, token, matter["id"])
+    second = _session(client, token, matter["id"])
+
+    response = client.get(
+        "/api/workspace-assistant/sessions",
+        headers=auth_headers(token),
+        params={"title": first["title"], "limit": 100, "offset": 0},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["has_more"] is False
+    assert {row["id"] for row in body["items"]} == {first["id"], second["id"]}
+
+    missing = client.get(
+        "/api/workspace-assistant/sessions",
+        headers=auth_headers(token),
+        params={"title": "Ask · a-title-that-does-not-exist", "limit": 100},
+    )
+    assert missing.status_code == 200, missing.text
+    assert missing.json()["items"] == []
+
+
 def test_automated_request_header_uses_offline_assistant_end_to_end(
     client: TestClient,
     monkeypatch,

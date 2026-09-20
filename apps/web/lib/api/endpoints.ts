@@ -66,11 +66,14 @@ import {
   type MatterBillingProfileListResponse,
   type MatterBillingRate,
   type MatterComplianceListResponse,
+  type MatterDashboardSummary,
   type MatterFileQAAnswerMode,
   type MatterFileQAAnalysisLanguage,
   type MatterFileQAExportNoteResponse,
   type MatterFileQAHistoryResponse,
   type MatterFileQAResponse,
+  type MatterHearingFollowUp,
+  type MatterHearingPortfolio,
   type LitigationIntelligenceReviewResponse,
   type MockHearingListResponse,
   type MockHearingSession,
@@ -201,6 +204,9 @@ import {
   matterBillingProfileListResponse,
   matterBillingRate,
   matterComplianceListResponse,
+  matterDashboardSummary,
+  matterHearingFollowUp,
+  matterHearingPortfolio,
   matterFileQAExportNoteResponse,
   matterFileQAHistoryResponse,
   matterFileQAResponse,
@@ -565,6 +571,46 @@ export async function listMatters(params?: MatterListParams): Promise<MattersLis
   const path = qs.toString() ? `/api/matters/?${qs.toString()}` : "/api/matters/";
   const data = await apiRequest<unknown>(path);
   return mattersList.parse(data);
+}
+
+export async function fetchMatterDashboardSummary(params?: {
+  upcoming_limit?: number;
+  recent_limit?: number;
+}): Promise<MatterDashboardSummary> {
+  const qs = new URLSearchParams();
+  if (params?.upcoming_limit) qs.set("upcoming_limit", String(params.upcoming_limit));
+  if (params?.recent_limit) qs.set("recent_limit", String(params.recent_limit));
+  const path = qs.toString()
+    ? `/api/matters/dashboard-summary?${qs.toString()}`
+    : "/api/matters/dashboard-summary";
+  const data = await apiRequest<unknown>(path);
+  return matterDashboardSummary.parse(data);
+}
+
+export async function fetchMatterHearingPortfolio(params?: {
+  date?: string;
+  limit?: number;
+}): Promise<MatterHearingPortfolio> {
+  const qs = new URLSearchParams();
+  if (params?.date) qs.set("date", params.date);
+  if (params?.limit) qs.set("limit", String(params.limit));
+  const path = qs.toString()
+    ? `/api/matters/hearing-portfolio?${qs.toString()}`
+    : "/api/matters/hearing-portfolio";
+  const data = await apiRequest<unknown>(path);
+  return matterHearingPortfolio.parse(data);
+}
+
+export async function fetchMatterHearingFollowUp(params?: {
+  limit?: number;
+}): Promise<MatterHearingFollowUp> {
+  const qs = new URLSearchParams();
+  if (params?.limit) qs.set("limit", String(params.limit));
+  const path = qs.toString()
+    ? `/api/matters/hearing-follow-up?${qs.toString()}`
+    : "/api/matters/hearing-follow-up";
+  const data = await apiRequest<unknown>(path);
+  return matterHearingFollowUp.parse(data);
 }
 
 export async function listMatterTags(): Promise<MatterTagsList> {

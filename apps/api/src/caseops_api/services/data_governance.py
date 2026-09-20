@@ -20,6 +20,7 @@ from sqlalchemy import MetaData, Table, func, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
+    Company,
     CompanyMembership,
     DataRetentionPolicyVersion,
     DataRetentionPolicyVersionStatus,
@@ -28,6 +29,7 @@ from caseops_api.db.models import (
     LegalHoldStatus,
     TenantDataOperation,
     TenantDataOperationItem,
+    User,
 )
 from caseops_api.governance.data_class_projection import (
     admissible_data_classes,
@@ -56,6 +58,7 @@ from caseops_api.services.assignment_memberships import (
     require_locked_membership_capability,
 )
 from caseops_api.services.audit import record_from_context
+from caseops_api.services.capabilities import membership_has_capability
 from caseops_api.services.governance_integrity_scan import run_integrity_scan
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.tenant_offboarding import build_offboarding_plan
@@ -107,6 +110,50 @@ def _lock_dry_run_actor(
         )
     require_locked_membership_capability(session, actor, "audit:export")
     return SessionContext(company=context.company, membership=actor, user=actor.user)
+
+
+def _read_dry_run_actor(
+    session: Session,
+    *,
+    context: SessionContext,
+) -> SessionContext:
+    """Authorize a catalog read without taking the mutation fence."""
+
+    company = session.scalar(
+        select(Company)
+        .where(Company.id == context.company.id)
+        .execution_options(populate_existing=True)
+    )
+    actor = session.scalar(
+        select(CompanyMembership)
+        .where(
+            CompanyMembership.company_id == context.company.id,
+            CompanyMembership.id == context.membership.id,
+        )
+        .execution_options(populate_existing=True)
+    )
+    user = session.get(User, actor.user_id) if actor is not None else None
+    if (
+        company is None
+        or not company.is_active
+        or actor is None
+        or not actor.is_active
+        or actor.user_id != context.user.id
+        or user is None
+        or not user.is_active
+        or not membership_has_capability(session, actor, "audit:export")
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Data-governance administration is required.",
+        )
+    actor.user = user
+    return SessionContext(
+        company=company,
+        membership=actor,
+        user=user,
+        token_issued_at=context.token_issued_at,
+    )
 
 
 def _registered_item_scope(payload: TenantDataOperationDryRunRequest) -> list[dict]:
@@ -773,7 +820,7 @@ def list_admissible_data_class_catalog(
 ) -> TenantDataClassCatalogResponse:
     """Expose the exact reviewed catalog used by dry-run admission."""
 
-    _lock_dry_run_actor(session, context=context)
+    context = _read_dry_run_actor(session, context=context)
     require_current_projection(session)
     entries = admissible_data_classes()
     if entries is None:  # Defensive: require_current_projection already refused.
