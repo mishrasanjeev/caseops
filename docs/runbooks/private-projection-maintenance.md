@@ -29,6 +29,10 @@ disposition decisions.
   the second partial shadow and defers only repairable blockers to the next cadence
   while their persisted repair age is at most 300 seconds
 - Event lag SLO: 300 seconds
+- Maintenance capacity: 4 GiB memory and a 15-minute task deadline. The
+  production corpus includes tenants with more than 10,000 active Matters;
+  the previous 1 GiB/5-minute task could be killed mid-rebuild, leaving an
+  unreadable building shadow for the next cadence to recover.
 - Event attempts: 3, with 30-second then 60-second application backoff
 - Scheduler delivery attempts: at most 5 within 900 seconds
 - Alert policy: `CaseOps private projection maintenance failure`
