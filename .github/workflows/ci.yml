@@ -506,6 +506,12 @@ jobs:
         # the developer's workstation. On the Ubuntu runner those paths
         # don't exist, so `launchOptions` stays empty and Playwright uses
         # its bundled Chromium. No extra env needed.
+        # Keep the browser origin aligned with the IPv4-only Next server.
+        # `localhost` can resolve to ::1 on hosted Linux; the first public
+        # pages may still work while authenticated navigation fails with
+        # ERR_ABORTED and produces a misleading cascade of locator errors.
+        env:
+          CASEOPS_WEB_BASE_URL: http://127.0.0.1:3100
         run: npm run test:e2e:app
 
       # MUST be always(). A job killed by timeout-minutes IS cancelled, so both
