@@ -142,7 +142,7 @@
       "schedule": "*/5 * * * *",
       "time_zone": "Asia/Kolkata",
       "desired_state": "ENABLED",
-      "task_timeout_seconds": 300,
+      "task_timeout_seconds": 900,
       "image_policy": "release_digest",
       "canary_policy": "manual_safe",
       "retry": {
@@ -171,7 +171,7 @@
         "service_account": "caseops-runtime@perfect-period-305406.iam.gserviceaccount.com",
         "cloud_sql_instances": "perfect-period-305406:asia-south1:caseops-db",
         "cpu": "1",
-        "memory": "1Gi",
+        "memory": "4Gi",
         "max_retries": 0
       }
     },

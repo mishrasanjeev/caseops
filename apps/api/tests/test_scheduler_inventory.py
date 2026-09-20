@@ -61,8 +61,9 @@ def test_checked_in_inventory_is_complete_and_valid() -> None:
         if job["run_job_name"] == "caseops-private-projection-maintenance"
     )
     assert private_job["schedule"] == "*/5 * * * *"
-    assert private_job["task_timeout_seconds"] == 300
+    assert private_job["task_timeout_seconds"] == 900
     assert private_job["bootstrap"]["command"] == ["caseops-private-projection-maintenance"]
+    assert private_job["bootstrap"]["memory"] == "4Gi"
     assert private_job["bootstrap"]["max_retries"] == 0
     assert private_job["retry"] == {
         "max_retry_attempts": 5,
