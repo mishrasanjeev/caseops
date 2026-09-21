@@ -86,7 +86,7 @@ export default defineConfig({
     },
     {
       name: "tester-prod-chromium",
-      testMatch: [TESTER_AUTH_PROD_SPECS, /ram-2026-09-05-bugs\.spec\.ts$/, /ram-2026-09-08-bugs\.spec\.ts$/],
+      testMatch: [TESTER_AUTH_PROD_SPECS, /ram-2026-09-05-bugs\.spec\.ts$/, /ram-2026-09-08-bugs\.spec\.ts$/, /ram-2026-09-21-bugfixes\.spec\.ts$/],
       use: {
         ...devices["Desktop Chrome"],
         storageState: { cookies: [], origins: [] },

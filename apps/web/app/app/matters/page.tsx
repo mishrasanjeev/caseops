@@ -567,13 +567,22 @@ export default function MattersPage() {
           canCreateMatter || canBulkImportMatters ? (
             <div className="flex flex-wrap gap-2">
               {canBulkImportMatters ? (
-                <Button
-                  variant="outline"
-                  onClick={() => router.push("/app/matters/imports")}
-                  data-testid="matter-import-trigger"
-                >
-                  <UploadCloud className="h-4 w-4" /> Bulk upload matters
-                </Button>
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() => router.push("/app/matters/imports")}
+                    data-testid="matter-import-trigger"
+                  >
+                    <UploadCloud className="h-4 w-4" /> Bulk upload matters
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => router.push("/app/matters/bulk-update")}
+                    data-testid="matter-bulk-update-trigger"
+                  >
+                    <UploadCloud className="h-4 w-4" /> Bulk update matters
+                  </Button>
+                </>
               ) : null}
               {canCreateMatter ? <NewMatterDialog /> : null}
             </div>

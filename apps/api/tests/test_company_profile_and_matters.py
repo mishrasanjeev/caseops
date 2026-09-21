@@ -944,6 +944,56 @@ def test_matter_attachment_upload_and_download_are_available_in_workspace(
     assert download_response.content == b"Detailed chronology and grounds for appeal."
 
 
+def test_docx_attachment_has_authenticated_text_preview(client: TestClient) -> None:
+    from docx import Document
+
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+    matter_response = client.post(
+        "/api/matters/",
+        headers=auth_headers(token),
+        json={
+            "title": "DOCX preview matter",
+            "matter_code": "DOCX-2026-101",
+            "practice_area": "Commercial Litigation",
+            "forum_level": "high_court",
+            "status": "intake",
+        },
+    )
+    assert matter_response.status_code == 200, matter_response.text
+    matter_id = matter_response.json()["id"]
+
+    document = Document()
+    document.add_paragraph("The authenticated DOCX preview is visible.")
+    table = document.add_table(rows=1, cols=2)
+    table.cell(0, 0).text = "Issue"
+    table.cell(0, 1).text = "Resolved"
+    body = io.BytesIO()
+    document.save(body)
+    upload_response = client.post(
+        f"/api/matters/{matter_id}/attachments",
+        headers=auth_headers(token),
+        files={
+            "file": (
+                "preview.docx",
+                body.getvalue(),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+    )
+    assert upload_response.status_code == 200, upload_response.text
+    attachment_id = upload_response.json()["id"]
+
+    preview_response = client.get(
+        f"/api/matters/{matter_id}/attachments/{attachment_id}/preview",
+        headers=auth_headers(token),
+    )
+    assert preview_response.status_code == 200, preview_response.text
+    preview = preview_response.json()
+    assert "The authenticated DOCX preview is visible." in preview["paragraphs"]
+    assert ["Issue", "Resolved"] in preview["table_rows"]
+
+
 def test_notice_upload_persists_structured_notice_metadata(client: TestClient) -> None:
     bootstrap_payload = bootstrap_company(client)
     token = str(bootstrap_payload["access_token"])

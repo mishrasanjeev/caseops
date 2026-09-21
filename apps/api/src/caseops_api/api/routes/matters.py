@@ -88,6 +88,10 @@ from caseops_api.schemas.matter_access import (
     MatterAccessPanelResponse,
     MatterRestrictedAccessRequest,
 )
+from caseops_api.schemas.matter_bulk_updates import (
+    MatterBulkUpdateApplyResponse,
+    MatterBulkUpdatePreviewResponse,
+)
 from caseops_api.schemas.matter_imports import (
     BulkMatterImportDryRunResponse,
     MatterImportCommitResponse,
@@ -103,6 +107,7 @@ from caseops_api.schemas.matter_tags import (
 )
 from caseops_api.schemas.matters import (
     MatterAttachmentMetadataUpdateRequest,
+    MatterAttachmentPreviewResponse,
     MatterAttachmentRecord,
     MatterCourtOrderCreateRequest,
     MatterCourtOrderRecord,
@@ -232,6 +237,10 @@ from caseops_api.services.matter_audit import (
     list_matter_audit_events,
     matter_audit_event_dict,
 )
+from caseops_api.services.matter_bulk_updates import (
+    apply_matter_bulk_update,
+    preview_matter_bulk_update,
+)
 from caseops_api.services.matter_imports import (
     MATTER_IMPORT_DOCUMENT_ARCHIVE_MAX_BYTES,
     MATTER_IMPORT_DOCUMENT_MANIFEST_MAX_BYTES,
@@ -281,6 +290,7 @@ from caseops_api.services.matters import (
     get_matter,
     get_matter_attachment_bulk_download,
     get_matter_attachment_download,
+    get_matter_attachment_preview,
     get_matter_dashboard_summary,
     get_matter_invoice_pdf,
     get_matter_workspace,
@@ -467,6 +477,46 @@ async def current_company_matter_import_history(
         query=q,
         status_filter=status_filter,
         limit=limit,
+    )
+
+
+@router.post(
+    "/bulk-update/preview",
+    response_model=MatterBulkUpdatePreviewResponse,
+    summary="Preview updates for existing matters from the strict XLSX template",
+)
+async def preview_current_company_matter_bulk_update(
+    context: MatterEditor,
+    session: DbSession,
+    file: Annotated[UploadFile, File(...)],
+) -> MatterBulkUpdatePreviewResponse:
+    content = await file.read(32 * 1024 * 1024 + 1)
+    return await run_in_threadpool(
+        preview_matter_bulk_update,
+        session,
+        context=context,
+        content=content,
+    )
+
+
+@router.post(
+    "/bulk-update/apply",
+    response_model=MatterBulkUpdateApplyResponse,
+    summary="Apply a previously previewed existing-matter XLSX update",
+)
+async def apply_current_company_matter_bulk_update(
+    context: MatterEditor,
+    session: DbSession,
+    preview_token: Annotated[str, Form(...)],
+    file: Annotated[UploadFile, File(...)],
+) -> MatterBulkUpdateApplyResponse:
+    content = await file.read(32 * 1024 * 1024 + 1)
+    return await run_in_threadpool(
+        apply_matter_bulk_update,
+        session,
+        context=context,
+        content=content,
+        preview_token=preview_token,
     )
 
 
@@ -2839,6 +2889,25 @@ async def download_current_company_matter_attachment(
         path=storage_path,
         media_type=attachment.content_type or "application/octet-stream",
         filename=attachment.original_filename,
+    )
+
+
+@router.get(
+    "/{matter_id}/attachments/{attachment_id}/preview",
+    response_model=MatterAttachmentPreviewResponse,
+    summary="Preview a DOCX matter attachment",
+)
+async def preview_current_company_matter_attachment(
+    matter_id: str,
+    attachment_id: str,
+    context: CurrentContext,
+    session: DbSession,
+) -> MatterAttachmentPreviewResponse:
+    return get_matter_attachment_preview(
+        session,
+        context=context,
+        matter_id=matter_id,
+        attachment_id=attachment_id,
     )
 
 

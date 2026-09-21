@@ -343,6 +343,7 @@ export function ForumSelector({
   onChange,
   disabled = false,
   idPrefix = "forum-selector",
+  showCourtSearch = true,
   statusMessage = null,
   statusTone = "info",
 }: {
@@ -351,6 +352,7 @@ export function ForumSelector({
   onChange: (selection: ForumSelection) => void;
   disabled?: boolean;
   idPrefix?: string;
+  showCourtSearch?: boolean;
   statusMessage?: string | null;
   statusTone?: "info" | "warning" | "error";
 }) {
@@ -522,7 +524,7 @@ export function ForumSelector({
         </div>
       ) : null}
 
-      <div className="relative md:col-span-2">
+      {showCourtSearch ? <div className="relative md:col-span-2">
         <Label htmlFor={`${idPrefix}-court-search`}>Find exact court or approved alias</Label>
         <Input
           id={`${idPrefix}-court-search`}
@@ -567,7 +569,7 @@ export function ForumSelector({
             )}
           </div>
         ) : null}
-      </div>
+      </div> : null}
 
       <div>
         <Label htmlFor={`${idPrefix}-category`}>Forum hierarchy</Label>

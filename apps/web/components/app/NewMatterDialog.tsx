@@ -65,6 +65,7 @@ const schema = z.object({
     .max(120, "Temporary E-Case number is too long.")
     .optional(),
   cnr_number: z.string().max(32, "CNR number is too long.").optional(),
+  next_hearing_on: z.string().optional(),
   status: z.enum(["intake", "active", "on_hold"]),
   description: z.string().max(2000).optional(),
 });
@@ -98,6 +99,7 @@ export function NewMatterDialog() {
       case_number: "",
       temporary_e_case_number: "",
       cnr_number: "",
+      next_hearing_on: "",
       practice_area: "",
       status: "active",
       description: "",
@@ -171,6 +173,7 @@ export function NewMatterDialog() {
         temporary_e_case_number:
           values.temporary_e_case_number?.trim() || undefined,
         cnr_number: values.cnr_number?.trim() || undefined,
+        next_hearing_on: values.next_hearing_on || undefined,
         practice_area: values.practice_area?.trim() || undefined,
         description: values.description?.trim() || undefined,
         forum_level: forumSelection.forum_level,
@@ -341,8 +344,19 @@ export function NewMatterDialog() {
               idPrefix="new-matter-forum"
               statusMessage={forumCatalogStatusMessage}
               statusTone={forumCatalogStatusTone}
+              showCourtSearch={false}
             />
           </div>
+          <Field label="Next hearing date" className="md:col-span-2">
+            {({ fieldId }) => (
+              <Input
+                id={fieldId}
+                type="date"
+                data-testid="new-matter-next-hearing-on"
+                {...form.register("next_hearing_on")}
+              />
+            )}
+          </Field>
           <Field label="Status">
             {({ fieldId }) => (
               <div className="space-y-1.5">

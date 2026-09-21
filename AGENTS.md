@@ -151,6 +151,19 @@ requirements when using the fallback.
   upload, document lifecycle and publication remain fail-closed. Prove close,
   historical byte-identical download, grant revocation, explicit reopen and a
   second closure through both PostgreSQL and the dated browser journey.
+- Fake deployment CLIs must be executable before a test launches its shell.
+  A noexec temporary mount can make PATH fall through to real git/gcloud tools
+  even after chmod succeeds. Fail before launch, use exec-enabled isolated
+  test storage, and keep offline regression containers network-disabled.
+- Clean test storage must not hide required runtime binaries. Keep Temporal's
+  real test server outside an overlaid /tmp, pin its executable path and hash,
+  and run its workflow with networking disabled. A missing cache is a test
+  infrastructure failure, not a reason to skip notification workflow coverage
+  or enable external provider traffic.
+- Product-guide search may cache bounded immutable public search metadata,
+  never capability decisions or mutable response objects. Normalize the query
+  once, recheck current permissions on every search, and retain the original
+  performance budget plus content-change and response-mutation regressions.
 
 - Concurrent-index migrations must recover after the column transaction has
   committed but an index build has failed. Inspect existing column shape,
@@ -532,6 +545,23 @@ requirements when using the fallback.
   local smoke page to prove the actual shared-library/runtime contract before the
   suite. This keeps optional font-mirror stalls from consuming the browser-test
   budget while still failing closed when Chromium genuinely cannot start.
+  production regression runs must assert the rejection without spending; only
+  a separate opt-in budget-capped canary may establish live paid operation.
+- Private-projection batch writes must acquire their exact, bounded Client,
+  Matter, and IP-docket scope parents in deterministic `FOR KEY SHARE` order
+  before locking a shadow generation. Otherwise a lifecycle writer that owns a
+  parent and advances the generation epoch can deadlock the rebuild. Treat only
+  PostgreSQL `40P01` and `55P03` as bounded concurrency conflicts: retry once,
+  then defer only after a fresh-session integrity inspection proves an active
+  generation, no pending/failed events, exclusively repairable blockers, and
+  repair age inside the 300-second SLO. Unknown SQLSTATEs, unsafe blockers, and
+  SLO breaches remain release-blocking; require a later clean no-rebuild cadence
+  after overlapping writers stop.
+- A dependency-audit transport failure is neither a clean scan nor a reported
+  vulnerability. Retry recognized network failures inside a bounded budget,
+  fail immediately on every non-network audit error, and require an independent
+  digest-pinned scanner to return a clean result for the exact lockfile before
+  accepting a fallback. Never waive or manually approve a broken security gate.
 
 - A successful mutation must not be erased by an older in-flight list read.
   Wait for initial authoritative discovery before choosing create versus update,
@@ -589,6 +619,22 @@ requirements when using the fallback.
   actual migrated schema, using the same rule as release index health. Do not
   add redundant single-column indexes to satisfy a component-only heuristic;
   prove that dropping a required composite index is detected by the gate.
+- A Docker test snapshot must include repository-level fixtures, not only the
+  application directory. Explicit node selections must strip CRLF delimiters,
+  remain nonempty and reconcile one-to-one with collected identities. PostgreSQL
+  shards must migrate their independent base database before fixtures snapshot
+  catalogs. Preserve failed attempts and verify every shard's source hash.
+- A success-path test must verify the successful user outcome and the absence
+  of error feedback. Missing notification mocks can turn a successful mutation
+  into a caught error while a weak call-count assertion still passes. Pair
+  publication success with rejection, retained inputs and unchanged evidence.
+- A nested navigation destination must have one active visible owner. Match
+  the most-specific authorized catalog path, respecting segment boundaries,
+  and regress every catalog destination plus desktop and mobile navigation.
+- Responsive list actions must not squeeze the record title into a narrow
+  column. Reserve a useful title basis, wrap actions to the next row when needed,
+  and assert title width and sibling non-overlap after the sidebar consumes its
+  space. Inspect screenshots as well as DOM bounds at breakpoint edges.
 - A supporting-request count must start at the intended workflow boundary.
   Finish asynchronous sign-in/landing discovery before measuring the workspace,
   and inspect trace timestamps before attributing a late setup request to that
@@ -615,6 +661,7 @@ requirements when using the fallback.
   must use the PostgreSQL fixture and marker, not a SQLite client with a
   permanent skip. Global aggregate refreshes must own disposable databases;
   passing the marked suite does not prove incorrectly unmarked nodes executed.
+  still bound to SQLite remain unverified even when the marked suite passes.
 - Public requests use the shared HTTP deadline boundary without credentials.
   A JSON deadline must include body consumption, preserve caller cancellation,
   clear timers/listeners and never retry silently. Prove stalled headers and
@@ -730,6 +777,15 @@ requirements when using the fallback.
   column. Reserve a useful title basis, wrap actions to the next row when needed,
   and assert title width and sibling non-overlap after the sidebar consumes its
   space. Inspect screenshots as well as DOM bounds at breakpoint edges.
+- Independent patent records may share immutable source evidence. Closing a
+  sibling or family must not prevent corrections to an active application.
+  Distinguish read-only source parents from mutation targets under the same
+  deterministic locks; retain source ACL/hash checks and terminal-write guards.
+  Regress closed siblings, closed families and revoked source access together.
+- Docker acceptance must recheck the candidate source after image builds,
+  before browser tests and before certification. Reject source or commit drift
+  instead of attributing green tests to an image built from different code.
+  Exercise the actual PowerShell guard, not only a string-presence assertion.
 - Browser specs and Playwright configurations must be type-checked before
   expensive Docker builds and in CI. Query options from Testing Library are
   not interchangeable with Playwright options; unsupported options can be
@@ -877,3 +933,13 @@ requirements when using the fallback.
   serves `127.0.0.1:3100` can pass login transport but lose SameSite cookies,
   redirect back to sign-in and produce false product failures. Align the app
   harness host, API base URL and CSP loopback aliases before trusting UI proof.
+- A bulk-update workbook is a mutation plan, not an import variant. Require the
+  exact reviewed header inventory, resolve every row by the tenant-scoped Matter
+  Code, bind apply to the previewed file hash and `updated_at` tokens, treat
+  blank cells as no-op, and route each change through the canonical locked
+  matter update service. Never create a missing matter or let a bulk status
+  field bypass the dedicated lifecycle endpoint.
+- A document viewer regression is closed only when the authenticated browser
+  surface visibly renders the actual DOCX text/table content. A successful
+  download, a nonempty iframe, or indexed extraction is not enough; preview
+  parsing must be bounded and must reuse the same matter visibility gate.

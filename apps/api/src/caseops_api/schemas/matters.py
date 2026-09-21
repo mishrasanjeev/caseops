@@ -1071,6 +1071,14 @@ class MatterAttachmentRecord(BaseModel):
     created_at: datetime
 
 
+class MatterAttachmentPreviewResponse(BaseModel):
+    attachment_id: str
+    filename: str
+    content_type: str
+    paragraphs: list[str] = Field(default_factory=list)
+    table_rows: list[list[str]] = Field(default_factory=list)
+
+
 class MatterAttachmentMetadataUpdateRequest(BaseModel):
     document_type: MatterDocumentTypeLiteral | None = None
     lifecycle_stage: MatterLifecycleStageLiteral | None = None

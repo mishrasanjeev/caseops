@@ -76,6 +76,7 @@ from caseops_api.schemas.matters import (
     MATTER_CODE_ERROR,
     MatterActivityRecord,
     MatterAttachmentMetadataUpdateRequest,
+    MatterAttachmentPreviewResponse,
     MatterAttachmentRecord,
     MatterCauseListEntryRecord,
     MatterCourtOrderCreateRequest,
@@ -5867,6 +5868,88 @@ def get_matter_attachment_download(
             detail="Attachment file is no longer available.",
         )
     return attachment, str(storage_path)
+
+
+def get_matter_attachment_preview(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    attachment_id: str,
+) -> MatterAttachmentPreviewResponse:
+    """Return a bounded, authenticated DOCX preview for the document viewer.
+
+    Browser-native DOCX rendering is inconsistent and can produce a blank iframe.
+    Reuse the download authorization gate, then expose only plain text and table
+    cells. This is deliberately a preview contract, not a document conversion API.
+    """
+    attachment, _storage_path = get_matter_attachment_download(
+        session,
+        context=context,
+        matter_id=matter_id,
+        attachment_id=attachment_id,
+    )
+    filename = attachment.original_filename or "attachment.docx"
+    if not filename.lower().endswith(".docx"):
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Only DOCX files support inline preview.",
+        )
+    path = resolve_storage_path(attachment.storage_key)
+    if path.stat().st_size > 32 * 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="This document is too large for inline preview; download it instead.",
+        )
+    try:
+        from docx import Document
+
+        document = Document(io.BytesIO(path.read_bytes()))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("DOCX preview failed for attachment_id=%s: %s", attachment.id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="This DOCX could not be rendered for preview; download it instead.",
+        ) from exc
+
+    paragraphs: list[str] = []
+    total_chars = 0
+    for paragraph in document.paragraphs:
+        text_value = " ".join(paragraph.text.split())
+        if not text_value:
+            continue
+        remaining = 500_000 - total_chars
+        if remaining <= 0:
+            break
+        text_value = text_value[:remaining]
+        paragraphs.append(text_value)
+        total_chars += len(text_value)
+        if len(paragraphs) >= 5_000:
+            break
+
+    table_rows: list[list[str]] = []
+    for table in document.tables:
+        for row in table.rows:
+            cells: list[str] = []
+            for cell in row.cells[:100]:
+                cell_text = " ".join(cell.text.split())[:10_000]
+                cells.append(cell_text)
+            if cells:
+                table_rows.append(cells)
+            if len(table_rows) >= 5_000:
+                break
+        if len(table_rows) >= 5_000:
+            break
+
+    return MatterAttachmentPreviewResponse(
+        attachment_id=attachment.id,
+        filename=filename,
+        content_type=attachment.content_type or (
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        ),
+        paragraphs=paragraphs,
+        table_rows=table_rows,
+    )
 
 
 def get_matter_attachment_bulk_download(

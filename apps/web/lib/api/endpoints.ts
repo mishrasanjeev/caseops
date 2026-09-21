@@ -573,6 +573,53 @@ export async function listMatters(params?: MatterListParams): Promise<MattersLis
   return mattersList.parse(data);
 }
 
+export type MatterBulkUpdateRow = {
+  row_number: number;
+  matter_id: string | null;
+  matter_code: string | null;
+  status: "valid" | "invalid" | "unchanged" | "changed" | "applied" | "failed";
+  errors: string[];
+  changes: Record<string, { old: unknown; new: unknown }>;
+  expected_updated_at?: string | null;
+};
+
+export type MatterBulkUpdateResult = {
+  preview_token: string;
+  summary?: {
+    total_rows: number;
+    matched_rows: number;
+    changed_rows: number;
+    unchanged_rows: number;
+    invalid_rows: number;
+  };
+  applied_rows?: number;
+  failed_rows?: number;
+  headers?: string[];
+  rows: MatterBulkUpdateRow[];
+};
+
+export async function previewMatterBulkUpdate(file: File): Promise<MatterBulkUpdateResult> {
+  const body = new FormData();
+  body.append("file", file);
+  return apiRequest<MatterBulkUpdateResult>("/api/matters/bulk-update/preview", {
+    method: "POST",
+    body,
+  });
+}
+
+export async function applyMatterBulkUpdate(input: {
+  file: File;
+  previewToken: string;
+}): Promise<MatterBulkUpdateResult> {
+  const body = new FormData();
+  body.append("file", input.file);
+  body.append("preview_token", input.previewToken);
+  return apiRequest<MatterBulkUpdateResult>("/api/matters/bulk-update/apply", {
+    method: "POST",
+    body,
+  });
+}
+
 export async function fetchMatterDashboardSummary(params?: {
   upcoming_limit?: number;
   recent_limit?: number;
@@ -2961,6 +3008,23 @@ export function matterAttachmentDownloadUrl(input: {
   attachmentId: string;
 }): string {
   return `${API_BASE_URL}/api/matters/${input.matterId}/attachments/${input.attachmentId}/download`;
+}
+
+export type MatterAttachmentPreview = {
+  attachment_id: string;
+  filename: string;
+  content_type: string;
+  paragraphs: string[];
+  table_rows: string[][];
+};
+
+export async function fetchMatterAttachmentPreview(input: {
+  matterId: string;
+  attachmentId: string;
+}): Promise<MatterAttachmentPreview> {
+  return apiRequest<MatterAttachmentPreview>(
+    `/api/matters/${input.matterId}/attachments/${input.attachmentId}/preview`,
+  );
 }
 
 export function matterAttachmentBulkDownloadUrl(input: {

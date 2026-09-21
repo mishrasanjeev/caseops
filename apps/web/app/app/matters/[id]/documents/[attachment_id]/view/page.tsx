@@ -18,6 +18,7 @@ import type { PDFAnnotation } from "@/components/document/PDFViewer";
 import { Button } from "@/components/ui/Button";
 import {
   type MatterAttachmentAnnotationRecord,
+  fetchMatterAttachmentPreview,
   fetchMatterWorkspace,
   listMatterAttachmentAnnotations,
   matterAttachmentDownloadUrl,
@@ -90,6 +91,11 @@ export default function AttachmentViewerPage(): React.JSX.Element {
     contentType.includes("word") ||
     lowerName.endsWith(".doc") ||
     lowerName.endsWith(".docx");
+  const previewQuery = useQuery({
+    queryKey: ["matter-attachment-preview", matterId, attachmentId],
+    queryFn: () => fetchMatterAttachmentPreview({ matterId, attachmentId }),
+    enabled: Boolean(matterId && attachmentId && isWord),
+  });
 
   useEffect(() => {
     if (!matterId || !attachmentId) {
@@ -126,15 +132,44 @@ export default function AttachmentViewerPage(): React.JSX.Element {
         </div>
       ) : url && isWord ? (
         <div className="flex min-h-0 flex-1 flex-col gap-3">
-          <div className="rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] px-3 py-2 text-sm text-[var(--color-ink-2)]">
-            Word files open with the browser's document handling when available. If the frame
-            stays blank, use Download to open the same authenticated file locally.
+          <div className="min-h-0 flex-1 overflow-auto rounded-md border border-[var(--color-line)] bg-white p-5">
+            {previewQuery.isPending ? (
+              <p className="text-sm text-[var(--color-ink-2)]">Rendering document…</p>
+            ) : previewQuery.isError ? (
+              <p className="text-sm text-[var(--color-danger)]">
+                This DOCX could not be previewed. Download the authenticated file to continue.
+              </p>
+            ) : (
+              <article className="mx-auto max-w-4xl space-y-3 text-sm leading-6 text-[var(--color-ink)]">
+                {previewQuery.data?.paragraphs.map((paragraph, index) => (
+                  <p key={`${index}-${paragraph.slice(0, 16)}`}>{paragraph}</p>
+                ))}
+                {previewQuery.data?.table_rows.length ? (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full border-collapse border border-[var(--color-line)]">
+                      <tbody>
+                        {previewQuery.data.table_rows.map((row, rowIndex) => (
+                          <tr key={`row-${rowIndex}`}>
+                            {row.map((cell, cellIndex) => (
+                              <td
+                                key={`cell-${rowIndex}-${cellIndex}`}
+                                className="border border-[var(--color-line)] px-3 py-2 align-top"
+                              >
+                                {cell}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : null}
+                {!previewQuery.data?.paragraphs.length && !previewQuery.data?.table_rows.length ? (
+                  <p className="text-[var(--color-ink-2)]">This document has no previewable text.</p>
+                ) : null}
+              </article>
+            )}
           </div>
-          <iframe
-            title={filename}
-            src={url}
-            className="min-h-0 flex-1 rounded-md border border-[var(--color-line)] bg-white"
-          />
           <Button type="button" variant="outline" href={url}>
             Download
           </Button>
