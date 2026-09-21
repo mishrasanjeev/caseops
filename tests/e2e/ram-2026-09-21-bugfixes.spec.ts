@@ -28,9 +28,9 @@ async function authenticate(request: import("@playwright/test").APIRequestContex
   const suffix = randomUUID().slice(0, 8);
   const credentials = isProduction
     ? {
-        slug: process.env.CASEOPS_PROD_TEST_SLUG,
-        email: process.env.CASEOPS_PROD_TEST_EMAIL,
-        password: process.env.CASEOPS_PROD_TEST_PASSWORD,
+        slug: process.env.CASEOPS_PROD_TEST_SLUG ?? process.env.CASEOPS_RAM_PROD_SLUG,
+        email: process.env.CASEOPS_PROD_TEST_EMAIL ?? process.env.CASEOPS_RAM_PROD_EMAIL,
+        password: process.env.CASEOPS_PROD_TEST_PASSWORD ?? process.env.CASEOPS_RAM_PROD_PASSWORD,
       }
     : {
         slug: `ram-sep21-${suffix}`,
