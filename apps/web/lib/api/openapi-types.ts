@@ -9335,6 +9335,23 @@ export interface paths {
         patch: operations["patch_current_company_matter_attachment_metadata_api_matters__matter_id__attachments__attachment_id__metadata_patch"];
         trace?: never;
     };
+    "/api/matters/{matter_id}/attachments/{attachment_id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Preview a DOCX matter attachment */
+        get: operations["preview_current_company_matter_attachment_api_matters__matter_id__attachments__attachment_id__preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/{matter_id}/attachments/{attachment_id}/reindex": {
         parameters: {
             query?: never;
@@ -10873,6 +10890,40 @@ export interface paths {
         put?: never;
         /** Assign one tag to multiple visible matters */
         post: operations["post_current_company_matter_bulk_tags_api_matters_bulk_tags_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/bulk-update/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply a previously previewed existing-matter XLSX update */
+        post: operations["apply_current_company_matter_bulk_update_api_matters_bulk_update_apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/bulk-update/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview updates for existing matters from the strict XLSX template */
+        post: operations["preview_current_company_matter_bulk_update_api_matters_bulk_update_preview_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -16128,6 +16179,13 @@ export interface components {
              */
             users_viewer_used: number;
         };
+        /** Body_apply_current_company_matter_bulk_update_api_matters_bulk_update_apply_post */
+        Body_apply_current_company_matter_bulk_update_api_matters_bulk_update_apply_post: {
+            /** File */
+            file: string;
+            /** Preview Token */
+            preview_token: string;
+        };
         /** Body_dry_run_current_company_matter_import_api_matters_imports_dry_run_post */
         Body_dry_run_current_company_matter_import_api_matters_imports_dry_run_post: {
             /**
@@ -16266,6 +16324,11 @@ export interface components {
         };
         /** Body_preview_current_company_employee_import_api_companies_current_employees_imports_preview_post */
         Body_preview_current_company_employee_import_api_companies_current_employees_imports_preview_post: {
+            /** File */
+            file: string;
+        };
+        /** Body_preview_current_company_matter_bulk_update_api_matters_bulk_update_preview_post */
+        Body_preview_current_company_matter_bulk_update_api_matters_bulk_update_preview_post: {
             /** File */
             file: string;
         };
@@ -35458,6 +35521,19 @@ export interface components {
             /** Sequence Index */
             sequence_index?: number | null;
         };
+        /** MatterAttachmentPreviewResponse */
+        MatterAttachmentPreviewResponse: {
+            /** Attachment Id */
+            attachment_id: string;
+            /** Content Type */
+            content_type: string;
+            /** Filename */
+            filename: string;
+            /** Paragraphs */
+            paragraphs?: string[];
+            /** Table Rows */
+            table_rows?: string[][];
+        };
         /** MatterAttachmentRecord */
         MatterAttachmentRecord: {
             /** Content Type */
@@ -35980,6 +36056,64 @@ export interface components {
             assignments: components["schemas"]["MatterTagAssignmentRecord"][];
             /** Skipped Count */
             skipped_count: number;
+        };
+        /** MatterBulkUpdateApplyResponse */
+        MatterBulkUpdateApplyResponse: {
+            /** Applied Rows */
+            applied_rows: number;
+            /** Failed Rows */
+            failed_rows: number;
+            /** Preview Token */
+            preview_token: string;
+            /** Rows */
+            rows: components["schemas"]["MatterBulkUpdateRow"][];
+        };
+        /** MatterBulkUpdatePreviewResponse */
+        MatterBulkUpdatePreviewResponse: {
+            /** Headers */
+            headers: string[];
+            /** Preview Token */
+            preview_token: string;
+            /** Rows */
+            rows: components["schemas"]["MatterBulkUpdateRow"][];
+            summary: components["schemas"]["MatterBulkUpdateSummary"];
+        };
+        /** MatterBulkUpdateRow */
+        MatterBulkUpdateRow: {
+            /** Changes */
+            changes?: {
+                [key: string]: {
+                    [key: string]: unknown;
+                };
+            };
+            /** Errors */
+            errors?: string[];
+            /** Expected Updated At */
+            expected_updated_at?: string | null;
+            /** Matter Code */
+            matter_code?: string | null;
+            /** Matter Id */
+            matter_id?: string | null;
+            /** Row Number */
+            row_number: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "valid" | "invalid" | "unchanged" | "changed" | "applied" | "failed";
+        };
+        /** MatterBulkUpdateSummary */
+        MatterBulkUpdateSummary: {
+            /** Changed Rows */
+            changed_rows: number;
+            /** Invalid Rows */
+            invalid_rows: number;
+            /** Matched Rows */
+            matched_rows: number;
+            /** Total Rows */
+            total_rows: number;
+            /** Unchanged Rows */
+            unchanged_rows: number;
         };
         /** MatterCauseListEntryRecord */
         MatterCauseListEntryRecord: {
@@ -66438,6 +66572,38 @@ export interface operations {
             };
         };
     };
+    preview_current_company_matter_attachment_api_matters__matter_id__attachments__attachment_id__preview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attachment_id: string;
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterAttachmentPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     reindex_current_company_matter_attachment_api_matters__matter_id__attachments__attachment_id__reindex_post: {
         parameters: {
             query?: never;
@@ -69742,6 +69908,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MatterBulkTagAssignResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_current_company_matter_bulk_update_api_matters_bulk_update_apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_apply_current_company_matter_bulk_update_api_matters_bulk_update_apply_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterBulkUpdateApplyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_current_company_matter_bulk_update_api_matters_bulk_update_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_preview_current_company_matter_bulk_update_api_matters_bulk_update_preview_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterBulkUpdatePreviewResponse"];
                 };
             };
             /** @description Validation Error */
