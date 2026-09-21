@@ -183,6 +183,7 @@ test("ENH-006 next hearing flows from new matter into hearings, calendar, and ca
   const listed = await request.get(`${api}/api/matters/?q=${encodeURIComponent(code)}&limit=100`, { headers: auth.headers });
   expect(listed.status(), await listed.text()).toBe(200);
   const created = ((await listed.json()) as { matters: Matter[] }).matters.find((row) => row.matter_code === code);
+  expect(created).toBeDefined();
   expect(created?.next_hearing_on).toBe(hearingDate);
 
   await page.goto(`${web}/app/hearings`);
@@ -192,9 +193,9 @@ test("ENH-006 next hearing flows from new matter into hearings, calendar, and ca
   await page.getByRole("tab", { name: "week" }).click();
   const calendarDay = page.getByTestId(`calendar-week-day-${hearingDate}`);
   await expect(calendarDay).toBeVisible();
-  const calendarEvent = calendarDay.locator('[data-testid^="calendar-event-"]').first();
+  const calendarEvent = calendarDay.locator(`a[href="/app/matters/${created!.id}/hearings"]`).first();
   await expect(calendarEvent).toBeVisible();
-  await expect(calendarEvent).toHaveAttribute("title", /New matter hearing regression/);
+  await expect(calendarEvent).toHaveAttribute("title", /New matter hearing regression.*Next hearing/);
   await page.goto(`${web}/app/cause-list`);
   await page.locator("label").filter({ hasText: /^From$/ }).locator("input").fill(hearingDate);
   await page.locator("label").filter({ hasText: /^To$/ }).locator("input").fill(hearingDate);
