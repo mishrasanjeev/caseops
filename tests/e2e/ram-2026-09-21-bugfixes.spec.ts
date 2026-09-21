@@ -195,8 +195,8 @@ test("ENH-006 next hearing flows from new matter into hearings, calendar, and ca
   await expect(calendarEvent).toBeVisible();
   await expect(calendarEvent).toHaveAttribute("title", /New matter hearing regression/);
   await page.goto(`${web}/app/cause-list`);
-  await page.getByLabel("From").fill(hearingDate);
-  await page.getByLabel("To").fill(hearingDate);
+  await page.locator("label").filter({ hasText: /^From$/ }).locator("input").fill(hearingDate);
+  await page.locator("label").filter({ hasText: /^To$/ }).locator("input").fill(hearingDate);
   await page.getByRole("button", { name: "Preview" }).click();
   await expect(page.getByText("New matter hearing regression", { exact: true })).toBeVisible();
   await expect(page.getByText(hearingDate, { exact: true })).toBeVisible();
