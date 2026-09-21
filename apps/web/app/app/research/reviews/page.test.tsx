@@ -395,6 +395,20 @@ describe("IntelligentReviewsPage", () => {
     expect(mocks.getReview).toHaveBeenCalledWith("review-linked");
   });
 
+  it("loads a deep-linked review without waiting for bounded history", async () => {
+    const linked = reviewFixture({ id: "review-linked", issue: "Fast deep link review" });
+    let releaseHistory!: (value: { reviews: typeof linked[] }) => void;
+    mocks.searchParams = "report=report-1&review=review-linked";
+    mocks.listReviews.mockReturnValue(new Promise((resolve) => { releaseHistory = resolve; }));
+    mocks.getReview.mockResolvedValue(linked);
+
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Fast deep link review" })).toBeInTheDocument();
+    expect(mocks.getReview).toHaveBeenCalledWith("review-linked");
+    releaseHistory({ reviews: [linked] });
+  });
+
   it("shows typed abstention without presenting invented analysis", async () => {
     const abstained = reviewFixture({
       state: "abstained",

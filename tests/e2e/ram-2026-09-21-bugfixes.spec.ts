@@ -186,6 +186,7 @@ test("ENH-006 next hearing flows from new matter into hearings, calendar, and ca
   expect(created?.next_hearing_on).toBe(hearingDate);
 
   await page.goto(`${web}/app/hearings`);
+  await page.getByLabel("Exact hearing date").fill(hearingDate);
   await expect(page.getByText("New matter hearing regression", { exact: true }).first()).toBeVisible();
   await page.goto(`${web}/app/calendar`);
   await page.getByRole("tab", { name: "week" }).click();

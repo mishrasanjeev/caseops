@@ -563,13 +563,12 @@ function ReviewDetail({
   const reviewQuery = useQuery({
     queryKey: ["research", "intelligent-review", reviewId],
     queryFn: () => getIntelligentReview(reviewId ?? ""),
-    // The bounded history response already contains the complete review
-    // record. Avoid a second request on the concurrency-one API; deep links
-    // outside that bounded history still use the single-record endpoint.
+    // Reuse bounded history when it is ready, but do not make a deep link wait
+    // for that list. The exact review endpoint is the authoritative fallback
+    // and keeps a busy history query from leaving the requested detail stuck.
     enabled:
       Boolean(reviewId) &&
-      reviewHistoryReady &&
-      (!historyReview || ["queued", "running"].includes(historyReview.state)),
+      (!reviewHistoryReady || !historyReview || ["queued", "running"].includes(historyReview.state)),
     initialData: historyReview,
     refetchInterval: (query) =>
       ["queued", "running"].includes(query.state.data?.state ?? "") ? 1_500 : false,
