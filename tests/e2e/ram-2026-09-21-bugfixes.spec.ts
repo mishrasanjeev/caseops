@@ -186,7 +186,7 @@ test("ENH-006 next hearing flows from new matter into hearings, calendar, and ca
   expect(created?.next_hearing_on).toBe(hearingDate);
 
   await page.goto(`${web}/app/hearings`);
-  await expect(page.getByText("New matter hearing regression", { exact: true })).toBeVisible();
+  await expect(page.getByText("New matter hearing regression", { exact: true }).first()).toBeVisible();
   await page.goto(`${web}/app/calendar`);
   await page.getByRole("tab", { name: "week" }).click();
   const calendarDay = page.getByTestId(`calendar-week-day-${hearingDate}`);
@@ -198,6 +198,6 @@ test("ENH-006 next hearing flows from new matter into hearings, calendar, and ca
   await page.locator("label").filter({ hasText: /^From$/ }).locator("input").fill(hearingDate);
   await page.locator("label").filter({ hasText: /^To$/ }).locator("input").fill(hearingDate);
   await page.getByRole("button", { name: "Preview" }).click();
-  await expect(page.getByText("New matter hearing regression", { exact: true })).toBeVisible();
-  await expect(page.getByText(hearingDate, { exact: true })).toBeVisible();
+  await expect(page.getByText("New matter hearing regression", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(hearingDate, { exact: true }).first()).toBeVisible();
 });
