@@ -88,7 +88,7 @@ def test_api_ci_shards_disable_network_backed_ocr() -> None:
     ("workflow_name", "job_name"),
     [
         ("ci.yml", "e2e"),
-        ("prod-verify.yml", "prod-playwright"),
+        ("prod-verify.yml", "prod-playwright-shards"),
         ("release-verify.yml", "release-playwright"),
     ],
 )
