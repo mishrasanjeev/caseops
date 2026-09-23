@@ -474,6 +474,12 @@ requirements when using the fallback.
   transient transport and 5xx failures with a small finite bound. Revalidate
   the digest format after every attempt and fail before migration or routing if
   the bound is exhausted; never turn the retry into an unbounded release wait.
+- A Cloud Run Job's `executionCount` is lifetime creation count, not retained
+  history size. Drain retained executions through bounded v2 API pages with a
+  hard inventory sentinel, validate every execution identity and terminal
+  field, and require two clean samples after pausing. Do not put gcloud's full
+  client-side history materialization behind a shorter sub-deadline; the 1,899
+  retained projection executions took 44 seconds through gcloud on 2026-09-23.
   Provider-paid operation is established through authenticated human use and
   provider account evidence, never by an automated credit-bearing canary.
 - An automatic next-hearing sync is an identity-and-evidence workflow, not a

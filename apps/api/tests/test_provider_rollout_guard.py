@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import copy
+import json
 import subprocess
+from urllib import parse as urllib_parse
 
 import pytest
 
@@ -34,6 +36,8 @@ def wire(monkeypatch, histories):
     def gcloud(arguments, *, expect_json=False, timeout=60):
         calls.append(arguments)
         assert 0 < timeout <= 30
+        if arguments == ["auth", "print-access-token"]:
+            return "test-access-token"
         if arguments[:3] == ["scheduler", "jobs", "pause"]:
             return ""
         if arguments[:3] == ["scheduler", "jobs", "describe"]:
@@ -41,13 +45,22 @@ def wire(monkeypatch, histories):
                 "state": "PAUSED",
                 "httpTarget": {"uri": guard.scheduler_uri("p", "r", JOB)},
             }
-        assert arguments[:4] == ["run", "jobs", "executions", "list"]
-        assert f"--limit={guard.EXECUTION_DRAIN_SCAN_SENTINEL}" in arguments
-        assert not any(arg.startswith("--filter") for arg in arguments)
-        assert not any(arg.startswith("--sort-by") for arg in arguments)
+        raise AssertionError(arguments)
+
+    def list_executions(**kwargs):
+        calls.append(["run-api", "executions", "list", kwargs["job_name"]])
+        assert kwargs == {
+            "job_name": JOB,
+            "project": "p",
+            "region": "r",
+            "access_token": "test-access-token",
+            "timeout": kwargs["timeout"],
+        }
+        assert 0 < kwargs["timeout"] <= 180
         return next(histories)
 
     monkeypatch.setattr(guard, "run_gcloud", gcloud)
+    monkeypatch.setattr(guard, "_list_job_executions_v2", list_executions)
     return inventory, calls, now
 
 
@@ -64,7 +77,8 @@ def test_drain_does_not_miss_old_worker_behind_new_completed_execution(monkeypat
     assert result["drained"] and result["clean_samples"] == 2
     assert result["observed_executions"] == ["old"]
     assert now[0] == 10
-    assert calls[0][:4] == ["scheduler", "jobs", "pause", SCHEDULER]
+    assert calls[0] == ["auth", "print-access-token"]
+    assert calls[1][:4] == ["scheduler", "jobs", "pause", SCHEDULER]
     assert not any("resume" in args or "execute" in args or "cancel" in args for args in calls)
 
 
@@ -108,6 +122,93 @@ def test_observed_production_execution_history_stays_below_drain_sentinel():
     retained = [execution(str(i), done=True) for i in range(1768)]
 
     assert guard._unfinished_executions(retained, job_name=JOB) == []
+
+
+def test_execution_api_pages_complete_inventory_without_gcloud_history_scan(
+    monkeypatch,
+):
+    requested_urls = []
+
+    class Response:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return json.dumps(self.payload).encode("utf-8")
+
+    def execution_v2(name, *, done):
+        payload = {
+            "name": f"projects/p/locations/r/jobs/{JOB}/executions/{name}",
+            "job": JOB,
+            "createTime": "2026-09-23T00:00:00Z",
+        }
+        if done:
+            payload["completionTime"] = "2026-09-23T00:01:00Z"
+        else:
+            payload["runningCount"] = 1
+        return payload
+
+    def urlopen(request, *, timeout):
+        requested_urls.append(request.full_url)
+        assert request.get_header("Authorization") == "Bearer token"
+        assert 0 < timeout <= 30
+        query = urllib_parse.parse_qs(urllib_parse.urlparse(request.full_url).query)
+        if "pageToken" not in query:
+            return Response(
+                {
+                    "executions": [execution_v2("new", done=True)],
+                    "nextPageToken": "next-token",
+                }
+            )
+        assert query["pageToken"] == ["next-token"]
+        return Response({"executions": [execution_v2("old", done=False)]})
+
+    monkeypatch.setattr(guard.urllib_request, "urlopen", urlopen)
+    rows = guard._list_job_executions_v2(
+        job_name=JOB,
+        project="p",
+        region="r",
+        access_token="token",
+        timeout=30,
+    )
+
+    assert guard._unfinished_executions(rows, job_name=JOB) == ["old"]
+    assert len(requested_urls) == 2
+    first_query = urllib_parse.parse_qs(urllib_parse.urlparse(requested_urls[0]).query)
+    assert first_query["pageSize"] == [str(guard.EXECUTION_API_PAGE_SIZE)]
+    assert "nextPageToken" in first_query["fields"][0]
+
+
+def test_execution_api_rejects_repeated_page_token(monkeypatch):
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return b'{"executions": [], "nextPageToken": "repeat"}'
+
+    monkeypatch.setattr(
+        guard.urllib_request,
+        "urlopen",
+        lambda _request, *, timeout: Response(),
+    )
+    with pytest.raises(guard.InventoryError, match="page token"):
+        guard._list_job_executions_v2(
+            job_name=JOB,
+            project="p",
+            region="r",
+            access_token="token",
+            timeout=30,
+        )
 
 
 def test_failed_count_is_not_completion_and_completion_with_running_task_is_not_drain():

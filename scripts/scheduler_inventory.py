@@ -20,14 +20,20 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib import error as urllib_error
+from urllib import parse as urllib_parse
+from urllib import request as urllib_request
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INVENTORY = REPO_ROOT / "infra" / "cloudrun" / "scheduler-inventory.json"
 DIGEST_IMAGE = re.compile(r"^.+@sha256:[a-f0-9]{64}$")
-# The five-minute private-projection job retained 1,768 executions in production
+# The five-minute private-projection job retained 1,899 executions in production
 # on 2026-09-23. Keep a bounded unfiltered scan so an older active execution
 # cannot hide behind newer completed rows, with room above the observed volume.
+# Read the v2 API in bounded pages: gcloud's client-side materialization took
+# 44 seconds for the same inventory and exceeded the drain's sub-deadline.
 EXECUTION_DRAIN_SCAN_SENTINEL = 3001
+EXECUTION_API_PAGE_SIZE = 1000
 
 
 class InventoryError(RuntimeError):
@@ -861,6 +867,105 @@ def _unfinished_executions(payload: object, *, job_name: str) -> list[str]:
     return unfinished
 
 
+def _list_job_executions_v2(
+    *,
+    job_name: str,
+    project: str,
+    region: str,
+    access_token: str,
+    timeout: float,
+) -> list[dict[str, Any]]:
+    """Read the complete retained execution inventory through bounded API pages."""
+
+    if not access_token.strip():
+        raise InventoryError("gcloud returned an empty access token")
+    deadline = time.monotonic() + timeout
+    parent = (
+        f"projects/{project}/locations/{region}/jobs/{job_name}/executions"
+    )
+    endpoint = f"https://run.googleapis.com/v2/{parent}"
+    fields = (
+        "executions(name,job,createTime,completionTime,runningCount),"
+        "nextPageToken"
+    )
+    page_token = ""
+    seen_page_tokens: set[str] = set()
+    executions: list[dict[str, Any]] = []
+
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise InventoryError("Cloud Run execution inventory deadline exceeded")
+        query: dict[str, str | int] = {
+            "pageSize": min(
+                EXECUTION_API_PAGE_SIZE,
+                EXECUTION_DRAIN_SCAN_SENTINEL - len(executions),
+            ),
+            "fields": fields,
+        }
+        if page_token:
+            query["pageToken"] = page_token
+        request = urllib_request.Request(
+            f"{endpoint}?{urllib_parse.urlencode(query)}",
+            headers={
+                "Accept": "application/json",
+                "Authorization": f"Bearer {access_token.strip()}",
+            },
+        )
+        try:
+            with urllib_request.urlopen(request, timeout=min(30, remaining)) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except (
+            json.JSONDecodeError,
+            OSError,
+            TimeoutError,
+            UnicodeDecodeError,
+            urllib_error.URLError,
+        ) as exc:
+            raise InventoryError(
+                "Cloud Run execution inventory request failed"
+            ) from exc
+        if not isinstance(payload, dict) or not isinstance(
+            payload.get("executions", []), list
+        ):
+            raise InventoryError("Cloud Run returned an invalid execution inventory")
+        for execution in payload.get("executions", []):
+            if not isinstance(execution, dict):
+                raise InventoryError("Cloud Run returned an invalid execution record")
+            name = execution.get("name")
+            job = execution.get("job")
+            if not isinstance(name, str) or not name.startswith(f"{parent}/"):
+                raise InventoryError("Cloud Run returned a mismatched execution identity")
+            executions.append(
+                {
+                    "metadata": {
+                        "name": name.rsplit("/", 1)[-1],
+                        "labels": {"run.googleapis.com/job": job},
+                    },
+                    "status": {
+                        **(
+                            {"completionTime": execution["completionTime"]}
+                            if "completionTime" in execution
+                            else {}
+                        ),
+                        "runningCount": execution.get("runningCount", 0),
+                    },
+                }
+            )
+            if len(executions) >= EXECUTION_DRAIN_SCAN_SENTINEL:
+                raise InventoryError("execution inventory is invalid or truncated")
+        next_page_token = payload.get("nextPageToken", "")
+        if not next_page_token:
+            return executions
+        if (
+            not isinstance(next_page_token, str)
+            or next_page_token in seen_page_tokens
+        ):
+            raise InventoryError("Cloud Run returned an invalid execution page token")
+        seen_page_tokens.add(next_page_token)
+        page_token = next_page_token
+
+
 def quiesce(
     inventory: dict[str, Any],
     *,
@@ -873,6 +978,12 @@ def quiesce(
     if not 5 <= wait_seconds <= 600:
         raise InventoryError("drain wait must be between 5 and 600 seconds")
     deadline = time.monotonic() + wait_seconds
+
+    access_token = run_gcloud(
+        ["auth", "print-access-token"], timeout=min(30, wait_seconds)
+    )
+    if not isinstance(access_token, str) or not access_token.strip():
+        raise InventoryError("gcloud returned an empty access token")
 
     def call(arguments: list[str], *, expect_json: bool = False) -> Any:
         remaining = deadline - time.monotonic()
@@ -901,22 +1012,18 @@ def quiesce(
             != scheduler_uri(project, region, job["run_job_name"])
         ):
             raise InventoryError("scheduler pause/target could not be verified")
-        executions = call(
-            [
-                "run",
-                "jobs",
-                "executions",
-                "list",
-                "--job",
-                job["run_job_name"],
-                "--project",
-                project,
-                "--region",
-                region,
-                f"--limit={EXECUTION_DRAIN_SCAN_SENTINEL}",
-                "--format=json",
-            ],
-            expect_json=True,
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise InventoryError(
+                "execution drain deadline exceeded; scheduler remains paused; "
+                "rerun this release after inspecting the active executions"
+            )
+        executions = _list_job_executions_v2(
+            job_name=job["run_job_name"],
+            project=project,
+            region=region,
+            access_token=access_token,
+            timeout=remaining,
         )
         active = _unfinished_executions(executions, job_name=job["run_job_name"])
         observed.update(active)
