@@ -1386,6 +1386,34 @@ class MatterBulkImportRow(Base):
     created_matter: Mapped[Matter | None] = relationship(foreign_keys=[created_matter_id])
 
 
+class MatterBulkUpdateOperation(Base):
+    """Tenant-scoped audit summary; uploaded file contents are never retained."""
+
+    __tablename__ = "matter_bulk_update_operations"
+    __table_args__ = (
+        Index("ix_matter_bulk_update_operations_company_created", "company_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    company_id: Mapped[str] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    uploader_membership_id: Mapped[str | None] = mapped_column(
+        ForeignKey("company_memberships.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    format: Mapped[str] = mapped_column(String(8), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    total_rows: Mapped[int] = mapped_column(Integer, nullable=False)
+    changed_rows: Mapped[int] = mapped_column(Integer, nullable=False)
+    invalid_rows: Mapped[int] = mapped_column(Integer, nullable=False)
+    applied_rows: Mapped[int] = mapped_column(Integer, nullable=False)
+    failed_rows: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    uploader_membership: Mapped[CompanyMembership | None] = relationship()
+
+
 class Matter(Base):
     __tablename__ = "matters"
     __table_args__ = (

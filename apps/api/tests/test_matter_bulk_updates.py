@@ -107,4 +107,4 @@ def test_bulk_update_cannot_change_lifecycle_status(client: TestClient) -> None:
     assert response.status_code == 200, response.text
     row = response.json()["rows"][0]
     assert row["status"] == "invalid"
-    assert "dedicated lifecycle workflow" in row["errors"][0]
+    assert "cannot change Matter Status" in row["errors"][0]

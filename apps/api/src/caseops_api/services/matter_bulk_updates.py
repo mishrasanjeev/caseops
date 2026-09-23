@@ -6,17 +6,22 @@ from __future__ import annotations
 
 import hashlib
 import io
+import csv
+import json
+import os
 from datetime import date, datetime
 from typing import Any
 
 from fastapi import HTTPException, status
 from openpyxl import load_workbook
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
-from caseops_api.db.models import CompanyMembership, Matter, Team
+from caseops_api.db.models import CompanyMembership, Matter, MatterBulkUpdateOperation, Team
 from caseops_api.schemas.matter_bulk_updates import (
     MatterBulkUpdateApplyResponse,
+    MatterBulkUpdateHistoryRecord,
+    MatterBulkUpdateHistoryResponse,
     MatterBulkUpdatePreviewResponse,
     MatterBulkUpdateRow,
     MatterBulkUpdateSummary,
@@ -52,6 +57,9 @@ HEADERS = [
     "CNR Number",
 ]
 MAX_ROWS = 500
+MAX_FILE_BYTES = 5 * 1024 * 1024
+XLSX_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+CSV_TYPE = "text/csv; charset=utf-8"
 
 
 def _cell(value: Any) -> str:
@@ -75,25 +83,45 @@ def _parse_date(value: str) -> date:
         raise ValueError("Filing Date must be an ISO date such as 2026-09-21.") from exc
 
 
-def _parse_rows(content: bytes) -> tuple[str, list[tuple[int, dict[str, str]]]]:
-    if len(content) > 32 * 1024 * 1024:
+def _parse_rows(content: bytes, filename: str) -> tuple[str, list[tuple[int, dict[str, str]]], str]:
+    if len(content) > MAX_FILE_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="Bulk update file is too large.",
+            detail=f"Bulk update file must be {MAX_FILE_BYTES // (1024 * 1024)} MiB or smaller.",
         )
+    extension = os.path.splitext(os.path.basename(filename))[1].casefold()
+    if extension not in {".xlsx", ".csv"}:
+        raise HTTPException(status_code=400, detail="Choose a .xlsx or .csv bulk-update file.")
+    manifest_format = extension[1:]
     try:
-        workbook = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
-        sheet = workbook.active
-        values = list(sheet.iter_rows(values_only=True))
+        if manifest_format == "csv":
+            text = content.decode("utf-8-sig", errors="strict")
+            reader = csv.reader(io.StringIO(text, newline=""), strict=True)
+            values = []
+            for row in reader:
+                values.append(row)
+                if len(values) > MAX_ROWS + 1:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Bulk update supports at most {MAX_ROWS} data rows.",
+                    )
+        else:
+            workbook = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+            try:
+                sheet = workbook.active
+                if sheet.max_row is not None and sheet.max_row > MAX_ROWS + 1:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Bulk update supports at most {MAX_ROWS} data rows.",
+                    )
+                values = list(sheet.iter_rows(values_only=True))
+            finally:
+                workbook.close()
+    except HTTPException:
+        raise
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Upload a valid XLSX workbook."
-        ) from exc
-    finally:
-        try:
-            workbook.close()
-        except UnboundLocalError:
-            pass
+        label = "CSV file" if manifest_format == "csv" else "XLSX workbook"
+        raise HTTPException(status_code=400, detail=f"Upload a valid UTF-8 {label}.") from exc
     if not values:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="The workbook is empty."
@@ -119,20 +147,7 @@ def _parse_rows(content: bytes) -> tuple[str, list[tuple[int, dict[str, str]]]]:
                 detail=f"Bulk update supports at most {MAX_ROWS} populated rows.",
             )
         rows.append((row_number, dict(zip(HEADERS, cells, strict=False))))
-    return hashlib.sha256(content).hexdigest(), rows
-
-
-def _enum_value(value: str) -> str:
-    normalized = " ".join(value.lower().replace("-", " ").replace("_", " ").split())
-    mapping = {
-        "intake": "intake",
-        "active": "active",
-        "on hold": "on_hold",
-        "on_hold": "on_hold",
-        "closed": "disposed",
-        "disposed": "disposed",
-    }
-    return mapping.get(normalized, "")
+    return hashlib.sha256(content).hexdigest(), rows, manifest_format
 
 
 def _forum_value(value: str) -> str:
@@ -205,13 +220,7 @@ def _updates_for_row(
         if row[source]:
             updates[target] = row[source]
     if row["Matter Status"]:
-        status_value = _enum_value(row["Matter Status"])
-        if status_value in {"disposed"}:
-            errors.append("Lifecycle status changes must use the dedicated lifecycle workflow.")
-        elif not status_value:
-            errors.append("Matter Status must be Intake, Active, or On hold.")
-        else:
-            updates["status"] = status_value
+        errors.append("Bulk update cannot change Matter Status; use the dedicated matter workflow.")
     if row["Forum"]:
         forum_value = _forum_value(row["Forum"])
         if not forum_value:
@@ -268,6 +277,14 @@ def _preview_rows(
         select(Matter).where(Matter.company_id == context.company.id, Matter.matter_code.in_(codes))
     )
     by_code = {matter.matter_code: matter for matter in matters}
+    code_counts: dict[str, int] = {}
+    for _, row in rows:
+        raw_code = row.get("Matter Code", "")
+        try:
+            code = normalize_matter_code(raw_code)
+        except Exception:
+            continue
+        code_counts[code] = code_counts.get(code, 0) + 1
     result: list[MatterBulkUpdateRow] = []
     for row_number, row in rows:
         raw_code = row.get("Matter Code", "")
@@ -276,6 +293,16 @@ def _preview_rows(
         except Exception:
             code = ""
         matter = by_code.get(code)
+        if code and code_counts.get(code, 0) > 1:
+            result.append(
+                MatterBulkUpdateRow(
+                    row_number=row_number,
+                    matter_code=code,
+                    status="invalid",
+                    errors=["Matter Code appears more than once in this file; remove duplicate rows."],
+                )
+            )
+            continue
         if not raw_code or matter is None:
             result.append(
                 MatterBulkUpdateRow(
@@ -313,10 +340,11 @@ def _preview_rows(
 
 
 def preview_matter_bulk_update(
-    session: Session, *, context: SessionContext, content: bytes
+    session: Session, *, context: SessionContext, content: bytes, filename: str
 ) -> MatterBulkUpdatePreviewResponse:
-    token, rows = _parse_rows(content)
+    file_hash, rows, _ = _parse_rows(content, filename)
     plans = _preview_rows(session, context=context, rows=rows)
+    token = _preview_token(file_hash, plans)
     changed = sum(plan.status == "changed" for plan in plans)
     unchanged = sum(plan.status == "unchanged" for plan in plans)
     invalid = sum(plan.status == "invalid" for plan in plans)
@@ -335,15 +363,39 @@ def preview_matter_bulk_update(
 
 
 def apply_matter_bulk_update(
-    session: Session, *, context: SessionContext, content: bytes, preview_token: str
+    session: Session,
+    *,
+    context: SessionContext,
+    content: bytes,
+    filename: str,
+    preview_token: str,
 ) -> MatterBulkUpdateApplyResponse:
-    token, rows = _parse_rows(content)
-    if token != preview_token:
+    file_hash, rows, manifest_format = _parse_rows(content, filename)
+    plans = _preview_rows(session, context=context, rows=rows)
+    current_token = _preview_token(file_hash, plans)
+    safe_filename = os.path.basename(filename).replace("\\", "_").replace("/", "_")[:255] or "upload"
+    if current_token != preview_token:
+        changed = sum(plan.status == "changed" for plan in plans)
+        invalid = sum(plan.status == "invalid" for plan in plans)
+        session.add(
+            MatterBulkUpdateOperation(
+                company_id=context.company.id,
+                uploader_membership_id=context.membership.id,
+                filename=safe_filename,
+                format=manifest_format,
+                status="stale",
+                total_rows=len(plans),
+                changed_rows=changed,
+                invalid_rows=invalid,
+                applied_rows=0,
+                failed_rows=changed,
+            )
+        )
+        session.commit()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="The workbook changed after preview; generate a new preview.",
+            detail="A Matter changed after preview or the upload differs; review a fresh preview before applying.",
         )
-    plans = _preview_rows(session, context=context, rows=rows)
     applied = 0
     failed = 0
     for plan, (_, raw_row) in zip(plans, rows, strict=True):
@@ -374,7 +426,102 @@ def apply_matter_bulk_update(
             plan.status = "failed"
             plan.errors.append(str(exc))
             failed += 1
+    failed += sum(plan.status == "invalid" for plan in plans)
+    status_value = "completed_with_errors" if failed else "completed"
+    operation = MatterBulkUpdateOperation(
+        company_id=context.company.id,
+        uploader_membership_id=context.membership.id,
+        filename=safe_filename,
+        format=manifest_format,
+        status=status_value,
+        total_rows=len(plans),
+        changed_rows=sum(bool(plan.changes) for plan in plans),
+        invalid_rows=sum(plan.status == "invalid" for plan in plans),
+        applied_rows=applied,
+        failed_rows=failed,
+    )
+    session.add(operation)
     session.commit()
     return MatterBulkUpdateApplyResponse(
-        preview_token=preview_token, applied_rows=applied, failed_rows=failed, rows=plans
+        preview_token=preview_token,
+        applied_rows=applied,
+        failed_rows=failed,
+        rows=plans,
+        operation_id=operation.id,
     )
+
+
+def _preview_token(file_hash: str, plans: list[MatterBulkUpdateRow]) -> str:
+    state = [
+        {
+            "row": plan.row_number,
+            "matter_id": plan.matter_id,
+            "status": plan.status,
+            "expected_updated_at": plan.expected_updated_at.isoformat()
+            if plan.expected_updated_at
+            else None,
+            "changes": plan.changes,
+            "errors": plan.errors,
+        }
+        for plan in plans
+    ]
+    payload = json.dumps([file_hash, state], sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def matter_bulk_update_template(manifest_format: str) -> tuple[bytes, str, str]:
+    if manifest_format == "csv":
+        output = io.StringIO(newline="")
+        csv.writer(output, lineterminator="\r\n").writerow(HEADERS)
+        return output.getvalue().encode("utf-8"), CSV_TYPE, "matter-bulk-update-template.csv"
+    if manifest_format != "xlsx":
+        raise HTTPException(status_code=400, detail="Format must be csv or xlsx.")
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Matter Updates"
+    sheet.append(HEADERS)
+    output = io.BytesIO()
+    workbook.save(output)
+    workbook.close()
+    return output.getvalue(), XLSX_TYPE, "matter-bulk-update-template.xlsx"
+
+
+def list_matter_bulk_update_history(
+    session: Session, *, context: SessionContext, limit: int = 50
+) -> MatterBulkUpdateHistoryResponse:
+    query = select(MatterBulkUpdateOperation).where(
+        MatterBulkUpdateOperation.company_id == context.company.id
+    )
+    total = session.scalar(select(func.count()).select_from(query.subquery())) or 0
+    operations = session.scalars(
+        query.options(
+            joinedload(MatterBulkUpdateOperation.uploader_membership).joinedload(
+                CompanyMembership.user
+            )
+        )
+        .order_by(MatterBulkUpdateOperation.created_at.desc())
+        .limit(limit)
+    )
+    records = []
+    for item in operations:
+        membership = item.uploader_membership
+        records.append(
+            MatterBulkUpdateHistoryRecord(
+                id=item.id,
+                filename=item.filename,
+                format=item.format,
+                status=item.status,
+                total_rows=item.total_rows,
+                changed_rows=item.changed_rows,
+                invalid_rows=item.invalid_rows,
+                applied_rows=item.applied_rows,
+                failed_rows=item.failed_rows,
+                uploader_membership_id=item.uploader_membership_id,
+                uploader_name=membership.user.full_name if membership else None,
+                uploader_email=membership.user.email if membership else None,
+                created_at=item.created_at,
+            )
+        )
+    return MatterBulkUpdateHistoryResponse(operations=records, total=total)

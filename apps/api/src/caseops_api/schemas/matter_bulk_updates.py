@@ -38,3 +38,25 @@ class MatterBulkUpdateApplyResponse(BaseModel):
     applied_rows: int
     failed_rows: int
     rows: list[MatterBulkUpdateRow]
+    operation_id: str
+
+
+class MatterBulkUpdateHistoryRecord(BaseModel):
+    id: str
+    filename: str
+    format: Literal["csv", "xlsx"]
+    status: Literal["completed", "completed_with_errors", "stale"]
+    total_rows: int
+    changed_rows: int
+    invalid_rows: int
+    applied_rows: int
+    failed_rows: int
+    uploader_membership_id: str | None = None
+    uploader_name: str | None = None
+    uploader_email: str | None = None
+    created_at: datetime
+
+
+class MatterBulkUpdateHistoryResponse(BaseModel):
+    operations: list[MatterBulkUpdateHistoryRecord]
+    total: int

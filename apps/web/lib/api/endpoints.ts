@@ -594,9 +594,41 @@ export type MatterBulkUpdateResult = {
   };
   applied_rows?: number;
   failed_rows?: number;
+  operation_id?: string;
   headers?: string[];
   rows: MatterBulkUpdateRow[];
 };
+
+export type MatterBulkUpdateOperation = {
+  id: string;
+  filename: string;
+  format: "csv" | "xlsx";
+  status: "completed" | "completed_with_errors" | "stale";
+  total_rows: number;
+  changed_rows: number;
+  invalid_rows: number;
+  applied_rows: number;
+  failed_rows: number;
+  uploader_membership_id: string | null;
+  uploader_name: string | null;
+  uploader_email: string | null;
+  created_at: string;
+};
+
+export async function downloadMatterBulkUpdateTemplate(
+  format: "csv" | "xlsx",
+): Promise<Blob> {
+  const response = await apiBlobRequest(
+    `/api/matters/bulk-update/template?format=${format}`,
+  );
+  return response.blob();
+}
+
+export async function listMatterBulkUpdateHistory(
+  limit = 50,
+): Promise<{ operations: MatterBulkUpdateOperation[]; total: number }> {
+  return apiRequest(`/api/matters/bulk-update/history?limit=${limit}`);
+}
 
 export async function previewMatterBulkUpdate(file: File): Promise<MatterBulkUpdateResult> {
   const body = new FormData();
@@ -3006,8 +3038,10 @@ export async function reindexMatterAttachment(input: {
 export function matterAttachmentDownloadUrl(input: {
   matterId: string;
   attachmentId: string;
+  inline?: boolean;
 }): string {
-  return `${API_BASE_URL}/api/matters/${input.matterId}/attachments/${input.attachmentId}/download`;
+  const base = `${API_BASE_URL}/api/matters/${input.matterId}/attachments/${input.attachmentId}/download`;
+  return input.inline ? `${base}?inline=true` : base;
 }
 
 export type MatterAttachmentPreview = {

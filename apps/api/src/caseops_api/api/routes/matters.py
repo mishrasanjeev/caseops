@@ -90,6 +90,7 @@ from caseops_api.schemas.matter_access import (
 )
 from caseops_api.schemas.matter_bulk_updates import (
     MatterBulkUpdateApplyResponse,
+    MatterBulkUpdateHistoryResponse,
     MatterBulkUpdatePreviewResponse,
 )
 from caseops_api.schemas.matter_imports import (
@@ -238,7 +239,10 @@ from caseops_api.services.matter_audit import (
     matter_audit_event_dict,
 )
 from caseops_api.services.matter_bulk_updates import (
+    MAX_FILE_BYTES as MATTER_BULK_UPDATE_MAX_FILE_BYTES,
     apply_matter_bulk_update,
+    list_matter_bulk_update_history,
+    matter_bulk_update_template,
     preview_matter_bulk_update,
 )
 from caseops_api.services.matter_imports import (
@@ -490,12 +494,13 @@ async def preview_current_company_matter_bulk_update(
     session: DbSession,
     file: Annotated[UploadFile, File(...)],
 ) -> MatterBulkUpdatePreviewResponse:
-    content = await file.read(32 * 1024 * 1024 + 1)
+    content = await file.read(MATTER_BULK_UPDATE_MAX_FILE_BYTES + 1)
     return await run_in_threadpool(
         preview_matter_bulk_update,
         session,
         context=context,
         content=content,
+        filename=file.filename or "upload.xlsx",
     )
 
 
@@ -510,14 +515,45 @@ async def apply_current_company_matter_bulk_update(
     preview_token: Annotated[str, Form(...)],
     file: Annotated[UploadFile, File(...)],
 ) -> MatterBulkUpdateApplyResponse:
-    content = await file.read(32 * 1024 * 1024 + 1)
+    content = await file.read(MATTER_BULK_UPDATE_MAX_FILE_BYTES + 1)
     return await run_in_threadpool(
         apply_matter_bulk_update,
         session,
         context=context,
         content=content,
+        filename=file.filename or "upload.xlsx",
         preview_token=preview_token,
     )
+
+
+@router.get(
+    "/bulk-update/template",
+    summary="Download the controlled existing-matter bulk-update template",
+)
+async def download_matter_bulk_update_template(
+    context: MatterEditor,
+    format: Literal["csv", "xlsx"] = Query(default="xlsx"),
+) -> Response:
+    del context
+    body, content_type, filename = matter_bulk_update_template(format)
+    return Response(
+        content=body,
+        media_type=content_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get(
+    "/bulk-update/history",
+    response_model=MatterBulkUpdateHistoryResponse,
+    summary="List tenant-scoped bulk-update operation history",
+)
+async def current_company_matter_bulk_update_history(
+    context: MatterEditor,
+    session: DbSession,
+    limit: int = Query(default=50, ge=1, le=100),
+) -> MatterBulkUpdateHistoryResponse:
+    return list_matter_bulk_update_history(session, context=context, limit=limit)
 
 
 @router.post(
@@ -2878,6 +2914,7 @@ async def download_current_company_matter_attachment(
     attachment_id: str,
     context: CurrentContext,
     session: DbSession,
+    inline: bool = Query(default=False),
 ) -> FileResponse:
     attachment, storage_path = get_matter_attachment_download(
         session,
@@ -2885,10 +2922,33 @@ async def download_current_company_matter_attachment(
         matter_id=matter_id,
         attachment_id=attachment_id,
     )
+    media_type = attachment.content_type or "application/octet-stream"
+    filename = attachment.original_filename
+    disposition = "attachment"
+    if inline:
+        suffix = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+        allowed_inline_types = {"pdf", "png", "jpg", "jpeg", "gif", "webp"}
+        if suffix not in allowed_inline_types:
+            raise HTTPException(
+                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                detail="Only PDF and image attachments can be displayed inline.",
+            )
+        expected_types = {
+            "pdf": "application/pdf",
+            "png": "image/png",
+            "jpg": "image/jpeg",
+            "jpeg": "image/jpeg",
+            "gif": "image/gif",
+            "webp": "image/webp",
+        }
+        media_type = expected_types[suffix]
+        disposition = "inline"
     return FileResponse(
         path=storage_path,
-        media_type=attachment.content_type or "application/octet-stream",
-        filename=attachment.original_filename,
+        media_type=media_type,
+        filename=filename,
+        content_disposition_type=disposition,
+        headers={"X-Content-Type-Options": "nosniff"},
     )
 
 
