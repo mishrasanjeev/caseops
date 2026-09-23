@@ -62,9 +62,15 @@ type MatterRecord = {
   updated_at: string;
 };
 
+type TenantAIPolicy = {
+  workspace_assistant_enabled: boolean;
+  policy_version: number;
+};
+
 let api: APIRequestContext;
 let identity: LoginPayload;
 let matter: MatterRecord;
+let originalAssistantPolicy: TenantAIPolicy | undefined;
 
 function password(): string {
   const value =
@@ -152,9 +158,40 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
     });
     await expectStatus(created, 200, "create workbook regression matter");
     matter = (await created.json()) as MatterRecord;
+    const policy = await api.get(
+      `${API_BASE_URL}/api/admin/tenant-ai-policy`,
+      { headers: headers() },
+    );
+    await expectStatus(policy, 200, "read original assistant policy");
+    originalAssistantPolicy = (await policy.json()) as TenantAIPolicy;
   });
 
   test.afterAll(async () => {
+    if (originalAssistantPolicy) {
+      const currentPolicyResponse = await api.get(
+        `${API_BASE_URL}/api/admin/tenant-ai-policy`,
+        { headers: headers() },
+      );
+      await expectStatus(currentPolicyResponse, 200, "read assistant policy for cleanup");
+      const currentPolicy = (await currentPolicyResponse.json()) as TenantAIPolicy;
+      if (
+        currentPolicy.workspace_assistant_enabled !==
+        originalAssistantPolicy.workspace_assistant_enabled
+      ) {
+        const restored = await api.patch(
+          `${API_BASE_URL}/api/admin/tenant-ai-policy`,
+          {
+            headers: headers(),
+            data: {
+              workspace_assistant_enabled:
+                originalAssistantPolicy.workspace_assistant_enabled,
+              expected_version: currentPolicy.policy_version,
+            },
+          },
+        );
+        await expectStatus(restored, 200, "restore original assistant policy");
+      }
+    }
     if (matter?.id && matter.status !== "disposed") {
       const current = await api.get(
         `${API_BASE_URL}/api/matters/${matter.id}`,
@@ -204,7 +241,16 @@ test.describe.serial("Ram 2026-09-02 workbook regressions", () => {
     page,
   }) => {
     await signIn(page);
+    const loadedPolicy = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === "/api/admin/tenant-ai-policy" &&
+        response.request().method() === "GET",
+    );
     await page.goto(`${BASE_URL}/app/admin`);
+    const policyResponse = await loadedPolicy;
+    await expectStatus(policyResponse, 200, "load assistant policy in browser");
+    const browserPolicy = (await policyResponse.json()) as TenantAIPolicy;
+    expect(browserPolicy.policy_version).toBeGreaterThan(0);
     const toggle = page.getByTestId("tenant-ai-policy-assistant-toggle");
     await expect(toggle).toBeVisible();
     await expect(toggle).toBeEnabled();

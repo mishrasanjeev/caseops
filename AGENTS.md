@@ -459,6 +459,12 @@ requirements when using the fallback.
 - A no-paid-provider rejection is successful test isolation, not evidence that
   the configured provider is unavailable. Regular, bulk, Docker, and
   production regression runs must assert the rejection without spending.
+- Scheduled production monitoring must stay read-only. Run destructive QA
+  journeys only for an exact-release dispatch while private-projection
+  maintenance is paused and drained; after the mutations stop, require one
+  converged maintenance execution and a second clean no-rebuild execution
+  before resuming cadence. Do not suppress the QA tenant, relax the 300-second
+  SLO, or treat a stale-writer fence as corruption.
   Provider-paid operation is established through authenticated human use and
   provider account evidence, never by an automated credit-bearing canary.
 - An automatic next-hearing sync is an identity-and-evidence workflow, not a

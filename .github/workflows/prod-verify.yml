@@ -101,7 +101,7 @@ jobs:
             echo "Add it under repo Settings → Secrets and variables → Actions."
             exit 1
           fi
-          if [ -z "$CASEOPS_IP_QA_PASSWORD" ]; then
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -z "$CASEOPS_IP_QA_PASSWORD" ]; then
             echo "::error::CASEOPS_IP_QA_PASSWORD secret is not configured."
             echo "Add it under repo Settings → Secrets and variables → Actions."
             exit 1
@@ -152,6 +152,7 @@ jobs:
         run: echo "ready=true" >> "$GITHUB_OUTPUT"
 
       - name: Run prod-Playwright suite (ram-batch)
+        if: github.event_name == 'workflow_dispatch'
         env:
           CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
           # Optional overrides — defaults are baked into the setup file
@@ -186,7 +187,7 @@ jobs:
 
       - name: Check IPLF-037B renewal acceptance configuration
         id: renewal-prerequisites
-        if: always() && !cancelled() && steps.prod-playwright-prerequisites.outputs.ready == 'true'
+        if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && steps.prod-playwright-prerequisites.outputs.ready == 'true'
         env:
           CASEOPS_IP_RENEWAL_CALENDAR_VERSION_ID: ${{ vars.CASEOPS_IP_RENEWAL_CALENDAR_VERSION_ID }}
           CASEOPS_IP_RENEWAL_RULE_VERSION_ID: ${{ vars.CASEOPS_IP_RENEWAL_RULE_VERSION_ID }}
@@ -218,7 +219,7 @@ jobs:
           fi
 
       - name: Run IPLF-037B renewal acceptance
-        if: always() && !cancelled() && steps.prod-playwright-prerequisites.outputs.ready == 'true' && steps.renewal-prerequisites.outputs.configured == 'true'
+        if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && steps.prod-playwright-prerequisites.outputs.ready == 'true' && steps.renewal-prerequisites.outputs.configured == 'true'
         timeout-minutes: 8
         env:
           CASEOPS_IP_QA_PASSWORD: ${{ secrets.CASEOPS_IP_QA_PASSWORD }}
@@ -231,7 +232,7 @@ jobs:
 
       - name: Check IPLF-039F cost acceptance configuration
         id: ip-cost-prerequisites
-        if: always() && !cancelled() && steps.prod-playwright-prerequisites.outputs.ready == 'true'
+        if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && steps.prod-playwright-prerequisites.outputs.ready == 'true'
         env:
           CASEOPS_IP_COST_PROD_TEST_TENANT_ACK: ${{ vars.CASEOPS_IP_COST_PROD_TEST_TENANT_ACK }}
           CASEOPS_IP_COST_PROD_BILLING_MATTER_IDS_JSON: ${{ vars.CASEOPS_IP_COST_PROD_BILLING_MATTER_IDS_JSON }}
@@ -272,7 +273,7 @@ jobs:
           fi
 
       - name: Run IPLF-039F cost acceptance
-        if: always() && !cancelled() && steps.prod-playwright-prerequisites.outputs.ready == 'true' && steps.ip-cost-prerequisites.outputs.configured == 'true'
+        if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && steps.prod-playwright-prerequisites.outputs.ready == 'true' && steps.ip-cost-prerequisites.outputs.configured == 'true'
         timeout-minutes: 8
         env:
           CASEOPS_EXPECTED_RELEASE_SHA: ${{ steps.deployed-release.outputs.release_sha }}
@@ -289,7 +290,7 @@ jobs:
         # provider or quota incident.  The Notice suite is still a required
         # production signal, so run it after a RAM failure and retain both
         # outcomes in the same fail-closed workflow result.
-        if: always() && !cancelled() && steps.prod-playwright-prerequisites.outputs.ready == 'true'
+        if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && steps.prod-playwright-prerequisites.outputs.ready == 'true'
         env:
           CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
           PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
@@ -311,7 +312,7 @@ jobs:
           fi
 
       - name: Run exact-release patent and domain journeys
-        if: always() && !cancelled() && steps.patent-statute-prerequisites.outputs.ready == 'true'
+        if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && steps.patent-statute-prerequisites.outputs.ready == 'true'
         env:
           PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
           PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}

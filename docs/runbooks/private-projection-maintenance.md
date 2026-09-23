@@ -102,6 +102,16 @@ one successful rebuild cadence followed by a second clean cadence. A new event
 after a clean rebuild starts a new repair interval; it is not evidence that the
 preceding rebuild failed.
 
+Recurring scheduled production verification is read-only. Mutation-capable RAM,
+Notice, cost and patent journeys run only for an exact-release dispatch. The
+canonical deploy defaults to pausing and draining private-projection maintenance
+before those release-owned QA mutations and leaves the cadence paused after
+dispatch. Resume it only after the dispatched workflow succeeds, a manual
+maintenance execution converges with no blockers, and a second execution reports
+`rebuild_count=0`. This prevents synthetic QA writes from repeatedly fencing a
+legitimate shadow while preserving the same five-minute SLO and alert contract
+for every tenant.
+
 An interrupted worker can leave an unreadable `building` or `ready` shadow behind
 before its normal exception cleanup runs. Once the next worker owns the tenant
 advisory lease, a shadow older than 15 minutes is treated as crashed residue: its

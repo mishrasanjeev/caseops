@@ -192,6 +192,9 @@ test("ENH-006 next hearing flows from new matter into hearings, calendar, and ca
   await page.goto(`${web}/app/calendar`);
   await page.getByRole("tab", { name: "week" }).click();
   const calendarDay = page.getByTestId(`calendar-week-day-${hearingDate}`);
+  if ((await calendarDay.count()) === 0) {
+    await page.getByTestId("calendar-next-month").click();
+  }
   await expect(calendarDay).toBeVisible();
   const calendarEvent = calendarDay.locator(`a[href="/app/matters/${created!.id}/hearings"]`).first();
   await expect(calendarEvent).toBeVisible();

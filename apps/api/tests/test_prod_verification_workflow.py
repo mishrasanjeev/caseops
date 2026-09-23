@@ -78,6 +78,26 @@ def test_prod_verification_cancels_superseded_runs() -> None:
     assert "cancel-in-progress: true" in concurrency
 
 
+def test_scheduled_prod_verification_is_read_only() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "prod-verify.yml").read_text(
+        encoding="utf-8"
+    )
+
+    for step_name in (
+        "Run prod-Playwright suite (ram-batch)",
+        "Run IPLF-037B renewal acceptance",
+        "Run IPLF-039F cost acceptance",
+        "Run prod-Playwright suite (notice module)",
+        "Run exact-release patent and domain journeys",
+    ):
+        step = workflow.split(f"- name: {step_name}", 1)[1].split("- name:", 1)[0]
+        assert "github.event_name == 'workflow_dispatch'" in step
+    statute_step = workflow.split(
+        "- name: Verify every release-owned statute source record", 1
+    )[1].split("- name:", 1)[0]
+    assert "github.event_name == 'workflow_dispatch'" not in statute_step
+
+
 def test_prod_verification_runs_notice_suite_after_ram_failure() -> None:
     """The required Notice signal must not disappear behind another failure."""
 

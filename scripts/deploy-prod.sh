@@ -113,7 +113,12 @@ WEB_MIN_INSTANCES="${WEB_MIN_INSTANCES:-1}"
 # releases preserve the historical path exactly.
 A0_CAPTURE_RULE_GOVERNANCE_BASELINE="${CASEOPS_A0_CAPTURE_RULE_GOVERNANCE_BASELINE:-false}"
 A0_RULE_GOVERNANCE_BASELINE_OUTPUT="${CASEOPS_A0_RULE_GOVERNANCE_BASELINE_OUTPUT:-}"
-PRIVATE_PROJECTION_SCHEDULER_HOLD="${CASEOPS_PRIVATE_PROJECTION_SCHEDULER_HOLD:-false}"
+# Destructive exact-release browser verification writes the two dedicated QA
+# tenants for several minutes. Default to holding projection maintenance until
+# that verification finishes and two operator-controlled clean cadences pass.
+# Scheduled verification is read-only, so normal cadence can remain enabled
+# between releases without colliding with synthetic QA mutation.
+PRIVATE_PROJECTION_SCHEDULER_HOLD="${CASEOPS_PRIVATE_PROJECTION_SCHEDULER_HOLD:-true}"
 
 if [[ "${A0_CAPTURE_RULE_GOVERNANCE_BASELINE}" != "true" && "${A0_CAPTURE_RULE_GOVERNANCE_BASELINE}" != "false" ]]; then
   echo "ERROR: CASEOPS_A0_CAPTURE_RULE_GOVERNANCE_BASELINE must be true or false."
@@ -301,6 +306,12 @@ echo "--- drain tracked-case provider workers before migration ---"
 python scripts/scheduler_inventory.py quiesce \
   --scheduler caseops-case-tracking-poll-1800-ist \
   --project "${PROJECT}" --region "${REGION}" --wait-seconds 180
+if [[ "${PRIVATE_PROJECTION_SCHEDULER_HOLD}" == "true" ]]; then
+  echo "--- drain private projection maintenance before release-owned QA mutation ---"
+  python scripts/scheduler_inventory.py quiesce \
+    --scheduler caseops-private-projection-maintenance-cadence \
+    --project "${PROJECT}" --region "${REGION}" --wait-seconds 180
+fi
 
 # Resolve the API tag while it is known to exist and pin every long-lived job
 # to the digest. Artifact Registry cleanup may delete tags; digest references
@@ -459,11 +470,21 @@ if [[ "${PRIVATE_PROJECTION_SCHEDULER_HOLD}" == "true" ]]; then
   )
   echo "  private projection scheduler remains paused through release certification."
 fi
-python scripts/scheduler_inventory.py reconcile \
-  --project "${PROJECT}" \
-  --region "${REGION}" \
-  --image "${API_IMMUTABLE_IMAGE}" \
-  "${SCHEDULER_HOLD_ARGS[@]}"
+for reconcile_attempt in 1 2 3; do
+  if python scripts/scheduler_inventory.py reconcile \
+    --project "${PROJECT}" \
+    --region "${REGION}" \
+    --image "${API_IMMUTABLE_IMAGE}" \
+    "${SCHEDULER_HOLD_ARGS[@]}"; then
+    break
+  fi
+  if [[ "${reconcile_attempt}" == "3" ]]; then
+    echo "ERROR: recurring-job inventory reconciliation failed after three bounded attempts."
+    exit 1
+  fi
+  echo "  scheduler control plane did not converge (attempt ${reconcile_attempt}/3); retrying."
+  sleep $((reconcile_attempt * 5))
+done
 
 # Private projection failures have a zero-error-budget security impact at
 # hydration and a five-minute removal SLO in the derived index. Reconcile the
@@ -1136,5 +1157,8 @@ gh workflow run prod-verify.yml \
   --ref main \
   -f "expected_release_sha=${HEAD_SHA}"
 echo "  prod-verify.yml dispatched for exact release ${HEAD_SHA}."
+if [[ "${PRIVATE_PROJECTION_SCHEDULER_HOLD}" == "true" ]]; then
+  echo "  private projection cadence remains paused until prod-verify succeeds, followed by one clean rebuild execution and a second no-rebuild execution."
+fi
 
 echo "=== deploy-prod.sh — DONE ${TAG} ==="

@@ -307,10 +307,15 @@ def test_a0_production_acceptance_is_an_isolated_verify_only_gate() -> None:
         "steps.prod-playwright-prerequisites.outputs.ready == 'true'"
     )
     assert "id: prod-playwright-prerequisites" in workflow
-    # Renewal preflight, renewal acceptance, and Notice remain visible
-    # independently after the broad RAM batch. The historical A0 transition
-    # gate additionally requires an explicit manual opt-in.
-    assert workflow.count(prerequisite_gate) == 7
+    # Read-only scheduled checks and exact-release mutation gates remain
+    # independently visible after a broad RAM failure. The historical A0
+    # transition additionally requires an explicit manual opt-in.
+    assert workflow.count(prerequisite_gate) == 2
+    dispatch_prerequisite_gate = (
+        "if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && "
+        "steps.prod-playwright-prerequisites.outputs.ready == 'true'"
+    )
+    assert workflow.count(dispatch_prerequisite_gate) == 5
     assert (prerequisite_gate + " && inputs.run_historical_a0_gate == true") in workflow
     assert "CASEOPS_IP_A0_PROD_MODE: verify" in workflow
     assert (
@@ -2046,6 +2051,36 @@ def test_deploy_prod_keeps_private_projection_scheduler_paused_during_incident(
         and "--hold-scheduler-paused caseops-private-projection-maintenance-cadence" in call
         for call in calls
     )
+
+
+def test_deploy_prod_defaults_to_draining_and_holding_private_projection(
+    tmp_path: Path,
+) -> None:
+    result = _run_deploy_with_fakes(tmp_path, "abcdef1")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+    assert any(
+        "scheduler_inventory.py quiesce" in call
+        and "--scheduler caseops-private-projection-maintenance-cadence" in call
+        for call in calls
+    )
+    assert any(
+        "scheduler_inventory.py reconcile" in call
+        and "--hold-scheduler-paused caseops-private-projection-maintenance-cadence" in call
+        for call in calls
+    )
+    assert "private projection cadence remains paused" in result.stdout
+
+
+def test_deploy_prod_retries_scheduler_reconciliation_with_a_finite_bound() -> None:
+    script = _read_repo_text("scripts/deploy-prod.sh")
+
+    reconcile = script.split("--- 3/6 reconcile recurring-job inventory ---", 1)[1].split(
+        "# Private projection failures", 1
+    )[0]
+    assert "for reconcile_attempt in 1 2 3" in reconcile
+    assert "failed after three bounded attempts" in reconcile
 
 
 def test_deploy_prod_rejects_invalid_private_projection_scheduler_hold(
