@@ -465,6 +465,11 @@ requirements when using the fallback.
   converged maintenance execution and a second clean no-rebuild execution
   before resuming cadence. Do not suppress the QA tenant, relax the 300-second
   SLO, or treat a stale-writer fence as corruption.
+- A recurring-job drain must size its complete unfiltered execution scan from
+  observed retained production history, not a small fixture. The five-minute
+  private-projection job retained 1,768 executions on 2026-09-23; preserve a
+  bounded sentinel above that volume and fail closed when the sentinel is hit,
+  because a newest-only sample can hide an older running execution.
   Provider-paid operation is established through authenticated human use and
   provider account evidence, never by an automated credit-bearing canary.
 - An automatic next-hearing sync is an identity-and-evidence workflow, not a

@@ -42,7 +42,7 @@ def wire(monkeypatch, histories):
                 "httpTarget": {"uri": guard.scheduler_uri("p", "r", JOB)},
             }
         assert arguments[:4] == ["run", "jobs", "executions", "list"]
-        assert "--limit=1001" in arguments
+        assert f"--limit={guard.EXECUTION_DRAIN_SCAN_SENTINEL}" in arguments
         assert not any(arg.startswith("--filter") for arg in arguments)
         assert not any(arg.startswith("--sort-by") for arg in arguments)
         return next(histories)
@@ -93,12 +93,21 @@ def test_drain_deadline_keeps_scheduler_paused_without_cancelling_paid_work(monk
         [{**execution(), "status": {"completionTime": "not-a-date"}}],
         [{**execution(), "status": {"runningCount": True}}],
         [{**execution(), "status": {"completionTime": "2026-09-09T03:00:00"}}],
-        [execution(str(i), done=True) for i in range(1001)],
+        [
+            execution(str(i), done=True)
+            for i in range(guard.EXECUTION_DRAIN_SCAN_SENTINEL)
+        ],
     ],
 )
 def test_invalid_or_truncated_execution_inventory_never_proves_drain(history):
     with pytest.raises(guard.InventoryError):
         guard._unfinished_executions(history, job_name=JOB)
+
+
+def test_observed_production_execution_history_stays_below_drain_sentinel():
+    retained = [execution(str(i), done=True) for i in range(1768)]
+
+    assert guard._unfinished_executions(retained, job_name=JOB) == []
 
 
 def test_failed_count_is_not_completion_and_completion_with_running_task_is_not_drain():

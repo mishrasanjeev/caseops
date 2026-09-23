@@ -24,6 +24,10 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INVENTORY = REPO_ROOT / "infra" / "cloudrun" / "scheduler-inventory.json"
 DIGEST_IMAGE = re.compile(r"^.+@sha256:[a-f0-9]{64}$")
+# The five-minute private-projection job retained 1,768 executions in production
+# on 2026-09-23. Keep a bounded unfiltered scan so an older active execution
+# cannot hide behind newer completed rows, with room above the observed volume.
+EXECUTION_DRAIN_SCAN_SENTINEL = 3001
 
 
 class InventoryError(RuntimeError):
@@ -815,7 +819,10 @@ def _selected_job(inventory: dict[str, Any], scheduler: str) -> dict[str, Any]:
 
 def _unfinished_executions(payload: object, *, job_name: str) -> list[str]:
     # Read the unfiltered history: a newest-only sample can hide an older worker.
-    if not isinstance(payload, list) or len(payload) >= 1001:
+    if (
+        not isinstance(payload, list)
+        or len(payload) >= EXECUTION_DRAIN_SCAN_SENTINEL
+    ):
         raise InventoryError("execution inventory is invalid or truncated")
     unfinished: list[str] = []
     seen: set[str] = set()
@@ -906,7 +913,7 @@ def quiesce(
                 project,
                 "--region",
                 region,
-                "--limit=1001",
+                f"--limit={EXECUTION_DRAIN_SCAN_SENTINEL}",
                 "--format=json",
             ],
             expect_json=True,
