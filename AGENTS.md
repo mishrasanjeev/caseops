@@ -470,6 +470,10 @@ requirements when using the fallback.
   private-projection job retained 1,768 executions on 2026-09-23; preserve a
   bounded sentinel above that volume and fail closed when the sentinel is hit,
   because a newest-only sample can hide an older running execution.
+- Release control-plane reads that establish immutable image identity may retry
+  transient transport and 5xx failures with a small finite bound. Revalidate
+  the digest format after every attempt and fail before migration or routing if
+  the bound is exhausted; never turn the retry into an unbounded release wait.
   Provider-paid operation is established through authenticated human use and
   provider account evidence, never by an automated credit-bearing canary.
 - An automatic next-hearing sync is an identity-and-evidence workflow, not a

@@ -188,6 +188,26 @@ assert_current_main() {
   echo "  canonical main verified at ${phase}: ${origin_main_sha}"
 }
 
+resolve_image_digest() {
+  local image="$1"
+  local attempt digest
+  for attempt in 1 2 3; do
+    if digest=$(gcloud artifacts docker images describe "${image}" \
+      --project "${PROJECT}" --format='value(image_summary.digest)'); then
+      if [[ "${digest}" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+        printf '%s\n' "${digest}"
+        return 0
+      fi
+    fi
+    if [[ "${attempt}" == "3" ]]; then
+      echo "ERROR: could not resolve immutable digest for ${image} after three bounded attempts." >&2
+      return 1
+    fi
+    echo "  Artifact Registry digest lookup failed (attempt ${attempt}/3); retrying." >&2
+    sleep $((attempt * 5))
+  done
+}
+
 # A long release can otherwise route an obsolete commit after another PR lands
 # on main. Refresh the remote ref before the first cloud call, then repeat at
 # every mutation/activation boundary below.
@@ -316,12 +336,7 @@ fi
 # Resolve the API tag while it is known to exist and pin every long-lived job
 # to the digest. Artifact Registry cleanup may delete tags; digest references
 # keep scheduled jobs runnable and prevent a repeat of the July 2026 report outage.
-API_DIGEST=$(gcloud artifacts docker images describe "${API_IMAGE}" \
-  --project "${PROJECT}" --format='value(image_summary.digest)')
-if [[ ! "${API_DIGEST}" =~ ^sha256:[a-f0-9]{64}$ ]]; then
-  echo "ERROR: could not resolve immutable digest for ${API_IMAGE}."
-  exit 1
-fi
+API_DIGEST=$(resolve_image_digest "${API_IMAGE}")
 API_IMMUTABLE_IMAGE="${REGISTRY}/caseops-api@${API_DIGEST}"
 echo "  immutable api image=${API_IMMUTABLE_IMAGE}"
 

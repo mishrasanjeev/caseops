@@ -1365,6 +1365,7 @@ def _run_deploy_with_fakes(
     main_drift_after_fetches: int | None = None,
     private_projection_scheduler_hold: str | None = None,
     active_prod_verify_runs: str = "",
+    artifact_describe_failures: int = 0,
 ) -> subprocess.CompletedProcess[str]:
     fake_bin = tmp_path / "fake-bin"
     fake_bin.mkdir()
@@ -1433,6 +1434,15 @@ if [[ "$*" == *"run jobs execute caseops-db-index-health"* && \
   "${FAKE_INDEX_HEALTH_MODE}" == "fail" ]]; then
   exit 56
 elif [[ "$*" == *"artifacts docker images describe"* ]]; then
+  count=0
+  if [[ -f "${FAKE_ARTIFACT_DESCRIBE_COUNT}" ]]; then
+    count=$(cat "${FAKE_ARTIFACT_DESCRIBE_COUNT}")
+  fi
+  count=$((count + 1))
+  printf '%s\n' "${count}" > "${FAKE_ARTIFACT_DESCRIBE_COUNT}"
+  if [[ "${count}" -le "${FAKE_ARTIFACT_DESCRIBE_FAILURES}" ]]; then
+    exit 57
+  fi
   printf '%s\n' 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
 elif [[ "$*" == *"run jobs describe caseops-migrate-job"* && "$*" == *"--format=json"* ]]; then
   printf '%s\n' "${FAKE_MIGRATION_JOB_JSON}"
@@ -1789,6 +1799,10 @@ exec "${FAKE_REAL_PYTHON}" "$@"
             "FAKE_GH_ACTIVE_RUNS": active_prod_verify_runs,
             "FAKE_GH_RUNS_CLEARED": _bash_path(tmp_path / "gh-runs-cleared"),
             "FAKE_INDEX_HEALTH_MODE": index_health_mode,
+            "FAKE_ARTIFACT_DESCRIBE_COUNT": _bash_path(
+                tmp_path / "artifact-describe-count"
+            ),
+            "FAKE_ARTIFACT_DESCRIBE_FAILURES": str(artifact_describe_failures),
             "FAKE_QA_AFTER_JSON": _a0_qa_job_json(
                 immutable_image,
                 5,
@@ -2081,6 +2095,18 @@ def test_deploy_prod_retries_scheduler_reconciliation_with_a_finite_bound() -> N
     )[0]
     assert "for reconcile_attempt in 1 2 3" in reconcile
     assert "failed after three bounded attempts" in reconcile
+
+
+def test_deploy_prod_retries_transient_artifact_digest_lookup(tmp_path: Path) -> None:
+    result = _run_deploy_with_fakes(
+        tmp_path,
+        "abcdef1",
+        artifact_describe_failures=1,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (tmp_path / "artifact-describe-count").read_text(encoding="utf-8").strip() == "2"
+    assert "Artifact Registry digest lookup failed (attempt 1/3)" in result.stderr
 
 
 def test_deploy_prod_rejects_invalid_private_projection_scheduler_hold(
