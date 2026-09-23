@@ -459,6 +459,12 @@ requirements when using the fallback.
 - A no-paid-provider rejection is successful test isolation, not evidence that
   the configured provider is unavailable. Regular, bulk, Docker, and
   production regression runs must assert the rejection without spending.
+- Production verification must fit the repository's effective 40-minute
+  GitHub-hosted job ceiling. Serialize mutation-capable QA shards as separate
+  jobs, pin and recheck the same exact serving SHA at every shard boundary,
+  retain sibling results after a shard failure, and write release evidence only
+  after every required shard succeeds. A suite canceled after earlier green
+  subsets is incomplete, never a product pass.
 - Scheduled production monitoring must stay read-only. Run destructive QA
   journeys only for an exact-release dispatch while private-projection
   maintenance is paused and drained; after the mutations stop, require one

@@ -36,20 +36,25 @@ on:
         type: boolean
 
 concurrency:
-  # Two scheduled runs on the same prod surface contending for the QA
-  # Bot session would race the storageState file. Cancel the superseded
-  # run so it cannot continue mutating QA while a newer release is serving.
-  group: prod-verify
+  # Scheduled verification is read-only and must not cancel an exact-release
+  # dispatch that is holding the projection scheduler paused. Within each
+  # trigger class, cancel a superseded run so two mutation-capable release
+  # verifiers cannot contend for the persistent QA tenants.
+  group: prod-verify-${{ github.event_name }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  prod-playwright:
-    name: Prod-Playwright suites
+  resolve-release:
+    name: Resolve exact production release
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 5
+    outputs:
+      release_sha: ${{ steps.deployed-release.outputs.release_sha }}
+      api_revision: ${{ steps.deployed-release.outputs.api_revision }}
+      web_revision: ${{ steps.deployed-release.outputs.web_revision }}
     steps:
       - name: Check out release-verification control plane
         uses: actions/checkout@v4
@@ -73,17 +78,43 @@ jobs:
           fi
           python scripts/verify_deployed_release.py "${args[@]}"
 
-      - name: Check out the exact serving production release
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ steps.deployed-release.outputs.release_sha }}
-
       - name: Record exact serving identity
         run: |
-          test "$(git rev-parse HEAD)" = "${{ steps.deployed-release.outputs.release_sha }}"
           echo "release_sha=${{ steps.deployed-release.outputs.release_sha }}"
           echo "api_revision=${{ steps.deployed-release.outputs.api_revision }}"
           echo "web_revision=${{ steps.deployed-release.outputs.web_revision }}"
+
+  prod-playwright-shards:
+    name: Prod Playwright (${{ matrix.suite }})
+    if: github.event_name == 'workflow_dispatch'
+    needs: resolve-release
+    runs-on: ubuntu-latest
+    # GitHub-hosted execution is capped at 40 minutes for this repository.
+    # Keep each shard below that boundary and serialize mutation-capable QA
+    # work so persistent test tenants cannot race each other.
+    timeout-minutes: 38
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        suite:
+          - tester
+          - legacy
+          - supporting
+          - patent-statute
+    steps:
+      - name: Check out the exact serving production release
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-release.outputs.release_sha }}
+
+      - name: Recheck exact serving identity at shard boundary
+        run: |
+          test "$(git rev-parse HEAD)" = "${{ needs.resolve-release.outputs.release_sha }}"
+          python scripts/verify_deployed_release.py \
+            --expected-sha "${{ needs.resolve-release.outputs.release_sha }}" \
+            --wait-seconds 30 \
+            --interval-seconds 5
 
       - name: Gate on production QA secrets
         # Fail loudly + early if the secret is missing. Without it the
@@ -94,19 +125,18 @@ jobs:
           CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
           CASEOPS_IP_QA_PASSWORD: ${{ secrets.CASEOPS_IP_QA_PASSWORD }}
           CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET: ${{ secrets.CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET }}
-          EVENT_NAME: ${{ github.event_name }}
         run: |
           if [ -z "$CASEOPS_QA_PASSWORD" ]; then
             echo "::error::CASEOPS_QA_PASSWORD secret is not configured."
             echo "Add it under repo Settings → Secrets and variables → Actions."
             exit 1
           fi
-          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -z "$CASEOPS_IP_QA_PASSWORD" ]; then
+          if [ -z "$CASEOPS_IP_QA_PASSWORD" ]; then
             echo "::error::CASEOPS_IP_QA_PASSWORD secret is not configured."
             echo "Add it under repo Settings → Secrets and variables → Actions."
             exit 1
           fi
-          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -z "$CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET" ]; then
+          if [ -z "$CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET" ]; then
             echo "::error::CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET is not configured."
             echo "Provision the same dedicated value in GitHub Actions and the API Secret Manager binding."
             exit 1
@@ -151,43 +181,51 @@ jobs:
         id: prod-playwright-prerequisites
         run: echo "ready=true" >> "$GITHUB_OUTPUT"
 
-      - name: Run prod-Playwright suite (ram-batch)
-        if: github.event_name == 'workflow_dispatch'
+      - name: Run canonical tester production regressions
+        if: matrix.suite == 'tester'
         env:
           CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
-          # Optional overrides — defaults are baked into the setup file
-          # (https://caseops.ai + qa-bot@caseops.ai + caseops-qa).
           PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
           PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
           CASEOPS_QA_EMAIL: ${{ vars.CASEOPS_QA_EMAIL }}
           CASEOPS_QA_SLUG: ${{ vars.CASEOPS_QA_SLUG }}
-          # Canonical dated regressions run against the same dedicated QA
-          # tenant in CI. Local operators can still provide separate tester
-          # credentials through these environment variables when needed.
           CASEOPS_RAM_PROD_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
           CASEOPS_RAM_PROD_EMAIL: ${{ vars.CASEOPS_QA_EMAIL }}
           CASEOPS_RAM_PROD_SLUG: ${{ vars.CASEOPS_QA_SLUG }}
           CASEOPS_IP_QA_PASSWORD: ${{ secrets.CASEOPS_IP_QA_PASSWORD }}
-          CASEOPS_EXPECTED_RELEASE_SHA: ${{ steps.deployed-release.outputs.release_sha }}
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
           CASEOPS_QA_TRACKED_CASE_BOOKMARK_ID: ${{ vars.CASEOPS_QA_TRACKED_CASE_BOOKMARK_ID }}
           CASEOPS_QA_TRACKED_CASE_CNR: ${{ vars.CASEOPS_QA_TRACKED_CASE_CNR }}
-        run: npx playwright test --config=playwright.prod-ram.config.ts --project=prod-chromium --project=tester-prod-chromium --reporter=list --output=test-results/ram
+        run: npx playwright test --config=playwright.prod-ram.config.ts --project=tester-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/tester
+
+      - name: Run legacy QA production regressions
+        if: matrix.suite == 'legacy'
+        env:
+          CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
+          PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
+          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
+          CASEOPS_QA_EMAIL: ${{ vars.CASEOPS_QA_EMAIL }}
+          CASEOPS_QA_SLUG: ${{ vars.CASEOPS_QA_SLUG }}
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
+          CASEOPS_QA_TRACKED_CASE_BOOKMARK_ID: ${{ vars.CASEOPS_QA_TRACKED_CASE_BOOKMARK_ID }}
+          CASEOPS_QA_TRACKED_CASE_CNR: ${{ vars.CASEOPS_QA_TRACKED_CASE_CNR }}
+        run: npx playwright test --config=playwright.prod-ram.config.ts --project=prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/legacy
 
       - name: Run IPLF-027B A0 quiescence acceptance
         # This is immutable historical rollout evidence tied to one exact
         # predecessor fixture. It is available for deliberate replay but is
         # not a recurring release-health gate after that fixture is retired.
-        if: always() && !cancelled() && steps.prod-playwright-prerequisites.outputs.ready == 'true' && inputs.run_historical_a0_gate == true
+        if: always() && !cancelled() && matrix.suite == 'supporting' && steps.prod-playwright-prerequisites.outputs.ready == 'true' && inputs.run_historical_a0_gate == true
         timeout-minutes: 5
         env:
           CASEOPS_IP_QA_PASSWORD: ${{ secrets.CASEOPS_IP_QA_PASSWORD }}
-          CASEOPS_EXPECTED_RELEASE_SHA: ${{ steps.deployed-release.outputs.release_sha }}
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
           CASEOPS_IP_A0_PROD_MODE: verify
         run: npx playwright test --config=playwright.ip-a0-prod.config.ts --reporter=list --output=test-results/ip-a0
 
       - name: Check IPLF-037B renewal acceptance configuration
         id: renewal-prerequisites
-        if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && steps.prod-playwright-prerequisites.outputs.ready == 'true'
+        if: always() && !cancelled() && matrix.suite == 'supporting' && steps.prod-playwright-prerequisites.outputs.ready == 'true'
         env:
           CASEOPS_IP_RENEWAL_CALENDAR_VERSION_ID: ${{ vars.CASEOPS_IP_RENEWAL_CALENDAR_VERSION_ID }}
           CASEOPS_IP_RENEWAL_RULE_VERSION_ID: ${{ vars.CASEOPS_IP_RENEWAL_RULE_VERSION_ID }}
@@ -219,11 +257,11 @@ jobs:
           fi
 
       - name: Run IPLF-037B renewal acceptance
-        if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && steps.prod-playwright-prerequisites.outputs.ready == 'true' && steps.renewal-prerequisites.outputs.configured == 'true'
+        if: always() && !cancelled() && matrix.suite == 'supporting' && steps.prod-playwright-prerequisites.outputs.ready == 'true' && steps.renewal-prerequisites.outputs.configured == 'true'
         timeout-minutes: 8
         env:
           CASEOPS_IP_QA_PASSWORD: ${{ secrets.CASEOPS_IP_QA_PASSWORD }}
-          CASEOPS_EXPECTED_RELEASE_SHA: ${{ steps.deployed-release.outputs.release_sha }}
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
           CASEOPS_IP_RENEWAL_CALENDAR_VERSION_ID: ${{ vars.CASEOPS_IP_RENEWAL_CALENDAR_VERSION_ID }}
           CASEOPS_IP_RENEWAL_RULE_VERSION_ID: ${{ vars.CASEOPS_IP_RENEWAL_RULE_VERSION_ID }}
           CASEOPS_IP_RENEWAL_GRACE_RULE_VERSION_ID: ${{ vars.CASEOPS_IP_RENEWAL_GRACE_RULE_VERSION_ID }}
@@ -232,7 +270,7 @@ jobs:
 
       - name: Check IPLF-039F cost acceptance configuration
         id: ip-cost-prerequisites
-        if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && steps.prod-playwright-prerequisites.outputs.ready == 'true'
+        if: always() && !cancelled() && matrix.suite == 'supporting' && steps.prod-playwright-prerequisites.outputs.ready == 'true'
         env:
           CASEOPS_IP_COST_PROD_TEST_TENANT_ACK: ${{ vars.CASEOPS_IP_COST_PROD_TEST_TENANT_ACK }}
           CASEOPS_IP_COST_PROD_BILLING_MATTER_IDS_JSON: ${{ vars.CASEOPS_IP_COST_PROD_BILLING_MATTER_IDS_JSON }}
@@ -273,10 +311,10 @@ jobs:
           fi
 
       - name: Run IPLF-039F cost acceptance
-        if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && steps.prod-playwright-prerequisites.outputs.ready == 'true' && steps.ip-cost-prerequisites.outputs.configured == 'true'
+        if: always() && !cancelled() && matrix.suite == 'supporting' && steps.prod-playwright-prerequisites.outputs.ready == 'true' && steps.ip-cost-prerequisites.outputs.configured == 'true'
         timeout-minutes: 8
         env:
-          CASEOPS_EXPECTED_RELEASE_SHA: ${{ steps.deployed-release.outputs.release_sha }}
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
           CASEOPS_IP_COST_PROD_TEST_TENANT_ACK: ${{ vars.CASEOPS_IP_COST_PROD_TEST_TENANT_ACK }}
           CASEOPS_IP_COST_PROD_BILLING_MATTER_IDS_JSON: ${{ vars.CASEOPS_IP_COST_PROD_BILLING_MATTER_IDS_JSON }}
           CASEOPS_IP_COST_PROD_COMPANY_SLUG: ${{ vars.CASEOPS_IP_COST_PROD_COMPANY_SLUG }}
@@ -290,7 +328,7 @@ jobs:
         # provider or quota incident.  The Notice suite is still a required
         # production signal, so run it after a RAM failure and retain both
         # outcomes in the same fail-closed workflow result.
-        if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && steps.prod-playwright-prerequisites.outputs.ready == 'true'
+        if: always() && !cancelled() && matrix.suite == 'supporting' && steps.prod-playwright-prerequisites.outputs.ready == 'true'
         env:
           CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
           PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
@@ -301,7 +339,7 @@ jobs:
 
       - name: Check release-owned patent and statute acceptance
         id: patent-statute-prerequisites
-        if: always() && !cancelled() && steps.prod-playwright-prerequisites.outputs.ready == 'true'
+        if: always() && !cancelled() && matrix.suite == 'patent-statute' && steps.prod-playwright-prerequisites.outputs.ready == 'true'
         run: |
           if [[ -f tests/e2e/support/patent-acceptance.ts ]]; then
             test -f tests/e2e/ram-2026-09-07-statute-source-data.spec.ts
@@ -312,34 +350,134 @@ jobs:
           fi
 
       - name: Run exact-release patent and domain journeys
-        if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && steps.patent-statute-prerequisites.outputs.ready == 'true'
+        if: always() && !cancelled() && matrix.suite == 'patent-statute' && steps.prod-playwright-prerequisites.outputs.ready == 'true' && steps.patent-statute-prerequisites.outputs.ready == 'true'
         env:
           PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
           PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
           CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
           CASEOPS_IP_QA_PASSWORD: ${{ secrets.CASEOPS_IP_QA_PASSWORD }}
-          CASEOPS_EXPECTED_RELEASE_SHA: ${{ steps.deployed-release.outputs.release_sha }}
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
         run: npx playwright test --config=playwright.prod-ram.config.ts --project=patent-prod-chromium --workers=1 --retries=0 --reporter=list --output=test-results/patent
 
       - name: Verify every release-owned statute source record
-        if: always() && !cancelled() && steps.patent-statute-prerequisites.outputs.ready == 'true'
+        if: always() && !cancelled() && matrix.suite == 'patent-statute' && steps.prod-playwright-prerequisites.outputs.ready == 'true' && steps.patent-statute-prerequisites.outputs.ready == 'true'
         env:
           PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
           PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
           CASEOPS_RAM_PROD_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
           CASEOPS_RAM_PROD_EMAIL: qa-bot@caseops.ai
           CASEOPS_RAM_PROD_SLUG: caseops-qa
-          CASEOPS_EXPECTED_RELEASE_SHA: ${{ steps.deployed-release.outputs.release_sha }}
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
         # Read-only batches use bounded parallelism after all mutation phases.
         run: npx playwright test --config=playwright.prod-ram.config.ts --project=statute-source-prod-chromium --workers=4 --retries=0 --reporter=list --output=test-results/statute-sources
 
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-playwright-report-${{ matrix.suite }}
+          path: |
+            test-results/
+          if-no-files-found: error
+          retention-days: 14
+
+  scheduled-statute-verification:
+    name: Scheduled read-only statute verification
+    if: github.event_name == 'schedule'
+    needs: resolve-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the exact serving production release
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-release.outputs.release_sha }}
+
+      - name: Recheck exact serving identity
+        run: |
+          test "$(git rev-parse HEAD)" = "${{ needs.resolve-release.outputs.release_sha }}"
+          python scripts/verify_deployed_release.py \
+            --expected-sha "${{ needs.resolve-release.outputs.release_sha }}" \
+            --wait-seconds 30 \
+            --interval-seconds 5
+
+      - name: Gate on production QA secret
+        env:
+          CASEOPS_QA_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
+        run: |
+          if [ -z "$CASEOPS_QA_PASSWORD" ]; then
+            echo "::error::CASEOPS_QA_PASSWORD secret is not configured."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - run: npm ci
+
+      - name: Install Chromium for Playwright
+        timeout-minutes: 5
+        run: npx playwright install chromium
+
+      - name: Verify release-owned statute acceptance exists
+        run: |
+          test -f tests/e2e/support/patent-acceptance.ts
+          test -f tests/e2e/ram-2026-09-07-statute-source-data.spec.ts
+
+      - name: Verify every release-owned statute source record
+        env:
+          PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
+          PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
+          CASEOPS_RAM_PROD_PASSWORD: ${{ secrets.CASEOPS_QA_PASSWORD }}
+          CASEOPS_RAM_PROD_EMAIL: qa-bot@caseops.ai
+          CASEOPS_RAM_PROD_SLUG: caseops-qa
+          CASEOPS_EXPECTED_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
+        run: npx playwright test --config=playwright.prod-ram.config.ts --project=statute-source-prod-chromium --workers=4 --retries=0 --reporter=list --output=test-results/statute-sources
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-playwright-report-scheduled-statutes
+          path: test-results/
+          if-no-files-found: error
+          retention-days: 14
+
+  record-release-evidence:
+    name: Record exact-release evidence
+    if: always() && github.event_name == 'workflow_dispatch' && needs.resolve-release.result == 'success' && needs.prod-playwright-shards.result == 'success'
+    needs:
+      - resolve-release
+      - prod-playwright-shards
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out the exact serving production release
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-release.outputs.release_sha }}
+
+      - name: Recheck exact serving identity before evidence write
+        run: |
+          test "$(git rev-parse HEAD)" = "${{ needs.resolve-release.outputs.release_sha }}"
+          python scripts/verify_deployed_release.py \
+            --expected-sha "${{ needs.resolve-release.outputs.release_sha }}" \
+            --wait-seconds 30 \
+            --interval-seconds 5
+
       - name: Record exact-release public-claims evidence
-        if: success() && github.event_name == 'workflow_dispatch'
         env:
           CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET: ${{ secrets.CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET }}
           PROD_API_BASE_URL: ${{ vars.PROD_API_BASE_URL }}
-          SERVING_RELEASE_SHA: ${{ steps.deployed-release.outputs.release_sha }}
+          SERVING_RELEASE_SHA: ${{ needs.resolve-release.outputs.release_sha }}
         run: |
+          if [ -z "$CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET" ]; then
+            echo "::error::CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET is not configured."
+            exit 1
+          fi
           evidence_ref="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}"
           python scripts/write_machine_readiness_evidence.py \
             --api-base "${PROD_API_BASE_URL:-https://api.caseops.ai}" \
@@ -348,13 +486,3 @@ jobs:
             --run-id "github-actions:${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" \
             --evidence-ref "$evidence_ref" \
             --operational public_claims_reviewed=pass
-
-      - name: Upload Playwright report on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: prod-playwright-report
-          path: |
-            test-results/
-          if-no-files-found: error
-          retention-days: 14
