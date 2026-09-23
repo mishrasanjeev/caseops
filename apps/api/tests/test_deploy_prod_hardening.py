@@ -294,6 +294,8 @@ def test_private_retrieval_production_acceptance_is_exact_and_release_owned() ->
 
 
 def test_a0_production_acceptance_is_an_isolated_verify_only_gate() -> None:
+    import yaml
+
     workflow = _read_repo_text(".github/workflows/prod-verify.yml")
     config = _read_repo_text("playwright.ip-a0-prod.config.ts")
     app_config = _read_repo_text("playwright.app.config.ts")
@@ -301,30 +303,18 @@ def test_a0_production_acceptance_is_an_isolated_verify_only_gate() -> None:
     broad_config = _read_repo_text("playwright.prod-ram.config.ts")
     spec = _read_repo_text("tests/e2e/iplf-027b-a0-quiescence-2026-08-14-prod.spec.ts")
 
-    assert "Run IPLF-027B A0 quiescence acceptance" in workflow
-    prerequisite_gate = (
-        "if: always() && !cancelled() && "
-        "steps.prod-playwright-prerequisites.outputs.ready == 'true'"
-    )
-    assert "id: prod-playwright-prerequisites" in workflow
-    # Read-only scheduled checks and exact-release mutation gates remain
-    # independently visible after a broad RAM failure. The historical A0
-    # transition additionally requires an explicit manual opt-in.
-    assert workflow.count(prerequisite_gate) == 2
-    dispatch_prerequisite_gate = (
-        "if: always() && !cancelled() && github.event_name == 'workflow_dispatch' && "
-        "steps.prod-playwright-prerequisites.outputs.ready == 'true'"
-    )
-    assert workflow.count(dispatch_prerequisite_gate) == 5
-    assert (prerequisite_gate + " && inputs.run_historical_a0_gate == true") in workflow
-    assert "CASEOPS_IP_A0_PROD_MODE: verify" in workflow
-    assert (
-        "npx playwright test --config=playwright.ip-a0-prod.config.ts --reporter=list" in workflow
-    )
-    assert (
-        workflow.index("Run prod-Playwright suite (ram-batch)")
-        < workflow.index("Run IPLF-027B A0 quiescence acceptance")
-        < workflow.index("Run prod-Playwright suite (notice module)")
+    parsed = yaml.safe_load(workflow)
+    shard_steps = parsed["jobs"]["prod-playwright-shards"]["steps"]
+    by_name = {step.get("name"): step for step in shard_steps}
+    a0 = by_name["Run IPLF-027B A0 quiescence acceptance"]
+    assert "always() && !cancelled()" in a0["if"]
+    assert "matrix.suite == 'supporting'" in a0["if"]
+    assert "steps.prod-playwright-prerequisites.outputs.ready == 'true'" in a0["if"]
+    assert "inputs.run_historical_a0_gate == true" in a0["if"]
+    assert a0["env"]["CASEOPS_IP_A0_PROD_MODE"] == "verify"
+    assert "--config=playwright.ip-a0-prod.config.ts" in a0["run"]
+    assert shard_steps.index(a0) < shard_steps.index(
+        by_name["Run prod-Playwright suite (notice module)"]
     )
     assert "testMatch: /iplf-027b-a0-quiescence-2026-08-14-prod\\.spec\\.ts$/" in config
     assert "testIgnore: /iplf-027b-a0-quiescence-2026-08-14-prod\\.spec\\.ts$/" in app_config

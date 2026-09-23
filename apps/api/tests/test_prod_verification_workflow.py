@@ -74,28 +74,29 @@ def test_prod_verification_cancels_superseded_runs() -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / "prod-verify.yml").read_text(encoding="utf-8")
 
     concurrency = workflow.split("concurrency:", 1)[1].split("permissions:", 1)[0]
-    assert "group: prod-verify" in concurrency
+    assert "group: prod-verify-${{ github.event_name }}" in concurrency
     assert "cancel-in-progress: true" in concurrency
 
 
 def test_scheduled_prod_verification_is_read_only() -> None:
+    import yaml
+
     workflow = (REPO_ROOT / ".github" / "workflows" / "prod-verify.yml").read_text(
         encoding="utf-8"
     )
+    parsed = yaml.safe_load(workflow)
+    jobs = parsed["jobs"]
+    dispatch = jobs["prod-playwright-shards"]
+    scheduled = jobs["scheduled-statute-verification"]
 
-    for step_name in (
-        "Run prod-Playwright suite (ram-batch)",
-        "Run IPLF-037B renewal acceptance",
-        "Run IPLF-039F cost acceptance",
-        "Run prod-Playwright suite (notice module)",
-        "Run exact-release patent and domain journeys",
-    ):
-        step = workflow.split(f"- name: {step_name}", 1)[1].split("- name:", 1)[0]
-        assert "github.event_name == 'workflow_dispatch'" in step
-    statute_step = workflow.split(
-        "- name: Verify every release-owned statute source record", 1
-    )[1].split("- name:", 1)[0]
-    assert "github.event_name == 'workflow_dispatch'" not in statute_step
+    assert dispatch["if"] == "github.event_name == 'workflow_dispatch'"
+    assert scheduled["if"] == "github.event_name == 'schedule'"
+    scheduled_names = {step.get("name") for step in scheduled["steps"]}
+    assert "Verify every release-owned statute source record" in scheduled_names
+    assert "Run IPLF-037B renewal acceptance" not in scheduled_names
+    assert "Run IPLF-039F cost acceptance" not in scheduled_names
+    assert "Run prod-Playwright suite (notice module)" not in scheduled_names
+    assert "Run exact-release patent and domain journeys" not in scheduled_names
 
 
 def test_prod_verification_runs_notice_suite_after_ram_failure() -> None:
@@ -107,18 +108,27 @@ def test_prod_verification_runs_notice_suite_after_ram_failure() -> None:
 
     assert "if: always()" in next_step
     assert "playwright.notice-prod.config.ts" in next_step
+    assert "fail-fast: false" in workflow
 
 
 def test_prod_verification_preserves_each_suite_failure_artifact() -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / "prod-verify.yml").read_text(encoding="utf-8")
 
     for output_directory in (
-        "ram", "ip-a0", "ip-renewal", "ip-cost", "notice", "patent", "statute-sources"
+        "tester",
+        "legacy",
+        "ip-a0",
+        "ip-renewal",
+        "ip-cost",
+        "notice",
+        "patent",
+        "statute-sources",
     ):
         assert f"--output=test-results/{output_directory}" in workflow
     upload_step = workflow.split("- name: Upload Playwright report on failure", 1)[1]
     assert "test-results/" in upload_step
     assert "if-no-files-found: error" in upload_step
+    assert "prod-playwright-report-${{ matrix.suite }}" in upload_step
 
 
 def test_historical_a0_acceptance_is_opt_in_not_a_recurring_release_gate() -> None:
@@ -168,25 +178,61 @@ def test_ip_cost_acceptance_is_isolated_and_partially_configured_runs_fail_close
 
 
 def test_exact_release_dispatch_records_only_the_claim_proven_by_the_suite() -> None:
-    workflow = (REPO_ROOT / ".github" / "workflows" / "prod-verify.yml").read_text(encoding="utf-8")
-    writer = workflow.split("- name: Record exact-release public-claims evidence", 1)[1].split(
-        "- name: Upload Playwright report on failure", 1
-    )[0]
+    import yaml
 
-    assert "if: success() && github.event_name == 'workflow_dispatch'" in writer
-    assert "CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET" in writer
-    assert "steps.deployed-release.outputs.release_sha" in writer
-    assert '--run-id "github-actions:${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}"' in writer
-    assert "--operational public_claims_reviewed=pass" in writer
-    assert "--billing" not in writer
-    assert "--pine" not in writer
+    workflow = (REPO_ROOT / ".github" / "workflows" / "prod-verify.yml").read_text(encoding="utf-8")
+    parsed = yaml.safe_load(workflow)
+    job = parsed["jobs"]["record-release-evidence"]
+    writer = next(
+        step
+        for step in job["steps"]
+        if step.get("name") == "Record exact-release public-claims evidence"
+    )
+
+    assert "needs.prod-playwright-shards.result == 'success'" in job["if"]
+    assert job["needs"] == ["resolve-release", "prod-playwright-shards"]
+    assert "CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET" in writer["env"]
+    assert "needs.resolve-release.outputs.release_sha" in writer["env"]["SERVING_RELEASE_SHA"]
+    assert '--run-id "github-actions:${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}"' in writer["run"]
+    assert "--operational public_claims_reviewed=pass" in writer["run"]
+    assert "--billing" not in writer["run"]
+    assert "--pine" not in writer["run"]
+
+
+def test_exact_release_verification_is_serialized_into_bounded_jobs() -> None:
+    import yaml
+
+    workflow = yaml.safe_load(
+        (REPO_ROOT / ".github/workflows/prod-verify.yml").read_text(encoding="utf-8")
+    )
+    shard_job = workflow["jobs"]["prod-playwright-shards"]
+    assert shard_job["timeout-minutes"] < 40
+    assert shard_job["strategy"]["fail-fast"] is False
+    assert shard_job["strategy"]["max-parallel"] == 1
+    assert shard_job["strategy"]["matrix"]["suite"] == [
+        "tester",
+        "legacy",
+        "supporting",
+        "patent-statute",
+    ]
+
+    by_name = {step.get("name"): step for step in shard_job["steps"]}
+    boundary = by_name["Recheck exact serving identity at shard boundary"]
+    assert "--expected-sha" in boundary["run"]
+    assert "needs.resolve-release.outputs.release_sha" in boundary["run"]
+    tester = by_name["Run canonical tester production regressions"]["run"]
+    legacy = by_name["Run legacy QA production regressions"]["run"]
+    assert "--project=tester-prod-chromium" in tester
+    assert "--project=prod-chromium" not in tester
+    assert "--project=prod-chromium" in legacy
+    assert "--project=tester-prod-chromium" not in legacy
 
 
 def test_patent_and_statute_production_phases_are_release_owned_and_bounded() -> None:
     import yaml
 
     workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/prod-verify.yml").read_text())
-    steps = workflow["jobs"]["prod-playwright"]["steps"]
+    steps = workflow["jobs"]["prod-playwright-shards"]["steps"]
     by_name = {step.get("name"): step for step in steps}
     check = by_name["Check release-owned patent and statute acceptance"]
     assert "-f tests/e2e/support/patent-acceptance.ts" in check["run"]
@@ -200,12 +246,12 @@ def test_patent_and_statute_production_phases_are_release_owned_and_bounded() ->
         assert "CASEOPS_EXPECTED_RELEASE_SHA" in step["env"]
     assert "--project=patent-prod-chromium --workers=1" in patent["run"]
     assert "--project=statute-source-prod-chromium --workers=4" in statutes["run"]
-    broad = by_name["Run prod-Playwright suite (ram-batch)"]["run"]
-    assert "--project=prod-chromium --project=tester-prod-chromium" in broad
+    tester = by_name["Run canonical tester production regressions"]["run"]
+    legacy = by_name["Run legacy QA production regressions"]["run"]
+    assert "--project=tester-prod-chromium" in tester
+    assert "--project=prod-chromium" in legacy
     assert steps.index(by_name["Run prod-Playwright suite (notice module)"]) < steps.index(check)
     assert steps.index(check) < steps.index(patent) < steps.index(statutes)
-    writer = by_name["Record exact-release public-claims evidence"]
-    assert steps.index(statutes) < steps.index(writer)
 
 
 def test_existing_patent_qa_helper_does_not_rewrite_live_configuration() -> None:
