@@ -27,7 +27,9 @@ async function waitForSignInForm(page: import("@playwright/test").Page) {
 
 function localSignedMatterSelection(matterId: string, membershipId: string): string {
   const python = process.env.CASEOPS_E2E_PYTHON || path.join(
-    repoRoot, "apps", "api", ".venv", "Scripts", "python.exe",
+    repoRoot, "apps", "api", ".venv",
+    process.platform === "win32" ? "Scripts" : "bin",
+    process.platform === "win32" ? "python.exe" : "python",
   );
   const script = [
     "import sys",
@@ -58,7 +60,9 @@ function localSignedMatterSelection(matterId: string, membershipId: string): str
         encoding: "utf8",
         timeout: 30_000,
       });
-  if (run.status !== 0) throw new Error(`Could not create local nonbillable selection: ${run.stderr}`);
+  if (run.error || run.status !== 0) {
+    throw new Error(`Could not create local nonbillable selection: ${run.error?.message || run.stderr || `exit ${run.status}`}`);
+  }
   return run.stdout.trim();
 }
 

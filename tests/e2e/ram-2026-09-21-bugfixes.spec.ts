@@ -241,7 +241,7 @@ test("BUG-006 DOCX is visibly rendered and ENH-007 updates only an existing matt
   await expect(page.getByText("Bulk update Playwright title", { exact: true })).toBeVisible();
 
   await page.goto(`${web}/app/admin/provider-operations`);
-  await expect(page.getByRole("heading", { name: "Provider operations" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Provider operations", exact: true })).toBeVisible();
   await expect(page.getByText("Could not load provider operations")).toHaveCount(0);
   await page.goto(`${web}/app/admin/integrations`);
   await expect(page.getByRole("heading", { name: /Integrations/i }).first()).toBeVisible();

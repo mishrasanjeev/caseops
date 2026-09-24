@@ -263,3 +263,14 @@ current `main`; clean-checkout CodeQL reported a potentially uninitialized
 `identity` in standalone case search (and an unnecessary test lambda). The
 candidate remains no-go until those annotations are fixed, the changed tree
 passes complete Docker acceptance again, and all CI checks are green.
+
+The fifth complete Docker gate at `ec8d5324` passed 389 PostgreSQL tests,
+both desktop shards and mobile; CodeQL cleared on the refreshed PR. Its Linux
+app CI run still failed two dated tests: a fuzzy `Provider operations` heading
+locator also matched the legitimate empty-state heading, and the local
+nonbillable token helper hardcoded a Windows virtualenv executable. These are
+separate from the product's DOCX render and signed-link guards. The locator is
+now exact and the helper selects the platform's virtualenv Python, preserving
+the serving Docker API's signing path. The unchanged local production-style
+journeys passed 3/3 (one production-only skip). The CI failure remains open
+until the new commit's complete clean-checkout run and Docker gate pass.

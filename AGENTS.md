@@ -1089,3 +1089,8 @@ requirements when using the fallback.
   explicitly initialized flag before later query construction; do not rely on
   short-circuiting through an unbound local. Treat CodeQL annotations on changed
   production paths as release blockers, fix them, and rerun the exact candidate.
+- Dated Playwright assertions must target an exact heading when a valid empty
+  state includes the same words. A Windows Docker pass does not certify the
+  Linux app CI harness: derive virtualenv executables by platform, report
+  spawn errors explicitly, and rerun the selected CI journeys plus the full
+  clean-checkout suite before release.
