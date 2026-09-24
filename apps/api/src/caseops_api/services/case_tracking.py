@@ -1842,7 +1842,9 @@ def _read_matter_selection_token(token: str) -> dict[str, object]:
             raise ValueError("Expired selection")
         return claims
     except (ValueError, TypeError, KeyError, UnicodeDecodeError) as exc:
-        raise HTTPException(409, "This case selection expired or is invalid. Find the case again.") from exc
+        raise HTTPException(
+            409, "This case selection expired or is invalid. Find the case again."
+        ) from exc
 
 
 def resolve_matter_case(

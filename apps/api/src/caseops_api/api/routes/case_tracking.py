@@ -25,9 +25,9 @@ from caseops_api.schemas.production_safety import CaseTrackingTenantSupportMatri
 from caseops_api.services.case_tracking import (
     create_bookmark,
     download_case_tracking_source,
+    link_matter_case,
     list_bookmarks,
     list_updates,
-    link_matter_case,
     provider_status_response,
     refresh_bookmark,
     resolve_matter_case,
