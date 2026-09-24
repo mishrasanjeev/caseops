@@ -39,6 +39,7 @@ from caseops_api.schemas.matter_bulk_updates import (
 from caseops_api.schemas.matters import MatterUpdateRequest, normalize_matter_code
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.matter_access import assert_access, can_access, visible_matters_filter
+from caseops_api.services.matter_imports import _unsafe_import_cell
 from caseops_api.services.matters import update_matter
 from caseops_api.services.session_context import SessionContext
 
@@ -197,7 +198,10 @@ def _parse_rows(content: bytes, filename: str) -> tuple[str, list[tuple[int, dic
                 detail=f"Row {row_number} contains columns outside the bulk update template.",
             )
         cells = [_cell(value) for value in raw[: len(HEADERS)]]
-        if any(value.startswith(("=", "+", "-", "@")) for value in cells):
+        if any(
+            _unsafe_import_cell(header, value)
+            for header, value in zip(HEADERS, cells, strict=False)
+        ):
             raise HTTPException(
                 status_code=400,
                 detail=f"Formula-like cell content is not accepted (row {row_number}). Use plain values.",

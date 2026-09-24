@@ -8,6 +8,7 @@ from datetime import date
 from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from openpyxl import Workbook
 from sqlalchemy import select
@@ -30,6 +31,42 @@ def _workbook_bytes(rows: list[list[object]], headers: list[str] = HEADERS) -> b
     output = io.BytesIO()
     workbook.save(output)
     return output.getvalue()
+
+
+@pytest.mark.parametrize("format_name", ["csv", "xlsx"])
+def test_bulk_update_accepts_international_contact_number(format_name: str) -> None:
+    values = [""] * len(HEADERS)
+    values[HEADERS.index("Matter Code")] = "BULK-PHONE-1"
+    values[HEADERS.index("Client Contact Number")] = "+919876543210"
+    if format_name == "xlsx":
+        content = _workbook_bytes([values])
+    else:
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerows([HEADERS, values])
+        content = output.getvalue().encode("utf-8")
+    _, rows, _ = matter_bulk_updates._parse_rows(content, f"updates.{format_name}")
+    assert rows[0][1]["Client Contact Number"] == "+919876543210"
+
+
+@pytest.mark.parametrize("unsafe_value", ["+SUM(1,2)", "=1+1", "@cmd"])
+def test_bulk_update_still_rejects_formula_like_contact(unsafe_value: str) -> None:
+    values = [""] * len(HEADERS)
+    values[HEADERS.index("Matter Code")] = "BULK-PHONE-1"
+    values[HEADERS.index("Client Contact Number")] = unsafe_value
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerows([HEADERS, values])
+    with pytest.raises(HTTPException, match="Formula-like"):
+        matter_bulk_updates._parse_rows(output.getvalue().encode("utf-8"), "updates.csv")
+
+
+def test_bulk_update_rejects_xlsx_formula_node_in_contact_column() -> None:
+    values = [""] * len(HEADERS)
+    values[HEADERS.index("Matter Code")] = "BULK-PHONE-1"
+    values[HEADERS.index("Client Contact Number")] = "=1+1"
+    with pytest.raises(HTTPException, match="Spreadsheet formulas"):
+        matter_bulk_updates._parse_rows(_workbook_bytes([values]), "updates.xlsx")
 
 
 def test_bulk_update_previews_and_applies_existing_matter_only(client: TestClient) -> None:

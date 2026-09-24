@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import subprocess
+import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,6 +33,13 @@ logger = logging.getLogger(__name__)
 TEXT_SUFFIXES = {".txt", ".md", ".csv", ".json", ".log", ".yaml", ".yml", ".xml", ".html", ".htm"}
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
 MAX_DOCX_BYTES = 32 * 1024 * 1024
+MAX_DOCX_EXPANDED_BYTES = 64 * 1024 * 1024
+MAX_DOCX_XML_PART_BYTES = 8 * 1024 * 1024
+MAX_DOCX_OTHER_PART_BYTES = 32 * 1024 * 1024
+MAX_DOCX_PARTS = 256
+MAX_DOCX_EXTRACTED_CHARS = 1_000_000
+MAX_DOCX_TEXT_SEGMENTS = 10_000
+MAX_DOCX_CHUNKS = 2_000
 HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
 
 
@@ -125,15 +133,53 @@ def _extract_image_text(path: Path) -> str:
 def _extract_docx_text(path: Path) -> str:
     if path.stat().st_size > MAX_DOCX_BYTES:
         raise ValueError("DOCX exceeds the processing size limit.")
+    with zipfile.ZipFile(path) as archive:
+        entries = archive.infolist()
+        if len(entries) > MAX_DOCX_PARTS:
+            raise ValueError("DOCX contains too many archive parts.")
+        expanded = 0
+        for entry in entries:
+            part_limit = (
+                MAX_DOCX_XML_PART_BYTES
+                if entry.filename.lower().endswith((".xml", ".rels"))
+                else MAX_DOCX_OTHER_PART_BYTES
+            )
+            if entry.file_size > part_limit or entry.file_size > MAX_DOCX_EXPANDED_BYTES - expanded:
+                raise ValueError("DOCX exceeds the expanded processing size limit.")
+            part_size = 0
+            with archive.open(entry) as stream:
+                while chunk := stream.read(64 * 1024):
+                    part_size += len(chunk)
+                    expanded += len(chunk)
+                    if part_size > part_limit or expanded > MAX_DOCX_EXPANDED_BYTES:
+                        raise ValueError("DOCX exceeds the expanded processing size limit.")
     from docx import Document
 
     document = Document(str(path))
-    parts = [paragraph.text for paragraph in document.paragraphs if paragraph.text.strip()]
+    parts: list[str] = []
+    extracted_chars = 0
+
+    def add_part(value: str) -> None:
+        nonlocal extracted_chars
+        if not value.strip():
+            return
+        extracted_chars += len(value) + 1
+        if extracted_chars > MAX_DOCX_EXTRACTED_CHARS or len(parts) >= MAX_DOCX_TEXT_SEGMENTS:
+            raise ValueError("DOCX exceeds the extracted text limit.")
+        parts.append(value)
+
+    for paragraph in document.paragraphs:
+        add_part(paragraph.text)
     for table in document.tables:
         for row in table.rows:
-            cells = [" ".join(cell.text.split()) for cell in row.cells]
+            cells = []
+            for cell in row.cells:
+                value = " ".join(cell.text.split())
+                if len(value) > MAX_DOCX_EXTRACTED_CHARS - extracted_chars:
+                    raise ValueError("DOCX exceeds the extracted text limit.")
+                cells.append(value)
             if any(cells):
-                parts.append(" | ".join(cells))
+                add_part(" | ".join(cells))
     return "\n".join(parts)
 
 
@@ -248,10 +294,18 @@ def parse_attachment(storage_key: str, content_type: str | None) -> ParsedDocume
                 chunks=[],
                 error="DOCX text extraction returned an empty payload.",
             )
+        chunks = _chunk_text(text)
+        if len(chunks) > MAX_DOCX_CHUNKS:
+            return ParsedDocument(
+                status=DocumentProcessingStatus.FAILED,
+                extracted_text=None,
+                chunks=[],
+                error="DOCX exceeds the indexed chunk limit.",
+            )
         return ParsedDocument(
             status=DocumentProcessingStatus.INDEXED,
             extracted_text=text,
-            chunks=_chunk_text(text),
+            chunks=chunks,
             error=None,
         )
     if suffix == ".pdf" or content_type == "application/pdf":
