@@ -1094,3 +1094,9 @@ requirements when using the fallback.
   Linux app CI harness: derive virtualenv executables by platform, report
   spawn errors explicitly, and rerun the selected CI journeys plus the full
   clean-checkout suite before release.
+- A release backfill bound must be sized from a read-only production backlog,
+  not a small fixture. Preflight every tenant before writing, retain finite
+  per-tenant and release-wide caps with observed headroom, and test above the
+  prior cap on PostgreSQL. A failed bounded run can commit earlier pages;
+  prove idempotent replay, reconcile remaining rows, and keep traffic on the
+  old revision until the exact-image job and dated browser journey pass.

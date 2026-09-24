@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
@@ -196,15 +196,7 @@ def _ensure_hearing_row_for_next_hearing(
     return hearing
 
 
-def backfill_legacy_next_hearings(
-    session: Session,
-    *,
-    context: SessionContext,
-    limit: int = 50,
-) -> int:
-    """Materialize one bounded page of pre-feature Matter dates without changing them."""
-    if not 1 <= limit <= 50:
-        raise ValueError("Legacy hearing backfill limit must be between 1 and 50.")
+def _legacy_hearing_filters(context: SessionContext):
     existing = (
         select(MatterHearing.id)
         .where(
@@ -215,16 +207,38 @@ def backfill_legacy_next_hearings(
         )
         .exists()
     )
+    return (
+        Matter.company_id == context.company.id,
+        Matter.is_active.is_(True),
+        Matter.status != MatterStatus.DISPOSED,
+        Matter.next_hearing_on.is_not(None),
+        ~existing,
+    )
+
+
+def count_legacy_next_hearings(session: Session, *, context: SessionContext) -> int:
+    """Count the same eligible rows that the bounded writer can materialize."""
+    return int(
+        session.scalar(
+            select(func.count()).select_from(Matter).where(*_legacy_hearing_filters(context))
+        )
+        or 0
+    )
+
+
+def backfill_legacy_next_hearings(
+    session: Session,
+    *,
+    context: SessionContext,
+    limit: int = 50,
+) -> int:
+    """Materialize one bounded page of pre-feature Matter dates without changing them."""
+    if not 1 <= limit <= 50:
+        raise ValueError("Legacy hearing backfill limit must be between 1 and 50.")
     matters = list(
         session.scalars(
             select(Matter)
-            .where(
-                Matter.company_id == context.company.id,
-                Matter.is_active.is_(True),
-                Matter.status != MatterStatus.DISPOSED,
-                Matter.next_hearing_on.is_not(None),
-                ~existing,
-            )
+            .where(*_legacy_hearing_filters(context))
             .order_by(Matter.id)
             .limit(limit)
             .with_for_update(of=Matter, skip_locked=True)

@@ -36,6 +36,7 @@ def test_release_hearing_backfill_is_bounded_and_provider_free(
 
     monkeypatch.setattr(command, "get_session_factory", lambda: lambda: session)
     monkeypatch.setattr(command, "_system_contexts", lambda _session: [context])
+    monkeypatch.setattr(command, "count_legacy_next_hearings", lambda *_args, **_kwargs: 52)
 
     def backfill(_session: FakeSession, *, context: object, limit: int) -> int:
         assert context is not None
@@ -47,15 +48,18 @@ def test_release_hearing_backfill_is_bounded_and_provider_free(
     assert command.main() == 0
     assert calls == [50, 50]
     assert session.commits == 2
-    assert session.rollbacks == 0
-    line = capsys.readouterr().out.strip()
-    assert json.loads(line.removeprefix("CASEOPS_HEARING_BACKFILL ")) == {
+    assert session.rollbacks == 1
+    preflight, result = capsys.readouterr().out.strip().splitlines()
+    assert json.loads(preflight.removeprefix("CASEOPS_HEARING_BACKFILL_PREFLIGHT ")) == {
+        "tenant-a": 52
+    }
+    assert json.loads(result.removeprefix("CASEOPS_HEARING_BACKFILL ")) == {
         "tenant_count": 1,
         "materialized": {"tenant-a": 52},
     }
 
 
-def test_release_hearing_backfill_fails_when_more_than_ten_pages_remain(
+def test_release_hearing_backfill_rejects_oversized_backlog_before_writes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     session = FakeSession()
@@ -63,12 +67,36 @@ def test_release_hearing_backfill_fails_when_more_than_ten_pages_remain(
     monkeypatch.setattr(command, "get_session_factory", lambda: lambda: session)
     monkeypatch.setattr(command, "_system_contexts", lambda _session: [context])
     monkeypatch.setattr(
+        command, "count_legacy_next_hearings", lambda *_args, **_kwargs: 2501
+    )
+    monkeypatch.setattr(
         command,
         "backfill_legacy_next_hearings",
-        lambda _session, *, context, limit: 50 if limit == 50 else 1,
+        lambda *_args, **_kwargs: pytest.fail("writer called"),
     )
 
-    with pytest.raises(RuntimeError, match="exceeded its per-tenant release bound"):
+    with pytest.raises(RuntimeError, match="before any writes"):
         command.main()
-    assert session.commits == 10
+    assert session.commits == 0
     assert session.rollbacks == 1
+
+
+def test_release_hearing_backfill_detects_concurrent_growth_after_preflight(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = FakeSession()
+    context = SimpleNamespace(company=SimpleNamespace(id="tenant-a"))
+    calls = iter((2500, 1))
+    monkeypatch.setattr(command, "get_session_factory", lambda: lambda: session)
+    monkeypatch.setattr(command, "_system_contexts", lambda _session: [context])
+    monkeypatch.setattr(
+        command, "count_legacy_next_hearings", lambda *_args, **_kwargs: next(calls)
+    )
+    monkeypatch.setattr(
+        command, "backfill_legacy_next_hearings", lambda *_args, **_kwargs: 50
+    )
+
+    with pytest.raises(RuntimeError, match="concurrent writes may be active"):
+        command.main()
+    assert session.commits == 50
+    assert session.rollbacks == 2
