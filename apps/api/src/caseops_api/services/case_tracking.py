@@ -1621,11 +1621,13 @@ def search_cases(
 ) -> CaseTrackingSearchResponse:
     matter = _matter_or_none(session, context=context, matter_id=payload.matter_id)
     frozen_matter = None
+    complete_results_for_matter = False
     if matter is not None:
         require_operational_matter(session, matter=matter, operation="search case tracking")
         identity = matter_identity(matter)
         if not reliable_identity(identity):
             raise HTTPException(409, IDENTITY_REQUIRED)
+        complete_results_for_matter = not identity.cnr
         frozen_matter = (
             matter.lifecycle_version,
             matter.access_policy_version,
@@ -1638,7 +1640,7 @@ def search_cases(
         court_code=payload.court_code,
         state=payload.state,
         court_name=payload.court_name,
-        require_complete_results=require_complete_results or bool(matter and not identity.cnr),
+        require_complete_results=require_complete_results or complete_results_for_matter,
     )
     reservation_id: str | None = None
     company_id, membership_id, token_issued_at = (

@@ -409,7 +409,7 @@ def test_disposal_during_provider_transport_wins_without_new_children(client, mo
     get_settings.cache_clear()
     monkeypatch.setattr(
         "caseops_api.services.case_tracking.get_case_tracking_provider",
-        lambda: FakeCaseTrackingProvider(),
+        FakeCaseTrackingProvider,
     )
     resolved = client.post(
         f"/api/case-tracking/matters/{matter['id']}/resolve", headers=headers

@@ -255,3 +255,11 @@ under `.tmp/release-20260924-link-third`; it did not reach mobile and is not
 release evidence. These fixes and the later bulk-contact/DOCX-index merge need
 a fresh complete Docker inventory, clean-checkout CI, canonical-main merge,
 exact-image deployment, and production E2E before any verdict is upgraded.
+
+The fourth Docker gate at `a663d36c` completed green: 389/389 PostgreSQL,
+both desktop Playwright shards, and mobile. The three previously failing dated
+journeys passed. PR #470 was then opened from an identical-tree merge with
+current `main`; clean-checkout CodeQL reported a potentially uninitialized
+`identity` in standalone case search (and an unnecessary test lambda). The
+candidate remains no-go until those annotations are fixed, the changed tree
+passes complete Docker acceptance again, and all CI checks are green.

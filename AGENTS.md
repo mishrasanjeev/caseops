@@ -1084,3 +1084,8 @@ requirements when using the fallback.
   Docker acceptance, sign inside the exact API container and verify the normal
   server admission path; a host-generated token can fail solely because test
   and container secrets differ. Never weaken signature validation to pass E2E.
+- A local green gate does not subsume clean-checkout static analysis. Values
+  assigned only inside an optional Matter branch must be converted to an
+  explicitly initialized flag before later query construction; do not rely on
+  short-circuiting through an unbound local. Treat CodeQL annotations on changed
+  production paths as release blockers, fix them, and rerun the exact candidate.
