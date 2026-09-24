@@ -238,3 +238,20 @@ intermediate Next dev attempt served a stale 404 and left malformed generated
 `.next/dev/types`; it was treated as incomplete setup, isolated from source,
 and not counted as a product failure. The second full run remains red and did
 not reach shard 2/mobile; a complete new candidate run is still required.
+
+The third complete Docker run at `6e152826` passed 389/389 PostgreSQL tests
+and desktop shard 1 (198 tests, one expected provider-isolation skip). Desktop
+shard 2 found three distinct test-boundary defects. The September 10 legacy
+hearing journey tried to create a pre-feature incomplete bookmark through the
+current guarded public endpoint, which correctly returned 409. Its fixture now
+seeds the pre-feature state only inside isolated E2E Docker, asserts zero prior
+bookmarks and tenant scope, and requires the same bookmark ID after ordinary
+scheduled recovery. The September 21 DOCX assertion looked for preview text in
+the parent DOM after the viewer moved to a sandboxed iframe; it now checks the
+actual iframe. The September 24 Matter-link token was signed with the host's
+test secret rather than the serving Docker API secret; it now signs inside the
+API container without changing server verification. The failed run is retained
+under `.tmp/release-20260924-link-third`; it did not reach mobile and is not
+release evidence. These fixes and the later bulk-contact/DOCX-index merge need
+a fresh complete Docker inventory, clean-checkout CI, canonical-main merge,
+exact-image deployment, and production E2E before any verdict is upgraded.

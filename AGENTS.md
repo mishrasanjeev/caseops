@@ -1072,3 +1072,15 @@ requirements when using the fallback.
   coverage separate from the real Matter link journey, and replay both against
   a production-style build after a UI contract change. A local Next dev 404 or
   partially written generated type file is setup evidence, not a product verdict.
+- A legacy-data browser regression must establish the pre-feature state, not
+  ask the current public API to create data that its new guard correctly rejects.
+  Restrict direct fixture seeding to isolated E2E Docker, assert tenant scope and
+  zero existing children, then exercise the normal scheduler/API and verify the
+  original record ID survives recovery. Never relax the public guard for a test.
+- A sandboxed document preview renders in its iframe, not the parent document.
+  Dated Playwright assertions must enter that frame and verify actual rendered
+  text, while separate checks retain the sandbox and download authorization.
+- A signed test token must be minted with the serving runtime's secret. In
+  Docker acceptance, sign inside the exact API container and verify the normal
+  server admission path; a host-generated token can fail solely because test
+  and container secrets differ. Never weaken signature validation to pass E2E.
