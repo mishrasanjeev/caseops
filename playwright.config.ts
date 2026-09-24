@@ -21,9 +21,11 @@ const browserExecutablePath = browserExecutableCandidates.find((candidate) =>
 );
 
 const apiPythonOverride = process.env.CASEOPS_E2E_PYTHON?.trim();
+const apiPort = process.env.CASEOPS_E2E_API_PORT ?? "8000";
+const webPort = process.env.CASEOPS_E2E_WEB_PORT ?? "3000";
 const apiServerCommand = apiPythonOverride
-  ? `"${apiPythonOverride}" -m uvicorn caseops_api.main:app --host 127.0.0.1 --port ${process.env.CASEOPS_E2E_API_PORT ?? "8000"} --app-dir src`
-  : "uv --directory apps/api run --no-sync python -m uvicorn caseops_api.main:app --host 127.0.0.1 --port 8000 --app-dir src";
+  ? `"${apiPythonOverride}" -m uvicorn caseops_api.main:app --host 127.0.0.1 --port ${apiPort} --app-dir src`
+  : `uv --directory apps/api run --no-sync python -m uvicorn caseops_api.main:app --host 127.0.0.1 --port ${apiPort} --app-dir src`;
 
 export default defineConfig({
   testDir: path.join("tests", "e2e"),
@@ -95,7 +97,7 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
     },
     {
-      command: "npx next dev --turbopack --hostname 127.0.0.1 --port 3000",
+      command: `npx next dev --turbopack --hostname 127.0.0.1 --port ${webPort}`,
       cwd: path.join(repoRoot, "apps", "web"),
       env: {
         ...e2eEnv,

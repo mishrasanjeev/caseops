@@ -8,6 +8,8 @@ const {
   fetchCaseTrackingStatusMock,
   searchTrackedCasesMock,
   resolveMatterCaseMock,
+  searchMatterCasesMock,
+  linkMatterCaseMock,
   createCaseTrackingBookmarkMock,
   fetchCaseTrackingSupportMatrixMock,
   listCaseTrackingBookmarksMock,
@@ -18,6 +20,8 @@ const {
   fetchCaseTrackingStatusMock: vi.fn(),
   searchTrackedCasesMock: vi.fn(),
   resolveMatterCaseMock: vi.fn(),
+  searchMatterCasesMock: vi.fn(),
+  linkMatterCaseMock: vi.fn(),
   createCaseTrackingBookmarkMock: vi.fn(),
   fetchCaseTrackingSupportMatrixMock: vi.fn(),
   listCaseTrackingBookmarksMock: vi.fn(),
@@ -39,6 +43,8 @@ vi.mock("@/lib/api/endpoints", () => ({
 
 vi.mock("@/lib/api/case-tracking-matter-resolution", () => ({
   resolveMatterCase: resolveMatterCaseMock,
+  searchMatterCases: searchMatterCasesMock,
+  linkMatterCase: linkMatterCaseMock,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -158,6 +164,8 @@ describe("CaseTrackingPage", () => {
     fetchCaseTrackingStatusMock.mockReset();
     searchTrackedCasesMock.mockReset();
     resolveMatterCaseMock.mockReset();
+    searchMatterCasesMock.mockReset();
+    linkMatterCaseMock.mockReset();
     createCaseTrackingBookmarkMock.mockReset();
     fetchCaseTrackingSupportMatrixMock.mockReset();
     listCaseTrackingBookmarksMock.mockReset();
@@ -190,6 +198,7 @@ describe("CaseTrackingPage", () => {
     });
     listCaseTrackingUpdatesMock.mockResolvedValue({ updates: [] });
     createCaseTrackingBookmarkMock.mockResolvedValue(bookmark);
+    linkMatterCaseMock.mockResolvedValue(bookmark);
     refreshCaseTrackingBookmarkMock.mockResolvedValue({
       bookmark,
       created_updates: [],
@@ -237,6 +246,7 @@ describe("CaseTrackingPage", () => {
         next_hearing_on: "2026-10-05",
         source_url: null,
         provenance_label: "Provider-normalized case status",
+        link_token: "signed-selection-1",
       }],
     });
     render(withClient(<CaseTrackingPage />));
@@ -247,6 +257,31 @@ describe("CaseTrackingPage", () => {
     expect(await screen.findByText("One case matches the Matter identifiers.")).toBeInTheDocument();
     expect(screen.getAllByTestId("matter-case-candidate")).toHaveLength(1);
     expect(screen.queryByRole("link", { name: /eCourts/i })).not.toBeInTheDocument();
+    expect(linkMatterCaseMock).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByTestId("matter-case-link-submit"));
+    expect(linkMatterCaseMock).toHaveBeenCalledWith(
+      { matterId: "matter-1", linkToken: "signed-selection-1" },
+      expect.anything(),
+    );
+    expect(await screen.findByTestId("matter-case-linked")).toHaveTextContent("Linked to this Matter.");
+    expect(screen.getByRole("link", { name: "View Matter" })).toHaveAttribute("href", "/app/matters/matter-1");
+  });
+
+  it("keeps failed selection visible and offers a retry", async () => {
+    resolveMatterCaseMock.mockResolvedValue({
+      provider: "ecourtsindia", status: "matched",
+      results: [{ provider: "ecourtsindia", cnr_number: "DLHC010012342026", case_number: "WP(C) 1/2026",
+        court_code: "DLHC", court_name: "Delhi High Court", case_title: "Example case",
+        party_names: [], current_status: "Pending", current_stage: null, next_hearing_on: null,
+        source_url: null, link_token: "signed-selection-2" }],
+    });
+    linkMatterCaseMock.mockRejectedValue(new ApiError(409, "Matter identity changed. Find the case again.", null));
+    render(withClient(<CaseTrackingPage />));
+    await userEvent.click(await screen.findByTestId("matter-case-resolve-submit"));
+    await userEvent.click(await screen.findByTestId("matter-case-link-submit"));
+    expect(await screen.findByTestId("matter-case-link-error")).toHaveTextContent("Matter identity changed");
+    expect(screen.queryByTestId("matter-case-linked")).not.toBeInTheDocument();
+    expect(screen.getByTestId("matter-case-link-submit")).toBeEnabled();
   });
 
   it.each([
@@ -260,9 +295,9 @@ describe("CaseTrackingPage", () => {
     expect(screen.queryByTestId("matter-case-candidate")).not.toBeInTheDocument();
   });
 
-  it("searches, bookmarks with matter context, and shows bookmark updates", async () => {
+  it("searches with Matter context, links signed result, and shows bookmark updates", async () => {
     const user = userEvent.setup();
-    searchTrackedCasesMock.mockResolvedValue({
+    searchMatterCasesMock.mockResolvedValue({
       provider: "ecourtsindia",
       results: [
         {
@@ -278,6 +313,7 @@ describe("CaseTrackingPage", () => {
           next_hearing_on: "2026-06-15",
           source_url: null,
           provenance_label: "Provider-normalized case status",
+          link_token: "manual-search-selection",
         },
       ],
     });
@@ -307,24 +343,26 @@ describe("CaseTrackingPage", () => {
     await user.type(await screen.findByTestId("case-tracking-query"), "Example Petitioner");
     await user.type(screen.getByTestId("case-tracking-cnr"), "DLHC010012342026");
     await user.click(screen.getByTestId("case-tracking-search-submit"));
-    expect(searchTrackedCasesMock.mock.calls[0][0]).toEqual({
-      query: "Example Petitioner",
-      cnr_number: "DLHC010012342026",
-      case_number: null,
-      court_code: null,
+    expect(searchMatterCasesMock.mock.calls[0][0]).toEqual({
+      matterId: "matter-1",
+      input: {
+        query: "Example Petitioner",
+        cnr_number: "DLHC010012342026",
+        case_number: null,
+        court_code: null,
+      },
     });
     expect(
       await screen.findAllByText("Example Petitioner v Example Respondent"),
     ).not.toHaveLength(0);
 
-    await user.click(screen.getAllByRole("button", { name: /Bookmark/i })[0]);
-    expect(createCaseTrackingBookmarkMock.mock.calls[0][0]).toEqual(
-      expect.objectContaining({
-        cnr_number: "DLHC010012342026",
-        matter_id: "matter-1",
-        metadata: {},
-      }),
+    await user.click(screen.getByTestId("matter-search-link-submit"));
+    expect(linkMatterCaseMock).toHaveBeenCalledWith(
+      { matterId: "matter-1", linkToken: "manual-search-selection" },
+      expect.anything(),
     );
+    expect(createCaseTrackingBookmarkMock).not.toHaveBeenCalled();
+    expect(await screen.findByTestId("matter-search-linked")).toBeInTheDocument();
     await user.click(screen.getAllByText("Example Petitioner v Example Respondent")[1]);
     expect(screen.getByTestId("case-tracking-bookmark-bm-1")).toBeInTheDocument();
     expect(await screen.findByText("Order dated 26 May 2026")).toBeInTheDocument();
@@ -349,6 +387,23 @@ describe("CaseTrackingPage", () => {
     expect(updateCaseTrackingBookmarkMock.mock.calls[0][1]).toEqual({
       notification_enabled: false,
     });
+  });
+
+  it("does not offer a Matter link for a search result without server verification", async () => {
+    searchMatterCasesMock.mockResolvedValue({
+      provider: "ecourtsindia",
+      results: [{ provider: "ecourtsindia", cnr_number: "DLHC010099992026",
+        case_number: "WP(C) 99/2026", court_code: "DLHC", court_name: "Delhi High Court",
+        case_title: "Different case", party_names: [], current_status: null,
+        current_stage: null, next_hearing_on: null, source_url: null,
+        provenance_label: "Provider-normalized case status", link_token: null }],
+    });
+    render(withClient(<CaseTrackingPage />));
+    await userEvent.type(await screen.findByTestId("case-tracking-query"), "Different case");
+    await userEvent.click(screen.getByTestId("case-tracking-search-submit"));
+    expect(await screen.findByText("Does not match this Matter")).toBeInTheDocument();
+    expect(screen.queryByTestId("matter-search-link-submit")).not.toBeInTheDocument();
+    expect(createCaseTrackingBookmarkMock).not.toHaveBeenCalled();
   });
 
   it("disables manual refresh when provider health is red and preserves fallback guidance", async () => {
@@ -417,7 +472,7 @@ describe("CaseTrackingPage", () => {
 
   it("BUG-042: shows an explicit empty-results message instead of nothing", async () => {
     const user = userEvent.setup();
-    searchTrackedCasesMock.mockResolvedValue({ provider: "ecourtsindia", results: [] });
+    searchMatterCasesMock.mockResolvedValue({ provider: "ecourtsindia", results: [] });
     render(withClient(<CaseTrackingPage />));
 
     await user.type(await screen.findByTestId("case-tracking-query"), "No Such Party");
@@ -430,7 +485,7 @@ describe("CaseTrackingPage", () => {
 
   it("BUG-042: renders the backend error detail verbatim when search fails", async () => {
     const user = userEvent.setup();
-    searchTrackedCasesMock.mockRejectedValue(
+    searchMatterCasesMock.mockRejectedValue(
       new ApiError(502, "eCourtsIndia provider returned an error.", null, null),
     );
     render(withClient(<CaseTrackingPage />));

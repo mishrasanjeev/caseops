@@ -18,6 +18,7 @@ from caseops_api.schemas.case_tracking import (
     CaseTrackingSearchRequest,
     CaseTrackingSearchResponse,
     CaseTrackingUpdateListResponse,
+    MatterCaseLinkRequest,
     MatterCaseResolutionResponse,
 )
 from caseops_api.schemas.production_safety import CaseTrackingTenantSupportMatrixResponse
@@ -26,6 +27,7 @@ from caseops_api.services.case_tracking import (
     download_case_tracking_source,
     list_bookmarks,
     list_updates,
+    link_matter_case,
     provider_status_response,
     refresh_bookmark,
     resolve_matter_case,
@@ -102,6 +104,20 @@ def post_matter_case_resolution(
     session: DbSession,
 ) -> MatterCaseResolutionResponse:
     return resolve_matter_case(session, context=context, matter_id=matter_id)
+
+
+@router.post(
+    "/matters/{matter_id}/link",
+    response_model=CaseTrackingBookmarkRecord,
+    summary="Link a verified eCourts candidate to a Matter without another provider call.",
+)
+def post_matter_case_link(
+    matter_id: str,
+    payload: MatterCaseLinkRequest,
+    context: CaseTrackingUser,
+    session: DbSession,
+) -> CaseTrackingBookmarkRecord:
+    return link_matter_case(session, context=context, matter_id=matter_id, payload=payload)
 
 
 @router.post(

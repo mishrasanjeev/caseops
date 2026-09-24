@@ -16,6 +16,7 @@ from caseops_api.db.models import (
     CompanyMembership,
     Matter,
     ProviderSpendReservation,
+    TrackedCaseBookmark,
     TrackedCasePollRun,
     TrackedCaseProviderOperation,
     TrackedCaseProviderSnapshot,
@@ -381,35 +382,45 @@ def test_source_download_releases_transaction_and_rechecks_access(client, monkey
         get_settings.cache_clear()
 
 
-def test_disposal_during_provider_transport_wins_without_new_children(client):
+def test_disposal_during_provider_transport_wins_without_new_children(client, monkeypatch):
     boot = bootstrap_company(client)
     headers = auth_headers(str(boot["access_token"]))
-    response = client.post(
-        "/api/matters/",
-        headers=headers,
-        json={
-            "title": "Concurrent disposal",
-            "matter_code": "PROVIDER-DISPOSE",
-            "practice_area": "litigation",
-            "forum_level": "high_court",
-            "court_name": "Delhi High Court",
-            "status": "active",
-        },
-    )
+    with monkeypatch.context() as fixture_policy:
+        fixture_policy.setenv("CASEOPS_CASE_TRACKING_ENABLED", "false")
+        get_settings.cache_clear()
+        response = client.post(
+            "/api/matters/",
+            headers=headers,
+            json={
+                "title": "Concurrent disposal",
+                "matter_code": "PROVIDER-DISPOSE",
+                "practice_area": "litigation",
+                "forum_level": "high_court",
+                "court_name": "Delhi High Court",
+                "cnr_number": "DLHC010012342026",
+                "case_number": "WP(C) 1/2026",
+                "status": "active",
+            },
+        )
     assert response.status_code == 200, response.text
     matter = response.json()
-    created = client.post(
-        "/api/case-tracking/bookmarks",
-        headers=headers,
-        json={
-            "provider": "ecourtsindia",
-            "cnr_number": "DLHC010012342026",
-            "court_name": "Delhi High Court",
-            "case_title": "Concurrent disposal",
-            "matter_id": matter["id"],
-        },
+    with get_session_factory()() as session:
+        assert session.scalar(select(func.count(TrackedCaseBookmark.id))) == 0
+    get_settings.cache_clear()
+    monkeypatch.setattr(
+        "caseops_api.services.case_tracking.get_case_tracking_provider",
+        lambda: FakeCaseTrackingProvider(),
     )
-    assert created.status_code == 201, created.text
+    resolved = client.post(
+        f"/api/case-tracking/matters/{matter['id']}/resolve", headers=headers
+    )
+    assert resolved.status_code == 200, resolved.text
+    created = client.post(
+        f"/api/case-tracking/matters/{matter['id']}/link",
+        headers=headers,
+        json={"link_token": resolved.json()["results"][0]["link_token"]},
+    )
+    assert created.status_code == 200, created.text
     context = _context_from_bootstrap(boot)
     with get_session_factory()() as session:
 

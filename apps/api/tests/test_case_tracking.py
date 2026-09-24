@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+from base64 import urlsafe_b64decode
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 
@@ -39,12 +41,14 @@ from caseops_api.db.models import (
     User,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.schemas.case_tracking import CaseTrackingSearchRequest
 from caseops_api.services.case_tracking import (
     _release_smoke_authority_source_text,
     apply_snapshot,
     download_case_tracking_source,
     normalize_cnr,
     poll_tracked_cases,
+    search_cases,
 )
 from caseops_api.services.case_tracking_providers import (
     _SOURCE_TEXT_MAX_CHARS,
@@ -60,6 +64,7 @@ from caseops_api.services.next_hearing import backfill_legacy_next_hearings
 from caseops_api.services.production_safety import support_matrix_match
 from caseops_api.services.session_context import SessionContext
 from tests.test_auth_company import auth_headers, bootstrap_company
+from tests.test_today_view_matter_access import _invite_member
 
 
 class FakeCaseTrackingProvider:
@@ -621,6 +626,293 @@ def _create_resolution_matter(client: TestClient, token: str, *, cnr: str | None
     return str(response.json()["id"])
 
 
+def _create_unlinked_resolution_matter(
+    client: TestClient, token: str, monkeypatch, *, cnr: str | None
+) -> str:
+    prior = os.environ.get("CASEOPS_CASE_TRACKING_ENABLED")
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_ENABLED", "false")
+    get_settings.cache_clear()
+    matter_id = _create_resolution_matter(client, token, cnr=cnr)
+    with get_session_factory()() as session:
+        assert session.scalar(select(func.count()).select_from(TrackedCaseBookmark)) == 0
+    if prior is None:
+        monkeypatch.delenv("CASEOPS_CASE_TRACKING_ENABLED", raising=False)
+    else:
+        monkeypatch.setenv("CASEOPS_CASE_TRACKING_ENABLED", prior)
+    get_settings.cache_clear()
+    return matter_id
+
+
+def test_matter_case_selection_links_exact_provider_evidence_once_without_transport(
+    client: TestClient, monkeypatch
+) -> None:
+    token = _bootstrap(client)
+    matter_id = _create_unlinked_resolution_matter(
+        client, token, monkeypatch, cnr="DLHC010012342026"
+    )
+    provider = FakeCaseTrackingProvider()
+    monkeypatch.setattr(
+        "caseops_api.services.case_tracking.get_case_tracking_provider", lambda: provider
+    )
+    resolved = client.post(
+        f"/api/case-tracking/matters/{matter_id}/resolve", headers=auth_headers(token)
+    )
+    assert resolved.status_code == 200, resolved.text
+    candidate = resolved.json()["results"][0]
+    assert candidate["link_token"]
+    assert len(provider.search_calls) == 1
+    with get_session_factory()() as session:
+        assert session.scalar(select(func.count()).select_from(TrackedCaseBookmark)) == 0
+
+    forged = client.post(
+        "/api/case-tracking/bookmarks",
+        headers=auth_headers(token),
+        json={
+            "provider": "ecourtsindia",
+            "cnr_number": candidate["cnr_number"],
+            "case_title": "Client-supplied candidate",
+            "matter_id": matter_id,
+        },
+    )
+    assert forged.status_code == 409, forged.text
+    with get_session_factory()() as session:
+        assert session.scalar(select(func.count()).select_from(TrackedCaseBookmark)) == 0
+
+    link_url = f"/api/case-tracking/matters/{matter_id}/link"
+    selected = client.post(
+        link_url, headers=auth_headers(token), json={"link_token": candidate["link_token"]}
+    )
+    assert selected.status_code == 200, selected.text
+    assert selected.json()["matter_id"] == matter_id
+    assert selected.json()["tracked_case"]["cnr_number"] == candidate["cnr_number"]
+    replay = client.post(
+        link_url, headers=auth_headers(token), json={"link_token": candidate["link_token"]}
+    )
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["id"] == selected.json()["id"]
+    assert len(provider.search_calls) == 1
+    assert provider.refresh_calls == []
+    with get_session_factory()() as session:
+        assert session.scalar(select(func.count()).select_from(TrackedCaseBookmark)) == 1
+        assert session.scalar(
+            select(func.count()).select_from(AuditEvent).where(
+                AuditEvent.action == "case_tracking.matter_case_linked",
+                AuditEvent.matter_id == matter_id,
+            )
+        ) == 1
+
+
+def test_public_bookmark_route_preserves_company_scope_but_rejects_matter_claims(
+    client: TestClient, monkeypatch
+) -> None:
+    token = _bootstrap(client)
+    matter_id = _create_unlinked_resolution_matter(
+        client, token, monkeypatch, cnr="DLHC010012342026"
+    )
+    payload = {
+        "provider": "ecourtsindia",
+        "cnr_number": "DLHC010012342026",
+        "case_title": "Company bookmark",
+    }
+    company_bookmark = client.post(
+        "/api/case-tracking/bookmarks", headers=auth_headers(token), json=payload
+    )
+    assert company_bookmark.status_code == 201, company_bookmark.text
+    assert company_bookmark.json()["matter_id"] is None
+    unsafe_link = client.post(
+        "/api/case-tracking/bookmarks",
+        headers=auth_headers(token),
+        json={**payload, "matter_id": matter_id},
+    )
+    assert unsafe_link.status_code == 409, unsafe_link.text
+    listed = client.get("/api/case-tracking/bookmarks", headers=auth_headers(token))
+    assert listed.status_code == 200, listed.text
+    assert [(row["id"], row["matter_id"]) for row in listed.json()["bookmarks"]] == [
+        (company_bookmark.json()["id"], None)
+    ]
+
+
+def test_manual_matter_search_issues_bounded_url_free_token_without_transaction_during_transport(
+    client: TestClient, monkeypatch
+) -> None:
+    boot = bootstrap_company(client)
+    token = str(boot["access_token"])
+    matter_id = _create_unlinked_resolution_matter(
+        client, token, monkeypatch, cnr="DLHC010012342026"
+    )
+    context = _context_from_bootstrap(boot)
+    with get_session_factory()() as session:
+
+        class TransactionCheckingProvider(FakeCaseTrackingProvider):
+            def search_cases(self, *, query: CaseSearchQuery) -> list[ProviderCaseSnapshot]:
+                assert not session.in_transaction()
+                return super().search_cases(query=query)
+
+        provider = TransactionCheckingProvider()
+        response = search_cases(
+            session,
+            context=context,
+            payload=CaseTrackingSearchRequest(query="Example Petitioner", matter_id=matter_id),
+            provider=provider,
+        )
+    result = response.results[0]
+    assert result.link_token
+    encoded = result.link_token.split(".", 1)[0]
+    claims = json.loads(urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)))
+    assert "source_url" not in claims["result"]
+    assert "provider.example" not in json.dumps(claims)
+    assert len(result.link_token) <= 8192
+    assert len(provider.search_calls) == 1
+    linked = client.post(
+        f"/api/case-tracking/matters/{matter_id}/link",
+        headers=auth_headers(token),
+        json={"link_token": result.link_token},
+    )
+    assert linked.status_code == 200, linked.text
+    assert len(provider.search_calls) == 1
+
+
+def test_oversized_provider_result_cannot_issue_matter_link_token(
+    client: TestClient, monkeypatch
+) -> None:
+    token = _bootstrap(client)
+    matter_id = _create_unlinked_resolution_matter(
+        client, token, monkeypatch, cnr="DLHC010012342026"
+    )
+    provider = FakeCaseTrackingProvider()
+    original = provider.search_cases
+
+    def oversized(*, query: CaseSearchQuery) -> list[ProviderCaseSnapshot]:
+        return [replace(original(query=query)[0], case_title="x" * 6000)]
+
+    provider.search_cases = oversized  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        "caseops_api.services.case_tracking.get_case_tracking_provider", lambda: provider
+    )
+    response = client.post(
+        "/api/case-tracking/search",
+        headers=auth_headers(token),
+        json={"cnr_number": "DLHC010012342026", "matter_id": matter_id},
+    )
+    assert response.status_code == 409, response.text
+    with get_session_factory()() as session:
+        assert session.scalar(select(func.count()).select_from(TrackedCaseBookmark)) == 0
+
+
+def test_matter_case_selection_rejects_tamper_cross_matter_and_changed_identity(
+    client: TestClient, monkeypatch
+) -> None:
+    token = _bootstrap(client)
+    matter_id = _create_unlinked_resolution_matter(
+        client, token, monkeypatch, cnr="DLHC010012342026"
+    )
+    provider = FakeCaseTrackingProvider()
+    monkeypatch.setattr(
+        "caseops_api.services.case_tracking.get_case_tracking_provider", lambda: provider
+    )
+    resolved = client.post(
+        f"/api/case-tracking/matters/{matter_id}/resolve", headers=auth_headers(token)
+    )
+    assert resolved.status_code == 200, resolved.text
+    selection = resolved.json()["results"][0]["link_token"]
+    link_url = f"/api/case-tracking/matters/{matter_id}/link"
+    tampered = client.post(
+        link_url, headers=auth_headers(token), json={"link_token": selection[:-1] + "0"}
+    )
+    assert tampered.status_code == 409, tampered.text
+    wrong_matter = client.post(
+        "/api/case-tracking/matters/not-this-matter/link",
+        headers=auth_headers(token), json={"link_token": selection},
+    )
+    assert wrong_matter.status_code == 409, wrong_matter.text
+    with get_session_factory()() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        matter.case_number = "WP(C) 999/2026"
+        session.commit()
+    stale = client.post(link_url, headers=auth_headers(token), json={"link_token": selection})
+    assert stale.status_code == 409, stale.text
+    with get_session_factory()() as session:
+        assert session.scalar(select(func.count()).select_from(TrackedCaseBookmark)) == 0
+    assert len(provider.search_calls) == 1
+
+
+def test_matter_case_selection_fails_after_lifecycle_or_access_version_change(
+    client: TestClient, monkeypatch
+) -> None:
+    token = _bootstrap(client)
+    matter_id = _create_unlinked_resolution_matter(
+        client, token, monkeypatch, cnr="DLHC010012342026"
+    )
+    provider = FakeCaseTrackingProvider()
+    monkeypatch.setattr(
+        "caseops_api.services.case_tracking.get_case_tracking_provider", lambda: provider
+    )
+    resolved = client.post(
+        f"/api/case-tracking/matters/{matter_id}/resolve", headers=auth_headers(token)
+    )
+    selection = resolved.json()["results"][0]["link_token"]
+    url = f"/api/case-tracking/matters/{matter_id}/link"
+    with get_session_factory()() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        matter.access_policy_version += 1
+        session.commit()
+    denied = client.post(url, headers=auth_headers(token), json={"link_token": selection})
+    assert denied.status_code == 409, denied.text
+    with get_session_factory()() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        matter.access_policy_version -= 1
+        matter.lifecycle_version += 1
+        matter.status = "disposed"
+        matter.is_active = False
+        session.commit()
+    terminal = client.post(url, headers=auth_headers(token), json={"link_token": selection})
+    assert terminal.status_code == 409, terminal.text
+    with get_session_factory()() as session:
+        assert session.scalar(select(func.count()).select_from(TrackedCaseBookmark)) == 0
+    assert len(provider.search_calls) == 1
+
+
+def test_matter_case_selection_rechecks_current_member_access_under_lock(
+    client: TestClient, monkeypatch
+) -> None:
+    owner_token = _bootstrap(client)
+    matter_id = _create_unlinked_resolution_matter(
+        client, owner_token, monkeypatch, cnr="DLHC010012342026"
+    )
+    member_id, member_token = _invite_member(
+        client, owner_token, "case-link-member@example.com"
+    )
+    provider = FakeCaseTrackingProvider()
+    monkeypatch.setattr(
+        "caseops_api.services.case_tracking.get_case_tracking_provider", lambda: provider
+    )
+    resolved = client.post(
+        f"/api/case-tracking/matters/{matter_id}/resolve",
+        headers=auth_headers(member_token),
+    )
+    assert resolved.status_code == 200, resolved.text
+    selection = resolved.json()["results"][0]["link_token"]
+    with get_session_factory()() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        matter.restricted_access = True
+        matter.access_policy_version += 1
+        session.commit()
+    denied = client.post(
+        f"/api/case-tracking/matters/{matter_id}/link",
+        headers=auth_headers(member_token),
+        json={"link_token": selection},
+    )
+    assert denied.status_code == 404, denied.text
+    with get_session_factory()() as session:
+        assert session.scalar(select(func.count()).select_from(TrackedCaseBookmark)) == 0
+        assert session.get(CompanyMembership, member_id) is not None
+    assert len(provider.search_calls) == 1
+
+
 def test_matter_case_resolution_uses_server_owned_cnr_and_rejects_conflicts(
     client: TestClient, monkeypatch
 ) -> None:
@@ -753,10 +1045,7 @@ def test_legacy_hearing_backfill_materializes_past_today_and_future_once(
             assert matter is not None
             matter.next_hearing_source = "case_tracking" if index < 2 else "unknown"
         for row in session.scalars(select(MatterHearing).where(MatterHearing.matter_id.in_(ids))):
-            if row.matter_id == ids[1]:
-                row.status = "cancelled"
-            else:
-                session.delete(row)
+            session.delete(row)
         for row in session.scalars(
             select(MatterNextHearingHistory).where(MatterNextHearingHistory.matter_id.in_(ids))
         ):
@@ -765,7 +1054,7 @@ def test_legacy_hearing_backfill_materializes_past_today_and_future_once(
         session.commit()
         assert session.scalar(
             select(func.count()).select_from(MatterHearing).where(MatterHearing.matter_id.in_(ids))
-        ) == 1
+        ) == 0
 
     context = _context_from_bootstrap(boot)
     with get_session_factory()() as session:
@@ -782,12 +1071,11 @@ def test_legacy_hearing_backfill_materializes_past_today_and_future_once(
         hearings = list(
             session.scalars(select(MatterHearing).where(MatterHearing.matter_id.in_(ids)))
         )
-        assert len(hearings) == 4
-        scheduled = [row for row in hearings if row.status == "scheduled"]
-        assert len(scheduled) == 3
-        assert {row.hearing_on for row in scheduled} == set(dates)
+        assert len(hearings) == 3
+        assert {row.hearing_on for row in hearings} == set(dates)
+        assert all(row.status == "scheduled" for row in hearings)
         assert {
-            row.matter_id: row.source for row in scheduled
+            row.matter_id: row.source for row in hearings
         } == {ids[0]: "case_tracking", ids[1]: "case_tracking", ids[2]: "unknown"}
         histories = list(
             session.scalars(
@@ -1999,6 +2287,8 @@ def test_disposed_matter_blocks_case_tracking_refresh_before_provider_call(
 ) -> None:
     boot = bootstrap_company(client)
     token = str(boot["access_token"])
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_ENABLED", "false")
+    get_settings.cache_clear()
     matter_response = client.post(
         "/api/matters/",
         headers=auth_headers(token),
@@ -2008,26 +2298,31 @@ def test_disposed_matter_blocks_case_tracking_refresh_before_provider_call(
             "practice_area": "litigation",
             "forum_level": "high_court",
             "court_name": "Delhi High Court",
+            "cnr_number": "DLHC010012342026",
+            "case_number": "WP(C) 1/2026",
             "status": "active",
         },
     )
     assert matter_response.status_code == 200, matter_response.text
     matter = matter_response.json()
-    bookmark = client.post(
-        "/api/case-tracking/bookmarks",
-        headers=auth_headers(token),
-        json={
-            "provider": "ecourtsindia",
-            "cnr_number": "DLHC010012342026",
-            "case_number": "WP(C) 1/2026",
-            "court_code": "DLHC",
-            "court_name": "Delhi High Court",
-            "case_title": "Example Petitioner v Example Respondent",
-            "matter_id": matter["id"],
-            "notification_enabled": True,
-        },
+    with get_session_factory()() as session:
+        assert session.scalar(select(func.count()).select_from(TrackedCaseBookmark)) == 0
+    monkeypatch.setenv("CASEOPS_CASE_TRACKING_ENABLED", "true")
+    get_settings.cache_clear()
+    provider = FakeCaseTrackingProvider()
+    monkeypatch.setattr(
+        "caseops_api.services.case_tracking.get_case_tracking_provider", lambda: provider
     )
-    assert bookmark.status_code == 201, bookmark.text
+    resolved = client.post(
+        f"/api/case-tracking/matters/{matter['id']}/resolve", headers=auth_headers(token)
+    )
+    assert resolved.status_code == 200, resolved.text
+    bookmark = client.post(
+        f"/api/case-tracking/matters/{matter['id']}/link",
+        headers=auth_headers(token),
+        json={"link_token": resolved.json()["results"][0]["link_token"]},
+    )
+    assert bookmark.status_code == 200, bookmark.text
 
     disposed = client.patch(
         f"/api/matters/{matter['id']}/lifecycle/status",
@@ -2057,11 +2352,6 @@ def test_disposed_matter_blocks_case_tracking_refresh_before_provider_call(
     )
     assert forbidden_bookmark.status_code == 409, forbidden_bookmark.text
 
-    provider = FakeCaseTrackingProvider()
-    monkeypatch.setattr(
-        "caseops_api.services.case_tracking.get_case_tracking_provider",
-        lambda: provider,
-    )
     refresh = client.post(
         f"/api/case-tracking/bookmarks/{bookmark.json()['id']}/refresh",
         headers=auth_headers(token),

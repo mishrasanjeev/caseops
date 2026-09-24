@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
+import { spawnSync } from "node:child_process";
+import path from "node:path";
 
 import { expect, test } from "@playwright/test";
 
 import { noPaidProviderHeaders } from "./support/cost-controls";
-import { apiBaseUrl } from "./support/env";
+import { apiBaseUrl, e2eEnv, repoRoot } from "./support/env";
 
 const web = process.env.PROD_BASE_URL || process.env.CASEOPS_WEB_BASE_URL || "http://127.0.0.1:3000";
 const api = process.env.PROD_API_BASE_URL || apiBaseUrl;
@@ -23,7 +25,33 @@ async function waitForSignInForm(page: import("@playwright/test").Page) {
   });
 }
 
-test("Matter court link shows a verified case result without provider spend in local UI", async ({ page, request }) => {
+function localSignedMatterSelection(matterId: string, membershipId: string): string {
+  const python = process.env.CASEOPS_E2E_PYTHON || path.join(
+    repoRoot, "apps", "api", ".venv", "Scripts", "python.exe",
+  );
+  const script = [
+    "import sys",
+    "from caseops_api.db.session import get_session_factory",
+    "from caseops_api.db.models import Matter",
+    "from caseops_api.schemas.case_tracking import CaseTrackingSearchResultRecord",
+    "from caseops_api.services.case_tracking import _matter_selection_token",
+    "from caseops_api.services.identity import get_session_context",
+    "with get_session_factory()() as session:",
+    "    matter = session.get(Matter, sys.argv[1])",
+    "    context = get_session_context(session, sys.argv[2])",
+    "    result = CaseTrackingSearchResultRecord(provider='ecourtsindia', cnr_number='DLHC010012342026', case_number='WP(C) 1/2026', court_code='DLHC', court_name='Delhi High Court', case_title='Selected candidate', party_names=[], current_status='Pending', current_stage='Arguments', next_hearing_on=None, source_url=None)",
+    "    print(_matter_selection_token(context=context, matter=matter, result=result))",
+  ].join("\n");
+  const run = spawnSync(python, ["-c", script, matterId, membershipId], {
+    cwd: path.join(repoRoot, "apps", "api"),
+    env: { ...process.env, ...e2eEnv, PYTHONPATH: path.join(repoRoot, "apps", "api", "src") },
+    encoding: "utf8",
+  });
+  if (run.status !== 0) throw new Error(`Could not create local nonbillable selection: ${run.stderr}`);
+  return run.stdout.trim();
+}
+
+test("Matter court link shows the user-selected case without provider spend in local UI", async ({ page, request }) => {
   test.skip(production, "Local UI journey uses deterministic nonbillable provider evidence.");
   const suffix = randomUUID().slice(0, 8);
   const slug = `ecourt-link-${suffix}`;
@@ -41,9 +69,10 @@ test("Matter court link shows a verified case result without provider spend in l
     },
   });
   expect(boot.status(), await boot.text()).toBe(200);
+  const bootData = await boot.json();
   const headers = {
     ...noPaidProviderHeaders,
-    Authorization: `Bearer ${(await boot.json()).access_token as string}`,
+    Authorization: `Bearer ${bootData.access_token as string}`,
   };
   const created = await request.post(`${api}/api/matters/`, {
     headers,
@@ -60,6 +89,7 @@ test("Matter court link shows a verified case result without provider spend in l
   });
   expect(created.status(), await created.text()).toBe(200);
   const matterId = (await created.json()).id as string;
+  const selectedToken = localSignedMatterSelection(matterId, bootData.membership.id as string);
   await page.setExtraHTTPHeaders(noPaidProviderHeaders);
   await page.goto(`${web}/sign-in`);
   await waitForSignInForm(page);
@@ -83,19 +113,74 @@ test("Matter court link shows a verified case result without provider spend in l
   await page.route(`**/api/case-tracking/matters/${matterId}/resolve`, async (route) => {
     expect(route.request().headers()["x-caseops-automated-test"]).toBe("no-paid-providers");
     await route.fulfill({ json: {
-      provider: "ecourtsindia", status: "matched", results: [{
+      provider: "ecourtsindia", status: "multiple_matches", results: [{
+        provider: "ecourtsindia", cnr_number: "DLHC010099992026",
+        case_number: "WP(C) 99/2026", court_code: "DLHC", court_name: "Delhi High Court",
+        case_title: "First candidate", party_names: [],
+        current_status: "Pending", current_stage: "Arguments", next_hearing_on: null,
+        source_url: null, provenance_label: "Provider-normalized case status", link_token: "selection-1",
+      }, {
         provider: "ecourtsindia", cnr_number: "DLHC010012342026",
         case_number: "WP(C) 1/2026", court_code: "DLHC", court_name: "Delhi High Court",
-        case_title: "Example Petitioner v Example Respondent", party_names: [],
+        case_title: "Selected candidate", party_names: [],
         current_status: "Pending", current_stage: "Arguments", next_hearing_on: null,
-        source_url: null, provenance_label: "Provider-normalized case status",
+        source_url: null, provenance_label: "Provider-normalized case status", link_token: selectedToken,
+      }],
+    } });
+  });
+  await page.route("**/api/case-tracking/search", async (route) => {
+    expect(route.request().headers()["x-caseops-automated-test"]).toBe("no-paid-providers");
+    expect(route.request().postDataJSON()).toEqual({
+      query: "Selected candidate", cnr_number: "DLHC010012342026", case_number: "WP(C) 1/2026",
+      court_code: null, matter_id: matterId,
+    });
+    await route.fulfill({ json: {
+      provider: "ecourtsindia", results: [{
+        provider: "ecourtsindia", cnr_number: "DLHC010099992026",
+        case_number: "WP(C) 99/2026", court_code: "DLHC", court_name: "Delhi High Court",
+        case_title: "Unmatched result", party_names: [], current_status: "Pending",
+        current_stage: null, next_hearing_on: null, source_url: null, link_token: null,
+      }, {
+        provider: "ecourtsindia", cnr_number: "DLHC010012342026",
+        case_number: "WP(C) 1/2026", court_code: "DLHC", court_name: "Delhi High Court",
+        case_title: "Selected candidate", party_names: [], current_status: "Pending",
+        current_stage: null, next_hearing_on: null, source_url: null,
+        link_token: selectedToken,
       }],
     } });
   });
   await page.goto(`${web}${href}`);
   await page.getByTestId("matter-case-resolve-submit").click();
-  await expect(page.getByText("One case matches the Matter identifiers.")).toBeVisible();
-  await expect(page.getByTestId("matter-case-candidate")).toHaveCount(1);
+  await expect(page.getByText(/Multiple verified candidates remain/)).toBeVisible();
+  await expect(page.getByTestId("matter-case-candidate")).toHaveCount(2);
+  const linkResponsePromise = page.waitForResponse((response) =>
+    response.url().endsWith(`/api/case-tracking/matters/${matterId}/link`) &&
+    response.request().method() === "POST",
+  );
+  await page.getByTestId("matter-case-candidate").nth(1).getByTestId("matter-case-link-submit").click();
+  const linkResponse = await linkResponsePromise;
+  expect(linkResponse.status(), await linkResponse.text()).toBe(200);
+  expect(linkResponse.request().postDataJSON()).toEqual({ link_token: selectedToken });
+  expect(linkResponse.request().headers()["x-caseops-automated-test"]).toBe("no-paid-providers");
+  await expect(page.getByTestId("matter-case-candidate").nth(1).getByTestId("matter-case-linked")).toBeVisible();
+  await expect(page.getByTestId("matter-case-candidate").first().getByTestId("matter-case-link-submit")).toBeVisible();
+  await page.getByTestId("case-tracking-query").fill("Selected candidate");
+  await page.getByTestId("case-tracking-search-submit").click();
+  await expect(page.getByText("Does not match this Matter")).toBeVisible();
+  const replayResponsePromise = page.waitForResponse((response) =>
+    response.url().endsWith(`/api/case-tracking/matters/${matterId}/link`) &&
+    response.request().method() === "POST",
+  );
+  await page.getByTestId("matter-search-link-submit").click();
+  const replayResponse = await replayResponsePromise;
+  expect(replayResponse.status(), await replayResponse.text()).toBe(200);
+  expect(replayResponse.request().postDataJSON()).toEqual({ link_token: selectedToken });
+  await expect(page.getByTestId("matter-search-linked")).toBeVisible();
+  const bookmarks = await request.get(`${api}/api/case-tracking/bookmarks`, { headers });
+  expect(bookmarks.status(), await bookmarks.text()).toBe(200);
+  expect((await bookmarks.json()).bookmarks.filter((row: { matter_id: string }) =>
+    row.matter_id === matterId,
+  )).toHaveLength(1);
 });
 
 test("legacy dates have canonical hearings and automated eCourts lookup cannot spend", async ({ page, request }) => {

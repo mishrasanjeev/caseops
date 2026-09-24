@@ -17,15 +17,19 @@ from caseops_api.db.models import (
     IpRegistrySnapshot,
     IpRegistrySyncAttempt,
     IpTrackedCaseLink,
+    Matter,
     TrackedCase,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.schemas.case_tracking import CaseTrackingBookmarkCreateRequest
 from caseops_api.schemas.ip_registry import (
     IpRegistryDiffResolveRequest,
     IpRegistryLinkCreateRequest,
     IpRegistryManualSnapshotRequest,
 )
+from caseops_api.services.case_tracking import _create_or_get_bookmark
 from tests.test_auth_company import auth_headers, bootstrap_company
+from tests.test_case_tracking import _context_from_bootstrap
 from tests.test_clients import _mk_matter
 from tests.test_ip_record_workflow import _application, _asset, _docket, _particulars
 
@@ -837,24 +841,28 @@ def test_ip_proceeding_references_canonical_tracked_case_without_copying(
     )
     assert proceeding_response.status_code == 201, proceeding_response.text
     proceeding = proceeding_response.json()
-    bookmark = client.post(
-        "/api/case-tracking/bookmarks",
-        headers=headers,
-        json={
-            "provider": "ecourtsindia",
-            "cnr_number": "DLHC010012342026",
-            "case_number": "C.O. (COMM.IPD-TM) 1/2026",
-            "court_code": "DLHC",
-            "court_name": "Delhi High Court",
-            "case_title": "Fixture Applicant LLP v Registrar of Trade Marks",
-            "party_names": ["Fixture Applicant LLP", "Registrar of Trade Marks"],
-            "current_status": "Pending",
-            "current_stage": "Notice",
-            "matter_id": matter["id"],
-        },
-    )
-    assert bookmark.status_code == 201, bookmark.text
-    tracked_case_id = bookmark.json()["tracked_case"]["id"]
+    with get_session_factory()() as session:
+        legacy_matter = session.get(Matter, matter["id"])
+        assert legacy_matter is not None
+        mutation = _create_or_get_bookmark(
+            session,
+            context=_context_from_bootstrap(bootstrap),
+            matter=legacy_matter,
+            payload=CaseTrackingBookmarkCreateRequest(
+                provider="ecourtsindia",
+                cnr_number="DLHC010012342026",
+                case_number="C.O. (COMM.IPD-TM) 1/2026",
+                court_code="DLHC",
+                court_name="Delhi High Court",
+                case_title="Fixture Applicant LLP v Registrar of Trade Marks",
+                party_names=["Fixture Applicant LLP", "Registrar of Trade Marks"],
+                current_status="Pending",
+                current_stage="Notice",
+                matter_id=matter["id"],
+            ),
+        )
+        tracked_case_id = mutation.tracked_case.id
+        session.commit()
 
     created = client.post(
         f"/api/ip/dockets/{docket['id']}/tracked-case-references",

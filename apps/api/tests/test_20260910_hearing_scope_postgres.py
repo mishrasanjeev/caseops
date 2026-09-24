@@ -20,7 +20,7 @@ from caseops_api.db.session import get_session_factory
 from caseops_api.services import case_tracking
 from tests.test_20260904_auto_next_hearing_sync import DatedSyncProvider
 from tests.test_20260910_hearing_matching import snapshot
-from tests.test_20260910_hearing_matching_races import setup_case
+from tests.test_20260910_hearing_matching_races import link_fixture_case, setup_case
 from tests.test_auth_company import auth_headers
 from tests.test_case_tracking import _context_from_bootstrap
 from tests.test_postgres_validation import _ensure_migrations  # noqa: F401
@@ -29,7 +29,9 @@ from tests.test_today_view_matter_access import _invite_member
 pytestmark = pytest.mark.postgres
 
 
-def bookmark(client, headers, matter_id=None):
+def bookmark(client, headers, monkeypatch, matter_id=None):
+    if matter_id is not None:
+        return link_fixture_case(client, monkeypatch, headers, matter_id)
     response = client.post(
         "/api/case-tracking/bookmarks",
         headers=headers,
@@ -52,7 +54,7 @@ def test_other_actor_private_bookmark_does_not_block_or_leak_into_own_refresh(
 ):
     client = isolated_postgres_client
     boot, owner_headers, private = setup_case(client, monkeypatch)
-    owner_bookmark = bookmark(client, owner_headers, private["id"])
+    owner_bookmark = bookmark(client, owner_headers, monkeypatch, private["id"])
     with get_session_factory()() as session:
         hidden = session.get(Matter, private["id"])
         hidden.restricted_access = True
@@ -80,7 +82,7 @@ def test_other_actor_private_bookmark_does_not_block_or_leak_into_own_refresh(
         with get_session_factory()() as session:
             session.get(Matter, own_matter_id).cnr_number = "DLHC010091232026"
             session.commit()
-    own = bookmark(client, member_headers, own_matter_id)
+    own = bookmark(client, member_headers, monkeypatch, own_matter_id)
     assert own["tracked_case_id"] == owner_bookmark["tracked_case_id"]
     provider = DatedSyncProvider(
         replace(snapshot(), next_hearing_on=date.today() + timedelta(days=7))
@@ -112,7 +114,7 @@ def test_bookmark_write_after_posttransport_scope_read_cannot_publish_stale_date
 ):
     client = isolated_postgres_client
     boot, headers, original = setup_case(client, monkeypatch)
-    linked = bookmark(client, headers, original["id"])
+    linked = bookmark(client, headers, monkeypatch, original["id"])
     replacement = client.post(
         "/api/matters/",
         headers=headers,
@@ -220,7 +222,7 @@ def test_publication_holds_bookmark_fence_until_date_write(
 ):
     client = isolated_postgres_client
     boot, headers, original = setup_case(client, monkeypatch)
-    linked = bookmark(client, headers, original["id"])
+    linked = bookmark(client, headers, monkeypatch, original["id"])
     destination = client.post(
         "/api/matters/",
         headers=headers,
