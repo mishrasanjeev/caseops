@@ -591,3 +591,15 @@ end**: exact identity, provider-derived safe destination, canonical
 `MatterHearing`, cross-surface consistency, deduplication, and recovery evidence
 remain required. See `docs/bugfix-ram24sep-2026.md`. Current candidate is not on
 canonical main; no production verification or deployment has occurred.
+
+The isolated eCourts follow-up branch adds a server-owned Matter resolution
+action for `J03/J08`, `M02/M08`, `EC-01..06`: it uses the bounded provider search,
+checks current tenant access and lifecycle after transport, requires exact CNR
+or a complete case-number inventory, and never fabricates an external URL.
+The existing scheduled poll already calls the canonical next-hearing writer;
+this branch additionally materializes one bounded page of legacy non-null
+Matter dates and preserves existing history/source provenance (`BUG-017`,
+`EC-08..10/12`). These are local candidate changes only. External case deep
+links, unverified multiple-candidate selection, `BUG-014` Court Sync Run Sync,
+full Calendar/Today/Cause List acceptance, and exact-release production proof
+remain open; no paid automated provider probe is authorized.

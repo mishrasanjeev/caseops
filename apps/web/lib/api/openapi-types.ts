@@ -2952,6 +2952,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/case-tracking/matters/{matter_id}/link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Link a verified eCourts candidate to a Matter without another provider call. */
+        post: operations["post_matter_case_link_api_case_tracking_matters__matter_id__link_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/case-tracking/matters/{matter_id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolve a Matter against bounded, exact eCourts case evidence. */
+        post: operations["post_matter_case_resolution_api_case_tracking_matters__matter_id__resolve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/case-tracking/search": {
         parameters: {
             query?: never;
@@ -17634,6 +17668,8 @@ export interface components {
             court_code?: string | null;
             /** Court Name */
             court_name?: string | null;
+            /** Matter Id */
+            matter_id?: string | null;
             /** Query */
             query?: string | null;
             /** State */
@@ -17662,6 +17698,8 @@ export interface components {
             current_stage: string | null;
             /** Current Status */
             current_status: string | null;
+            /** Link Token */
+            link_token?: string | null;
             /** Next Hearing On */
             next_hearing_on: string | null;
             /** Party Names */
@@ -36107,6 +36145,8 @@ export interface components {
             skipped_rows: number;
             /** Total Rows */
             total_rows: number;
+            /** Valid Rows */
+            valid_rows: number;
         };
         /** MatterBulkUpdateHistoryRecord */
         MatterBulkUpdateHistoryRecord: {
@@ -36132,6 +36172,10 @@ export interface components {
             id: string;
             /** Invalid Rows */
             invalid_rows: number;
+            /** Rows */
+            rows: components["schemas"]["MatterBulkUpdateHistoryRow"][];
+            /** Skipped Rows */
+            skipped_rows: number;
             /**
              * Status
              * @enum {string}
@@ -36145,6 +36189,8 @@ export interface components {
             uploader_membership_id?: string | null;
             /** Uploader Name */
             uploader_name?: string | null;
+            /** Valid Rows */
+            valid_rows: number;
         };
         /** MatterBulkUpdateHistoryResponse */
         MatterBulkUpdateHistoryResponse: {
@@ -36152,6 +36198,22 @@ export interface components {
             operations: components["schemas"]["MatterBulkUpdateHistoryRecord"][];
             /** Total */
             total: number;
+        };
+        /** MatterBulkUpdateHistoryRow */
+        MatterBulkUpdateHistoryRow: {
+            /** Changed Fields */
+            changed_fields?: string[];
+            /** Errors */
+            errors?: string[];
+            /** Matter Code */
+            matter_code?: string | null;
+            /** Row Number */
+            row_number: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "invalid" | "unchanged" | "applied" | "failed" | "redacted";
         };
         /** MatterBulkUpdatePreviewResponse */
         MatterBulkUpdatePreviewResponse: {
@@ -36199,6 +36261,58 @@ export interface components {
             total_rows: number;
             /** Unchanged Rows */
             unchanged_rows: number;
+        };
+        /** MatterCaseCandidateRecord */
+        MatterCaseCandidateRecord: {
+            /** Case Number */
+            case_number: string | null;
+            /** Case Title */
+            case_title: string;
+            /** Cnr Number */
+            cnr_number: string | null;
+            /** Court Code */
+            court_code: string | null;
+            /** Court Name */
+            court_name: string | null;
+            /** Current Stage */
+            current_stage: string | null;
+            /** Current Status */
+            current_status: string | null;
+            /** Link Token */
+            link_token: string;
+            /** Next Hearing On */
+            next_hearing_on: string | null;
+            /** Party Names */
+            party_names?: string[];
+            /**
+             * Provenance Label
+             * @default Provider-normalized case status
+             */
+            provenance_label: string;
+            /** Provider */
+            provider: string;
+            /** Source Url */
+            source_url?: string | null;
+        };
+        /** MatterCaseLinkRequest */
+        MatterCaseLinkRequest: {
+            /** Link Token */
+            link_token: string;
+        };
+        /** MatterCaseResolutionResponse */
+        MatterCaseResolutionResponse: {
+            /**
+             * Provider
+             * @default ecourtsindia
+             */
+            provider: string;
+            /** Results */
+            results?: components["schemas"]["MatterCaseCandidateRecord"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "matched" | "multiple_matches" | "no_match" | "insufficient_identifiers";
         };
         /** MatterCauseListEntryRecord */
         MatterCauseListEntryRecord: {
@@ -52727,6 +52841,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_matter_case_link_api_case_tracking_matters__matter_id__link_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MatterCaseLinkRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseTrackingBookmarkRecord"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_matter_case_resolution_api_case_tracking_matters__matter_id__resolve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                matter_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterCaseResolutionResponse"];
                 };
             };
             /** @description Validation Error */

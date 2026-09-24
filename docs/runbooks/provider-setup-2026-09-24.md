@@ -30,6 +30,10 @@ The above is a Cloud Run environment/Secret Manager *presence* audit, not a
 live credential, delivery, billing, or tenant-consent test. Review the current
 `/app/admin/integrations`, `/app/admin/provider-operations`, and
 `/api/platform-admin/production-readiness` states before each activation.
+No CaseOps Gmail Pub/Sub topic or CaseOps Google OAuth client secret was found
+in the project inventory. Unrelated application secrets in the same GCP project
+must not be reused. The Google Auth Platform console requires an interactive
+account sign-in before its client/consent state can be inspected or changed.
 
 ## 2. Set up Google Workspace with this Google Cloud project
 

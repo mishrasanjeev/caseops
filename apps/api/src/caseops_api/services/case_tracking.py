@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import re
+from base64 import b64decode, urlsafe_b64encode
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from datetime import time as datetime_time
@@ -49,6 +51,9 @@ from caseops_api.schemas.case_tracking import (
     CaseTrackingSearchResultRecord,
     CaseTrackingUpdateListResponse,
     CaseTrackingUpdateRecord,
+    MatterCaseCandidateRecord,
+    MatterCaseLinkRequest,
+    MatterCaseResolutionResponse,
     TrackedCaseRecord,
 )
 from caseops_api.services.audit import record_from_context
@@ -69,7 +74,10 @@ from caseops_api.services.hearing_matching import (
     MAX_MATCH_CANDIDATES,
     HearingIdentity,
     identity_matches,
+    normalized,
+    public_number,
     reliable_identity,
+    search_number,
 )
 from caseops_api.services.hearing_matching_scopes import (
     HearingScope,
@@ -83,7 +91,11 @@ from caseops_api.services.matter_operational_guard import (
     matter_is_operational,
     require_operational_matter,
 )
-from caseops_api.services.next_hearing import apply_next_hearing_update, clear_next_hearing
+from caseops_api.services.next_hearing import (
+    apply_next_hearing_update,
+    backfill_legacy_next_hearings,
+    clear_next_hearing,
+)
 from caseops_api.services.notification_delivery import (
     enqueue_notification_delivery_intent,
     redact_provider_error,
@@ -104,6 +116,8 @@ from caseops_api.services.provider_spend import (
 from caseops_api.services.session_context import SessionContext
 
 _MAX_BODY_LENGTH = 500
+_MATTER_SELECTION_TTL = timedelta(minutes=15)
+_MATTER_SELECTION_DOMAIN = b"caseops:matter-case-selection:v1:"
 _PROVIDER_LEASE = timedelta(seconds=180)
 _RELEASE_SMOKE_MAX_SNAPSHOT_EVENTS = 200
 _RED_PROVIDER_RESPONSE_CLASSES = {
@@ -1603,7 +1617,22 @@ def search_cases(
     context: SessionContext,
     payload: CaseTrackingSearchRequest,
     provider: CaseTrackingProvider | None = None,
+    require_complete_results: bool = False,
 ) -> CaseTrackingSearchResponse:
+    matter = _matter_or_none(session, context=context, matter_id=payload.matter_id)
+    frozen_matter = None
+    complete_results_for_matter = False
+    if matter is not None:
+        require_operational_matter(session, matter=matter, operation="search case tracking")
+        identity = matter_identity(matter)
+        if not reliable_identity(identity):
+            raise HTTPException(409, IDENTITY_REQUIRED)
+        complete_results_for_matter = not identity.cnr
+        frozen_matter = (
+            matter.lifecycle_version,
+            matter.access_policy_version,
+            _hash_value(asdict(identity)),
+        )
     query = CaseSearchQuery(
         query=payload.query,
         cnr_number=normalize_cnr(payload.cnr_number),
@@ -1611,6 +1640,7 @@ def search_cases(
         court_code=payload.court_code,
         state=payload.state,
         court_name=payload.court_name,
+        require_complete_results=require_complete_results or complete_results_for_matter,
     )
     reservation_id: str | None = None
     company_id, membership_id, token_issued_at = (
@@ -1698,6 +1728,17 @@ def search_cases(
         base_url=getattr(active_provider, "base_url", None),
         transport_is_mocked=getattr(active_provider, "transport", None) is not None,
     )
+    current_matter = _matter_or_none(session, context=context, matter_id=payload.matter_id)
+    if current_matter is not None:
+        current_identity = matter_identity(current_matter)
+        if not matter_is_operational(current_matter) or (
+            current_matter.lifecycle_version,
+            current_matter.access_policy_version,
+            _hash_value(asdict(current_identity)),
+        ) != frozen_matter:
+            raise HTTPException(409, "Matter identity or access changed during lookup.")
+        if len(snapshots) > MAX_MATCH_CANDIDATES:
+            raise HTTPException(409, "Provider candidate list exceeded the match limit.")
     record_from_context(
         session,
         context,
@@ -1714,10 +1755,246 @@ def search_cases(
         },
     )
     session.commit()
+    records = [_search_record(snapshot) for snapshot in snapshots]
+    if current_matter is not None:
+        for result in records:
+            if _matter_case_candidate_matches(current_identity, result):
+                result.link_token = _matter_selection_token(
+                    context=context, matter=current_matter, result=result
+                )
     return CaseTrackingSearchResponse(
         provider=active_provider.provider_key,
-        results=[_search_record(snapshot) for snapshot in snapshots],
+        results=records,
     )
+
+
+def _matter_case_candidate_matches(
+    identity: HearingIdentity,
+    result: CaseTrackingSearchResultRecord,
+) -> bool:
+    expected_cnr = normalize_cnr(identity.cnr)
+    if expected_cnr:
+        if normalize_cnr(result.cnr_number) != expected_cnr:
+            return False
+    else:
+        wanted = public_number(identity.case_number)
+        found = public_number(result.case_number)
+        if not wanted or not found or wanted[1:] != found[1:]:
+            return False
+        if wanted[0] and found[0] and wanted[0] != found[0]:
+            return False
+    if identity.case_number and result.case_number:
+        wanted = public_number(identity.case_number)
+        found = public_number(result.case_number)
+        if wanted and found and wanted[1:] != found[1:]:
+            return False
+    if identity.court_name and result.court_name:
+        if normalized(identity.court_name) != normalized(result.court_name):
+            return False
+    elif not expected_cnr:
+        return False
+    expected_parties = {normalized(value) for value in identity.parties if value.strip()}
+    actual_parties = {normalized(value) for value in result.party_names if value.strip()}
+    if expected_parties and actual_parties and not expected_parties.issubset(actual_parties):
+        return False
+    if not expected_cnr and expected_parties and not actual_parties:
+        return False
+    return True
+
+
+def _matter_selection_token(
+    *, context: SessionContext, matter: Matter, result: CaseTrackingSearchResultRecord
+) -> str:
+    result_data = result.model_dump(mode="json", exclude={"source_url", "link_token"})
+    claims = {
+        "company_id": context.company.id,
+        "membership_id": context.membership.id,
+        "matter_id": matter.id,
+        "lifecycle_version": matter.lifecycle_version,
+        "access_policy_version": matter.access_policy_version,
+        "identity_hash": _hash_value(asdict(matter_identity(matter))),
+        "expires_at": int((_now() + _MATTER_SELECTION_TTL).timestamp()),
+        "result": result_data,
+    }
+    body = json.dumps(claims, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    if len(body) > 5_800:
+        raise HTTPException(409, "Provider candidate is too large to link safely.")
+    signature = hmac.digest(
+        get_settings().auth_secret.encode("utf-8"), _MATTER_SELECTION_DOMAIN + body, "sha256"
+    )
+    token = f"{urlsafe_b64encode(body).decode().rstrip('=')}.{signature.hex()}"
+    if len(token) > 8192:
+        raise HTTPException(409, "Provider candidate is too large to link safely.")
+    return token
+
+
+def _read_matter_selection_token(token: str) -> dict[str, object]:
+    try:
+        encoded, signature = token.split(".", 1)
+        body = b64decode(encoded + "=" * (-len(encoded) % 4), altchars=b"-_", validate=True)
+        expected = hmac.digest(
+            get_settings().auth_secret.encode("utf-8"), _MATTER_SELECTION_DOMAIN + body, "sha256"
+        )
+        if not hmac.compare_digest(bytes.fromhex(signature), expected):
+            raise ValueError("Invalid signature")
+        claims = json.loads(body)
+        if not isinstance(claims, dict) or not isinstance(claims.get("expires_at"), int):
+            raise ValueError("Invalid claims")
+        if claims["expires_at"] < int(_now().timestamp()):
+            raise ValueError("Expired selection")
+        return claims
+    except (ValueError, TypeError, KeyError, UnicodeDecodeError) as exc:
+        raise HTTPException(
+            409, "This case selection expired or is invalid. Find the case again."
+        ) from exc
+
+
+def resolve_matter_case(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    provider: CaseTrackingProvider | None = None,
+) -> MatterCaseResolutionResponse:
+    matter = _matter_or_none(session, context=context, matter_id=matter_id)
+    assert matter is not None
+    if not matter_is_operational(matter):
+        raise HTTPException(status_code=409, detail="Disposed matters cannot resolve court cases.")
+    identity = matter_identity(matter)
+    if not reliable_identity(identity) or (not identity.cnr and not identity.case_number):
+        return MatterCaseResolutionResponse(status="insufficient_identifiers")
+    # Search input is server-owned. A case number is searched using its public
+    # number/year; the provider must certify completeness before we pick one.
+    query = CaseTrackingSearchRequest(
+        cnr_number=identity.cnr,
+        case_number=None if identity.cnr else search_number(identity),
+        court_name=identity.court_name,
+    )
+    frozen = (matter.lifecycle_version, matter.access_policy_version, identity)
+    response = search_cases(
+        session,
+        context=context,
+        payload=query,
+        provider=provider,
+        require_complete_results=not bool(identity.cnr),
+    )
+    session.expire_all()
+    current = _matter_or_none(session, context=context, matter_id=matter_id)
+    assert current is not None
+    if not matter_is_operational(current) or (
+        current.lifecycle_version,
+        current.access_policy_version,
+        matter_identity(current),
+    ) != frozen:
+        raise HTTPException(
+            status_code=409, detail="Matter identity or access changed during lookup."
+        )
+    if len(response.results) > MAX_MATCH_CANDIDATES:
+        raise HTTPException(
+            status_code=409, detail="Provider candidate list exceeded the match limit."
+        )
+    verified = [
+        result for result in response.results if _matter_case_candidate_matches(identity, result)
+    ]
+    return MatterCaseResolutionResponse(
+        provider=response.provider,
+        status=(
+            "no_match"
+            if not verified
+            else "matched"
+            if len(verified) == 1
+            else "multiple_matches"
+        ),
+        results=[
+            MatterCaseCandidateRecord(
+                **result.model_dump(exclude={"link_token"}),
+                link_token=_matter_selection_token(context=context, matter=current, result=result),
+            )
+            for result in verified
+        ],
+    )
+
+
+def link_matter_case(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    payload: MatterCaseLinkRequest,
+) -> CaseTrackingBookmarkRecord:
+    claims = _read_matter_selection_token(payload.link_token)
+    if (
+        claims.get("company_id") != context.company.id
+        or claims.get("membership_id") != context.membership.id
+        or claims.get("matter_id") != matter_id
+    ):
+        raise HTTPException(409, "This case selection belongs to a different Matter or user.")
+    matter = session.scalar(
+        select(Matter)
+        .where(Matter.id == matter_id, Matter.company_id == context.company.id)
+        .with_for_update(of=Matter)
+        .execution_options(populate_existing=True)
+    )
+    if matter is None:
+        raise HTTPException(404, "Matter not found.")
+    assert_access(session, context=context, matter=matter)
+    require_operational_matter(session, matter=matter, operation="link case tracking")
+    identity = matter_identity(matter)
+    if (
+        matter.lifecycle_version != claims.get("lifecycle_version")
+        or matter.access_policy_version != claims.get("access_policy_version")
+        or _hash_value(asdict(identity)) != claims.get("identity_hash")
+    ):
+        raise HTTPException(409, "Matter identity or access changed. Find the case again.")
+    try:
+        result = CaseTrackingSearchResultRecord.model_validate(claims["result"])
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(409, "This case selection is invalid. Find the case again.") from exc
+    if result.provider != "ecourtsindia" or not _matter_case_candidate_matches(identity, result):
+        raise HTTPException(409, "The selected case no longer matches this Matter.")
+
+    from caseops_api.services.production_safety import assert_case_tracking_supported
+
+    assert_case_tracking_supported(
+        session,
+        provider=result.provider,
+        court_code=result.court_code,
+        court_name=result.court_name,
+    )
+    bookmark_payload = CaseTrackingBookmarkCreateRequest(
+        provider=result.provider,
+        cnr_number=result.cnr_number,
+        case_number=result.case_number,
+        court_code=result.court_code,
+        court_name=result.court_name,
+        case_title=result.case_title,
+        party_names=result.party_names,
+        current_status=result.current_status,
+        current_stage=result.current_stage,
+        next_hearing_on=result.next_hearing_on,
+        matter_id=matter.id,
+        name=matter.matter_code,
+        notification_enabled=True,
+    )
+    mutation = _create_or_get_bookmark(
+        session, context=context, payload=bookmark_payload, matter=matter
+    )
+    if mutation.created:
+        record_from_context(
+            session,
+            context,
+            action="case_tracking.matter_case_linked",
+            target_type="tracked_case_bookmark",
+            target_id=mutation.bookmark.id,
+            matter_id=matter.id,
+            metadata={
+                "provider": result.provider,
+                "tracked_case_id_sha256": _hash_value(mutation.tracked_case.id),
+            },
+        )
+        session.commit()
+        session.refresh(mutation.bookmark)
+    return _bookmark_record(session, mutation.bookmark)
 
 
 def _matter_or_none(
@@ -2043,6 +2320,11 @@ def create_bookmark(
 ) -> CaseTrackingBookmarkRecord:
     from caseops_api.services.production_safety import assert_case_tracking_supported
 
+    if payload.matter_id is not None:
+        raise HTTPException(
+            409,
+            "Link a Matter through its verified case selection, not a bookmark request.",
+        )
     assert_case_tracking_supported(
         session,
         provider=payload.provider,
@@ -4335,6 +4617,12 @@ def poll_tracked_cases(
     window = case_tracking_window_state(now)
     contexts = _system_contexts(session)
     runs: list[CaseTrackingPollRunRecord] = []
+
+    # The hearing migration is independent of provider availability and paid
+    # eligibility. A failed page must fail the job, not be hidden as a green poll.
+    for context in contexts:
+        backfill_legacy_next_hearings(session, context=context)
+        session.commit()
 
     if enforce_window and not force and not window.inside_window:
         for context in contexts:

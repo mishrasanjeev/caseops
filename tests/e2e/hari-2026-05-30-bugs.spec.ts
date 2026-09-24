@@ -181,6 +181,7 @@ test.describe("Hari 2026-05-30 case tracking and research regressions", () => {
       const body = route.request().postDataJSON() as Record<string, unknown>;
       expect(body.query).toBe("Example Petitioner");
       expect(body.court_code).toBe("DLHC");
+      expect(body.matter_id).toBeUndefined();
       return route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -232,7 +233,7 @@ test.describe("Hari 2026-05-30 case tracking and research regressions", () => {
       }),
     );
 
-    await page.goto("/app/case-tracking?matterId=matter-e2e");
+    await page.goto("/app/case-tracking");
     await page.getByTestId("case-tracking-query").fill("Example Petitioner");
     await page.getByTestId("case-tracking-court-code").fill("DLHC");
     await page.getByTestId("case-tracking-search-submit").click();

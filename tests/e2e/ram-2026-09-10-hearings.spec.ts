@@ -60,6 +60,46 @@ function poll() {
   expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
 }
 
+function seedLegacyBookmark(matterId: string, membershipId: string): string {
+  const project = process.env.CASEOPS_E2E_DOCKER_PROJECT;
+  const file = process.env.CASEOPS_E2E_DOCKER_COMPOSE_FILE;
+  if (!dockerAcceptance || !project || !file) {
+    throw new Error("Legacy bookmark seeding is restricted to isolated Docker acceptance.");
+  }
+  const script = [
+    "import json, sys",
+    "from sqlalchemy import func, select",
+    "from caseops_api.core.settings import get_settings",
+    "from caseops_api.db.models import CompanyMembership, Matter, TrackedCase, TrackedCaseBookmark",
+    "from caseops_api.db.session import get_session_factory",
+    "from caseops_api.services.case_tracking import _tracked_case_identity_key, normalize_case_number",
+    "if get_settings().env != 'e2e': raise RuntimeError('Legacy fixture requires e2e runtime')",
+    "with get_session_factory()() as session:",
+    "    matter = session.get(Matter, sys.argv[1])",
+    "    membership = session.get(CompanyMembership, sys.argv[2])",
+    "    if matter is None or membership is None or membership.company_id != matter.company_id: raise RuntimeError('Fixture scope mismatch')",
+    "    if matter.case_number != 'WP(C) 8124/2026' or matter.court_name is not None: raise RuntimeError('Fixture is not the pre-court legacy Matter')",
+    "    existing = session.scalar(select(func.count()).select_from(TrackedCaseBookmark).where(TrackedCaseBookmark.company_id == matter.company_id))",
+    "    if existing: raise RuntimeError('Fixture must begin without bookmarks')",
+    "    number = matter.case_number",
+    "    tracked = TrackedCase(company_id=matter.company_id, provider='ecourtsindia', identity_key=_tracked_case_identity_key(cnr_number=None, case_number=number, court_code=None, court_name=None), case_number=number, normalized_case_number=normalize_case_number(number), case_title='Legacy incomplete auto-link', metadata_json={'source': 'matter_create_auto_link'})",
+    "    session.add(tracked)",
+    "    session.flush()",
+    "    bookmark = TrackedCaseBookmark(company_id=matter.company_id, tracked_case_id=tracked.id, created_by_membership_id=membership.id, matter_id=matter.id, scope_key=matter.id, active_scope_key=matter.id, notification_enabled=True)",
+    "    session.add(bookmark)",
+    "    session.flush()",
+    "    fixture_id = bookmark.id",
+    "    session.commit()",
+    "    print(json.dumps({'id': fixture_id}))",
+  ].join("\n");
+  const result = spawnSync("docker", [
+    "compose", "--project-name", project, "--file", file,
+    "exec", "-T", "api", "python", "-c", script, matterId, membershipId,
+  ], { cwd: repoRoot, encoding: "utf8", timeout: 30_000 });
+  expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+  return (JSON.parse(result.stdout.trim()) as { id: string }).id;
+}
+
 test("BUG-014 scheduled CNR, combined registration and filing identities persist the nearest visible hearing", async ({ page, request }) => {
   test.skip(!dockerAcceptance, "Scheduled behavioral acceptance uses the offline emulator; host and production suites must not run it.");
   // This Docker journey covers five identities across three widths and reloads,
@@ -73,7 +113,8 @@ test("BUG-014 scheduled CNR, combined registration and filing identities persist
     company_name: slug, company_slug: slug, company_type: "law_firm", owner_full_name: "Hearing QA", owner_email: email, owner_password: password,
   } });
   expect(bootstrap.status(), await bootstrap.text()).toBe(200);
-  const headers = { ...noPaidProviderHeaders, Authorization: `Bearer ${(await bootstrap.json()).access_token}` };
+  const bootData = await bootstrap.json();
+  const headers = { ...noPaidProviderHeaders, Authorization: `Bearer ${bootData.access_token}` };
   const fixtures: { id: string; code: string; mode: string }[] = [];
   for (const mode of ["cnr", "case", "filing", "ambiguous", "missing-court"]) {
     const code = `${mode}-${suffix}`;
@@ -103,18 +144,17 @@ test("BUG-014 scheduled CNR, combined registration and filing identities persist
     fixtures.push({ id: matter.id, code, mode });
   }
   const legacyMatter = fixtures.find(fixture => fixture.mode === "missing-court")!;
-  const legacy = await request.post(`${api}/api/case-tracking/bookmarks`, { headers, data: {
-    provider: "ecourtsindia", case_number: "WP(C) 8124/2026", case_title: "Legacy incomplete auto-link",
-    matter_id: legacyMatter.id, metadata: { source: "matter_create_auto_link" },
-  } });
-  expect(legacy.status(), await legacy.text()).toBe(201);
-  const legacyBookmark = await legacy.json();
-  expect(legacyBookmark.tracked_case.manual_refresh_allowed).toBe(false);
+  const beforeSeed = await request.get(`${api}/api/case-tracking/bookmarks`, { headers });
+  expect(beforeSeed.status(), await beforeSeed.text()).toBe(200);
+  expect((await beforeSeed.json()).bookmarks).toHaveLength(0);
+  const legacyBookmarkId = seedLegacyBookmark(legacyMatter.id, bootData.membership.id);
   const before = await request.get(`${api}/api/case-tracking/bookmarks`, { headers });
   expect(before.status()).toBe(200);
   const beforeRows = (await before.json()).bookmarks;
   expect(beforeRows).toHaveLength(1);
   expect(beforeRows[0].matter_id).toBe(legacyMatter.id);
+  expect(beforeRows[0].id).toBe(legacyBookmarkId);
+  expect(beforeRows[0].tracked_case.manual_refresh_allowed).toBe(false);
   poll();
   await page.setExtraHTTPHeaders(noPaidProviderHeaders);
   await page.goto(`${web}/sign-in`);
@@ -145,7 +185,7 @@ test("BUG-014 scheduled CNR, combined registration and filing identities persist
   expect(recovered.status()).toBe(200);
   const recoveredRows = (await recovered.json()).bookmarks.filter((row: { matter_id: string }) => row.matter_id === legacyMatter.id);
   expect(recoveredRows).toHaveLength(1);
-  expect(recoveredRows[0].id).toBe(legacyBookmark.id);
+  expect(recoveredRows[0].id).toBe(legacyBookmarkId);
   expect(recoveredRows[0].tracked_case.next_hearing_on).toBe(plusDays(7));
   await visibleMatter(page, legacyMatter.code, plusDays(7), false);
 });

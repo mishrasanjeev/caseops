@@ -20585,6 +20585,11 @@
           "sql_type": "INTEGER",
           "nullable": false
         },
+        "row_results_json": {
+          "category_id": "domain_attribute",
+          "sql_type": "JSON",
+          "nullable": false
+        },
         "status": {
           "category_id": "configuration_or_state_metadata",
           "sql_type": "VARCHAR(32)",
@@ -30246,7 +30251,7 @@
       }
     }
   ],
-  "schema_fingerprint": "f12f5c2b171829eb1f5804db5a0c152499961033db4bf2a461ccbbd2aebc0b38",
+  "schema_fingerprint": "e358fc491fe00d698711e44df506eeac9ccc32187630af7e5ac713bcab01ad4a",
   "index_inventory": {
     "orm_index_count": 1760,
     "orm_index_fingerprint": "7572b09a7d95e39148959f0fdd5358d1acb6c470b2fafd8b2e93213ebc6f6d32",

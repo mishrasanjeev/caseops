@@ -196,6 +196,97 @@ def _ensure_hearing_row_for_next_hearing(
     return hearing
 
 
+def backfill_legacy_next_hearings(
+    session: Session,
+    *,
+    context: SessionContext,
+    limit: int = 50,
+) -> int:
+    """Materialize one bounded page of pre-feature Matter dates without changing them."""
+    if not 1 <= limit <= 50:
+        raise ValueError("Legacy hearing backfill limit must be between 1 and 50.")
+    existing = (
+        select(MatterHearing.id)
+        .where(
+            MatterHearing.company_id == Matter.company_id,
+            MatterHearing.matter_id == Matter.id,
+            MatterHearing.hearing_on == Matter.next_hearing_on,
+            MatterHearing.status == MatterHearingStatus.SCHEDULED,
+        )
+        .exists()
+    )
+    matters = list(
+        session.scalars(
+            select(Matter)
+            .where(
+                Matter.company_id == context.company.id,
+                Matter.is_active.is_(True),
+                Matter.status != MatterStatus.DISPOSED,
+                Matter.next_hearing_on.is_not(None),
+                ~existing,
+            )
+            .order_by(Matter.id)
+            .limit(limit)
+            .with_for_update(of=Matter, skip_locked=True)
+            .execution_options(populate_existing=True)
+        )
+    )
+    for matter in matters:
+        hearing_on = matter.next_hearing_on
+        assert hearing_on is not None
+        source = matter.next_hearing_source or MatterNextHearingSource.UNKNOWN
+        hearing = _ensure_hearing_row_for_next_hearing(
+            session,
+            matter=matter,
+            hearing_on=hearing_on,
+            source=source,
+            source_ref_type=matter.next_hearing_source_ref_type,
+            source_ref_id=matter.next_hearing_source_ref_id,
+        )
+        history_exists = session.scalar(
+            select(MatterNextHearingHistory.id)
+            .where(
+                MatterNextHearingHistory.company_id == matter.company_id,
+                MatterNextHearingHistory.matter_id == matter.id,
+                MatterNextHearingHistory.new_date == hearing_on,
+            )
+            .limit(1)
+        )
+        if history_exists is None:
+            history = MatterNextHearingHistory(
+                company_id=matter.company_id,
+                matter_id=matter.id,
+                old_date=None,
+                new_date=hearing_on,
+                source=source,
+                source_ref_type=matter.next_hearing_source_ref_type,
+                source_ref_id=matter.next_hearing_source_ref_id,
+                change_reason=(
+                    "Legacy date materialized as a scheduled hearing; "
+                    "original change time unknown."
+                ),
+                manual_lock=matter.next_hearing_manual_lock,
+            )
+            session.add(history)
+            session.flush()
+            _audit_next_hearing(
+                session,
+                context=None,
+                company_id=matter.company_id,
+                actor_membership_id=None,
+                action="matter.next_hearing.legacy_materialized",
+                matter_id=matter.id,
+                target_type="matter_next_hearing_history",
+                target_id=history.id,
+                metadata={
+                    "after": hearing_on.isoformat(),
+                    "materialized_hearing_id": hearing.id,
+                    "source": source,
+                },
+            )
+    return len(matters)
+
+
 def _audit_next_hearing(
     session: Session,
     *,

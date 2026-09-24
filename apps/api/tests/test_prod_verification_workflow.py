@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -97,6 +99,23 @@ def test_scheduled_prod_verification_is_read_only() -> None:
     assert "Run IPLF-039F cost acceptance" not in scheduled_names
     assert "Run prod-Playwright suite (notice module)" not in scheduled_names
     assert "Run exact-release patent and domain journeys" not in scheduled_names
+
+    # A new or edited scheduled step needs explicit read-only review. Named
+    # deny-lists alone missed the 22 September mutating-QA/projection overlap.
+    steps_digest = hashlib.sha256(
+        json.dumps(scheduled["steps"], sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    assert steps_digest == "0eb6062e19bf61ada88a35ce91ba6698b378ca4b6070062626d4777c6abcf28c"
+    config = (REPO_ROOT / "playwright.prod-ram.config.ts").read_text(encoding="utf-8")
+    assert (
+        'name: "statute-source-prod-chromium",\n'
+        '      testMatch: /ram-2026-09-07-statute-source-data\\.spec\\.ts$/,'
+    ) in config
+    statute_spec = (
+        REPO_ROOT / "tests/e2e/ram-2026-09-07-statute-source-data.spec.ts"
+    ).read_text(encoding="utf-8")
+    spec_digest = hashlib.sha256(statute_spec.replace("\r\n", "\n").encode()).hexdigest()
+    assert spec_digest == "60f2583d845e5ee8092777f3db4a551acbfe30419d14b65faff509dc101bdb41"
 
 
 def test_prod_verification_runs_notice_suite_after_ram_failure() -> None:

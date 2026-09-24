@@ -586,6 +586,7 @@ export type MatterBulkUpdateRow = {
 export type MatterBulkUpdateResult = {
   preview_token: string;
   total_rows?: number;
+  valid_rows?: number;
   skipped_rows?: number;
   summary?: {
     total_rows: number;
@@ -607,10 +608,19 @@ export type MatterBulkUpdateOperation = {
   format: "csv" | "xlsx";
   status: "completed" | "completed_with_errors" | "stale";
   total_rows: number;
+  valid_rows: number;
   changed_rows: number;
   invalid_rows: number;
   applied_rows: number;
+  skipped_rows: number;
   failed_rows: number;
+  rows: Array<{
+    row_number: number;
+    matter_code: string | null;
+    status: "invalid" | "unchanged" | "applied" | "failed" | "redacted";
+    errors: string[];
+    changed_fields: string[];
+  }>;
   uploader_membership_id: string | null;
   uploader_name: string | null;
   uploader_email: string | null;

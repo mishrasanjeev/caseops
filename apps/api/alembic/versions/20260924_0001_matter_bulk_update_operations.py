@@ -40,6 +40,7 @@ def upgrade() -> None:
         sa.Column("invalid_rows", sa.Integer(), nullable=False),
         sa.Column("applied_rows", sa.Integer(), nullable=False),
         sa.Column("failed_rows", sa.Integer(), nullable=False),
+        sa.Column("row_results_json", sa.JSON(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     )
     op.create_index(

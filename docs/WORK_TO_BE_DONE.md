@@ -1507,12 +1507,19 @@ onboarding. Either threshold is recorded in `docs/runbooks/corpus-ingest.md`.
 
 Review of 22 populated BUG-010..BUG-031 rows and the bulk-update/eCourts DOCX is
 recorded in `docs/bugfix-ram24sep-2026.md`; row-by-row evidence is in the
-sanitized `CaseOps_Bug_Fix_Summary_2026-09-24.xlsx`. Candidate `86886a5f` is
-not on `origin/main` and is **NO-GO** for production. Local evidence includes
-388 PostgreSQL passes and a separate focused Docker Playwright run (2/2), but
-not a single green full Docker harness or exact-release production Playwright.
-No bug is marked properly fixed. The eCourts feature, faithful DOCX rendering,
-and exact persisted records for reported Sync/hearing/integration incidents
-remain open. Diagnose any alleged Matter reopening from its persisted lifecycle
-version and ordered audit events; do not infer it from hearing updates or
-private-projection maintenance logs.
+sanitized `CaseOps_Bug_Fix_Summary_2026-09-24.xlsx`. PR #468 reached candidate
+`12a9832e` but is not on `origin/main` and is **NO-GO** for application
+deployment. The earlier frozen Docker run passed 389 PostgreSQL tests and all
+selected desktop/mobile browser tests; clean-checkout CI exposed generated
+contract and locale drift, which is being revalidated on the newer candidate.
+The final changed source still needs a new full Docker run and exact-release
+production Playwright. No bug is marked properly fixed. The eCourts feature,
+faithful DOCX rendering, and exact incident proof for BUG-014 and BUG-031 remain
+open. A bounded, read-only audit of `test-legal` on old production release
+`723debe8` found two ordinary active matters, codes `5972` and `5966`, with
+case-tracking-sourced next-hearing dates but zero scheduled hearings; their
+history shows `Not set -> date` after manual clearing. This is a real BUG-017
+data gap, distinct from a Matter lifecycle reopen. Backfill and repeatable
+same-record production UI proof remain required. Diagnose any alleged Matter
+reopening from persisted lifecycle version and ordered audit events, not from
+hearing updates or private-projection alerts.

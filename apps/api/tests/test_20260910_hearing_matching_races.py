@@ -21,7 +21,11 @@ from caseops_api.db.models import (
     TrackedCaseUpdate,
 )
 from caseops_api.db.session import get_session_factory
-from caseops_api.services.case_tracking import poll_tracked_cases, refresh_bookmark
+from caseops_api.services.case_tracking import (
+    _tracked_case_identity_key,
+    poll_tracked_cases,
+    refresh_bookmark,
+)
 from caseops_api.services.case_tracking_providers import ProviderCaseEvent
 from tests.test_20260904_auto_next_hearing_sync import DatedSyncProvider, _enable_tracking
 from tests.test_20260910_hearing_matching import snapshot
@@ -63,25 +67,65 @@ def setup_case(client, monkeypatch, *, mode="case_number"):
     return boot, headers, response.json()
 
 
+def link_fixture_case(client, monkeypatch, headers, matter_id):
+    provider = DatedSyncProvider(replace(snapshot(), cnr_number=None))
+    monkeypatch.setattr(
+        "caseops_api.services.case_tracking.get_case_tracking_provider", lambda: provider
+    )
+    resolved = client.post(
+        f"/api/case-tracking/matters/{matter_id}/resolve", headers=headers
+    )
+    assert resolved.status_code == 200, resolved.text
+    assert resolved.json()["status"] == "matched"
+    linked = client.post(
+        f"/api/case-tracking/matters/{matter_id}/link",
+        headers=headers,
+        json={"link_token": resolved.json()["results"][0]["link_token"]},
+    )
+    assert linked.status_code == 200, linked.text
+    return linked.json()
+
+
+def legacy_bookmark_fixture(boot, matter_id):
+    with get_session_factory()() as session:
+        assert session.scalar(select(func.count(TrackedCaseBookmark.id))) == 0
+        tracked = TrackedCase(
+            company_id=str(boot["company"]["id"]),
+            provider="ecourtsindia",
+            identity_key=_tracked_case_identity_key(
+                cnr_number=None,
+                case_number="WP(C) 9123/2026",
+                court_code=None,
+                court_name="Delhi High Court",
+            ),
+            case_number="WP(C) 9123/2026",
+            court_name="Delhi High Court",
+            case_title="Legacy automatic bookmark",
+            metadata_json={"source": "matter_create_auto_link"},
+        )
+        session.add(tracked)
+        session.flush()
+        bookmark = TrackedCaseBookmark(
+            company_id=tracked.company_id,
+            tracked_case_id=tracked.id,
+            created_by_membership_id=str(boot["membership"]["id"]),
+            matter_id=matter_id,
+            scope_key=matter_id,
+            active_scope_key=matter_id,
+            notification_enabled=True,
+        )
+        session.add(bookmark)
+        session.commit()
+        return {"id": bookmark.id, "tracked_case_id": tracked.id}
+
+
 def exercise_boundary(client, monkeypatch, boundary, change):
     from caseops_api.services import case_tracking
 
     boot, headers, matter = setup_case(client, monkeypatch)
     claim_time = datetime.now(UTC)
     monkeypatch.setattr(case_tracking, "_now", lambda: claim_time)
-    created = client.post(
-        "/api/case-tracking/bookmarks",
-        headers=headers,
-        json={
-            "provider": "ecourtsindia",
-            "case_number": "WP(C) 9123/2026",
-            "court_name": "Delhi High Court",
-            "case_title": "September 10 matching",
-            "matter_id": matter["id"],
-        },
-    )
-    assert created.status_code == 201, created.text
-    bookmark = created.json()
+    bookmark = link_fixture_case(client, monkeypatch, headers, matter["id"])
     context = _context_from_bootstrap(boot)
     entered, release = Event(), Event()
     near = date.today() + timedelta(days=7)
@@ -264,19 +308,7 @@ def test_legacy_bookmark_requires_court_and_recovers_from_current_matter(
     from caseops_api.services import case_tracking
 
     boot, headers, matter = setup_case(client, monkeypatch)
-    created = client.post(
-        "/api/case-tracking/bookmarks",
-        headers=headers,
-        json={
-            "provider": "ecourtsindia",
-            "case_number": "WP(C) 9123/2026",
-            "court_name": "Delhi High Court",
-            "case_title": "Legacy automatic bookmark",
-            "matter_id": matter["id"],
-        },
-    )
-    assert created.status_code == 201, created.text
-    bookmark = created.json()
+    bookmark = legacy_bookmark_fixture(boot, matter["id"])
     with get_session_factory()() as session:
         stored_matter = session.get(Matter, matter["id"])
         tracking = session.get(TrackedCase, bookmark["tracked_case_id"])

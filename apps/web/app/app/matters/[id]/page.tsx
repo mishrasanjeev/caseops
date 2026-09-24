@@ -241,7 +241,7 @@ function caseTrackingHrefForMatter(matter: {
   cnr_number?: string | null;
   case_number?: string | null;
 }): string | null {
-  if (!matter.court_name && !matter.cnr_number && !matter.case_number) return null;
+  if (!matter.cnr_number && !(matter.case_number && matter.court_name)) return null;
   const params = new URLSearchParams({ matterId: matter.id });
   if (matter.cnr_number) params.set("cnr", matter.cnr_number);
   if (matter.case_number) params.set("caseNumber", matter.case_number);

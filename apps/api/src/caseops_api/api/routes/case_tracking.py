@@ -18,15 +18,19 @@ from caseops_api.schemas.case_tracking import (
     CaseTrackingSearchRequest,
     CaseTrackingSearchResponse,
     CaseTrackingUpdateListResponse,
+    MatterCaseLinkRequest,
+    MatterCaseResolutionResponse,
 )
 from caseops_api.schemas.production_safety import CaseTrackingTenantSupportMatrixResponse
 from caseops_api.services.case_tracking import (
     create_bookmark,
     download_case_tracking_source,
+    link_matter_case,
     list_bookmarks,
     list_updates,
     provider_status_response,
     refresh_bookmark,
+    resolve_matter_case,
     run_release_smoke,
     search_cases,
     update_bookmark,
@@ -87,6 +91,33 @@ def post_case_tracking_search(
     session: DbSession,
 ) -> CaseTrackingSearchResponse:
     return search_cases(session, context=context, payload=payload)
+
+
+@router.post(
+    "/matters/{matter_id}/resolve",
+    response_model=MatterCaseResolutionResponse,
+    summary="Resolve a Matter against bounded, exact eCourts case evidence.",
+)
+def post_matter_case_resolution(
+    matter_id: str,
+    context: CaseTrackingUser,
+    session: DbSession,
+) -> MatterCaseResolutionResponse:
+    return resolve_matter_case(session, context=context, matter_id=matter_id)
+
+
+@router.post(
+    "/matters/{matter_id}/link",
+    response_model=CaseTrackingBookmarkRecord,
+    summary="Link a verified eCourts candidate to a Matter without another provider call.",
+)
+def post_matter_case_link(
+    matter_id: str,
+    payload: MatterCaseLinkRequest,
+    context: CaseTrackingUser,
+    session: DbSession,
+) -> CaseTrackingBookmarkRecord:
+    return link_matter_case(session, context=context, matter_id=matter_id, payload=payload)
 
 
 @router.post(

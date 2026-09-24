@@ -2,7 +2,7 @@
 
 ## Release disposition
 
-**NO-GO for production.** This worktree is at `86886a5fc128c2c456a83804095dfa17d9b9960a`; canonical `origin/main` remains `723debe8f507ed099cee1bf6c5a40ef9753108ca`. No merge, push, production mutation, or production Playwright run was performed. The local candidate has meaningful Docker evidence, but eCourts linking/refresh is a separate broad feature and several reported incidents have no persisted record identity with which to reproduce the original failure.
+**NO-GO for application deployment.** PR #468 now contains the CI-remediation checkpoint `12a9832ef2c3b7fae7c9dc11f69a43ac57c4f751`; canonical `origin/main` was `723debe8f507ed099cee1bf6c5a40ef9753108ca` at the last release check. No merge, application deployment, or exact-release production Playwright run has occurred. The Google Drive API was enabled in the production GCP project as a separate configuration step, without changing Cloud Run service settings. The earlier candidate has meaningful Docker evidence, but eCourts linking/refresh is a separate broad feature and several reported incidents have no persisted record identity with which to reproduce the original failure.
 
 Inputs reviewed: `CaseOps_ai_Bugs(lll).xlsx` (22 populated bug rows, BUG-010 through BUG-031; copied totals are not authoritative) and `CaseOps_Enhancements_Bulk_Update_and_eCourts_Case_Link.docx` (bulk update and eCourts case-link/refresh proposals). A separate sanitized workbook records every row and its current verdict: `C:/Users/mishr/Downloads/CaseOps_Bug_Fix_Summary_2026-09-24.xlsx`. Reporter credentials and workbook secrets are intentionally excluded from this report and all tests/artifacts.
 
@@ -147,3 +147,130 @@ Gmail webhook resources, Microsoft tenant consent and non-Google vendor accounts
 remain provider-gated. The sanitized workbook now records these states in a
 `Provider Setup` tab without upgrading any bug verdict. No paid provider call
 was made.
+
+### BUG-017 persisted production reproduction
+
+A bounded, read-only check using the supplied `test-legal` account and the
+no-paid-provider marker against API release `723debe8` found 25 visible matters
+with `next_hearing_on >= 2026-01-01`; four had no canonical scheduled
+`MatterHearing` in their workspace. Two ordinary active matters are code `5972`
+(`3f01ac0c-df3c-40ea-846f-bda253168f8c`, 2026-11-04) and code `5966`
+(`2c324e89-9ead-4e16-abd6-4a923733add6`, 2026-09-25); both have
+`next_hearing_source=case_tracking`, `next_hearing_manual_lock=false`, and zero
+hearings. Their latest history transitions are `Not set -> date` from a
+`tracked_case` source, preceded by a manual `date -> Not set` and an earlier
+tracked-case restore. This is the precise reported symptom, not a lifecycle
+reopen. Two retained `BENCH-PROBE` matters also had stale dates without
+hearings and source `unknown`. This is a real stored-data mismatch, not merely
+an old UI locator or a projection alert. The audit made no mutation or provider
+call. Its exact records must be reconciled after a bounded idempotent backfill,
+and the user-visible Matter/Hearings/Calendar/Today/Cause List journey must pass
+on the deployed release before BUG-017 can be marked properly fixed.
+
+### Private-projection alert review
+
+The 22 September `active_generation_manifest_mismatch` alert was a real
+release-blocking repair-SLO breach: the deferred repair age reached 432 seconds,
+above the 300-second limit. It rebuilt at 21:41 UTC and the 21:46 cadence was
+clean. Mutation-capable production QA ran from 21:27 to 21:38, overlapping
+three maintenance attempts. This supports, but does not prove without persisted
+epoch inspection, repeated QA writes fencing safe shadow rebuilds rather than
+source corruption. The current schedule confines mutations to exact-release
+dispatches. A read-only Cloud Logging audit found zero blocked maintenance
+payloads across 394 runs from 23 September 00:01 through 24 September 13:01;
+the 13:01 and 13:06 runs each covered six tenants with zero blockers, pending
+or failed events, deferred repairs, or rebuilds. No runtime fence/SLO change is
+justified by this evidence. A new regression pins the complete scheduled
+verification step inventory so future mutation additions require explicit
+read-only review. Current clean cadence is old-release evidence only; the final
+release still needs its own post-QA rebuild and second clean cadence.
+
+### Combined candidate checkpoint (not deployed)
+
+The checkpoint PR's clean-checkout CI completed green, including all API,
+PostgreSQL, web, security, generated-client and Playwright jobs. Subsequent
+DOCX, eCourts and bulk-history changes are not covered by that CI result.
+On the combined local tree, web typecheck/build passed, the full coverage run
+passed 185 files and 1,091 tests, focused API tests passed, and the dated
+local DOCX and eCourts browser journeys each passed. The first integrated
+DOCX browser attempt failed because a PowerShell patch pipeline corrupted its
+binary fixture; the failed result was preserved, the fixture was restored from
+the agent's Git blob, its ZIP signature verified, and the unchanged journey
+passed. This was a test-asset transfer fault, not authorization to weaken
+upload signature checks.
+
+The case-tracking backfill now ignores cancelled rows when deciding whether a
+scheduled hearing exists. A provider-free one-shot job pinned to the release
+API image is in the deploy script between migration and traffic routing, so
+the four persisted test-tenant mismatches are not left for a later paid poll.
+The job is bounded and fails if it cannot converge. Full Docker acceptance,
+fresh CI, canonical-main merge, deployed-record re-read and production
+Playwright remain required before any bug verdict can be upgraded.
+
+### Final link-candidate integration gate
+
+The safe case-link branch was merged into the combined candidate with a
+short-lived signed provider selection, server-owned identity and access checks,
+idempotent linking, and a user-visible link action. Local combined API checks
+passed 97 tests with 10 PostgreSQL-only skips; 17 focused web tests and the
+web/E2E typechecks and production web build passed. The first complete Docker
+attempt at `49d0e571` ended red before browser shards: 382 PostgreSQL passes
+and seven failures. Six came from adapting a case-number-only search fixture
+where the PostgreSQL hearing-scope races required a CNR-backed tracked case;
+the seventh was a PostgreSQL wrapper still calling the updated helper without
+`monkeypatch`. An attempted global CNR change failed all 16 original search
+races and was rejected. Separate fixtures now retain both transport boundaries.
+The original search races passed 25/25 locally, and the exact PostgreSQL scope
+and wrapper selections passed 11/11 on a fresh isolated pgvector database.
+These selective replacements do not certify the full release: another complete
+Docker inventory, clean-checkout CI, main merge, exact-image deployment and
+production Playwright remain required.
+
+The complete replacement Docker run at `6d76c5f9` passed all 389 PostgreSQL
+tests and index/seed checks. Desktop shard 1 then found one dated test drift:
+`hari-2026-05-30-bugs.spec.ts` opened case tracking with a fictional Matter ID,
+yet expected the standalone `Bookmark` action. Matter context now intentionally
+requires a verified `Link to Matter` selection. The old standalone search,
+bookmark, and update assertion has been restored without fake Matter context;
+the separate new link journey retains real Matter-scoped proof. Both dated
+journeys passed individually against the local production-style build. An
+intermediate Next dev attempt served a stale 404 and left malformed generated
+`.next/dev/types`; it was treated as incomplete setup, isolated from source,
+and not counted as a product failure. The second full run remains red and did
+not reach shard 2/mobile; a complete new candidate run is still required.
+
+The third complete Docker run at `6e152826` passed 389/389 PostgreSQL tests
+and desktop shard 1 (198 tests, one expected provider-isolation skip). Desktop
+shard 2 found three distinct test-boundary defects. The September 10 legacy
+hearing journey tried to create a pre-feature incomplete bookmark through the
+current guarded public endpoint, which correctly returned 409. Its fixture now
+seeds the pre-feature state only inside isolated E2E Docker, asserts zero prior
+bookmarks and tenant scope, and requires the same bookmark ID after ordinary
+scheduled recovery. The September 21 DOCX assertion looked for preview text in
+the parent DOM after the viewer moved to a sandboxed iframe; it now checks the
+actual iframe. The September 24 Matter-link token was signed with the host's
+test secret rather than the serving Docker API secret; it now signs inside the
+API container without changing server verification. The failed run is retained
+under `.tmp/release-20260924-link-third`; it did not reach mobile and is not
+release evidence. These fixes and the later bulk-contact/DOCX-index merge need
+a fresh complete Docker inventory, clean-checkout CI, canonical-main merge,
+exact-image deployment, and production E2E before any verdict is upgraded.
+
+The fourth Docker gate at `a663d36c` completed green: 389/389 PostgreSQL,
+both desktop Playwright shards, and mobile. The three previously failing dated
+journeys passed. PR #470 was then opened from an identical-tree merge with
+current `main`; clean-checkout CodeQL reported a potentially uninitialized
+`identity` in standalone case search (and an unnecessary test lambda). The
+candidate remains no-go until those annotations are fixed, the changed tree
+passes complete Docker acceptance again, and all CI checks are green.
+
+The fifth complete Docker gate at `ec8d5324` passed 389 PostgreSQL tests,
+both desktop shards and mobile; CodeQL cleared on the refreshed PR. Its Linux
+app CI run still failed two dated tests: a fuzzy `Provider operations` heading
+locator also matched the legitimate empty-state heading, and the local
+nonbillable token helper hardcoded a Windows virtualenv executable. These are
+separate from the product's DOCX render and signed-link guards. The locator is
+now exact and the helper selects the platform's virtualenv Python, preserving
+the serving Docker API's signing path. The unchanged local production-style
+journeys passed 3/3 (one production-only skip). The CI failure remains open
+until the new commit's complete clean-checkout run and Docker gate pass.

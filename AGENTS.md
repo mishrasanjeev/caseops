@@ -1038,3 +1038,59 @@ requirements when using the fallback.
   its display order follows the runner's locale unless explicitly pinned.
   Browser and unit assertions should verify the value and use the same date
   formatter as the UI, not freeze one regional spelling such as `05 Oct`.
+- Scheduled production verification must remain structurally read-only. Pin
+  and review the complete scheduled step inventory, not a deny-list of known
+  mutating step names; an unnoticed new QA writer can repeatedly fence private
+  projection shadows and cause a real 300-second repair SLO breach. Keep
+  mutation-capable acceptance on exact-release dispatch under scheduler hold,
+  then require a convergent rebuild and a second clean cadence before resume.
+- A case-tracking-sourced next-hearing field is not a scheduled hearing. Audit
+  the same active Matter's `next_hearing_on`, provenance history and canonical
+  `MatterHearing` rows; a `Not set -> date` event can coexist with zero hearings
+  after manual clearing and tracked-case recovery. Backfill only current
+  non-null eligible dates with idempotent, lifecycle-aware scheduling, then
+  prove the exact persisted records across Matter, Hearings, Calendar, Today
+  and Cause List after reload.
+- Preserve binary regression fixtures byte-for-byte when integrating isolated
+  worktrees. A PowerShell text pipeline can corrupt a binary Git patch while
+  leaving the expected filename in place; restore the Git blob directly or
+  regenerate it, verify its signature/container, and rerun the unchanged
+  browser journey before diagnosing a product upload failure.
+- A legacy-hearing repair is not release-ready merely because the bounded
+  function exists. Execute a provider-free, exact-image backfill before routing
+  traffic and production QA, fail on non-convergence, and test cancelled-row
+  replacement as well as past/current/future dates and idempotent replay.
+- A provider-link test fixture must preserve the identity and transport boundary
+  that each regression claims to exercise. A CNR-linked case uses detail/refresh,
+  while a case-number-only case uses search; switching one shared fixture can
+  bypass an entire race even when a link succeeds. Give those paths distinct
+  fixtures, prove the actual provider call and tracked-case identity, and update
+  PostgreSQL wrappers when a reused test helper gains a required fixture.
+- A dated browser test that exercises standalone search/bookmark behavior must
+  not invent a Matter ID merely to enter the screen. A Matter-scoped search now
+  offers only server-verified Link actions; keep standalone bookmark/update
+  coverage separate from the real Matter link journey, and replay both against
+  a production-style build after a UI contract change. A local Next dev 404 or
+  partially written generated type file is setup evidence, not a product verdict.
+- A legacy-data browser regression must establish the pre-feature state, not
+  ask the current public API to create data that its new guard correctly rejects.
+  Restrict direct fixture seeding to isolated E2E Docker, assert tenant scope and
+  zero existing children, then exercise the normal scheduler/API and verify the
+  original record ID survives recovery. Never relax the public guard for a test.
+- A sandboxed document preview renders in its iframe, not the parent document.
+  Dated Playwright assertions must enter that frame and verify actual rendered
+  text, while separate checks retain the sandbox and download authorization.
+- A signed test token must be minted with the serving runtime's secret. In
+  Docker acceptance, sign inside the exact API container and verify the normal
+  server admission path; a host-generated token can fail solely because test
+  and container secrets differ. Never weaken signature validation to pass E2E.
+- A local green gate does not subsume clean-checkout static analysis. Values
+  assigned only inside an optional Matter branch must be converted to an
+  explicitly initialized flag before later query construction; do not rely on
+  short-circuiting through an unbound local. Treat CodeQL annotations on changed
+  production paths as release blockers, fix them, and rerun the exact candidate.
+- Dated Playwright assertions must target an exact heading when a valid empty
+  state includes the same words. A Windows Docker pass does not certify the
+  Linux app CI harness: derive virtualenv executables by platform, report
+  spawn errors explicitly, and rerun the selected CI journeys plus the full
+  clean-checkout suite before release.

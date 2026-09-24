@@ -1019,6 +1019,12 @@ def test_docx_attachment_has_authenticated_text_preview(client: TestClient) -> N
     preview = preview_response.json()
     assert "The authenticated DOCX preview is visible." in preview["paragraphs"]
     assert ["Issue", "Resolved"] in preview["table_rows"]
+    download_response = client.get(
+        f"/api/matters/{matter_id}/attachments/{attachment_id}/download",
+        headers=auth_headers(token),
+    )
+    assert download_response.status_code == 200
+    assert download_response.content == body.getvalue()
 
     from caseops_api.services.document_processing import parse_attachment
 
@@ -1030,6 +1036,69 @@ def test_docx_attachment_has_authenticated_text_preview(client: TestClient) -> N
     assert parsed.extracted_text is not None
     assert "The authenticated DOCX preview is visible." in parsed.extracted_text
     assert "Issue | Resolved" in parsed.extracted_text
+
+
+def test_docx_inline_preview_rejects_external_relationship_but_keeps_original(
+    client: TestClient,
+) -> None:
+    from docx import Document
+
+    bootstrap_payload = bootstrap_company(client)
+    token = str(bootstrap_payload["access_token"])
+    matter_response = client.post(
+        "/api/matters/",
+        headers=auth_headers(token),
+        json={
+            "title": "Unsafe DOCX preview matter",
+            "matter_code": "DOCX-2026-102",
+            "practice_area": "Commercial Litigation",
+            "forum_level": "high_court",
+            "status": "intake",
+        },
+    )
+    assert matter_response.status_code == 200, matter_response.text
+    matter_id = matter_response.json()["id"]
+
+    source = io.BytesIO()
+    Document().save(source)
+    unsafe = io.BytesIO()
+    with zipfile.ZipFile(source) as original, zipfile.ZipFile(unsafe, "w") as output:
+        for part in original.infolist():
+            if part.filename != "word/_rels/document.xml.rels":
+                output.writestr(part, original.read(part))
+        output.writestr(
+            "word/_rels/document.xml.rels",
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId999" '
+            'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" '
+            'Target="https://example.invalid/tracker.png" TargetMode="External"/>'
+            "</Relationships>",
+        )
+    unsafe_bytes = unsafe.getvalue()
+    upload = client.post(
+        f"/api/matters/{matter_id}/attachments",
+        headers=auth_headers(token),
+        files={
+            "file": (
+                "unsafe.docx",
+                unsafe_bytes,
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+    )
+    assert upload.status_code == 200, upload.text
+    attachment_id = upload.json()["id"]
+    preview = client.get(
+        f"/api/matters/{matter_id}/attachments/{attachment_id}/preview",
+        headers=auth_headers(token),
+    )
+    assert preview.status_code == 422
+    download = client.get(
+        f"/api/matters/{matter_id}/attachments/{attachment_id}/download",
+        headers=auth_headers(token),
+    )
+    assert download.status_code == 200
+    assert download.content == unsafe_bytes
 
 
 def test_notice_upload_persists_structured_notice_metadata(client: TestClient) -> None:
