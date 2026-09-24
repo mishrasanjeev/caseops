@@ -225,3 +225,16 @@ and wrapper selections passed 11/11 on a fresh isolated pgvector database.
 These selective replacements do not certify the full release: another complete
 Docker inventory, clean-checkout CI, main merge, exact-image deployment and
 production Playwright remain required.
+
+The complete replacement Docker run at `6d76c5f9` passed all 389 PostgreSQL
+tests and index/seed checks. Desktop shard 1 then found one dated test drift:
+`hari-2026-05-30-bugs.spec.ts` opened case tracking with a fictional Matter ID,
+yet expected the standalone `Bookmark` action. Matter context now intentionally
+requires a verified `Link to Matter` selection. The old standalone search,
+bookmark, and update assertion has been restored without fake Matter context;
+the separate new link journey retains real Matter-scoped proof. Both dated
+journeys passed individually against the local production-style build. An
+intermediate Next dev attempt served a stale 404 and left malformed generated
+`.next/dev/types`; it was treated as incomplete setup, isolated from source,
+and not counted as a product failure. The second full run remains red and did
+not reach shard 2/mobile; a complete new candidate run is still required.

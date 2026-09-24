@@ -1066,3 +1066,9 @@ requirements when using the fallback.
   bypass an entire race even when a link succeeds. Give those paths distinct
   fixtures, prove the actual provider call and tracked-case identity, and update
   PostgreSQL wrappers when a reused test helper gains a required fixture.
+- A dated browser test that exercises standalone search/bookmark behavior must
+  not invent a Matter ID merely to enter the screen. A Matter-scoped search now
+  offers only server-verified Link actions; keep standalone bookmark/update
+  coverage separate from the real Matter link journey, and replay both against
+  a production-style build after a UI contract change. A local Next dev 404 or
+  partially written generated type file is setup evidence, not a product verdict.
