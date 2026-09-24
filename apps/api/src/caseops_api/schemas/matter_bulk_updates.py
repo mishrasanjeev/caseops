@@ -36,11 +36,20 @@ class MatterBulkUpdatePreviewResponse(BaseModel):
 class MatterBulkUpdateApplyResponse(BaseModel):
     preview_token: str
     total_rows: int
+    valid_rows: int
     applied_rows: int
     skipped_rows: int
     failed_rows: int
     rows: list[MatterBulkUpdateRow]
     operation_id: str
+
+
+class MatterBulkUpdateHistoryRow(BaseModel):
+    row_number: int
+    matter_code: str | None = None
+    status: Literal["invalid", "unchanged", "applied", "failed", "redacted"]
+    errors: list[str] = Field(default_factory=list)
+    changed_fields: list[str] = Field(default_factory=list)
 
 
 class MatterBulkUpdateHistoryRecord(BaseModel):
@@ -49,10 +58,13 @@ class MatterBulkUpdateHistoryRecord(BaseModel):
     format: Literal["csv", "xlsx"]
     status: Literal["completed", "completed_with_errors", "stale"]
     total_rows: int
+    valid_rows: int
     changed_rows: int
     invalid_rows: int
     applied_rows: int
+    skipped_rows: int
     failed_rows: int
+    rows: list[MatterBulkUpdateHistoryRow]
     uploader_membership_id: str | None = None
     uploader_name: str | None = None
     uploader_email: str | None = None

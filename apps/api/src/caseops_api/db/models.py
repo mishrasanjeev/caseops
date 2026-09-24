@@ -1409,6 +1409,7 @@ class MatterBulkUpdateOperation(Base):
     invalid_rows: Mapped[int] = mapped_column(Integer, nullable=False)
     applied_rows: Mapped[int] = mapped_column(Integer, nullable=False)
     failed_rows: Mapped[int] = mapped_column(Integer, nullable=False)
+    row_results_json: Mapped[list[dict]] = mapped_column(JSON, default=list, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False
     )

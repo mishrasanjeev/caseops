@@ -13,12 +13,14 @@ import zipfile
 from datetime import date, datetime
 from itertools import islice
 from typing import Any
+from uuid import uuid4
 
 from fastapi import HTTPException, status
 from openpyxl import load_workbook
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
+from caseops_api.core.redaction import redact_text
 from caseops_api.db.models import (
     CompanyMembership,
     Matter,
@@ -29,13 +31,14 @@ from caseops_api.schemas.matter_bulk_updates import (
     MatterBulkUpdateApplyResponse,
     MatterBulkUpdateHistoryRecord,
     MatterBulkUpdateHistoryResponse,
+    MatterBulkUpdateHistoryRow,
     MatterBulkUpdatePreviewResponse,
     MatterBulkUpdateRow,
     MatterBulkUpdateSummary,
 )
 from caseops_api.schemas.matters import MatterUpdateRequest, normalize_matter_code
 from caseops_api.services.audit import record_from_context
-from caseops_api.services.matter_access import assert_access, can_access
+from caseops_api.services.matter_access import assert_access, can_access, visible_matters_filter
 from caseops_api.services.matters import update_matter
 from caseops_api.services.session_context import SessionContext
 
@@ -505,11 +508,13 @@ def apply_matter_bulk_update(
     safe_filename = (
         os.path.basename(filename).replace("\\", "_").replace("/", "_")[:255] or "upload"
     )
+    operation_id = str(uuid4())
     if current_token != preview_token:
         changed = sum(plan.status == "changed" for plan in plans)
         invalid = sum(plan.status == "invalid" for plan in plans)
         session.add(
             MatterBulkUpdateOperation(
+                id=operation_id,
                 company_id=context.company.id,
                 uploader_membership_id=context.membership.id,
                 filename=safe_filename,
@@ -520,6 +525,10 @@ def apply_matter_bulk_update(
                 invalid_rows=invalid,
                 applied_rows=0,
                 failed_rows=changed,
+                row_results_json=_operation_row_results(
+                    plans,
+                    failure_reason="The upload or Matter changed after preview. Review a fresh preview.",
+                ),
             )
         )
         session.commit()
@@ -558,10 +567,24 @@ def apply_matter_bulk_update(
                 for field in fields
             ):
                 raise HTTPException(status_code=409, detail="Matter source state changed after preview.")
+            record_from_context(
+                session,
+                context,
+                action="matter.bulk_update.row_applied",
+                target_type="matter",
+                target_id=matter.id,
+                matter_id=matter.id,
+                metadata={
+                    "operation_id": operation_id,
+                    "row_number": plan.row_number,
+                    "changed_fields": sorted(plan.changes),
+                },
+            )
             plan.status = "applied"
             applied += 1
         skipped = sum(plan.status in {"invalid", "unchanged"} for plan in plans)
         operation = MatterBulkUpdateOperation(
+            id=operation_id,
             company_id=context.company.id,
             uploader_membership_id=context.membership.id,
             filename=safe_filename,
@@ -574,6 +597,7 @@ def apply_matter_bulk_update(
             invalid_rows=sum(plan.status == "invalid" for plan in plans),
             applied_rows=applied,
             failed_rows=0,
+            row_results_json=_operation_row_results(plans),
         )
         session.add(operation)
         session.commit()
@@ -600,6 +624,7 @@ def apply_matter_bulk_update(
                 )
         session.add(
             MatterBulkUpdateOperation(
+                id=operation_id,
                 company_id=context.company.id,
                 uploader_membership_id=context.membership.id,
                 filename=safe_filename,
@@ -610,6 +635,10 @@ def apply_matter_bulk_update(
                 invalid_rows=sum(plan.status == "invalid" for plan in plans),
                 applied_rows=0,
                 failed_rows=sum(plan.status in {"changed", "applied"} for plan in plans),
+                row_results_json=_operation_row_results(
+                    plans,
+                    failure_reason="The batch was rolled back because a Matter or its access changed. No rows were updated.",
+                ),
             )
         )
         session.commit()
@@ -620,12 +649,34 @@ def apply_matter_bulk_update(
     return MatterBulkUpdateApplyResponse(
         preview_token=preview_token,
         total_rows=len(plans),
+        valid_rows=sum(plan.status != "invalid" for plan in plans),
         applied_rows=applied,
         skipped_rows=skipped,
         failed_rows=0,
         rows=plans,
         operation_id=operation.id,
     )
+
+
+def _operation_row_results(
+    plans: list[MatterBulkUpdateRow], *, failure_reason: str | None = None
+) -> list[dict[str, object]]:
+    results: list[dict[str, object]] = []
+    for plan in plans:
+        failed = failure_reason is not None and plan.status in {"changed", "applied"}
+        results.append(
+            {
+                "row_number": plan.row_number,
+                "matter_id": plan.matter_id,
+                "matter_code": plan.matter_code,
+                "status": "failed" if failed else plan.status,
+                "errors": [failure_reason] if failed else [
+                    redact_text(error, max_length=500) for error in plan.errors
+                ],
+                "changed_fields": sorted(plan.changes),
+            }
+        )
+    return results
 
 
 def _preview_token(file_hash: str, plans: list[MatterBulkUpdateRow]) -> str:
@@ -685,7 +736,7 @@ def list_matter_bulk_update_history(
         MatterBulkUpdateOperation.company_id == context.company.id
     )
     total = session.scalar(select(func.count()).select_from(query.subquery())) or 0
-    operations = session.scalars(
+    operations = list(session.scalars(
         query.options(
             joinedload(MatterBulkUpdateOperation.uploader_membership).joinedload(
                 CompanyMembership.user
@@ -693,21 +744,58 @@ def list_matter_bulk_update_history(
         )
         .order_by(MatterBulkUpdateOperation.created_at.desc())
         .limit(limit)
-    )
+    ))
+    matter_ids = {
+        str(row["matter_id"])
+        for operation in operations
+        for row in operation.row_results_json
+        if row.get("matter_id")
+    }
+    visible_ids: set[str] = set()
+    if matter_ids:
+        scope = visible_matters_filter(session, context=context)
+        ordered_ids = sorted(matter_ids)
+        for offset in range(0, len(ordered_ids), 4000):
+            visible_ids.update(
+                session.scalars(
+                    select(Matter.id).where(
+                        Matter.company_id == context.company.id,
+                        Matter.id.in_(ordered_ids[offset : offset + 4000]),
+                        scope,
+                    )
+                )
+            )
     records = []
     for item in operations:
         membership = item.uploader_membership
+        own_operation = item.uploader_membership_id == context.membership.id
+        rows = []
+        for row in item.row_results_json:
+            matter_id = row.get("matter_id")
+            visible = matter_id in visible_ids if matter_id else own_operation
+            rows.append(
+                MatterBulkUpdateHistoryRow(
+                    row_number=int(row["row_number"]),
+                    matter_code=str(row["matter_code"]) if visible and row.get("matter_code") else None,
+                    status=str(row["status"]) if visible else "redacted",
+                    errors=list(row.get("errors") or []) if visible else [],
+                    changed_fields=list(row.get("changed_fields") or []) if visible else [],
+                )
+            )
         records.append(
             MatterBulkUpdateHistoryRecord(
                 id=item.id,
-                filename=item.filename,
+                filename=item.filename if own_operation else "Bulk update upload",
                 format=item.format,
                 status=item.status,
                 total_rows=item.total_rows,
+                valid_rows=item.total_rows - item.invalid_rows,
                 changed_rows=item.changed_rows,
                 invalid_rows=item.invalid_rows,
                 applied_rows=item.applied_rows,
+                skipped_rows=item.total_rows - item.applied_rows - item.failed_rows,
                 failed_rows=item.failed_rows,
+                rows=rows,
                 uploader_membership_id=item.uploader_membership_id,
                 uploader_name=membership.user.full_name if membership else None,
                 uploader_email=membership.user.email if membership else None,

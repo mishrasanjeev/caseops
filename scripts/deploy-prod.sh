@@ -406,6 +406,38 @@ gcloud run jobs execute caseops-migrate-job \
   --region "${REGION}" --project "${PROJECT}" --wait --quiet
 echo "  migrate-job completed."
 
+# A migrated schema alone does not repair pre-feature Matters whose persisted
+# next-hearing date has no scheduled hearing. This one-shot job is provider-free,
+# bounded, idempotent, and pinned to the exact API image before QA reads them.
+echo "--- legacy next-hearing materialization (exact candidate image) ---"
+HEARING_BACKFILL_JOB=caseops-backfill-next-hearings
+HEARING_BACKFILL_ACTION=update
+if ! gcloud run jobs describe "${HEARING_BACKFILL_JOB}" \
+  --region "${REGION}" --project "${PROJECT}" >/dev/null 2>&1; then
+  HEARING_BACKFILL_ACTION=create
+fi
+gcloud run jobs "${HEARING_BACKFILL_ACTION}" "${HEARING_BACKFILL_JOB}" \
+  --image "${API_IMMUTABLE_IMAGE}" \
+  --command python \
+  --args "^|^-m|caseops_api.scripts.backfill_next_hearings" \
+  --service-account "caseops-runtime@${PROJECT}.iam.gserviceaccount.com" \
+  --set-env-vars "CASEOPS_ENV=cloud,CASEOPS_AUTO_MIGRATE=false" \
+  --set-secrets "CASEOPS_DATABASE_URL=caseops-database-url:latest,CASEOPS_AUTH_SECRET=caseops-auth-secret:latest" \
+  --set-cloudsql-instances "${PROJECT}:${REGION}:caseops-db" \
+  --task-timeout 10m \
+  --max-retries 0 \
+  --region "${REGION}" --project "${PROJECT}" --quiet
+HEARING_BACKFILL_IMAGE=$(gcloud run jobs describe "${HEARING_BACKFILL_JOB}" \
+  --region "${REGION}" --project "${PROJECT}" \
+  --format='value(spec.template.spec.template.spec.containers[0].image)')
+if [[ "${HEARING_BACKFILL_IMAGE}" != "${API_IMMUTABLE_IMAGE}" ]]; then
+  echo "ERROR: ${HEARING_BACKFILL_JOB} is not pinned to the candidate API digest."
+  exit 1
+fi
+gcloud run jobs execute "${HEARING_BACKFILL_JOB}" \
+  --region "${REGION}" --project "${PROJECT}" --wait --quiet
+echo "  legacy next-hearing materialization completed from ${API_IMMUTABLE_IMAGE}."
+
 # The statute catalog is release data, not an optional operator follow-up.
 # Pin the one-shot job to the exact candidate image and run it before traffic
 # so a green application deploy cannot leave production with an empty verified

@@ -30,6 +30,10 @@ const PDFViewer = dynamic(
   () => import("@/components/document/PDFViewer").then((m) => m.PDFViewer),
   { ssr: false, loading: () => <p className="p-6 text-sm">Loading viewer…</p> },
 );
+const DocxViewer = dynamic(
+  () => import("@/components/document/DocxViewer").then((m) => m.DocxViewer),
+  { ssr: false, loading: () => <p className="p-6 text-sm">Loading viewer…</p> },
+);
 
 function recordToAnnotation(r: MatterAttachmentAnnotationRecord): PDFAnnotation {
   const bbox =
@@ -108,14 +112,16 @@ export default function AttachmentViewerPage(): React.JSX.Element {
     setImageUrl(objectUrl);
     return () => URL.revokeObjectURL(objectUrl);
   }, [imageQuery.data]);
-  const isWord =
-    contentType.includes("word") ||
-    lowerName.endsWith(".doc") ||
-    lowerName.endsWith(".docx");
+  const isWord = lowerName.endsWith(".docx");
   const previewQuery = useQuery({
     queryKey: ["matter-attachment-preview", matterId, attachmentId],
     queryFn: () => fetchMatterAttachmentPreview({ matterId, attachmentId }),
     enabled: Boolean(matterId && attachmentId && isWord),
+  });
+  const docxQuery = useQuery({
+    queryKey: ["matter-attachment-docx", matterId, attachmentId],
+    queryFn: ({ signal }) => fetchMatterAttachmentBlob({ matterId, attachmentId, signal }),
+    enabled: Boolean(matterId && attachmentId && isWord && previewQuery.isSuccess),
   });
 
   useEffect(() => {
@@ -154,45 +160,18 @@ export default function AttachmentViewerPage(): React.JSX.Element {
           )}
         </div>
       ) : url && isWord ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-3">
-          <div className="min-h-0 flex-1 overflow-auto rounded-md border border-[var(--color-line)] bg-white p-5">
-            {previewQuery.isPending ? (
-              <p className="text-sm text-[var(--color-ink-2)]">Rendering document…</p>
-            ) : previewQuery.isError ? (
-              <p className="text-sm text-[var(--color-danger)]">
-                This DOCX could not be previewed. Download the authenticated file to continue.
-              </p>
-            ) : (
-              <article className="mx-auto max-w-4xl space-y-3 text-sm leading-6 text-[var(--color-ink)]">
-                {previewQuery.data?.paragraphs.map((paragraph, index) => (
-                  <p key={`${index}-${paragraph.slice(0, 16)}`}>{paragraph}</p>
-                ))}
-                {previewQuery.data?.table_rows.length ? (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full border-collapse border border-[var(--color-line)]">
-                      <tbody>
-                        {previewQuery.data.table_rows.map((row, rowIndex) => (
-                          <tr key={`row-${rowIndex}`}>
-                            {row.map((cell, cellIndex) => (
-                              <td
-                                key={`cell-${rowIndex}-${cellIndex}`}
-                                className="border border-[var(--color-line)] px-3 py-2 align-top"
-                              >
-                                {cell}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : null}
-                {!previewQuery.data?.paragraphs.length && !previewQuery.data?.table_rows.length ? (
-                  <p className="text-[var(--color-ink-2)]">This document has no previewable text.</p>
-                ) : null}
-              </article>
-            )}
-          </div>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+          {previewQuery.isError || docxQuery.isError ? (
+            <div className="flex min-h-0 flex-1 items-center justify-center rounded-md border border-[var(--color-line)] bg-white p-4 text-center text-sm text-[var(--color-danger)]">
+              This DOCX could not be rendered safely. Download the original file to continue.
+            </div>
+          ) : docxQuery.data ? (
+            <DocxViewer key={attachmentId} blob={docxQuery.data} filename={filename} />
+          ) : (
+            <div className="flex min-h-0 flex-1 items-center justify-center rounded-md border border-[var(--color-line)] bg-white p-4 text-sm" role="status">
+              Preparing document…
+            </div>
+          )}
           <Button type="button" variant="outline" href={url}>
             Download
           </Button>

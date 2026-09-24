@@ -1038,3 +1038,25 @@ requirements when using the fallback.
   its display order follows the runner's locale unless explicitly pinned.
   Browser and unit assertions should verify the value and use the same date
   formatter as the UI, not freeze one regional spelling such as `05 Oct`.
+- Scheduled production verification must remain structurally read-only. Pin
+  and review the complete scheduled step inventory, not a deny-list of known
+  mutating step names; an unnoticed new QA writer can repeatedly fence private
+  projection shadows and cause a real 300-second repair SLO breach. Keep
+  mutation-capable acceptance on exact-release dispatch under scheduler hold,
+  then require a convergent rebuild and a second clean cadence before resume.
+- A case-tracking-sourced next-hearing field is not a scheduled hearing. Audit
+  the same active Matter's `next_hearing_on`, provenance history and canonical
+  `MatterHearing` rows; a `Not set -> date` event can coexist with zero hearings
+  after manual clearing and tracked-case recovery. Backfill only current
+  non-null eligible dates with idempotent, lifecycle-aware scheduling, then
+  prove the exact persisted records across Matter, Hearings, Calendar, Today
+  and Cause List after reload.
+- Preserve binary regression fixtures byte-for-byte when integrating isolated
+  worktrees. A PowerShell text pipeline can corrupt a binary Git patch while
+  leaving the expected filename in place; restore the Git blob directly or
+  regenerate it, verify its signature/container, and rerun the unchanged
+  browser journey before diagnosing a product upload failure.
+- A legacy-hearing repair is not release-ready merely because the bounded
+  function exists. Execute a provider-free, exact-image backfill before routing
+  traffic and production QA, fail on non-convergence, and test cancelled-row
+  replacement as well as past/current/future dates and idempotent replay.

@@ -120,6 +120,12 @@ class CaseTrackingSearchResponse(BaseModel):
     results: list[CaseTrackingSearchResultRecord]
 
 
+class MatterCaseResolutionResponse(BaseModel):
+    status: Literal["matched", "multiple_matches", "no_match", "insufficient_identifiers"]
+    provider: str = "ecourtsindia"
+    results: list[CaseTrackingSearchResultRecord] = Field(default_factory=list)
+
+
 class CaseTrackingBookmarkCreateRequest(BaseModel):
     provider: str = "ecourtsindia"
     cnr_number: str | None = Field(default=None, max_length=32)

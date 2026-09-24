@@ -18,6 +18,7 @@ from caseops_api.schemas.case_tracking import (
     CaseTrackingSearchRequest,
     CaseTrackingSearchResponse,
     CaseTrackingUpdateListResponse,
+    MatterCaseResolutionResponse,
 )
 from caseops_api.schemas.production_safety import CaseTrackingTenantSupportMatrixResponse
 from caseops_api.services.case_tracking import (
@@ -27,6 +28,7 @@ from caseops_api.services.case_tracking import (
     list_updates,
     provider_status_response,
     refresh_bookmark,
+    resolve_matter_case,
     run_release_smoke,
     search_cases,
     update_bookmark,
@@ -87,6 +89,19 @@ def post_case_tracking_search(
     session: DbSession,
 ) -> CaseTrackingSearchResponse:
     return search_cases(session, context=context, payload=payload)
+
+
+@router.post(
+    "/matters/{matter_id}/resolve",
+    response_model=MatterCaseResolutionResponse,
+    summary="Resolve a Matter against bounded, exact eCourts case evidence.",
+)
+def post_matter_case_resolution(
+    matter_id: str,
+    context: CaseTrackingUser,
+    session: DbSession,
+) -> MatterCaseResolutionResponse:
+    return resolve_matter_case(session, context=context, matter_id=matter_id)
 
 
 @router.post(

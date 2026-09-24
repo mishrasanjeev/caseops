@@ -41,6 +41,7 @@ import {
   type CaseTrackingSearchResult,
   type CaseTrackingUpdateRecord,
 } from "@/lib/api/endpoints";
+import { resolveMatterCase } from "@/lib/api/case-tracking-matter-resolution";
 
 export default function CaseTrackingPage() {
   const queryClient = useQueryClient();
@@ -77,6 +78,9 @@ export default function CaseTrackingPage() {
 
   const searchMutation = useMutation({
     mutationFn: searchTrackedCases,
+  });
+  const matterResolution = useMutation({
+    mutationFn: resolveMatterCase,
   });
   const bookmarkMutation = useMutation({
     mutationFn: createCaseTrackingBookmark,
@@ -173,15 +177,57 @@ export default function CaseTrackingPage() {
       ) : null}
 
       {matterId || initialCourtName ? (
-        <Card>
+        <Card data-testid="matter-case-resolution">
           <CardHeader>
-            <CardTitle as="h2" className="text-base">Matter context</CardTitle>
+            <CardTitle as="h2" className="text-base">Find this Matter on eCourts</CardTitle>
             <CardDescription>
               {initialCourtName
-                ? `${initialCourtName} opened from the matter overview. Confirm the supported court code before provider search.`
-                : "Opened from the matter overview. Confirm the supported court code before provider search."}
+                ? `${initialCourtName}. CaseOps checks the saved Matter identifiers before showing a match.`
+                : "CaseOps checks the saved Matter identifiers before showing a match."}
             </CardDescription>
           </CardHeader>
+          {matterId ? (
+            <CardContent className="space-y-3">
+              <Button
+                type="button"
+                disabled={!configured || matterResolution.isPending}
+                onClick={() => matterResolution.mutate(matterId)}
+                data-testid="matter-case-resolve-submit"
+              >
+                <Search className="h-4 w-4" aria-hidden />
+                Find matching case
+              </Button>
+              {matterResolution.isError ? (
+                <p role="alert" className="text-sm text-[var(--color-danger)]">
+                  {apiErrorMessage(matterResolution.error, "eCourts lookup is unavailable. Try again later.")}
+                </p>
+              ) : null}
+              {matterResolution.data?.status === "insufficient_identifiers" ? (
+                <p role="status">Insufficient case identifiers. Add a valid CNR, or a case number with year and court, to the Matter.</p>
+              ) : null}
+              {matterResolution.data?.status === "no_match" ? (
+                <p role="status">No matching eCourts case found. Check the Matter identifiers or use the search below.</p>
+              ) : null}
+              {matterResolution.data?.status === "multiple_matches" ? (
+                <p role="status">Multiple verified candidates remain. Review their case details; CaseOps will not choose one automatically.</p>
+              ) : null}
+              {matterResolution.data?.status === "matched" ? (
+                <p role="status">One case matches the Matter identifiers.</p>
+              ) : null}
+              {matterResolution.data?.results.map((result, index) => (
+                <div key={`${result.cnr_number ?? result.case_number}-${index}`} className="border-t border-[var(--color-line)] pt-3" data-testid="matter-case-candidate">
+                  <CaseSummary
+                    title={result.case_title}
+                    court={result.court_name}
+                    status={result.current_status}
+                    stage={result.current_stage}
+                    nextHearing={result.next_hearing_on}
+                  />
+                  <p className="mt-1 text-xs text-[var(--color-mute)]">{result.cnr_number ?? result.case_number}</p>
+                </div>
+              ))}
+            </CardContent>
+          ) : null}
         </Card>
       ) : null}
 

@@ -6,6 +6,7 @@ import logging
 import zipfile
 from datetime import UTC, date, datetime, time, timedelta
 from typing import BinaryIO, NamedTuple
+from xml.etree import ElementTree
 
 from fastapi import HTTPException, status
 from sqlalchemy import and_, func, or_, select, text
@@ -5875,6 +5876,53 @@ def get_matter_attachment_download(
     return attachment, str(storage_path)
 
 
+def _validate_docx_preview_archive(path: str) -> None:
+    """Keep rich browser rendering inside a bounded, inert OOXML subset."""
+    with zipfile.ZipFile(path) as archive:
+        parts = archive.infolist()
+        if len(parts) > 2_000:
+            raise ValueError("too many DOCX parts")
+        total_size = 0
+        seen: set[str] = set()
+        for part in parts:
+            name = part.filename
+            folded = name.casefold()
+            segments = folded.split("/")
+            if (
+                name.startswith("/")
+                or "\\" in name
+                or any(segment in {"", ".", ".."} for segment in segments[:-1])
+                or folded in seen
+                or part.flag_bits & 1
+                or any(
+                    segment in {"activex", "embeddings", "webextensions"}
+                    for segment in segments
+                )
+                or folded.endswith((".bin", ".svg", ".html", ".htm", ".js"))
+            ):
+                raise ValueError("unsafe DOCX part")
+            seen.add(folded)
+            total_size += part.file_size
+            if (
+                part.file_size > 32 * 1024 * 1024
+                or total_size > 64 * 1024 * 1024
+                or part.file_size > max(part.compress_size, 1) * 200
+            ):
+                raise ValueError("DOCX expands beyond preview limits")
+            if not folded.endswith((".xml", ".rels")):
+                continue
+            content = archive.read(part)
+            if b"<!doctype" in content.lower() or b"<!entity" in content.lower():
+                raise ValueError("DOCX XML entities are not previewable")
+            if folded.endswith(".rels"):
+                root = ElementTree.fromstring(content)
+                for relation in root:
+                    if relation.attrib.get("TargetMode", "").casefold() == "external":
+                        raise ValueError("external DOCX resources are not previewable")
+        if "[content_types].xml" not in seen or "word/document.xml" not in seen:
+            raise ValueError("missing DOCX document parts")
+
+
 def get_matter_attachment_preview(
     session: Session,
     *,
@@ -5884,9 +5932,9 @@ def get_matter_attachment_preview(
 ) -> MatterAttachmentPreviewResponse:
     """Return a bounded, authenticated DOCX preview for the document viewer.
 
-    Browser-native DOCX rendering is inconsistent and can produce a blank iframe.
-    Reuse the download authorization gate, then expose only plain text and table
-    cells. This is deliberately a preview contract, not a document conversion API.
+    Reuse the download authorization gate and validate the OOXML package before
+    the browser receives it for isolated rich rendering. The text fields remain
+    for older clients and are not a substitute for the original document bytes.
     """
     attachment, _storage_path = get_matter_attachment_download(
         session,
@@ -5909,6 +5957,7 @@ def get_matter_attachment_preview(
     try:
         from docx import Document
 
+        _validate_docx_preview_archive(str(path))
         document = Document(io.BytesIO(path.read_bytes()))
     except Exception as exc:  # noqa: BLE001
         logger.warning("DOCX preview failed for attachment_id=%s: %s", attachment.id, exc)

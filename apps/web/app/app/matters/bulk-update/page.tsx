@@ -1,7 +1,7 @@
 "use client";
 
-import { Check, Download, FileSpreadsheet, Loader2, Upload } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Check, Download, Eye, FileSpreadsheet, Loader2, Upload } from "lucide-react";
+import { Fragment, useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -13,27 +13,46 @@ import {
   downloadMatterBulkUpdateTemplate,
   listMatterBulkUpdateHistory,
   previewMatterBulkUpdate,
+  type MatterBulkUpdateOperation,
   type MatterBulkUpdateResult,
 } from "@/lib/api/endpoints";
+
+function resultCsv(operation: MatterBulkUpdateOperation): string {
+  const cell = (value: string): string => {
+    const safe = /^[=+@\-\t\r]/.test(value) ? `'${value}` : value;
+    return `"${safe.replaceAll('"', '""')}"`;
+  };
+  const rows = [
+    ["Row", "Matter Code", "Status", "Changed Fields", "Errors"],
+    ...operation.rows.map((row) => [
+      String(row.row_number), row.matter_code ?? "", row.status,
+      row.changed_fields.join("; "), row.errors.join("; "),
+    ]),
+  ];
+  return `\uFEFF${rows.map((row) => row.map(cell).join(",")).join("\r\n")}\r\n`;
+}
 
 export default function MatterBulkUpdatePage(): React.JSX.Element {
   const [file, setFile] = useState<File | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [preview, setPreview] = useState<MatterBulkUpdateResult | null>(null);
+  const [result, setResult] = useState<MatterBulkUpdateResult | null>(null);
+  const [expandedOperationId, setExpandedOperationId] = useState<string | null>(null);
+  const [historyLoadFailed, setHistoryLoadFailed] = useState(false);
   const queryClient = useQueryClient();
   const [history, setHistory] = useState<Awaited<ReturnType<typeof listMatterBulkUpdateHistory>> | null>(null);
   useEffect(() => {
     let active = true;
-    void listMatterBulkUpdateHistory().then((result) => {
-      if (active) setHistory(result);
+    void listMatterBulkUpdateHistory().then((response) => {
+      if (active) setHistory(response);
     }).catch(() => {
-      if (active) setHistory({ operations: [], total: 0 });
+      if (active) setHistoryLoadFailed(true);
     });
     return () => { active = false; };
   }, []);
   const previewMutation = useMutation({
     mutationFn: (selected: File) => previewMatterBulkUpdate(selected),
-    onSuccess: setPreview,
+    onSuccess: (response) => { setPreview(response); setResult(null); },
     onError: (error) => toast.error(apiErrorMessage(error, "Could not preview workbook.")),
   });
   const applyMutation = useMutation({
@@ -41,18 +60,34 @@ export default function MatterBulkUpdatePage(): React.JSX.Element {
       if (!file || !preview) throw new Error("Preview the workbook first.");
       return applyMatterBulkUpdate({ file, previewToken: preview.preview_token });
     },
-    onSuccess: async (result) => {
-      setPreview(result);
-      await queryClient.invalidateQueries({ queryKey: ["matters"] });
-      const [updatedHistory] = await Promise.all([
-        listMatterBulkUpdateHistory(),
-        queryClient.invalidateQueries({ queryKey: ["matters", "bulk-update-history"] }),
-      ]);
-      setHistory(updatedHistory);
-      toast.success(`Updated ${result.applied_rows ?? 0} of ${result.total_rows ?? 0} rows; ${result.skipped_rows ?? 0} skipped, ${result.failed_rows ?? 0} failed.`);
+    onSuccess: (response) => {
+      setResult(response);
+      setPreview(null);
+      void queryClient.invalidateQueries({ queryKey: ["matters"] });
+      void listMatterBulkUpdateHistory().then((updatedHistory) => {
+        setHistory(updatedHistory);
+        setHistoryLoadFailed(false);
+      }).catch(() => setHistoryLoadFailed(true));
+      toast.success(`Updated ${response.applied_rows ?? 0} of ${response.total_rows ?? 0} rows; ${response.skipped_rows ?? 0} skipped, ${response.failed_rows ?? 0} failed.`);
     },
-    onError: (error) => toast.error(apiErrorMessage(error, "Could not apply workbook.")),
+    onError: (error) => {
+      setPreview(null);
+      void listMatterBulkUpdateHistory().then(setHistory).catch(() => setHistoryLoadFailed(true));
+      toast.error(apiErrorMessage(error, "Could not apply workbook."));
+    },
   });
+
+  function downloadResult(operation: MatterBulkUpdateOperation): void {
+    const blob = new Blob([resultCsv(operation)], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `matter-bulk-update-${operation.id}-results.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
 
   async function downloadTemplate(format: "csv" | "xlsx"): Promise<void> {
     try {
@@ -113,6 +148,7 @@ export default function MatterBulkUpdatePage(): React.JSX.Element {
                 const selected = event.target.files?.[0] ?? null;
                 setFile(selected);
                 setPreview(null);
+                setResult(null);
               }}
             />
           </label>
@@ -134,14 +170,24 @@ export default function MatterBulkUpdatePage(): React.JSX.Element {
             <span><strong>{preview.summary.invalid_rows}</strong> invalid (will be skipped)</span>
           </div>
         ) : null}
-        {preview ? (
+        {result?.operation_id ? (
+          <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm" data-testid="bulk-update-final-result">
+            <strong>Final result</strong>
+            <span>{result.total_rows} rows</span>
+            <span>{result.valid_rows} valid</span>
+            <span>{result.applied_rows} updated</span>
+            <span>{result.skipped_rows} skipped</span>
+            <span>{result.failed_rows} failed</span>
+          </div>
+        ) : null}
+        {(preview ?? result) ? (
           <div className="overflow-x-auto border border-[var(--color-line)]">
             <table className="min-w-full text-left text-sm">
               <thead className="bg-[var(--color-bg-2)] text-xs uppercase tracking-wide">
                 <tr><th className="px-3 py-2">Row</th><th className="px-3 py-2">Matter</th><th className="px-3 py-2">Result</th><th className="px-3 py-2">Changes / errors</th></tr>
               </thead>
               <tbody>
-                {preview.rows.map((row) => (
+                {(preview ?? result)?.rows.map((row) => (
                   <tr key={row.row_number} className="border-t border-[var(--color-line)] align-top">
                     <td className="px-3 py-2 font-mono">{row.row_number}</td>
                     <td className="px-3 py-2 font-mono">{row.matter_code ?? "—"}</td>
@@ -179,14 +225,15 @@ export default function MatterBulkUpdatePage(): React.JSX.Element {
       </section>
       <section className="flex flex-col gap-3" aria-labelledby="bulk-update-history-heading">
         <h2 id="bulk-update-history-heading" className="text-lg font-semibold">Operation history</h2>
+        {historyLoadFailed ? <p role="alert" className="text-sm">Could not load operation history. Reload to try again.</p> : null}
         {history?.operations.length ? (
           <div className="overflow-x-auto border border-[var(--color-line)]">
             <table className="min-w-full text-left text-sm">
-              <thead className="bg-[var(--color-bg-2)] text-xs uppercase"><tr><th className="px-3 py-2">File</th><th className="px-3 py-2">Uploader</th><th className="px-3 py-2">Time</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Rows</th><th className="px-3 py-2">Applied</th><th className="px-3 py-2">Invalid / failed</th></tr></thead>
-              <tbody>{history.operations.map((operation) => <tr key={operation.id} className="border-t border-[var(--color-line)]"><td className="px-3 py-2">{operation.filename}</td><td className="px-3 py-2">{operation.uploader_name ?? operation.uploader_email ?? "Former member"}</td><td className="px-3 py-2">{new Date(operation.created_at).toLocaleString()}</td><td className="px-3 py-2">{operation.status}</td><td className="px-3 py-2">{operation.total_rows}</td><td className="px-3 py-2">{operation.applied_rows}</td><td className="px-3 py-2">{operation.invalid_rows} / {operation.failed_rows}</td></tr>)}</tbody>
+              <thead className="bg-[var(--color-bg-2)] text-xs uppercase"><tr><th className="px-3 py-2">File</th><th className="px-3 py-2">Uploader</th><th className="px-3 py-2">Time</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Rows</th><th className="px-3 py-2">Updated</th><th className="px-3 py-2">Skipped / failed</th><th className="px-3 py-2">Results</th></tr></thead>
+              <tbody>{history.operations.map((operation) => <Fragment key={operation.id}><tr className="border-t border-[var(--color-line)]"><td className="px-3 py-2">{operation.filename}</td><td className="px-3 py-2">{operation.uploader_name ?? operation.uploader_email ?? "Former member"}</td><td className="px-3 py-2">{new Date(operation.created_at).toLocaleString()}</td><td className="px-3 py-2">{operation.status}</td><td className="px-3 py-2">{operation.total_rows}</td><td className="px-3 py-2">{operation.applied_rows}</td><td className="px-3 py-2">{operation.skipped_rows} / {operation.failed_rows}</td><td className="px-3 py-2"><div className="flex gap-1"><Button type="button" variant="outline" aria-label={`View results for ${operation.filename}`} onClick={() => setExpandedOperationId(expandedOperationId === operation.id ? null : operation.id)}><Eye className="h-4 w-4" /></Button><Button type="button" variant="outline" aria-label={`Download results for ${operation.filename}`} onClick={() => downloadResult(operation)}><Download className="h-4 w-4" /></Button></div></td></tr>{expandedOperationId === operation.id ? <tr><td colSpan={8} className="px-3 py-2"><ul className="space-y-1 text-sm">{operation.rows.map((row) => <li key={row.row_number}>Row {row.row_number}: {row.matter_code ?? "Restricted matter"} — {row.status}{row.changed_fields.length ? ` (${row.changed_fields.join(", ")})` : ""}{row.errors.length ? ` — ${row.errors.join("; ")}` : ""}</li>)}</ul></td></tr> : null}</Fragment>)}</tbody>
             </table>
           </div>
-        ) : <p className="text-sm text-[var(--color-ink-2)]">No update operations have been recorded.</p>}
+        ) : !historyLoadFailed && history ? <p className="text-sm text-[var(--color-ink-2)]">No update operations have been recorded.</p> : null}
       </section>
     </div>
   );

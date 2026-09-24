@@ -5,10 +5,10 @@ import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 
 import { noPaidProviderHeaders } from "./support/cost-controls";
-import { apiBaseUrl, repoRoot } from "./support/env";
+import { apiBaseUrl, repoRoot, webBaseUrl } from "./support/env";
 import { plusDays } from "./support/helpers";
 
-const web = process.env.PROD_BASE_URL || process.env.CASEOPS_WEB_BASE_URL || "http://127.0.0.1:3100";
+const web = process.env.PROD_BASE_URL || webBaseUrl;
 const api = process.env.PROD_API_BASE_URL || apiBaseUrl;
 const isProduction = Boolean(process.env.PROD_BASE_URL || process.env.CASEOPS_PROD_TEST_SLUG);
 const fixtureRoot = path.join(repoRoot, "tests", "fixtures");
@@ -197,8 +197,14 @@ test("BUG-006 DOCX is visibly rendered and ENH-007 updates only an existing matt
     if (column === "Matter Code") return code;
     return "";
   });
+  const unknownCode = `BULK-UNKNOWN-${randomUUID().slice(0, 8).toUpperCase()}`;
+  const invalidValues = header.replace(/^\uFEFF/, "").split(",").map((column) => {
+    if (column === "Matter Title") return "Must not be created";
+    if (column === "Matter Code") return unknownCode;
+    return "";
+  });
   const csvEscape = (value: string) => `"${value.replaceAll('"', '""')}"`;
-  const bulkCsv = Buffer.from(`${header}\r\n${values.map(csvEscape).join(",")}\r\n`, "utf-8");
+  const bulkCsv = Buffer.from(`${header}\r\n${values.map(csvEscape).join(",")}\r\n${invalidValues.map(csvEscape).join(",")}\r\n`, "utf-8");
   await page.locator('input[type="file"]').setInputFiles({
     name: "matter-bulk-update.csv",
     mimeType: "text/csv",
@@ -206,11 +212,30 @@ test("BUG-006 DOCX is visibly rendered and ENH-007 updates only an existing matt
   });
   await page.getByRole("button", { name: "Preview changes" }).click();
   await expect(page.getByTestId("bulk-update-summary")).toContainText("1 changed");
-  await expect(page.getByTestId("bulk-update-summary")).toContainText("0 invalid");
+  await expect(page.getByTestId("bulk-update-summary")).toContainText("1 invalid");
   await page.getByRole("button", { name: "Apply reviewed changes" }).click();
-  await expect(page.getByText(/Updated 1 of 1 rows; 0 skipped, 0 failed\./)).toBeVisible();
+  await expect(page.getByText(/Updated 1 of 2 rows; 1 skipped, 0 failed\./)).toBeVisible();
+  await expect(page.getByTestId("bulk-update-final-result")).toContainText("2 rows");
+  await expect(page.getByTestId("bulk-update-final-result")).toContainText("1 updated");
+  await expect(page.getByTestId("bulk-update-final-result")).toContainText("1 skipped");
+  await expect(page.getByRole("button", { name: "Apply reviewed changes" })).toBeDisabled();
   await expect(page.getByRole("heading", { name: "Operation history" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "matter-bulk-update.csv", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "View results for matter-bulk-update.csv" }).first().click();
+  await expect(page.getByText(`Row 2: ${code} — applied`, { exact: false })).toBeVisible();
+  await expect(page.getByText(`Row 3: ${unknownCode} — invalid`, { exact: false })).toBeVisible();
+  const resultDownload = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download results for matter-bulk-update.csv" }).first().click();
+  const resultStream = await (await resultDownload).createReadStream();
+  const resultChunks: Buffer[] = [];
+  for await (const chunk of resultStream) resultChunks.push(Buffer.from(chunk));
+  const resultText = Buffer.concat(resultChunks).toString("utf-8");
+  expect(resultText).toContain(`${code}`);
+  expect(resultText).toContain(`${unknownCode}`);
+  expect(resultText).toContain("Matter Code must match one existing matter");
+  const missing = await request.get(`${api}/api/matters/?q=${encodeURIComponent(unknownCode)}`, { headers: auth.headers });
+  expect(missing.status(), await missing.text()).toBe(200);
+  expect(((await missing.json()) as { matters: Matter[] }).matters.some((row) => row.matter_code === unknownCode)).toBe(false);
   await page.goto(`${web}/app/matters/${matter.id}`);
   await expect(page.getByText("Bulk update Playwright title", { exact: true })).toBeVisible();
 

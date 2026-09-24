@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import csv
+import importlib.util
 import io
 import zipfile
 from datetime import date
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 from openpyxl import Workbook
 from sqlalchemy import select
 
-from caseops_api.db.models import AuditEvent, MatterHearing
+from caseops_api.db.models import AuditEvent, MatterBulkUpdateOperation, MatterHearing
 from caseops_api.db.session import get_session_factory
 from caseops_api.services import matter_access, matter_bulk_updates, matters
 from caseops_api.services.matter_bulk_updates import HEADERS
@@ -78,6 +80,7 @@ def test_bulk_update_previews_and_applies_existing_matter_only(client: TestClien
     )
     assert apply_response.status_code == 200, apply_response.text
     assert apply_response.json()["applied_rows"] == 1
+    assert apply_response.json()["valid_rows"] == 1
     assert apply_response.json()["failed_rows"] == 0
     assert apply_response.json()["operation_id"]
 
@@ -94,6 +97,26 @@ def test_bulk_update_previews_and_applies_existing_matter_only(client: TestClien
     assert history.json()["operations"][0]["applied_rows"] == 1
     assert history.json()["operations"][0]["invalid_rows"] == 1
     assert history.json()["operations"][0]["failed_rows"] == 0
+    assert history.json()["operations"][0]["skipped_rows"] == 1
+    assert [row["status"] for row in history.json()["operations"][0]["rows"]] == [
+        "applied", "invalid"
+    ]
+    assert history.json()["operations"][0]["rows"][1]["errors"]
+    with get_session_factory()() as session:
+        operation = session.get(MatterBulkUpdateOperation, apply_response.json()["operation_id"])
+        assert operation is not None
+        assert operation.row_results_json[0]["changed_fields"] == ["description", "title"]
+        audit = session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.company_id == bootstrap_payload["company"]["id"],
+                AuditEvent.action == "matter.bulk_update.row_applied",
+                AuditEvent.target_id == matter_response.json()["id"],
+            )
+        )
+        assert audit is not None
+        assert apply_response.json()["operation_id"] in (audit.metadata_json or "")
+        assert "Updated bulk title" not in (audit.metadata_json or "")
+        assert "description" in (audit.metadata_json or "")
     assert apply_response.json()["skipped_rows"] == 1
 
 
@@ -653,6 +676,12 @@ def _assert_bulk_access_change_rolls_back_batch(
     assert history.status_code == 200, history.text
     assert history.json()["operations"][0]["status"] == "stale"
     assert history.json()["operations"][0]["applied_rows"] == 0
+    assert history.json()["operations"][0]["failed_rows"] == 2
+    assert [row["status"] for row in history.json()["operations"][0]["rows"]] == [
+        "failed", "failed"
+    ]
+    rows = history.json()["operations"][0]["rows"]
+    assert all("No rows were updated" in row["errors"][0] for row in rows)
     with get_session_factory()() as session:
         denied = session.scalar(
             select(AuditEvent.id).where(
@@ -675,3 +704,141 @@ def test_bulk_access_change_rolls_back_batch_on_postgres(
     isolated_postgres_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _assert_bulk_access_change_rolls_back_batch(isolated_postgres_client, monkeypatch)
+
+
+def test_bulk_history_redacts_inaccessible_matter_codes_and_row_details(
+    client: TestClient,
+) -> None:
+    boot = bootstrap_company(client)
+    owner_token = str(boot["access_token"])
+    matters_by_code = {}
+    for code in ("BULK-VISIBLE-1", "BULK-SECRET-1"):
+        created = client.post(
+            "/api/matters/",
+            headers=auth_headers(owner_token),
+            json={
+                "title": f"Original {code}", "matter_code": code,
+                "practice_area": "Civil", "forum_level": "high_court", "status": "active",
+            },
+        )
+        assert created.status_code == 200, created.text
+        matters_by_code[code] = created.json()["id"]
+    rows = []
+    for code in (*matters_by_code, "BULK-UNKNOWN-1"):
+        row = [""] * len(HEADERS)
+        row[HEADERS.index("Matter Code")] = code
+        row[HEADERS.index("Matter Title")] = "Private change"
+        rows.append(row)
+    content = _workbook_bytes(rows)
+    preview = client.post(
+        "/api/matters/bulk-update/preview", headers=auth_headers(owner_token),
+        files={"file": ("BULK-SECRET-1.xlsx", content, XLSX_TYPE)},
+    )
+    assert preview.status_code == 200, preview.text
+    applied = client.post(
+        "/api/matters/bulk-update/apply", headers=auth_headers(owner_token),
+        data={"preview_token": preview.json()["preview_token"]},
+        files={"file": ("BULK-SECRET-1.xlsx", content, XLSX_TYPE)},
+    )
+    assert applied.status_code == 200, applied.text
+    invited = client.post(
+        "/api/companies/current/users", headers=auth_headers(owner_token),
+        json={
+            "full_name": "History Reader", "email": "history-reader@example.com",
+            "role": "member", "password": "HistoryReaderPass123!",
+        },
+    )
+    assert invited.status_code == 200, invited.text
+    restricted = client.post(
+        f"/api/matters/{matters_by_code['BULK-SECRET-1']}/access/restricted",
+        headers=auth_headers(owner_token), json={"restricted": True},
+    )
+    assert restricted.status_code == 200, restricted.text
+    login = client.post(
+        "/api/auth/login",
+        json={
+            "company_slug": "aster-legal", "email": "history-reader@example.com",
+            "password": "HistoryReaderPass123!",
+        },
+    )
+    assert login.status_code == 200, login.text
+    reader_token = str(login.json()["access_token"])
+    history = client.get(
+        "/api/matters/bulk-update/history", headers=auth_headers(reader_token)
+    )
+    assert history.status_code == 200, history.text
+    operation = history.json()["operations"][0]
+    assert operation["filename"] == "Bulk update upload"
+    assert operation["rows"][0]["matter_code"] == "BULK-VISIBLE-1"
+    assert operation["rows"][1] == {
+        "row_number": 3, "matter_code": None, "status": "redacted",
+        "errors": [], "changed_fields": [],
+    }
+    assert operation["rows"][2]["status"] == "redacted"
+    assert "BULK-SECRET-1" not in history.text
+    assert "BULK-UNKNOWN-1" not in history.text
+    assert "Private change" not in history.text
+
+    own_row = [""] * len(HEADERS)
+    own_row[HEADERS.index("Matter Code")] = "BULK-VISIBLE-1"
+    own_row[HEADERS.index("Matter Title")] = "Reader's own change"
+    own_content = _workbook_bytes([own_row])
+    own_preview = client.post(
+        "/api/matters/bulk-update/preview", headers=auth_headers(reader_token),
+        files={"file": ("reader-update.xlsx", own_content, XLSX_TYPE)},
+    )
+    assert own_preview.status_code == 200, own_preview.text
+    own_apply = client.post(
+        "/api/matters/bulk-update/apply", headers=auth_headers(reader_token),
+        data={"preview_token": own_preview.json()["preview_token"]},
+        files={"file": ("reader-update.xlsx", own_content, XLSX_TYPE)},
+    )
+    assert own_apply.status_code == 200, own_apply.text
+    now_restricted = client.post(
+        f"/api/matters/{matters_by_code['BULK-VISIBLE-1']}/access/restricted",
+        headers=auth_headers(owner_token), json={"restricted": True},
+    )
+    assert now_restricted.status_code == 200, now_restricted.text
+    after_revocation = client.get(
+        "/api/matters/bulk-update/history", headers=auth_headers(reader_token)
+    )
+    assert after_revocation.status_code == 200, after_revocation.text
+    own_operation = after_revocation.json()["operations"][0]
+    assert own_operation["filename"] == "reader-update.xlsx"
+    assert own_operation["applied_rows"] == 1
+    assert own_operation["rows"][0]["status"] == "redacted"
+    assert own_operation["rows"][0]["matter_code"] is None
+    assert "BULK-VISIBLE-1" not in after_revocation.text
+
+
+def test_bulk_update_migration_downgrade_refuses_retained_operation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "alembic/versions/20260924_0001_matter_bulk_update_operations.py"
+    )
+    spec = importlib.util.spec_from_file_location("bulk_update_migration", path)
+    assert spec is not None and spec.loader is not None
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    dropped = []
+
+    class FakeConnection:
+        @staticmethod
+        def scalar(_statement):
+            return 1
+
+    class FakeOperations:
+        @staticmethod
+        def get_bind():
+            return FakeConnection()
+
+        @staticmethod
+        def drop_table(table_name):
+            dropped.append(table_name)
+
+    monkeypatch.setattr(migration, "op", FakeOperations())
+    with pytest.raises(RuntimeError, match="retained bulk-update history"):
+        migration.downgrade()
+    assert dropped == []

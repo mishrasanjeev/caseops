@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   fetchCaseTrackingStatusMock,
   searchTrackedCasesMock,
+  resolveMatterCaseMock,
   createCaseTrackingBookmarkMock,
   fetchCaseTrackingSupportMatrixMock,
   listCaseTrackingBookmarksMock,
@@ -16,6 +17,7 @@ const {
 } = vi.hoisted(() => ({
   fetchCaseTrackingStatusMock: vi.fn(),
   searchTrackedCasesMock: vi.fn(),
+  resolveMatterCaseMock: vi.fn(),
   createCaseTrackingBookmarkMock: vi.fn(),
   fetchCaseTrackingSupportMatrixMock: vi.fn(),
   listCaseTrackingBookmarksMock: vi.fn(),
@@ -33,6 +35,10 @@ vi.mock("@/lib/api/endpoints", () => ({
   updateCaseTrackingBookmark: updateCaseTrackingBookmarkMock,
   refreshCaseTrackingBookmark: refreshCaseTrackingBookmarkMock,
   listCaseTrackingUpdates: listCaseTrackingUpdatesMock,
+}));
+
+vi.mock("@/lib/api/case-tracking-matter-resolution", () => ({
+  resolveMatterCase: resolveMatterCaseMock,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -151,6 +157,7 @@ describe("CaseTrackingPage", () => {
   beforeEach(() => {
     fetchCaseTrackingStatusMock.mockReset();
     searchTrackedCasesMock.mockReset();
+    resolveMatterCaseMock.mockReset();
     createCaseTrackingBookmarkMock.mockReset();
     fetchCaseTrackingSupportMatrixMock.mockReset();
     listCaseTrackingBookmarksMock.mockReset();
@@ -211,6 +218,46 @@ describe("CaseTrackingPage", () => {
     expect(screen.getByTestId("case-tracking-cnr")).toHaveValue("DLHC010012342026");
     await user.click(screen.getByTestId("case-tracking-search-submit"));
     expect(searchTrackedCasesMock).not.toHaveBeenCalled();
+  });
+
+  it("resolves the saved Matter only after an explicit click and shows one verified candidate", async () => {
+    resolveMatterCaseMock.mockResolvedValue({
+      provider: "ecourtsindia",
+      status: "matched",
+      results: [{
+        provider: "ecourtsindia",
+        cnr_number: "DLHC010012342026",
+        case_number: "WP(C) 1/2026",
+        court_code: "DLHC",
+        court_name: "Delhi High Court",
+        case_title: "Example Petitioner v Example Respondent",
+        party_names: ["Example Petitioner", "Example Respondent"],
+        current_status: "Pending",
+        current_stage: "Arguments",
+        next_hearing_on: "2026-10-05",
+        source_url: null,
+        provenance_label: "Provider-normalized case status",
+      }],
+    });
+    render(withClient(<CaseTrackingPage />));
+    const find = await screen.findByTestId("matter-case-resolve-submit");
+    expect(resolveMatterCaseMock).not.toHaveBeenCalled();
+    await userEvent.click(find);
+    expect(resolveMatterCaseMock).toHaveBeenCalledWith("matter-1", expect.anything());
+    expect(await screen.findByText("One case matches the Matter identifiers.")).toBeInTheDocument();
+    expect(screen.getAllByTestId("matter-case-candidate")).toHaveLength(1);
+    expect(screen.queryByRole("link", { name: /eCourts/i })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["no_match", "No matching eCourts case found."],
+    ["insufficient_identifiers", "Insufficient case identifiers."],
+  ])("shows %s without inventing a destination", async (status, message) => {
+    resolveMatterCaseMock.mockResolvedValue({ provider: "ecourtsindia", status, results: [] });
+    render(withClient(<CaseTrackingPage />));
+    await userEvent.click(await screen.findByTestId("matter-case-resolve-submit"));
+    expect(await screen.findByText(new RegExp(message))).toBeInTheDocument();
+    expect(screen.queryByTestId("matter-case-candidate")).not.toBeInTheDocument();
   });
 
   it("searches, bookmarks with matter context, and shows bookmark updates", async () => {

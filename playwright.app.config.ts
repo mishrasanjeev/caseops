@@ -53,6 +53,7 @@ export default defineConfig({
     /case-tracking-summary-\d{4}-\d{2}-\d{2}\.spec\.ts$/,
     /ram-2026-09-07-statute-source-data\.spec\.ts/,
     /ram-2026-09-21-bugfixes\.spec\.ts/,
+    /ram-2026-09-24-prod\.spec\.ts/,
     /iplf-\d{3}[a-z]-[a-z0-9-]+-\d{4}-\d{2}-\d{2}\.spec\.ts/,
     /hari-2026-05-09-bugs\.spec\.ts/,
     /hari-2026-05-09-bug-033\.spec\.ts/,

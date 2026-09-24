@@ -162,6 +162,18 @@ def test_production_deploy_seeds_verified_statutes_before_routing_traffic() -> N
     assert deploy.index(seed_update) < deploy.index(seed_execute) < deploy.index(api_deploy)
 
 
+def test_production_deploy_materializes_legacy_hearings_before_qa() -> None:
+    deploy = _read_repo_text("scripts/deploy-prod.sh")
+
+    backfill_update = 'gcloud run jobs "${HEARING_BACKFILL_ACTION}" "${HEARING_BACKFILL_JOB}"'
+    backfill_execute = 'gcloud run jobs execute "${HEARING_BACKFILL_JOB}"'
+    assert "caseops_api.scripts.backfill_next_hearings" in deploy
+    assert "HEARING_BACKFILL_JOB=caseops-backfill-next-hearings" in deploy
+    assert deploy.index(backfill_update) < deploy.index(backfill_execute)
+    assert deploy.index(backfill_execute) < deploy.index("gcloud run deploy caseops-api")
+    assert deploy.index(backfill_execute) < deploy.index("gh workflow run prod-verify.yml")
+
+
 def test_production_deploy_owns_indian_kanoon_activation_without_manual_data_entry() -> None:
     deploy = _read_repo_text("scripts/deploy-prod.sh")
     manifest = _read_repo_text("infra/cloudrun/api-service.yaml")
@@ -2009,6 +2021,12 @@ def test_deploy_prod_accepts_clean_head_and_healthy_api(tmp_path: Path) -> None:
         for call in calls
     )
     assert any("run jobs execute caseops-seed-indian-kanoon-costs" in call for call in calls)
+    assert any(
+        "run jobs update caseops-backfill-next-hearings" in call
+        and "caseops_api.scripts.backfill_next_hearings" in call
+        for call in calls
+    )
+    assert any("run jobs execute caseops-backfill-next-hearings" in call for call in calls)
     assert any(
         "run deploy caseops-api" in call
         and "CASEOPS_INDIAN_KANOON_API_TOKEN=caseops-indian-kanoon-api-token:latest" in call

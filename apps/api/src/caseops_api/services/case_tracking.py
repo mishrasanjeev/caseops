@@ -49,6 +49,7 @@ from caseops_api.schemas.case_tracking import (
     CaseTrackingSearchResultRecord,
     CaseTrackingUpdateListResponse,
     CaseTrackingUpdateRecord,
+    MatterCaseResolutionResponse,
     TrackedCaseRecord,
 )
 from caseops_api.services.audit import record_from_context
@@ -69,7 +70,10 @@ from caseops_api.services.hearing_matching import (
     MAX_MATCH_CANDIDATES,
     HearingIdentity,
     identity_matches,
+    normalized,
+    public_number,
     reliable_identity,
+    search_number,
 )
 from caseops_api.services.hearing_matching_scopes import (
     HearingScope,
@@ -83,7 +87,11 @@ from caseops_api.services.matter_operational_guard import (
     matter_is_operational,
     require_operational_matter,
 )
-from caseops_api.services.next_hearing import apply_next_hearing_update, clear_next_hearing
+from caseops_api.services.next_hearing import (
+    apply_next_hearing_update,
+    backfill_legacy_next_hearings,
+    clear_next_hearing,
+)
 from caseops_api.services.notification_delivery import (
     enqueue_notification_delivery_intent,
     redact_provider_error,
@@ -1603,6 +1611,7 @@ def search_cases(
     context: SessionContext,
     payload: CaseTrackingSearchRequest,
     provider: CaseTrackingProvider | None = None,
+    require_complete_results: bool = False,
 ) -> CaseTrackingSearchResponse:
     query = CaseSearchQuery(
         query=payload.query,
@@ -1611,6 +1620,7 @@ def search_cases(
         court_code=payload.court_code,
         state=payload.state,
         court_name=payload.court_name,
+        require_complete_results=require_complete_results,
     )
     reservation_id: str | None = None
     company_id, membership_id, token_issued_at = (
@@ -1717,6 +1727,100 @@ def search_cases(
     return CaseTrackingSearchResponse(
         provider=active_provider.provider_key,
         results=[_search_record(snapshot) for snapshot in snapshots],
+    )
+
+
+def _matter_case_candidate_matches(
+    identity: HearingIdentity,
+    result: CaseTrackingSearchResultRecord,
+) -> bool:
+    expected_cnr = normalize_cnr(identity.cnr)
+    if expected_cnr:
+        if normalize_cnr(result.cnr_number) != expected_cnr:
+            return False
+    else:
+        wanted = public_number(identity.case_number)
+        found = public_number(result.case_number)
+        if not wanted or not found or wanted[1:] != found[1:]:
+            return False
+        if wanted[0] and found[0] and wanted[0] != found[0]:
+            return False
+    if identity.case_number and result.case_number:
+        wanted = public_number(identity.case_number)
+        found = public_number(result.case_number)
+        if wanted and found and wanted[1:] != found[1:]:
+            return False
+    if identity.court_name and result.court_name:
+        if normalized(identity.court_name) != normalized(result.court_name):
+            return False
+    elif not expected_cnr:
+        return False
+    expected_parties = {normalized(value) for value in identity.parties if value.strip()}
+    actual_parties = {normalized(value) for value in result.party_names if value.strip()}
+    if expected_parties and actual_parties and not expected_parties.issubset(actual_parties):
+        return False
+    if not expected_cnr and expected_parties and not actual_parties:
+        return False
+    return True
+
+
+def resolve_matter_case(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    provider: CaseTrackingProvider | None = None,
+) -> MatterCaseResolutionResponse:
+    matter = _matter_or_none(session, context=context, matter_id=matter_id)
+    assert matter is not None
+    if not matter_is_operational(matter):
+        raise HTTPException(status_code=409, detail="Disposed matters cannot resolve court cases.")
+    identity = matter_identity(matter)
+    if not reliable_identity(identity) or (not identity.cnr and not identity.case_number):
+        return MatterCaseResolutionResponse(status="insufficient_identifiers")
+    # Search input is server-owned. A case number is searched using its public
+    # number/year; the provider must certify completeness before we pick one.
+    query = CaseTrackingSearchRequest(
+        cnr_number=identity.cnr,
+        case_number=None if identity.cnr else search_number(identity),
+        court_name=identity.court_name,
+    )
+    frozen = (matter.lifecycle_version, matter.access_policy_version, identity)
+    response = search_cases(
+        session,
+        context=context,
+        payload=query,
+        provider=provider,
+        require_complete_results=not bool(identity.cnr),
+    )
+    session.expire_all()
+    current = _matter_or_none(session, context=context, matter_id=matter_id)
+    assert current is not None
+    if not matter_is_operational(current) or (
+        current.lifecycle_version,
+        current.access_policy_version,
+        matter_identity(current),
+    ) != frozen:
+        raise HTTPException(
+            status_code=409, detail="Matter identity or access changed during lookup."
+        )
+    if len(response.results) > MAX_MATCH_CANDIDATES:
+        raise HTTPException(
+            status_code=409, detail="Provider candidate list exceeded the match limit."
+        )
+    verified = [
+        result for result in response.results if _matter_case_candidate_matches(identity, result)
+    ]
+    return MatterCaseResolutionResponse(
+        provider=response.provider,
+        status=(
+            "no_match"
+            if not verified
+            else "matched"
+            if len(verified) == 1
+            else "multiple_matches"
+        ),
+        results=verified,
     )
 
 
@@ -4335,6 +4439,12 @@ def poll_tracked_cases(
     window = case_tracking_window_state(now)
     contexts = _system_contexts(session)
     runs: list[CaseTrackingPollRunRecord] = []
+
+    # The hearing migration is independent of provider availability and paid
+    # eligibility. A failed page must fail the job, not be hidden as a green poll.
+    for context in contexts:
+        backfill_legacy_next_hearings(session, context=context)
+        session.commit()
 
     if enforce_window and not force and not window.inside_window:
         for context in contexts:
