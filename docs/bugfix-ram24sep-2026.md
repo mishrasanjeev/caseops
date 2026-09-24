@@ -206,3 +206,22 @@ the four persisted test-tenant mismatches are not left for a later paid poll.
 The job is bounded and fails if it cannot converge. Full Docker acceptance,
 fresh CI, canonical-main merge, deployed-record re-read and production
 Playwright remain required before any bug verdict can be upgraded.
+
+### Final link-candidate integration gate
+
+The safe case-link branch was merged into the combined candidate with a
+short-lived signed provider selection, server-owned identity and access checks,
+idempotent linking, and a user-visible link action. Local combined API checks
+passed 97 tests with 10 PostgreSQL-only skips; 17 focused web tests and the
+web/E2E typechecks and production web build passed. The first complete Docker
+attempt at `49d0e571` ended red before browser shards: 382 PostgreSQL passes
+and seven failures. Six came from adapting a case-number-only search fixture
+where the PostgreSQL hearing-scope races required a CNR-backed tracked case;
+the seventh was a PostgreSQL wrapper still calling the updated helper without
+`monkeypatch`. An attempted global CNR change failed all 16 original search
+races and was rejected. Separate fixtures now retain both transport boundaries.
+The original search races passed 25/25 locally, and the exact PostgreSQL scope
+and wrapper selections passed 11/11 on a fresh isolated pgvector database.
+These selective replacements do not certify the full release: another complete
+Docker inventory, clean-checkout CI, main merge, exact-image deployment and
+production Playwright remain required.

@@ -1060,3 +1060,9 @@ requirements when using the fallback.
   function exists. Execute a provider-free, exact-image backfill before routing
   traffic and production QA, fail on non-convergence, and test cancelled-row
   replacement as well as past/current/future dates and idempotent replay.
+- A provider-link test fixture must preserve the identity and transport boundary
+  that each regression claims to exercise. A CNR-linked case uses detail/refresh,
+  while a case-number-only case uses search; switching one shared fixture can
+  bypass an entire race even when a link succeeds. Give those paths distinct
+  fixtures, prove the actual provider call and tracked-case identity, and update
+  PostgreSQL wrappers when a reused test helper gains a required fixture.

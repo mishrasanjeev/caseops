@@ -20,7 +20,7 @@ from caseops_api.db.session import get_session_factory
 from caseops_api.services import case_tracking
 from tests.test_20260904_auto_next_hearing_sync import DatedSyncProvider
 from tests.test_20260910_hearing_matching import snapshot
-from tests.test_20260910_hearing_matching_races import link_fixture_case, setup_case
+from tests.test_20260910_hearing_matching_races import setup_case
 from tests.test_auth_company import auth_headers
 from tests.test_case_tracking import _context_from_bootstrap
 from tests.test_postgres_validation import _ensure_migrations  # noqa: F401
@@ -31,7 +31,20 @@ pytestmark = pytest.mark.postgres
 
 def bookmark(client, headers, monkeypatch, matter_id=None):
     if matter_id is not None:
-        return link_fixture_case(client, monkeypatch, headers, matter_id)
+        provider = DatedSyncProvider(snapshot())
+        monkeypatch.setattr(case_tracking, "get_case_tracking_provider", lambda: provider)
+        resolved = client.post(
+            f"/api/case-tracking/matters/{matter_id}/resolve", headers=headers
+        )
+        assert resolved.status_code == 200, resolved.text
+        assert resolved.json()["status"] == "matched"
+        linked = client.post(
+            f"/api/case-tracking/matters/{matter_id}/link",
+            headers=headers,
+            json={"link_token": resolved.json()["results"][0]["link_token"]},
+        )
+        assert linked.status_code == 200, linked.text
+        return linked.json()
     response = client.post(
         "/api/case-tracking/bookmarks",
         headers=headers,

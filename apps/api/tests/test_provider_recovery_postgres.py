@@ -53,9 +53,11 @@ def test_async_scrape_status_recovers_without_duplicate_purchase(
     )
 
 
-def test_concurrent_disposal_wins_without_operational_output(isolated_postgres_client):
+def test_concurrent_disposal_wins_without_operational_output(
+    isolated_postgres_client, monkeypatch
+):
     journeys.test_disposal_during_provider_transport_wins_without_new_children(
-        isolated_postgres_client
+        isolated_postgres_client, monkeypatch
     )
 
 
