@@ -20534,6 +20534,75 @@
       }
     },
     {
+      "id": "matter_bulk_update_operations",
+      "table_name": "matter_bulk_update_operations",
+      "purpose": "Repository SQL persistence class `matter_bulk_update_operations`; its exact column inventory is intentionally versioned below.",
+      "policy_profile_id": "tenant_restricted_legal_content",
+      "disposition_handler_id": "registry_fail_closed",
+      "columns": {
+        "applied_rows": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "changed_rows": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "company_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "created_at": {
+          "category_id": "temporal_or_version_metadata",
+          "sql_type": "DATETIME",
+          "nullable": false
+        },
+        "failed_rows": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "filename": {
+          "category_id": "privileged_or_raw_content",
+          "sql_type": "VARCHAR(255)",
+          "nullable": false
+        },
+        "format": {
+          "category_id": "domain_attribute",
+          "sql_type": "VARCHAR(8)",
+          "nullable": false
+        },
+        "id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": false
+        },
+        "invalid_rows": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "status": {
+          "category_id": "configuration_or_state_metadata",
+          "sql_type": "VARCHAR(32)",
+          "nullable": false
+        },
+        "total_rows": {
+          "category_id": "domain_attribute",
+          "sql_type": "INTEGER",
+          "nullable": false
+        },
+        "uploader_membership_id": {
+          "category_id": "tenant_or_access_identifier",
+          "sql_type": "VARCHAR(36)",
+          "nullable": true
+        }
+      }
+    },
+    {
       "id": "matter_cause_list_entries",
       "table_name": "matter_cause_list_entries",
       "purpose": "Repository SQL persistence class `matter_cause_list_entries`; its exact column inventory is intentionally versioned below.",
@@ -30177,12 +30246,12 @@
       }
     }
   ],
-  "schema_fingerprint": "bfc10cc54691315dde112d135a86a0d529a7675859b1b043d57ecffa8c37e0c7",
+  "schema_fingerprint": "f12f5c2b171829eb1f5804db5a0c152499961033db4bf2a461ccbbd2aebc0b38",
   "index_inventory": {
-    "orm_index_count": 1757,
-    "orm_index_fingerprint": "f57a3a65118d4500caefa8420604fc5918ac67bb04ca313802c38809ea37e53d",
-    "migration_index_count": 743,
-    "migration_index_fingerprint": "1898d723487d9344e04380f336f6a602f7c0c75bcb40e1661ec40bb0dc2e2870",
+    "orm_index_count": 1760,
+    "orm_index_fingerprint": "7572b09a7d95e39148959f0fdd5358d1acb6c470b2fafd8b2e93213ebc6f6d32",
+    "migration_index_count": 746,
+    "migration_index_fingerprint": "2215a2597f5bc1998e325249af56a7a05dfc779b76fbd00293a8fb8705c85219",
     "interpretation": "Relational indexes inherit registered source table/column treatment. The fingerprints deliberately force a reviewed map update for every index change; the named non-SQL classes separately identify pgvector projections."
   }
 }

@@ -1029,3 +1029,12 @@ requirements when using the fallback.
   change product behavior to satisfy a stale simultaneous-state expectation.
   Scope post-filter assertions to the named follow-up region: its urgency
   headings can legitimately also appear in the main hearing buckets.
+- A new ORM table, migration index, API route, or response schema must update
+  every checked-in generated contract before CI: the data-governance map and
+  rendered view, and the OpenAPI TypeScript client. Local Docker acceptance
+  does not replace these clean-checkout checks. Run the validators and generated
+  diff gates before promoting the candidate.
+- A legal calendar date must retain its YYYY-MM-DD value across timezones, but
+  its display order follows the runner's locale unless explicitly pinned.
+  Browser and unit assertions should verify the value and use the same date
+  formatter as the UI, not freeze one regional spelling such as `05 Oct`.

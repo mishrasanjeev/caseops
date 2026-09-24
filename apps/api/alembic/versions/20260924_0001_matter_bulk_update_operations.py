@@ -1,4 +1,8 @@
-"""Persist sanitized tenant-scoped matter bulk-update operation history."""
+"""Persist sanitized tenant-scoped matter bulk-update operation history.
+
+MIGRATION-LOCK-RISK: acknowledged: indexes are built only on the new empty table.
+MIGRATION-ROLLBACK: restore-forward; refuse to drop retained operation history.
+"""
 
 from __future__ import annotations
 
@@ -12,6 +16,8 @@ revision = "20260924_0001"
 down_revision = "20260920_0001"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
+
+# DATA-GOVERNANCE-MAP: updated
 
 
 def upgrade() -> None:
@@ -58,6 +64,14 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    retained = op.get_bind().scalar(
+        sa.text("SELECT 1 FROM matter_bulk_update_operations LIMIT 1")
+    )
+    if retained is not None:
+        raise RuntimeError(
+            "Cannot downgrade while retained bulk-update history exists. "
+            "Use governed disposition and restore-forward."
+        )
     op.drop_index(
         "ix_matter_bulk_update_operations_company_created",
         table_name="matter_bulk_update_operations",

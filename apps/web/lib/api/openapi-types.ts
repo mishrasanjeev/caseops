@@ -10913,6 +10913,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matters/bulk-update/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List tenant-scoped bulk-update operation history */
+        get: operations["current_company_matter_bulk_update_history_api_matters_bulk_update_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matters/bulk-update/preview": {
         parameters: {
             query?: never;
@@ -10924,6 +10941,23 @@ export interface paths {
         put?: never;
         /** Preview updates for existing matters from the strict XLSX template */
         post: operations["preview_current_company_matter_bulk_update_api_matters_bulk_update_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/matters/bulk-update/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download the controlled existing-matter bulk-update template */
+        get: operations["download_matter_bulk_update_template_api_matters_bulk_update_template_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -36063,10 +36097,61 @@ export interface components {
             applied_rows: number;
             /** Failed Rows */
             failed_rows: number;
+            /** Operation Id */
+            operation_id: string;
             /** Preview Token */
             preview_token: string;
             /** Rows */
             rows: components["schemas"]["MatterBulkUpdateRow"][];
+            /** Skipped Rows */
+            skipped_rows: number;
+            /** Total Rows */
+            total_rows: number;
+        };
+        /** MatterBulkUpdateHistoryRecord */
+        MatterBulkUpdateHistoryRecord: {
+            /** Applied Rows */
+            applied_rows: number;
+            /** Changed Rows */
+            changed_rows: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Failed Rows */
+            failed_rows: number;
+            /** Filename */
+            filename: string;
+            /**
+             * Format
+             * @enum {string}
+             */
+            format: "csv" | "xlsx";
+            /** Id */
+            id: string;
+            /** Invalid Rows */
+            invalid_rows: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "completed" | "completed_with_errors" | "stale";
+            /** Total Rows */
+            total_rows: number;
+            /** Uploader Email */
+            uploader_email?: string | null;
+            /** Uploader Membership Id */
+            uploader_membership_id?: string | null;
+            /** Uploader Name */
+            uploader_name?: string | null;
+        };
+        /** MatterBulkUpdateHistoryResponse */
+        MatterBulkUpdateHistoryResponse: {
+            /** Operations */
+            operations: components["schemas"]["MatterBulkUpdateHistoryRecord"][];
+            /** Total */
+            total: number;
         };
         /** MatterBulkUpdatePreviewResponse */
         MatterBulkUpdatePreviewResponse: {
@@ -66508,7 +66593,9 @@ export interface operations {
     };
     download_current_company_matter_attachment_api_matters__matter_id__attachments__attachment_id__download_get: {
         parameters: {
-            query?: never;
+            query?: {
+                inline?: boolean;
+            };
             header?: never;
             path: {
                 attachment_id: string;
@@ -69954,6 +70041,37 @@ export interface operations {
             };
         };
     };
+    current_company_matter_bulk_update_history_api_matters_bulk_update_history_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatterBulkUpdateHistoryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     preview_current_company_matter_bulk_update_api_matters_bulk_update_preview_post: {
         parameters: {
             query?: never;
@@ -69974,6 +70092,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MatterBulkUpdatePreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_matter_bulk_update_template_api_matters_bulk_update_template_get: {
+        parameters: {
+            query?: {
+                format?: "csv" | "xlsx";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

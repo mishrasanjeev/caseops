@@ -112,3 +112,38 @@ correctly rejected a stale preview token before the first batch write. The
 hook now flips only after the first non-nested apply update and explicitly
 asserts that this phase was reached. No browser project ran in this red gate;
 the full frozen inventory must be rerun.
+
+The sixth frozen run on fingerprint
+`d72870f4fef9090a7593a6f702a734bd022496772b6f5624a6f6695332c3d8a3`
+passed as one invocation: 389 PostgreSQL tests; desktop shard 1, 196 passed
+with one known skip; desktop shard 2, 191 passed with five known skips; mobile,
+four passed. The migration/index checks and release statute reseed passed.
+Its source was committed as `d49cbdd3b437bafb1a4bb463a1e6141ba9abdd0f`
+and opened in PR #468. The clean-checkout CI then found three additional red
+gates: the new ORM table/indexes were missing from the generated data-governance
+map, the bulk-update routes/schemas were missing from the generated OpenAPI
+client, and a hearing unit test assumed `05 Oct` when the CI locale rendered
+`Oct 05`. These are not production validation. The generated contracts are
+being regenerated and the locale-dependent assertion corrected; CI must rerun
+before any merge or deployment.
+
+## 2026-09-24 CI and provider follow-up
+
+The first PR run remained red. Local remediation regenerated the governance map,
+data-class projection and OpenAPI client, corrected the locale-dependent hearing
+assertion, and added the migration's governance marker. The migration now refuses
+to discard retained bulk-operation history on downgrade. The full static
+contract chain found this missing marker before commit; its earlier failure is
+retained as a failed gate. Ruff and focused governance tests passed locally;
+the full web coverage rerun passed 1,086/1,086 tests with two workers. These
+checks do not replace final Docker acceptance or clean-checkout CI.
+
+Provider configuration was audited separately in
+`docs/runbooks/provider-setup-2026-09-24.md`. Gmail, Calendar, Pub/Sub and
+Secret Manager APIs were already enabled in the production GCP project;
+`drive.googleapis.com` was enabled and rechecked on 24 September 2026. No
+production Cloud Run connector credentials were changed. Google OAuth consent,
+Gmail webhook resources, Microsoft tenant consent and non-Google vendor accounts
+remain provider-gated. The sanitized workbook now records these states in a
+`Provider Setup` tab without upgrading any bug verdict. No paid provider call
+was made.

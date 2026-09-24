@@ -20,6 +20,7 @@ vi.mock("@/lib/capabilities", () => ({
 }));
 
 import HearingsPage from "@/app/app/hearings/page";
+import { formatLegalDate } from "@/lib/dates";
 
 function withClient(children: ReactNode) {
   const client = new QueryClient({
@@ -160,7 +161,7 @@ describe("HearingsPage (portfolio aggregate)", () => {
     await user.type(screen.getByLabelText("Exact hearing date"), "2026-10-05");
 
     expect(await screen.findByText("Selected-date matter")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "05 Oct 2026 (1)" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: `${formatLegalDate("2026-10-05")} (1)` })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Past listing date (4)" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "Missing hearing date (12)" })).toBeNull();
   });
