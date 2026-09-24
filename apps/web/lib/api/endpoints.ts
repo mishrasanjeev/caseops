@@ -585,6 +585,8 @@ export type MatterBulkUpdateRow = {
 
 export type MatterBulkUpdateResult = {
   preview_token: string;
+  total_rows?: number;
+  skipped_rows?: number;
   summary?: {
     total_rows: number;
     matched_rows: number;
@@ -3042,6 +3044,17 @@ export function matterAttachmentDownloadUrl(input: {
 }): string {
   const base = `${API_BASE_URL}/api/matters/${input.matterId}/attachments/${input.attachmentId}/download`;
   return input.inline ? `${base}?inline=true` : base;
+}
+
+export async function fetchMatterAttachmentBlob(input: {
+  matterId: string;
+  attachmentId: string;
+  inline?: boolean;
+  signal?: AbortSignal;
+}): Promise<Blob> {
+  const path = `/api/matters/${input.matterId}/attachments/${input.attachmentId}/download${input.inline ? "?inline=true" : ""}`;
+  const response = await apiBlobRequest(path, { signal: input.signal });
+  return response.blob();
 }
 
 export type MatterAttachmentPreview = {

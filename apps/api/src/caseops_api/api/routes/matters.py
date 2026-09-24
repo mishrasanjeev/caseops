@@ -240,6 +240,8 @@ from caseops_api.services.matter_audit import (
 )
 from caseops_api.services.matter_bulk_updates import (
     MAX_FILE_BYTES as MATTER_BULK_UPDATE_MAX_FILE_BYTES,
+)
+from caseops_api.services.matter_bulk_updates import (
     apply_matter_bulk_update,
     list_matter_bulk_update_history,
     matter_bulk_update_template,

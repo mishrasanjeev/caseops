@@ -124,7 +124,7 @@ export default function AllHearingsPage() {
         </CardContent>
       </Card>
 
-      {followUpQuery.data &&
+      {!exactDate && followUpQuery.data &&
       (followUpQuery.data.overdue_count > 0 || followUpQuery.data.missing_date_count > 0) ? (
         <section className="grid gap-4 lg:grid-cols-2" aria-label="Hearing date follow-up">
           <FollowUpCard

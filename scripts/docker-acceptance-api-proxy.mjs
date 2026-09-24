@@ -34,7 +34,10 @@ const server = http.createServer((request, response) => {
       port: targetPort,
     },
     (upstreamResponse) => {
-      response.writeHead(upstreamResponse.statusCode ?? 502, upstreamResponse.headers);
+      const responseHeaders = { ...upstreamResponse.headers };
+      delete responseHeaders["keep-alive"];
+      responseHeaders.connection = "close";
+      response.writeHead(upstreamResponse.statusCode ?? 502, responseHeaders);
       upstreamResponse.pipe(response);
     },
   );
@@ -54,7 +57,7 @@ const server = http.createServer((request, response) => {
       }),
     );
     if (!response.headersSent) {
-      response.writeHead(502, { "content-type": "application/problem+json" });
+      response.writeHead(502, { "content-type": "application/problem+json", connection: "close" });
     }
     if (!response.writableEnded) {
       response.end(

@@ -31,9 +31,9 @@ REGISTRY_027A_FINGERPRINT = "10b97a818b23d4fae8fe7f54b63edb50b0e04c16778cf0e646e
 # The ORM schema at render time. Compared against the live models at runtime, so
 # an image whose models moved after this file was rendered reports stale rather
 # than answering from a projection that no longer describes it.
-ORM_SCHEMA_FINGERPRINT = "2ecdf1a57d31f4acc019a7b5f95cb4e6f5f986cc9a9a8662003055fcbad48e33"
+ORM_SCHEMA_FINGERPRINT = "ccbe7c0c4ee911133d033aa9d132da99803dfa81fceb98e88bf77423526e5b60"
 
-PROJECTION_ID = "1805611df164e7a04798fa54ba79237a0be3d54f063cefd5d952d59d5213cc5f"
+PROJECTION_ID = "b311d74a46c1d2765d7901ac40afc40c944b32e0ab61527bdcbcfa7106a3b1db"
 
 # Every SQL table the repository-wide map inventories. Membership here is what
 # separates "inventoried but never reviewed" from "no such data class", which

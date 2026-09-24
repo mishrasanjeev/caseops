@@ -124,6 +124,47 @@ describe("HearingsPage (portfolio aggregate)", () => {
     );
   });
 
+  it("puts exact-date results first and hides unrelated follow-up queues while filtered", async () => {
+    const user = userEvent.setup();
+    fetchMatterHearingPortfolioMock.mockResolvedValue({
+      company_id: "company-1",
+      matters: [
+        {
+          id: "m-selected",
+          matter_code: "DATE-1",
+          title: "Selected-date matter",
+          status: "active",
+          practice_area: "Civil",
+          forum_level: "high_court",
+          next_hearing_on: "2026-10-05",
+          created_at: "2026-04-01T00:00:00Z",
+          updated_at: "2026-04-15T00:00:00Z",
+        },
+      ],
+      total_count: 1,
+      limit: 500,
+      truncated: false,
+      date: "2026-10-05",
+    });
+    fetchMatterHearingFollowUpMock.mockResolvedValue({
+      company_id: "company-1",
+      overdue_matters: [],
+      missing_date_matters: [],
+      overdue_count: 4,
+      missing_date_count: 12,
+      limit: 200,
+      truncated: false,
+    });
+    render(withClient(<HearingsPage />));
+
+    await user.type(screen.getByLabelText("Exact hearing date"), "2026-10-05");
+
+    expect(await screen.findByText("Selected-date matter")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "05 Oct 2026 (1)" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Past listing date (4)" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Missing hearing date (12)" })).toBeNull();
+  });
+
   it("surfaces overdue and missing hearing follow-up queues", async () => {
     fetchMatterHearingPortfolioMock.mockResolvedValue({
       company_id: "company-1",

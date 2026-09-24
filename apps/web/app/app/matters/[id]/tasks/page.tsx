@@ -205,7 +205,7 @@ export default function MatterTasksPage() {
               created, changed, or reopened.
             </p>
           ) : (
-          <form className="grid gap-3 md:grid-cols-[1fr_10rem_9rem_auto]" onSubmit={submitTask}>
+          <form className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_10rem_9rem_auto]" onSubmit={submitTask}>
             <Field label="Task">
               <Input
                 value={taskForm.title}
@@ -315,7 +315,7 @@ export default function MatterTasksPage() {
             </p>
           ) : (
           <form
-            className="grid gap-3 md:grid-cols-[1fr_10rem_9rem_auto]"
+            className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_10rem_9rem_auto]"
             onSubmit={submitDeadline}
           >
             <Field label="Deadline">

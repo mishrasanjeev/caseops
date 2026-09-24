@@ -1409,7 +1409,9 @@ class MatterBulkUpdateOperation(Base):
     invalid_rows: Mapped[int] = mapped_column(Integer, nullable=False)
     applied_rows: Mapped[int] = mapped_column(Integer, nullable=False)
     failed_rows: Mapped[int] = mapped_column(Integer, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
 
     uploader_membership: Mapped[CompanyMembership | None] = relationship()
 
@@ -15763,15 +15765,20 @@ class IpPatentFamily(Base):
         ForeignKeyConstraint(
             ["docket_id", "company_id"],
             ["ip_docket_records.id", "ip_docket_records.company_id"],
-            name="fk_patent_family_docket_company", ondelete="RESTRICT",
+            name="fk_patent_family_docket_company",
+            ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
-            ["asset_id", "company_id"], ["ip_assets.id", "ip_assets.company_id"],
-            name="fk_patent_family_asset_company", ondelete="RESTRICT",
+            ["asset_id", "company_id"],
+            ["ip_assets.id", "ip_assets.company_id"],
+            name="fk_patent_family_asset_company",
+            ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
-            ["client_id", "company_id"], ["clients.id", "clients.company_id"],
-            name="fk_patent_family_client_company", ondelete="RESTRICT",
+            ["client_id", "company_id"],
+            ["clients.id", "clients.company_id"],
+            name="fk_patent_family_client_company",
+            ondelete="RESTRICT",
         ),
         UniqueConstraint("id", "company_id", name="uq_patent_family_id_company"),
         UniqueConstraint("company_id", "docket_id", name="uq_patent_family_company_docket"),
@@ -15795,33 +15802,43 @@ class IpPatentFamilyVersion(Base):
         ForeignKeyConstraint(
             ["family_id", "company_id"],
             ["ip_patent_families.id", "ip_patent_families.company_id"],
-            name="fk_patent_family_version_family_company", ondelete="RESTRICT",
+            name="fk_patent_family_version_family_company",
+            ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
-            ["client_id", "company_id"], ["clients.id", "clients.company_id"],
-            name="fk_patent_family_version_client_company", ondelete="RESTRICT",
+            ["client_id", "company_id"],
+            ["clients.id", "clients.company_id"],
+            name="fk_patent_family_version_client_company",
+            ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
             ["created_by_membership_id", "company_id"],
             ["company_memberships.id", "company_memberships.company_id"],
-            name="fk_patent_family_version_actor_company", ondelete="RESTRICT",
+            name="fk_patent_family_version_actor_company",
+            ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
             ["source_document_version_id", "company_id", "source_document_id"],
             [
-                "ip_document_versions.id", "ip_document_versions.company_id",
+                "ip_document_versions.id",
+                "ip_document_versions.company_id",
                 "ip_document_versions.document_id",
             ],
-            name="fk_patent_family_version_document_company", ondelete="RESTRICT",
+            name="fk_patent_family_version_document_company",
+            ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
             ["source_registry_snapshot_id", "company_id"],
             ["ip_registry_snapshots.id", "ip_registry_snapshots.company_id"],
-            name="fk_patent_family_version_registry_company", ondelete="RESTRICT",
+            name="fk_patent_family_version_registry_company",
+            ondelete="RESTRICT",
         ),
         UniqueConstraint("id", "company_id", name="uq_patent_family_version_id_company"),
         UniqueConstraint(
-            "company_id", "family_id", "version", name="uq_patent_family_version_number",
+            "company_id",
+            "family_id",
+            "version",
+            name="uq_patent_family_version_number",
         ),
         CheckConstraint("version > 0", name="ck_patent_family_version_positive"),
         CheckConstraint(
@@ -15842,12 +15859,15 @@ class IpPatentFamilyVersion(Base):
         Index("ix_patent_family_versions_company_client", "company_id", "client_id"),
         Index("ix_patent_family_versions_company_actor", "company_id", "created_by_membership_id"),
         Index(
-            "ix_patent_family_versions_company_document", "company_id",
-            "source_document_version_id", "source_document_id",
+            "ix_patent_family_versions_company_document",
+            "company_id",
+            "source_document_version_id",
+            "source_document_id",
         ),
         Index(
             "ix_patent_family_versions_company_registry",
-            "company_id", "source_registry_snapshot_id",
+            "company_id",
+            "source_registry_snapshot_id",
         ),
     )
 
@@ -15867,7 +15887,9 @@ class IpPatentFamilyVersion(Base):
     created_by_membership_id: Mapped[str] = mapped_column(String(36), nullable=False)
     reason: Mapped[str] = mapped_column(String(1000), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, nullable=False,
+        DateTime(timezone=True),
+        default=utcnow,
+        nullable=False,
     )
 
 
@@ -16731,23 +16753,34 @@ class IpPatentPriorityDetail(Base):
         ),
         Index(
             "ix_patent_priorities_company_source_sequence",
-            "company_id", "source_docket_id", "sequence",
+            "company_id",
+            "source_docket_id",
+            "sequence",
         ),
         Index(
             "ix_patent_priorities_company_target_sequence",
-            "company_id", "target_docket_id", "sequence",
+            "company_id",
+            "target_docket_id",
+            "sequence",
         ),
         Index(
             "ix_patent_priorities_relationship_owner",
-            "relationship_id", "company_id", "source_docket_id", "target_docket_id",
+            "relationship_id",
+            "company_id",
+            "source_docket_id",
+            "target_docket_id",
         ),
         Index(
             "ix_patent_priorities_predecessor_owner",
-            "supersedes_priority_id", "company_id", "source_docket_id",
+            "supersedes_priority_id",
+            "company_id",
+            "source_docket_id",
         ),
         Index(
             "ix_patent_priorities_source_version",
-            "source_document_version_id", "company_id", "source_document_id",
+            "source_document_version_id",
+            "company_id",
+            "source_document_id",
         ),
         Index("ix_patent_priorities_actor_company", "created_by_membership_id", "company_id"),
     )
@@ -20389,12 +20422,14 @@ class LegalHoldReleaseRequest(Base):
         ForeignKeyConstraint(
             ["legal_hold_id", "company_id"],
             ["legal_holds.id", "legal_holds.company_id"],
-            name="fk_hold_release_request_hold_company", ondelete="RESTRICT",
+            name="fk_hold_release_request_hold_company",
+            ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
             ["dry_run_id", "company_id"],
             ["tenant_data_operations.id", "tenant_data_operations.company_id"],
-            name="fk_hold_release_request_dry_run_company", ondelete="RESTRICT",
+            name="fk_hold_release_request_dry_run_company",
+            ondelete="RESTRICT",
         ),
         UniqueConstraint("company_id", "idempotency_key", name="uq_hold_release_request_key"),
         CheckConstraint("expires_at > created_at", name="ck_hold_release_request_expiry"),

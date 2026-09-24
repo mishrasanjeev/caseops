@@ -580,3 +580,14 @@ Multi-day web work (react-pdf integration + annotation overlay + route + in-doc 
 - [x] **R2** — `apps/api/src/caseops_api/services/drafting_prompts.py` — one specialised prompt per type. Bail enforces BNSS s.483 + triple test + parity. Cheque Bounce hard-enforces the statutory 15-day window + amount in figures AND words. Criminal Complaint defaults to BNS with the 2024-07-01 cutover called out. Civil Suit flags Commercial Courts Act s.12A.
 - [x] **R3** — `GET /api/drafting/templates` (list) + `GET /api/drafting/templates/{type}` (full schema + Pydantic JSON-schema for Zod). Wired at `/api/drafting/*`.
 - [ ] **R7** — per-type fixture at `apps/api/tests/fixtures/drafting/{type}.json` with a golden draft. Deferred to a follow-up (the 18 tests in `test_drafting_templates.py` already cover schema + prompt gates; goldens belong in a dedicated `eval_drafting --type bail` pass which is its own sprint line-item).
+# 2026-09-24 — Bulk update and eCourts scope checkpoint
+
+The new bulk-update surface maps to existing Matter/hearing workflows (J08,
+M08, US-057, FT-078..082); it is implemented locally as a tenant-scoped,
+preview-first mutation plan and remains **partial**, not release-complete.
+Status/lifecycle is intentionally excluded from spreadsheet edits. The separate
+eCourts case-link and scheduled-refresh proposal is **not implemented end to
+end**: exact identity, provider-derived safe destination, canonical
+`MatterHearing`, cross-surface consistency, deduplication, and recovery evidence
+remain required. See `docs/bugfix-ram24sep-2026.md`. Current candidate is not on
+canonical main; no production verification or deployment has occurred.

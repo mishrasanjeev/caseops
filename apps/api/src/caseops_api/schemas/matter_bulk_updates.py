@@ -35,7 +35,9 @@ class MatterBulkUpdatePreviewResponse(BaseModel):
 
 class MatterBulkUpdateApplyResponse(BaseModel):
     preview_token: str
+    total_rows: int
     applied_rows: int
+    skipped_rows: int
     failed_rows: int
     rows: list[MatterBulkUpdateRow]
     operation_id: str

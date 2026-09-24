@@ -45,6 +45,11 @@ def test_connector_health_is_durable_and_token_safe(client: TestClient) -> None:
     body = response.json()
     providers = {row["provider"] for row in body["health"]}
     assert {"gmail", "google_drive", "google_calendar", "microsoft_365"} <= providers
+    health_by_provider = {row["provider"]: row for row in body["health"]}
+    for provider in ("google_workspace", "microsoft_365"):
+        assert health_by_provider[provider]["connected_state"] != "connected"
+        assert health_by_provider[provider]["last_attempted_at"] is None
+        assert health_by_provider[provider]["last_checked_at"] is not None
     assert all(
         row["disabled_reason"] is None or len(row["disabled_reason"]) <= 160
         for row in body["health"]
@@ -94,9 +99,7 @@ def test_admin_integrations_concurrent_reads_do_not_duplicate_health_records(
     with factory() as session:
         rows = list(
             session.scalars(
-                select(ConnectorHealthRecord).where(
-                    ConnectorHealthRecord.company_id == company_id
-                )
+                select(ConnectorHealthRecord).where(ConnectorHealthRecord.company_id == company_id)
             )
         )
 
@@ -342,10 +345,7 @@ def test_drive_candidate_review_cannot_link_or_import_after_disposal(
     assert all("disposed" in response.text.lower() for response in responses)
 
     with factory() as session:
-        rows = [
-            session.get(DriveFileCandidate, candidate_id)
-            for candidate_id in candidate_ids
-        ]
+        rows = [session.get(DriveFileCandidate, candidate_id) for candidate_id in candidate_ids]
         assert all(row is not None for row in rows)
         assert all(row.status == "new" for row in rows if row is not None)
         assert all(row.linked_matter_id is None for row in rows if row is not None)

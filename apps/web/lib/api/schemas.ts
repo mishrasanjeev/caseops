@@ -2569,6 +2569,28 @@ export const outlookBulkSyncResponse = z.object({
   ]),
 });
 
+export const providerOperationResponseClasses = [
+  "success",
+  "no_change",
+  "verified_cached",
+  "timeout",
+  "authentication",
+  "case_not_found",
+  "ambiguous_match",
+  "match_validation_failed",
+  "concurrent_refresh",
+  "rate_limit",
+  "parse_error",
+  "provider_outage",
+  "url_failure",
+  "removed_document",
+  "changed_content",
+  "unsupported_access",
+  "configuration",
+  "policy",
+  "unknown",
+] as const;
+
 export const providerOperationRecord = z.object({
   id: z.string(),
   job_kind: z.enum([
@@ -2602,22 +2624,7 @@ export const providerOperationRecord = z.object({
   created_at: z.string(),
   updated_at: z.string(),
   correlation_ref: z.string().nullable(),
-  response_class: z.enum([
-    "success",
-    "no_change",
-    "timeout",
-    "authentication",
-    "rate_limit",
-    "parse_error",
-    "provider_outage",
-    "url_failure",
-    "removed_document",
-    "changed_content",
-    "unsupported_access",
-    "configuration",
-    "policy",
-    "unknown",
-  ]),
+  response_class: z.enum(providerOperationResponseClasses),
   last_attempted_at: z.string().nullable(),
   last_successful_at: z.string().nullable(),
   last_good_at: z.string().nullable(),

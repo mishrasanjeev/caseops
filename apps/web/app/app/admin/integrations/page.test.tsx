@@ -10,7 +10,7 @@ vi.mock("@/lib/capabilities", () => ({
 }));
 
 import TenantIntegrationsPage from "@/app/app/admin/integrations/page";
-import { mockBillingFetch } from "@/test/billing-fixtures";
+import { mockBillingFetch, tenantIntegrationHealth } from "@/test/billing-fixtures";
 
 function renderWithQuery(ui: ReactElement) {
   const client = new QueryClient({
@@ -96,6 +96,36 @@ describe("TenantIntegrationsPage", () => {
     expect(screen.queryByText(/gross margin/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/internal cost/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/payment MDR/i)).not.toBeInTheDocument();
+  });
+
+  it("separates configured state from provider outcomes and local refresh time", async () => {
+    const defaultImplementation = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("/api/admin/integrations/health")) {
+        return new Response(JSON.stringify({
+          ...tenantIntegrationHealth,
+          health: [{
+            ...tenantIntegrationHealth.health[0],
+            provider: "configured-only-provider",
+            configured_state: "configured",
+            connected_state: "configured",
+            last_attempted_at: "2026-09-18T10:00:00Z",
+            last_success_at: "2026-09-18T09:00:00Z",
+            last_failure_at: "2026-09-18T10:00:00Z",
+            last_checked_at: "2026-09-19T11:00:00Z",
+          }],
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return defaultImplementation!(input, init);
+    });
+
+    renderWithQuery(<TenantIntegrationsPage />);
+
+    expect(await screen.findByText("Configuration is not a confirmed provider connection.")).toBeInTheDocument();
+    expect(screen.getByText(/provider attempt/)).toBeInTheDocument();
+    expect(screen.getByText(/last success/)).toBeInTheDocument();
+    expect(screen.getByText(/last failure/)).toBeInTheDocument();
+    expect(screen.getByText(/local refresh/)).toBeInTheDocument();
   });
 
   it("saves and tests tenant Google Workspace configuration from the UI", async () => {

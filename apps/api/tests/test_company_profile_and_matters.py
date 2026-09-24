@@ -8,6 +8,8 @@ import zipfile
 
 from fastapi.testclient import TestClient
 
+from caseops_api.db.models import MatterAttachment
+from caseops_api.db.session import get_session_factory
 from tests.test_auth_company import auth_headers, bootstrap_company
 
 _PLANTED_PROVIDER_SECRET = "planted-provider-secret-do-not-return"
@@ -882,6 +884,8 @@ def test_owner_can_pull_chennai_high_court_public_orders(
 def test_matter_attachment_upload_and_download_are_available_in_workspace(
     client: TestClient,
 ) -> None:
+    from PIL import Image
+
     bootstrap_payload = bootstrap_company(client)
     token = str(bootstrap_payload["access_token"])
 
@@ -942,6 +946,29 @@ def test_matter_attachment_upload_and_download_are_available_in_workspace(
 
     assert download_response.status_code == 200
     assert download_response.content == b"Detailed chronology and grounds for appeal."
+    inline_response = client.get(
+        f"/api/matters/{matter_id}/attachments/{attachment['id']}/download?inline=true",
+        headers=auth_headers(token),
+    )
+    assert inline_response.status_code == 415
+
+    image_buffer = io.BytesIO()
+    Image.new("RGB", (3, 2), color=(20, 120, 200)).save(image_buffer, format="PNG")
+    image_upload = client.post(
+        f"/api/matters/{matter_id}/attachments",
+        headers=auth_headers(token),
+        files={"file": ("hearing-photo.png", image_buffer.getvalue(), "image/png")},
+    )
+    assert image_upload.status_code == 200, image_upload.text
+    image_id = image_upload.json()["id"]
+    image_response = client.get(
+        f"/api/matters/{matter_id}/attachments/{image_id}/download?inline=true",
+        headers=auth_headers(token),
+    )
+    assert image_response.status_code == 200, image_response.text
+    assert image_response.headers["content-type"].startswith("image/png")
+    assert image_response.headers["content-disposition"].startswith("inline;")
+    assert image_response.headers["x-content-type-options"] == "nosniff"
 
 
 def test_docx_attachment_has_authenticated_text_preview(client: TestClient) -> None:
@@ -992,6 +1019,17 @@ def test_docx_attachment_has_authenticated_text_preview(client: TestClient) -> N
     preview = preview_response.json()
     assert "The authenticated DOCX preview is visible." in preview["paragraphs"]
     assert ["Issue", "Resolved"] in preview["table_rows"]
+
+    from caseops_api.services.document_processing import parse_attachment
+
+    with get_session_factory()() as session:
+        stored = session.get(MatterAttachment, attachment_id)
+        assert stored is not None
+        parsed = parse_attachment(stored.storage_key, stored.content_type)
+    assert parsed.status == "indexed"
+    assert parsed.extracted_text is not None
+    assert "The authenticated DOCX preview is visible." in parsed.extracted_text
+    assert "Issue | Resolved" in parsed.extracted_text
 
 
 def test_notice_upload_persists_structured_notice_metadata(client: TestClient) -> None:
@@ -1829,13 +1867,9 @@ def test_owner_can_create_and_sync_pine_labs_payment_link(
     payment_attempt = payment_link_response.json()
     assert payment_attempt["provider_order_id"] == "pl-order-001"
     assert payment_attempt["payment_url"] == "https://pay.pinelabs.test/pl-order-001"
-    assert str(create_request["return_url"]).endswith(
-        f"/app/matters/{matter_id}/billing"
-    )
+    assert str(create_request["return_url"]).endswith(f"/app/matters/{matter_id}/billing")
     assert "//app/" not in str(create_request["return_url"])
-    assert create_request["webhook_url"] == (
-        "http://testserver/api/payments/pine-labs/webhook"
-    )
+    assert create_request["webhook_url"] == ("http://testserver/api/payments/pine-labs/webhook")
 
     sync_response = client.post(
         f"/api/payments/matters/{matter_id}/invoices/{invoice_id}/pine-labs/sync",
@@ -1866,9 +1900,7 @@ def test_payment_link_provider_failure_does_not_leak_exception_detail(
 
     class FailingGateway:
         def create_payment_link(self, **_kwargs):
-            raise RuntimeError(
-                f"provider rejected api_secret={_PLANTED_PROVIDER_SECRET}"
-            )
+            raise RuntimeError(f"provider rejected api_secret={_PLANTED_PROVIDER_SECRET}")
 
     monkeypatch.setattr(
         "caseops_api.services.payments._get_gateway_client",
@@ -1925,9 +1957,7 @@ def test_payment_status_provider_failure_does_not_leak_exception_detail(
             )
 
         def fetch_payment_status(self, **_kwargs):
-            raise RuntimeError(
-                f"provider rejected api_secret={_PLANTED_PROVIDER_SECRET}"
-            )
+            raise RuntimeError(f"provider rejected api_secret={_PLANTED_PROVIDER_SECRET}")
 
     gateway = FailingStatusGateway()
     monkeypatch.setattr(

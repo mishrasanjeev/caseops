@@ -47,6 +47,7 @@ test("forwards a complete mutation response exactly once", async (t) => {
   });
   const response = await fetch(url, { method: "POST", body: "original mutation" });
   assert.equal(response.status, 201);
+  assert.equal(response.headers.get("connection"), "close");
   assert.equal(await response.text(), payload);
   assert.equal(calls, 1);
   assert.equal(errors(), "");
@@ -136,5 +137,33 @@ test("does not suppress a real transport failure while the client is connected",
   const response = await fetch(url);
   assert.equal(response.status, 502);
   assert.equal((await response.json()).title, "Docker acceptance transport failure");
+  assert.equal(response.headers.get("connection"), "close");
   assert.match(errors(), /docker_acceptance_api_proxy_error/);
+});
+
+test("completed downstream responses close explicitly without disabling upstream reuse", async (t) => {
+  const upstreamSockets = new Set();
+  const body = "complete:" + "x".repeat(256 * 1024);
+  const { url, errors } = await fixture(t, (request, response) => {
+    upstreamSockets.add(request.socket.remotePort);
+    response.setHeader("Keep-Alive", "timeout=5");
+    response.end(body);
+  });
+  const agent = new http.Agent({ keepAlive: true, maxSockets: 1 });
+  t.after(() => agent.destroy());
+  const downstreamPorts = [];
+  for (let index = 0; index < 2; index += 1) {
+    const response = await new Promise((resolve, reject) => {
+      const request = http.get(url, { agent }, resolve);
+      request.on("error", reject);
+    });
+    downstreamPorts.push(response.socket.localPort);
+    assert.equal(response.headers.connection, "close");
+    let received = "";
+    for await (const chunk of response) received += chunk.toString();
+    assert.equal(received, body);
+  }
+  assert.notEqual(downstreamPorts[0], downstreamPorts[1]);
+  assert.equal(upstreamSockets.size, 1);
+  assert.equal(errors(), "");
 });

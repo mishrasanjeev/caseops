@@ -1503,3 +1503,16 @@ one. Founder may defer any P2 / P3 item indefinitely.
 demo when Delhi + Bombay + Supreme Court 2020-2024 are fully embedded;
 full 10-year x 5-HC + SC is "done" for first paying customer
 onboarding. Either threshold is recorded in `docs/runbooks/corpus-ingest.md`.
+# 2026-09-24 — Ram bug workbook / bulk update checkpoint
+
+Review of 22 populated BUG-010..BUG-031 rows and the bulk-update/eCourts DOCX is
+recorded in `docs/bugfix-ram24sep-2026.md`; row-by-row evidence is in the
+sanitized `CaseOps_Bug_Fix_Summary_2026-09-24.xlsx`. Candidate `86886a5f` is
+not on `origin/main` and is **NO-GO** for production. Local evidence includes
+388 PostgreSQL passes and a separate focused Docker Playwright run (2/2), but
+not a single green full Docker harness or exact-release production Playwright.
+No bug is marked properly fixed. The eCourts feature, faithful DOCX rendering,
+and exact persisted records for reported Sync/hearing/integration incidents
+remain open. Diagnose any alleged Matter reopening from its persisted lifecycle
+version and ordered audit events; do not infer it from hearing updates or
+private-projection maintenance logs.

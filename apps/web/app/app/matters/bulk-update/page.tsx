@@ -49,8 +49,7 @@ export default function MatterBulkUpdatePage(): React.JSX.Element {
         queryClient.invalidateQueries({ queryKey: ["matters", "bulk-update-history"] }),
       ]);
       setHistory(updatedHistory);
-      const skipped = result.failed_rows ?? 0;
-      toast.success(`Updated ${result.applied_rows ?? 0} existing matters; ${skipped} rows were skipped or failed.`);
+      toast.success(`Updated ${result.applied_rows ?? 0} of ${result.total_rows ?? 0} rows; ${result.skipped_rows ?? 0} skipped, ${result.failed_rows ?? 0} failed.`);
     },
     onError: (error) => toast.error(apiErrorMessage(error, "Could not apply workbook.")),
   });
@@ -88,6 +87,11 @@ export default function MatterBulkUpdatePage(): React.JSX.Element {
         actions={<Button variant="outline" href="/app/matters"><Check className="h-4 w-4" /> Back to matters</Button>}
       />
       <section className="flex flex-col gap-4 border-y border-[var(--color-line)] py-5">
+        <p className="max-w-3xl text-sm text-[var(--color-ink-2)]">
+          Matter Code must identify an existing matter in this workspace. Blank cells keep current values;
+          status and lifecycle changes use the matter lifecycle workflow. Formula cells are rejected.
+          Preview lists exact old and new values, and only reviewed valid rows are applied.
+        </p>
         <div className="flex flex-wrap items-center gap-2">
           <span className="mr-2 text-sm font-medium">Download template</span>
           <Button type="button" variant="outline" disabled={downloading} onClick={() => void downloadTemplate("xlsx")}>
@@ -121,6 +125,7 @@ export default function MatterBulkUpdatePage(): React.JSX.Element {
             Preview changes
           </Button>
         </div>
+        {file ? <p className="text-xs text-[var(--color-ink-2)]">{file.name} · {(file.size / (1024 * 1024)).toFixed(2)} MiB</p> : null}
         {preview?.summary ? (
           <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-[var(--color-ink-2)]" data-testid="bulk-update-summary">
             <span><strong>{preview.summary.total_rows}</strong> rows</span>

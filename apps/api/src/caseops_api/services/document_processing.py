@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 TEXT_SUFFIXES = {".txt", ".md", ".csv", ".json", ".log", ".yaml", ".yml", ".xml", ".html", ".htm"}
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
+MAX_DOCX_BYTES = 32 * 1024 * 1024
 HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
 
 
@@ -121,6 +122,21 @@ def _extract_image_text(path: Path) -> str:
     return _run_tesseract(command, path)
 
 
+def _extract_docx_text(path: Path) -> str:
+    if path.stat().st_size > MAX_DOCX_BYTES:
+        raise ValueError("DOCX exceeds the processing size limit.")
+    from docx import Document
+
+    document = Document(str(path))
+    parts = [paragraph.text for paragraph in document.paragraphs if paragraph.text.strip()]
+    for table in document.tables:
+        for row in table.rows:
+            cells = [" ".join(cell.text.split()) for cell in row.cells]
+            if any(cells):
+                parts.append(" | ".join(cells))
+    return "\n".join(parts)
+
+
 def _extract_scanned_pdf_text(path: Path) -> str:
     from caseops_api.services.ocr import ocr_pdf
 
@@ -205,6 +221,32 @@ def parse_attachment(storage_key: str, content_type: str | None) -> ParsedDocume
                 extracted_text=None,
                 chunks=[],
                 error="Readable text extraction returned an empty payload.",
+            )
+        return ParsedDocument(
+            status=DocumentProcessingStatus.INDEXED,
+            extracted_text=text,
+            chunks=_chunk_text(text),
+            error=None,
+        )
+    if (
+        suffix == ".docx"
+        or content_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    ):
+        try:
+            text = _normalize_whitespace(_extract_docx_text(path))
+        except Exception as exc:  # noqa: BLE001
+            return ParsedDocument(
+                status=DocumentProcessingStatus.FAILED,
+                extracted_text=None,
+                chunks=[],
+                error=redact_provider_error(exc),
+            )
+        if not text:
+            return ParsedDocument(
+                status=DocumentProcessingStatus.FAILED,
+                extracted_text=None,
+                chunks=[],
+                error="DOCX text extraction returned an empty payload.",
             )
         return ParsedDocument(
             status=DocumentProcessingStatus.INDEXED,
