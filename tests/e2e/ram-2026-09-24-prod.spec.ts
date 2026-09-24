@@ -42,11 +42,22 @@ function localSignedMatterSelection(matterId: string, membershipId: string): str
     "    result = CaseTrackingSearchResultRecord(provider='ecourtsindia', cnr_number='DLHC010012342026', case_number='WP(C) 1/2026', court_code='DLHC', court_name='Delhi High Court', case_title='Selected candidate', party_names=[], current_status='Pending', current_stage='Arguments', next_hearing_on=None, source_url=None)",
     "    print(_matter_selection_token(context=context, matter=matter, result=result))",
   ].join("\n");
-  const run = spawnSync(python, ["-c", script, matterId, membershipId], {
-    cwd: path.join(repoRoot, "apps", "api"),
-    env: { ...process.env, ...e2eEnv, PYTHONPATH: path.join(repoRoot, "apps", "api", "src") },
-    encoding: "utf8",
-  });
+  const dockerProject = process.env.CASEOPS_E2E_DOCKER_PROJECT;
+  const dockerComposeFile = process.env.CASEOPS_E2E_DOCKER_COMPOSE_FILE;
+  if (dockerProject && !dockerComposeFile) {
+    throw new Error("Docker acceptance requires its exact Compose file.");
+  }
+  const run = dockerProject && dockerComposeFile
+    ? spawnSync("docker", [
+        "compose", "--project-name", dockerProject, "--file", dockerComposeFile,
+        "exec", "-T", "api", "python", "-c", script, matterId, membershipId,
+      ], { cwd: repoRoot, encoding: "utf8", timeout: 30_000 })
+    : spawnSync(python, ["-c", script, matterId, membershipId], {
+        cwd: path.join(repoRoot, "apps", "api"),
+        env: { ...process.env, ...e2eEnv, PYTHONPATH: path.join(repoRoot, "apps", "api", "src") },
+        encoding: "utf8",
+        timeout: 30_000,
+      });
   if (run.status !== 0) throw new Error(`Could not create local nonbillable selection: ${run.stderr}`);
   return run.stdout.trim();
 }

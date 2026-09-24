@@ -149,9 +149,10 @@ test("BUG-006 DOCX is visibly rendered and ENH-007 updates only an existing matt
 
   await signIn(page, auth);
   await page.goto(`${web}/app/matters/${matter.id}/documents/${attachment.id}/view`);
-  await expect(page.getByText("CaseOps DOCX preview acceptance", { exact: true })).toBeVisible();
-  await expect(page.getByText("This text must be visible inside the authenticated document viewer.", { exact: true })).toBeVisible();
-  await expect(page.getByText("Verified", { exact: true })).toBeVisible();
+  const docxFrame = page.frameLocator('[data-testid="docx-preview-frame"]');
+  await expect(docxFrame.getByText("CaseOps DOCX preview acceptance", { exact: true })).toBeVisible();
+  await expect(docxFrame.getByText("This text must be visible inside the authenticated document viewer.", { exact: true })).toBeVisible();
+  await expect(docxFrame.getByText("Verified", { exact: true })).toBeVisible();
 
   const imageUpload = await request.post(`${api}/api/matters/${matter.id}/attachments`, {
     headers: auth.headers,
