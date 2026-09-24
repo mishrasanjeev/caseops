@@ -7,10 +7,12 @@ import {
   BellOff,
   Bookmark,
   ExternalLink,
+  Link2,
   RefreshCw,
   Search,
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
@@ -38,9 +40,16 @@ import {
   searchTrackedCases,
   updateCaseTrackingBookmark,
   type CaseTrackingBookmarkRecord,
-  type CaseTrackingSearchResult,
+  type CaseTrackingSearchInput,
   type CaseTrackingUpdateRecord,
 } from "@/lib/api/endpoints";
+import {
+  linkMatterCase,
+  resolveMatterCase,
+  searchMatterCases,
+  type MatterAwareSearchResponse,
+  type MatterAwareSearchResult,
+} from "@/lib/api/case-tracking-matter-resolution";
 
 export default function CaseTrackingPage() {
   const queryClient = useQueryClient();
@@ -52,6 +61,7 @@ export default function CaseTrackingPage() {
   const [courtCode, setCourtCode] = useState(searchParams.get("courtCode") ?? "");
   const initialCourtName = searchParams.get("court");
   const [selectedBookmarkId, setSelectedBookmarkId] = useState<string | null>(null);
+  const [linkedCandidateToken, setLinkedCandidateToken] = useState<string | null>(null);
 
   const status = useQuery({
     queryKey: ["case-tracking", "status"],
@@ -76,7 +86,23 @@ export default function CaseTrackingPage() {
   });
 
   const searchMutation = useMutation({
-    mutationFn: searchTrackedCases,
+    mutationFn: (input: CaseTrackingSearchInput): Promise<MatterAwareSearchResponse> =>
+      matterId ? searchMatterCases({ matterId, input }) : searchTrackedCases(input),
+  });
+  const matterResolution = useMutation({
+    mutationFn: resolveMatterCase,
+    onMutate: () => {
+      setLinkedCandidateToken(null);
+      matterLink.reset();
+    },
+  });
+  const matterLink = useMutation({
+    mutationFn: linkMatterCase,
+    onSuccess: (bookmark, selection) => {
+      setLinkedCandidateToken(selection.linkToken);
+      setSelectedBookmarkId(bookmark.id);
+      queryClient.invalidateQueries({ queryKey: ["case-tracking", "bookmarks"] });
+    },
   });
   const bookmarkMutation = useMutation({
     mutationFn: createCaseTrackingBookmark,
@@ -173,15 +199,80 @@ export default function CaseTrackingPage() {
       ) : null}
 
       {matterId || initialCourtName ? (
-        <Card>
+        <Card data-testid="matter-case-resolution">
           <CardHeader>
-            <CardTitle as="h2" className="text-base">Matter context</CardTitle>
+            <CardTitle as="h2" className="text-base">Find this Matter on eCourts</CardTitle>
             <CardDescription>
               {initialCourtName
-                ? `${initialCourtName} opened from the matter overview. Confirm the supported court code before provider search.`
-                : "Opened from the matter overview. Confirm the supported court code before provider search."}
+                ? `${initialCourtName}. CaseOps checks the saved Matter identifiers before showing a match.`
+                : "CaseOps checks the saved Matter identifiers before showing a match."}
             </CardDescription>
           </CardHeader>
+          {matterId ? (
+            <CardContent className="space-y-3">
+              <Button
+                type="button"
+                disabled={!configured || matterResolution.isPending}
+                onClick={() => matterResolution.mutate(matterId)}
+                data-testid="matter-case-resolve-submit"
+              >
+                <Search className="h-4 w-4" aria-hidden />
+                Find matching case
+              </Button>
+              {matterResolution.isError ? (
+                <p role="alert" className="text-sm text-[var(--color-danger)]">
+                  {apiErrorMessage(matterResolution.error, "eCourts lookup is unavailable. Try again later.")}
+                </p>
+              ) : null}
+              {matterResolution.data?.status === "insufficient_identifiers" ? (
+                <p role="status">Insufficient case identifiers. Add a valid CNR, or a case number with year and court, to the Matter.</p>
+              ) : null}
+              {matterResolution.data?.status === "no_match" ? (
+                <p role="status">No matching eCourts case found. Check the Matter identifiers or use the search below.</p>
+              ) : null}
+              {matterResolution.data?.status === "multiple_matches" ? (
+                <p role="status">Multiple verified candidates remain. Review their case details; CaseOps will not choose one automatically.</p>
+              ) : null}
+              {matterResolution.data?.status === "matched" ? (
+                <p role="status">One case matches the Matter identifiers.</p>
+              ) : null}
+              {matterLink.isError ? (
+                <p role="alert" className="text-sm text-[var(--color-danger)]" data-testid="matter-case-link-error">
+                  {apiErrorMessage(matterLink.error, "Could not link this case. Find it again and retry.")}
+                </p>
+              ) : null}
+              {matterResolution.data?.results.map((result, index) => (
+                <div key={`${result.cnr_number ?? result.case_number}-${index}`} className="border-t border-[var(--color-line)] pt-3" data-testid="matter-case-candidate">
+                  <CaseSummary
+                    title={result.case_title}
+                    court={result.court_name}
+                    status={result.current_status}
+                    stage={result.current_stage}
+                    nextHearing={result.next_hearing_on}
+                  />
+                  <p className="mt-1 text-xs text-[var(--color-mute)]">{result.cnr_number ?? result.case_number}</p>
+                  {linkedCandidateToken === result.link_token ? (
+                    <p role="status" className="mt-2 flex flex-wrap items-center gap-2 text-sm" data-testid="matter-case-linked">
+                      Linked to this Matter.
+                      <Link href={`/app/matters/${encodeURIComponent(matterId)}`} className="font-medium text-[var(--color-brand-600)] hover:underline">View Matter</Link>
+                    </p>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="mt-2"
+                      disabled={matterLink.isPending}
+                      onClick={() => matterLink.mutate({ matterId, linkToken: result.link_token })}
+                      data-testid="matter-case-link-submit"
+                    >
+                      <Link2 className="h-4 w-4" aria-hidden />
+                      Link to Matter
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </CardContent>
+          ) : null}
         </Card>
       ) : null}
 
@@ -250,6 +341,8 @@ export default function CaseTrackingPage() {
             onSubmit={(event) => {
               event.preventDefault();
               if (!canSearch || searchMutation.isPending) return;
+              setLinkedCandidateToken(null);
+              matterLink.reset();
               searchMutation.mutate({
                 query: query.trim() || null,
                 cnr_number: cnr.trim() || null,
@@ -318,6 +411,13 @@ export default function CaseTrackingPage() {
               )}
             </p>
           ) : null}
+          {matterLink.isError && !matterResolution.data?.results.some(
+            (result) => result.link_token === matterLink.variables?.linkToken,
+          ) ? (
+            <p role="alert" className="text-sm text-[var(--color-danger)]" data-testid="matter-search-link-error">
+              {apiErrorMessage(matterLink.error, "Could not link this case. Find it again and retry.")}
+            </p>
+          ) : null}
           {searchMutation.isSuccess ? (
             searchMutation.data.results.length ? (
               <div className="divide-y divide-[var(--color-line)] rounded-md border border-[var(--color-line)]">
@@ -325,7 +425,12 @@ export default function CaseTrackingPage() {
                   <SearchResultRow
                     key={`${result.provider}:${result.cnr_number ?? result.case_number}`}
                     result={result}
-                    busy={bookmarkMutation.isPending}
+                    busy={bookmarkMutation.isPending || matterLink.isPending}
+                    matterContext={Boolean(matterId)}
+                    linked={Boolean(result.link_token && linkedCandidateToken === result.link_token)}
+                    onLink={result.link_token && matterId
+                      ? () => matterLink.mutate({ matterId, linkToken: result.link_token as string })
+                      : undefined}
                     onBookmark={() =>
                       bookmarkMutation.mutate({
                         provider: result.provider,
@@ -338,7 +443,7 @@ export default function CaseTrackingPage() {
                         current_status: result.current_status,
                         current_stage: result.current_stage,
                         next_hearing_on: result.next_hearing_on,
-                        matter_id: matterId,
+                        matter_id: null,
                         notification_enabled: true,
                         metadata: {},
                       })
@@ -461,25 +566,45 @@ export default function CaseTrackingPage() {
 function SearchResultRow({
   result,
   busy,
+  matterContext,
+  linked,
+  onLink,
   onBookmark,
 }: {
-  result: CaseTrackingSearchResult;
+  result: MatterAwareSearchResult;
   busy: boolean;
+  matterContext: boolean;
+  linked: boolean;
+  onLink?: () => void;
   onBookmark: () => void;
 }) {
   return (
     <div className="flex flex-col gap-3 p-3 md:flex-row md:items-center md:justify-between">
-      <CaseSummary
-        title={result.case_title}
-        court={result.court_name}
-        status={result.current_status}
-        stage={result.current_stage}
-        nextHearing={result.next_hearing_on}
-      />
-      <Button type="button" variant="secondary" onClick={onBookmark} disabled={busy}>
-        <Bookmark className="h-4 w-4" aria-hidden />
-        Bookmark
-      </Button>
+      <div className="min-w-0">
+        <CaseSummary
+          title={result.case_title}
+          court={result.court_name}
+          status={result.current_status}
+          stage={result.current_stage}
+          nextHearing={result.next_hearing_on}
+        />
+        <p className="mt-1 text-xs text-[var(--color-mute)]">{result.cnr_number ?? result.case_number}</p>
+      </div>
+      {linked ? (
+        <p role="status" className="text-sm font-medium" data-testid="matter-search-linked">Linked to Matter</p>
+      ) : onLink ? (
+        <Button type="button" variant="secondary" onClick={onLink} disabled={busy} data-testid="matter-search-link-submit">
+          <Link2 className="h-4 w-4" aria-hidden />
+          Link to Matter
+        </Button>
+      ) : matterContext ? (
+        <p className="text-xs text-[var(--color-mute)]">Does not match this Matter</p>
+      ) : (
+        <Button type="button" variant="secondary" onClick={onBookmark} disabled={busy}>
+          <Bookmark className="h-4 w-4" aria-hidden />
+          Bookmark
+        </Button>
+      )}
     </div>
   );
 }

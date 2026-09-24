@@ -59,6 +59,7 @@ class CaseTrackingSearchRequest(BaseModel):
     court_code: str | None = Field(default=None, max_length=80)
     state: str | None = Field(default=None, max_length=80)
     court_name: str | None = Field(default=None, max_length=255)
+    matter_id: str | None = Field(default=None, max_length=36)
 
     @field_validator("query", "cnr_number", "case_number", "court_code", "state", "court_name")
     @classmethod
@@ -113,11 +114,26 @@ class CaseTrackingSearchResultRecord(BaseModel):
     next_hearing_on: date | None
     source_url: str | None = None
     provenance_label: str = "Provider-normalized case status"
+    link_token: str | None = None
 
 
 class CaseTrackingSearchResponse(BaseModel):
     provider: str
     results: list[CaseTrackingSearchResultRecord]
+
+
+class MatterCaseCandidateRecord(CaseTrackingSearchResultRecord):
+    link_token: str
+
+
+class MatterCaseLinkRequest(BaseModel):
+    link_token: str = Field(min_length=1, max_length=8192)
+
+
+class MatterCaseResolutionResponse(BaseModel):
+    status: Literal["matched", "multiple_matches", "no_match", "insufficient_identifiers"]
+    provider: str = "ecourtsindia"
+    results: list[MatterCaseCandidateRecord] = Field(default_factory=list)
 
 
 class CaseTrackingBookmarkCreateRequest(BaseModel):
