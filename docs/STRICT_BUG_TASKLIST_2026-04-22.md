@@ -1627,3 +1627,16 @@ tracked case (both are already returned by `GET /api/case-tracking/bookmarks`
 and rendered on the page after the error-surfacing change), then reproduce that
 exact identity shape in a dated regression before changing any matching rule.
 Do not close this row while eighteen bookmarks cannot refresh.
+# 2026-09-24 — Ram workbook and lifecycle checkpoint
+
+The 22 populated BUG-010..BUG-031 rows plus two DOCX proposals are reconciled
+in `docs/bugfix-ram24sep-2026.md` and the sanitized workbook
+`C:/Users/mishr/Downloads/CaseOps_Bug_Fix_Summary_2026-09-24.xlsx`. Candidate
+`86886a5f` is local-only and production remains **NO-GO**. Docker evidence is
+388 PostgreSQL tests passed and a separate focused Playwright run 2/2; the full
+Docker harness did not pass as one invocation, and production exact-SHA browser
+verification is absent. No reported Matter reopening is established without
+its persisted lifecycle version and ordered audit events. Do not interpret a
+hearing-date update or private-projection maintenance blocker as a lifecycle
+transition. See the dated report for row-level verdicts, failed-run history,
+remaining eCourts/DOCX scope, and root-cause learnings.

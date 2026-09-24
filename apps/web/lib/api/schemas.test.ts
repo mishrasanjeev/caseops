@@ -11,6 +11,7 @@ import {
   providerAdapterContractRecord,
   providerCostProfileRecord,
   providerOperationRecord,
+  providerOperationResponseClasses,
 } from "@/lib/api/schemas";
 
 describe("connector readiness mixed-revision compatibility", () => {
@@ -228,14 +229,10 @@ describe("providerCostProfileRecord", () => {
 });
 
 describe("providerOperationRecord", () => {
-  it.each([
-    ["ip_registry_sync", "provider_outage"],
-    ["ip_journal_ingestion", "rate_limit"],
-    ["source_link_health", "changed_content"],
-  ])("accepts the IPLF-056 operation kind %s", (jobKind, responseClass) => {
+  it.each(providerOperationResponseClasses)("accepts backend response class %s", (responseClass) => {
     const parsed = providerOperationRecord.parse({
-      id: `${jobKind}:operation-1`,
-      job_kind: jobKind,
+      id: "ip_registry_sync:operation-1",
+      job_kind: "ip_registry_sync",
       provider: "ipindia-registry",
       company_id: "company-1",
       matter_id: null,
@@ -270,7 +267,7 @@ describe("providerOperationRecord", () => {
       notes: [],
     });
 
-    expect(parsed.job_kind).toBe(jobKind);
+    expect(parsed.job_kind).toBe("ip_registry_sync");
     expect(parsed.response_class).toBe(responseClass);
   });
 });

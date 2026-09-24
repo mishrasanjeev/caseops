@@ -3,13 +3,15 @@ import { render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
-const { applyMatterBulkUpdateMock, previewMatterBulkUpdateMock } = vi.hoisted(() => ({
+const { applyMatterBulkUpdateMock, listMatterBulkUpdateHistoryMock, previewMatterBulkUpdateMock } = vi.hoisted(() => ({
   applyMatterBulkUpdateMock: vi.fn(),
+  listMatterBulkUpdateHistoryMock: vi.fn().mockResolvedValue({ operations: [], total: 0 }),
   previewMatterBulkUpdateMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
   applyMatterBulkUpdate: applyMatterBulkUpdateMock,
+  listMatterBulkUpdateHistory: listMatterBulkUpdateHistoryMock,
   previewMatterBulkUpdate: previewMatterBulkUpdateMock,
 }));
 

@@ -135,6 +135,7 @@ def assert_access(
     *,
     context: SessionContext,
     matter: Matter,
+    commit_denial: bool = True,
 ) -> None:
     """Enforce access and audit denials. Called from every matter
     service right after the company_id check."""
@@ -152,7 +153,7 @@ def assert_access(
         matter_id=matter.id,
         result="denied",
         metadata={"reason": "matter_visibility_denied"},
-        commit=True,
+        commit=commit_denial,
     )
     # Pretend the matter does not exist rather than leaking that it does
     # but the user is walled — matches the tenant-isolation 404 pattern.

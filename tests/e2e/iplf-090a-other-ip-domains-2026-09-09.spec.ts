@@ -10,6 +10,9 @@ test.use({ extraHTTPHeaders: noPaidProviderHeaders });
 
 const domains = ["design", "copyright", "domain_name", "licensing", "enforcement",
   "geographical_indication", "plant_variety", "semiconductor_layout", "trade_secret", "customs_enforcement"];
+const domainGroups = [domains.slice(0, 4), domains.slice(4, 7), domains.slice(7)];
+const responsiveGroups = [393, 768, 1280].flatMap((width) =>
+  domainGroups.map((group, groupIndex) => ({ width, group, groupIndex })));
 type Field = { key: string; label: string; kind: string; required: boolean };
 
 async function lifecycle(page: Page, active: boolean, version: number) {
@@ -29,8 +32,8 @@ async function lifecycle(page: Page, active: boolean, version: number) {
   await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
 }
 
-for (const width of [393, 768, 1280]) {
-  test(`OTHER-IP-090-091 independent source journeys at ${width}px`, async ({ page, request }, info) => {
+for (const { width, group, groupIndex } of responsiveGroups) {
+  test(`OTHER-IP-090-091 independent source journeys group ${groupIndex + 1} at ${width}px`, async ({ page, request }, info) => {
     await page.setViewportSize({ width, height: 1000 });
     const tenant = await bootstrapPatentTenant(request);
     const headers = { ...await enablePatentWorkspace(request, tenant), ...noPaidProviderHeaders };
@@ -52,7 +55,7 @@ for (const width of [393, 768, 1280]) {
     for (const contract of contracts) expect(contract.intake_available, contract.domain).toBe(true);
     await signInPatentTenant(page, tenant);
 
-    for (const domain of domains) {
+    for (const domain of group) {
       const contract = contracts.find((row: { domain: string }) => row.domain === domain);
       const title = `${contract.label} ${runId}`;
       await page.goto("/app/ip");

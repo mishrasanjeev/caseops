@@ -201,8 +201,13 @@ function HealthRow({ row }: { row: ConnectorHealthRecord }) {
       <div className="min-w-0">
         <div className="font-medium text-[var(--color-ink)]">{row.provider}</div>
         <div className="text-xs text-[var(--color-mute)]">
-          attempted {formatWhen(row.last_attempted_at)} - last good{" "}
-          {formatWhen(row.last_good_at)}
+          provider attempt {formatWhen(row.last_attempted_at)}
+          <span className="px-1">·</span>
+          last success {formatWhen(row.last_success_at)}
+          <span className="px-1">·</span>
+          last failure {formatWhen(row.last_failure_at)}
+          <span className="px-1">·</span>
+          local refresh {formatWhen(row.last_checked_at)}
         </div>
       </div>
       <div className="flex flex-wrap gap-1.5">
@@ -218,6 +223,11 @@ function HealthRow({ row }: { row: ConnectorHealthRecord }) {
         <Badge tone={toneForStatus(row.connected_state)}>
           {row.connected_state.replaceAll("_", " ")}
         </Badge>
+        {row.configured_state === "configured" && row.connected_state !== "connected" ? (
+          <span className="self-center text-xs text-[var(--color-mute)]">
+            Configuration is not a confirmed provider connection.
+          </span>
+        ) : null}
       </div>
       <div className="text-xs text-[var(--color-mute)] md:text-right">
         {row.current_error_redacted ?? row.disabled_reason ?? "No alert"}

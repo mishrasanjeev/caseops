@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
+from types import SimpleNamespace
+from typing import get_args
 from uuid import uuid4
 
 import pytest
@@ -33,6 +37,7 @@ from caseops_api.db.models import (
     UserMailboxConnection,
 )
 from caseops_api.db.session import get_session_factory
+from caseops_api.schemas.provider_operations import ProviderOperationRecord
 from caseops_api.services.calendar_projection_safety import (
     CALENDAR_UPSERT_CLAIM_IN_FLIGHT_CODE,
     CALENDAR_UPSERT_CLAIM_PREFIX,
@@ -1599,3 +1604,73 @@ def test_connector_health_fails_closed_without_recent_success_and_serializes_kin
     )
     assert connector["response_class"] == "timeout"
     assert connector["correlation_ref"].startswith("id:")
+
+
+def test_provider_operation_response_class_matches_frontend_contract() -> None:
+    backend_classes = set(
+        get_args(ProviderOperationRecord.model_fields["response_class"].annotation)
+    )
+    frontend_schema = (
+        Path(__file__).resolve().parents[3] / "apps/web/lib/api/schemas.ts"
+    ).read_text(encoding="utf-8")
+    declaration = re.search(
+        r"export const providerOperationResponseClasses = \[(.*?)\] as const;",
+        frontend_schema,
+        re.DOTALL,
+    )
+    assert declaration is not None, "frontend provider response class contract was not found"
+    frontend_classes = set(re.findall(r'"([a-z_]+)"', declaration.group(1)))
+    assert frontend_classes == backend_classes
+
+
+def test_configuration_alone_is_not_reported_as_provider_connection(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    boot = bootstrap_company(client)
+    token = str(boot["access_token"])
+    settings = SimpleNamespace(
+        outlook_client_id="",
+        outlook_client_secret="",
+        outlook_redirect_uri="",
+        gmail_pubsub_topic="",
+        gmail_webhook_verification_token="",
+        sendgrid_api_key="configured-key",
+        sendgrid_sender_email="sender@example.test",
+        sendgrid_webhook_public_key="",
+        twilio_enabled=True,
+        twilio_account_sid="configured-account",
+        twilio_auth_token="configured-token",
+        twilio_from_number="+10000000000",
+        whatsapp_enabled=True,
+        whatsapp_access_token="configured-token",
+        whatsapp_phone_number_id="configured-phone",
+        whatsapp_template_name="configured-template",
+    )
+    monkeypatch.setattr("caseops_api.services.connector_health.get_settings", lambda: settings)
+    monkeypatch.setattr(
+        "caseops_api.services.connector_health.google_workspace_connector_missing_config_names",
+        lambda session, context, connector: [],
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.connector_health.google_workspace_connector_configured",
+        lambda session, context, connector: True,
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.connector_health._microsoft365_configured",
+        lambda session, company_id: (True, []),
+    )
+    monkeypatch.setattr(
+        "caseops_api.services.case_tracking_providers.provider_status",
+        lambda: (False, "test-adapter", True, None),
+    )
+
+    response = client.post(
+        "/api/admin/integrations/health/check",
+        headers=auth_headers(token),
+    )
+    assert response.status_code == 200, response.text
+    health = {row["provider"]: row for row in response.json()["health"]}
+    for provider in ("google_workspace", "microsoft_365", "email_delivery", "sms", "whatsapp"):
+        assert health[provider]["configured_state"] == "configured"
+        assert health[provider]["connected_state"] == "configured"

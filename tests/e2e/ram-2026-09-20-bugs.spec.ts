@@ -101,11 +101,18 @@ test("Ram 2026-09-20 dashboard counts, hearing filters, follow-up queues and cou
 
   await page.goto("/app/hearings");
   await page.getByLabel("Exact hearing date").fill(exactDate);
-  await expect(page.getByRole("heading", { name: /Past listing date \(1\)/ })).toBeVisible();
-  await expect(page.getByRole("heading", { name: /Missing hearing date \(46\)/ })).toBeVisible();
-  await expect(page.getByRole("heading", { name: /2026 \(6\)/ })).toBeVisible();
+  await expect(page.getByText("6 matching hearings", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: new RegExp(`${exactDate.slice(0, 4)} \\(6\\)$`) }),
+  ).toBeVisible();
   await expect(page.getByText("Sep20 dashboard active 0")).toBeVisible();
-  await expect(page.getByText("Sep20 overdue hearing")).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Past listing date/ })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /Missing hearing date/ })).toHaveCount(0);
+  await page.getByRole("button", { name: "Clear date" }).click();
+  const followUp = page.getByRole("region", { name: "Hearing date follow-up" });
+  await expect(followUp.getByRole("heading", { name: "Past listing date (1)" })).toBeVisible();
+  await expect(followUp.getByRole("heading", { name: "Missing hearing date (46)" })).toBeVisible();
+  await expect(followUp.getByText("Sep20 overdue hearing")).toBeVisible();
 
   await page.goto(`/app/matters/${linkedMatterId}`);
   const courtLink = page.getByRole("link", { name: "Delhi High Court" }).first();

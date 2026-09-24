@@ -1435,6 +1435,7 @@ def _lock_matter_assignment_fence(
     additional_membership_ids: set[str | None],
     required_capability: str,
     team_ids_to_lock: set[str | None] | None = None,
+    commit_access_denial: bool = True,
 ) -> tuple[Matter, dict[str, CompanyMembership], list[IpDocketRecord]]:
     """Lock principals, Matter, and active linked dockets in canonical order."""
 
@@ -1478,6 +1479,7 @@ def _lock_matter_assignment_fence(
         context=context,
         matter_id=matter_id,
         lock_for_update=True,
+        commit_access_denial=commit_access_denial,
     )
     current_roles = _matter_role_snapshot_from_model(matter)
     if current_roles != matter_roles:
@@ -1808,6 +1810,7 @@ def _get_matter_model(
     matter_id: str,
     lock_for_update: bool = False,
     lock_for_share: bool = False,
+    commit_access_denial: bool = True,
 ) -> Matter:
     if lock_for_update and lock_for_share:
         raise ValueError("Matter lock cannot be both exclusive and shared.")
@@ -1827,7 +1830,7 @@ def _get_matter_model(
         )
     if not matter:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Matter not found.")
-    assert_access(session, context=context, matter=matter)
+    assert_access(session, context=context, matter=matter, commit_denial=commit_access_denial)
     if lock_for_update or lock_for_share:
         # The row lock is already held. Populate relationships in a separate,
         # non-locking statement so nullable eager joins never participate in
@@ -2624,6 +2627,7 @@ def update_matter(
     matter_id: str,
     payload: MatterUpdateRequest,
     commit: bool = True,
+    commit_access_denial: bool = True,
 ) -> MatterRecord:
     requested_updates = payload.model_dump(exclude_unset=True)
     matter_roles = _discover_matter_role_snapshot(
@@ -2672,6 +2676,7 @@ def update_matter(
         },
         required_capability=MATTER_MUTATION_CAPABILITIES["update_matter"],
         team_ids_to_lock={matter_roles.team_id, resulting_team_id},
+        commit_access_denial=commit_access_denial,
     )
     if (
         team_access_changing

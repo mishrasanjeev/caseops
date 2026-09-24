@@ -12,7 +12,6 @@ const web = process.env.PROD_BASE_URL || process.env.CASEOPS_WEB_BASE_URL || "ht
 const api = process.env.PROD_API_BASE_URL || apiBaseUrl;
 const isProduction = Boolean(process.env.PROD_BASE_URL || process.env.CASEOPS_PROD_TEST_SLUG);
 const fixtureRoot = path.join(repoRoot, "tests", "fixtures");
-const bulkFixture = path.join(fixtureRoot, "matter-bulk-update.xlsx");
 const docxFixture = path.join(fixtureRoot, "matter-preview.docx");
 const BULK_CODE = "BULK-UPDATE-CASEOPS";
 
@@ -132,7 +131,8 @@ test("BUG-006 DOCX is visibly rendered and ENH-007 updates only an existing matt
   test.setTimeout(240_000);
   const auth = await authenticate(request);
   const hearingDate = plusDays(4);
-  const matter = await ensureMatter(request, auth.headers, BULK_CODE, "Bulk update baseline", hearingDate);
+  const code = `${BULK_CODE}-${randomUUID().slice(0, 8).toUpperCase()}`;
+  const matter = await ensureMatter(request, auth.headers, code, "Bulk update baseline", hearingDate);
 
   const upload = await request.post(`${api}/api/matters/${matter.id}/attachments`, {
     headers: auth.headers,
@@ -153,15 +153,73 @@ test("BUG-006 DOCX is visibly rendered and ENH-007 updates only an existing matt
   await expect(page.getByText("This text must be visible inside the authenticated document viewer.", { exact: true })).toBeVisible();
   await expect(page.getByText("Verified", { exact: true })).toBeVisible();
 
+  const imageUpload = await request.post(`${api}/api/matters/${matter.id}/attachments`, {
+    headers: auth.headers,
+    multipart: {
+      file: {
+        name: "matter-inline-view.png",
+        mimeType: "image/png",
+        buffer: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p5sAAAAASUVORK5CYII=",
+          "base64",
+        ),
+      },
+    },
+  });
+  expect(imageUpload.status(), await imageUpload.text()).toBe(200);
+  const imageAttachment = (await imageUpload.json()) as { id: string };
+  await page.goto(`${web}/app/matters/${matter.id}/documents/${imageAttachment.id}/view`);
+  const image = page.getByRole("img", { name: "matter-inline-view.png" });
+  await expect(image).toBeVisible();
+  await expect.poll(() => image.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBe(1);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${web}/app/matters/${matter.id}/documents`);
+  const documentScroller = page.getByTestId("matter-document-group-unclassified").locator(".overflow-x-auto");
+  await expect(documentScroller).toBeVisible();
+  await expect(page.getByTestId(`matter-attachment-view-${attachment.id}`)).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+
   await page.goto(`${web}/app/matters/bulk-update`);
-  await page.locator('input[type="file"]').setInputFiles(bulkFixture);
+  const templateDownload = page.waitForEvent("download");
+  await page.getByRole("button", { name: "XLSX", exact: true }).click();
+  expect((await templateDownload).suggestedFilename()).toBe("matter-bulk-update-template.xlsx");
+  const csvDownload = page.waitForEvent("download");
+  await page.getByRole("button", { name: "CSV", exact: true }).click();
+  const csvTemplate = await csvDownload;
+  expect(csvTemplate.suggestedFilename()).toBe("matter-bulk-update-template.csv");
+  const templateStream = await csvTemplate.createReadStream();
+  const templateChunks: Buffer[] = [];
+  for await (const chunk of templateStream) templateChunks.push(Buffer.from(chunk));
+  const header = Buffer.concat(templateChunks).toString("utf-8").split(/\r?\n/, 1)[0] ?? "";
+  const values = header.replace(/^\uFEFF/, "").split(",").map((column) => {
+    if (column === "Matter Title") return "Bulk update Playwright title";
+    if (column === "Matter Code") return code;
+    return "";
+  });
+  const csvEscape = (value: string) => `"${value.replaceAll('"', '""')}"`;
+  const bulkCsv = Buffer.from(`${header}\r\n${values.map(csvEscape).join(",")}\r\n`, "utf-8");
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "matter-bulk-update.csv",
+    mimeType: "text/csv",
+    buffer: bulkCsv,
+  });
   await page.getByRole("button", { name: "Preview changes" }).click();
   await expect(page.getByTestId("bulk-update-summary")).toContainText("1 changed");
   await expect(page.getByTestId("bulk-update-summary")).toContainText("0 invalid");
   await page.getByRole("button", { name: "Apply reviewed changes" }).click();
-  await expect(page.getByText(/Updated 1 existing matters\./)).toBeVisible();
+  await expect(page.getByText(/Updated 1 of 1 rows; 0 skipped, 0 failed\./)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Operation history" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "matter-bulk-update.csv", exact: true })).toBeVisible();
   await page.goto(`${web}/app/matters/${matter.id}`);
   await expect(page.getByText("Bulk update Playwright title", { exact: true })).toBeVisible();
+
+  await page.goto(`${web}/app/admin/provider-operations`);
+  await expect(page.getByRole("heading", { name: "Provider operations" })).toBeVisible();
+  await expect(page.getByText("Could not load provider operations")).toHaveCount(0);
+  await page.goto(`${web}/app/admin/integrations`);
+  await expect(page.getByRole("heading", { name: /Integrations/i }).first()).toBeVisible();
+  await expect(page.getByText("Readiness, configuration names, and delivery gates for workspace connectors.")).toBeVisible();
 });
 
 test("ENH-006 next hearing flows from new matter into hearings, calendar, and cause list", async ({ page, request }) => {
@@ -199,6 +257,13 @@ test("ENH-006 next hearing flows from new matter into hearings, calendar, and ca
   const calendarEvent = calendarDay.locator(`a[href="/app/matters/${created!.id}/hearings"]`).first();
   await expect(calendarEvent).toBeVisible();
   await expect(calendarEvent).toHaveAttribute("title", /New matter hearing regression.*Next hearing/);
+
+  await page.setViewportSize({ width: 600, height: 900 });
+  await page.goto(`${web}/app/matters/${created!.id}/tasks`);
+  await expect(page.getByLabel("Task")).toBeVisible();
+  await expect(page.getByLabel("Deadline", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(600);
+  expect(await page.getByLabel("Task").evaluate((element: HTMLInputElement) => element.getBoundingClientRect().width)).toBeGreaterThan(160);
   await page.goto(`${web}/app/cause-list`);
   await page.locator("label").filter({ hasText: /^From$/ }).locator("input").fill(hearingDate);
   await page.locator("label").filter({ hasText: /^To$/ }).locator("input").fill(hearingDate);

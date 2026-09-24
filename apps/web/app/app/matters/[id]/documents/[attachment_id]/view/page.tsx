@@ -12,12 +12,13 @@
 import { useQuery } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { PDFAnnotation } from "@/components/document/PDFViewer";
 import { Button } from "@/components/ui/Button";
 import {
   type MatterAttachmentAnnotationRecord,
+  fetchMatterAttachmentBlob,
   fetchMatterAttachmentPreview,
   fetchMatterWorkspace,
   listMatterAttachmentAnnotations,
@@ -48,12 +49,17 @@ function recordToAnnotation(r: MatterAttachmentAnnotationRecord): PDFAnnotation 
 export default function AttachmentViewerPage(): React.JSX.Element {
   const router = useRouter();
   const params = useParams<{ id: string; attachment_id: string }>();
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const matterId = params?.id ?? "";
   const attachmentId = params?.attachment_id ?? "";
 
   const url = useMemo(() => {
     if (!matterId || !attachmentId) return "";
     return matterAttachmentDownloadUrl({ matterId, attachmentId });
+  }, [matterId, attachmentId]);
+  const inlineUrl = useMemo(() => {
+    if (!matterId || !attachmentId) return "";
+    return matterAttachmentDownloadUrl({ matterId, attachmentId, inline: true });
   }, [matterId, attachmentId]);
 
   const annotationsQuery = useQuery({
@@ -87,6 +93,21 @@ export default function AttachmentViewerPage(): React.JSX.Element {
     lowerName.endsWith(".png") ||
     lowerName.endsWith(".jpg") ||
     lowerName.endsWith(".jpeg");
+  const imageQuery = useQuery({
+    queryKey: ["matter-attachment-image", matterId, attachmentId],
+    queryFn: ({ signal }) =>
+      fetchMatterAttachmentBlob({ matterId, attachmentId, inline: true, signal }),
+    enabled: Boolean(matterId && attachmentId && isImage),
+  });
+  useEffect(() => {
+    if (!imageQuery.data) {
+      setImageUrl(null);
+      return;
+    }
+    const objectUrl = URL.createObjectURL(imageQuery.data);
+    setImageUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [imageQuery.data]);
   const isWord =
     contentType.includes("word") ||
     lowerName.endsWith(".doc") ||
@@ -117,18 +138,20 @@ export default function AttachmentViewerPage(): React.JSX.Element {
       </div>
       {url && isPdf ? (
         <PDFViewer
-          url={url}
+          url={inlineUrl}
           filename={filename}
           className="flex-1"
           annotations={annotations}
         />
       ) : url && isImage ? (
         <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] p-4">
-          <img
-            src={url}
-            alt={filename}
-            className="max-h-full max-w-full object-contain"
-          />
+          {imageUrl ? (
+            <img src={imageUrl} alt={filename} className="max-h-full max-w-full object-contain" />
+          ) : imageQuery.isError ? (
+            <p className="text-sm text-[var(--color-danger)]">This image could not be previewed. Download the authenticated file to continue.</p>
+          ) : (
+            <p className="text-sm text-[var(--color-ink-2)]">Loading image…</p>
+          )}
         </div>
       ) : url && isWord ? (
         <div className="flex min-h-0 flex-1 flex-col gap-3">

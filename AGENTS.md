@@ -276,8 +276,10 @@ requirements when using the fallback.
 - Do not use Uvicorn `--timeout-keep-alive 0` as a Playwright stability fix. It
   schedules an immediate unannounced socket close and can move `ECONNRESET`
   failures between unrelated requests. Advertise `Connection: close` on the
-  loopback test server and close only after the complete response; never hide a
-  mutation transport failure behind an automatic retry.
+  loopback test server and close only after the complete response. The Docker
+  acceptance proxy must strip upstream hop-by-hop keep-alive response headers,
+  close downstream sockets explicitly, and retain bounded upstream pooling;
+  never hide a mutation transport failure behind an automatic retry.
 - Every provider-normalized identifier exposed by CaseOps must round-trip
   through the corresponding CaseOps input schema. Do not impose guessed
   provider formats (such as a minimum court-code length); preserve bounded
@@ -970,3 +972,69 @@ requirements when using the fallback.
   surface visibly renders the actual DOCX text/table content. A successful
   download, a nonempty iframe, or indexed extraction is not enough; preview
   parsing must be bounded and must reuse the same matter visibility gate.
+- Reporter-supplied workbook IDs are local to that file and commonly collide
+  with older CaseOps ledgers. Namespace newly triaged records by source and
+  report date; reconcile populated issue rows and attachments independently of
+  copied totals. Keep bug, enhancement, expected configuration, duplicate, and
+  inconclusive evidence distinct, and never copy credentials into a ledger or
+  generated workbook.
+- Connector configuration, a stored OAuth connection, provider activity, and
+  a successful provider outcome are separate facts. A local readiness refresh
+  is not a provider attempt; only persisted provider success/failure evidence
+  may populate provider-attempt timestamps. Do not call paid providers merely
+  to make a health dashboard appear green.
+- Bulk update status is not an editable spreadsheet field: lifecycle changes
+  remain on the dedicated, audited, version-checked transition path. Route
+  next-hearing changes through the canonical hearing scheduler, report
+  skipped/invalid rows separately from apply-time failures, and tie results to
+  tenant-scoped operation history. Review exact old/new values before apply.
+- A Matter court link may lead to a supported internal search when exact
+  identifiers are available, but an external eCourts destination must come
+  from a validated provider result or reviewed source reference. Never invent
+  a deep-link URL, infer a case from party names alone, or bypass a CAPTCHA or
+  provider budget to satisfy a clickable-link request.
+- Adding or changing an ORM table changes the runtime data-class schema
+  fingerprint. Regenerate and validate
+  `generated_data_class_projection.py` with
+  `scripts/ip_data_class_projection.py render` and `validate`, then run the
+  PostgreSQL legal-hold regressions. The intentional fail-closed 503 is not a
+  reason to weaken the projection check.
+- Protected attachment previews must use the authenticated blob client; a raw
+  browser `<img src>` cannot attach the CaseOps bearer token. Revoke generated
+  object URLs on replacement/unmount, and assert decoded pixels in Playwright,
+  not merely that an image element exists.
+- Persistent E2E tenants need a fresh Matter/source identity per run, with
+  cleanup or explicit retention policy. Fixed codes can silently turn a
+  creation/update regression into a stale replay and can mutate a real QA
+  record during repeated verification.
+- A bulk preview must conceal an inaccessible Matter Code exactly as it
+  conceals a missing code: no Matter ID, version, or field values. Its diff
+  must include canonical derived court lineage changes, and team-role checks
+  must run before the user approves the plan. A post-preview access or
+  validation failure must roll back all staged updates, preserve the denial
+  audit without an inner commit, and require a fresh preview. Bound XLSX
+  columns and iterations as well as upload bytes and rows. A bulk apply
+  regression that injects a later-row failure must distinguish canonical
+  dry-run updates inside rolled-back savepoints from actual batch writes;
+  otherwise a hook can stale the preview token before any row is applied.
+- A browser acceptance that spans many independent domain records at multiple
+  widths must keep each named test within its measured worst-case budget. Split
+  the inventory into bounded, independently reported groups instead of merely
+  raising a timeout; retain all source, lifecycle, screenshot, and responsive
+  assertions, and reconcile the groups against the complete domain list.
+- A dated hearing browser test must respect the current filter contract: an
+  exact-date filter shows only matching hearings and intentionally hides
+  overdue/missing-date follow-up queues. Assert the filtered records and count,
+  clear the filter, then assert both follow-up queues and their matters. Do not
+  change product behavior to satisfy a stale simultaneous-state expectation.
+  Scope post-filter assertions to the named follow-up region: its urgency
+  headings can legitimately also appear in the main hearing buckets.
+- A new ORM table, migration index, API route, or response schema must update
+  every checked-in generated contract before CI: the data-governance map and
+  rendered view, and the OpenAPI TypeScript client. Local Docker acceptance
+  does not replace these clean-checkout checks. Run the validators and generated
+  diff gates before promoting the candidate.
+- A legal calendar date must retain its YYYY-MM-DD value across timezones, but
+  its display order follows the runner's locale unless explicitly pinned.
+  Browser and unit assertions should verify the value and use the same date
+  formatter as the UI, not freeze one regional spelling such as `05 Oct`.

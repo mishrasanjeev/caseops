@@ -547,7 +547,7 @@ def refresh_connector_health_records(
             configured_state=_configured_state(configured=google_configured),
             connected_state=_connection_state(
                 configured=google_configured,
-                connected=google_configured,
+                connected=False,
             ),
             required_scopes=list(GOOGLE_WORKSPACE_SCOPES),
             webhook_status="gmail_configured" if settings.gmail_pubsub_topic else "missing",
@@ -612,7 +612,7 @@ def refresh_connector_health_records(
             configured_state=_configured_state(configured=microsoft_configured),
             connected_state=_connection_state(
                 configured=microsoft_configured,
-                connected=microsoft_configured,
+                connected=False,
             ),
             required_scopes=[
                 "offline_access",
@@ -667,7 +667,7 @@ def refresh_connector_health_records(
             configured_state=_configured_state(configured=email_configured),
             connected_state=_connection_state(
                 configured=email_configured,
-                connected=email_configured,
+                connected=False,
                 disabled=not email_configured,
             ),
             webhook_status="configured" if settings.sendgrid_webhook_public_key else "missing",
@@ -694,7 +694,7 @@ def refresh_connector_health_records(
             configured_state=_configured_state(configured=sms_configured),
             connected_state=_connection_state(
                 configured=sms_configured,
-                connected=sms_configured,
+                connected=False,
                 disabled=not sms_configured,
             ),
             webhook_status="not_enabled",
@@ -721,7 +721,7 @@ def refresh_connector_health_records(
             configured_state=_configured_state(configured=whatsapp_configured),
             connected_state=_connection_state(
                 configured=whatsapp_configured,
-                connected=whatsapp_configured,
+                connected=False,
                 disabled=not whatsapp_configured,
             ),
             webhook_status="not_enabled",
@@ -1008,11 +1008,7 @@ def _record(row: ConnectorHealthRecord) -> ConnectorHealthSchema:
     required_scopes = list(row.required_scopes_json or [])
     granted_scopes = list(row.granted_scopes_json or [])
     freshness_state, operational_state, freshness_age_minutes = _freshness(row)
-    last_attempted_at = _latest_time(
-        row.last_checked_at,
-        row.last_success_at,
-        row.last_failure_at,
-    )
+    last_attempted_at = _latest_time(row.last_success_at, row.last_failure_at)
     return ConnectorHealthSchema(
         id=row.id,
         company_id=row.company_id,

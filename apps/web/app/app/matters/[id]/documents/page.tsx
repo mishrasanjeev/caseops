@@ -1128,7 +1128,9 @@ export default function MatterDocumentsPage() {
                   {group.documents.length}
                 </Badge>
               </div>
-              <table className="w-full text-sm">
+              <div className="relative overflow-x-auto">
+              <table className="w-full min-w-[72rem] text-sm">
+                <caption className="sr-only">Documents and available actions for this matter</caption>
                 <thead>
                   <tr className="border-b border-[var(--color-line)] text-xs uppercase tracking-[0.06em] text-[var(--color-mute)]">
                     <th className="w-10 px-4 py-2.5 text-left font-semibold">Select</th>
@@ -1443,6 +1445,7 @@ export default function MatterDocumentsPage() {
                   })}
                 </tbody>
               </table>
+              </div>
             </section>
           ))}
         </CardContent>
