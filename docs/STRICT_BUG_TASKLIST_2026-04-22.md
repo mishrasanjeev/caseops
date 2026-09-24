@@ -1652,8 +1652,10 @@ failed closed. A read-only diagnostic measured 940 remaining across three
 tenants (573, 363, 4); no provider was called. Both schedulers were resumed
 after the failed release, and serving API/web remained at the older revision.
 The follow-up candidate preflights the shared eligibility predicate before any
-new writes, allows 2,500 per tenant and 10,000 release-wide, gives the bounded
-job 30 minutes, and adds a 1,200-row PostgreSQL replay regression. These are
+new writes, requires a zero-remaining postflight after every tenant (including
+a short SKIP LOCKED page), allows 2,500 per tenant and 10,000 release-wide,
+gives the bounded job 30 minutes, and adds a 1,200-row PostgreSQL replay
+regression. These are
 candidate changes only until complete Docker, clean CI, canonical-main merge,
 exact-image deploy, and production Playwright all pass. The partial backfill is
 not a deployment claim or an end-user fix verdict.

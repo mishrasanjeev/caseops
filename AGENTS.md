@@ -1098,5 +1098,6 @@ requirements when using the fallback.
   not a small fixture. Preflight every tenant before writing, retain finite
   per-tenant and release-wide caps with observed headroom, and test above the
   prior cap on PostgreSQL. A failed bounded run can commit earlier pages;
-  prove idempotent replay, reconcile remaining rows, and keep traffic on the
+  prove idempotent replay, require a zero-remaining postflight even after a
+  short SKIP LOCKED page, and keep traffic on the
   old revision until the exact-image job and dated browser journey pass.

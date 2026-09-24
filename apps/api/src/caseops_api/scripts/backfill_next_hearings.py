@@ -47,14 +47,13 @@ def main() -> int:
                 total += count
                 if count < PAGE_SIZE:
                     break
-            else:
-                remaining = count_legacy_next_hearings(session, context=context)
-                session.rollback()
-                if remaining:
-                    raise RuntimeError(
-                        "Legacy hearing backfill exceeded its per-tenant release bound "
-                        "after preflight; concurrent writes may be active."
-                    )
+            remaining = count_legacy_next_hearings(session, context=context)
+            session.rollback()
+            if remaining:
+                raise RuntimeError(
+                    "Legacy hearing backfill left eligible rows after bounded pages; "
+                    "concurrent writers or locks may be active."
+                )
             totals[context.company.id] = total
         print(
             "CASEOPS_HEARING_BACKFILL "
