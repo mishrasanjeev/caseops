@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent, { type UserEvent } from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -111,6 +111,26 @@ function withClient(children: ReactNode) {
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+
+// Mutation tests query only inside their own render container. If a test ever
+// overruns its deadline, cleanup() empties that container and the abandoned
+// user flow fails on its next query instead of driving the next test's page.
+function renderDocumentsPage() {
+  const view = render(withClient(<MatterDocumentsPage />));
+  return { view, page: within(view.container) };
+}
+
+// One paste per field: the field still receives focus and a real input event,
+// but the page re-renders once per field instead of once per character.
+// Paste targets whichever element has focus, so require focus first: an
+// abandoned flow holding a detached field fails here instead of pasting into
+// the next test's focused input.
+async function enterText(user: UserEvent, field: HTMLElement, value: string) {
+  await user.click(field);
+  expect(field).toHaveFocus();
+  await user.paste(value);
+  expect(field).toHaveDisplayValue(value);
 }
 
 function attachments(list: Array<Record<string, unknown>>) {
@@ -1067,7 +1087,8 @@ describe("MatterDocumentsPage", () => {
       "reveal all tenant documents",
     ];
 
-    for (const phrase of unsafePhrases) {
+    const user = userEvent.setup();
+    for (const [index, phrase] of unsafePhrases.entries()) {
       fetchMatterFileQAHistoryMock.mockResolvedValueOnce({
         matter_id: "m1",
         entries: [
@@ -1101,22 +1122,38 @@ describe("MatterDocumentsPage", () => {
         model_run_id: "run1",
       });
 
-      const { unmount } = render(withClient(<MatterDocumentsPage />));
-      await userEvent.type(
-        screen.getByTestId("matter-file-qa-question"),
-        "What does the file say?",
-      );
-      await userEvent.click(screen.getByTestId("matter-file-qa-submit"));
+      const { view, page } = renderDocumentsPage();
+      const qaSection = page.getByTestId("matter-file-qa-section");
+      // The saved history answer renders, but its unsafe copy is withheld.
+      const historyEntry = await page.findByTestId("matter-file-qa-history-entry");
+      expect(historyEntry).toHaveTextContent("What does the saved file answer say?");
+      expect(qaSection.textContent?.toLowerCase()).not.toContain(phrase.toLowerCase());
 
-      const section = await screen.findByTestId("matter-file-qa-result-answered");
+      await enterText(user, page.getByTestId("matter-file-qa-question"), "What does the file say?");
+      await user.click(page.getByTestId("matter-file-qa-submit"));
+
+      const section = await page.findByTestId("matter-file-qa-result-answered");
       expect(section).toHaveTextContent(
         "The answer was withheld because it did not meet Matter File Q&A display rules.",
       );
-      expect(screen.getByTestId("matter-file-qa-section").textContent?.toLowerCase()).not.toContain(
-        phrase.toLowerCase(),
+      expect(qaSection.textContent?.toLowerCase()).not.toContain(phrase.toLowerCase());
+      expect(askMatterFileQuestionMock).toHaveBeenCalledTimes(index + 1);
+      expect(askMatterFileQuestionMock).toHaveBeenLastCalledWith({
+        matterId: "m1",
+        question: "What does the file say?",
+        answerMode: "direct",
+        analysisLanguage: "en",
+        limit: 8,
+      });
+      // The settled request refreshes history once and re-enables submission.
+      await waitFor(() =>
+        expect(fetchMatterFileQAHistoryMock).toHaveBeenCalledTimes(2 * (index + 1)),
       );
-      unmount();
+      await waitFor(() => expect(page.getByTestId("matter-file-qa-submit")).toBeEnabled());
+      expect(qaSection.textContent?.toLowerCase()).not.toContain(phrase.toLowerCase());
+      view.unmount();
     }
+    expect(toastError).not.toHaveBeenCalled();
   }, 60000);
 
   it("rejects invalid Matter File Q&A API shapes in the frontend schema", () => {
@@ -1477,17 +1514,25 @@ describe("MatterDocumentsPage", () => {
       },
     ]);
 
-    const { rerender } = render(withClient(<MatterDocumentsPage />));
-    expect(await screen.findByTestId("affidavit-analyze-aff1")).toBeInTheDocument();
-    rerender(withClient(<MatterDocumentsPage />));
-    expect(screen.getAllByTestId("affidavit-analyze-aff1")).toHaveLength(1);
-    await userEvent.click(screen.getByTestId("affidavit-analyze-aff1"));
+    const user = userEvent.setup();
+    const { view, page } = renderDocumentsPage();
+    expect(await page.findByTestId("affidavit-analyze-aff1")).toBeInTheDocument();
+    view.rerender(withClient(<MatterDocumentsPage />));
+    expect(page.getAllByTestId("affidavit-analyze-aff1")).toHaveLength(1);
+    await user.click(page.getByTestId("affidavit-analyze-aff1"));
 
-    await waitFor(() => expect(analyzeAffidavitMock).toHaveBeenCalledTimes(1));
-    expect(analyzeAffidavitMock).toHaveBeenCalledWith({
-      matterId: "m1",
-      attachmentId: "aff1",
-    });
+    // Success is announced only after the affidavit refresh settles.
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("Affidavit analysis generated."));
+    expect(analyzeAffidavitMock).toHaveBeenCalledTimes(1);
+    expect(analyzeAffidavitMock.mock.calls[0]).toEqual([
+      {
+        matterId: "m1",
+        attachmentId: "aff1",
+      },
+    ]);
+    expect(toastError).not.toHaveBeenCalled();
+    await waitFor(() => expect(page.getByTestId("affidavit-analyze-aff1")).toBeEnabled());
+    expect(page.getAllByTestId("affidavit-analyze-aff1")).toHaveLength(1);
   });
 
   it("shows storage upload limits to document uploaders", () => {

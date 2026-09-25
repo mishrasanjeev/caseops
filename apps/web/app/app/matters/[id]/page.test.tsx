@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent, { type UserEvent } from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -71,6 +71,27 @@ function createClient() {
 
 function withClient(children: ReactNode, client = createClient()) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+
+// Mutation tests query only inside their own render container. If a test ever
+// overruns its deadline, cleanup() empties that container and the abandoned
+// user flow fails on its next query instead of driving the next test's page.
+function renderOverviewPage() {
+  const view = render(withClient(<MatterOverviewPage />));
+  return within(view.container);
+}
+
+// Replace a field's value with one paste: the field still receives focus and
+// real input events, but the page re-renders once per field, not per character.
+// Paste targets whichever element has focus, so require focus first: an
+// abandoned flow holding a detached field fails here instead of pasting into
+// the next test's focused input.
+async function replaceText(user: UserEvent, field: HTMLElement, value: string) {
+  await user.clear(field);
+  expect(field).toHaveFocus();
+  expect(field).toHaveDisplayValue("");
+  await user.paste(value);
+  expect(field).toHaveDisplayValue(value);
 }
 
 const BASE_DATA = {
@@ -387,46 +408,24 @@ describe("MatterOverviewPage", () => {
       disclaimer: "Not legal advice.",
     });
 
-    render(withClient(<MatterOverviewPage />));
+    const user = userEvent.setup();
+    const page = renderOverviewPage();
 
-    await userEvent.click(screen.getByTestId("matter-edit-open"));
-    await userEvent.clear(screen.getByTestId("matter-edit-title"));
-    await userEvent.type(
-      screen.getByTestId("matter-edit-title"),
-      "Corrected Matter",
-    );
-    await userEvent.clear(screen.getByTestId("matter-edit-code"));
-    await userEvent.type(
-      screen.getByTestId("matter-edit-code"),
-      "fixed-2026-001",
-    );
-    await userEvent.clear(screen.getByTestId("matter-edit-client"));
-    await userEvent.type(
-      screen.getByTestId("matter-edit-client"),
-      "Correct Client",
-    );
-    await userEvent.clear(screen.getByTestId("matter-edit-opposing"));
-    await userEvent.type(
-      screen.getByTestId("matter-edit-opposing"),
-      "Correct Opponent",
-    );
-    await userEvent.clear(screen.getByTestId("matter-edit-case-number"));
-    await userEvent.type(
-      screen.getByTestId("matter-edit-case-number"),
-      "CASE-99",
-    );
-    await userEvent.clear(screen.getByTestId("matter-edit-cnr-number"));
-    await userEvent.type(screen.getByTestId("matter-edit-cnr-number"), "CNR99");
-    await userEvent.clear(screen.getByTestId("matter-edit-court-forum-number"));
-    await userEvent.type(
-      screen.getByTestId("matter-edit-court-forum-number"),
-      "Court 12",
-    );
-    await userEvent.click(screen.getByTestId("matter-edit-save"));
+    await user.click(page.getByTestId("matter-edit-open"));
+    await replaceText(user, page.getByTestId("matter-edit-title"), "Corrected Matter");
+    await replaceText(user, page.getByTestId("matter-edit-code"), "fixed-2026-001");
+    await replaceText(user, page.getByTestId("matter-edit-client"), "Correct Client");
+    await replaceText(user, page.getByTestId("matter-edit-opposing"), "Correct Opponent");
+    await replaceText(user, page.getByTestId("matter-edit-case-number"), "CASE-99");
+    await replaceText(user, page.getByTestId("matter-edit-cnr-number"), "CNR99");
+    await replaceText(user, page.getByTestId("matter-edit-court-forum-number"), "Court 12");
+    await user.click(page.getByTestId("matter-edit-save"));
 
-    await waitFor(() => expect(updateMatterMock).toHaveBeenCalledTimes(1));
-    expect(updateMatterMock).toHaveBeenCalledWith(
-      expect.objectContaining({
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("Matter updated."));
+    // Only the corrected fields are sent, with the loaded OCC token and no status.
+    expect(updateMatterMock).toHaveBeenCalledTimes(1);
+    expect(updateMatterMock.mock.calls[0]).toEqual([
+      {
         matterId: "m-1",
         expected_updated_at: "2026-07-15T08:30:00Z",
         title: "Corrected Matter",
@@ -436,9 +435,13 @@ describe("MatterOverviewPage", () => {
         case_number: "CASE-99",
         cnr_number: "CNR99",
         court_forum_number: "Court 12",
-      }),
-    );
-    expect(updateMatterMock.mock.calls[0]?.[0]).not.toHaveProperty("status");
+      },
+    ]);
+    expect(transitionMatterStatusMock).not.toHaveBeenCalled();
+    expect(toastError).not.toHaveBeenCalled();
+    // The settled mutation closes the editor.
+    await waitFor(() => expect(page.queryByTestId("matter-edit-form")).not.toBeInTheDocument());
+    expect(page.getByTestId("matter-edit-open")).toBeEnabled();
   });
 
   it("activates an Intake matter without requiring a conflict check", async () => {
