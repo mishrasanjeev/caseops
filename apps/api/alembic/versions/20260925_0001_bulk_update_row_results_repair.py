@@ -34,4 +34,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    raise RuntimeError("Bulk-update history is retained; use restore-forward.")
+    # The prior revision already declares this column. Keep it in both schema shapes.
+    pass

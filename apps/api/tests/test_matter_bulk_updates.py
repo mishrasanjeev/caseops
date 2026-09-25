@@ -913,6 +913,7 @@ def test_bulk_update_row_results_repair_handles_applied_schema_drift(
         )
         migration.upgrade()
         migration.upgrade()
+        migration.downgrade()
         names = {
             column["name"]
             for column in sa.inspect(connection).get_columns("matter_bulk_update_operations")
