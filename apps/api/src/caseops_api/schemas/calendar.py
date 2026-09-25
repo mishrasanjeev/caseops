@@ -18,6 +18,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from caseops_api.schemas.oauth_redirect import oauth_redirect_error
+
 CalendarEventKind = Literal["hearing", "task", "deadline"]
 CalendarEventDisplayType = Literal[
     "hearing",
@@ -380,6 +382,24 @@ class OutlookTenantConfigurationResponse(BaseModel):
     adp20_readiness: OutlookADP20ReadinessLiteral
 
 
+# The only Microsoft callback CaseOps serves; the Outlook calendar flow builds
+# both the authorization URL and the token exchange from this stored value.
+OUTLOOK_OAUTH_CALLBACK_PATH = "/api/calendar/connections/outlook/callback"
+
+
+def outlook_oauth_redirect_error(value: str) -> str | None:
+    return oauth_redirect_error(
+        value,
+        label="Outlook",
+        provider="Microsoft",
+        expected_path=OUTLOOK_OAUTH_CALLBACK_PATH,
+    )
+
+
+def outlook_oauth_redirect_is_valid(value: str | None) -> bool:
+    return bool(value) and outlook_oauth_redirect_error(str(value)) is None
+
+
 class OutlookTenantConfigurationUpdateRequest(BaseModel):
     client_id: str | None = Field(default=None, max_length=255)
     client_secret: str | None = Field(default=None, max_length=4096)
@@ -402,6 +422,16 @@ class OutlookTenantConfigurationUpdateRequest(BaseModel):
         if isinstance(value, str):
             cleaned = value.strip()
             return cleaned or None
+        return value
+
+    @field_validator("redirect_uri")
+    @classmethod
+    def exact_outlook_callback(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        problem = outlook_oauth_redirect_error(value)
+        if problem:
+            raise ValueError(problem)
         return value
 
 

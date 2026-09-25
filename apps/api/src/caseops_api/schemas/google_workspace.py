@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Literal
-from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field, ValidationInfo, field_validator
+
+from caseops_api.schemas.oauth_redirect import oauth_redirect_error
 
 GoogleWorkspaceProviderLiteral = Literal["google_workspace"]
 GoogleWorkspaceConfigurationSourceLiteral = Literal[
@@ -87,12 +88,6 @@ GOOGLE_OAUTH_CALLBACK_PATHS: dict[str, str] = {
     "gmail_redirect_uri": "/api/mailbox/gmail/callback",
     "drive_redirect_uri": "/api/drive/google/callback",
 }
-_LOCAL_OAUTH_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
-# urlsplit() tolerates whitespace and control characters inside an authority;
-# Google does not, so reject them before they reach the stored row.
-_FORBIDDEN_URI_CHARACTERS = tuple(chr(code) for code in range(33)) + ("",)
-
-
 def google_oauth_redirect_error(field: str, value: str) -> str | None:
     """Return an actionable message when a redirect URI is not one Google can call.
 
@@ -100,40 +95,12 @@ def google_oauth_redirect_error(field: str, value: str) -> str | None:
     existed cannot present itself as configured.
     """
 
-    expected_path = GOOGLE_OAUTH_CALLBACK_PATHS[field]
-    connector = field.removesuffix("_redirect_uri")
-    advice = (
-        f"The {connector} redirect URI must be the address Google sends the user back to, "
-        f"ending in {expected_path}"
+    return oauth_redirect_error(
+        value,
+        label=field.removesuffix("_redirect_uri"),
+        provider="Google",
+        expected_path=GOOGLE_OAUTH_CALLBACK_PATHS[field],
     )
-    if any(character in value for character in _FORBIDDEN_URI_CHARACTERS):
-        return f"{advice}. Remove spaces, tabs and line breaks from the address."
-    parts = urlsplit(value)
-    host = parts.hostname or ""
-    if parts.scheme not in {"http", "https"} or not host:
-        return f"{advice}. Enter a full https address including the host."
-    try:
-        # Reading .port is the only way to learn that the authority carries an
-        # unusable port; urlsplit() itself accepts one. Out-of-range values
-        # raise here, and port 0 parses but is not an address Google can call.
-        port = parts.port
-    except ValueError:
-        return f"{advice}. The port after the host is not a usable number."
-    if port == 0:
-        return f"{advice}. Port 0 is not an address Google can call back."
-    if parts.scheme != "https" and host not in _LOCAL_OAUTH_HOSTS:
-        return f"{advice}. Google accepts https only, except on localhost."
-    if parts.username or parts.password:
-        return f"{advice}. Remove the username or password from the address."
-    if parts.query or parts.fragment:
-        return f"{advice}. Remove the query string or fragment."
-    if parts.path != expected_path:
-        return (
-            f"{advice}. It currently ends in {parts.path or '/'}, which Google will reject "
-            "as a redirect_uri mismatch. Check for a trailing slash, a typo, or another "
-            "connector's address pasted into this field."
-        )
-    return None
 
 
 def google_oauth_redirect_is_valid(field: str, value: str | None) -> bool:

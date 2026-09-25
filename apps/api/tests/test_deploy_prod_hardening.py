@@ -2089,6 +2089,13 @@ def test_deploy_prod_defaults_to_draining_and_holding_private_projection(
     assert any(
         "scheduler_inventory.py quiesce" in call
         and "--scheduler caseops-private-projection-maintenance-cadence" in call
+        and "--wait-seconds 300" in call
+        for call in calls
+    )
+    assert any(
+        "scheduler_inventory.py quiesce" in call
+        and "--scheduler caseops-case-tracking-poll-1800-ist" in call
+        and "--wait-seconds 300" in call
         for call in calls
     )
     assert any(

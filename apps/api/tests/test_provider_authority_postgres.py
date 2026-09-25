@@ -267,7 +267,7 @@ def test_postgres_outlook_readiness_demotion_discards_provider_success(
                 "pg-outlook-secret"
             ),
             tenant_id="organizations",
-            redirect_uri="https://api.example.test/outlook/callback",
+            redirect_uri="https://api.example.test/api/calendar/connections/outlook/callback",
             scopes_json=list(calendar_sync.OUTLOOK_SCOPES),
             oauth_consent_model_approved=True,
             scopes_approved=True,

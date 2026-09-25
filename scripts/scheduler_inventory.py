@@ -1039,8 +1039,10 @@ def quiesce(
         raise InventoryError("drain wait must be between 5 and 600 seconds")
     deadline = time.monotonic() + wait_seconds
 
+    # Hosted and Windows gcloud control-plane calls can exceed 30 seconds.
+    # Keep each call bounded by both the per-call cap and the drain deadline.
     access_token = run_gcloud(
-        ["auth", "print-access-token"], timeout=min(30, wait_seconds)
+        ["auth", "print-access-token"], timeout=min(90, wait_seconds)
     )
     if not isinstance(access_token, str) or not access_token.strip():
         raise InventoryError("gcloud returned an empty access token")
@@ -1053,7 +1055,7 @@ def quiesce(
                 "rerun this release after inspecting the active executions"
             )
         return run_gcloud(
-            arguments, expect_json=expect_json, timeout=min(30, remaining)
+            arguments, expect_json=expect_json, timeout=min(90, remaining)
         )
 
     location = ["--project", project, "--location", region]
