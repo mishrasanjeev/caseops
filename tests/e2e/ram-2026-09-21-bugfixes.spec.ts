@@ -131,6 +131,7 @@ test("BUG-006 DOCX is visibly rendered and ENH-007 updates only an existing matt
   const auth = await authenticate(request);
   const hearingDate = plusDays(4);
   const code = `${BULK_CODE}-${randomUUID().slice(0, 8).toUpperCase()}`;
+  const bulkFilename = `matter-bulk-update-${code}.csv`;
   const matter = await ensureMatter(request, auth.headers, code, "Bulk update baseline", hearingDate);
 
   const upload = await request.post(`${api}/api/matters/${matter.id}/attachments`, {
@@ -206,7 +207,7 @@ test("BUG-006 DOCX is visibly rendered and ENH-007 updates only an existing matt
   const csvEscape = (value: string) => `"${value.replaceAll('"', '""')}"`;
   const bulkCsv = Buffer.from(`${header}\r\n${values.map(csvEscape).join(",")}\r\n${invalidValues.map(csvEscape).join(",")}\r\n`, "utf-8");
   await page.locator('input[type="file"]').setInputFiles({
-    name: "matter-bulk-update.csv",
+    name: bulkFilename,
     mimeType: "text/csv",
     buffer: bulkCsv,
   });
@@ -220,12 +221,12 @@ test("BUG-006 DOCX is visibly rendered and ENH-007 updates only an existing matt
   await expect(page.getByTestId("bulk-update-final-result")).toContainText("1 skipped");
   await expect(page.getByRole("button", { name: "Apply reviewed changes" })).toBeDisabled();
   await expect(page.getByRole("heading", { name: "Operation history" })).toBeVisible();
-  await expect(page.getByRole("cell", { name: "matter-bulk-update.csv", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "View results for matter-bulk-update.csv" }).first().click();
+  await expect(page.getByRole("cell", { name: bulkFilename, exact: true })).toBeVisible();
+  await page.getByRole("button", { name: `View results for ${bulkFilename}` }).click();
   await expect(page.getByText(`Row 2: ${code} — applied`, { exact: false })).toBeVisible();
   await expect(page.getByText(`Row 3: ${unknownCode} — invalid`, { exact: false })).toBeVisible();
   const resultDownload = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download results for matter-bulk-update.csv" }).first().click();
+  await page.getByRole("button", { name: `Download results for ${bulkFilename}` }).click();
   const resultStream = await (await resultDownload).createReadStream();
   const resultChunks: Buffer[] = [];
   for await (const chunk of resultStream) resultChunks.push(Buffer.from(chunk));
