@@ -20536,7 +20536,7 @@
     {
       "id": "matter_bulk_update_operations",
       "table_name": "matter_bulk_update_operations",
-      "purpose": "Repository SQL persistence class `matter_bulk_update_operations`; its exact column inventory is intentionally versioned below.",
+      "purpose": "Tenant-scoped bulk-update operation history. Forward revision 20260925_0001 adds row_results_json to databases that applied 20260924_0001 before that column was introduced; historical rows receive an empty result list rather than invented row evidence.",
       "policy_profile_id": "tenant_restricted_legal_content",
       "disposition_handler_id": "registry_fail_closed",
       "columns": {
