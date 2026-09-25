@@ -1143,3 +1143,12 @@ requirements when using the fallback.
   incident evidence. Keep the cadence paused on missing or changed evidence;
   audit direct Cloud Scheduler ResumeJob access because it bypasses the CLI
   guard.
+- Container scoping does not isolate a timed-out Vitest flow from Radix
+  portals: React detaches portal content without emptying it, and
+  `user.paste`/`user.keyboard` act on whichever element has focus, which can
+  be the next test's input. Require focus on the field before each paste,
+  check that page and portal are still mounted before portal queries, and
+  prove isolation with a forced short timeout on dialog tests too. A worker's
+  first accessible-role query is cold (170-370 ms measured) and is charged to
+  the 1 s `findByRole` deadline; poll the precise visible text, then keep the
+  role and visibility assertion. Never raise the deadline.

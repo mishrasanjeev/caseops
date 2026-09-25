@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import userEvent, { type UserEvent } from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -11,6 +11,8 @@ const {
   coreMock,
   recordsMock,
   actionMock,
+  toastError,
+  toastSuccess,
   workspaceMock,
 } = vi.hoisted(() => ({
   capabilityMock: vi.fn(),
@@ -19,6 +21,8 @@ const {
   coreMock: vi.fn(),
   recordsMock: vi.fn(),
   actionMock: vi.fn(),
+  toastError: vi.fn(),
+  toastSuccess: vi.fn(),
   workspaceMock: vi.fn(),
 }));
 
@@ -33,7 +37,7 @@ vi.mock("@/lib/use-session", () => ({
   }),
 }));
 
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock("sonner", () => ({ toast: { success: toastSuccess, error: toastError } }));
 
 vi.mock("@/lib/api/endpoints", () => ({
   createMadridRecord: createMock,
@@ -157,6 +161,35 @@ function wrapper() {
   };
 }
 
+// Mutation tests query only inside their own render container. If a test ever
+// overruns its deadline, cleanup() empties that container and the abandoned
+// user flow fails on its next query instead of driving the next test's page.
+function renderMadridPage() {
+  const view = render(<MadridPage />, { wrapper: wrapper() });
+  return within(view.container);
+}
+
+// One paste per field: the field still receives focus and a real input event,
+// but the page re-renders once per field instead of once per character.
+// Paste targets whichever element has focus, so require focus first: an
+// abandoned flow holding a detached field fails here instead of pasting into
+// the next test's focused input.
+async function enterText(user: UserEvent, field: HTMLElement, value: string) {
+  await user.click(field);
+  expect(field).toHaveFocus();
+  await user.paste(value);
+  expect(field).toHaveDisplayValue(value);
+}
+
+// The page stamps these times from the wall clock; bound them to the test run.
+function expectTimestampWithin(value: unknown, startedAt: number) {
+  expect(typeof value).toBe("string");
+  const stamped = Date.parse(value as string);
+  expect(new Date(stamped).toISOString()).toBe(value);
+  expect(stamped).toBeGreaterThanOrEqual(startedAt);
+  expect(stamped).toBeLessThanOrEqual(Date.now());
+}
+
 describe("Madrid portfolio", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -179,60 +212,114 @@ describe("Madrid portfolio", () => {
 
   it("keeps designation statuses independent and reconciles a linked source candidate", async () => {
     const user = userEvent.setup();
-    render(<MadridPage />, { wrapper: wrapper() });
+    const startedAt = Date.now();
+    const page = renderMadridPage();
 
-    expect(await screen.findByRole("heading", { name: "ASTER" })).toBeVisible();
-    expect(screen.getByRole("link", { name: "Open source" })).toHaveAttribute("href", IR.source_url);
-    expect(screen.getByText("manual sourced only")).toBeVisible();
-    expect(screen.getByRole("link", { name: /wipo:snapshot:1888001:20260825/i })).toHaveAttribute(
+    // Poll precise workspace text; a cold accessible-role query inside findBy
+    // can consume the polling deadline under CPU contention.
+    expect(await page.findByText("manual sourced only")).toBeVisible();
+    expect(page.getByRole("heading", { name: "ASTER" })).toBeVisible();
+    expect(page.getByRole("link", { name: "Open source" })).toHaveAttribute("href", IR.source_url);
+    expect(page.getByRole("link", { name: /wipo:snapshot:1888001:20260825/i })).toHaveAttribute(
       "href",
       IR.source_url,
     );
 
-    await user.click(screen.getByRole("button", { name: "Accept" }));
-    await waitFor(() => expect(actionMock).toHaveBeenCalledWith(expect.objectContaining({
+    await user.click(page.getByRole("button", { name: "Accept" }));
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("Source candidate reconciled."));
+    expect(actionMock).toHaveBeenCalledTimes(1);
+    const [reconciliation] = actionMock.mock.calls[0];
+    expect(reconciliation).toEqual({
       recordId: IR.id,
+      expectedVersion: 4,
+      expectedLifecycleVersion: 7,
       actionKind: "source_reconciliation",
       authority: "internal",
+      effectiveAt: expect.any(String),
+      responsibleMembershipId: "member-1",
+      reason: "Counsel reconciled source candidate as same fact.",
+      sourceReference: `madrid-review:${CANDIDATE.id}`,
+      sourceRetrievedAt: expect.any(String),
       reconcilesEventId: CANDIDATE.id,
       reconciliationDecision: "same_fact",
-    })));
+    });
+    expectTimestampWithin(reconciliation.effectiveAt, startedAt);
+    expectTimestampWithin(reconciliation.sourceRetrievedAt, startedAt);
+    expect(toastError).not.toHaveBeenCalled();
+    // The mutation stays pending until its workspace refresh settles.
+    await waitFor(() => expect(page.getByRole("button", { name: "Accept" })).toBeEnabled());
 
-    await user.click(screen.getByRole("tab", { name: "Designations" }));
-    const indiaRow = screen.getByRole("cell", { name: "IN" }).closest("tr");
-    const euRow = screen.getByRole("cell", { name: "EM" }).closest("tr");
+    await user.click(page.getByRole("tab", { name: "Designations" }));
+    const indiaRow = page.getByRole("cell", { name: "IN" }).closest("tr");
+    const euRow = page.getByRole("cell", { name: "EM" }).closest("tr");
     expect(indiaRow).not.toBeNull();
     expect(euRow).not.toBeNull();
     expect(within(indiaRow!).getByText("provisional_refusal")).toBeVisible();
     expect(within(euRow!).getByText("protected")).toBeVisible();
 
-    await user.click(screen.getByRole("tab", { name: "History" }));
-    expect(screen.getByRole("link", { name: CANDIDATE.source_reference })).toHaveAttribute(
+    await user.click(page.getByRole("tab", { name: "History" }));
+    expect(page.getByRole("link", { name: CANDIDATE.source_reference })).toHaveAttribute(
       "href",
       IR.source_url,
     );
+    expect(actionMock).toHaveBeenCalledTimes(1);
   });
 
   it("records a WIPO snapshot as a candidate with canonical evidence links", async () => {
     const user = userEvent.setup();
-    render(<MadridPage />, { wrapper: wrapper() });
+    const startedAt = Date.now();
+    const page = renderMadridPage();
 
-    expect(await screen.findByRole("heading", { name: "Record transaction" })).toBeVisible();
-    expect(screen.getByLabelText("Authority")).toHaveValue("wipo");
-    await user.type(screen.getByLabelText("Source reference"), "wipo:snapshot:1888001:20260826");
-    await user.type(screen.getByLabelText("Source URL"), IR.source_url);
-    await user.type(screen.getByLabelText("WIPO status"), "renewed");
-    await user.selectOptions(screen.getByLabelText("Linked document"), "document-1");
-    await user.selectOptions(screen.getByLabelText("Linked deadline"), "deadline-1");
-    await user.type(screen.getByLabelText("Reason"), "Reviewed the dated WIPO source record.");
-    await user.click(screen.getByRole("button", { name: "Record transaction" }));
+    expect(await page.findByLabelText("Source reference")).toBeVisible();
+    expect(page.getByRole("heading", { name: "Record transaction" })).toBeVisible();
+    expect(page.getByLabelText("Authority")).toHaveValue("wipo");
+    const effectiveDate = (page.getByLabelText("Effective date") as HTMLInputElement).value;
+    expect(effectiveDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    await enterText(user, page.getByLabelText("Source reference"), "wipo:snapshot:1888001:20260826");
+    await enterText(user, page.getByLabelText("Source URL"), IR.source_url);
+    await enterText(user, page.getByLabelText("WIPO status"), "renewed");
+    await user.selectOptions(page.getByLabelText("Linked document"), "document-1");
+    await user.selectOptions(page.getByLabelText("Linked deadline"), "deadline-1");
+    await enterText(user, page.getByLabelText("Reason"), "Reviewed the dated WIPO source record.");
+    await user.click(page.getByRole("button", { name: "Record transaction" }));
 
-    await waitFor(() => expect(actionMock).toHaveBeenCalledWith(expect.objectContaining({
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("Madrid transaction recorded."));
+    expect(actionMock).toHaveBeenCalledTimes(1);
+    const [snapshot] = actionMock.mock.calls[0];
+    expect(snapshot).toEqual({
+      recordId: IR.id,
+      expectedVersion: 4,
+      expectedLifecycleVersion: 7,
       actionKind: "source_snapshot",
       authority: "wipo",
-      wipoStatus: "renewed",
+      effectiveAt: `${effectiveDate}T12:00:00.000Z`,
+      responsibleMembershipId: "member-1",
+      reason: "Reviewed the dated WIPO source record.",
+      sourceUrl: IR.source_url,
+      sourceReference: "wipo:snapshot:1888001:20260826",
+      sourceRetrievedAt: expect.any(String),
+      evidenceRefs: ["wipo:snapshot:1888001:20260826"],
       documentRefs: ["document-1"],
       deadlineRefs: ["deadline-1"],
-    })));
+      costItemRefs: [],
+      wipoStatus: "renewed",
+      nationalStatus: null,
+      localAgentName: null,
+      irNumber: null,
+      internationalRegistrationDate: null,
+      notificationDate: null,
+      publicationDate: null,
+      statementDate: null,
+      renewalDueDate: null,
+      details: {},
+    });
+    expectTimestampWithin(snapshot.sourceRetrievedAt, startedAt);
+    expect(toastError).not.toHaveBeenCalled();
+    // The settled mutation clears the draft and re-enables submission.
+    expect(page.getByLabelText("Source reference")).toHaveDisplayValue("");
+    expect(page.getByLabelText("Reason")).toHaveDisplayValue("");
+    await waitFor(() =>
+      expect(page.getByRole("button", { name: "Record transaction" })).toBeEnabled(),
+    );
   });
 });

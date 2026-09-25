@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, type RenderResult, screen, waitFor, within } from "@testing-library/react";
+import userEvent, { type UserEvent } from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -12,6 +12,8 @@ const {
   previewProviderOperationReplayMock,
   replayProviderOperationMock,
   resolveCaseTrackingProviderIncidentMock,
+  toastError,
+  toastSuccess,
   useCapabilityMock,
 } = vi.hoisted(() => ({
   fetchProviderReadinessMock: vi.fn(),
@@ -21,6 +23,8 @@ const {
   previewProviderOperationReplayMock: vi.fn(),
   replayProviderOperationMock: vi.fn(),
   resolveCaseTrackingProviderIncidentMock: vi.fn(),
+  toastError: vi.fn(),
+  toastSuccess: vi.fn(),
   useCapabilityMock: vi.fn(),
 }));
 
@@ -39,7 +43,7 @@ vi.mock("@/lib/capabilities", () => ({
 }));
 
 vi.mock("sonner", () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+  toast: { success: toastSuccess, error: toastError },
 }));
 
 import ProviderOperationsPage from "@/app/app/admin/provider-operations/page";
@@ -49,6 +53,57 @@ function withClient(children: ReactNode) {
     defaultOptions: { queries: { retry: false } },
   });
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+
+// Mutation tests query only inside their own render container. If a test ever
+// overruns its deadline, cleanup() empties that container and the abandoned
+// user flow fails on its next query instead of driving the next test's page.
+function renderOperationsPage() {
+  const view = render(withClient(<ProviderOperationsPage />));
+  return { view, page: within(view.container) };
+}
+
+// Radix portal content stays queryable after React detaches it, so every query
+// on a portal scope first requires this test's page and the portal to be mounted.
+function mountedWithin(view: RenderResult, element: HTMLElement) {
+  const queries = within(element);
+  return new Proxy(queries, {
+    get(target, key) {
+      const query = Reflect.get(target, key);
+      if (typeof query !== "function") return query;
+      return (...args: unknown[]) => {
+        expect(view.container).toBeInTheDocument();
+        expect(element).toBeInTheDocument();
+        return query(...args);
+      };
+    },
+  });
+}
+
+// Radix portals the action dialog to document.body, outside the container.
+// Resolve the single open dialog only while this test's page is still mounted,
+// then scope to it. A plain attribute lookup keeps a cold accessible-role query
+// out of the polling deadline.
+async function ownDialog(view: RenderResult) {
+  const element = await waitFor(() => {
+    expect(view.container).toBeInTheDocument();
+    const dialogs = document.querySelectorAll<HTMLElement>('[role="dialog"]');
+    expect(dialogs).toHaveLength(1);
+    return dialogs[0];
+  });
+  return { element, dialog: mountedWithin(view, element) };
+}
+
+// One paste per field: the field still receives focus and a real input event,
+// but the page re-renders once per field instead of once per character.
+// Paste targets whichever element has focus, so require focus first: an
+// abandoned flow holding a detached field fails here instead of pasting into
+// the next test's focused input.
+async function enterText(user: UserEvent, field: HTMLElement, value: string) {
+  await user.click(field);
+  expect(field).toHaveFocus();
+  await user.paste(value);
+  expect(field).toHaveDisplayValue(value);
 }
 
 const operation = {
@@ -204,6 +259,8 @@ describe("ProviderOperationsPage", () => {
     replayProviderOperationMock.mockReset();
     resolveCaseTrackingProviderIncidentMock.mockReset();
     useCapabilityMock.mockReset();
+    toastError.mockReset();
+    toastSuccess.mockReset();
     useCapabilityMock.mockReturnValue(true);
     listProviderOperationsMock.mockResolvedValue({
       operations: [operation],
@@ -351,30 +408,45 @@ describe("ProviderOperationsPage", () => {
 
   it("requests replay through the guarded provider operation endpoint", async () => {
     const user = userEvent.setup();
-    render(withClient(<ProviderOperationsPage />));
-    await user.click(await screen.findByTestId(`provider-operation-replay-${operation.id}`));
+    const { view, page } = renderOperationsPage();
+    await user.click(await page.findByTestId(`provider-operation-replay-${operation.id}`));
     expect(replayProviderOperationMock).not.toHaveBeenCalled();
-    expect(screen.getByText("Replay provider operation")).toBeInTheDocument();
-    expect(await screen.findByText(/Scope: 1 operation/i)).toBeInTheDocument();
+    const { element: dialogElement, dialog } = await ownDialog(view);
+    expect(dialog.getByText("Replay provider operation")).toBeInTheDocument();
+    expect(await dialog.findByText(/Scope: 1 operation/i)).toBeInTheDocument();
+    expect(previewProviderOperationReplayMock).toHaveBeenCalledTimes(1);
     expect(previewProviderOperationReplayMock.mock.calls[0][0]).toEqual({
       operationIds: [operation.id],
     });
-    const confirm = screen.getByTestId("provider-operation-confirm-action");
+    const confirm = dialog.getByTestId("provider-operation-confirm-action");
     expect(confirm).toBeDisabled();
-    await user.type(
-      screen.getByLabelText("Reason"),
+    await enterText(
+      user,
+      dialog.getByLabelText("Reason"),
       "Reviewed provider failure and approved replay.",
     );
     expect(confirm).toBeEnabled();
     await user.click(confirm);
     await waitFor(() =>
-      expect(replayProviderOperationMock).toHaveBeenCalled(),
+      expect(toastSuccess).toHaveBeenCalledWith("Notification intent was queued."),
     );
+    expect(replayProviderOperationMock).toHaveBeenCalledTimes(1);
     expect(replayProviderOperationMock.mock.calls[0][0]).toEqual({
       operationId: operation.id,
       previewToken: "signed-preview-token-value",
       reason: "Reviewed provider failure and approved replay.",
     });
+    expect(previewProviderOperationReplayMock).toHaveBeenCalledTimes(1);
+    expect(ignoreProviderOperationMock).not.toHaveBeenCalled();
+    expect(markProviderOperationResolvedMock).not.toHaveBeenCalled();
+    expect(resolveCaseTrackingProviderIncidentMock).not.toHaveBeenCalled();
+    expect(toastError).not.toHaveBeenCalled();
+    // The settled mutation closes the dialog, refreshes the jobs and frees the row.
+    await waitFor(() => expect(dialogElement).not.toBeInTheDocument());
+    await waitFor(() => expect(listProviderOperationsMock).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(page.getByTestId(`provider-operation-replay-${operation.id}`)).toBeEnabled(),
+    );
   });
 
   it("requires root cause, prevention, and canary evidence for tracked-case closure", async () => {
@@ -402,32 +474,55 @@ describe("ProviderOperationsPage", () => {
       operation: { ...trackingOperation, status: "resolved" },
     });
 
-    render(withClient(<ProviderOperationsPage />));
+    const { view, page } = renderOperationsPage();
     await user.click(
-      await screen.findByTestId(`provider-operation-resolve-${trackingOperation.id}`),
+      await page.findByTestId(`provider-operation-resolve-${trackingOperation.id}`),
     );
-    const confirm = screen.getByTestId("provider-operation-confirm-action");
-    await user.type(
-      screen.getByLabelText("Reason"),
+    const { element: dialogElement, dialog } = await ownDialog(view);
+    const confirm = dialog.getByTestId("provider-operation-confirm-action");
+    await enterText(
+      user,
+      dialog.getByLabelText("Reason"),
       "Provider authentication expired before the polling window.",
     );
     expect(confirm).toBeDisabled();
-    await user.type(
-      screen.getByLabelText("Prevention"),
+    await enterText(
+      user,
+      dialog.getByLabelText("Prevention"),
       "Alert before credentials expire and block affected polling.",
     );
-    await user.type(
-      screen.getByLabelText("Canary evidence"),
+    expect(confirm).toBeDisabled();
+    await enterText(
+      user,
+      dialog.getByLabelText("Canary evidence"),
       "Single-record replay succeeded and remained healthy.",
     );
     expect(confirm).toBeEnabled();
     await user.click(confirm);
-    await waitFor(() => expect(resolveCaseTrackingProviderIncidentMock).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith(
+        "Tracked-case provider incident closed with successful canary evidence.",
+      ),
+    );
+    expect(resolveCaseTrackingProviderIncidentMock).toHaveBeenCalledTimes(1);
     expect(resolveCaseTrackingProviderIncidentMock.mock.calls[0][0]).toEqual({
       operationId: trackingOperation.id,
       rootCause: "Provider authentication expired before the polling window.",
       prevention: "Alert before credentials expire and block affected polling.",
       canaryEvidence: "Single-record replay succeeded and remained healthy.",
     });
+    expect(markProviderOperationResolvedMock).not.toHaveBeenCalled();
+    expect(previewProviderOperationReplayMock).not.toHaveBeenCalled();
+    expect(replayProviderOperationMock).not.toHaveBeenCalled();
+    expect(ignoreProviderOperationMock).not.toHaveBeenCalled();
+    expect(toastError).not.toHaveBeenCalled();
+    // The settled mutation closes the dialog, refreshes the jobs and frees the row.
+    await waitFor(() => expect(dialogElement).not.toBeInTheDocument());
+    await waitFor(() => expect(listProviderOperationsMock).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(
+        page.getByTestId(`provider-operation-resolve-${trackingOperation.id}`),
+      ).toBeEnabled(),
+    );
   });
 });
