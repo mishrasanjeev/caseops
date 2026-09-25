@@ -816,8 +816,11 @@ def test_matter_case_selection_rejects_tamper_cross_matter_and_changed_identity(
     assert resolved.status_code == 200, resolved.text
     selection = resolved.json()["results"][0]["link_token"]
     link_url = f"/api/case-tracking/matters/{matter_id}/link"
+    changed_last_hex = "1" if selection[-1] == "0" else "0"
     tampered = client.post(
-        link_url, headers=auth_headers(token), json={"link_token": selection[:-1] + "0"}
+        link_url,
+        headers=auth_headers(token),
+        json={"link_token": selection[:-1] + changed_last_hex},
     )
     assert tampered.status_code == 409, tampered.text
     wrong_matter = client.post(

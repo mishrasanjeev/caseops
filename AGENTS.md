@@ -466,6 +466,10 @@ requirements when using the fallback.
   unscoped role query can fail strict mode after the real error has rendered.
   Keep the exact-release production journey running through its later visible
   result, not merely the first API checks.
+- A tamper regression must actually change the signed input for every random
+  token. Replacing a hex signature's final character with a fixed value is a
+  1-in-16 no-op when it already has that value; choose a different character
+  and assert rejection, including that formerly colliding case.
 - Production verification must fit the repository's effective 40-minute
   GitHub-hosted job ceiling. Serialize mutation-capable QA shards as separate
   jobs, pin and recheck the same exact serving SHA at every shard boundary,
