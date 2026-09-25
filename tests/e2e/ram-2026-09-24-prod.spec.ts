@@ -245,7 +245,7 @@ test("QA-owned matter has a canonical hearing and automated eCourts lookup canno
   expect(href).toContain("/app/case-tracking?matterId=");
   await page.goto(`${web}${href}`);
   await page.getByTestId("matter-case-resolve-submit").click();
-  await expect(page.getByRole("alert")).toContainText(/no external request was made/i);
+  await expect(page.getByTestId("matter-case-resolution").getByRole("alert")).toContainText(/no external request was made/i);
   await page.goto(`${web}/app/hearings`);
   await page.getByLabel("Exact hearing date").fill(hearingDate);
   await expect(page.locator(`a[href*="/app/matters/${matterId}"]`).first()).toBeVisible();
