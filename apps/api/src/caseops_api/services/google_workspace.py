@@ -33,6 +33,7 @@ from caseops_api.schemas.google_workspace import (
     GoogleWorkspaceReadinessTestResponse,
     GoogleWorkspaceTenantConfigurationResponse,
     GoogleWorkspaceTenantConfigurationUpdateRequest,
+    google_oauth_redirect_is_valid,
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.http_retries import (
@@ -265,6 +266,12 @@ def _google_workspace_oauth_config_from_row(
             else None
         )
         redirect_uri = _tenant_connector_redirect(row, connector=connector)
+        # A row written before redirect-URI validation existed can hold an
+        # address Google will refuse. Treat it as missing so readiness stays
+        # honest and no user is sent through a consent screen that cannot
+        # return, rather than failing after the grant.
+        if not google_oauth_redirect_is_valid(f"{connector}_redirect_uri", redirect_uri):
+            redirect_uri = None
         missing = []
         if not row.client_id:
             missing.append("GOOGLE_WORKSPACE_CLIENT_ID")
@@ -310,15 +317,21 @@ def _config_items(
             ),
             GoogleWorkspaceConfigurationItemStatus(
                 name="GOOGLE_CALENDAR_REDIRECT_URI",
-                configured=bool(row.calendar_redirect_uri),
+                configured=google_oauth_redirect_is_valid(
+                    "calendar_redirect_uri", row.calendar_redirect_uri
+                ),
             ),
             GoogleWorkspaceConfigurationItemStatus(
                 name="GMAIL_REDIRECT_URI",
-                configured=bool(row.gmail_redirect_uri),
+                configured=google_oauth_redirect_is_valid(
+                    "gmail_redirect_uri", row.gmail_redirect_uri
+                ),
             ),
             GoogleWorkspaceConfigurationItemStatus(
                 name="GOOGLE_DRIVE_REDIRECT_URI",
-                configured=bool(row.drive_redirect_uri),
+                configured=google_oauth_redirect_is_valid(
+                    "drive_redirect_uri", row.drive_redirect_uri
+                ),
             ),
         ]
     calendar = _env_oauth_config(connector="calendar")

@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Literal
+from urllib.parse import urlsplit
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
 GoogleWorkspaceProviderLiteral = Literal["google_workspace"]
 GoogleWorkspaceConfigurationSourceLiteral = Literal[
@@ -74,6 +75,72 @@ class GoogleWorkspaceTenantConfigurationResponse(BaseModel):
     readiness: GoogleWorkspaceReadinessLiteral
 
 
+# Google matches a redirect URI as an exact string: scheme, host, path, case and
+# trailing slash all count. The three values below are the only callback paths
+# CaseOps serves, so an admin who mistypes one, adds a trailing slash, or pastes
+# the Drive URI into the Gmail field must fail here rather than after a user has
+# already granted consent. ``tests/test_20260925_google_oauth_redirect_validation``
+# pins them to the mounted routes. The host stays free: each deployment and each
+# self-hosted tenant registers its own origin.
+GOOGLE_OAUTH_CALLBACK_PATHS: dict[str, str] = {
+    "calendar_redirect_uri": "/api/calendar/connections/google-calendar/callback",
+    "gmail_redirect_uri": "/api/mailbox/gmail/callback",
+    "drive_redirect_uri": "/api/drive/google/callback",
+}
+_LOCAL_OAUTH_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+# urlsplit() tolerates whitespace and control characters inside an authority;
+# Google does not, so reject them before they reach the stored row.
+_FORBIDDEN_URI_CHARACTERS = tuple(chr(code) for code in range(33)) + ("",)
+
+
+def google_oauth_redirect_error(field: str, value: str) -> str | None:
+    """Return an actionable message when a redirect URI is not one Google can call.
+
+    Shared by the admin form and the read path so a row written before this rule
+    existed cannot present itself as configured.
+    """
+
+    expected_path = GOOGLE_OAUTH_CALLBACK_PATHS[field]
+    connector = field.removesuffix("_redirect_uri")
+    advice = (
+        f"The {connector} redirect URI must be the address Google sends the user back to, "
+        f"ending in {expected_path}"
+    )
+    if any(character in value for character in _FORBIDDEN_URI_CHARACTERS):
+        return f"{advice}. Remove spaces, tabs and line breaks from the address."
+    parts = urlsplit(value)
+    host = parts.hostname or ""
+    if parts.scheme not in {"http", "https"} or not host:
+        return f"{advice}. Enter a full https address including the host."
+    try:
+        # Reading .port is the only way to learn that the authority carries an
+        # unusable port; urlsplit() itself accepts one. Out-of-range values
+        # raise here, and port 0 parses but is not an address Google can call.
+        port = parts.port
+    except ValueError:
+        return f"{advice}. The port after the host is not a usable number."
+    if port == 0:
+        return f"{advice}. Port 0 is not an address Google can call back."
+    if parts.scheme != "https" and host not in _LOCAL_OAUTH_HOSTS:
+        return f"{advice}. Google accepts https only, except on localhost."
+    if parts.username or parts.password:
+        return f"{advice}. Remove the username or password from the address."
+    if parts.query or parts.fragment:
+        return f"{advice}. Remove the query string or fragment."
+    if parts.path != expected_path:
+        return (
+            f"{advice}. It currently ends in {parts.path or '/'}, which Google will reject "
+            "as a redirect_uri mismatch. Check for a trailing slash, a typo, or another "
+            "connector's address pasted into this field."
+        )
+    return None
+
+
+def google_oauth_redirect_is_valid(field: str, value: str | None) -> bool:
+    return bool(value) and google_oauth_redirect_error(field, str(value)) is None
+
+
+
 class GoogleWorkspaceTenantConfigurationUpdateRequest(BaseModel):
     client_id: str | None = Field(default=None, max_length=255)
     client_secret: str | None = Field(default=None, max_length=4096)
@@ -101,6 +168,20 @@ class GoogleWorkspaceTenantConfigurationUpdateRequest(BaseModel):
         if isinstance(value, str):
             cleaned = value.strip()
             return cleaned or None
+        return value
+
+    @field_validator(
+        "calendar_redirect_uri",
+        "gmail_redirect_uri",
+        "drive_redirect_uri",
+    )
+    @classmethod
+    def exact_connector_callback(cls, value: str | None, info: ValidationInfo) -> str | None:
+        if value is None:
+            return None
+        problem = google_oauth_redirect_error(str(info.field_name), value)
+        if problem:
+            raise ValueError(problem)
         return value
 
 
