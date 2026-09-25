@@ -1135,3 +1135,11 @@ requirements when using the fallback.
   operation while an asynchronous history refresh inserts the current one;
   preserve the failed run and fix the test identity rather than misclassifying
   the applied mutation as a product failure.
+- A private-projection scheduler resume is a release certification step, not a
+  cleanup command. Require the latest successful exact-SHA mutation-capable
+  prod-verify dispatch, the currently serving API revision's immutable digest,
+  and two later serial clean maintenance executions on that digest, with zero
+  rebuilds in the second. A preliminary repair or historical SLO breach remains
+  incident evidence. Keep the cadence paused on missing or changed evidence;
+  audit direct Cloud Scheduler ResumeJob access because it bypasses the CLI
+  guard.

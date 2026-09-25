@@ -17,7 +17,7 @@ import shutil
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib import error as urllib_error
@@ -1108,7 +1108,7 @@ def _evidence_time(value: object, label: str) -> datetime:
         raise InventoryError(f"invalid {label} timestamp") from exc
     if parsed.tzinfo is None:
         raise InventoryError(f"timezone-free {label} timestamp")
-    return parsed.astimezone(timezone.utc)
+    return parsed.astimezone(UTC)
 
 
 def _active_prod_verification() -> None:
@@ -1193,7 +1193,7 @@ def _successful_qa_dispatch(release_sha: str, qa_run_id: int) -> tuple[datetime,
     if len(api_revisions) != 1:
         raise InventoryError("prod-verify did not record one serving API revision")
     qa_completed = max(completed)
-    if qa_completed > datetime.now(timezone.utc):
+    if qa_completed > datetime.now(UTC):
         raise InventoryError("prod-verify completion is future-dated")
     return qa_completed, api_revisions.pop()
 
@@ -1293,7 +1293,7 @@ def _maintenance_execution(
         raise InventoryError("maintenance execution identity, image or outcome is invalid")
     started = _evidence_time(status.get("startTime"), "maintenance start")
     ended = _evidence_time(status.get("completionTime"), "maintenance completion")
-    if not started < ended <= datetime.now(timezone.utc):
+    if not started < ended <= datetime.now(UTC):
         raise InventoryError("maintenance execution timing is invalid")
     log_filter = (
         'resource.type="cloud_run_job" AND '
@@ -1364,7 +1364,10 @@ def _private_resume_evidence(
         "run", "revisions", "describe", qa_api_revision,
         "--project", project, "--region", region, "--format=json",
     ], expect_json=True)
-    revision_containers = (revision.get("spec") or {}).get("containers") if isinstance(revision, dict) else None
+    revision_containers = (
+        (revision.get("spec") or {}).get("containers")
+        if isinstance(revision, dict) else None
+    )
     revision_api = [
         row for row in revision_containers or []
         if isinstance(row, dict) and row.get("name") == "api"
@@ -1401,11 +1404,11 @@ def _private_resume_evidence(
         "run", "jobs", "describe", job["run_job_name"],
         "--project", project, "--region", region, "--format=json",
     ], expect_json=True)
-    if (
-        not isinstance(job_status, dict)
-        or str(((job_status.get("status") or {}).get("latestCreatedExecution") or {}).get("name", "")).rsplit("/", 1)[-1]
-        != names[0]
-    ):
+    latest_execution = (
+        ((job_status.get("status") or {}).get("latestCreatedExecution") or {})
+        if isinstance(job_status, dict) else {}
+    )
+    if str(latest_execution.get("name", "")).rsplit("/", 1)[-1] != names[0]:
         raise InventoryError("maintenance execution list is not current")
     second_started, second_ended, second_record = _maintenance_execution(
         names[0], job=job, project=project, region=region, image=image, second=True,
@@ -1444,7 +1447,7 @@ def resume_verified(
     if scheduler == PRIVATE_PROJECTION_SCHEDULER and (
         project != inventory["production_project"] or region != inventory["location"]
     ):
-        raise InventoryError("private cadence evidence must target the production project and region")
+        raise InventoryError("private cadence evidence must target production project and region")
     selected = copy.deepcopy(inventory)
     selected["jobs"] = [copy.deepcopy(job)]
     selected["legacy_schedulers_to_pause"] = []
