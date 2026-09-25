@@ -21,19 +21,21 @@ emulators for regression tests.
 | Indian Kanoon | Licensed adapter enabled, token and terms/budget metadata bound. | Recheck current terms, price profiles, prepaid balance, attribution and a funded-human result; automated verification remains read-only. |
 | Pine Labs Plural | Payment-link and subscription switches are both **off**. | Merchant account, credentials, base URL, signed webhook, UAT and reviewed production activation. |
 | Twilio SMS / Meta WhatsApp | Both disabled; required sender/template credentials are not bound. | Vendor account, approved sender/number or template, region/compliance requirements, signed delivery callbacks, spend limits. |
-| Google Calendar / Gmail / Drive connectors | OAuth settings are **not** bound to the production API. | Complete section 2; user consent is required. Drive currently supports bounded metadata discovery, not automatic attachment import. |
+| Google Calendar / Gmail / Drive connectors | OAuth settings are **not** bound to the production API; tenant-admin configuration is also supported and was not audited here. | Complete section 2; user consent is required. Drive supports bounded discovery and review-first manual content import, not automatic import. |
 | Microsoft 365 / Outlook | OAuth settings are not bound. | Entra app registration, tenant consent, redirect URI and secret; this is not supplied by Google Cloud. |
 | IP India / WIPO registry | Adapter contracts are blocked pending licensing/provider contract. | Obtain lawful access and approved technical contract before enabling any live fetch. |
-| OCR / durable workflows | Local RapidOCR is the configured OCR path; Temporal flags are separate. | Document AI and Google Workflows are architecture changes, not configuration substitutes. |
+| OCR / durable workflows | The production API image selects local Tesseract; RapidOCR is a source default outside that image. Temporal flags are separate. | Document AI and Google Workflows are architecture changes, not configuration substitutes. |
 
 The above is a Cloud Run environment/Secret Manager *presence* audit, not a
 live credential, delivery, billing, or tenant-consent test. Review the current
 `/app/admin/integrations`, `/app/admin/provider-operations`, and
 `/api/platform-admin/production-readiness` states before each activation.
 No CaseOps Gmail Pub/Sub topic or CaseOps Google OAuth client secret was found
-in the project inventory. Unrelated application secrets in the same GCP project
-must not be reused. The Google Auth Platform console requires an interactive
-account sign-in before its client/consent state can be inspected or changed.
+in the project inventory. This does not establish whether a tenant administrator
+has saved OAuth configuration inside CaseOps. Unrelated application secrets in
+the same GCP project must not be reused. The Google Auth Platform console
+requires an interactive account sign-in before its client/consent state can be
+inspected or changed.
 
 ## 2. Set up Google Workspace with this Google Cloud project
 
@@ -43,7 +45,7 @@ account sign-in before its client/consent state can be inspected or changed.
    review the project budget before increasing usage.
 2. In [Google Auth Platform](https://console.cloud.google.com/auth/overview),
    configure the application's branding/audience and consent screen. Request
-   only the scopes CaseOps uses: `calendar.events`, `gmail.metadata`, and
+   only the scopes CaseOps uses: `calendar.events`, `gmail.readonly`, and
    `drive.readonly`. Complete any Google verification required by the chosen
    audience and sensitive/restricted scopes.
 3. Create a **Web application** OAuth client. Register exactly these redirects:
@@ -52,12 +54,13 @@ account sign-in before its client/consent state can be inspected or changed.
    `https://api.caseops.ai/api/drive/google/callback`. Record the client ID in
    release configuration and the client secret in Secret Manager. Do not paste
    either into this document.
-4. Through the canonical release configuration, bind the matching
-   `CASEOPS_GOOGLE_CALENDAR_*`, `CASEOPS_GMAIL_*`, and
-   `CASEOPS_GOOGLE_DRIVE_*` OAuth settings. Do not use the seven-day UAT setup
-   script as an unattended permanent production rollout. Deploy from current
-   `origin/main` and confirm the exact API revision before asking a tenant user
-   to connect an account.
+4. Configure the matching `CASEOPS_GOOGLE_CALENDAR_*`, `CASEOPS_GMAIL_*`, and
+   `CASEOPS_GOOGLE_DRIVE_*` OAuth settings through the canonical release, or
+   use the server-supported tenant-admin OAuth configuration for the intended
+   firm. Inspect the effective tenant state before assuming an absent API
+   environment binding means every firm is unconfigured. Do not use the
+   seven-day UAT setup script as an unattended permanent rollout. Deploy from
+   current `origin/main` and confirm the exact API revision before connection.
 5. If Gmail watch is needed, create a dedicated Pub/Sub topic and grant only
    `roles/pubsub.publisher` on that topic to
    `gmail-api-push@system.gserviceaccount.com`. Create a push subscription to
@@ -69,7 +72,8 @@ account sign-in before its client/consent state can be inspected or changed.
 6. A tenant administrator reviews `/app/admin/integrations`; an authorized user
    completes each Google OAuth connection. Confirm calendar event sync, Gmail
    metadata import/watch, and Drive metadata discovery with that user's consent.
-   Do not describe Drive metadata listing as document import or durable sync.
+   Review and explicitly import one selected Drive candidate to test the manual
+   content path. Do not describe discovery or manual import as automatic sync.
 
 The existing [Google UAT runbook](google-workspace-gcp-uat-setup-2026-06-08.md)
 documents a short-lived scripted setup. Google's current
