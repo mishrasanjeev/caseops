@@ -1671,3 +1671,43 @@ cover production volume, terminal statuses, a memberless active company and a
 real new-date schedule; unit tests cover live-growth boundaries. The earlier
 Docker browser shard was intentionally interrupted, not accepted. Full Docker
 and CI must be rerun on the changed commit before merger or deployment.
+
+## 2026-09-25 — BUG-006 / ENH-007 bulk update production history
+
+`tests/e2e/ram-2026-09-21-bugfixes.spec.ts` (BUG-006 DOCX / ENH-007 bulk update)
+passed in local Docker but failed on `tester-prod-chromium`. Two separate
+causes, classified from the retained Playwright snapshot and Cloud Logging:
+
+- **Release `91719e47`, run `36091367446`, line 217 (no apply toast).**
+  `POST /api/matters/bulk-update/apply` and `GET .../history` returned 500 on
+  `caseops-api-00463-2qp` (04:16:16 UTC): `UndefinedColumn
+  matter_bulk_update_operations.row_results_json`. Revision `20260924_0001` had
+  reached production before the column was added to it. Repaired by
+  `20260925_0001_bulk_update_row_results_repair` (PR #475); apply and history
+  have returned 200 since `caseops-api-00464-9wd`. Schema drift, now closed.
+- **Release `65a9c5b0`, run `36112912771`, line 225 (row results missing).**
+  Not a missing row payload. The failure snapshot shows two
+  `matter-bulk-update.csv` operations in the persistent QA tenant: this run's
+  (08:53:51, `BULK-UPDATE-CASEOPS-03B0EA45`) and a retained one from 07:49:13
+  (`BULK-UPDATE-CASEOPS-CC8B10B4`). The spec asserted the filename cell before
+  the post-apply history refresh arrived, so only the retained row matched.
+  `.first()` then expanded the retained operation's results; the new row
+  appeared above it afterwards. Docker never reproduced this because every
+  local run bootstraps a fresh tenant with no history.
+
+Adjacent defects fixed in the same change: operations that share a filename had
+identical accessible action names (`View results for <file>`), and a slower
+initial history read could overwrite the history fetched after an apply,
+dropping the just-applied operation from the table (reproduced in a unit probe
+against the unfixed page: 2 rows → 1). The page now applies only the most
+recently issued history read, labels each action with its upload time, and
+marks the row matching the apply response as `This upload` (`aria-current`).
+
+Regression coverage: the dated spec now seeds a retained same-name operation
+through the public API before the browser journey in every environment. It then
+follows the exact `operation_id` from the apply response, asserting that row's
+two results, that the retained row stays collapsed, and the per-operation
+download filename. `page.test.tsx` adds the production-shape unit case. No
+assertion was relaxed; filename- and position-based selection was replaced by
+identity. Verdict until the prod-verify tester suite passes this spec on the
+deployed release: **Inconclusive**.
