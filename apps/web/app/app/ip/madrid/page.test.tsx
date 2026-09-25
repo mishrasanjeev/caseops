@@ -213,6 +213,35 @@ describe("Madrid portfolio", () => {
   it("keeps designation statuses independent and reconciles a linked source candidate", async () => {
     const user = userEvent.setup();
     const startedAt = Date.now();
+    const reconciliationEvent = {
+      id: "event-reconciliation-1",
+      event_kind: "madrid_action",
+      effective_at: "2026-08-26T08:00:00Z",
+      reason: "Counsel reconciled source candidate as same fact.",
+      source: "internal",
+      source_reference: `madrid-review:${CANDIDATE.id}`,
+      candidate_status: "confirmed",
+      payload_json: {
+        action_kind: "source_reconciliation",
+        authority: "internal",
+        reconciles_event_id: CANDIDATE.id,
+        reconciliation_decision: "same_fact",
+      },
+    };
+    // After the reconciliation commits, the refreshed workspace no longer lists
+    // the candidate as unresolved and records the reconciliation event.
+    workspaceMock.mockImplementation(async () =>
+      actionMock.mock.calls.length
+        ? {
+            ...WORKSPACE,
+            record: { ...IR, version: 5 },
+            events: [CANDIDATE, reconciliationEvent],
+            unresolved_source_candidates: [],
+            data_quality_gaps: [],
+            next_required_actions: [],
+          }
+        : WORKSPACE,
+    );
     const page = renderMadridPage();
 
     // Poll precise workspace text; a cold accessible-role query inside findBy
@@ -246,8 +275,11 @@ describe("Madrid portfolio", () => {
     expectTimestampWithin(reconciliation.effectiveAt, startedAt);
     expectTimestampWithin(reconciliation.sourceRetrievedAt, startedAt);
     expect(toastError).not.toHaveBeenCalled();
-    // The mutation stays pending until its workspace refresh settles.
-    await waitFor(() => expect(page.getByRole("button", { name: "Accept" })).toBeEnabled());
+    // The refreshed workspace clears the reconciled candidate and its actions.
+    expect(await page.findByText("No source conflicts")).toBeVisible();
+    expect(page.queryByRole("button", { name: "Accept" })).not.toBeInTheDocument();
+    expect(page.queryByRole("button", { name: "Keep separate" })).not.toBeInTheDocument();
+    expect(page.queryByRole("button", { name: "Reject" })).not.toBeInTheDocument();
 
     await user.click(page.getByRole("tab", { name: "Designations" }));
     const indiaRow = page.getByRole("cell", { name: "IN" }).closest("tr");
@@ -262,6 +294,7 @@ describe("Madrid portfolio", () => {
       "href",
       IR.source_url,
     );
+    expect(page.getByText(reconciliationEvent.reason)).toBeVisible();
     expect(actionMock).toHaveBeenCalledTimes(1);
   });
 

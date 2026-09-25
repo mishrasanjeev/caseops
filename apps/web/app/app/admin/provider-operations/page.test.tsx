@@ -408,6 +408,15 @@ describe("ProviderOperationsPage", () => {
 
   it("requests replay through the guarded provider operation endpoint", async () => {
     const user = userEvent.setup();
+    const queued = { ...operation, status: "queued", replay_available: false };
+    // After the replay commits, the refreshed job list returns the queued job.
+    listProviderOperationsMock.mockImplementation(async () => ({
+      operations: [replayProviderOperationMock.mock.calls.length ? queued : operation],
+      open_count: 1,
+      ignored_count: 0,
+      resolved_count: 0,
+      replayable_count: replayProviderOperationMock.mock.calls.length ? 0 : 1,
+    }));
     const { view, page } = renderOperationsPage();
     await user.click(await page.findByTestId(`provider-operation-replay-${operation.id}`));
     expect(replayProviderOperationMock).not.toHaveBeenCalled();
@@ -441,12 +450,15 @@ describe("ProviderOperationsPage", () => {
     expect(markProviderOperationResolvedMock).not.toHaveBeenCalled();
     expect(resolveCaseTrackingProviderIncidentMock).not.toHaveBeenCalled();
     expect(toastError).not.toHaveBeenCalled();
-    // The settled mutation closes the dialog, refreshes the jobs and frees the row.
+    // The settled mutation closes the dialog and refreshes the jobs: the row now
+    // shows the queued job, cannot be replayed again, and is no longer busy.
     await waitFor(() => expect(dialogElement).not.toBeInTheDocument());
     await waitFor(() => expect(listProviderOperationsMock).toHaveBeenCalledTimes(2));
-    await waitFor(() =>
-      expect(page.getByTestId(`provider-operation-replay-${operation.id}`)).toBeEnabled(),
-    );
+    const row = page.getByTestId(`provider-operation-${operation.id}`);
+    await waitFor(() => expect(within(row).getByText("queued")).toBeInTheDocument());
+    expect(within(row).queryByText("dead letter")).not.toBeInTheDocument();
+    expect(page.getByTestId(`provider-operation-replay-${operation.id}`)).toBeDisabled();
+    expect(page.getByTestId(`provider-operation-ignore-${operation.id}`)).toBeEnabled();
   });
 
   it("requires root cause, prevention, and canary evidence for tracked-case closure", async () => {
@@ -460,12 +472,23 @@ describe("ProviderOperationsPage", () => {
       replay_available: false,
       mark_resolved_available: true,
     };
-    listProviderOperationsMock.mockResolvedValue({
-      operations: [trackingOperation],
-      open_count: 1,
-      ignored_count: 0,
-      resolved_count: 0,
-      replayable_count: 0,
+    const resolved = {
+      ...trackingOperation,
+      status: "resolved",
+      operator_state: "resolved",
+      ignore_available: false,
+      mark_resolved_available: false,
+    };
+    // After the closure commits, the refreshed job list returns the resolved job.
+    listProviderOperationsMock.mockImplementation(async () => {
+      const closed = resolveCaseTrackingProviderIncidentMock.mock.calls.length > 0;
+      return {
+        operations: [closed ? resolved : trackingOperation],
+        open_count: closed ? 0 : 1,
+        ignored_count: 0,
+        resolved_count: closed ? 1 : 0,
+        replayable_count: 0,
+      };
     });
     resolveCaseTrackingProviderIncidentMock.mockResolvedValue({
       action: "mark_resolved",
@@ -516,13 +539,17 @@ describe("ProviderOperationsPage", () => {
     expect(replayProviderOperationMock).not.toHaveBeenCalled();
     expect(ignoreProviderOperationMock).not.toHaveBeenCalled();
     expect(toastError).not.toHaveBeenCalled();
-    // The settled mutation closes the dialog, refreshes the jobs and frees the row.
+    // The settled mutation closes the dialog and refreshes the jobs: the row now
+    // shows the resolved job and offers no further operator action.
     await waitFor(() => expect(dialogElement).not.toBeInTheDocument());
     await waitFor(() => expect(listProviderOperationsMock).toHaveBeenCalledTimes(2));
-    await waitFor(() =>
+    const row = page.getByTestId(`provider-operation-${trackingOperation.id}`);
+    await waitFor(() => expect(within(row).getAllByText("resolved")).toHaveLength(2));
+    expect(within(row).queryByText("replay queued")).not.toBeInTheDocument();
+    for (const action of ["replay", "ignore", "resolve"]) {
       expect(
-        page.getByTestId(`provider-operation-resolve-${trackingOperation.id}`),
-      ).toBeEnabled(),
-    );
+        page.getByTestId(`provider-operation-${action}-${trackingOperation.id}`),
+      ).toBeDisabled();
+    }
   });
 });
