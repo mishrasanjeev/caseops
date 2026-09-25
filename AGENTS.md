@@ -1164,3 +1164,12 @@ requirements when using the fallback.
   first accessible-role query is cold (170-370 ms measured) and is charged to
   the 1 s `findByRole` deadline; poll the precise visible text, then keep the
   role and visibility assertion. Never raise the deadline.
+- A source link with `target="_blank"` may emit a browser download on its
+  opener or on a transient popup. Subscribe to downloads on every page in the
+  same browser context before clicking, then assert the exact source URL and
+  downloaded bytes. An API 200 alone does not prove the browser journey.
+- A failed Docker acceptance may deliberately retain one-off worker runners.
+  Select the canonical service by project, service, and `oneoff=False` labels
+  on replay; do not mistake those evidence containers for extra replicas.
+  Manual replay must reproduce the standard wrapper's mock-only provider
+  environment, and a fixture safety-guard failure is incomplete test setup.
