@@ -111,6 +111,11 @@ def test_accepted_paths_are_the_callbacks_the_api_actually_serves() -> None:
             + GOOGLE_OAUTH_CALLBACK_PATHS["gmail_redirect_uri"],
             "line break inside the address",
         ),
+        (
+            "gmail_redirect_uri",
+            f"https://api.tenant.example:0{GOOGLE_OAUTH_CALLBACK_PATHS['gmail_redirect_uri']}",
+            "port 0, which parses but cannot be called back",
+        ),
     ],
 )
 def test_admin_cannot_save_a_redirect_uri_google_will_reject(

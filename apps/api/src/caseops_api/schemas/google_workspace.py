@@ -113,11 +113,14 @@ def google_oauth_redirect_error(field: str, value: str) -> str | None:
     if parts.scheme not in {"http", "https"} or not host:
         return f"{advice}. Enter a full https address including the host."
     try:
-        # Reading .port is the only way to learn that the authority carries a
-        # non-numeric port; urlsplit() itself accepts it.
-        _port = parts.port
+        # Reading .port is the only way to learn that the authority carries an
+        # unusable port; urlsplit() itself accepts one. Out-of-range values
+        # raise here, and port 0 parses but is not an address Google can call.
+        port = parts.port
     except ValueError:
-        return f"{advice}. The port after the host is not a number."
+        return f"{advice}. The port after the host is not a usable number."
+    if port == 0:
+        return f"{advice}. Port 0 is not an address Google can call back."
     if parts.scheme != "https" and host not in _LOCAL_OAUTH_HOSTS:
         return f"{advice}. Google accepts https only, except on localhost."
     if parts.username or parts.password:
