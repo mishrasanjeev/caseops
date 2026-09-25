@@ -1101,3 +1101,10 @@ requirements when using the fallback.
   prove idempotent replay, require a zero-remaining postflight even after a
   short SKIP LOCKED page, and keep traffic on the
   old revision until the exact-image job and dated browser journey pass.
+- Hearing materialization must not turn a completed, cancelled or adjourned
+  hearing back into a scheduled one. A matching terminal hearing makes a
+  legacy date ineligible for automatic backfill; unchanged provider repair
+  must preserve it, while a genuinely new date gets a new scheduled row.
+  Count active companies rather than active memberships for release repair,
+  cap actual writes as well as preflight backlog, and recheck every tenant at
+  the end. A point-in-time final recount is not a promise against future writes.

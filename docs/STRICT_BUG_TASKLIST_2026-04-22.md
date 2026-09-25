@@ -1659,3 +1659,15 @@ regression. These are
 candidate changes only until complete Docker, clean CI, canonical-main merge,
 exact-image deploy, and production Playwright all pass. The partial backfill is
 not a deployment claim or an end-user fix verdict.
+
+An independent review of `57e7ee38` stopped the release despite its 390/390
+PostgreSQL pass: the legacy selector ignored terminal same-date hearings while
+the shared helper could rewrite one to `scheduled`; a short page could also
+mask later writes, and membership-based enumeration could miss an active firm.
+The candidate now excludes every existing same-date hearing from backfill,
+preserves terminal rows during unchanged-date repair, uses active company IDs,
+bounds actual writes, and runs a final cross-tenant recount. PostgreSQL tests
+cover production volume, terminal statuses, a memberless active company and a
+real new-date schedule; unit tests cover live-growth boundaries. The earlier
+Docker browser shard was intentionally interrupted, not accepted. Full Docker
+and CI must be rerun on the changed commit before merger or deployment.

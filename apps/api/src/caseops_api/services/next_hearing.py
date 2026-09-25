@@ -149,6 +149,7 @@ def _ensure_hearing_row_for_next_hearing(
         MatterHearing.company_id == matter.company_id,
         MatterHearing.matter_id == matter.id,
         MatterHearing.source == source,
+        MatterHearing.status == MatterHearingStatus.SCHEDULED,
     )
     if source_ref_type and source_ref_id:
         query = query.where(
@@ -196,19 +197,18 @@ def _ensure_hearing_row_for_next_hearing(
     return hearing
 
 
-def _legacy_hearing_filters(context: SessionContext):
+def _legacy_hearing_filters(company_id: str):
     existing = (
         select(MatterHearing.id)
         .where(
             MatterHearing.company_id == Matter.company_id,
             MatterHearing.matter_id == Matter.id,
             MatterHearing.hearing_on == Matter.next_hearing_on,
-            MatterHearing.status == MatterHearingStatus.SCHEDULED,
         )
         .exists()
     )
     return (
-        Matter.company_id == context.company.id,
+        Matter.company_id == company_id,
         Matter.is_active.is_(True),
         Matter.status != MatterStatus.DISPOSED,
         Matter.next_hearing_on.is_not(None),
@@ -216,11 +216,11 @@ def _legacy_hearing_filters(context: SessionContext):
     )
 
 
-def count_legacy_next_hearings(session: Session, *, context: SessionContext) -> int:
+def count_legacy_next_hearings(session: Session, *, company_id: str) -> int:
     """Count the same eligible rows that the bounded writer can materialize."""
     return int(
         session.scalar(
-            select(func.count()).select_from(Matter).where(*_legacy_hearing_filters(context))
+            select(func.count()).select_from(Matter).where(*_legacy_hearing_filters(company_id))
         )
         or 0
     )
@@ -229,7 +229,7 @@ def count_legacy_next_hearings(session: Session, *, context: SessionContext) -> 
 def backfill_legacy_next_hearings(
     session: Session,
     *,
-    context: SessionContext,
+    company_id: str,
     limit: int = 50,
 ) -> int:
     """Materialize one bounded page of pre-feature Matter dates without changing them."""
@@ -238,7 +238,7 @@ def backfill_legacy_next_hearings(
     matters = list(
         session.scalars(
             select(Matter)
-            .where(*_legacy_hearing_filters(context))
+            .where(*_legacy_hearing_filters(company_id))
             .order_by(Matter.id)
             .limit(limit)
             .with_for_update(of=Matter, skip_locked=True)
@@ -439,14 +439,25 @@ def apply_next_hearing_update(
     is_manual = source_value == MatterNextHearingSource.MANUAL
     if matter.next_hearing_on == new_date and matter.next_hearing_manual_lock == manual_lock:
         if matter.status != MatterStatus.DISPOSED:
-            _ensure_hearing_row_for_next_hearing(
-                session,
-                matter=matter,
-                hearing_on=new_date,
-                source=source_value,
-                source_ref_type=source_ref_type,
-                source_ref_id=source_ref_id,
+            terminal_hearing_exists = session.scalar(
+                select(MatterHearing.id)
+                .where(
+                    MatterHearing.company_id == matter.company_id,
+                    MatterHearing.matter_id == matter.id,
+                    MatterHearing.hearing_on == new_date,
+                    MatterHearing.status != MatterHearingStatus.SCHEDULED,
+                )
+                .limit(1)
             )
+            if terminal_hearing_exists is None:
+                _ensure_hearing_row_for_next_hearing(
+                    session,
+                    matter=matter,
+                    hearing_on=new_date,
+                    source=source_value,
+                    source_ref_type=source_ref_type,
+                    source_ref_id=source_ref_id,
+                )
         return NextHearingApplyResult(applied=False, reason="unchanged")
 
     today = _today()
