@@ -17,9 +17,10 @@ down_revision = "20260924_0001"
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
     columns = {
         column["name"]
-        for column in sa.inspect(op.get_bind()).get_columns("matter_bulk_update_operations")
+        for column in sa.inspect(bind).get_columns("matter_bulk_update_operations")
     }
     if "row_results_json" not in columns:
         op.add_column(
@@ -31,6 +32,12 @@ def upgrade() -> None:
                 server_default=sa.text("'[]'"),
             ),
         )
+        if bind.dialect.name == "postgresql":
+            op.alter_column(
+                "matter_bulk_update_operations",
+                "row_results_json",
+                server_default=None,
+            )
 
 
 def downgrade() -> None:
