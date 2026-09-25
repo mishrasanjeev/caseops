@@ -14,12 +14,14 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from caseops_api.db.models import (
+    TenantGoogleWorkspaceConfiguration,
     TenantMicrosoft365Configuration,
     TenantOutlookConfiguration,
 )
 from caseops_api.db.session import get_session_factory
 from caseops_api.main import create_application
 from caseops_api.schemas.calendar import OUTLOOK_OAUTH_CALLBACK_PATH
+from caseops_api.schemas.oauth_redirect import oauth_redirect_error
 from tests.test_legalworkspace_calendar_sync import _auth, _bootstrap_company
 
 HOST = "https://api.tenant.example"
@@ -92,8 +94,7 @@ def test_pinned_outlook_path_is_the_callback_the_api_serves() -> None:
 
 
 OUTLOOK_REJECTIONS = [
-    (reason, shape.format(path=OUTLOOK_OAUTH_CALLBACK_PATH))
-    for reason, shape in STRUCTURAL_CASES
+    (reason, shape.format(path=OUTLOOK_OAUTH_CALLBACK_PATH)) for reason, shape in STRUCTURAL_CASES
 ] + [
     ("trailing slash", f"{OUTLOOK_URI}/"),
     ("typo in the path", f"{HOST}/api/calendar/connections/outlook/calback"),
@@ -185,9 +186,7 @@ def test_outlook_value_stored_before_this_rule_fails_closed(client: TestClient) 
     assert "login.microsoftonline.com" not in start.text
 
 
-M365_REJECTIONS = [
-    (reason, shape.format(path=M365_PATH)) for reason, shape in STRUCTURAL_CASES
-] + [
+M365_REJECTIONS = [(reason, shape.format(path=M365_PATH)) for reason, shape in STRUCTURAL_CASES] + [
     (
         "line break inside the address",
         "https://api.tenant.example" + chr(10) + M365_PATH,
@@ -249,3 +248,108 @@ def test_microsoft365_value_stored_before_this_rule_is_not_configured(
     assert _item(body, "MICROSOFT_365_REDIRECT_URI")["configured"] is False
     assert "MICROSOFT_365_REDIRECT_URI" in body["missing_config_names"]
     assert body["readiness"] == "blocked_pending_admin_configuration"
+
+
+# An unclosed IPv6 bracket makes urlsplit() itself raise. Rows saved before
+# validation can hold one, and every read path runs this rule, so it must
+# report a problem rather than turn a status page into a 500.
+UNPARSEABLE = "https://[broken"
+
+
+def test_shared_rule_reports_an_address_urlsplit_cannot_parse() -> None:
+    problem = oauth_redirect_error(
+        f"{UNPARSEABLE}{OUTLOOK_OAUTH_CALLBACK_PATH}",
+        label="Outlook",
+        provider="Microsoft",
+        expected_path=OUTLOOK_OAUTH_CALLBACK_PATH,
+    )
+    assert problem is not None
+    assert "not a valid URL" in problem
+
+
+@pytest.mark.parametrize(
+    ("route", "model", "column", "config_name"),
+    [
+        (
+            "/api/admin/outlook-configuration",
+            TenantOutlookConfiguration,
+            "redirect_uri",
+            "OUTLOOK_REDIRECT_URI",
+        ),
+        (
+            "/api/admin/microsoft365-configuration",
+            TenantMicrosoft365Configuration,
+            "redirect_uri",
+            "MICROSOFT_365_REDIRECT_URI",
+        ),
+        (
+            "/api/admin/google-workspace-configuration",
+            TenantGoogleWorkspaceConfiguration,
+            "gmail_redirect_uri",
+            "GMAIL_REDIRECT_URI",
+        ),
+    ],
+)
+def test_unparseable_stored_address_is_reported_not_a_server_error(
+    client: TestClient,
+    route: str,
+    model: type,
+    column: str,
+    config_name: str,
+) -> None:
+    token = _company(client, f"unparseable-{config_name.lower().replace('_', '-')}")
+    payloads = {
+        "/api/admin/outlook-configuration": _outlook_payload(),
+        "/api/admin/microsoft365-configuration": _microsoft365_payload(),
+        "/api/admin/google-workspace-configuration": {
+            "client_id": "tenant-google-client",
+            "client_secret": "tenant-google-secret",
+            "calendar_redirect_uri": f"{HOST}/api/calendar/connections/google-calendar/callback",
+            "gmail_redirect_uri": f"{HOST}/api/mailbox/gmail/callback",
+            "drive_redirect_uri": f"{HOST}/api/drive/google/callback",
+            "oauth_consent_model_approved": True,
+            "scopes_approved": True,
+        },
+    }
+    assert client.patch(route, headers=_auth(token), json=payloads[route]).status_code == 200
+    with get_session_factory()() as session:
+        row = session.scalar(select(model))
+        assert row is not None
+        setattr(row, column, f"{UNPARSEABLE}/callback")
+        session.commit()
+
+    status = client.get(route, headers=_auth(token))
+    assert status.status_code == 200, status.text
+    assert _item(status.json(), config_name)["configured"] is False
+    assert config_name in status.json()["missing_config_names"]
+
+
+def test_connector_health_agrees_with_microsoft365_configuration(client: TestClient) -> None:
+    """The health dashboard must not call Microsoft 365 configured when its page says blocked."""
+
+    token = _company(client, "m365-health")
+    assert (
+        client.patch(
+            "/api/admin/microsoft365-configuration",
+            headers=_auth(token),
+            json=_microsoft365_payload(),
+        ).status_code
+        == 200
+    )
+    healthy = client.post("/api/admin/integrations/health/check", headers=_auth(token))
+    assert healthy.status_code == 200, healthy.text
+    records = {r["provider"]: r for r in healthy.json()["health"]}
+    assert records["microsoft_365"]["configured_state"] == "configured"
+
+    with get_session_factory()() as session:
+        row = session.scalar(select(TenantMicrosoft365Configuration))
+        assert row is not None
+        row.redirect_uri = f"http://api.tenant.example{M365_PATH}"
+        session.commit()
+
+    checked = client.post("/api/admin/integrations/health/check", headers=_auth(token))
+    assert checked.status_code == 200, checked.text
+    records = {r["provider"]: r for r in checked.json()["health"]}
+    # Microsoft 365 and every connector derived from it stop claiming configured.
+    for provider in ("microsoft_365", "outlook_mail", "outlook_calendar"):
+        assert records[provider]["configured_state"] != "configured", provider

@@ -43,8 +43,14 @@ def oauth_redirect_error(
         )
     if any(character in value for character in _FORBIDDEN_URI_CHARACTERS):
         return f"{advice}. Remove spaces, tabs and line breaks from the address."
-    parts = urlsplit(value)
-    host = parts.hostname or ""
+    try:
+        # urlsplit() itself raises on some malformed authorities, such as an
+        # unclosed IPv6 bracket. The read path calls this for rows saved before
+        # validation existed, so a parse failure must report, not crash.
+        parts = urlsplit(value)
+        host = parts.hostname or ""
+    except ValueError:
+        return f"{advice}. The address is not a valid URL."
     if parts.scheme not in {"http", "https"} or not host:
         return f"{advice}. Enter a full https address including the host."
     try:
