@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent, { type UserEvent } from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -12,6 +12,8 @@ const {
   decideHitMock,
   docketsMock,
   ingestMock,
+  toastError,
+  toastSuccess,
   workspaceMock,
 } = vi.hoisted(() => ({
   capabilityMock: vi.fn(),
@@ -21,6 +23,8 @@ const {
   decideHitMock: vi.fn(),
   docketsMock: vi.fn(),
   ingestMock: vi.fn(),
+  toastError: vi.fn(),
+  toastSuccess: vi.fn(),
   workspaceMock: vi.fn(),
 }));
 
@@ -37,7 +41,7 @@ vi.mock("@/lib/use-session", () => ({
   }),
 }));
 
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock("sonner", () => ({ toast: { success: toastSuccess, error: toastError } }));
 
 vi.mock("@/lib/api/endpoints", () => ({
   createIpWatchHandoff: createHandoffMock,
@@ -130,6 +134,22 @@ function wrapper() {
   };
 }
 
+// Mutation tests query only inside their own render container. If a test ever
+// overruns its deadline, cleanup() empties that container and the abandoned
+// user flow fails on its next query instead of driving the next test's page.
+function renderWatchPage() {
+  const view = render(<IpJournalWatchPage />, { wrapper: wrapper() });
+  return within(view.container);
+}
+
+// One paste per field: the field still receives focus and a real input event,
+// but the page re-renders once per field instead of once per character.
+async function enterText(user: UserEvent, field: HTMLElement, value: string) {
+  await user.click(field);
+  await user.paste(value);
+  expect(field).toHaveDisplayValue(value);
+}
+
 describe("IP journal watch page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -159,26 +179,37 @@ describe("IP journal watch page", () => {
   it("creates explicit criteria, frequency, recipients, and cost policy", async () => {
     const user = userEvent.setup();
     createProfileMock.mockResolvedValue(PROFILE);
-    render(<IpJournalWatchPage />, { wrapper: wrapper() });
-    await user.click(await screen.findByRole("button", { name: "Profiles" }));
-    await user.type(screen.getByLabelText("Profile name"), "ACME class and word watch");
-    await user.type(screen.getByLabelText("Word terms"), "ACME, ACME PRIME");
-    await user.type(screen.getByLabelText("Nice classes"), "9, 42");
-    await user.clear(screen.getByLabelText("Recipient membership IDs"));
-    await user.type(screen.getByLabelText("Recipient membership IDs"), "member-1, member-2");
-    await user.selectOptions(screen.getByLabelText("Frequency"), "daily");
-    await user.clear(screen.getByLabelText("Max cost (minor units)"));
-    await user.type(screen.getByLabelText("Max cost (minor units)"), "250");
-    await user.click(screen.getByRole("button", { name: "Create profile" }));
-    await waitFor(() => expect(createProfileMock).toHaveBeenCalledTimes(1));
-    expect(createProfileMock.mock.calls[0][0]).toEqual(expect.objectContaining({
+    const page = renderWatchPage();
+    await user.click(await page.findByRole("button", { name: "Profiles" }));
+    await enterText(user, page.getByLabelText("Profile name"), "ACME class and word watch");
+    await enterText(user, page.getByLabelText("Word terms"), "ACME, ACME PRIME");
+    await enterText(user, page.getByLabelText("Nice classes"), "9, 42");
+    await user.clear(page.getByLabelText("Recipient membership IDs"));
+    await enterText(user, page.getByLabelText("Recipient membership IDs"), "member-1, member-2");
+    await user.selectOptions(page.getByLabelText("Frequency"), "daily");
+    await user.clear(page.getByLabelText("Max cost (minor units)"));
+    await enterText(user, page.getByLabelText("Max cost (minor units)"), "250");
+    await user.click(page.getByRole("button", { name: "Create profile" }));
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("Watch profile created."));
+    expect(createProfileMock).toHaveBeenCalledTimes(1);
+    expect(createProfileMock.mock.calls[0][0]).toEqual({
       docketId: "docket-1",
+      name: "ACME class and word watch",
+      providerKey: "manual-journal",
       wordTerms: ["ACME", "ACME PRIME"],
+      phoneticTerms: [],
+      deviceReferences: [],
       classNumbers: [9, 42],
+      proprietorTerms: [],
+      jurisdictions: ["IN"],
       frequency: "daily",
       recipientMembershipIds: ["member-1", "member-2"],
       maxCostMinorPerPeriod: 250,
-    }));
+      costCurrency: "INR",
+    });
+    expect(toastError).not.toHaveBeenCalled();
+    // The mutation stays pending until its workspace refresh settles.
+    await waitFor(() => expect(page.getByRole("button", { name: "Create profile" })).toBeEnabled());
   });
 
   it("records source-confirmed review and creates a canonical opposition handoff", async () => {
@@ -187,16 +218,36 @@ describe("IP journal watch page", () => {
     workspaceMock.mockResolvedValue({ ...WORKSPACE, hits: [relevant], publications: [{ ...PUBLICATION, source_status: "available" }] });
     decideHitMock.mockResolvedValue(relevant);
     createHandoffMock.mockResolvedValue({ id: "handoff-1", hit_id: HIT.id, handoff_kind: "opposition", status: "completed", target_type: "ip_proceeding" });
-    render(<IpJournalWatchPage />, { wrapper: wrapper() });
-    await user.selectOptions(await screen.findByLabelText("Disposition"), "relevant");
-    await user.clear(screen.getByLabelText("Reason"));
-    await user.type(screen.getByLabelText("Reason"), "Official journal confirms overlapping classes.");
-    await user.click(screen.getByLabelText(/I opened and confirmed/));
-    await user.click(screen.getByRole("button", { name: "Record review" }));
-    await waitFor(() => expect(decideHitMock).toHaveBeenCalledTimes(1));
-    expect(decideHitMock.mock.calls[0][0]).toEqual(expect.objectContaining({ sourceConfirmed: true, disposition: "relevant" }));
-    await user.click(screen.getByRole("button", { name: "Create opposition" }));
-    await waitFor(() => expect(createHandoffMock).toHaveBeenCalledTimes(1));
-    expect(createHandoffMock.mock.calls[0][0]).toEqual(expect.objectContaining({ hitId: HIT.id, handoffKind: "opposition", applicationId: "application-1" }));
+    const page = renderWatchPage();
+    await user.selectOptions(await page.findByLabelText("Disposition"), "relevant");
+    await user.clear(page.getByLabelText("Reason"));
+    await enterText(user, page.getByLabelText("Reason"), "Official journal confirms overlapping classes.");
+    await user.click(page.getByLabelText(/I opened and confirmed/));
+    await user.click(page.getByRole("button", { name: "Record review" }));
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("Attorney review recorded."));
+    expect(decideHitMock).toHaveBeenCalledTimes(1);
+    expect(decideHitMock.mock.calls[0][0]).toEqual({
+      hitId: HIT.id,
+      expectedVersion: 3,
+      disposition: "relevant",
+      reason: "Official journal confirms overlapping classes.",
+      sourceConfirmed: true,
+    });
+    await waitFor(() => expect(page.getByRole("button", { name: "Record review" })).toBeEnabled());
+    await user.click(page.getByRole("button", { name: "Create opposition" }));
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("opposition created without re-entry."));
+    expect(createHandoffMock).toHaveBeenCalledTimes(1);
+    expect(createHandoffMock.mock.calls[0][0]).toEqual({
+      hitId: HIT.id,
+      handoffKind: "opposition",
+      applicationId: "application-1",
+      title: "Review ASTER PRIME",
+      matterCode: null,
+      dueOn: null,
+      assigneeMembershipId: "member-1",
+      notes: null,
+    });
+    expect(toastError).not.toHaveBeenCalled();
+    await waitFor(() => expect(page.getByRole("button", { name: "Create opposition" })).toBeEnabled());
   });
 });

@@ -1143,6 +1143,13 @@ requirements when using the fallback.
   incident evidence. Keep the cadence paused on missing or changed evidence;
   audit direct Cloud Scheduler ResumeJob access because it bypasses the CLI
   guard.
+- A Vitest timeout does not stop the test's async user flow. Global `screen`
+  queries let the abandoned flow drive the next test's freshly rendered page
+  and record a stray mock call there. Scope mutation-test queries to the
+  render container, enter bulk text with one paste per field rather than
+  per-keystroke typing, await the settled mutation, and assert exact call
+  counts and complete payloads. Prove isolation with a forced short-timeout
+  copy and measure the full suite under CPU load; never raise the timeout.
 - Container scoping does not isolate a timed-out Vitest flow from Radix
   portals: React detaches portal content without emptying it, and
   `user.paste`/`user.keyboard` act on whichever element has focus, which can

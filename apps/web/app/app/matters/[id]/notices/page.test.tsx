@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent, { type UserEvent } from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -70,6 +70,22 @@ function withClient(children: ReactNode) {
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+
+// Upload tests query only inside their own render container. If a test ever
+// overruns its deadline, cleanup() empties that container and the abandoned
+// user flow fails on its next query instead of driving the next test's page.
+function renderUploadPage() {
+  const view = render(withClient(<MatterNoticesPage />));
+  return within(view.container);
+}
+
+// One paste per field: the field still receives focus and a real input event,
+// but the page re-renders once per field instead of once per character.
+async function enterText(user: UserEvent, field: HTMLElement, value: string) {
+  await user.click(field);
+  await user.paste(value);
+  expect(field).toHaveDisplayValue(value);
 }
 
 describe("MatterNoticesPage", () => {
@@ -180,70 +196,86 @@ describe("MatterNoticesPage", () => {
       ["documents:upload", "documents:manage"].includes(capability),
     );
     uploadMock.mockResolvedValue({ id: "notice-2" });
-    render(withClient(<MatterNoticesPage />));
+    const user = userEvent.setup();
+    const page = renderUploadPage();
 
-    await userEvent.type(screen.getByTestId("matter-notice-type"), "Legal demand");
-    await userEvent.type(screen.getByTestId("matter-notice-department"), "Finance");
-    await userEvent.type(screen.getByTestId("matter-notice-subject"), "Lease default notice");
-    await userEvent.type(screen.getByTestId("matter-notice-authority"), "Rent Controller");
-    await userEvent.type(screen.getByTestId("matter-notice-internal-spoc"), "Asha Mehta");
-    await userEvent.type(screen.getByTestId("matter-notice-received-on"), "2026-07-03");
-    await userEvent.type(screen.getByTestId("matter-notice-mode"), "Email");
-    await userEvent.type(screen.getByTestId("matter-notice-source"), "Client");
-    await userEvent.type(screen.getByTestId("matter-notice-amount"), "12500");
-    await userEvent.type(screen.getByTestId("matter-notice-reply-due-on"), "2026-07-10");
-    await userEvent.type(
-      screen.getByTestId("matter-notice-summary"),
+    await enterText(user, page.getByTestId("matter-notice-type"), "Legal demand");
+    await enterText(user, page.getByTestId("matter-notice-department"), "Finance");
+    await enterText(user, page.getByTestId("matter-notice-subject"), "Lease default notice");
+    await enterText(user, page.getByTestId("matter-notice-authority"), "Rent Controller");
+    await enterText(user, page.getByTestId("matter-notice-internal-spoc"), "Asha Mehta");
+    await enterText(user, page.getByTestId("matter-notice-received-on"), "2026-07-03");
+    await enterText(user, page.getByTestId("matter-notice-mode"), "Email");
+    await enterText(user, page.getByTestId("matter-notice-source"), "Client");
+    await enterText(user, page.getByTestId("matter-notice-amount"), "12500");
+    await enterText(user, page.getByTestId("matter-notice-reply-due-on"), "2026-07-10");
+    await enterText(
+      user,
+      page.getByTestId("matter-notice-summary"),
       "Lease arrears disputed by client.",
     );
-    await userEvent.type(
-      screen.getByTestId("matter-notice-response"),
+    await enterText(
+      user,
+      page.getByTestId("matter-notice-response"),
       "Send response denying default.",
     );
-    await userEvent.type(screen.getByTestId("matter-notice-remarks"), "Urgent.");
-    await userEvent.type(
-      screen.getByTestId("matter-notice-internal-remarks"),
+    await enterText(user, page.getByTestId("matter-notice-remarks"), "Urgent.");
+    await enterText(
+      user,
+      page.getByTestId("matter-notice-internal-remarks"),
       "Check ledger.",
     );
     const file = new File(["notice body"], "legal-notice.txt", {
       type: "text/plain",
     });
-    await userEvent.upload(screen.getByTestId("matter-notice-file-input"), file);
+    await user.upload(page.getByTestId("matter-notice-file-input"), file);
 
     await waitFor(() => {
-      expect(uploadMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          matterId: "m1",
-          file,
-          documentType: "notice",
-          lifecycleStage: "initiation",
-          documentDate: "2026-07-03",
-          noticeDirection: "received",
-          noticeDocumentRole: "notice",
-          noticeType: "Legal demand",
-          noticeMode: "Email",
-          noticeSource: "Client",
-          noticeSubject: "Lease default notice",
-          noticeReceivedOn: "2026-07-03",
-          noticeAuthority: "Rent Controller",
-          noticeReceivedFrom: "Client",
-          noticeSummary: "Lease arrears disputed by client.",
-          noticeRemarks: "Urgent.",
-          noticeStatus: "Open",
-          noticeDepartment: "Finance",
-          noticeInternalSpoc: "Asha Mehta",
-          noticeInternalRemarks: "Check ledger.",
-          noticeAmountMinor: 1250000,
-          noticeCurrency: "INR",
-          noticeReplyDueOn: "2026-07-10",
-          noticeReplyRequired: true,
-          noticeReplySent: false,
-          noticeResponse: "Send response denying default.",
-          sequenceIndex: null,
-          linkedCourtOrderId: null,
-          hearingId: null,
-        }),
-      );
+      expect(toastSuccess).toHaveBeenCalledWith("Notice received uploaded.");
+    });
+    expect(uploadMock).toHaveBeenCalledTimes(1);
+    expect(uploadMock.mock.calls[0]).toEqual([
+      {
+        matterId: "m1",
+        file,
+        documentType: "notice",
+        lifecycleStage: "initiation",
+        documentDate: "2026-07-03",
+        noticeDirection: "received",
+        noticeDocumentRole: "notice",
+        noticeType: "Legal demand",
+        noticeMode: "Email",
+        noticeSource: "Client",
+        noticeSubject: "Lease default notice",
+        noticeReceivedOn: "2026-07-03",
+        noticeResponse: "Send response denying default.",
+        noticeAuthority: "Rent Controller",
+        noticeReceivedFrom: "Client",
+        noticeSummary: "Lease arrears disputed by client.",
+        noticeRemarks: "Urgent.",
+        noticeStatus: "Open",
+        noticeDepartment: "Finance",
+        noticeInternalSpoc: "Asha Mehta",
+        noticeInternalRemarks: "Check ledger.",
+        noticeAmountMinor: 1250000,
+        noticeDisputeAmountMinor: null,
+        noticeRecoveredAmountMinor: null,
+        noticeCurrency: "INR",
+        noticeReplyDueOn: "2026-07-10",
+        noticeReplyRequired: true,
+        noticeReplySent: false,
+        noticeReplySentOn: null,
+        noticeSentOn: null,
+        noticeCounselEngaged: null,
+        sequenceIndex: null,
+        linkedCourtOrderId: null,
+        hearingId: null,
+      },
+    ]);
+    expect(toastError).not.toHaveBeenCalled();
+    // The settled upload resets the draft, so nothing is left in flight.
+    await waitFor(() => {
+      expect(page.getByTestId("matter-notice-subject")).toHaveDisplayValue("");
     });
   });
 
@@ -252,41 +284,68 @@ describe("MatterNoticesPage", () => {
       ["documents:upload", "documents:manage"].includes(capability),
     );
     uploadMock.mockResolvedValue({ id: "sent-1" });
-    render(withClient(<MatterNoticesPage />));
+    const user = userEvent.setup();
+    const page = renderUploadPage();
 
-    await userEvent.click(screen.getByTestId("notice-sent-tab"));
-    await userEvent.type(screen.getByTestId("matter-notice-sent-on"), "2026-07-04");
-    await userEvent.type(screen.getByTestId("matter-notice-type"), "Recovery notice");
-    await userEvent.clear(screen.getByTestId("matter-notice-status"));
-    await userEvent.type(screen.getByTestId("matter-notice-status"), "Dispatched");
-    await userEvent.type(screen.getByTestId("matter-notice-subject"), "Payment notice");
-    await userEvent.type(screen.getByTestId("matter-notice-counsel"), "Rao & Co.");
-    await userEvent.type(screen.getByTestId("matter-notice-dispute-amount"), "15000");
-    await userEvent.type(screen.getByTestId("matter-notice-recovered-amount"), "2500");
+    await user.click(page.getByTestId("notice-sent-tab"));
+    await enterText(user, page.getByTestId("matter-notice-sent-on"), "2026-07-04");
+    await enterText(user, page.getByTestId("matter-notice-type"), "Recovery notice");
+    await user.clear(page.getByTestId("matter-notice-status"));
+    await enterText(user, page.getByTestId("matter-notice-status"), "Dispatched");
+    await enterText(user, page.getByTestId("matter-notice-subject"), "Payment notice");
+    await enterText(user, page.getByTestId("matter-notice-counsel"), "Rao & Co.");
+    await enterText(user, page.getByTestId("matter-notice-dispute-amount"), "15000");
+    await enterText(user, page.getByTestId("matter-notice-recovered-amount"), "2500");
     const file = new File(["sent notice"], "sent-notice.txt", {
       type: "text/plain",
     });
-    await userEvent.upload(screen.getByTestId("matter-notice-file-input"), file);
+    await user.upload(page.getByTestId("matter-notice-file-input"), file);
 
     await waitFor(() => {
-      expect(uploadMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          matterId: "m1",
-          file,
-          documentType: "notice",
-          documentDate: "2026-07-04",
-          noticeDirection: "sent",
-          noticeDocumentRole: "notice",
-          noticeSentOn: "2026-07-04",
-          noticeType: "Recovery notice",
-          noticeStatus: "Dispatched",
-          noticeSubject: "Payment notice",
-          noticeCounselEngaged: "Rao & Co.",
-          noticeDisputeAmountMinor: 1500000,
-          noticeRecoveredAmountMinor: 250000,
-          noticeReplyRequired: false,
-        }),
-      );
+      expect(toastSuccess).toHaveBeenCalledWith("Notice sent uploaded.");
+    });
+    expect(uploadMock).toHaveBeenCalledTimes(1);
+    expect(uploadMock.mock.calls[0]).toEqual([
+      {
+        matterId: "m1",
+        file,
+        documentType: "notice",
+        lifecycleStage: "initiation",
+        documentDate: "2026-07-04",
+        noticeDirection: "sent",
+        noticeDocumentRole: "notice",
+        noticeType: "Recovery notice",
+        noticeMode: null,
+        noticeSource: null,
+        noticeSubject: "Payment notice",
+        noticeReceivedOn: null,
+        noticeResponse: null,
+        noticeAuthority: null,
+        noticeReceivedFrom: null,
+        noticeSummary: null,
+        noticeRemarks: null,
+        noticeStatus: "Dispatched",
+        noticeDepartment: null,
+        noticeInternalSpoc: null,
+        noticeInternalRemarks: null,
+        noticeAmountMinor: null,
+        noticeDisputeAmountMinor: 1500000,
+        noticeRecoveredAmountMinor: 250000,
+        noticeCurrency: "INR",
+        noticeReplyDueOn: null,
+        noticeReplyRequired: false,
+        noticeReplySent: false,
+        noticeReplySentOn: null,
+        noticeSentOn: "2026-07-04",
+        noticeCounselEngaged: "Rao & Co.",
+        sequenceIndex: null,
+        linkedCourtOrderId: null,
+        hearingId: null,
+      },
+    ]);
+    expect(toastError).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(page.getByTestId("matter-notice-subject")).toHaveDisplayValue("");
     });
   });
 

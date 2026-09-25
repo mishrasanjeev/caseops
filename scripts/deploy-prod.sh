@@ -325,12 +325,12 @@ assert_current_main "post-build pre-migration gate"
 echo "--- drain tracked-case provider workers before migration ---"
 python scripts/scheduler_inventory.py quiesce \
   --scheduler caseops-case-tracking-poll-1800-ist \
-  --project "${PROJECT}" --region "${REGION}" --wait-seconds 180
+  --project "${PROJECT}" --region "${REGION}" --wait-seconds 300
 if [[ "${PRIVATE_PROJECTION_SCHEDULER_HOLD}" == "true" ]]; then
   echo "--- drain private projection maintenance before release-owned QA mutation ---"
   python scripts/scheduler_inventory.py quiesce \
     --scheduler caseops-private-projection-maintenance-cadence \
-    --project "${PROJECT}" --region "${REGION}" --wait-seconds 180
+    --project "${PROJECT}" --region "${REGION}" --wait-seconds 300
 fi
 
 # Resolve the API tag while it is known to exist and pin every long-lived job

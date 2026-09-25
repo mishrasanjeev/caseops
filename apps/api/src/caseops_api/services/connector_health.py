@@ -35,6 +35,7 @@ from caseops_api.schemas.integrations import (
 from caseops_api.schemas.integrations import (
     ConnectorHealthRecord as ConnectorHealthSchema,
 )
+from caseops_api.schemas.microsoft365 import microsoft365_oauth_redirect_is_valid
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.calendar_sync import GOOGLE_CALENDAR_SCOPES, OUTLOOK_SCOPES
 from caseops_api.services.google_workspace import (
@@ -395,7 +396,9 @@ def _microsoft365_configured(session: Session, *, company_id: str) -> tuple[bool
             missing.append("MICROSOFT_365_CLIENT_SECRET")
         if not row.tenant_id:
             missing.append("MICROSOFT_365_TENANT_ID")
-        if not row.redirect_uri:
+        # Agree with the configuration endpoint: a stored address Microsoft
+        # would refuse is not configuration.
+        if not microsoft365_oauth_redirect_is_valid(row.redirect_uri):
             missing.append("MICROSOFT_365_REDIRECT_URI")
         if not row.admin_consent_approved:
             missing.append("MICROSOFT_365_ADMIN_CONSENT_APPROVED")
