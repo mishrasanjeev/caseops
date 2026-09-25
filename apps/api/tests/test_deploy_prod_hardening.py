@@ -565,7 +565,11 @@ def test_workstation_docker_gate_is_migration_first_and_exact_release() -> None:
     assert "condition: service_healthy" in compose
     assert "${CASEOPS_DOCKER_VALKEY_PORT:-16379}:6379" in compose
 
-    assert '$ComposeProject = "caseops-acceptance-$($ReleaseSha.Substring(0, 12))"' in docker_script
+    assert '$RunNonce = [Guid]::NewGuid().ToString("N").Substring(0, 12)' in docker_script
+    assert (
+        '$ComposeProject = "caseops-acceptance-$($ReleaseSha.Substring(0, 12))-$RunNonce"'
+        in docker_script
+    )
     assert (
         "$PortBlock = [Convert]::ToInt32($ReleaseSha.Substring(0, 6), 16) % 6000" in docker_script
     )
