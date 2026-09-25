@@ -1122,3 +1122,9 @@ requirements when using the fallback.
   Count active companies rather than active memberships for release repair,
   cap actual writes as well as preflight backlog, and recheck every tenant at
   the end. A point-in-time final recount is not a promise against future writes.
+- Local Docker acceptance runs for the same release may overlap across agents.
+  Give every invocation a unique Compose project and preferred port block;
+  isolate its volumes and retain separate result journals. A SHA-only name
+  lets startup or cleanup destroy another run's PostgreSQL mid-test. The
+  resulting connection loss and cascading fixture errors are incomplete
+  infrastructure evidence, never a product-pass or product-failure verdict.

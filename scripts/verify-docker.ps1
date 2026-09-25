@@ -127,8 +127,11 @@ if (
     throw "Could not resolve the exact candidate source identity."
 }
 
-$ComposeProject = "caseops-acceptance-$($ReleaseSha.Substring(0, 12))"
-$PortBlock = [Convert]::ToInt32($ReleaseSha.Substring(0, 6), 16) % 6000
+# A release identity is shared across agents; the Compose project owns mutable
+# containers and volumes, so each invocation needs its own namespace.
+$RunNonce = [Guid]::NewGuid().ToString("N").Substring(0, 12)
+$ComposeProject = "caseops-acceptance-$($ReleaseSha.Substring(0, 12))-$RunNonce"
+$PortBlock = [Convert]::ToInt32($RunNonce.Substring(0, 6), 16) % 6000
 $PreferredPortBase = 20000 + ($PortBlock * 5)
 $PortBase = Get-AvailablePortBase -InitialBlock $PortBlock
 $ApiPort = ($PortBase + 0).ToString()
