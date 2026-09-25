@@ -11,13 +11,6 @@ const web = process.env.PROD_BASE_URL || process.env.CASEOPS_WEB_BASE_URL || "ht
 const api = process.env.PROD_API_BASE_URL || apiBaseUrl;
 const production = new URL(web).hostname === "caseops.ai";
 
-const legacyMatters = [
-  ["3f01ac0c-df3c-40ea-846f-bda253168f8c", "2026-11-04", "case_tracking"],
-  ["2c324e89-9ead-4e16-abd6-4a923733add6", "2026-09-25", "case_tracking"],
-  ["84ac219b-1133-4cf5-8272-16bbdc2a1ee5", "2026-05-15", "unknown"],
-  ["3701d1bc-a9c8-4ed6-a9f7-0f1092559733", "2026-05-15", "unknown"],
-] as const;
-
 async function waitForSignInForm(page: import("@playwright/test").Page) {
   await page.waitForFunction(() => {
     const form = document.querySelector('form[aria-label="Sign in"]');
@@ -198,8 +191,8 @@ test("Matter court link shows the user-selected case without provider spend in l
   )).toHaveLength(1);
 });
 
-test("legacy dates have canonical hearings and automated eCourts lookup cannot spend", async ({ page, request }) => {
-  test.skip(!production, "Exact reported Matter IDs exist only in the production test workspace.");
+test("QA-owned matter has a canonical hearing and automated eCourts lookup cannot spend", async ({ page, request }) => {
+  test.skip(!production, "Production QA workspace acceptance only.");
   const slug = process.env.CASEOPS_PROD_TEST_SLUG ?? process.env.CASEOPS_RAM_PROD_SLUG;
   const email = process.env.CASEOPS_PROD_TEST_EMAIL ?? process.env.CASEOPS_RAM_PROD_EMAIL;
   const password = process.env.CASEOPS_PROD_TEST_PASSWORD ?? process.env.CASEOPS_RAM_PROD_PASSWORD;
@@ -213,16 +206,30 @@ test("legacy dates have canonical hearings and automated eCourts lookup cannot s
     ...noPaidProviderHeaders,
     Authorization: `Bearer ${(await login.json()).access_token as string}`,
   };
-  for (const [id, date, source] of legacyMatters) {
-    const workspace = await request.get(`${api}/api/matters/${id}/workspace`, { headers });
-    expect(workspace.status(), await workspace.text()).toBe(200);
-    const data = await workspace.json();
-    expect(data.matter.next_hearing_on).toBe(date);
-    expect(data.matter.next_hearing_source).toBe(source);
-    expect(data.hearings.filter((row: { hearing_on: string; status: string }) =>
-      row.hearing_on === date && row.status === "scheduled",
-    )).toHaveLength(1);
-  }
+  const hearingDate = new Date(Date.now() + 4 * 86_400_000).toISOString().slice(0, 10);
+  const code = `SEP24-${randomUUID().slice(0, 8).toUpperCase()}`;
+  const created = await request.post(`${api}/api/matters/`, {
+    headers,
+    data: {
+      title: "QA canonical hearing acceptance",
+      matter_code: code,
+      practice_area: "litigation",
+      forum_level: "high_court",
+      court_name: "Delhi High Court",
+      case_number: `WP(C) ${randomUUID().slice(0, 6)}/2026`,
+      next_hearing_on: hearingDate,
+      status: "active",
+    },
+  });
+  expect(created.status(), await created.text()).toBe(200);
+  const matterId = (await created.json()).id as string;
+  const workspace = await request.get(`${api}/api/matters/${matterId}/workspace`, { headers });
+  expect(workspace.status(), await workspace.text()).toBe(200);
+  const data = await workspace.json();
+  expect(data.matter.next_hearing_on).toBe(hearingDate);
+  expect(data.hearings.filter((row: { hearing_on: string; status: string }) =>
+    row.hearing_on === hearingDate && row.status === "scheduled",
+  )).toHaveLength(1);
   await page.setExtraHTTPHeaders(noPaidProviderHeaders);
   await page.goto(`${web}/sign-in`);
   await waitForSignInForm(page);
@@ -231,7 +238,7 @@ test("legacy dates have canonical hearings and automated eCourts lookup cannot s
   await page.locator("#password").fill(password);
   await page.locator('button[type="submit"]').click();
   await page.waitForURL(/\/app(?:[/?]|$)/);
-  await page.goto(`${web}/app/matters/${legacyMatters[0][0]}`);
+  await page.goto(`${web}/app/matters/${matterId}`);
   const court = page.locator('a[href*="/app/case-tracking?matterId="]').first();
   await expect(court).toBeVisible();
   const href = await court.getAttribute("href");
@@ -240,6 +247,6 @@ test("legacy dates have canonical hearings and automated eCourts lookup cannot s
   await page.getByTestId("matter-case-resolve-submit").click();
   await expect(page.getByRole("alert")).toContainText(/no external request was made/i);
   await page.goto(`${web}/app/hearings`);
-  await page.getByLabel("Exact hearing date").fill("2026-09-25");
-  await expect(page.locator(`a[href*="/app/matters/${legacyMatters[1][0]}"]`).first()).toBeVisible();
+  await page.getByLabel("Exact hearing date").fill(hearingDate);
+  await expect(page.locator(`a[href*="/app/matters/${matterId}"]`).first()).toBeVisible();
 });
