@@ -17,7 +17,7 @@ import shutil
 import subprocess
 import sys
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib import error as urllib_error
@@ -34,6 +34,10 @@ DIGEST_IMAGE = re.compile(r"^.+@sha256:[a-f0-9]{64}$")
 # 44 seconds for the same inventory and exceeded the drain's sub-deadline.
 EXECUTION_DRAIN_SCAN_SENTINEL = 3001
 EXECUTION_API_PAGE_SIZE = 1000
+PRIVATE_PROJECTION_SCHEDULER = "caseops-private-projection-maintenance-cadence"
+PROD_VERIFY_REPOSITORY = "mishrasanjeev/caseops"
+PROD_VERIFY_WORKFLOW = "prod-verify.yml"
+RELEASE_SHA = re.compile(r"[a-f0-9]{40}")
 
 
 class InventoryError(RuntimeError):
@@ -300,6 +304,32 @@ def run_gcloud(
         raise InventoryError(f"gcloud returned invalid JSON: {exc}") from exc
 
 
+def _run_gh(arguments: list[str]) -> Any:
+    output = _run_gh_text(arguments)
+    try:
+        return json.loads(output)
+    except json.JSONDecodeError as exc:
+        raise InventoryError("GitHub returned invalid verification evidence") from exc
+
+
+def _run_gh_text(arguments: list[str]) -> str:
+    executable = shutil.which("gh")
+    if not executable:
+        raise InventoryError("gh CLI is required for private cadence resume")
+    try:
+        completed = subprocess.run(
+            [executable, *arguments], check=False, capture_output=True,
+            text=True, encoding="utf-8", timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise InventoryError("GitHub verification evidence is unavailable") from exc
+    if completed.returncode:
+        raise InventoryError("GitHub verification evidence is unavailable")
+    if len(completed.stdout) > 2_000_000:
+        raise InventoryError("GitHub verification evidence exceeds bounded output")
+    return completed.stdout
+
+
 def scheduler_uri(project: str, region: str, run_job_name: str) -> str:
     return (
         f"https://run.googleapis.com/v2/projects/{project}/locations/{region}/"
@@ -425,6 +455,28 @@ def reconcile(
         run_job = job["run_job_name"]
         scheduler = job["scheduler_name"]
         print(f"converging {scheduler} -> {run_job}", flush=True)
+        scheduler_preexists: bool | None = None
+        if scheduler == PRIVATE_PROJECTION_SCHEDULER and job["desired_state"] == "ENABLED":
+            scheduler_preexists = scheduler_exists(
+                scheduler, project=project, location=location
+            )
+            if not scheduler_preexists:
+                raise InventoryError(
+                    "private cadence cannot be created enabled; hold it paused"
+                )
+            prior_state = run_gcloud(
+                [
+                    "scheduler", "jobs", "describe", scheduler,
+                    "--location", location, "--project", project,
+                    "--format=json(state)",
+                ],
+                expect_json=True,
+            )
+            if not isinstance(prior_state, dict) or prior_state.get("state") != "ENABLED":
+                raise InventoryError(
+                    "private cadence must remain paused until the evidence-checked "
+                    "resume command succeeds"
+                )
         exists = run_job_exists(run_job, project=project, region=region)
         if job.get("bootstrap") is not None:
             run_job_arguments = _bootstrap_arguments(
@@ -475,7 +527,10 @@ def reconcile(
         )
         action = (
             "update"
-            if scheduler_exists(scheduler, project=project, location=location)
+            if scheduler_preexists is True or (
+                scheduler_preexists is None
+                and scheduler_exists(scheduler, project=project, location=location)
+            )
             else "create"
         )
         scheduler_arguments = [
@@ -537,6 +592,11 @@ def reconcile(
         )
         if scheduler_after_update.get("state") != job["desired_state"]:
             state_action = "pause" if job["desired_state"] == "PAUSED" else "resume"
+            if scheduler == PRIVATE_PROJECTION_SCHEDULER and state_action == "resume":
+                raise InventoryError(
+                    "private cadence must remain paused until the evidence-checked "
+                    "resume command succeeds"
+                )
             run_gcloud(
                 [
                     "scheduler",
@@ -1039,6 +1099,336 @@ def quiesce(
         time.sleep(min(5, max(0, deadline - time.monotonic())))
 
 
+def _evidence_time(value: object, label: str) -> datetime:
+    if not isinstance(value, str) or not value:
+        raise InventoryError(f"missing {label} timestamp")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise InventoryError(f"invalid {label} timestamp") from exc
+    if parsed.tzinfo is None:
+        raise InventoryError(f"timezone-free {label} timestamp")
+    return parsed.astimezone(UTC)
+
+
+def _active_prod_verification() -> None:
+    for status in ("queued", "in_progress", "waiting", "requested", "pending"):
+        runs = _run_gh([
+            "run", "list", "--repo", PROD_VERIFY_REPOSITORY,
+            "--workflow", PROD_VERIFY_WORKFLOW, "--status", status,
+            "--limit", "1", "--json", "databaseId",
+        ])
+        if not isinstance(runs, list):
+            raise InventoryError("invalid active prod-verify inventory")
+        if runs:
+            raise InventoryError("prod-verify is active; private cadence stays paused")
+
+
+def _successful_qa_dispatch(release_sha: str, qa_run_id: int) -> tuple[datetime, str]:
+    if not RELEASE_SHA.fullmatch(release_sha) or qa_run_id <= 0:
+        raise InventoryError("private resume requires an exact release SHA and QA run ID")
+    _active_prod_verification()
+    latest = _run_gh([
+        "run", "list", "--repo", PROD_VERIFY_REPOSITORY,
+        "--workflow", PROD_VERIFY_WORKFLOW, "--event", "workflow_dispatch",
+        "--limit", "1", "--json", "databaseId,event,headSha,status,conclusion",
+    ])
+    if (
+        not isinstance(latest, list) or len(latest) != 1
+        or latest[0].get("databaseId") != qa_run_id
+        or latest[0].get("event") != "workflow_dispatch"
+        or latest[0].get("headSha") != release_sha
+        or latest[0].get("status") != "completed"
+        or latest[0].get("conclusion") != "success"
+    ):
+        raise InventoryError("latest exact-SHA prod-verify dispatch is not successful")
+    detail = _run_gh([
+        "run", "view", str(qa_run_id), "--repo", PROD_VERIFY_REPOSITORY,
+        "--json", "databaseId,event,headSha,status,conclusion,workflowName,jobs",
+    ])
+    if (
+        not isinstance(detail, dict)
+        or detail.get("databaseId") != qa_run_id
+        or detail.get("event") != "workflow_dispatch"
+        or detail.get("headSha") != release_sha
+        or detail.get("status") != "completed"
+        or detail.get("conclusion") != "success"
+        or detail.get("workflowName") != "Prod verification (Playwright)"
+    ):
+        raise InventoryError("prod-verify dispatch identity changed or is incomplete")
+    jobs = detail.get("jobs")
+    required = {
+        "Resolve exact production release",
+        "Prod Playwright (tester)",
+        "Prod Playwright (legacy)",
+        "Prod Playwright (supporting)",
+        "Prod Playwright (patent-statute)",
+        "Record exact-release evidence",
+    }
+    if not isinstance(jobs, list):
+        raise InventoryError("prod-verify job evidence is missing")
+    completed: list[datetime] = []
+    successful: set[str] = set()
+    release_job_id: int | None = None
+    for job in jobs:
+        if not isinstance(job, dict):
+            raise InventoryError("invalid prod-verify job evidence")
+        if job.get("name") in required and job.get("conclusion") == "success":
+            successful.add(job["name"])
+            completed.append(_evidence_time(job.get("completedAt"), "QA job completion"))
+            if job["name"] == "Resolve exact production release":
+                release_job_id = job.get("databaseId")
+    if successful != required:
+        raise InventoryError("prod-verify did not complete every required QA job")
+    if not isinstance(release_job_id, int) or release_job_id <= 0:
+        raise InventoryError("prod-verify release identity job is missing")
+    release_log = _run_gh_text([
+        "run", "view", str(qa_run_id), "--repo", PROD_VERIFY_REPOSITORY,
+        "--job", str(release_job_id), "--log",
+    ])
+    recorded_shas = set(re.findall(r"\brelease_sha=([a-f0-9]{40})\b", release_log))
+    if recorded_shas != {release_sha}:
+        raise InventoryError("prod-verify did not record the exact serving SHA")
+    api_revisions = set(re.findall(r"\bapi_revision=(caseops-api-[a-z0-9-]+)\b", release_log))
+    if len(api_revisions) != 1:
+        raise InventoryError("prod-verify did not record one serving API revision")
+    qa_completed = max(completed)
+    if qa_completed > datetime.now(UTC):
+        raise InventoryError("prod-verify completion is future-dated")
+    return qa_completed, api_revisions.pop()
+
+
+def _clean_maintenance_record(record: object, *, second: bool) -> dict[str, Any]:
+    if not isinstance(record, dict):
+        raise InventoryError("maintenance log has no structured record")
+    if (
+        record.get("mode") != "maintain"
+        or record.get("status") != "ok"
+        or record.get("severity") != "INFO"
+        or record.get("release_blocked") is not False
+        or record.get("event_lag_slo_seconds") != 300
+        or record.get("candidate_scan_truncated") is not False
+        or record.get("error_code")
+    ):
+        raise InventoryError("maintenance execution is blocked or incomplete")
+    candidates = record.get("candidate_company_count")
+    rebuilds = record.get("rebuild_count")
+    companies = record.get("companies")
+    if (
+        isinstance(candidates, bool) or not isinstance(candidates, int)
+        or not 0 <= candidates <= 50
+        or isinstance(rebuilds, bool) or not isinstance(rebuilds, int)
+        or not 0 <= rebuilds <= 5
+        or not isinstance(companies, list) or len(companies) != candidates
+        or (second and rebuilds != 0)
+    ):
+        raise InventoryError("maintenance candidate/rebuild accounting is invalid")
+    rebuilt = 0
+    for company in companies:
+        if not isinstance(company, dict):
+            raise InventoryError("invalid maintenance company record")
+        if company.get("rebuilt") is True:
+            rebuilt += 1
+        elif company.get("rebuilt") is not False:
+            raise InventoryError("maintenance rebuild result is missing")
+        if (
+            company.get("blockers_after") != []
+            or company.get("repair_deferred") is not False
+            or company.get("repair_lag_slo_breached") is not False
+            or company.get("lag_slo_breached_before_recovery") is not False
+            or company.get("error_code")
+        ):
+            raise InventoryError("maintenance retained a blocker, deferral or SLO breach")
+        for field in ("pending_event_count_after", "failed_event_count_after"):
+            count = company.get(field)
+            if isinstance(count, bool) or not isinstance(count, int) or count != 0:
+                raise InventoryError("maintenance retained pending or failed events")
+        for field in (
+            "oldest_pending_lag_seconds_before", "oldest_repair_lag_seconds_after"
+        ):
+            lag = company.get(field)
+            if lag is not None and (
+                isinstance(lag, bool) or not isinstance(lag, (int, float))
+                or not 0 <= lag <= 300
+            ):
+                raise InventoryError("maintenance lag evidence is invalid")
+    if rebuilt != rebuilds:
+        raise InventoryError("maintenance rebuild accounting disagrees")
+    return record
+
+
+def _maintenance_execution(
+    name: str, *, job: dict[str, Any], project: str, region: str,
+    image: str, second: bool,
+) -> tuple[datetime, datetime, dict[str, Any]]:
+    execution = run_gcloud([
+        "run", "jobs", "executions", "describe", name,
+        "--project", project, "--region", region, "--format=json",
+    ], expect_json=True)
+    if not isinstance(execution, dict):
+        raise InventoryError("maintenance execution detail is unavailable")
+    metadata = execution.get("metadata") or {}
+    status = execution.get("status") or {}
+    spec = execution.get("spec") or {}
+    containers = ((spec.get("template") or {}).get("spec") or {}).get("containers") or []
+    completed = [
+        row for row in status.get("conditions", [])
+        if isinstance(row, dict) and row.get("type") == "Completed"
+    ]
+    bootstrap = job["bootstrap"]
+    if (
+        str(metadata.get("name", "")).rsplit("/", 1)[-1] != name
+        or (metadata.get("labels") or {}).get("run.googleapis.com/job")
+        != job["run_job_name"]
+        or spec.get("taskCount") != 1
+        or len(containers) != 1
+        or containers[0].get("image") != image
+        or containers[0].get("command") != bootstrap["command"]
+        or containers[0].get("args") != bootstrap["args"]
+        or len(completed) != 1 or str(completed[0].get("status")).lower() != "true"
+        or status.get("succeededCount") != 1
+        or status.get("failedCount", 0) not in (0, None)
+        or status.get("cancelledCount", 0) not in (0, None)
+    ):
+        raise InventoryError("maintenance execution identity, image or outcome is invalid")
+    started = _evidence_time(status.get("startTime"), "maintenance start")
+    ended = _evidence_time(status.get("completionTime"), "maintenance completion")
+    if not started < ended <= datetime.now(UTC):
+        raise InventoryError("maintenance execution timing is invalid")
+    log_filter = (
+        'resource.type="cloud_run_job" AND '
+        f'resource.labels.job_name="{job["run_job_name"]}" AND '
+        f'labels."run.googleapis.com/execution_name"="{name}" AND '
+        f'logName="projects/{project}/logs/run.googleapis.com%2Fstdout" AND '
+        'textPayload:"CASEOPS_PRIVATE_PROJECTION"'
+    )
+    logs = run_gcloud([
+        "logging", "read", log_filter, "--project", project,
+        "--order=desc", "--limit=3", "--format=json",
+    ], expect_json=True)
+    if not isinstance(logs, list) or len(logs) != 1:
+        raise InventoryError("one execution-scoped maintenance record is required")
+    log = logs[0]
+    if not isinstance(log, dict):
+        raise InventoryError("invalid maintenance log entry")
+    payload = log.get("textPayload")
+    if (
+        (log.get("resource") or {}).get("type") != "cloud_run_job"
+        or ((log.get("resource") or {}).get("labels") or {}).get("job_name")
+        != job["run_job_name"]
+        or (log.get("labels") or {}).get("run.googleapis.com/execution_name") != name
+        or not isinstance(payload, str)
+        or not payload.startswith("CASEOPS_PRIVATE_PROJECTION ")
+    ):
+        raise InventoryError("maintenance log is not bound to the execution")
+    try:
+        record = json.loads(payload.removeprefix("CASEOPS_PRIVATE_PROJECTION "))
+    except json.JSONDecodeError as exc:
+        raise InventoryError("invalid structured maintenance log") from exc
+    _clean_maintenance_record(record, second=second)
+    if not (
+        started <= _evidence_time(record.get("started_at"), "maintenance log start")
+        <= _evidence_time(record.get("completed_at"), "maintenance log completion")
+        <= ended
+    ):
+        raise InventoryError("maintenance log time does not match execution")
+    return started, ended, record
+
+
+def _private_resume_evidence(
+    *, job: dict[str, Any], project: str, region: str, image: str,
+    release_sha: str, qa_run_id: int,
+) -> dict[str, Any]:
+    qa_completed, qa_api_revision = _successful_qa_dispatch(release_sha, qa_run_id)
+    service = run_gcloud([
+        "run", "services", "describe", "caseops-api", "--project", project,
+        "--region", region, "--format=json",
+    ], expect_json=True)
+    if not isinstance(service, dict):
+        raise InventoryError("serving API image evidence is unavailable")
+    service_status = service.get("status")
+    traffic = service_status.get("traffic") if isinstance(service_status, dict) else None
+    if (
+        not isinstance(service_status, dict)
+        or service_status.get("latestReadyRevisionName") != qa_api_revision
+        or not isinstance(traffic, list)
+        or len(traffic) != 1
+        or not isinstance(traffic[0], dict)
+        or traffic[0].get("revisionName") != qa_api_revision
+        or isinstance(traffic[0].get("percent"), bool)
+        or traffic[0].get("percent") != 100
+        or traffic[0].get("tag") not in (None, "")
+    ):
+        raise InventoryError("serving API revision or traffic differs from QA evidence")
+    revision = run_gcloud([
+        "run", "revisions", "describe", qa_api_revision,
+        "--project", project, "--region", region, "--format=json",
+    ], expect_json=True)
+    revision_containers = (
+        (revision.get("spec") or {}).get("containers")
+        if isinstance(revision, dict) else None
+    )
+    revision_api = [
+        row for row in revision_containers or []
+        if isinstance(row, dict) and row.get("name") == "api"
+    ]
+    if (
+        not isinstance(revision_containers, list)
+        or len(revision_api) != 1
+        or revision_api[0].get("image") != image
+    ):
+        raise InventoryError("QA serving revision does not use the maintenance image")
+    rows = run_gcloud([
+        "run", "jobs", "executions", "list", "--job", job["run_job_name"],
+        "--project", project, "--region", region,
+        "--sort-by=~metadata.creationTimestamp", "--limit=3", "--format=json",
+    ], expect_json=True)
+    if not isinstance(rows, list) or len(rows) < 2 or len(rows) > 3:
+        raise InventoryError("two latest maintenance executions are unavailable")
+    names: list[str] = []
+    created: list[datetime] = []
+    for row in rows:
+        metadata = row.get("metadata") if isinstance(row, dict) else None
+        if not isinstance(metadata, dict):
+            raise InventoryError("invalid maintenance execution listing")
+        name = metadata.get("name")
+        if not isinstance(name, str) or not re.fullmatch(
+            re.escape(job["run_job_name"]) + r"-[a-z0-9-]+", name
+        ) or name in names:
+            raise InventoryError("invalid maintenance execution identity")
+        names.append(name)
+        created.append(_evidence_time(metadata.get("creationTimestamp"), "execution creation"))
+    if created != sorted(created, reverse=True) or len(set(created)) != len(created):
+        raise InventoryError("latest maintenance execution order is unverified")
+    job_status = run_gcloud([
+        "run", "jobs", "describe", job["run_job_name"],
+        "--project", project, "--region", region, "--format=json",
+    ], expect_json=True)
+    latest_execution = (
+        ((job_status.get("status") or {}).get("latestCreatedExecution") or {})
+        if isinstance(job_status, dict) else {}
+    )
+    if str(latest_execution.get("name", "")).rsplit("/", 1)[-1] != names[0]:
+        raise InventoryError("maintenance execution list is not current")
+    second_started, second_ended, second_record = _maintenance_execution(
+        names[0], job=job, project=project, region=region, image=image, second=True,
+    )
+    first_started, first_ended, first_record = _maintenance_execution(
+        names[1], job=job, project=project, region=region, image=image, second=False,
+    )
+    if not qa_completed < first_started < first_ended <= second_started < second_ended:
+        raise InventoryError("maintenance runs are not serial and after completed QA")
+    if _successful_qa_dispatch(release_sha, qa_run_id) != (qa_completed, qa_api_revision):
+        raise InventoryError("prod-verify evidence changed during maintenance inspection")
+    return {
+        "qa_run_id": qa_run_id, "release_sha": release_sha,
+        "qa_completed_at": qa_completed.isoformat(),
+        "qa_api_revision": qa_api_revision, "image": image,
+        "maintenance_executions": [names[1], names[0]],
+        "rebuild_counts": [first_record["rebuild_count"], second_record["rebuild_count"]],
+    }
+
+
 def resume_verified(
     inventory: dict[str, Any],
     *,
@@ -1046,12 +1436,18 @@ def resume_verified(
     project: str,
     region: str,
     image: str,
+    release_sha: str = "",
+    qa_run_id: int = 0,
 ) -> dict[str, Any]:
     job = _selected_job(inventory, scheduler)
     if not DIGEST_IMAGE.fullmatch(image) or job["desired_state"] != "ENABLED":
         raise InventoryError(
             "resume requires an immutable image and enabled canonical job"
         )
+    if scheduler == PRIVATE_PROJECTION_SCHEDULER and (
+        project != inventory["production_project"] or region != inventory["location"]
+    ):
+        raise InventoryError("private cadence evidence must target production project and region")
     selected = copy.deepcopy(inventory)
     selected["jobs"] = [copy.deepcopy(job)]
     selected["legacy_schedulers_to_pause"] = []
@@ -1062,6 +1458,12 @@ def resume_verified(
     if errors:
         raise InventoryError(
             "paused release job failed verification: " + "; ".join(errors)
+        )
+    evidence = None
+    if scheduler == PRIVATE_PROJECTION_SCHEDULER:
+        evidence = _private_resume_evidence(
+            job=job, project=project, region=region, image=image,
+            release_sha=release_sha, qa_run_id=qa_run_id,
         )
     try:
         run_gcloud(
@@ -1100,6 +1502,8 @@ def resume_verified(
             ]
         )
         raise
+    if evidence is not None:
+        summary["private_resume_evidence"] = evidence
     return summary
 
 
@@ -1116,6 +1520,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--region")
     parser.add_argument("--image")
     parser.add_argument("--scheduler")
+    parser.add_argument("--release-sha")
+    parser.add_argument("--qa-run-id", type=int)
     parser.add_argument("--wait-seconds", type=int, default=180)
     parser.add_argument(
         "--hold-scheduler-paused",
@@ -1145,12 +1551,26 @@ def main(argv: list[str] | None = None) -> int:
                     wait_seconds=args.wait_seconds,
                 )
             else:
+                if args.scheduler == PRIVATE_PROJECTION_SCHEDULER and (
+                    not args.release_sha or not args.qa_run_id
+                ):
+                    raise InventoryError(
+                        "private cadence resume requires --release-sha and --qa-run-id"
+                    )
+                if args.scheduler != PRIVATE_PROJECTION_SCHEDULER and (
+                    args.release_sha or args.qa_run_id
+                ):
+                    raise InventoryError(
+                        "QA evidence arguments apply only to private cadence resume"
+                    )
                 summary = resume_verified(
                     inventory,
                     scheduler=args.scheduler,
                     project=project,
                     region=region,
                     image=args.image or "",
+                    release_sha=args.release_sha or "",
+                    qa_run_id=args.qa_run_id or 0,
                 )
             print(json.dumps(summary, indent=2, sort_keys=True))
             return 0

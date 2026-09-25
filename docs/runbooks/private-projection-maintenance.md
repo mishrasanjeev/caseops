@@ -51,8 +51,10 @@ immutable API image digest; do not deploy or verify a mutable tag.
 During an active private-projection incident, keep the cadence paused through the
 canonical deployment by setting `CASEOPS_PRIVATE_PROJECTION_SCHEDULER_HOLD=true`.
 This changes only the effective reconcile state for that release; the checked-in
-inventory remains `ENABLED`. Resume the canonical cadence manually only after the
-exact release, production browser and controlled maintenance proofs are clean.
+inventory remains `ENABLED`. The deploy script defaults this hold to `true`.
+`scheduler_inventory.py reconcile` will not transition this private scheduler
+from paused to enabled; use its evidence-checked `resume` command. The paid
+case-tracking scheduler keeps its separate resume behavior.
 
 ```bash
 python scripts/scheduler_inventory.py verify \
@@ -98,7 +100,8 @@ legitimately fence every shadow while dated browser journeys create, dispose,
 or reopen records. Do not reinterpret this as projection corruption, suppress
 the tenant, or relax the 300-second release blocker. Correlate the tenant's
 applied event epochs with the test window, let the workload stop, then require
-one successful rebuild cadence followed by a second clean cadence. A new event
+one clean cadence (which may rebuild) followed by a second clean cadence with
+no rebuild. A new event
 after a clean rebuild starts a new repair interval; it is not evidence that the
 preceding rebuild failed.
 
@@ -106,11 +109,62 @@ Recurring scheduled production verification is read-only. Mutation-capable RAM,
 Notice, cost and patent journeys run only for an exact-release dispatch. The
 canonical deploy defaults to pausing and draining private-projection maintenance
 before those release-owned QA mutations and leaves the cadence paused after
-dispatch. Resume it only after the dispatched workflow succeeds, a manual
-maintenance execution converges with no blockers, and a second execution reports
-`rebuild_count=0`. This prevents synthetic QA writes from repeatedly fencing a
-legitimate shadow while preserving the same five-minute SLO and alert contract
-for every tenant.
+dispatch. Resume it only after the dispatched workflow succeeds and two
+**consecutive later** maintenance executions are clean, serial, and run from the
+exact immutable API image; the second must report `rebuild_count=0`. The first
+execution after a long QA hold may recover old work while reporting
+`lag_slo_breached_before_recovery=true` and a blocked result. Keep that failure
+and its lag history intact, then obtain two later clean executions. This prevents
+synthetic QA writes from repeatedly fencing a legitimate shadow while preserving
+the same five-minute SLO and alert contract for every tenant.
+
+The operator supplies the exact 40-character release SHA, successful
+`workflow_dispatch` prod-verify run ID, and immutable API image digest. The guard
+reads the latest dispatch and its required job outcomes from GitHub, checks the
+recorded serving SHA and API revision in the release-resolution job log, rejects
+any active prod-verify run, and rejects future-dated completion evidence. It
+requires the current service's latest-ready revision to equal that QA revision,
+with exactly one untagged status-traffic entry at 100% on that revision. The
+service template may retain a mutable image tag; the guard binds the immutable
+digest from the QA revision and the maintenance executions instead. It also
+checks the paused scheduler inventory contract, the two newest Cloud Run
+execution outcomes, and each execution-scoped structured stdout log. There is
+no arbitrary QA age cutoff: a long CI delay does not require rerunning
+mutation-capable QA when two later clean maintenance executions exist.
+Each clean report must have no blocker, deferred repair, pending/failed event,
+truncated candidate scan, or SLO breach. Missing, malformed, superseded, or unavailable
+evidence leaves the cadence paused. An earlier blocked execution is not erased or
+reclassified when later runs converge.
+
+```bash
+gcloud run jobs execute caseops-private-projection-maintenance \
+  --project perfect-period-305406 --region asia-south1 --wait
+```
+
+Inspect that execution and its `CASEOPS_PRIVATE_PROJECTION` record. Repeat the
+manual execution only after the prior one completes, until the two latest runs
+meet the clean criteria. A blocked post-QA repair remains in the history; it is
+not one of the two qualifying runs. Then resume:
+
+```bash
+python scripts/scheduler_inventory.py resume \
+  --scheduler caseops-private-projection-maintenance-cadence \
+  --project perfect-period-305406 --region asia-south1 \
+  --image "${API_IMMUTABLE_IMAGE}" \
+  --release-sha "${EXACT_RELEASE_SHA}" --qa-run-id "${PROD_VERIFY_RUN_ID}"
+```
+
+This command is an operator guard, not an IAM boundary: a principal with direct
+Cloud Scheduler ResumeJob permission can bypass the script. Restrict that
+permission and audit direct resume calls separately. GitHub and Cloud Logging
+availability are required at resume time; the guard does not issue production
+maintenance executions or re-run QA itself.
+
+On 2026-09-25, prod-verify dispatch `36091367446` ran 03:41-04:46 UTC while
+an explicit operator-credential CloudScheduler.ResumeJob occurred at
+03:39:53/54 UTC. Maintenance deferred at 04:31, breached at 04:36 (369 seconds)
+and 04:41 (701 seconds), then rebuilt at 04:46. The 701-second breach remains
+incident evidence even after later clean cadences.
 
 An interrupted worker can leave an unreadable `building` or `ready` shadow behind
 before its normal exception cleanup runs. Once the next worker owns the tenant
