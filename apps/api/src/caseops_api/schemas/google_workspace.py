@@ -88,6 +88,54 @@ GOOGLE_OAUTH_CALLBACK_PATHS: dict[str, str] = {
     "drive_redirect_uri": "/api/drive/google/callback",
 }
 _LOCAL_OAUTH_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+# urlsplit() tolerates whitespace and control characters inside an authority;
+# Google does not, so reject them before they reach the stored row.
+_FORBIDDEN_URI_CHARACTERS = tuple(chr(code) for code in range(33)) + ("",)
+
+
+def google_oauth_redirect_error(field: str, value: str) -> str | None:
+    """Return an actionable message when a redirect URI is not one Google can call.
+
+    Shared by the admin form and the read path so a row written before this rule
+    existed cannot present itself as configured.
+    """
+
+    expected_path = GOOGLE_OAUTH_CALLBACK_PATHS[field]
+    connector = field.removesuffix("_redirect_uri")
+    advice = (
+        f"The {connector} redirect URI must be the address Google sends the user back to, "
+        f"ending in {expected_path}"
+    )
+    if any(character in value for character in _FORBIDDEN_URI_CHARACTERS):
+        return f"{advice}. Remove spaces, tabs and line breaks from the address."
+    parts = urlsplit(value)
+    host = parts.hostname or ""
+    if parts.scheme not in {"http", "https"} or not host:
+        return f"{advice}. Enter a full https address including the host."
+    try:
+        # Reading .port is the only way to learn that the authority carries a
+        # non-numeric port; urlsplit() itself accepts it.
+        _port = parts.port
+    except ValueError:
+        return f"{advice}. The port after the host is not a number."
+    if parts.scheme != "https" and host not in _LOCAL_OAUTH_HOSTS:
+        return f"{advice}. Google accepts https only, except on localhost."
+    if parts.username or parts.password:
+        return f"{advice}. Remove the username or password from the address."
+    if parts.query or parts.fragment:
+        return f"{advice}. Remove the query string or fragment."
+    if parts.path != expected_path:
+        return (
+            f"{advice}. It currently ends in {parts.path or '/'}, which Google will reject "
+            "as a redirect_uri mismatch. Check for a trailing slash, a typo, or another "
+            "connector's address pasted into this field."
+        )
+    return None
+
+
+def google_oauth_redirect_is_valid(field: str, value: str | None) -> bool:
+    return bool(value) and google_oauth_redirect_error(field, str(value)) is None
+
 
 
 class GoogleWorkspaceTenantConfigurationUpdateRequest(BaseModel):
@@ -128,28 +176,9 @@ class GoogleWorkspaceTenantConfigurationUpdateRequest(BaseModel):
     def exact_connector_callback(cls, value: str | None, info: ValidationInfo) -> str | None:
         if value is None:
             return None
-        expected_path = GOOGLE_OAUTH_CALLBACK_PATHS[str(info.field_name)]
-        connector = str(info.field_name).removesuffix("_redirect_uri")
-        parts = urlsplit(value)
-        host = parts.hostname or ""
-        advice = (
-            f"The {connector} redirect URI must be the address Google sends the user back to, "
-            f"ending in {expected_path}"
-        )
-        if parts.scheme not in {"http", "https"} or not host:
-            raise ValueError(f"{advice}. Enter a full https address including the host.")
-        if parts.scheme != "https" and host not in _LOCAL_OAUTH_HOSTS:
-            raise ValueError(f"{advice}. Google accepts https only, except on localhost.")
-        if parts.username or parts.password:
-            raise ValueError(f"{advice}. Remove the username or password from the address.")
-        if parts.query or parts.fragment:
-            raise ValueError(f"{advice}. Remove the query string or fragment.")
-        if parts.path != expected_path:
-            raise ValueError(
-                f"{advice}. It currently ends in {parts.path or '/'}, which Google will reject "
-                "as a redirect_uri mismatch. Check for a trailing slash, a typo, or another "
-                "connector's address pasted into this field."
-            )
+        problem = google_oauth_redirect_error(str(info.field_name), value)
+        if problem:
+            raise ValueError(problem)
         return value
 
 

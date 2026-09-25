@@ -11,7 +11,10 @@ from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
+from caseops_api.db.models import TenantGoogleWorkspaceConfiguration
+from caseops_api.db.session import get_session_factory
 from caseops_api.main import create_application
 from caseops_api.schemas.google_workspace import (
     GOOGLE_OAUTH_CALLBACK_PATHS,
@@ -96,6 +99,18 @@ def test_accepted_paths_are_the_callbacks_the_api_actually_serves() -> None:
             f"{HOST.upper()}{GOOGLE_OAUTH_CALLBACK_PATHS['gmail_redirect_uri'].upper()}",
             "upper-cased path",
         ),
+        (
+            "gmail_redirect_uri",
+            f"https://api.tenant.example:notaport{GOOGLE_OAUTH_CALLBACK_PATHS['gmail_redirect_uri']}",
+            "port that is not a number",
+        ),
+        (
+            "gmail_redirect_uri",
+            "https://api.tenant.example"
+            + chr(10)
+            + GOOGLE_OAUTH_CALLBACK_PATHS["gmail_redirect_uri"],
+            "line break inside the address",
+        ),
     ],
 )
 def test_admin_cannot_save_a_redirect_uri_google_will_reject(
@@ -143,13 +158,84 @@ def test_admin_can_still_save_the_exact_callbacks_and_clear_them(
     assert saved.status_code == 200, saved.text
     assert saved.json()["configured"] is True
 
-    # A blank field still clears rather than tripping the new rule.
-    cleared = client.patch(
+    # Blank input is "leave this field alone", not "clear it": the update only
+    # assigns a redirect field when the payload carries one. Assert the stored
+    # value, because a 200 alone would not show which of the two happened.
+    blank = client.patch(
         "/api/admin/google-workspace-configuration",
         headers=_auth(token),
         json=_valid_payload(gmail_redirect_uri="   "),
     )
-    assert cleared.status_code == 200, cleared.text
+    assert blank.status_code == 200, blank.text
+    with get_session_factory()() as session:
+        row = session.scalar(select(TenantGoogleWorkspaceConfiguration))
+        assert row is not None
+        assert row.gmail_redirect_uri == (
+            f"{HOST}{GOOGLE_OAUTH_CALLBACK_PATHS['gmail_redirect_uri']}"
+        )
+    assert all(
+        item["configured"]
+        for item in blank.json()["required_config"]
+        if item["name"].endswith("REDIRECT_URI")
+    )
+
+
+def test_a_uri_stored_before_this_rule_is_not_reported_as_configured(
+    client: TestClient,
+) -> None:
+    """The live tenant row predates validation; readiness must not vouch for it."""
+
+    bootstrap = _bootstrap_company(
+        client,
+        slug="google-redirect-legacy",
+        email="owner@google-redirect-legacy.example",
+    )
+    token = str(bootstrap["access_token"])
+    assert (
+        client.patch(
+            "/api/admin/google-workspace-configuration",
+            headers=_auth(token),
+            json=_valid_payload(),
+        ).status_code
+        == 200
+    )
+
+    # Write the shape an admin could save before this rule existed.
+    with get_session_factory()() as session:
+        row = session.scalar(select(TenantGoogleWorkspaceConfiguration))
+        assert row is not None
+        row.gmail_redirect_uri = f"{HOST}/api/mailbox/gmail/callback/"
+        session.commit()
+
+    status = client.get(
+        "/api/admin/google-workspace-configuration",
+        headers=_auth(token),
+    )
+    assert status.status_code == 200, status.text
+    body = status.json()
+    gmail_item = next(
+        item for item in body["required_config"] if item["name"] == "GMAIL_REDIRECT_URI"
+    )
+    assert gmail_item["configured"] is False
+    assert "GMAIL_REDIRECT_URI" in body["missing_config_names"]
+    # The connectors whose addresses are still exact stay usable.
+    assert body["configured"] is False
+    calendar_item = next(
+        item
+        for item in body["required_config"]
+        if item["name"] == "GOOGLE_CALENDAR_REDIRECT_URI"
+    )
+    assert calendar_item["configured"] is True
+
+    # And no user can be sent to Google with the address Google will refuse:
+    # the start route reports the connector unavailable and hands back no link.
+    start = client.post("/api/mailbox/gmail/start", headers=_auth(token))
+    assert start.status_code == 200, start.text
+    started = start.json()
+    assert started["provider_available"] is False
+    assert started["auth_url"] is None
+    assert started["unavailable_reason"]
+    assert "accounts.google.com" not in start.text
 
 
 def test_localhost_development_origins_remain_usable() -> None:
