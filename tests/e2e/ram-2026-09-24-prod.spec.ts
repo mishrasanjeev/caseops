@@ -320,4 +320,15 @@ test("reported legacy Matters retain backfilled hearing evidence in their author
     expect(reloaded.status(), await reloaded.text()).toBe(200);
     expect((await reloaded.json()).matter.next_hearing_on).toBe(date);
   }
+  await page.goto(`${web}/app/matters/${legacyMatters[0][0]}`);
+  const court = page.locator('a[href*="/app/case-tracking?matterId="]').first();
+  await expect(court).toBeVisible();
+  const href = await court.getAttribute("href");
+  expect(href).toContain("/app/case-tracking?matterId=");
+  await page.goto(`${web}${href}`);
+  await page.getByTestId("matter-case-resolve-submit").click();
+  await expect(page.getByTestId("matter-case-resolution").getByRole("alert")).toContainText(/no external request was made/i);
+  await page.goto(`${web}/app/hearings`);
+  await page.getByLabel("Exact hearing date").fill("2026-09-25");
+  await expect(page.locator(`a[href*="/app/matters/${legacyMatters[1][0]}"]`).first()).toBeVisible();
 });
