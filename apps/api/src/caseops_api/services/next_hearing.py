@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
@@ -149,6 +149,7 @@ def _ensure_hearing_row_for_next_hearing(
         MatterHearing.company_id == matter.company_id,
         MatterHearing.matter_id == matter.id,
         MatterHearing.source == source,
+        MatterHearing.status == MatterHearingStatus.SCHEDULED,
     )
     if source_ref_type and source_ref_id:
         query = query.where(
@@ -196,35 +197,48 @@ def _ensure_hearing_row_for_next_hearing(
     return hearing
 
 
-def backfill_legacy_next_hearings(
-    session: Session,
-    *,
-    context: SessionContext,
-    limit: int = 50,
-) -> int:
-    """Materialize one bounded page of pre-feature Matter dates without changing them."""
-    if not 1 <= limit <= 50:
-        raise ValueError("Legacy hearing backfill limit must be between 1 and 50.")
+def _legacy_hearing_filters(company_id: str):
     existing = (
         select(MatterHearing.id)
         .where(
             MatterHearing.company_id == Matter.company_id,
             MatterHearing.matter_id == Matter.id,
             MatterHearing.hearing_on == Matter.next_hearing_on,
-            MatterHearing.status == MatterHearingStatus.SCHEDULED,
         )
         .exists()
     )
+    return (
+        Matter.company_id == company_id,
+        Matter.is_active.is_(True),
+        Matter.status != MatterStatus.DISPOSED,
+        Matter.next_hearing_on.is_not(None),
+        ~existing,
+    )
+
+
+def count_legacy_next_hearings(session: Session, *, company_id: str) -> int:
+    """Count the same eligible rows that the bounded writer can materialize."""
+    return int(
+        session.scalar(
+            select(func.count()).select_from(Matter).where(*_legacy_hearing_filters(company_id))
+        )
+        or 0
+    )
+
+
+def backfill_legacy_next_hearings(
+    session: Session,
+    *,
+    company_id: str,
+    limit: int = 50,
+) -> int:
+    """Materialize one bounded page of pre-feature Matter dates without changing them."""
+    if not 1 <= limit <= 50:
+        raise ValueError("Legacy hearing backfill limit must be between 1 and 50.")
     matters = list(
         session.scalars(
             select(Matter)
-            .where(
-                Matter.company_id == context.company.id,
-                Matter.is_active.is_(True),
-                Matter.status != MatterStatus.DISPOSED,
-                Matter.next_hearing_on.is_not(None),
-                ~existing,
-            )
+            .where(*_legacy_hearing_filters(company_id))
             .order_by(Matter.id)
             .limit(limit)
             .with_for_update(of=Matter, skip_locked=True)
@@ -420,19 +434,49 @@ def apply_next_hearing_update(
     manual_lock: bool = False,
     force: bool = False,
     authoritative_automatic: bool = False,
+    existing_hearing: MatterHearing | None = None,
 ) -> NextHearingApplyResult:
     source_value = str(source.value if isinstance(source, MatterNextHearingSource) else source)
     is_manual = source_value == MatterNextHearingSource.MANUAL
-    if matter.next_hearing_on == new_date and matter.next_hearing_manual_lock == manual_lock:
-        if matter.status != MatterStatus.DISPOSED:
-            _ensure_hearing_row_for_next_hearing(
-                session,
-                matter=matter,
-                hearing_on=new_date,
-                source=source_value,
-                source_ref_type=source_ref_type,
-                source_ref_id=source_ref_id,
+    if existing_hearing is not None and (
+        existing_hearing.id is None
+        or existing_hearing.company_id != matter.company_id
+        or existing_hearing.matter_id != matter.id
+        or existing_hearing.hearing_on != new_date
+        or existing_hearing.status
+        not in (MatterHearingStatus.SCHEDULED, MatterHearingStatus.ADJOURNED)
+    ):
+        raise ValueError("Existing hearing must be an open row for this matter and date.")
+    same_existing_hearing = existing_hearing is None or (
+        matter.next_hearing_source == source_value
+        and matter.next_hearing_source_ref_type == source_ref_type
+        and matter.next_hearing_source_ref_id == source_ref_id
+    )
+    if (
+        matter.next_hearing_on == new_date
+        and matter.next_hearing_manual_lock == manual_lock
+        and same_existing_hearing
+    ):
+        if matter.status != MatterStatus.DISPOSED and existing_hearing is None:
+            terminal_hearing_exists = session.scalar(
+                select(MatterHearing.id)
+                .where(
+                    MatterHearing.company_id == matter.company_id,
+                    MatterHearing.matter_id == matter.id,
+                    MatterHearing.hearing_on == new_date,
+                    MatterHearing.status != MatterHearingStatus.SCHEDULED,
+                )
+                .limit(1)
             )
+            if terminal_hearing_exists is None:
+                _ensure_hearing_row_for_next_hearing(
+                    session,
+                    matter=matter,
+                    hearing_on=new_date,
+                    source=source_value,
+                    source_ref_type=source_ref_type,
+                    source_ref_id=source_ref_id,
+                )
         return NextHearingApplyResult(applied=False, reason="unchanged")
 
     today = _today()
@@ -503,16 +547,17 @@ def apply_next_hearing_update(
     )
     session.add(history)
     session.flush()
-    materialized_hearing = None
+    materialized_hearing = existing_hearing
     if matter.status != MatterStatus.DISPOSED:
-        materialized_hearing = _ensure_hearing_row_for_next_hearing(
-            session,
-            matter=matter,
-            hearing_on=new_date,
-            source=source_value,
-            source_ref_type=source_ref_type,
-            source_ref_id=source_ref_id,
-        )
+        if materialized_hearing is None:
+            materialized_hearing = _ensure_hearing_row_for_next_hearing(
+                session,
+                matter=matter,
+                hearing_on=new_date,
+                source=source_value,
+                source_ref_type=source_ref_type,
+                source_ref_id=source_ref_id,
+            )
     _audit_next_hearing(
         session,
         context=context,

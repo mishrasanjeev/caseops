@@ -1640,3 +1640,34 @@ its persisted lifecycle version and ordered audit events. Do not interpret a
 hearing-date update or private-projection maintenance blocker as a lifecycle
 transition. See the dated report for row-level verdicts, failed-run history,
 remaining eCourts/DOCX scope, and root-cause learnings.
+
+## 2026-09-25 — legacy hearing release-bound incident
+
+PR #470 merged as `9835f11e` after complete Docker acceptance (389 PostgreSQL,
+both desktop shards and mobile) and clean CI. The exact-image production deploy
+stopped before routing at `caseops-backfill-next-hearings-ptgdk`: the 500-row
+per-tenant cap was derived from a 52-row fixture, while one production tenant
+had about 1,073 eligible legacy dates. The first 500 committed and the job
+failed closed. A read-only diagnostic measured 940 remaining across three
+tenants (573, 363, 4); no provider was called. Both schedulers were resumed
+after the failed release, and serving API/web remained at the older revision.
+The follow-up candidate preflights the shared eligibility predicate before any
+new writes, requires a zero-remaining postflight after every tenant (including
+a short SKIP LOCKED page), allows 2,500 per tenant and 10,000 release-wide,
+gives the bounded job 30 minutes, and adds a 1,200-row PostgreSQL replay
+regression. These are
+candidate changes only until complete Docker, clean CI, canonical-main merge,
+exact-image deploy, and production Playwright all pass. The partial backfill is
+not a deployment claim or an end-user fix verdict.
+
+An independent review of `57e7ee38` stopped the release despite its 390/390
+PostgreSQL pass: the legacy selector ignored terminal same-date hearings while
+the shared helper could rewrite one to `scheduled`; a short page could also
+mask later writes, and membership-based enumeration could miss an active firm.
+The candidate now excludes every existing same-date hearing from backfill,
+preserves terminal rows during unchanged-date repair, uses active company IDs,
+bounds actual writes, and runs a final cross-tenant recount. PostgreSQL tests
+cover production volume, terminal statuses, a memberless active company and a
+real new-date schedule; unit tests cover live-growth boundaries. The earlier
+Docker browser shard was intentionally interrupted, not accepted. Full Docker
+and CI must be rerun on the changed commit before merger or deployment.

@@ -424,7 +424,7 @@ gcloud run jobs "${HEARING_BACKFILL_ACTION}" "${HEARING_BACKFILL_JOB}" \
   --set-env-vars "CASEOPS_ENV=cloud,CASEOPS_AUTO_MIGRATE=false" \
   --set-secrets "CASEOPS_DATABASE_URL=caseops-database-url:latest,CASEOPS_AUTH_SECRET=caseops-auth-secret:latest" \
   --set-cloudsql-instances "${PROJECT}:${REGION}:caseops-db" \
-  --task-timeout 10m \
+  --task-timeout 30m \
   --max-retries 0 \
   --region "${REGION}" --project "${PROJECT}" --quiet
 HEARING_BACKFILL_IMAGE=$(gcloud run jobs describe "${HEARING_BACKFILL_JOB}" \

@@ -1094,3 +1094,22 @@ requirements when using the fallback.
   Linux app CI harness: derive virtualenv executables by platform, report
   spawn errors explicitly, and rerun the selected CI journeys plus the full
   clean-checkout suite before release.
+- A release backfill bound must be sized from a read-only production backlog,
+  not a small fixture. Preflight every tenant before writing, retain finite
+  per-tenant and release-wide caps with observed headroom, and test above the
+  prior cap on PostgreSQL. A failed bounded run can commit earlier pages;
+  prove idempotent replay, require a zero-remaining postflight even after a
+  short SKIP LOCKED page, and keep traffic on the
+  old revision until the exact-image job and dated browser journey pass.
+- Hearing materialization must not turn a completed, cancelled or adjourned
+  hearing back into a scheduled one. Completed and cancelled are closed;
+  adjourned is still open and must remain the authoritative row for an explicit
+  hearing edit or reconciliation. A same-date hearing of any status makes a
+  legacy date ineligible for automatic backfill; unchanged provider repair
+  must preserve it, while a genuinely new date gets a new scheduled row.
+  A same-date explicit replacement must update the Matter's source reference;
+  reopening a non-neutralized closed hearing by status alone must restore its
+  next date and reminders without creating a second calendar row.
+  Count active companies rather than active memberships for release repair,
+  cap actual writes as well as preflight backlog, and recheck every tenant at
+  the end. A point-in-time final recount is not a promise against future writes.

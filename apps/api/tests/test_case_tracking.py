@@ -1058,7 +1058,7 @@ def test_legacy_hearing_backfill_materializes_past_today_and_future_once(
 
     context = _context_from_bootstrap(boot)
     with get_session_factory()() as session:
-        assert backfill_legacy_next_hearings(session, context=context, limit=2) == 2
+        assert backfill_legacy_next_hearings(session, company_id=context.company.id, limit=2) == 2
         session.commit()
         monkeypatch.setattr(
             "caseops_api.services.case_tracking.get_case_tracking_provider",
@@ -1066,7 +1066,7 @@ def test_legacy_hearing_backfill_materializes_past_today_and_future_once(
         )
         runs = poll_tracked_cases(session, force=True)
         assert all(run.status == "skipped" for run in runs)
-        assert backfill_legacy_next_hearings(session, context=context, limit=2) == 0
+        assert backfill_legacy_next_hearings(session, company_id=context.company.id, limit=2) == 0
         session.commit()
         hearings = list(
             session.scalars(select(MatterHearing).where(MatterHearing.matter_id.in_(ids)))

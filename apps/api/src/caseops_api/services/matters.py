@@ -4156,20 +4156,27 @@ def update_matter_hearing(
         hearing.outcome_note = payload.outcome_note.strip() or None
     if payload.hearing_on is not None:
         hearing.hearing_on = payload.hearing_on
-        if hearing.status not in _CLOSED_HEARING_STATUSES:
-            apply_next_hearing_update(
-                session,
-                matter=matter,
-                new_date=payload.hearing_on,
-                source="manual",
-                actor_membership_id=context.membership.id,
-                context=context,
-                source_ref_type="matter_hearing",
-                source_ref_id=hearing.id,
-                reason="hearing_updated",
-                manual_lock=True,
-                force=True,
-            )
+    reopened_transition = (
+        prior_status in _CLOSED_HEARING_STATUSES
+        and hearing.status in _OPEN_HEARING_STATUSES
+    )
+    if (payload.hearing_on is not None or reopened_transition) and (
+        hearing.status in _OPEN_HEARING_STATUSES
+    ):
+        apply_next_hearing_update(
+            session,
+            matter=matter,
+            new_date=hearing.hearing_on,
+            source="manual",
+            actor_membership_id=context.membership.id,
+            context=context,
+            source_ref_type="matter_hearing",
+            source_ref_id=hearing.id,
+            reason="hearing_reopened" if reopened_transition else "hearing_updated",
+            manual_lock=True,
+            force=True,
+            existing_hearing=hearing,
+        )
     if "time_status" in requested_hearing_updates:
         if payload.time_status is None:
             raise HTTPException(
@@ -4244,14 +4251,14 @@ def update_matter_hearing(
             hearing=hearing,
             prior_hearing_on=prior_hearing_on,
         )
-    if rescheduled or completed_transition or cancelled_transition:
+    if rescheduled or completed_transition or cancelled_transition or reopened_transition:
         from caseops_api.services.hearing_reminders import (
             cancel_reminders_for_hearing,
             schedule_reminders_for_hearing,
         )
 
         cancel_reminders_for_hearing(session, hearing_id=hearing.id)
-        if rescheduled and hearing.status not in {"completed", "cancelled"}:
+        if (rescheduled or reopened_transition) and hearing.status in _OPEN_HEARING_STATUSES:
             schedule_reminders_for_hearing(session, hearing=hearing)
 
     if cancelled_transition:
@@ -4377,6 +4384,7 @@ def _reconcile_next_hearing_after_closed_hearing(
             reason="hearing_closed_recomputed",
             manual_lock=True,
             force=True,
+            existing_hearing=replacement,
         )
         return
 
@@ -5040,6 +5048,7 @@ def create_matter_hearing(
             reason="hearing_created",
             manual_lock=True,
             force=True,
+            existing_hearing=hearing,
         )
     _append_activity(
         session,

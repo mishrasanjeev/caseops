@@ -4621,7 +4621,7 @@ def poll_tracked_cases(
     # The hearing migration is independent of provider availability and paid
     # eligibility. A failed page must fail the job, not be hidden as a green poll.
     for context in contexts:
-        backfill_legacy_next_hearings(session, context=context)
+        backfill_legacy_next_hearings(session, company_id=context.company.id)
         session.commit()
 
     if enforce_window and not force and not window.inside_window:
