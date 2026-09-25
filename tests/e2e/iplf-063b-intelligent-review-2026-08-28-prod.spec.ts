@@ -448,6 +448,59 @@ test("IPLF-063B production proves the exact UJ-18 release", async ({
   );
   expect(abstained.state).toBe("abstained");
   expect(abstained.error_code).toBe("insufficient_accessible_sources");
+  expect(abstained.abstention_reason).toMatch(/No selected authority has both an accessible source and usable text/);
+
+  await test.step("A terminal history update replaces a stale running detail", async () => {
+    const staleReview: IntelligentReview = {
+      ...abstained,
+      state: "running",
+      progress: 35,
+      error_code: null,
+      abstention_reason: null,
+      updated_at: new Date(Date.parse(abstained.updated_at) - 1_000).toISOString(),
+    };
+    let releaseHistory = false;
+    let staleDetailResponses = 0;
+    const listRoute = /\/api\/research\/reviews\?limit=50$/;
+    const detailRoute = new RegExp(`/api/research/reviews/${abstained.id}$`);
+    await page.route(listRoute, async (route) => {
+      if (route.request().method() !== "GET" || releaseHistory) {
+        await route.continue();
+        return;
+      }
+      const response = await route.fetch();
+      const payload = await response.json() as { reviews: IntelligentReview[] };
+      expect(payload.reviews.some((review) => review.id === abstained.id)).toBe(true);
+      await route.fulfill({
+        response,
+        json: {
+          ...payload,
+          reviews: payload.reviews.map((review) => review.id === abstained.id ? staleReview : review),
+        },
+      });
+    });
+    await page.route(detailRoute, async (route) => {
+      if (route.request().method() !== "GET") {
+        await route.continue();
+        return;
+      }
+      const response = await route.fetch();
+      staleDetailResponses += 1;
+      await route.fulfill({ response, json: staleReview });
+    });
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.goto(`${WEB}/app/research/reviews?review=${encodeURIComponent(abstained.id)}`);
+    const staleDetail = page.getByTestId("intelligent-review-detail");
+    await expect(staleDetail.getByText(/Verifying frozen sources/)).toBeVisible();
+    await expect.poll(() => staleDetailResponses).toBeGreaterThan(0);
+    releaseHistory = true;
+    await page.getByRole("button", { name: "Refresh reviews" }).click();
+    await expect(staleDetail.getByText(/^abstained$/i)).toBeVisible();
+    await expect(staleDetail.getByText(abstained.abstention_reason!)).toBeVisible();
+    await expect(staleDetail.getByText(/Verifying frozen sources/)).toHaveCount(0);
+    await page.unroute(listRoute);
+    await page.unroute(detailRoute);
+  });
 
   await page.setViewportSize({ width: 360, height: 800 });
   await page.goto(
