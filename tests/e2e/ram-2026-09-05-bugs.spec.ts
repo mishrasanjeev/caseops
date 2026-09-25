@@ -206,8 +206,15 @@ test.describe("Ram September 05 reported workflows", () => {
     }
   });
 
+  const statuteActBatches = [
+    ["arbitration-1996", "bns-2023", "bnss-2023", "companies-2013", "cpc-1908"],
+    ["bsa-2023", "ni-act-1881", "limitation-1963", "hindu-marriage-1955", "prevention-of-corruption-1988"],
+    ["rti-2005", "gst-cgst-2017", "transfer-of-property-1882", "contract-1872", "consumer-protection-2019"],
+    ["ndps-1985", "specific-relief-1963", "ipc-1860", "iea-1872"],
+  ] as const;
   for (const width of [393, 768, 1280]) {
-  test(`BUG-010: release-owned Act catalog, attach, source detail and reload (${width}px)`, async ({
+  for (const [batchIndex, actIds] of statuteActBatches.entries()) {
+  test(`BUG-010: release-owned Act catalog, attach, source detail and reload (${width}px, batch ${batchIndex + 1})`, async ({
     page,
   }, testInfo) => {
     await page.setViewportSize({ width, height: 900 });
@@ -215,8 +222,8 @@ test.describe("Ram September 05 reported workflows", () => {
     const response = await api.post(`${API}/api/matters/`, {
       headers: headers(),
       data: {
-        title: `September statute acceptance ${width} ${RUN}`,
-        matter_code: `RAM905-STAT-${width}-${RUN}`,
+        title: `September statute acceptance ${width} batch ${batchIndex + 1} ${RUN}`,
+        matter_code: `RAM905-STAT-${width}-${batchIndex + 1}-${RUN}`,
         practice_area: "Civil",
         forum_level: "high_court",
       },
@@ -231,27 +238,7 @@ test.describe("Ram September 05 reported workflows", () => {
       picker.locator('option[value="constitution-india"]'),
     ).toBeAttached();
     // Never seed a synthetic verified provision to make this release gate pass.
-    for (const id of [
-      "arbitration-1996",
-      "bns-2023",
-      "bnss-2023",
-      "companies-2013",
-      "cpc-1908",
-      "bsa-2023",
-      "ni-act-1881",
-      "limitation-1963",
-      "hindu-marriage-1955",
-      "prevention-of-corruption-1988",
-      "rti-2005",
-      "gst-cgst-2017",
-      "transfer-of-property-1882",
-      "contract-1872",
-      "consumer-protection-2019",
-      "ndps-1985",
-      "specific-relief-1963",
-      "ipc-1860",
-      "iea-1872",
-    ]) {
+    for (const id of actIds) {
       const option = picker.locator(`option[value="${id}"]`);
       await expect.soft(option, `${id}: the catalog entry must exist`).toBeAttached();
       await expect.soft(option).not.toHaveAttribute("disabled", "");
@@ -355,6 +342,7 @@ test.describe("Ram September 05 reported workflows", () => {
       await page.getByTestId("matter-statute-add-trigger").click();
     }
   });
+  }
   }
 
   for (const width of [393, 1280]) {
