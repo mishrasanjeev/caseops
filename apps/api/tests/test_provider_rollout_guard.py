@@ -35,7 +35,7 @@ def wire(monkeypatch, histories):
 
     def gcloud(arguments, *, expect_json=False, timeout=60):
         calls.append(arguments)
-        assert 0 < timeout <= 30
+        assert 0 < timeout <= 90
         if arguments == ["auth", "print-access-token"]:
             return "test-access-token"
         if arguments[:3] == ["scheduler", "jobs", "pause"]:

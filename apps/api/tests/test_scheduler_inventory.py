@@ -560,6 +560,53 @@ def test_gcloud_runner_resolves_windows_command_shim(monkeypatch) -> None:
     assert calls == [[r"C:\Cloud SDK\bin\gcloud.CMD", "--version"]]
 
 
+def test_quiesce_allows_slow_control_plane_calls_without_skipping_drain(monkeypatch) -> None:
+    inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
+    scheduler = "caseops-case-tracking-poll-1800-ist"
+    job_name = "caseops-case-tracking-poll"
+    calls: list[tuple[list[str], float]] = []
+    scans: list[dict] = []
+
+    def fake_gcloud(arguments, *, expect_json=False, timeout=60):
+        calls.append((arguments, timeout))
+        if arguments[:2] == ["auth", "print-access-token"]:
+            return "test-token"
+        if arguments[:3] == ["scheduler", "jobs", "pause"]:
+            return ""
+        assert expect_json and arguments[:3] == ["scheduler", "jobs", "describe"]
+        return {
+            "state": "PAUSED",
+            "httpTarget": {
+                "uri": scheduler_inventory.scheduler_uri(
+                    inventory["production_project"], inventory["location"], job_name
+                )
+            },
+        }
+
+    def fake_executions(**kwargs):
+        scans.append(kwargs)
+        return []
+
+    monkeypatch.setattr(scheduler_inventory, "run_gcloud", fake_gcloud)
+    monkeypatch.setattr(scheduler_inventory, "_list_job_executions_v2", fake_executions)
+    monkeypatch.setattr(scheduler_inventory.time, "sleep", lambda _seconds: None)
+
+    result = scheduler_inventory.quiesce(
+        inventory,
+        scheduler=scheduler,
+        project=inventory["production_project"],
+        region=inventory["location"],
+        wait_seconds=300,
+    )
+
+    assert result["state"] == "PAUSED"
+    assert result["clean_samples"] == 2
+    assert result["drained"] is True
+    assert len(scans) == 2
+    assert len(calls) == 4  # token, pause, and two verified state samples
+    assert all(timeout == 90 for _, timeout in calls)
+
+
 def test_existence_probe_distinguishes_not_found_from_control_plane_failure(
     monkeypatch,
 ) -> None:

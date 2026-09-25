@@ -166,6 +166,11 @@ an explicit operator-credential CloudScheduler.ResumeJob occurred at
 and 04:41 (701 seconds), then rebuilt at 04:46. The 701-second breach remains
 incident evidence even after later clean cadences.
 
+The release drain permits up to five minutes for each named scheduler and caps
+individual `gcloud` control-plane calls at 90 seconds within that deadline.
+It still requires the scheduler to be paused and two clean execution samples;
+a deadline or control-plane error stops deployment with the scheduler paused.
+
 An interrupted worker can leave an unreadable `building` or `ready` shadow behind
 before its normal exception cleanup runs. Once the next worker owns the tenant
 advisory lease, a shadow older than 15 minutes is treated as crashed residue: its
