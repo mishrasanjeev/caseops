@@ -131,7 +131,7 @@ if (
 # containers and volumes, so each invocation needs its own namespace.
 $RunNonce = [Guid]::NewGuid().ToString("N").Substring(0, 12)
 $ComposeProject = "caseops-acceptance-$($ReleaseSha.Substring(0, 12))-$RunNonce"
-$PortBlock = [Convert]::ToInt32($ReleaseSha.Substring(0, 6), 16) % 6000
+$PortBlock = [Convert]::ToInt32($RunNonce.Substring(0, 6), 16) % 6000
 $PreferredPortBase = 20000 + ($PortBlock * 5)
 $PortBase = Get-AvailablePortBase -InitialBlock $PortBlock
 $ApiPort = ($PortBase + 0).ToString()

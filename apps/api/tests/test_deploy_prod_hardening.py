@@ -571,7 +571,7 @@ def test_workstation_docker_gate_is_migration_first_and_exact_release() -> None:
         in docker_script
     )
     assert (
-        "$PortBlock = [Convert]::ToInt32($ReleaseSha.Substring(0, 6), 16) % 6000" in docker_script
+        "$PortBlock = [Convert]::ToInt32($RunNonce.Substring(0, 6), 16) % 6000" in docker_script
     )
     assert "$PreferredPortBase = 20000 + ($PortBlock * 5)" in docker_script
     assert "function Test-TcpPortBlockAvailable" in docker_script
