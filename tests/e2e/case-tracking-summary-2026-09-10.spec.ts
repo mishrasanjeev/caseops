@@ -9,6 +9,8 @@ import {
   test,
   type APIRequestContext,
   type BrowserContext,
+  type Download,
+  type Locator,
   type Page,
 } from "@playwright/test";
 
@@ -35,6 +37,38 @@ type Container = {
   Config: { Labels: Record<string, string>; Env: string[] };
   NetworkSettings: { Networks: Record<string, unknown> };
 };
+
+async function clickAndCaptureDownload(page: Page, source: Locator): Promise<Download> {
+  const context = page.context();
+  const watched = new Set<Page>();
+  let resolveDownload!: (download: Download) => void;
+  let rejectDownload!: (error: Error) => void;
+  const downloadPromise = new Promise<Download>((resolve, reject) => {
+    resolveDownload = resolve;
+    rejectDownload = reject;
+  });
+  const onDownload = (download: Download) => resolveDownload(download);
+  const watch = (candidate: Page) => {
+    if (watched.has(candidate)) return;
+    watched.add(candidate);
+    candidate.on("download", onDownload);
+  };
+  const onPage = (candidate: Page) => watch(candidate);
+  context.on("page", onPage);
+  context.pages().forEach(watch);
+  const timeout = setTimeout(
+    () => rejectDownload(new Error("Source click produced no download in its browser context.")),
+    60_000,
+  );
+  try {
+    const [, download] = await Promise.all([source.click(), downloadPromise]);
+    return download;
+  } finally {
+    clearTimeout(timeout);
+    context.off("page", onPage);
+    watched.forEach((candidate) => candidate.off("download", onDownload));
+  }
+}
 
 test.use({ extraHTTPHeaders: noPaidProviderHeaders });
 
@@ -70,8 +104,16 @@ test("dated async summary: visible fallback, release-image worker, retained sour
   };
   const inspectContainer = (id: string): Container => JSON.parse(docker(["inspect", id]))[0];
   const service = (name: string) => {
-    const id = docker([...compose, "ps", "--all", "--quiet", name]);
-    expect(id).toMatch(/^[a-f0-9]+$/);
+    const ids = docker([
+      "ps", "--all", "--no-trunc",
+      "--filter", `label=com.docker.compose.project=${project}`,
+      "--filter", `label=com.docker.compose.service=${name}`,
+      "--filter", "label=com.docker.compose.oneoff=False",
+      "--format", "{{.ID}}",
+    ]).split("\n").filter(Boolean);
+    expect(ids, `one canonical ${name} service container is required`).toHaveLength(1);
+    const id = ids[0];
+    expect(id).toMatch(/^[a-f0-9]{64}$/);
     const value = inspectContainer(id);
     expect(value.Config.Labels["com.docker.compose.project"]).toBe(project);
     expect(value.Config.Labels["com.docker.compose.service"]).toBe(name);
@@ -293,9 +335,10 @@ test("dated async summary: visible fallback, release-image worker, retained sour
       expect(response.headers()["x-caseops-source-format"]).toBe("provider-document");
       expect(await response.text()).toBe(sourceText);
       expect(hash(await response.body())).toBe(hash(sourceText));
-      const downloadEvent = current.page.waitForEvent("download");
-      await source.click();
-      const download = await downloadEvent;
+      const download = await clickAndCaptureDownload(current.page, source);
+      expect(new URL(download.url()).pathname).toBe(
+        new URL((await source.getAttribute("href"))!, apiBaseUrl).pathname,
+      );
       expect(await download.failure()).toBeNull();
       const downloadedPath = info.outputPath(`${current.scenario}-source.md`);
       await download.saveAs(downloadedPath);

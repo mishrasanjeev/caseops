@@ -573,7 +573,16 @@ function ReviewDetail({
     refetchInterval: (query) =>
       ["queued", "running"].includes(query.state.data?.state ?? "") ? 1_500 : false,
   });
-  const review = reviewQuery.data;
+  // History returns the full record. A terminal history update must not leave
+  // the selected detail on its older cached running state when polling stops.
+  const cachedReview = reviewQuery.data;
+  const cachedPending = cachedReview?.state === "queued" || cachedReview?.state === "running";
+  const historyPending = historyReview?.state === "queued" || historyReview?.state === "running";
+  const review = historyReview && (
+    !cachedReview ||
+    historyReview.updated_at > cachedReview.updated_at ||
+    (historyReview.updated_at === cachedReview.updated_at && cachedPending && !historyPending)
+  ) ? historyReview : cachedReview;
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [lawyerNotes, setLawyerNotes] = useState("");
 

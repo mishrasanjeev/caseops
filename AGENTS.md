@@ -461,6 +461,11 @@ requirements when using the fallback.
 - A no-paid-provider rejection is successful test isolation, not evidence that
   the configured provider is unavailable. Regular, bulk, Docker, and
   production regression runs must assert the rejection without spending.
+- An async review history and its selected detail must converge on the same
+  terminal record. If the list returns full updated DTOs, a cached running
+  detail cannot remain visible after the list turns terminal and disables its
+  polling. Regress the running-to-abstained transition through the actual UI,
+  including the visible reason, without adding redundant supporting requests.
 - Production browser assertions for an application alert must scope to its
   workflow panel. Next.js also mounts an empty route-announcer alert; an
   unscoped role query can fail strict mode after the real error has rendered.
@@ -1159,3 +1164,12 @@ requirements when using the fallback.
   first accessible-role query is cold (170-370 ms measured) and is charged to
   the 1 s `findByRole` deadline; poll the precise visible text, then keep the
   role and visibility assertion. Never raise the deadline.
+- A source link with `target="_blank"` may emit a browser download on its
+  opener or on a transient popup. Subscribe to downloads on every page in the
+  same browser context before clicking, then assert the exact source URL and
+  downloaded bytes. An API 200 alone does not prove the browser journey.
+- A failed Docker acceptance may deliberately retain one-off worker runners.
+  Select the canonical service by project, service, and `oneoff=False` labels
+  on replay; do not mistake those evidence containers for extra replicas.
+  Manual replay must reproduce the standard wrapper's mock-only provider
+  environment, and a fixture safety-guard failure is incomplete test setup.

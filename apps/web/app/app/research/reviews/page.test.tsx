@@ -257,6 +257,31 @@ describe("IntelligentReviewsPage", () => {
     expect(mocks.getReview).toHaveBeenCalledWith("review-1");
   });
 
+  it("shows a terminal history update when selected detail still caches running", async () => {
+    const user = userEvent.setup();
+    const running = reviewFixture({
+      state: "running", progress: 35, updated_at: "2026-08-28T08:01:00Z",
+    });
+    const abstained = reviewFixture({
+      state: "abstained", progress: 100,
+      abstention_reason: "No selected authority has both an accessible source and usable text.",
+      updated_at: "2026-08-28T08:02:00Z",
+    });
+    mocks.listReviews
+      .mockResolvedValueOnce({ reviews: [running] })
+      .mockResolvedValue({ reviews: [abstained] });
+    mocks.getReview.mockResolvedValue(running);
+    renderPage();
+    const detail = within(await screen.findByTestId("intelligent-review-detail"));
+    expect(detail.getByText(/Verifying frozen sources/)).toBeInTheDocument();
+    await waitFor(() => expect(mocks.getReview).toHaveBeenCalledWith("review-1"));
+    await user.click(screen.getByRole("button", { name: "Refresh reviews" }));
+    expect(await detail.findByText(/No selected authority has both an accessible source and usable text/))
+      .toBeInTheDocument();
+    expect(detail.queryByText(/Verifying frozen sources/)).not.toBeInTheDocument();
+    expect(detail.getByText(/^abstained$/i)).toBeInTheDocument();
+  });
+
   it("queues a review using server-owned Matter, report, and authority identifiers", async () => {
     const user = userEvent.setup();
     mocks.listReviews.mockResolvedValue({ reviews: [] });
