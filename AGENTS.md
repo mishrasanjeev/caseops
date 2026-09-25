@@ -461,6 +461,11 @@ requirements when using the fallback.
 - A no-paid-provider rejection is successful test isolation, not evidence that
   the configured provider is unavailable. Regular, bulk, Docker, and
   production regression runs must assert the rejection without spending.
+- An async review history and its selected detail must converge on the same
+  terminal record. If the list returns full updated DTOs, a cached running
+  detail cannot remain visible after the list turns terminal and disables its
+  polling. Regress the running-to-abstained transition through the actual UI,
+  including the visible reason, without adding redundant supporting requests.
 - Production browser assertions for an application alert must scope to its
   workflow panel. Next.js also mounts an empty route-announcer alert; an
   unscoped role query can fail strict mode after the real error has rendered.

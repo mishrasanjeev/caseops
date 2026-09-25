@@ -227,6 +227,7 @@ test("IPLF-063B completes UJ-18 normal and exception paths", async ({ page }) =>
     await page.getByRole("combobox", { name: "Matter target" }).click();
     await page.getByRole("option", { name: new RegExp(`^${matter.matter_code} ·`) }).click();
     await page.getByRole("button", { name: "Generate review" }).click();
+    await expect(page.getByTestId("intelligent-review-detail").getByText(/^abstained$/i)).toBeVisible();
     await expect(
       page.getByTestId("intelligent-review-detail").getByText(/No selected authority has both an accessible source and usable text/),
     ).toBeVisible();
