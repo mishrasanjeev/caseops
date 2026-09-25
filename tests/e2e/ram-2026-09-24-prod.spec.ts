@@ -198,8 +198,9 @@ test("Matter court link shows the user-selected case without provider spend in l
   )).toHaveLength(1);
 });
 
-test("legacy dates have canonical hearings and automated eCourts lookup cannot spend", async ({ page, request }) => {
-  test.skip(!production, "Exact reported Matter IDs exist only in the production test workspace.");
+test("QA-owned matter has a canonical hearing and automated eCourts lookup cannot spend", async ({ page, request }) => {
+  test.setTimeout(90_000);
+  test.skip(!production, "Production QA workspace acceptance only.");
   const slug = process.env.CASEOPS_PROD_TEST_SLUG ?? process.env.CASEOPS_RAM_PROD_SLUG;
   const email = process.env.CASEOPS_PROD_TEST_EMAIL ?? process.env.CASEOPS_RAM_PROD_EMAIL;
   const password = process.env.CASEOPS_PROD_TEST_PASSWORD ?? process.env.CASEOPS_RAM_PROD_PASSWORD;
@@ -213,16 +214,88 @@ test("legacy dates have canonical hearings and automated eCourts lookup cannot s
     ...noPaidProviderHeaders,
     Authorization: `Bearer ${(await login.json()).access_token as string}`,
   };
-  for (const [id, date, source] of legacyMatters) {
-    const workspace = await request.get(`${api}/api/matters/${id}/workspace`, { headers });
+  const hearingDate = new Date(Date.now() + 4 * 86_400_000).toISOString().slice(0, 10);
+  const code = `SEP24-${randomUUID().slice(0, 8).toUpperCase()}`;
+  const created = await request.post(`${api}/api/matters/`, {
+    headers,
+    data: {
+      title: "QA canonical hearing acceptance",
+      matter_code: code,
+      practice_area: "litigation",
+      forum_level: "high_court",
+      court_name: "Delhi High Court",
+      case_number: `WP(C) ${randomUUID().slice(0, 6)}/2026`,
+      next_hearing_on: hearingDate,
+      status: "active",
+    },
+  });
+  expect(created.status(), await created.text()).toBe(200);
+  const matterId = (await created.json()).id as string;
+  try {
+    const workspace = await request.get(`${api}/api/matters/${matterId}/workspace`, { headers });
     expect(workspace.status(), await workspace.text()).toBe(200);
     const data = await workspace.json();
-    expect(data.matter.next_hearing_on).toBe(date);
-    expect(data.matter.next_hearing_source).toBe(source);
+    expect(data.matter.next_hearing_on).toBe(hearingDate);
     expect(data.hearings.filter((row: { hearing_on: string; status: string }) =>
-      row.hearing_on === date && row.status === "scheduled",
+      row.hearing_on === hearingDate && row.status === "scheduled",
     )).toHaveLength(1);
+    await page.setExtraHTTPHeaders(noPaidProviderHeaders);
+    await page.goto(`${web}/sign-in`);
+    await waitForSignInForm(page);
+    await page.locator("#company-slug").fill(slug);
+    await page.locator("#email").fill(email);
+    await page.locator("#password").fill(password);
+    await page.locator('button[type="submit"]').click();
+    await page.waitForURL(/\/app(?:[/?]|$)/);
+    await page.goto(`${web}/app/matters/${matterId}`);
+    const court = page.locator('a[href*="/app/case-tracking?matterId="]').first();
+    await expect(court).toBeVisible();
+    const href = await court.getAttribute("href");
+    expect(href).toContain("/app/case-tracking?matterId=");
+    await page.goto(`${web}${href}`);
+    await page.getByTestId("matter-case-resolve-submit").click();
+    await expect(page.getByTestId("matter-case-resolution").getByRole("alert")).toContainText(/no external request was made/i);
+    await page.goto(`${web}/app/hearings`);
+    await page.getByLabel("Exact hearing date").fill(hearingDate);
+    await expect(page.locator(`a[href*="/app/matters/${matterId}"]`).first()).toBeVisible();
+  } finally {
+    const current = await request.get(`${api}/api/matters/${matterId}`, { headers });
+    expect(current.status(), await current.text()).toBe(200);
+    const matter = (await current.json()) as { status: string; updated_at: string };
+    if (matter.status !== "disposed") {
+      const disposed = await request.patch(`${api}/api/matters/${matterId}/lifecycle/status`, {
+        headers,
+        data: {
+          to_status: "disposed",
+          expected_from_status: matter.status,
+          expected_updated_at: matter.updated_at,
+          reason: "Dispose the synthetic QA hearing acceptance Matter.",
+        },
+      });
+      expect(disposed.status(), await disposed.text()).toBe(200);
+    }
   }
+});
+
+test("reported legacy Matters retain backfilled hearing evidence in their authorized workspace", async ({ page, request }) => {
+  test.setTimeout(120_000);
+  test.skip(!production, "Exact legacy-record acceptance is production-only.");
+  const slug = process.env.CASEOPS_LEGACY_PROD_TEST_SLUG;
+  const email = process.env.CASEOPS_LEGACY_PROD_TEST_EMAIL;
+  const password = process.env.CASEOPS_LEGACY_PROD_TEST_PASSWORD;
+  const configured = [slug, email, password].filter(Boolean).length;
+  test.skip(configured === 0,
+    "Exact legacy records require credentials for their owning tenant; QA workspace credentials cannot access them.");
+  if (!slug || !email || !password) throw new Error("Legacy tenant credentials are required.");
+  const login = await request.post(`${api}/api/auth/login`, {
+    headers: noPaidProviderHeaders,
+    data: { company_slug: slug, email, password },
+  });
+  expect(login.status(), await login.text()).toBe(200);
+  const headers = {
+    ...noPaidProviderHeaders,
+    Authorization: `Bearer ${(await login.json()).access_token as string}`,
+  };
   await page.setExtraHTTPHeaders(noPaidProviderHeaders);
   await page.goto(`${web}/sign-in`);
   await waitForSignInForm(page);
@@ -231,6 +304,22 @@ test("legacy dates have canonical hearings and automated eCourts lookup cannot s
   await page.locator("#password").fill(password);
   await page.locator('button[type="submit"]').click();
   await page.waitForURL(/\/app(?:[/?]|$)/);
+  for (const [id, date, source] of legacyMatters) {
+    const workspace = await request.get(`${api}/api/matters/${id}/workspace`, { headers });
+    expect(workspace.status(), await workspace.text()).toBe(200);
+    const before = await workspace.json();
+    expect(before.matter.next_hearing_on).toBe(date);
+    expect(before.matter.next_hearing_source).toBe(source);
+    expect(before.hearings.filter((row: { hearing_on: string; status: string }) =>
+      row.hearing_on === date && row.status === "scheduled",
+    )).toHaveLength(1);
+    await page.goto(`${web}/app/matters/${id}`);
+    await page.reload();
+    await expect(page.getByText("Matter summary", { exact: true })).toBeVisible();
+    const reloaded = await request.get(`${api}/api/matters/${id}/workspace`, { headers });
+    expect(reloaded.status(), await reloaded.text()).toBe(200);
+    expect((await reloaded.json()).matter.next_hearing_on).toBe(date);
+  }
   await page.goto(`${web}/app/matters/${legacyMatters[0][0]}`);
   const court = page.locator('a[href*="/app/case-tracking?matterId="]').first();
   await expect(court).toBeVisible();

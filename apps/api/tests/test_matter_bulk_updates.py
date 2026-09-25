@@ -879,3 +879,47 @@ def test_bulk_update_migration_downgrade_refuses_retained_operation(
     with pytest.raises(RuntimeError, match="retained bulk-update history"):
         migration.downgrade()
     assert dropped == []
+
+
+@pytest.mark.parametrize("column_already_present", [False, True])
+def test_bulk_update_row_results_repair_handles_applied_schema_drift(
+    monkeypatch: pytest.MonkeyPatch, column_already_present: bool
+) -> None:
+    import sqlalchemy as sa
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "alembic/versions/20260925_0001_bulk_update_row_results_repair.py"
+    )
+    spec = importlib.util.spec_from_file_location("bulk_update_row_results_repair", path)
+    assert spec is not None and spec.loader is not None
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+
+    engine = sa.create_engine("sqlite+pysqlite:///:memory:")
+    metadata = sa.MetaData()
+    columns = [sa.Column("id", sa.String(36), primary_key=True)]
+    if column_already_present:
+        columns.append(sa.Column("row_results_json", sa.JSON(), nullable=False))
+    table = sa.Table("matter_bulk_update_operations", metadata, *columns)
+    metadata.create_all(engine)
+    with engine.begin() as connection:
+        if not column_already_present:
+            connection.execute(table.insert().values(id="historical"))
+        monkeypatch.setattr(
+            migration, "op", Operations(MigrationContext.configure(connection))
+        )
+        migration.upgrade()
+        migration.upgrade()
+        migration.downgrade()
+        names = {
+            column["name"]
+            for column in sa.inspect(connection).get_columns("matter_bulk_update_operations")
+        }
+        assert "row_results_json" in names
+        if not column_already_present:
+            assert connection.execute(
+                sa.text("SELECT row_results_json FROM matter_bulk_update_operations")
+            ).scalar_one() == "[]"
