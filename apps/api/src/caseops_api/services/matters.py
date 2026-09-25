@@ -4169,6 +4169,7 @@ def update_matter_hearing(
                 reason="hearing_updated",
                 manual_lock=True,
                 force=True,
+                existing_hearing=hearing,
             )
     if "time_status" in requested_hearing_updates:
         if payload.time_status is None:
@@ -4377,6 +4378,7 @@ def _reconcile_next_hearing_after_closed_hearing(
             reason="hearing_closed_recomputed",
             manual_lock=True,
             force=True,
+            existing_hearing=replacement,
         )
         return
 
@@ -5040,6 +5042,7 @@ def create_matter_hearing(
             reason="hearing_created",
             manual_lock=True,
             force=True,
+            existing_hearing=hearing,
         )
     _append_activity(
         session,

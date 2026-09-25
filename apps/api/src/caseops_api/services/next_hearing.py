@@ -434,11 +434,21 @@ def apply_next_hearing_update(
     manual_lock: bool = False,
     force: bool = False,
     authoritative_automatic: bool = False,
+    existing_hearing: MatterHearing | None = None,
 ) -> NextHearingApplyResult:
     source_value = str(source.value if isinstance(source, MatterNextHearingSource) else source)
     is_manual = source_value == MatterNextHearingSource.MANUAL
+    if existing_hearing is not None and (
+        existing_hearing.id is None
+        or existing_hearing.company_id != matter.company_id
+        or existing_hearing.matter_id != matter.id
+        or existing_hearing.hearing_on != new_date
+        or existing_hearing.status
+        not in (MatterHearingStatus.SCHEDULED, MatterHearingStatus.ADJOURNED)
+    ):
+        raise ValueError("Existing hearing must be an open row for this matter and date.")
     if matter.next_hearing_on == new_date and matter.next_hearing_manual_lock == manual_lock:
-        if matter.status != MatterStatus.DISPOSED:
+        if matter.status != MatterStatus.DISPOSED and existing_hearing is None:
             terminal_hearing_exists = session.scalar(
                 select(MatterHearing.id)
                 .where(
@@ -528,16 +538,17 @@ def apply_next_hearing_update(
     )
     session.add(history)
     session.flush()
-    materialized_hearing = None
+    materialized_hearing = existing_hearing
     if matter.status != MatterStatus.DISPOSED:
-        materialized_hearing = _ensure_hearing_row_for_next_hearing(
-            session,
-            matter=matter,
-            hearing_on=new_date,
-            source=source_value,
-            source_ref_type=source_ref_type,
-            source_ref_id=source_ref_id,
-        )
+        if materialized_hearing is None:
+            materialized_hearing = _ensure_hearing_row_for_next_hearing(
+                session,
+                matter=matter,
+                hearing_on=new_date,
+                source=source_value,
+                source_ref_type=source_ref_type,
+                source_ref_id=source_ref_id,
+            )
     _audit_next_hearing(
         session,
         context=context,

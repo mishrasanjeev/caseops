@@ -1102,7 +1102,9 @@ requirements when using the fallback.
   short SKIP LOCKED page, and keep traffic on the
   old revision until the exact-image job and dated browser journey pass.
 - Hearing materialization must not turn a completed, cancelled or adjourned
-  hearing back into a scheduled one. A matching terminal hearing makes a
+  hearing back into a scheduled one. Completed and cancelled are closed;
+  adjourned is still open and must remain the authoritative row for an explicit
+  hearing edit or reconciliation. A same-date hearing of any status makes a
   legacy date ineligible for automatic backfill; unchanged provider repair
   must preserve it, while a genuinely new date gets a new scheduled row.
   Count active companies rather than active memberships for release repair,
