@@ -181,7 +181,38 @@ test("BUG-006 DOCX is visibly rendered and ENH-007 updates only an existing matt
   await expect(page.getByTestId(`matter-attachment-view-${attachment.id}`)).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 
+  // 2026-09-25 production shape: the persistent QA tenant retained an earlier upload
+  // with the same filename, and `.first()` expanded it instead of this run's operation.
+  // The per-run filename avoids other runs' history; seeding a same-name operation here
+  // keeps that ambiguity in every environment, so this upload is followed by operation ID.
+  const csvEscape = (value: string) => `"${value.replaceAll('"', '""')}"`;
+  const bulkCsvFor = (header: string, rows: Array<Record<string, string>>) => {
+    const columns = header.replace(/^\uFEFF/, "").split(",");
+    const lines = rows.map((row) => columns.map((column) => csvEscape(row[column] ?? "")).join(","));
+    return Buffer.from(`${header}\r\n${lines.join("\r\n")}\r\n`, "utf-8");
+  };
+  const apiTemplate = await request.get(`${api}/api/matters/bulk-update/template?format=csv`, { headers: auth.headers });
+  expect(apiTemplate.status(), await apiTemplate.text()).toBe(200);
+  const apiHeader = (await apiTemplate.text()).split(/\r?\n/, 1)[0] ?? "";
+  const retainedCsv = bulkCsvFor(apiHeader, [{ "Matter Code": code, "Matter Title": "Bulk update retained prior title" }]);
+  const retainedPreview = await request.post(`${api}/api/matters/bulk-update/preview`, {
+    headers: auth.headers,
+    multipart: { file: { name: bulkFilename, mimeType: "text/csv", buffer: retainedCsv } },
+  });
+  expect(retainedPreview.status(), await retainedPreview.text()).toBe(200);
+  const retainedApply = await request.post(`${api}/api/matters/bulk-update/apply`, {
+    headers: auth.headers,
+    multipart: {
+      preview_token: ((await retainedPreview.json()) as { preview_token: string }).preview_token,
+      file: { name: bulkFilename, mimeType: "text/csv", buffer: retainedCsv },
+    },
+  });
+  expect(retainedApply.status(), await retainedApply.text()).toBe(200);
+  const retainedOperationId = ((await retainedApply.json()) as { operation_id: string }).operation_id;
+  expect(retainedOperationId).toBeTruthy();
+
   await page.goto(`${web}/app/matters/bulk-update`);
+  await expect(page.getByTestId(`bulk-update-operation-${retainedOperationId}`)).toBeVisible();
   const templateDownload = page.waitForEvent("download");
   await page.getByRole("button", { name: "XLSX", exact: true }).click();
   expect((await templateDownload).suggestedFilename()).toBe("matter-bulk-update-template.xlsx");
@@ -204,7 +235,6 @@ test("BUG-006 DOCX is visibly rendered and ENH-007 updates only an existing matt
     if (column === "Matter Code") return unknownCode;
     return "";
   });
-  const csvEscape = (value: string) => `"${value.replaceAll('"', '""')}"`;
   const bulkCsv = Buffer.from(`${header}\r\n${values.map(csvEscape).join(",")}\r\n${invalidValues.map(csvEscape).join(",")}\r\n`, "utf-8");
   await page.locator('input[type="file"]').setInputFiles({
     name: bulkFilename,
@@ -214,20 +244,41 @@ test("BUG-006 DOCX is visibly rendered and ENH-007 updates only an existing matt
   await page.getByRole("button", { name: "Preview changes" }).click();
   await expect(page.getByTestId("bulk-update-summary")).toContainText("1 changed");
   await expect(page.getByTestId("bulk-update-summary")).toContainText("1 invalid");
+  const applyResponse = page.waitForResponse((response) =>
+    response.request().method() === "POST" && new URL(response.url()).pathname === "/api/matters/bulk-update/apply");
   await page.getByRole("button", { name: "Apply reviewed changes" }).click();
+  const applied = await applyResponse;
+  expect(applied.status(), await applied.text()).toBe(200);
+  const operationId = ((await applied.json()) as { operation_id: string }).operation_id;
+  expect(operationId).toBeTruthy();
+  expect(operationId).not.toBe(retainedOperationId);
   await expect(page.getByText(/Updated 1 of 2 rows; 1 skipped, 0 failed\./)).toBeVisible();
   await expect(page.getByTestId("bulk-update-final-result")).toContainText("2 rows");
   await expect(page.getByTestId("bulk-update-final-result")).toContainText("1 updated");
   await expect(page.getByTestId("bulk-update-final-result")).toContainText("1 skipped");
   await expect(page.getByRole("button", { name: "Apply reviewed changes" })).toBeDisabled();
   await expect(page.getByRole("heading", { name: "Operation history" })).toBeVisible();
-  await expect(page.getByRole("cell", { name: bulkFilename, exact: true })).toBeVisible();
-  await page.getByRole("button", { name: `View results for ${bulkFilename}` }).click();
-  await expect(page.getByText(`Row 2: ${code} — applied`, { exact: false })).toBeVisible();
-  await expect(page.getByText(`Row 3: ${unknownCode} — invalid`, { exact: false })).toBeVisible();
+  const operationRow = page.getByTestId(`bulk-update-operation-${operationId}`);
+  await expect(operationRow).toBeVisible();
+  await expect(operationRow).toHaveAttribute("aria-current", "true");
+  await expect(operationRow.getByRole("cell").first()).toHaveText(`${bulkFilename}This upload`);
+  const retainedRow = page.getByTestId(`bulk-update-operation-${retainedOperationId}`);
+  await expect(retainedRow).toBeVisible();
+  await expect(retainedRow).not.toHaveAttribute("aria-current", "true");
+  const viewResults = operationRow.getByRole("button", { name: `View results for ${bulkFilename} uploaded ` });
+  await expect(viewResults).toHaveAccessibleName(new RegExp(`, operation ${operationId}$`));
+  await expect(page.getByRole("button", { name: `operation ${operationId}` })).toHaveCount(2);
+  await viewResults.click();
+  const operationResults = page.getByTestId(`bulk-update-operation-results-${operationId}`);
+  await expect(operationResults.getByRole("listitem")).toHaveCount(2);
+  await expect(operationResults.getByText(`Row 2: ${code} — applied`, { exact: false })).toBeVisible();
+  await expect(operationResults.getByText(`Row 3: ${unknownCode} — invalid`, { exact: false })).toBeVisible();
+  await expect(page.getByTestId(`bulk-update-operation-results-${retainedOperationId}`)).toHaveCount(0);
   const resultDownload = page.waitForEvent("download");
-  await page.getByRole("button", { name: `Download results for ${bulkFilename}` }).click();
-  const resultStream = await (await resultDownload).createReadStream();
+  await operationRow.getByRole("button", { name: `Download results for ${bulkFilename} uploaded ` }).click();
+  const downloadedResult = await resultDownload;
+  expect(downloadedResult.suggestedFilename()).toBe(`matter-bulk-update-${operationId}-results.csv`);
+  const resultStream = await downloadedResult.createReadStream();
   const resultChunks: Buffer[] = [];
   for await (const chunk of resultStream) resultChunks.push(Buffer.from(chunk));
   const resultText = Buffer.concat(resultChunks).toString("utf-8");
