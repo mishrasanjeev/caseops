@@ -36,8 +36,20 @@ function mount(canWrite = true) {
   return query;
 }
 
+// A worker's first accessible-role query builds its ARIA lookup cold, which by
+// itself measured 170-370 ms. Inside findByRole that cost is charged to the 1 s
+// polling deadline and, under full-suite CPU contention, can expire it after the
+// button has rendered. Poll the precise visible label, then keep the role and
+// visibility assertion as a synchronous check.
+async function openPerformanceHistory() {
+  await screen.findByText("Performance history");
+  const button = screen.getByRole("button", { name: "Performance history" });
+  expect(button).toBeVisible();
+  fireEvent.click(button);
+}
+
 async function fillPerformance() {
-  fireEvent.click(await screen.findByRole("button", { name: "Performance history" }));
+  await openPerformanceHistory();
   const form = await screen.findByRole("form", { name: "Record contract performance" });
   fireEvent.change(within(form).getByLabelText("Performance date"), { target: { value: receipt.occurred_on } });
   fireEvent.change(within(form).getByLabelText("Performance evidence account"), { target: { value: receipt.account } });
@@ -97,7 +109,7 @@ describe("Contract obligations and performance", () => {
 
   it("retains read-only history without exposing operational commands on a terminal parent", async () => {
     mount(false);
-    fireEvent.click(await screen.findByRole("button", { name: "Performance history" }));
+    await openPerformanceHistory();
     expect(await screen.findByText("No performance evidence recorded.")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Record performance" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Create obligation" })).not.toBeInTheDocument();

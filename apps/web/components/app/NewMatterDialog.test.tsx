@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, type RenderResult, waitFor, within } from "@testing-library/react";
+import userEvent, { type UserEvent } from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -33,16 +33,111 @@ function withClient(children: ReactNode, client = createTestClient()) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
-async function openDialog(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByTestId("new-matter-trigger"));
+// Tests query only inside their own render container, or inside a Radix portal
+// resolved through its trigger's aria-controls while that container is still
+// mounted. If a test ever overruns its deadline, cleanup() detaches both and
+// the abandoned user flow fails instead of driving the next test's dialog.
+function renderDialog(client = createTestClient()) {
+  const view = render(withClient(<NewMatterDialog />, client));
+  return { view, page: within(view.container) };
 }
 
-async function fillRequiredMatterFields(
-  user: ReturnType<typeof userEvent.setup>,
-) {
-  await user.type(await screen.findByLabelText("Title"), "Spine matter");
-  await user.type(screen.getByLabelText("Matter code"), "blr-001");
-  await user.type(screen.getByLabelText("Practice area"), "Commercial");
+async function controlledBy(view: RenderResult, trigger: HTMLElement) {
+  const id = trigger.getAttribute("aria-controls");
+  expect(id).toBeTruthy();
+  return waitFor(() => {
+    expect(view.container).toBeInTheDocument();
+    const element = document.getElementById(id as string);
+    expect(element).not.toBeNull();
+    return element as HTMLElement;
+  });
+}
+
+// Radix portal content stays queryable after React detaches it, so every query
+// on a portal scope first requires this test's page and the portal to be mounted.
+function mountedWithin(view: RenderResult, element: HTMLElement) {
+  const queries = within(element);
+  return new Proxy(queries, {
+    get(target, key) {
+      const query = Reflect.get(target, key);
+      if (typeof query !== "function") return query;
+      return (...args: unknown[]) => {
+        expect(view.container).toBeInTheDocument();
+        expect(element).toBeInTheDocument();
+        return query(...args);
+      };
+    },
+  });
+}
+
+async function openDialog(user: UserEvent, view: RenderResult) {
+  const trigger = within(view.container).getByTestId("new-matter-trigger");
+  await user.click(trigger);
+  const element = await controlledBy(view, trigger);
+  expect(element).toHaveAttribute("role", "dialog");
+  return { element, dialog: mountedWithin(view, element) };
+}
+
+// One paste per field: the field still receives focus and a real input event,
+// but the form re-renders once per field instead of once per character.
+// Paste targets whichever element has focus, so require focus first: an
+// abandoned flow holding a detached field fails here instead of pasting into
+// the next test's focused input.
+async function enterText(user: UserEvent, field: HTMLElement, value: string) {
+  await user.click(field);
+  expect(field).toHaveFocus();
+  await user.paste(value);
+  expect(field).toHaveDisplayValue(value);
+}
+
+type Dialog = ReturnType<typeof mountedWithin>;
+
+async function fillRequiredMatterFields(user: UserEvent, dialog: Dialog) {
+  await enterText(user, await dialog.findByLabelText("Title"), "Spine matter");
+  await enterText(user, dialog.getByLabelText("Matter code"), "blr-001");
+  await enterText(user, dialog.getByLabelText("Practice area"), "Commercial");
+}
+
+function createButton(dialog: Dialog) {
+  return dialog.getByRole("button", { name: /Create matter/i });
+}
+
+const DELHI_HIGH_COURT = {
+  forum_level: "high_court",
+  court_id: "delhi-hc",
+  court_name: "Delhi High Court",
+  forum_catalog_entry_id: "hc:delhi",
+  forum_state: "Delhi",
+  forum_district: null,
+  forum_city: "New Delhi",
+  forum_consumer_level: null,
+};
+
+// The complete createMatter payload for the required fields plus a forum.
+function matterPayload(overrides: Record<string, unknown>) {
+  return {
+    title: "Spine matter",
+    matter_code: "BLR-001",
+    client_name: undefined,
+    opposing_party: undefined,
+    case_number: undefined,
+    temporary_e_case_number: undefined,
+    cnr_number: undefined,
+    next_hearing_on: undefined,
+    practice_area: "Commercial",
+    description: undefined,
+    ...DELHI_HIGH_COURT,
+    status: "active",
+    ...overrides,
+  };
+}
+
+// A settled creation announces success once, closes and detaches the dialog.
+async function expectCreatedAndClosed(dialogElement: HTMLElement) {
+  await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("Matter created"));
+  expect(toastSuccess).toHaveBeenCalledTimes(1);
+  expect(toastError).not.toHaveBeenCalled();
+  await waitFor(() => expect(dialogElement).not.toBeInTheDocument());
 }
 
 describe("NewMatterDialog", () => {
@@ -158,25 +253,29 @@ describe("NewMatterDialog", () => {
 
   it("announces validation errors with aria-invalid + aria-describedby wired to the error id", async () => {
     const user = userEvent.setup();
-    render(withClient(<NewMatterDialog />));
+    const { view } = renderDialog();
 
-    await openDialog(user);
+    const { element, dialog } = await openDialog(user, view);
     await waitFor(() => expect(fetchForumCatalogMock).toHaveBeenCalledTimes(1));
-    // Submitting the dialog with no fields filled trips the zod schema.
-    await user.click(
-      await screen.findByRole("button", { name: /Create matter/i }),
+    // The default forum applies once the catalog has loaded.
+    await waitFor(() =>
+      expect(dialog.getByTestId("new-matter-forum-state")).toHaveValue("Delhi"),
     );
+    // Submitting the dialog with no fields filled trips the zod schema.
+    expect(createButton(dialog)).toBeEnabled();
+    await user.click(createButton(dialog));
 
-    const titleInput = await screen.findByLabelText("Title");
-    expect(titleInput).toHaveAttribute("aria-invalid", "true");
+    const titleInput = await dialog.findByLabelText("Title");
+    await waitFor(() => expect(titleInput).toHaveAttribute("aria-invalid", "true"));
     const errorId = titleInput.getAttribute("aria-describedby");
     expect(errorId).toBeTruthy();
-    const errorNode = document.getElementById(errorId as string);
+    const errorNode = element.querySelector(`[id="${errorId}"]`);
     expect(errorNode).toBeInTheDocument();
     expect(errorNode).toHaveAttribute("role", "alert");
     expect(errorNode?.textContent).toMatch(/At least 3 characters/i);
 
     expect(createMatterMock).not.toHaveBeenCalled();
+    expect(toastSuccess).not.toHaveBeenCalled();
   });
 
   it("keeps creation disabled while the forum catalog is loading", async () => {
@@ -187,14 +286,16 @@ describe("NewMatterDialog", () => {
         resolveCatalog = resolve;
       }),
     );
-    render(withClient(<NewMatterDialog />));
+    const { view } = renderDialog();
 
-    await openDialog(user);
+    const { dialog } = await openDialog(user, view);
 
-    expect(
-      screen.getByRole("button", { name: /Create matter/i }),
-    ).toBeDisabled();
+    expect(createButton(dialog)).toBeDisabled();
     resolveCatalog({ entries: [] });
+    // The resolved empty catalog still blocks hierarchy submission.
+    expect(await dialog.findByText(/Forum catalog is empty/i)).toBeInTheDocument();
+    expect(createButton(dialog)).toBeDisabled();
+    expect(createMatterMock).not.toHaveBeenCalled();
   });
 
   it("requires an explicit legacy fallback when the forum catalog request fails", async () => {
@@ -207,55 +308,47 @@ describe("NewMatterDialog", () => {
       created_at: "2026-04-17T10:00:00Z",
       status: "active",
     });
-    render(withClient(<NewMatterDialog />));
+    const { view } = renderDialog();
 
-    await openDialog(user);
-    expect(await screen.findByRole("alert")).toHaveTextContent(
+    const { element, dialog } = await openDialog(user, view);
+    expect(await dialog.findByRole("alert")).toHaveTextContent(
       /Forum catalog could not be loaded/i,
     );
-    await fillRequiredMatterFields(user);
-    expect(
-      screen.getByRole("button", { name: /Create matter/i }),
-    ).toBeDisabled();
+    await fillRequiredMatterFields(user, dialog);
+    expect(createButton(dialog)).toBeDisabled();
 
-    await user.selectOptions(
-      screen.getByTestId("new-matter-forum-category"),
-      "legacy",
-    );
-    expect(
-      screen.getByRole("button", { name: /Create matter/i }),
-    ).toBeDisabled();
+    await user.selectOptions(dialog.getByTestId("new-matter-forum-category"), "legacy");
+    expect(createButton(dialog)).toBeDisabled();
 
-    await user.type(
-      screen.getByTestId("new-matter-forum-legacy-court"),
-      "SIAC",
-    );
-    await user.click(screen.getByRole("button", { name: /Create matter/i }));
+    await enterText(user, dialog.getByTestId("new-matter-forum-legacy-court"), "SIAC");
+    await user.click(createButton(dialog));
 
-    await waitFor(() => expect(createMatterMock).toHaveBeenCalledTimes(1));
-    expect(createMatterMock).toHaveBeenCalledWith(
-      expect.objectContaining({
+    await expectCreatedAndClosed(element);
+    expect(createMatterMock).toHaveBeenCalledTimes(1);
+    expect(createMatterMock.mock.calls[0]).toStrictEqual([
+      matterPayload({
+        forum_level: "high_court",
         court_id: null,
         court_name: "SIAC",
         forum_catalog_entry_id: null,
+        forum_state: null,
+        forum_district: null,
+        forum_city: null,
+        forum_consumer_level: null,
       }),
-    );
+    ]);
   });
 
   it("blocks hierarchy submission when the forum catalog is empty", async () => {
     const user = userEvent.setup();
     fetchForumCatalogMock.mockResolvedValue({ entries: [] });
-    render(withClient(<NewMatterDialog />));
+    const { view } = renderDialog();
 
-    await openDialog(user);
-    expect(
-      await screen.findByText(/Forum catalog is empty/i),
-    ).toBeInTheDocument();
-    await fillRequiredMatterFields(user);
+    const { dialog } = await openDialog(user, view);
+    expect(await dialog.findByText(/Forum catalog is empty/i)).toBeInTheDocument();
+    await fillRequiredMatterFields(user, dialog);
 
-    expect(
-      screen.getByRole("button", { name: /Create matter/i }),
-    ).toBeDisabled();
+    expect(createButton(dialog)).toBeDisabled();
     expect(createMatterMock).not.toHaveBeenCalled();
   });
 
@@ -268,69 +361,49 @@ describe("NewMatterDialog", () => {
       created_at: "2026-04-17T10:00:00Z",
       status: "active",
     });
-    render(withClient(<NewMatterDialog />));
+    const { view } = renderDialog();
 
-    await openDialog(user);
+    const { element, dialog } = await openDialog(user, view);
     await waitFor(() =>
-      expect(screen.getByTestId("new-matter-forum-state")).toHaveValue("Delhi"),
+      expect(dialog.getByTestId("new-matter-forum-state")).toHaveValue("Delhi"),
     );
-    await user.type(await screen.findByLabelText("Title"), "  Spine matter  ");
-    await user.type(screen.getByLabelText("Matter code"), "  blr-001  ");
-    await user.type(screen.getByLabelText("Practice area"), "Commercial");
-    await user.type(screen.getByLabelText("Case number"), " WP(C) 1/2026 ");
-    await user.type(
-      screen.getByLabelText("Temporary E-Case number"),
-      " TEMP/2026/00125 ",
-    );
-    await user.type(
-      screen.getByLabelText("CNR number"),
-      " dlhc-0100-1234-2026 ",
-    );
-    await user.click(screen.getByRole("button", { name: /Create matter/i }));
+    await enterText(user, await dialog.findByLabelText("Title"), "  Spine matter  ");
+    await enterText(user, dialog.getByLabelText("Matter code"), "  blr-001  ");
+    await enterText(user, dialog.getByLabelText("Practice area"), "Commercial");
+    await enterText(user, dialog.getByLabelText("Case number"), " WP(C) 1/2026 ");
+    await enterText(user, dialog.getByLabelText("Temporary E-Case number"), " TEMP/2026/00125 ");
+    await enterText(user, dialog.getByLabelText("CNR number"), " dlhc-0100-1234-2026 ");
+    await user.click(createButton(dialog));
 
-    await waitFor(() => expect(createMatterMock).toHaveBeenCalledTimes(1));
-    expect(createMatterMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: "Spine matter",
-        matter_code: "BLR-001",
-        practice_area: "Commercial",
+    await expectCreatedAndClosed(element);
+    expect(createMatterMock).toHaveBeenCalledTimes(1);
+    expect(createMatterMock.mock.calls[0]).toStrictEqual([
+      matterPayload({
         case_number: "WP(C) 1/2026",
         temporary_e_case_number: "TEMP/2026/00125",
         cnr_number: "dlhc-0100-1234-2026",
-        forum_level: "high_court",
-        court_id: "delhi-hc",
-        court_name: "Delhi High Court",
-        forum_catalog_entry_id: "hc:delhi",
-        forum_state: "Delhi",
-        forum_district: null,
-        forum_city: "New Delhi",
-        forum_consumer_level: null,
-        status: "active",
       }),
-    );
-    await waitFor(() => expect(toastSuccess).toHaveBeenCalled());
+    ]);
   });
 
   it("rejects matter codes with spaces, slashes, or other special characters before submit", async () => {
     const user = userEvent.setup();
-    render(withClient(<NewMatterDialog />));
+    const { view } = renderDialog();
 
-    await openDialog(user);
+    const { dialog } = await openDialog(user, view);
     await waitFor(() =>
-      expect(screen.getByTestId("new-matter-forum-state")).toHaveValue("Delhi"),
+      expect(dialog.getByTestId("new-matter-forum-state")).toHaveValue("Delhi"),
     );
-    await user.type(
-      await screen.findByLabelText("Title"),
-      "Invalid code matter",
-    );
-    await user.type(screen.getByLabelText("Matter code"), "BAD CODE/1");
-    await user.type(screen.getByLabelText("Practice area"), "Commercial");
-    await user.click(screen.getByRole("button", { name: /Create matter/i }));
+    await enterText(user, await dialog.findByLabelText("Title"), "Invalid code matter");
+    await enterText(user, dialog.getByLabelText("Matter code"), "BAD CODE/1");
+    await enterText(user, dialog.getByLabelText("Practice area"), "Commercial");
+    await user.click(createButton(dialog));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
+    expect(await dialog.findByRole("alert")).toHaveTextContent(
       /letters, numbers, and hyphens only/i,
     );
     expect(createMatterMock).not.toHaveBeenCalled();
+    expect(toastSuccess).not.toHaveBeenCalled();
   });
 
   it("defaults new matters to Active and does not offer a terminal state at creation", async () => {
@@ -342,31 +415,31 @@ describe("NewMatterDialog", () => {
       created_at: "2026-04-17T10:00:00Z",
       status: "active",
     });
-    render(withClient(<NewMatterDialog />));
+    const { view } = renderDialog();
 
-    await openDialog(user);
+    const { element, dialog } = await openDialog(user, view);
     await waitFor(() =>
-      expect(screen.getByTestId("new-matter-forum-state")).toHaveValue("Delhi"),
+      expect(dialog.getByTestId("new-matter-forum-state")).toHaveValue("Delhi"),
     );
-    await fillRequiredMatterFields(user);
+    await fillRequiredMatterFields(user, dialog);
 
-    const statusTrigger = screen.getByRole("combobox", { name: "Status" });
+    const statusTrigger = dialog.getByRole("combobox", { name: "Status" });
     expect(statusTrigger).toHaveTextContent("Active");
     await user.click(statusTrigger);
-    const listbox = await screen.findByRole("listbox");
-    expect(within(listbox).getByText("Active")).toBeInTheDocument();
-    expect(within(listbox).queryByText("Dispose")).not.toBeInTheDocument();
-    expect(within(listbox).queryByText("Close")).not.toBeInTheDocument();
-    expect(within(listbox).queryByText("Closed")).not.toBeInTheDocument();
+    const listboxElement = await controlledBy(view, statusTrigger);
+    const listbox = mountedWithin(view, listboxElement);
+    expect(listbox.getByText("Active")).toBeInTheDocument();
+    expect(listbox.queryByText("Dispose")).not.toBeInTheDocument();
+    expect(listbox.queryByText("Close")).not.toBeInTheDocument();
+    expect(listbox.queryByText("Closed")).not.toBeInTheDocument();
+    // Escape goes to the focused element; send it only while this listbox has focus.
+    expect(listboxElement).toContainElement(document.activeElement as HTMLElement);
     await user.keyboard("{Escape}");
-    await user.click(screen.getByRole("button", { name: /Create matter/i }));
+    await user.click(createButton(dialog));
 
-    await waitFor(() => expect(createMatterMock).toHaveBeenCalledTimes(1));
-    expect(createMatterMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        status: "active",
-      }),
-    );
+    await expectCreatedAndClosed(element);
+    expect(createMatterMock).toHaveBeenCalledTimes(1);
+    expect(createMatterMock.mock.calls[0]).toStrictEqual([matterPayload({ status: "active" })]);
   });
 
   it("closes after successful creation without waiting for a slow matters refetch", async () => {
@@ -382,20 +455,18 @@ describe("NewMatterDialog", () => {
       created_at: "2026-04-17T10:00:00Z",
       status: "active",
     });
-    render(withClient(<NewMatterDialog />, client));
+    const { view } = renderDialog(client);
 
-    await openDialog(user);
+    const { element, dialog } = await openDialog(user, view);
     await waitFor(() =>
-      expect(screen.getByTestId("new-matter-forum-state")).toHaveValue("Delhi"),
+      expect(dialog.getByTestId("new-matter-forum-state")).toHaveValue("Delhi"),
     );
-    await fillRequiredMatterFields(user);
-    await user.click(screen.getByRole("button", { name: /Create matter/i }));
+    await fillRequiredMatterFields(user, dialog);
+    await user.click(createButton(dialog));
 
-    await waitFor(() =>
-      expect(
-        screen.queryByRole("dialog", { name: /New matter/i }),
-      ).not.toBeInTheDocument(),
-    );
+    await expectCreatedAndClosed(element);
+    expect(createMatterMock).toHaveBeenCalledTimes(1);
+    expect(createMatterMock.mock.calls[0]).toStrictEqual([matterPayload({})]);
     expect(client.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ["matters"],
     });
@@ -410,51 +481,38 @@ describe("NewMatterDialog", () => {
       created_at: "2026-06-24T10:00:00Z",
       status: "intake",
     });
-    render(withClient(<NewMatterDialog />));
+    const { view } = renderDialog();
 
-    await openDialog(user);
-    await fillRequiredMatterFields(user);
+    const { element, dialog } = await openDialog(user, view);
+    await fillRequiredMatterFields(user, dialog);
     await waitFor(() =>
-      expect(screen.getByTestId("new-matter-forum-state")).toHaveValue("Delhi"),
+      expect(dialog.getByTestId("new-matter-forum-state")).toHaveValue("Delhi"),
     );
-    await user.selectOptions(
-      screen.getByTestId("new-matter-forum-category"),
-      "district_court",
-    );
-    await user.selectOptions(
-      screen.getByTestId("new-matter-forum-district-state"),
-      "Assam",
-    );
+    await user.selectOptions(dialog.getByTestId("new-matter-forum-category"), "district_court");
+    await user.selectOptions(dialog.getByTestId("new-matter-forum-district-state"), "Assam");
 
     await waitFor(() =>
-      expect(screen.getByTestId("new-matter-forum-district-state")).toHaveValue(
-        "Assam",
-      ),
+      expect(dialog.getByTestId("new-matter-forum-district-state")).toHaveValue("Assam"),
     );
-    expect(screen.getByTestId("new-matter-forum-district")).toHaveValue(
+    expect(dialog.getByTestId("new-matter-forum-district")).toHaveValue(
       "__uncatalogued_district_court__",
     );
-    expect(
-      screen.getByRole("button", { name: /Create matter/i }),
-    ).toBeDisabled();
+    expect(createButton(dialog)).toBeDisabled();
 
-    await user.type(
-      screen.getByTestId("new-matter-forum-district-name"),
-      "Kamrup Metro",
-    );
-    expect(
-      screen.getByRole("button", { name: /Create matter/i }),
-    ).toBeDisabled();
+    await enterText(user, dialog.getByTestId("new-matter-forum-district-name"), "Kamrup Metro");
+    expect(createButton(dialog)).toBeDisabled();
 
-    await user.type(
-      screen.getByTestId("new-matter-forum-district-court"),
+    await enterText(
+      user,
+      dialog.getByTestId("new-matter-forum-district-court"),
       "Kamrup Metro District Court",
     );
-    await user.click(screen.getByRole("button", { name: /Create matter/i }));
+    await user.click(createButton(dialog));
 
-    await waitFor(() => expect(createMatterMock).toHaveBeenCalledTimes(1));
-    expect(createMatterMock).toHaveBeenCalledWith(
-      expect.objectContaining({
+    await expectCreatedAndClosed(element);
+    expect(createMatterMock).toHaveBeenCalledTimes(1);
+    expect(createMatterMock.mock.calls[0]).toStrictEqual([
+      matterPayload({
         forum_level: "lower_court",
         court_id: null,
         court_name: "Kamrup Metro District Court",
@@ -464,7 +522,7 @@ describe("NewMatterDialog", () => {
         forum_city: null,
         forum_consumer_level: null,
       }),
-    );
+    ]);
   });
 
   it("can create catalogued and uncatalogued DCDRC matters without stale metadata", async () => {
@@ -476,30 +534,31 @@ describe("NewMatterDialog", () => {
       created_at: "2026-06-25T10:00:00Z",
       status: "intake",
     });
-    render(withClient(<NewMatterDialog />));
+    const { view } = renderDialog();
 
-    await openDialog(user);
-    await fillRequiredMatterFields(user);
+    const first = await openDialog(user, view);
+    await fillRequiredMatterFields(user, first.dialog);
     await waitFor(() =>
-      expect(screen.getByTestId("new-matter-forum-state")).toHaveValue("Delhi"),
+      expect(first.dialog.getByTestId("new-matter-forum-state")).toHaveValue("Delhi"),
     );
     await user.selectOptions(
-      screen.getByTestId("new-matter-forum-category"),
+      first.dialog.getByTestId("new-matter-forum-category"),
       "district_commission",
     );
     await user.selectOptions(
-      screen.getByTestId("new-matter-forum-consumer-state"),
+      first.dialog.getByTestId("new-matter-forum-consumer-state"),
       "Rajasthan",
     );
 
-    expect(
-      screen.getByTestId("new-matter-forum-consumer-district"),
-    ).toHaveValue("consumer:dcdrc:11080086");
-    await user.click(screen.getByRole("button", { name: /Create matter/i }));
+    expect(first.dialog.getByTestId("new-matter-forum-consumer-district")).toHaveValue(
+      "consumer:dcdrc:11080086",
+    );
+    await user.click(createButton(first.dialog));
 
-    await waitFor(() => expect(createMatterMock).toHaveBeenCalledTimes(1));
-    expect(createMatterMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
+    await expectCreatedAndClosed(first.element);
+    expect(createMatterMock).toHaveBeenCalledTimes(1);
+    expect(createMatterMock.mock.calls[0]).toStrictEqual([
+      matterPayload({
         forum_level: "tribunal",
         court_id: null,
         court_name: "Ajmer District Consumer Disputes Redressal Commission",
@@ -509,49 +568,45 @@ describe("NewMatterDialog", () => {
         forum_city: null,
         forum_consumer_level: "district",
       }),
-    );
+    ]);
 
     createMatterMock.mockClear();
-    await openDialog(user);
-    await fillRequiredMatterFields(user);
+    toastSuccess.mockClear();
+    const second = await openDialog(user, view);
+    await fillRequiredMatterFields(user, second.dialog);
     await user.selectOptions(
-      screen.getByTestId("new-matter-forum-category"),
+      second.dialog.getByTestId("new-matter-forum-category"),
       "district_commission",
     );
     await user.selectOptions(
-      screen.getByTestId("new-matter-forum-consumer-state"),
+      second.dialog.getByTestId("new-matter-forum-consumer-state"),
       "Rajasthan",
     );
     await user.selectOptions(
-      screen.getByTestId("new-matter-forum-consumer-district"),
+      second.dialog.getByTestId("new-matter-forum-consumer-district"),
       "__uncatalogued_consumer_district__",
     );
-    expect(
-      screen.getByTestId("new-matter-forum-consumer-district-name"),
-    ).toHaveValue("");
-    expect(
-      screen.getByTestId("new-matter-forum-consumer-forum-name"),
-    ).toHaveValue("");
-    expect(
-      screen.getByRole("button", { name: /Create matter/i }),
-    ).toBeDisabled();
+    expect(second.dialog.getByTestId("new-matter-forum-consumer-district-name")).toHaveValue("");
+    expect(second.dialog.getByTestId("new-matter-forum-consumer-forum-name")).toHaveValue("");
+    expect(createButton(second.dialog)).toBeDisabled();
 
-    await user.type(
-      screen.getByTestId("new-matter-forum-consumer-district-name"),
+    await enterText(
+      user,
+      second.dialog.getByTestId("new-matter-forum-consumer-district-name"),
       "South II",
     );
-    expect(
-      screen.getByRole("button", { name: /Create matter/i }),
-    ).toBeDisabled();
-    await user.type(
-      screen.getByTestId("new-matter-forum-consumer-forum-name"),
+    expect(createButton(second.dialog)).toBeDisabled();
+    await enterText(
+      user,
+      second.dialog.getByTestId("new-matter-forum-consumer-forum-name"),
       "South II DCDRC Annex",
     );
-    await user.click(screen.getByRole("button", { name: /Create matter/i }));
+    await user.click(createButton(second.dialog));
 
-    await waitFor(() => expect(createMatterMock).toHaveBeenCalledTimes(1));
-    expect(createMatterMock).toHaveBeenLastCalledWith(
-      expect.objectContaining({
+    await expectCreatedAndClosed(second.element);
+    expect(createMatterMock).toHaveBeenCalledTimes(1);
+    expect(createMatterMock.mock.calls[0]).toStrictEqual([
+      matterPayload({
         forum_level: "tribunal",
         court_id: null,
         court_name: "South II DCDRC Annex",
@@ -561,7 +616,7 @@ describe("NewMatterDialog", () => {
         forum_city: null,
         forum_consumer_level: "district",
       }),
-    );
+    ]);
   });
 
   it("can create a matter against a previously missing Delhi District Court entry", async () => {
@@ -573,24 +628,22 @@ describe("NewMatterDialog", () => {
       created_at: "2026-06-23T10:00:00Z",
       status: "intake",
     });
-    render(withClient(<NewMatterDialog />));
+    const { view } = renderDialog();
 
-    await openDialog(user);
-    await fillRequiredMatterFields(user);
-    await user.selectOptions(
-      screen.getByTestId("new-matter-forum-category"),
-      "district_court",
-    );
+    const { element, dialog } = await openDialog(user, view);
+    await fillRequiredMatterFields(user, dialog);
+    await user.selectOptions(dialog.getByTestId("new-matter-forum-category"), "district_court");
     await waitFor(() =>
-      expect(screen.getByTestId("new-matter-forum-district")).toHaveValue(
+      expect(dialog.getByTestId("new-matter-forum-district")).toHaveValue(
         "district:delhi:dwarka",
       ),
     );
-    await user.click(screen.getByRole("button", { name: /Create matter/i }));
+    await user.click(createButton(dialog));
 
-    await waitFor(() => expect(createMatterMock).toHaveBeenCalledTimes(1));
-    expect(createMatterMock).toHaveBeenCalledWith(
-      expect.objectContaining({
+    await expectCreatedAndClosed(element);
+    expect(createMatterMock).toHaveBeenCalledTimes(1);
+    expect(createMatterMock.mock.calls[0]).toStrictEqual([
+      matterPayload({
         forum_level: "lower_court",
         court_id: null,
         court_name: "Dwarka Courts Complex",
@@ -598,7 +651,8 @@ describe("NewMatterDialog", () => {
         forum_state: "Delhi",
         forum_district: "South-West",
         forum_city: "Dwarka",
+        forum_consumer_level: null,
       }),
-    );
+    ]);
   });
 });

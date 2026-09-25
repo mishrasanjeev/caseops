@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import userEvent, { type UserEvent } from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -82,6 +82,26 @@ function withClient(children: ReactNode) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
+// Mutation tests query only inside their own render container. If a test ever
+// overruns its deadline, cleanup() empties that container and the abandoned
+// user flow fails on its next query instead of driving the next test's page.
+function renderAliasPage() {
+  const view = render(withClient(<PlatformForumAliasesPage />));
+  return within(view.container);
+}
+
+// One paste per field: the field still receives focus and a real input event,
+// but the page re-renders once per field instead of once per character.
+// Paste targets whichever element has focus, so require focus first: an
+// abandoned flow holding a detached field fails here instead of pasting into
+// the next test's focused input.
+async function enterText(user: UserEvent, field: HTMLElement, value: string) {
+  await user.click(field);
+  expect(field).toHaveFocus();
+  await user.paste(value);
+  expect(field).toHaveDisplayValue(value);
+}
+
 describe("PlatformForumAliasesPage", () => {
   beforeEach(() => {
     mocks.canManage = true;
@@ -122,27 +142,27 @@ describe("PlatformForumAliasesPage", () => {
 
   it("creates a verified non-Delhi alias with source evidence and a reason", async () => {
     const user = userEvent.setup();
-    render(withClient(<PlatformForumAliasesPage />));
-    await screen.findByTestId("forum-alias-registry");
+    const page = renderAliasPage();
+    await page.findByTestId("forum-alias-registry");
 
-    await user.type(screen.getByLabelText("Find canonical forum"), "Ernakulam");
-    await user.selectOptions(screen.getByLabelText("Canonical forum"), CATALOG_ENTRY.id);
-    await user.type(screen.getByLabelText("Alias"), "Ernakulam District Complex");
-    await user.selectOptions(screen.getByLabelText("Alias type"), "provider_label");
-    await user.selectOptions(screen.getByLabelText("Verification"), "verified");
-    await user.type(screen.getByLabelText("Source name"), "Official eCourts directory");
-    await user.type(
-      screen.getByLabelText("Source URL"),
-      "https://districts.ecourts.gov.in/",
-    );
-    await user.type(
-      screen.getByLabelText("Change reason"),
+    await enterText(user, page.getByLabelText("Find canonical forum"), "Ernakulam");
+    await user.selectOptions(page.getByLabelText("Canonical forum"), CATALOG_ENTRY.id);
+    await enterText(user, page.getByLabelText("Alias"), "Ernakulam District Complex");
+    await user.selectOptions(page.getByLabelText("Alias type"), "provider_label");
+    await user.selectOptions(page.getByLabelText("Verification"), "verified");
+    await enterText(user, page.getByLabelText("Source name"), "Official eCourts directory");
+    await enterText(user, page.getByLabelText("Source URL"), "https://districts.ecourts.gov.in/");
+    await enterText(
+      user,
+      page.getByLabelText("Change reason"),
       "Add the reviewed Kerala provider label.",
     );
-    await user.click(screen.getByRole("button", { name: "Add alias" }));
+    await user.click(page.getByRole("button", { name: "Add alias" }));
 
-    await waitFor(() =>
-      expect(mocks.createPlatformForumAlias).toHaveBeenCalledWith({
+    await waitFor(() => expect(mocks.success).toHaveBeenCalledWith("Forum alias created."));
+    expect(mocks.createPlatformForumAlias).toHaveBeenCalledTimes(1);
+    expect(mocks.createPlatformForumAlias.mock.calls[0]).toEqual([
+      {
         forum_catalog_entry_id: CATALOG_ENTRY.id,
         alias: "Ernakulam District Complex",
         alias_type: "provider_label",
@@ -151,8 +171,16 @@ describe("PlatformForumAliasesPage", () => {
         verification_status: "verified",
         is_active: true,
         reason: "Add the reviewed Kerala provider label.",
-      }),
-    );
+      },
+    ]);
+    expect(mocks.updatePlatformForumAlias).not.toHaveBeenCalled();
+    expect(mocks.error).not.toHaveBeenCalled();
+    // The settled mutation resets the draft and refreshes both registry reads.
+    expect(page.getByLabelText("Alias")).toHaveDisplayValue("");
+    await waitFor(() => {
+      expect(mocks.fetchPlatformForumAliases).toHaveBeenCalledTimes(2);
+      expect(mocks.fetchForumCatalog).toHaveBeenCalledTimes(2);
+    });
   });
 
   it("contains the accessible action heading inside the horizontal table scroller", async () => {
@@ -164,26 +192,36 @@ describe("PlatformForumAliasesPage", () => {
 
   it("updates and deactivates through optimistic concurrency", async () => {
     const user = userEvent.setup();
-    render(withClient(<PlatformForumAliasesPage />));
-    const row = await screen.findByTestId("forum-alias-row-alias-1");
+    const page = renderAliasPage();
+    const row = await page.findByTestId("forum-alias-row-alias-1");
 
     await user.click(within(row).getByRole("button", { name: "Edit" }));
-    await user.click(screen.getByLabelText("Active registry row"));
-    await user.type(
-      screen.getByLabelText("Change reason"),
-      "Retire an obsolete registry label.",
-    );
-    await user.click(screen.getByRole("button", { name: "Save alias" }));
+    await user.click(page.getByLabelText("Active registry row"));
+    await enterText(user, page.getByLabelText("Change reason"), "Retire an obsolete registry label.");
+    await user.click(page.getByRole("button", { name: "Save alias" }));
 
-    await waitFor(() =>
-      expect(mocks.updatePlatformForumAlias).toHaveBeenCalledWith(
-        "alias-1",
-        expect.objectContaining({
-          is_active: false,
-          expected_record_version: 3,
-          reason: "Retire an obsolete registry label.",
-        }),
-      ),
-    );
+    await waitFor(() => expect(mocks.success).toHaveBeenCalledWith("Forum alias updated."));
+    expect(mocks.updatePlatformForumAlias).toHaveBeenCalledTimes(1);
+    expect(mocks.updatePlatformForumAlias.mock.calls[0]).toEqual([
+      "alias-1",
+      {
+        alias: "Ernakulam Court Complex",
+        alias_type: "court_complex",
+        source_name: "Kerala courts directory",
+        source_url: "https://districts.ecourts.gov.in/",
+        verification_status: "verified",
+        is_active: false,
+        expected_record_version: 3,
+        reason: "Retire an obsolete registry label.",
+      },
+    ]);
+    expect(mocks.createPlatformForumAlias).not.toHaveBeenCalled();
+    expect(mocks.error).not.toHaveBeenCalled();
+    // The settled mutation leaves edit mode and refreshes both registry reads.
+    expect(page.getByRole("heading", { name: "Add reviewed alias" })).toBeVisible();
+    await waitFor(() => {
+      expect(mocks.fetchPlatformForumAliases).toHaveBeenCalledTimes(2);
+      expect(mocks.fetchForumCatalog).toHaveBeenCalledTimes(2);
+    });
   });
 });

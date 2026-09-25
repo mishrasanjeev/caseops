@@ -1,15 +1,19 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent, { type UserEvent } from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   fetchLitigationIntelligenceReviewMock,
   mutateLitigationIntelligenceReviewItemMock,
+  toastError,
+  toastSuccess,
 } = vi.hoisted(() => ({
   fetchLitigationIntelligenceReviewMock: vi.fn(),
   mutateLitigationIntelligenceReviewItemMock: vi.fn(),
+  toastError: vi.fn(),
+  toastSuccess: vi.fn(),
 }));
 
 vi.mock("@/lib/api/endpoints", () => ({
@@ -20,6 +24,8 @@ vi.mock("@/lib/api/endpoints", () => ({
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "m-1" }),
 }));
+
+vi.mock("sonner", () => ({ toast: { success: toastSuccess, error: toastError } }));
 
 import LitigationIntelligenceReviewPage from "@/app/app/matters/[id]/litigation-intelligence/page";
 import {
@@ -33,6 +39,29 @@ function withClient(children: ReactNode) {
   });
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
+
+// Mutation tests query only inside their own render container. If a test ever
+// overruns its deadline, cleanup() empties that container and the abandoned
+// user flow fails on its next query instead of driving the next test's page.
+function renderReviewPage() {
+  const view = render(withClient(<LitigationIntelligenceReviewPage />));
+  return within(view.container);
+}
+
+// One paste per field: the field still receives focus and a real input event,
+// but the page re-renders once per field instead of once per character.
+// Paste targets whichever element has focus, so require focus first: an
+// abandoned flow holding a detached field fails here instead of pasting into
+// the next test's focused input.
+async function enterText(user: UserEvent, field: HTMLElement, value: string) {
+  await user.click(field);
+  expect(field).toHaveFocus();
+  await user.paste(value);
+  expect(field).toHaveDisplayValue(value);
+}
+
+const REVIEW_NOTE_POLICY_MESSAGE =
+  "Review note contains unsupported prediction, judge-reputation, legal-advice, or biometric/psychological language.";
 
 const REVIEW_RESPONSE = {
   matter_id: "m-1",
@@ -133,6 +162,8 @@ describe("LitigationIntelligenceReviewPage", () => {
   beforeEach(() => {
     fetchLitigationIntelligenceReviewMock.mockReset();
     mutateLitigationIntelligenceReviewItemMock.mockReset();
+    toastError.mockReset();
+    toastSuccess.mockReset();
   });
 
   it("renders grouped review items with source links and safe disclaimer", async () => {
@@ -196,54 +227,62 @@ describe("LitigationIntelligenceReviewPage", () => {
       applied: true,
       updated_at: "2026-05-12T09:00:00Z",
     });
+    const user = userEvent.setup();
+    const page = renderReviewPage();
 
-    render(withClient(<LitigationIntelligenceReviewPage />));
-
-    await screen.findByTestId("litigation-review-page");
-    await userEvent.type(
-      screen.getByTestId("litigation-review-note-input-affidavit-question:q-1"),
+    await page.findByTestId("litigation-review-page");
+    await enterText(
+      user,
+      page.getByTestId("litigation-review-note-input-affidavit-question:q-1"),
       "Approved for hearing prep.",
     );
-    await userEvent.click(
-      screen.getByTestId("litigation-review-action-accept-affidavit-question:q-1"),
-    );
+    await user.click(page.getByTestId("litigation-review-action-accept-affidavit-question:q-1"));
 
-    await waitFor(() => {
-      expect(mutateLitigationIntelligenceReviewItemMock).toHaveBeenCalledWith({
+    // Success is announced only after the review refresh settles.
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("Review action saved."));
+    expect(toastSuccess).toHaveBeenCalledTimes(1);
+    expect(mutateLitigationIntelligenceReviewItemMock).toHaveBeenCalledTimes(1);
+    expect(mutateLitigationIntelligenceReviewItemMock.mock.calls[0]).toEqual([
+      {
         matterId: "m-1",
         itemId: "affidavit-question:q-1",
         itemType: "affidavit_question",
         action: "accept",
         note: "Approved for hearing prep.",
-      });
-    });
+      },
+    ]);
+    expect(fetchLitigationIntelligenceReviewMock).toHaveBeenCalledTimes(2);
+    expect(toastError).not.toHaveBeenCalled();
   });
 
   it("blocks unsafe review-note language before mutation", async () => {
     fetchLitigationIntelligenceReviewMock.mockResolvedValue(REVIEW_RESPONSE);
+    const user = userEvent.setup();
+    const page = renderReviewPage();
 
-    render(withClient(<LitigationIntelligenceReviewPage />));
-
-    await screen.findByTestId("litigation-review-page");
-    const noteInput = screen.getByTestId(
-      "litigation-review-note-input-affidavit-question:q-1",
-    );
-    const saveNote = screen.getByTestId(
-      "litigation-review-action-note-affidavit-question:q-1",
-    );
-    for (const note of [
+    await page.findByTestId("litigation-review-page");
+    const noteInput = page.getByTestId("litigation-review-note-input-affidavit-question:q-1");
+    const saveNote = page.getByTestId("litigation-review-action-note-affidavit-question:q-1");
+    const unsafeNotes = [
       "Guaranteed win because judge likes us.",
       "The witness will lose on this point.",
       "Add a loss probability for the matter.",
       "Add win/loss notes for this witness.",
       "This relies on judge reputation.",
-    ]) {
-      await userEvent.clear(noteInput);
-      await userEvent.type(noteInput, note);
-      await userEvent.click(saveNote);
+    ];
+    for (const [index, note] of unsafeNotes.entries()) {
+      await user.clear(noteInput);
+      await enterText(user, noteInput, note);
+      await user.click(saveNote);
+      // Each attempt is refused locally with the policy message.
+      expect(toastError).toHaveBeenCalledTimes(index + 1);
+      expect(toastError).toHaveBeenLastCalledWith(REVIEW_NOTE_POLICY_MESSAGE);
+      expect(saveNote).toBeEnabled();
     }
 
     expect(mutateLitigationIntelligenceReviewItemMock).not.toHaveBeenCalled();
+    expect(toastSuccess).not.toHaveBeenCalled();
+    expect(fetchLitigationIntelligenceReviewMock).toHaveBeenCalledTimes(1);
   });
 
   it("does not render unsafe stored reviewer notes", async () => {
