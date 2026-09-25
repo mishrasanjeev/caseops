@@ -238,8 +238,8 @@ export default function MatterBulkUpdatePage(): React.JSX.Element {
             <table className="min-w-full text-left text-sm">
               <thead className="bg-[var(--color-bg-2)] text-xs uppercase"><tr><th className="px-3 py-2">File</th><th className="px-3 py-2">Uploader</th><th className="px-3 py-2">Time</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Rows</th><th className="px-3 py-2">Updated</th><th className="px-3 py-2">Skipped / failed</th><th className="px-3 py-2">Results</th></tr></thead>
               <tbody>{history.operations.map((operation) => {
-                // Uploads commonly reuse one filename; the upload time and the
-                // current-upload marker keep each operation distinguishable.
+                // Uploads commonly reuse one filename and can share a displayed
+                // second; the operation ID keeps each action label unique.
                 const uploadedAt = new Date(operation.created_at).toLocaleString();
                 const isThisUpload = operation.id === result?.operation_id;
                 return (
@@ -252,7 +252,7 @@ export default function MatterBulkUpdatePage(): React.JSX.Element {
                       <td className="px-3 py-2">{operation.total_rows}</td>
                       <td className="px-3 py-2">{operation.applied_rows}</td>
                       <td className="px-3 py-2">{operation.skipped_rows} / {operation.failed_rows}</td>
-                      <td className="px-3 py-2"><div className="flex gap-1"><Button type="button" variant="outline" aria-label={`View results for ${operation.filename} uploaded ${uploadedAt}`} aria-expanded={expandedOperationId === operation.id} onClick={() => setExpandedOperationId(expandedOperationId === operation.id ? null : operation.id)}><Eye className="h-4 w-4" /></Button><Button type="button" variant="outline" aria-label={`Download results for ${operation.filename} uploaded ${uploadedAt}`} onClick={() => downloadResult(operation)}><Download className="h-4 w-4" /></Button></div></td>
+                      <td className="px-3 py-2"><div className="flex gap-1"><Button type="button" variant="outline" aria-label={`View results for ${operation.filename} uploaded ${uploadedAt}, operation ${operation.id}`} aria-expanded={expandedOperationId === operation.id} onClick={() => setExpandedOperationId(expandedOperationId === operation.id ? null : operation.id)}><Eye className="h-4 w-4" /></Button><Button type="button" variant="outline" aria-label={`Download results for ${operation.filename} uploaded ${uploadedAt}, operation ${operation.id}`} onClick={() => downloadResult(operation)}><Download className="h-4 w-4" /></Button></div></td>
                     </tr>
                     {expandedOperationId === operation.id ? <tr data-testid={`bulk-update-operation-results-${operation.id}`}><td colSpan={8} className="px-3 py-2"><ul className="space-y-1 text-sm">{operation.rows.map((row) => <li key={row.row_number}>Row {row.row_number}: {row.matter_code ?? "Restricted matter"} — {row.status}{row.changed_fields.length ? ` (${row.changed_fields.join(", ")})` : ""}{row.errors.length ? ` — ${row.errors.join("; ")}` : ""}</li>)}</ul></td></tr> : null}
                   </Fragment>

@@ -264,7 +264,10 @@ test("BUG-006 DOCX is visibly rendered and ENH-007 updates only an existing matt
   const retainedRow = page.getByTestId(`bulk-update-operation-${retainedOperationId}`);
   await expect(retainedRow).toBeVisible();
   await expect(retainedRow).not.toHaveAttribute("aria-current", "true");
-  await operationRow.getByRole("button", { name: /^View results for matter-bulk-update\.csv uploaded / }).click();
+  const viewResults = operationRow.getByRole("button", { name: /^View results for matter-bulk-update\.csv uploaded / });
+  await expect(viewResults).toHaveAccessibleName(new RegExp(`, operation ${operationId}$`));
+  await expect(page.getByRole("button", { name: `operation ${operationId}` })).toHaveCount(2);
+  await viewResults.click();
   const operationResults = page.getByTestId(`bulk-update-operation-results-${operationId}`);
   await expect(operationResults.getByRole("listitem")).toHaveCount(2);
   await expect(operationResults.getByText(`Row 2: ${code} — applied`, { exact: false })).toBeVisible();

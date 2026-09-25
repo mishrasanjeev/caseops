@@ -108,8 +108,9 @@ describe("MatterBulkUpdatePage", () => {
         ...extraRows,
       ],
     });
-    const retained = operation("operation-retained", "2026-09-25T07:49:13Z", "BULK-RETAINED");
-    const current = operation("operation-current", "2026-09-25T08:53:51Z", "BULK-CURRENT", [
+    // Both uploads fall within one displayed second, so the time alone cannot tell them apart.
+    const retained = operation("operation-retained", "2026-09-25T08:53:51.100Z", "BULK-RETAINED");
+    const current = operation("operation-current", "2026-09-25T08:53:51.900Z", "BULK-CURRENT", [
       { row_number: 3, matter_code: "BULK-UNKNOWN", status: "invalid", errors: ["Matter Code must match one existing matter"], changed_fields: [] },
     ]);
     let resolveInitial: (value: unknown) => void = () => {};
@@ -147,6 +148,12 @@ describe("MatterBulkUpdatePage", () => {
     const viewButtons = screen.getAllByRole("button", { name: /^View results for matter-bulk-update\.csv uploaded / });
     expect(viewButtons).toHaveLength(2);
     expect(new Set(viewButtons.map((button) => button.getAttribute("aria-label"))).size).toBe(2);
+    expect(within(currentRow).getByRole("button", { name: /^View results for / }).getAttribute("aria-label"))
+      .toMatch(/, operation operation-current$/);
+    expect(within(currentRow).getByRole("button", { name: /^Download results for / }).getAttribute("aria-label"))
+      .toMatch(/, operation operation-current$/);
+    expect(within(retainedRow).getByRole("button", { name: /^Download results for / }).getAttribute("aria-label"))
+      .toMatch(/, operation operation-retained$/);
 
     fireEvent.click(within(currentRow).getByRole("button", { name: /^View results for / }));
     const results = screen.getByTestId("bulk-update-operation-results-operation-current");
