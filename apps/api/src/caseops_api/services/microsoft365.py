@@ -21,6 +21,7 @@ from caseops_api.schemas.microsoft365 import (
     Microsoft365ReadinessTestResponse,
     Microsoft365TenantConfigurationResponse,
     Microsoft365TenantConfigurationUpdateRequest,
+    microsoft365_oauth_redirect_is_valid,
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.calendar_sync import _encrypt_secret
@@ -92,7 +93,8 @@ def _config_items(
         ),
         Microsoft365ConfigurationItemStatus(
             name="MICROSOFT_365_REDIRECT_URI",
-            configured=bool(row and row.redirect_uri),
+            # A value saved before redirect validation existed must not count.
+            configured=bool(row and microsoft365_oauth_redirect_is_valid(row.redirect_uri)),
         ),
     ]
 
