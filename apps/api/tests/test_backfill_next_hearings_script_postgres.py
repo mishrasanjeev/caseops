@@ -8,6 +8,8 @@ from sqlalchemy import func, insert, select
 
 from caseops_api.db.models import (
     CompanyMembership,
+    HearingReminder,
+    HearingReminderStatus,
     Matter,
     MatterHearing,
     MatterHearingStatus,
@@ -379,3 +381,149 @@ def test_manual_adjourned_create_and_closed_reconciliation_do_not_duplicate(
         assert matter is not None
         assert matter.next_hearing_on == replacement_date
         assert matter.next_hearing_source_ref_id == replacement_id
+
+
+def test_same_date_manual_replacement_updates_source_identity(
+    isolated_postgres_client,
+) -> None:
+    client = isolated_postgres_client
+    boot = bootstrap_company(client)
+    headers = auth_headers(str(boot["access_token"]))
+    matter_response = client.post(
+        "/api/matters/",
+        headers=headers,
+        json={
+            "title": "Same-date hearing replacement",
+            "matter_code": f"SAME-{uuid4().hex[:12]}",
+            "practice_area": "litigation",
+            "forum_level": "high_court",
+            "status": "intake",
+        },
+    )
+    assert matter_response.status_code == 200, matter_response.text
+    matter_id = matter_response.json()["id"]
+    hearing_day = date.today() + timedelta(days=9)
+    hearing_ids = []
+    for purpose in ("First listing", "Second listing"):
+        response = client.post(
+            f"/api/matters/{matter_id}/hearings",
+            headers=headers,
+            json={
+                "hearing_on": hearing_day.isoformat(),
+                "forum_name": "Delhi High Court",
+                "purpose": purpose,
+            },
+        )
+        assert response.status_code == 200, response.text
+        hearing_ids.append(response.json()["id"])
+    with get_session_factory()() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        assert matter.next_hearing_source_ref_id == hearing_ids[1]
+    cancelled = client.patch(
+        f"/api/matters/{matter_id}/hearings/{hearing_ids[1]}",
+        headers=headers,
+        json={"status": "cancelled"},
+    )
+    assert cancelled.status_code == 200, cancelled.text
+    with get_session_factory()() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        assert matter.next_hearing_on == hearing_day
+        assert matter.next_hearing_source_ref_id == hearing_ids[0]
+        hearings = list(
+            session.scalars(select(MatterHearing).where(MatterHearing.matter_id == matter_id))
+        )
+        assert len(hearings) == 2
+    calendar = client.get(
+        "/api/calendar/events",
+        headers=headers,
+        params={"from": hearing_day.isoformat(), "to": hearing_day.isoformat()},
+    )
+    assert calendar.status_code == 200, calendar.text
+    events = [
+        event
+        for event in calendar.json()["events"]
+        if event["kind"] == "hearing" and event["matter_id"] == matter_id
+    ]
+    assert len(events) == 1
+    assert events[0]["occurs_on"] == hearing_day.isoformat()
+
+
+def test_status_only_hearing_reopen_restores_next_date_and_reminders(
+    isolated_postgres_client,
+) -> None:
+    client = isolated_postgres_client
+    boot = bootstrap_company(client)
+    headers = auth_headers(str(boot["access_token"]))
+    matter_response = client.post(
+        "/api/matters/",
+        headers=headers,
+        json={
+            "title": "Hearing status-only reopen",
+            "matter_code": f"REOPEN-{uuid4().hex[:12]}",
+            "practice_area": "litigation",
+            "forum_level": "high_court",
+            "status": "intake",
+        },
+    )
+    assert matter_response.status_code == 200, matter_response.text
+    matter_id = matter_response.json()["id"]
+    hearing_day = date.today() + timedelta(days=10)
+    created = client.post(
+        f"/api/matters/{matter_id}/hearings",
+        headers=headers,
+        json={
+            "hearing_on": hearing_day.isoformat(),
+            "forum_name": "Delhi High Court",
+            "purpose": "Arguments",
+        },
+    )
+    assert created.status_code == 200, created.text
+    hearing_id = created.json()["id"]
+    closed = client.patch(
+        f"/api/matters/{matter_id}/hearings/{hearing_id}",
+        headers=headers,
+        json={"status": "completed", "create_follow_up": False},
+    )
+    assert closed.status_code == 200, closed.text
+    with get_session_factory()() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        assert matter.next_hearing_on is None
+    reopened = client.patch(
+        f"/api/matters/{matter_id}/hearings/{hearing_id}",
+        headers=headers,
+        json={"status": "scheduled"},
+    )
+    assert reopened.status_code == 200, reopened.text
+    with get_session_factory()() as session:
+        matter = session.get(Matter, matter_id)
+        assert matter is not None
+        assert matter.next_hearing_on == hearing_day
+        assert matter.next_hearing_source_ref_id == hearing_id
+        hearings = list(
+            session.scalars(select(MatterHearing).where(MatterHearing.matter_id == matter_id))
+        )
+        assert len(hearings) == 1
+        assert hearings[0].status == MatterHearingStatus.SCHEDULED
+        assert session.scalar(
+            select(func.count())
+            .select_from(HearingReminder)
+            .where(
+                HearingReminder.hearing_id == hearing_id,
+                HearingReminder.status == HearingReminderStatus.QUEUED,
+            )
+        ) > 0
+    calendar = client.get(
+        "/api/calendar/events",
+        headers=headers,
+        params={"from": hearing_day.isoformat(), "to": hearing_day.isoformat()},
+    )
+    assert calendar.status_code == 200, calendar.text
+    events = [
+        event
+        for event in calendar.json()["events"]
+        if event["kind"] == "hearing" and event["matter_id"] == matter_id
+    ]
+    assert len(events) == 1

@@ -447,7 +447,16 @@ def apply_next_hearing_update(
         not in (MatterHearingStatus.SCHEDULED, MatterHearingStatus.ADJOURNED)
     ):
         raise ValueError("Existing hearing must be an open row for this matter and date.")
-    if matter.next_hearing_on == new_date and matter.next_hearing_manual_lock == manual_lock:
+    same_existing_hearing = existing_hearing is None or (
+        matter.next_hearing_source == source_value
+        and matter.next_hearing_source_ref_type == source_ref_type
+        and matter.next_hearing_source_ref_id == source_ref_id
+    )
+    if (
+        matter.next_hearing_on == new_date
+        and matter.next_hearing_manual_lock == manual_lock
+        and same_existing_hearing
+    ):
         if matter.status != MatterStatus.DISPOSED and existing_hearing is None:
             terminal_hearing_exists = session.scalar(
                 select(MatterHearing.id)

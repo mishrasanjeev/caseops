@@ -1107,6 +1107,9 @@ requirements when using the fallback.
   hearing edit or reconciliation. A same-date hearing of any status makes a
   legacy date ineligible for automatic backfill; unchanged provider repair
   must preserve it, while a genuinely new date gets a new scheduled row.
+  A same-date explicit replacement must update the Matter's source reference;
+  reopening a non-neutralized closed hearing by status alone must restore its
+  next date and reminders without creating a second calendar row.
   Count active companies rather than active memberships for release repair,
   cap actual writes as well as preflight backlog, and recheck every tenant at
   the end. A point-in-time final recount is not a promise against future writes.
