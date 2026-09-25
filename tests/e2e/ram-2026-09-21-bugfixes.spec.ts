@@ -108,7 +108,6 @@ async function ensureMatter(
       forum_level: "high_court",
       status: "active",
       court_name: "Delhi High Court",
-      case_number: "WP(C) 2121/2026",
       client_name: "CaseOps QA Client",
       opposing_party: "CaseOps QA Opponent",
       next_hearing_on: nextHearing,
