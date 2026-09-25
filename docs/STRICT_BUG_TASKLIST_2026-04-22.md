@@ -1703,11 +1703,14 @@ against the unfixed page: 2 rows → 1). The page now applies only the most
 recently issued history read, labels each action with its upload time, and
 marks the row matching the apply response as `This upload` (`aria-current`).
 
-Regression coverage: the dated spec now seeds a retained same-name operation
-through the public API before the browser journey in every environment. It then
+Regression coverage: PR #478 independently gave each run a unique upload
+filename, so other runs' retained history cannot collide. This change keeps that
+per-run filename and seeds a retained operation with the same name through the
+public API before the browser journey, in every environment. The spec then
 follows the exact `operation_id` from the apply response, asserting that row's
 two results, that the retained row stays collapsed, and the per-operation
-download filename. `page.test.tsx` adds the production-shape unit case. No
+download filename. Action labels include the operation ID, so two same-name
+uploads in one displayed second stay distinguishable. `page.test.tsx` adds the production-shape unit case. No
 assertion was relaxed; filename- and position-based selection was replaced by
 identity. Verdict until the prod-verify tester suite passes this spec on the
 deployed release: **Inconclusive**.

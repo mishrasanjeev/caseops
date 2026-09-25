@@ -131,6 +131,7 @@ test("BUG-006 DOCX is visibly rendered and ENH-007 updates only an existing matt
   const auth = await authenticate(request);
   const hearingDate = plusDays(4);
   const code = `${BULK_CODE}-${randomUUID().slice(0, 8).toUpperCase()}`;
+  const bulkFilename = `matter-bulk-update-${code}.csv`;
   const matter = await ensureMatter(request, auth.headers, code, "Bulk update baseline", hearingDate);
 
   const upload = await request.post(`${api}/api/matters/${matter.id}/attachments`, {
@@ -180,10 +181,10 @@ test("BUG-006 DOCX is visibly rendered and ENH-007 updates only an existing matt
   await expect(page.getByTestId(`matter-attachment-view-${attachment.id}`)).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 
-  // 2026-09-25 production shape: the persistent QA tenant retains earlier uploads that
-  // reuse this filename. Seed one so every environment must identify this upload by
-  // its operation ID rather than by filename or table position.
-  const bulkFilename = "matter-bulk-update.csv";
+  // 2026-09-25 production shape: the persistent QA tenant retained an earlier upload
+  // with the same filename, and `.first()` expanded it instead of this run's operation.
+  // The per-run filename avoids other runs' history; seeding a same-name operation here
+  // keeps that ambiguity in every environment, so this upload is followed by operation ID.
   const csvEscape = (value: string) => `"${value.replaceAll('"', '""')}"`;
   const bulkCsvFor = (header: string, rows: Array<Record<string, string>>) => {
     const columns = header.replace(/^\uFEFF/, "").split(",");
@@ -264,7 +265,7 @@ test("BUG-006 DOCX is visibly rendered and ENH-007 updates only an existing matt
   const retainedRow = page.getByTestId(`bulk-update-operation-${retainedOperationId}`);
   await expect(retainedRow).toBeVisible();
   await expect(retainedRow).not.toHaveAttribute("aria-current", "true");
-  const viewResults = operationRow.getByRole("button", { name: /^View results for matter-bulk-update\.csv uploaded / });
+  const viewResults = operationRow.getByRole("button", { name: `View results for ${bulkFilename} uploaded ` });
   await expect(viewResults).toHaveAccessibleName(new RegExp(`, operation ${operationId}$`));
   await expect(page.getByRole("button", { name: `operation ${operationId}` })).toHaveCount(2);
   await viewResults.click();
@@ -274,7 +275,7 @@ test("BUG-006 DOCX is visibly rendered and ENH-007 updates only an existing matt
   await expect(operationResults.getByText(`Row 3: ${unknownCode} — invalid`, { exact: false })).toBeVisible();
   await expect(page.getByTestId(`bulk-update-operation-results-${retainedOperationId}`)).toHaveCount(0);
   const resultDownload = page.waitForEvent("download");
-  await operationRow.getByRole("button", { name: /^Download results for matter-bulk-update\.csv uploaded / }).click();
+  await operationRow.getByRole("button", { name: `Download results for ${bulkFilename} uploaded ` }).click();
   const downloadedResult = await resultDownload;
   expect(downloadedResult.suggestedFilename()).toBe(`matter-bulk-update-${operationId}-results.csv`);
   const resultStream = await downloadedResult.createReadStream();

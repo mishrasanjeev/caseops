@@ -1128,3 +1128,18 @@ requirements when using the fallback.
   lets startup or cleanup destroy another run's PostgreSQL mid-test. The
   resulting connection loss and cascading fixture errors are incomplete
   infrastructure evidence, never a product-pass or product-failure verdict.
+- Retained production operation histories can contain identical filenames from
+  prior acceptance runs. Give each browser-created import/update a unique
+  source filename, wait for its exact new history row, and scope result and
+  download assertions to that row. A `.first()` locator may select a stale
+  operation while an asynchronous history refresh inserts the current one;
+  preserve the failed run and fix the test identity rather than misclassifying
+  the applied mutation as a product failure.
+- A private-projection scheduler resume is a release certification step, not a
+  cleanup command. Require the latest successful exact-SHA mutation-capable
+  prod-verify dispatch, the currently serving API revision's immutable digest,
+  and two later serial clean maintenance executions on that digest, with zero
+  rebuilds in the second. A preliminary repair or historical SLO breach remains
+  incident evidence. Keep the cadence paused on missing or changed evidence;
+  audit direct Cloud Scheduler ResumeJob access because it bypasses the CLI
+  guard.
