@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from caseops_api.schemas.oauth_redirect import oauth_redirect_error
+
 Microsoft365ReadinessStatusLiteral = Literal["passed", "blocked", "not_run"]
 Microsoft365ReadinessLiteral = Literal[
     "blocked_pending_admin_configuration",
@@ -43,6 +45,22 @@ class Microsoft365TenantConfigurationResponse(BaseModel):
     readiness: Microsoft365ReadinessLiteral
 
 
+def microsoft365_oauth_redirect_error(value: str) -> str | None:
+    # No Microsoft 365 callback route exists yet: this registration is stored
+    # and reported for readiness only. Apply the rules every redirect must meet,
+    # but do not invent a path that CaseOps does not serve.
+    return oauth_redirect_error(
+        value,
+        label="Microsoft 365",
+        provider="Microsoft",
+        expected_path=None,
+    )
+
+
+def microsoft365_oauth_redirect_is_valid(value: str | None) -> bool:
+    return bool(value) and microsoft365_oauth_redirect_error(str(value)) is None
+
+
 class Microsoft365TenantConfigurationUpdateRequest(BaseModel):
     client_id: str | None = Field(default=None, max_length=255)
     client_secret: str | None = Field(default=None, max_length=4096)
@@ -62,6 +80,16 @@ class Microsoft365TenantConfigurationUpdateRequest(BaseModel):
         if isinstance(value, str):
             cleaned = value.strip()
             return cleaned or None
+        return value
+
+    @field_validator("redirect_uri")
+    @classmethod
+    def usable_microsoft365_redirect(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        problem = microsoft365_oauth_redirect_error(value)
+        if problem:
+            raise ValueError(problem)
         return value
 
 

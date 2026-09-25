@@ -59,6 +59,7 @@ from caseops_api.schemas.calendar import (
     OutlookReadinessTestResponse,
     OutlookTenantConfigurationResponse,
     OutlookTenantConfigurationUpdateRequest,
+    outlook_oauth_redirect_is_valid,
 )
 from caseops_api.services.assignment_memberships import (
     lock_company_memberships_for_assignment,
@@ -1060,7 +1061,15 @@ def _outlook_runtime_config_from_row(
             ),
             tenant_id=(row.tenant_id or "organizations").strip("/")
             or "organizations",
-            redirect_uri=row.redirect_uri if enabled else None,
+            # A row written before redirect validation existed can hold an
+            # address Microsoft will refuse. Treat it as missing so readiness
+            # stays honest and no user is sent through consent that cannot
+            # return, rather than failing after the grant.
+            redirect_uri=(
+                row.redirect_uri
+                if enabled and outlook_oauth_redirect_is_valid(row.redirect_uri)
+                else None
+            ),
             source="tenant_admin",
         )
     return _environment_runtime_config()

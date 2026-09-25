@@ -796,7 +796,7 @@ def test_outlook_scope_authority_rejects_partial_approved_scope_set(
         json={
             "client_id": "tenant-client",
             "client_secret": "tenant-secret",
-            "redirect_uri": "https://tenant.example.test/outlook/callback",
+            "redirect_uri": "https://tenant.example.test/api/calendar/connections/outlook/callback",
             "scopes": ["offline_access", "User.Read"],
             "oauth_consent_model_approved": True,
             "scopes_approved": True,
@@ -825,7 +825,7 @@ def test_outlook_status_loads_tenant_configuration_once(
         json={
             "client_id": "tenant-client",
             "client_secret": "tenant-secret",
-            "redirect_uri": "https://tenant.example.test/outlook/callback",
+            "redirect_uri": "https://tenant.example.test/api/calendar/connections/outlook/callback",
             "oauth_consent_model_approved": True,
             "scopes_approved": True,
             "enabled": True,
@@ -878,7 +878,7 @@ def test_outlook_machine_controls_fail_closed_when_policy_checks_fail(
         json={
             "client_id": "tenant-client",
             "client_secret": "tenant-secret",
-            "redirect_uri": "https://tenant.example.test/outlook/callback",
+            "redirect_uri": "https://tenant.example.test/api/calendar/connections/outlook/callback",
             "oauth_consent_model_approved": True,
             "scopes_approved": True,
             "enabled": True,
@@ -930,7 +930,7 @@ def test_disabled_tenant_outlook_never_falls_back_to_environment_credentials(
         json={
             "client_id": "tenant-client",
             "client_secret": "tenant-secret",
-            "redirect_uri": "https://tenant.example.test/outlook/callback",
+            "redirect_uri": "https://tenant.example.test/api/calendar/connections/outlook/callback",
             "oauth_consent_model_approved": True,
             "scopes_approved": True,
             "enabled": False,
