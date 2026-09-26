@@ -19,7 +19,15 @@ export async function collectFormLayoutOffenders(page: Page): Promise<string[]> 
   await page.evaluate(async () => {
     await document.fonts.ready;
     // Entrance transitions move cards from off-screen; measure only at rest.
-    await Promise.allSettled(document.getAnimations().map((animation) => animation.finished));
+    // Spinners animate forever, so wait only for finite animations, briefly.
+    const finite = document.getAnimations().filter((animation) => {
+      const timing = animation.effect?.getTiming();
+      return timing !== undefined && Number.isFinite(timing.iterations ?? 1);
+    });
+    await Promise.race([
+      Promise.allSettled(finite.map((animation) => animation.finished)),
+      new Promise((resolve) => setTimeout(resolve, 1500)),
+    ]);
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   });
   return page.locator("main").evaluate((main) => {
