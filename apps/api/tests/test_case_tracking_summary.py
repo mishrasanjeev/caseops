@@ -137,7 +137,8 @@ class SummaryEmulator(MockProvider):
         self.malformed = malformed
         self.fail = fail
 
-    def generate(self, **kwargs):
+    def generate(self, messages, *, temperature=0.2, max_tokens=1024):
+        del messages, temperature, max_tokens  # the emulator returns a fixed payload
         self.calls += 1
         self.callback()
         if self.fail:

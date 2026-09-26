@@ -206,7 +206,8 @@ def test_copyright_rights_claims_are_independent_from_registration_and_platform(
         "review": "rejected",
         "review_reason": "Source-backed review of competing evidence",
     }
-    second = save(client, headers, record, resolved, second, status=200).json()
+    rejected = save(client, headers, record, resolved, second, status=200).json()
+    assert rejected["facts"]["review"] == "rejected"
     supported = {
         **first["facts"],
         "review": "supported",

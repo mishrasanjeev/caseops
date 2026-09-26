@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from caseops_api.core.redaction import redact_provider_error
 from caseops_api.db.models import (
     AuditActorType,
     AuditResult,
@@ -58,7 +59,6 @@ from caseops_api.services.matter_access import (
     visible_ip_dockets_filter,
     visible_matters_filter,
 )
-from caseops_api.services.notification_delivery import redact_provider_error
 from caseops_api.services.private_retrieval import (
     PRIVATE_SAVED_SOURCE_SCHEMA,
     PrivateRetrievalInvariantError,

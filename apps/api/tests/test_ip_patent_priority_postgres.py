@@ -31,7 +31,7 @@ from caseops_api.schemas.ip_patents import (
     PatentPriorityCreateRequest,
 )
 from caseops_api.services.idempotency import canonical_json_sha256
-from caseops_api.services.ip_patent_applications import correct_patent_application
+from caseops_api.services.ip_patent_application_corrections import correct_patent_application
 from caseops_api.services.ip_patent_priorities import (
     _fact,
     _reject_cycle,

@@ -6,11 +6,9 @@ import {
   BellRing,
   CheckCircle2,
   ExternalLink,
-  FileCheck2,
   LoaderCircle,
   MailCheck,
   Plus,
-  RefreshCw,
   Send,
 } from "lucide-react";
 import { cloneElement, isValidElement, useEffect, useId, useState } from "react";

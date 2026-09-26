@@ -13,7 +13,7 @@ import {
   RefreshCw,
   Scale,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { toast } from "sonner";
 

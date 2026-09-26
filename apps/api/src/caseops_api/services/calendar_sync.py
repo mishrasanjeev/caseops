@@ -16,6 +16,7 @@ from jwt import InvalidTokenError
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session, joinedload
 
+from caseops_api.core.redaction import redact_provider_error
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     CalendarConnectionStatus,
@@ -86,10 +87,7 @@ from caseops_api.services.matter_access import (
     visible_matters_filter,
 )
 from caseops_api.services.matter_operational_guard import matter_is_operational
-from caseops_api.services.notification_delivery import (
-    redact_provider_error,
-    retry_delay_for_attempt,
-)
+from caseops_api.services.notification_delivery import retry_delay_for_attempt
 from caseops_api.services.security import require_recent_step_up
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.shared_work import resolve_shared_work_target

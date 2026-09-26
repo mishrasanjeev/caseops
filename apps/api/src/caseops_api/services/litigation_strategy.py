@@ -1394,7 +1394,6 @@ def generate_litigation_strategy(
             ),
         )
     retrieved = current_retrieved
-    ctx = current_ctx
 
     # Verify citations on the recommended route + alternatives.
     all_routes = [parsed.recommended_route, *parsed.alternative_routes]

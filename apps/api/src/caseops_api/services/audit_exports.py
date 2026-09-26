@@ -34,6 +34,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
+from caseops_api.core.redaction import redact_provider_error
 from caseops_api.db.models import (
     AuditEvent,
     AuditExportJob,
@@ -52,7 +53,6 @@ from caseops_api.services.document_storage import (
 )
 from caseops_api.services.ip_domain_policy import general_ip_disclosure_filter
 from caseops_api.services.matter_access import visible_ip_dockets_filter
-from caseops_api.services.notification_delivery import redact_provider_error
 from caseops_api.services.session_context import SessionContext
 
 logger = logging.getLogger(__name__)

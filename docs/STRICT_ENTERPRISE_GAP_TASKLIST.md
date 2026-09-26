@@ -2025,3 +2025,44 @@ is which.
   `apps/api/tests/test_20260903_bulk_matter_exact_court_forum.py`, statute page
   tests, `tests/e2e/provider-spend-forum-statute-2026-09-04.spec.ts`, and
   `tests/e2e/forum-alias-admin-2026-09-04.spec.ts`.
+
+## EH-ARCH-2026-09-26 - Service import tangle and CodeQL triage
+
+- **Status:** Open architecture debt; the code-scanning triage is closed.
+- **Context:** The 2026-09-26 CodeQL review reported 96 open alerts on `main`
+  (`dd07291e`). The security findings (clear-text logging of the scheduler
+  invoker identity, a polynomial ReDoS in the Docker acceptance provider
+  emulator, log injection of the authority search mode), every warning and the
+  code-hygiene notes were fixed in code. Three small import cycles
+  (`drafting`/`draft_compare`, `ip_patent_applications`/`ip_patent_priorities`,
+  `production_safety`/`ip_domain_catalog`) were broken, and
+  `redact_provider_error` is now imported from `core.redaction`. Each change
+  kept the application at 908 routes with a byte-identical OpenAPI document.
+- **Remaining tangle:** 29 service modules still form one strongly connected
+  import component (82 internal edges measured with function-level imports
+  included). It is held together by deliberate lazy back-edges, including
+  `matter_access` -> `private_retrieval.propagate_private_projection_change`,
+  `notification_delivery` -> `portal_ip`/`communications`, `shared_work` ->
+  `calendar_sync`/`deadlines`/`hearing_reminders`, `ip_lifecycle` ->
+  `ip_oppositions`/`private_retrieval`, and `deadlines` ->
+  `ip_coverage_projection`. The CodeQL cyclic-import alerts on those edges were
+  dismissed with this entry as the justification; they are not false positives.
+- **Required design:** Decompose deliberately rather than per alert. Candidate
+  seams are an access-change event boundary for private projection propagation,
+  a notification delivery adapter registry, and lifecycle hooks for IP
+  oppositions. Any registration-based inversion must fail closed when a hook is
+  missing, especially for access and tombstone propagation, and be proven on
+  PostgreSQL plus the dated browser journeys.
+- **Other dismissals, with reasons:**
+  - `branch_labels`/`depends_on` in ten applied Alembic revisions: false
+    positives, because Alembic reads both through `getattr`.
+  - Documentation-only `FK_INDEXES` in three applied revisions: won't fix,
+    because applied migrations are not edited.
+  - Three model re-exports in `db/models.py`: false positives, because the
+    names are consumed through `caseops_api.db.models` and the imports register
+    the tables on `Base.metadata`.
+  - The `BaseException` forwarder in `core/startup.py`: won't fix, because it
+    carries every warm-up failure from its daemon thread to the awaiting
+    startup; narrowing it would hang readiness.
+  - Two awaited-task statements inside `pytest.raises`: false positives,
+    because awaiting the task re-raises its exception and is the assertion.

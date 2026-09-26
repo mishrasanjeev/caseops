@@ -413,7 +413,7 @@ def test_google_machine_controls_fail_closed_when_policy_checks_fail(
     monkeypatch.setattr(
         google_workspace_service,
         "redact_provider_error",
-        lambda value: str(value),
+        str,
     )
 
     status_response = client.get(

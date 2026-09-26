@@ -6,6 +6,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
+from caseops_api.core.redaction import redact_provider_error
 from caseops_api.db.models import (
     CompanyMembership,
     Matter,
@@ -21,7 +22,6 @@ from caseops_api.services.court_sync_sources import (
     resolve_source_for_court,
 )
 from caseops_api.services.matters import _get_matter_model, _persist_court_sync_import
-from caseops_api.services.notification_delivery import redact_provider_error
 from caseops_api.services.session_context import SessionContext
 
 

@@ -5,6 +5,7 @@ from datetime import timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
+from caseops_api.core.redaction import redact_provider_error
 from caseops_api.db.models import (
     CompanyMembership,
     ContractActivity,
@@ -32,7 +33,6 @@ from caseops_api.services.matter_operational_guard import (
     assert_operational_matter,
     matter_is_operational,
 )
-from caseops_api.services.notification_delivery import redact_provider_error
 
 
 def _job_record(job: DocumentProcessingJob) -> DocumentProcessingJobRecord:
@@ -563,7 +563,7 @@ def _process_matter_attachment_job(session: Session, job: DocumentProcessingJob)
             )
         except Exception as exc:  # noqa: BLE001
             session.rollback()
-            from caseops_api.services.notification_delivery import redact_provider_error
+            from caseops_api.core.redaction import redact_provider_error
 
             persisted_job = session.get(DocumentProcessingJob, processing_job_id)
             if persisted_job is not None:

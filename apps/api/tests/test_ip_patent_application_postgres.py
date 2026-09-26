@@ -26,9 +26,11 @@ from caseops_api.schemas.ip_patents import (
     PatentApplicationCorrectionRequest,
     PatentApplicationCreateRequest,
 )
+from caseops_api.services.ip_patent_application_corrections import (
+    correct_patent_application,
+)
 from caseops_api.services.ip_patent_applications import (
     _lock_application_identity_writer,
-    correct_patent_application,
     create_patent_application,
     list_patent_applications,
 )

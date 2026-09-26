@@ -183,12 +183,10 @@ from caseops_api.services.deadlines import (
     update_deadline,
 )
 from caseops_api.services.document_jobs import run_document_processing_job
-from caseops_api.services.draft_compare import (
-    DraftCompareResult,
-    compare_versions_in_db,
-)
+from caseops_api.services.draft_compare import DraftCompareResult
 from caseops_api.services.draft_pdf_export import render_version_pdf
 from caseops_api.services.drafting import (
+    compare_versions_in_db,
     create_draft,
     edit_draft_version,
     generate_draft_version,

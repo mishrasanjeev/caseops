@@ -118,6 +118,7 @@ def test_activation_fences_blocked_scope_insert_on_postgres(isolated_postgres_cl
                     session.rollback()
                     return str(error.orig)
                 pytest.fail("Activated preservation scope must be immutable")
+            return None
 
         with ThreadPoolExecutor(max_workers=1) as pool:
             future = pool.submit(add_scope)
@@ -239,6 +240,7 @@ def test_hold_activation_wins_before_private_disposition_admission(isolated_post
                     session.rollback()
                     return str(error)
                 pytest.fail("Preservation must prevent disposition")
+            return None
 
         with ThreadPoolExecutor(max_workers=1) as pool:
             future = pool.submit(disposition)

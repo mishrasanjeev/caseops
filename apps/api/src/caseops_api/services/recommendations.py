@@ -1767,7 +1767,6 @@ def generate_recommendation(
             "with safety repair",
             unsafe_output_category,
         )
-        provider_retry_used = True
         try:
             parsed, completion = _invoke(llm, repair_messages)
             prompt_hash = _prompt_hash(repair_messages)

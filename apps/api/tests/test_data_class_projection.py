@@ -159,7 +159,7 @@ class TestTheProjectionCanRefuseItself:
         # ImportError out of a request, or - worse - a caller substitutes an
         # empty set and concludes nothing is registered.
         monkeypatch.setattr(
-            data_class_projection, "_structural_state", lambda: _unavailable_state()
+            data_class_projection, "_structural_state", _unavailable_state
         )
 
         assert admitted_data_class_ids() is None

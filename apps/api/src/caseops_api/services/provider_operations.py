@@ -12,6 +12,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
+from caseops_api.core.redaction import redact_provider_error
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     AuditResult,
@@ -86,7 +87,6 @@ from caseops_api.services.notification_delivery import (
     notification_dispatch_claim_in_flight_detail,
     notification_dispatch_claim_state,
     notification_provider_reconciliation_detail,
-    redact_provider_error,
 )
 from caseops_api.services.provider_adapter_catalog import provider_adapter_definition
 from caseops_api.services.provider_costs import effective_cost_minor
@@ -877,8 +877,10 @@ def _ip_registry_sync_record(row: IpRegistrySyncAttempt) -> ProviderOperationRec
         notes=[
             f"operation_kind={row.operation_kind}",
             "Registry attempt evidence is append-only operational history.",
-            "Replay stays disabled until the registered adapter supports replay; "
-            "manual sourced docketing remains available.",
+            (
+                "Replay stays disabled until the registered adapter supports replay; "
+                "manual sourced docketing remains available."
+            ),
         ],
     )
 

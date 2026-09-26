@@ -12,7 +12,6 @@ import {
   authenticateOrBootstrapLocalLegalTenant,
   LOCAL_LEGAL_PASSWORD,
 } from "./support/local-legal-tenant";
-import { apiBaseUrl } from "./support/env";
 
 const COMPANY_SLUG = "legal";
 const OWNER_EMAIL = "hari.gupta@gmail.com";
