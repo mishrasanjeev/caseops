@@ -4275,6 +4275,13 @@ export type CaseTrackingSearchInput = {
   court_name?: string | null;
 };
 
+export type CaseTrackingExistingMatter = {
+  matter_id: string;
+  matter_code: string | null;
+  title: string;
+  status: string;
+};
+
 export type CaseTrackingSearchResult = {
   provider: string;
   cnr_number: string | null;
@@ -4288,6 +4295,10 @@ export type CaseTrackingSearchResult = {
   next_hearing_on: string | null;
   source_url: string | null;
   provenance_label: string;
+  /** Visible Matters that already record this case's CNR (server-owned). */
+  existing_matters: CaseTrackingExistingMatter[];
+  /** Whether the scoped Matter already tracks this case. */
+  linked_to_matter: boolean;
 };
 
 export type CaseTrackingSearchResponse = {

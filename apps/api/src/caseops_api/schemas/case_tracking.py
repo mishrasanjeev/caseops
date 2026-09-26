@@ -101,6 +101,15 @@ class CaseTrackingSearchRequest(BaseModel):
         return self
 
 
+class CaseTrackingExistingMatter(BaseModel):
+    """A visible CaseOps Matter whose recorded CNR identifies this provider case."""
+
+    matter_id: str
+    matter_code: str | None = None
+    title: str
+    status: str
+
+
 class CaseTrackingSearchResultRecord(BaseModel):
     provider: str
     cnr_number: str | None
@@ -115,6 +124,11 @@ class CaseTrackingSearchResultRecord(BaseModel):
     source_url: str | None = None
     provenance_label: str = "Provider-normalized case status"
     link_token: str | None = None
+    # Server-owned context so a search never presents an already-tracked case as
+    # unrelated: Matters (visible to this user) that record the same CNR, and
+    # whether the scoped Matter already tracks this case.
+    existing_matters: list[CaseTrackingExistingMatter] = Field(default_factory=list)
+    linked_to_matter: bool = False
 
 
 class CaseTrackingSearchResponse(BaseModel):

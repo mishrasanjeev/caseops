@@ -60,6 +60,7 @@ from caseops_api.services.case_tracking_providers import (
     ProviderCaseSnapshot,
     _source_text,
 )
+from caseops_api.services.hearing_matching import HearingIdentity
 from caseops_api.services.next_hearing import backfill_legacy_next_hearings
 from caseops_api.services.production_safety import support_matrix_match
 from caseops_api.services.session_context import SessionContext
@@ -936,8 +937,21 @@ def test_matter_case_resolution_uses_server_owned_cnr_and_rejects_conflicts(
 
     original = provider.search_cases
 
+    # 2026-09-26 (BUG-032): a normalized CNR identifies the case on its own, as
+    # refresh and polling always required; free-text court wording no longer
+    # overrides it. A conflicting case is one with a different CNR.
+    def relabelled(*, query: CaseSearchQuery) -> list[ProviderCaseSnapshot]:
+        return [replace(original(query=query)[0], court_name="High Court of Delhi")]
+
+    provider.search_cases = relabelled  # type: ignore[method-assign]
+    relabel = client.post(
+        f"/api/case-tracking/matters/{matter_id}/resolve", headers=auth_headers(token)
+    )
+    assert relabel.status_code == 200, relabel.text
+    assert relabel.json()["status"] == "matched"
+
     def conflicting(*, query: CaseSearchQuery) -> list[ProviderCaseSnapshot]:
-        return [replace(original(query=query)[0], court_name="Bombay High Court")]
+        return [replace(original(query=query)[0], cnr_number="DLHC010099992026")]
 
     provider.search_cases = conflicting  # type: ignore[method-assign]
     mismatch = client.post(
@@ -958,6 +972,26 @@ def test_matter_case_resolution_requires_complete_case_number_search(
     monkeypatch.setattr(
         "caseops_api.services.case_tracking.get_case_tracking_provider", lambda: provider
     )
+    # eCourts v4 publishes the case type beside a bare registration number; without
+    # it, "1/2026" cannot prove which case type it is (2026-09-26, BUG-032).
+    published = provider.search_cases
+
+    def typed(*, query: CaseSearchQuery) -> list[ProviderCaseSnapshot]:
+        return [
+            replace(
+                snapshot,
+                matching_identity=HearingIdentity(
+                    cnr=snapshot.cnr_number,
+                    case_number=snapshot.case_number,
+                    case_type="WP(C)",
+                    court_name=snapshot.court_name,
+                    parties=tuple(snapshot.party_names),
+                ),
+            )
+            for snapshot in published(query=query)
+        ]
+
+    provider.search_cases = typed  # type: ignore[method-assign]
     resolved = client.post(
         f"/api/case-tracking/matters/{matter_id}/resolve", headers=auth_headers(token)
     )
@@ -970,7 +1004,11 @@ def test_matter_case_resolution_requires_complete_case_number_search(
 
     def two(*, query: CaseSearchQuery) -> list[ProviderCaseSnapshot]:
         first = original(query=query)[0]
-        return [first, replace(first, cnr_number="DLHC010099992026")]
+        second_identity = replace(first.matching_identity, cnr="DLHC010099992026")
+        return [
+            first,
+            replace(first, cnr_number="DLHC010099992026", matching_identity=second_identity),
+        ]
 
     provider.search_cases = two  # type: ignore[method-assign]
     ambiguous = client.post(
