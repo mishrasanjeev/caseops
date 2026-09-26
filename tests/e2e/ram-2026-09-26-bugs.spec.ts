@@ -47,12 +47,25 @@ async function authenticate(request: APIRequestContext): Promise<Credentials> {
         email: process.env.CASEOPS_PROD_TEST_EMAIL ?? process.env.CASEOPS_RAM_PROD_EMAIL,
         password: process.env.CASEOPS_PROD_TEST_PASSWORD ?? process.env.CASEOPS_RAM_PROD_PASSWORD,
       }
-    : { slug: `ram-sep26-${suffix}`, email: `sep26-${suffix}@example.com`, password: `Sep26-${suffix}!` };
+    : process.env.CASEOPS_LOCAL_TEST_SLUG
+      ? {
+          // A tester-supplied account recreated in local Docker (never production).
+          slug: process.env.CASEOPS_LOCAL_TEST_SLUG,
+          email: process.env.CASEOPS_LOCAL_TEST_EMAIL,
+          password: process.env.CASEOPS_LOCAL_TEST_PASSWORD,
+        }
+      : { slug: `ram-sep26-${suffix}`, email: `sep26-${suffix}@example.com`, password: `Sep26-${suffix}!` };
   if (!supplied.slug || !supplied.email || !supplied.password) {
     throw new Error("Production verification credentials must be supplied at runtime.");
   }
   const credentials = { slug: supplied.slug, email: supplied.email, password: supplied.password };
-  if (!isProduction) {
+  const existing = isProduction || !process.env.CASEOPS_LOCAL_TEST_SLUG
+    ? null
+    : await request.post(`${api}/api/auth/login`, {
+        headers: noPaidProviderHeaders,
+        data: { company_slug: credentials.slug, email: credentials.email, password: credentials.password },
+      });
+  if (!isProduction && existing?.status() !== 200) {
     const bootstrap = await request.post(`${api}/api/bootstrap/company`, {
       headers: noPaidProviderHeaders,
       data: {
