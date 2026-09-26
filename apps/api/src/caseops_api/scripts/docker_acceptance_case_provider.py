@@ -9,15 +9,20 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, unquote, urlparse
 
+_REGISTRATION_SUFFIX = re.compile(r"(\d{1,10}/\d{4})$")
+_MAX_CASE_NUMBER_LENGTH = 128
+
 
 def _case_payload(*, case_number: str, cnr: str) -> dict[str, object]:
     next_hearing = (date.today() + timedelta(days=21)).isoformat()
-    number = re.fullmatch(r"\s*(.*?)\s*[/ -]?\s*(\d+/\d{4})\s*", case_number)
-    case_type = number.group(1).strip(" /-") if number else ""
+    # Bounded, end-anchored parse: request text must not drive regex backtracking.
+    text = case_number.strip()[:_MAX_CASE_NUMBER_LENGTH]
+    number = _REGISTRATION_SUFFIX.search(text)
+    case_type = text[: number.start()].strip(" /-") if number else ""
     return {
         "cnr": cnr,
         "caseNumber": case_number,
-        "registrationNumber": number.group(2) if number else case_number,
+        "registrationNumber": number.group(1) if number else case_number,
         "caseType": "WP_C" if case_type in {"", "WP(C)"} else case_type,
         "courtCode": "DLHC",
         "courtName": "Delhi High Court",

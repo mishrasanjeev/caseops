@@ -877,8 +877,10 @@ def _ip_registry_sync_record(row: IpRegistrySyncAttempt) -> ProviderOperationRec
         notes=[
             f"operation_kind={row.operation_kind}",
             "Registry attempt evidence is append-only operational history.",
-            "Replay stays disabled until the registered adapter supports replay; "
-            "manual sourced docketing remains available.",
+            (
+                "Replay stays disabled until the registered adapter supports replay; "
+                "manual sourced docketing remains available."
+            ),
         ],
     )
 

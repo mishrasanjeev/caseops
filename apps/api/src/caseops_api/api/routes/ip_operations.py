@@ -287,7 +287,7 @@ from caseops_api.services.drafting import (
     validate_ip_draft,
 )
 from caseops_api.services.ip_audit import list_ip_docket_audit_events
-from caseops_api.services.ip_capability_catalog import domain_catalogue, ip_workspace_readiness
+from caseops_api.services.ip_capability_catalog import ip_workspace_readiness
 from caseops_api.services.ip_deadline_workflow import (
     activate_calendar_version,
     activate_rule_version,
@@ -329,6 +329,7 @@ from caseops_api.services.ip_documents import (
     seed_ip_document_taxonomy,
     upsert_ip_document_taxonomy_entry,
 )
+from caseops_api.services.ip_domain_catalog import domain_catalogue
 from caseops_api.services.ip_draft_exports import render_ip_draft_bundle
 from caseops_api.services.ip_import_files import MAX_IMPORT_BYTES, parse_ip_import_file
 from caseops_api.services.ip_imports import (

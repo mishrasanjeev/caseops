@@ -99,6 +99,7 @@ def test_finalization_reloads_after_concurrent_writer_wins(isolated_postgres_cli
                     session.rollback()
                     return error.status_code
                 pytest.fail("Concurrent grant/reviewer change must reject finalization")
+            return None
 
         with ThreadPoolExecutor(max_workers=1) as pool:
             future = pool.submit(finalize_waiter)
@@ -184,6 +185,7 @@ def test_canonical_owner_waits_before_membership_lock_and_campaign_wins(isolated
                     session.rollback()
                     return error.status_code
                 pytest.fail("Stale ordinary revoke must fail")
+            return None
 
         with ThreadPoolExecutor(max_workers=1) as pool:
             future = pool.submit(ordinary_revoke)

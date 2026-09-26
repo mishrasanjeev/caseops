@@ -123,6 +123,8 @@ def _serialize_private_rebuild(
                 if released:
                     return True
             except Exception:
+                # An unlock failure is not fatal: invalidating the dedicated
+                # connection below ends its session and drops the advisory lock.
                 pass
             lock_connection.invalidate()
             return False

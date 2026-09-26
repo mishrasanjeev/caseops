@@ -11270,6 +11270,15 @@ def test_private_rebuild_lease_timeout_is_bounded_and_does_not_leak(pg_engine) -
     from caseops_api.services.private_retrieval import PrivateRetrievalConcurrencyError
 
     company_id = str(uuid4())
+
+    def contend(contender: Session) -> None:
+        with private_retrieval_jobs._serialize_private_rebuild(
+            contender,
+            company_id=company_id,
+            wait_seconds=0.15,
+        ):
+            pytest.fail("contender acquired an owned rebuild lease")
+
     with Session(pg_engine) as owner:
         with private_retrieval_jobs._serialize_private_rebuild(
             owner,
@@ -11282,12 +11291,7 @@ def test_private_rebuild_lease_timeout_is_bounded_and_does_not_leak(pg_engine) -
                     PrivateRetrievalConcurrencyError,
                     match="bounded wait",
                 ):
-                    with private_retrieval_jobs._serialize_private_rebuild(
-                        contender,
-                        company_id=company_id,
-                        wait_seconds=0.15,
-                    ):
-                        raise AssertionError("contender acquired an owned rebuild lease")
+                    contend(contender)
             elapsed = monotonic() - started
 
     assert 0.1 <= elapsed < 1

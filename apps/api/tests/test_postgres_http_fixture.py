@@ -78,13 +78,20 @@ def test_http_clones_preserve_schema_and_never_replay_migrations(
 
 def test_http_clone_cleanup_preserves_template_after_failure(pg_engine, migrated_http_template):
     source_url = make_url(os.environ["CASEOPS_TEST_POSTGRES_URL"])
-    created_name = None
-    with pytest.raises(RuntimeError, match="deliberate fixture interruption"):
+    created_names: list[str | None] = []
+
+    def interrupt_clone() -> None:
         with temporary_http_database(source_url, template=migrated_http_template) as failed:
-            created_name = failed.url.database
+            created_names.append(failed.url.database)
             with failed.begin() as connection:
                 connection.exec_driver_sql("CREATE TABLE failed_fixture_probe (id integer)")
             raise RuntimeError("deliberate fixture interruption")
+
+    with pytest.raises(RuntimeError, match="deliberate fixture interruption"):
+        interrupt_clone()
+    assert len(created_names) == 1
+    created_name = created_names[0]
+    assert created_name
     with pg_engine.connect() as connection:
         assert connection.scalar(
             text("SELECT count(*) FROM pg_database WHERE datname=:name"), {"name": created_name},

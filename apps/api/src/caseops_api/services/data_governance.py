@@ -820,7 +820,7 @@ def list_admissible_data_class_catalog(
 ) -> TenantDataClassCatalogResponse:
     """Expose the exact reviewed catalog used by dry-run admission."""
 
-    context = _read_dry_run_actor(session, context=context)
+    _read_dry_run_actor(session, context=context)
     require_current_projection(session)
     entries = admissible_data_classes()
     if entries is None:  # Defensive: require_current_projection already refused.

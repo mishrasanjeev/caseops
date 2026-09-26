@@ -3,7 +3,7 @@ from fastapi import APIRouter
 from caseops_api.api.dependencies import DbSession
 from caseops_api.core.settings import get_settings, is_non_local_env
 from caseops_api.schemas.ip_domains import IpDomainCatalogue
-from caseops_api.services.ip_capability_catalog import domain_catalogue
+from caseops_api.services.ip_domain_catalog import domain_catalogue
 
 router = APIRouter()
 
