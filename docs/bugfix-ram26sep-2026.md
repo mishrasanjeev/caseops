@@ -207,5 +207,7 @@ Permanent rules added to `AGENTS.md` on 2026-09-26 cover each of these.
 
 ## Verification
 
-To be completed with exact commits, runs and results. A row stays open until the
-dated spec passes against the deployed release in the production tester suite.
+Evidence to date is recorded in `docs/STRICT_BUG_TASKLIST_2026-04-22.md`
+(2026-09-26 section). Production evidence, the deployed release identity and
+the final verdicts are added in a follow-up entry once the dated spec passes in
+the production tester suite; until then every row is **Inconclusive**.
