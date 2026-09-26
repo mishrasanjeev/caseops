@@ -1773,7 +1773,7 @@ report: `docs/bugfix-ram26sep-2026.md`. Permanent rules: `AGENTS.md`
   its first run found the portal invite form 397 px wide on a 390 px phone
   (fixed on the form and with a base rule `select { max-width: 100% }`).
 
-Evidence to date (candidate `14ea1478`, PR #487):
+Evidence to date (PR #487):
 
 - Unfixed-commit reproduction in a checkout of `dd07291e`: the six identity
   tests and both cause-list layout tests failed for the reported reasons
@@ -1786,7 +1786,11 @@ Evidence to date (candidate `14ea1478`, PR #487):
   page tests, 12/12 contract validators, OpenAPI client regenerated and matching.
 - Playwright against the Docker stack: the BUG-032/033/034 journeys pass; the
   layout sweep passes at 1280/1440/1920 px and, on the pre-fix image, flags only
-  the portal invite form at 390 px.
+  the portal invite form at 390 px. Full Docker acceptance on `f10faba8`: the
+  PostgreSQL suite passed 403/403; desktop shard 1 failed one 2026-05-30
+  case-tracking journey whose search mock omits the new optional
+  `existing_matters` field and crashed the page. The row now tolerates the
+  omission; the run is repeated on the corrected commit.
 - Pending: full Docker acceptance on the final commit, a pass signed in as the
   tester-supplied account recreated in local Docker, CI, merge, exact-image
   deploy, production tester verification, and maintenance re-certification.

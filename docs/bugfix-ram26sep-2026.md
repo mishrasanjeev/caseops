@@ -62,6 +62,11 @@ divergent rule: same CNR plus a different court label must give `no_match`.
   registries reuse numbers across case types (WP(C) 6209/2019 and CRL.A.
   6209/2019 share a court). Scheduled refresh of an already-linked bookmark
   keeps its exactly-one rule.
+- Docker acceptance finding, fixed: a search result without the optional
+  `existing_matters` context (older responses, dated browser mocks) crashed the
+  page into the workspace error boundary. The row treats a missing list as
+  empty, the client type matches the generated contract, and a page test
+  renders the older payload shape.
 - Review finding (P2), fixed: the SQL key that finds existing Matters by CNR
   drops every non-alphanumeric character (`regexp_replace` on PostgreSQL),
   matching `normalize_cnr`; a stored `DLHC_0103-1728.2019` is found.
