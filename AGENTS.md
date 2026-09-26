@@ -1173,3 +1173,27 @@ requirements when using the fallback.
   on replay; do not mistake those evidence containers for extra replicas.
   Manual replay must reproduce the standard wrapper's mock-only provider
   environment, and a fixture safety-guard failure is incomplete test setup.
+- A form inside a card must stay usable at every page layout, not one viewport.
+  Size card-internal forms with container queries: a viewport breakpoint cannot
+  know that xl puts two cards in one row, and `minmax(0,1fr)` beside fixed tracks
+  lets a title field collapse to zero. Verify with the navigation-driven form
+  layout sweep at desktop split-layout widths and mobile; never close a layout
+  report on a single width where the defect cannot occur.
+- One Matter/provider identity decision, one function. Search, resolve, link,
+  refresh, polling and next-hearing sync all call `identity_matches`: a
+  normalized CNR decides and free-text court or party wording never overrides
+  it; without a CNR, the exact case number with its provider case type plus the
+  court is required. Prove parity with a table where search issues a link token
+  exactly when refresh accepts, using real-world wording variation. Identical
+  fixture strings on both sides cannot test an identity comparison.
+- A generated document is verified by reading it. PDF tests must assert glyph
+  positions against column borders and printable width, each long value's full
+  text inside its own column, and non-Latin input; `%PDF` plus a checksum only
+  proves a file exists. Build PDFs through `services/pdf_layout.py`: fpdf2 cells
+  neither clip nor wrap, and `multi_cell` leaves the cursor at the right margin
+  unless `new_x` is given.
+- A reopened report means the previous proof measured a proxy. Before fixing
+  again, diff the earlier change and its test against the new report and record
+  why that test could not fail. Reproduce on the unfixed commit inside a checkout
+  of that commit: pytest's `pythonpath = ["src"]` otherwise imports the
+  candidate's source and a "reproduction" silently tests the fix.

@@ -149,12 +149,14 @@ def render_pdf_bytes(
     """Pure-function PDF renderer. Separated from ``render_version_pdf``
     so unit tests can exercise the layout without an authorisation or
     DB session."""
-    from fpdf import FPDF  # type: ignore[import-not-found]
+    from caseops_api.services.pdf_layout import safe_pdf_class
+
+    pdf_class = safe_pdf_class()
 
     # Subclass so we can inject the running page header + footer (page
     # numbers go through fpdf2's footer hook to ensure consistent
     # placement on every page).
-    class CourtFormattedPDF(FPDF):
+    class CourtFormattedPDF(pdf_class):
         def header(self) -> None:  # noqa: D401 — fpdf2 hook
             on_first_page = self.page_no() == 1
             has_header_text = bool(profile.court_header_text)

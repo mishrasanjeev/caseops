@@ -1739,3 +1739,63 @@ Evidence, 2026-09-26:
 Verdict: **Properly fixed**, proven by
 `tests/e2e/ram-2026-09-21-bugfixes.spec.ts:129` passing on release `b1ffd1c7`
 in prod-verify run `36175978724`.
+
+## 2026-09-26 — Ram workbook (IV): BUG-032, BUG-033, BUG-034
+
+Source `CaseOps_ai_Bugs(lV).xlsx`, three populated rows, all valid. Root-cause
+report: `docs/bugfix-ram26sep-2026.md`. Permanent rules: `AGENTS.md`
+(2026-09-26 entries). No credentials are reproduced in the repository.
+
+- **BUG-032 (High):** Case Tracking called a Matter's own eCourts case "Does not
+  match this Matter". Two identity policies existed for one decision: the manual
+  search/resolve/link matcher rejected a CNR-identical case on free-text court or
+  party wording, while refresh, polling and next-hearing sync accepted it on its
+  CNR. Every path now calls `identity_matches`; the signed selection carries the
+  provider's published matching identity; results list visible Matters that
+  already record the CNR, and the page shows "Linked to this Matter" / "Open
+  matter". Review additions: a CNR-less Matter must carry a typed case number
+  before it can be linked manually (registries reuse numbers across case types),
+  and the existing-Matter SQL key drops every non-alphanumeric character.
+- **BUG-033 (Medium):** cause list PDF text overlapped columns. Fixed-width
+  single-line fpdf2 cells summed to 199 mm on a 190 mm page, nothing wrapped,
+  values were cut at 32 characters, and a non-Latin title raised
+  `UnicodeEncodeError`. New `services/pdf_layout.py` (wrapping table, wrapped
+  pairs, safe font class); landscape A4 with a Date column and "Page N of M".
+  Audit found and fixed the same defects in the matter invoice (unwrapped line
+  items; a `multi_cell` that drew the Matter line off the page). Guards reject a
+  bare `FPDF` or a `multi_cell` without `new_x`.
+- **BUG-034 (Medium), reopened:** Tasks & Deadlines fields collapsed. The
+  2026-09-24 change used a viewport breakpoint with `minmax(0,1fr)`; at xl the
+  two cards share a row and the title column shrank to about 20 px; its proof
+  measured a 600 px viewport where the defect cannot occur. Forms are now sized
+  by their card with container queries. A product-wide form-layout guard sweeps
+  every page in the product's own navigation and every Matter tab at four widths;
+  its first run found the portal invite form 397 px wide on a 390 px phone
+  (fixed on the form and with a base rule `select { max-width: 100% }`).
+
+Evidence to date (PR #487):
+
+- Unfixed-commit reproduction in a checkout of `dd07291e`: the six identity
+  tests and both cause-list layout tests failed for the reported reasons
+  (missing link token for a CNR-identical case; glyphs crossing column borders;
+  `UnicodeEncodeError`).
+- Fixed: identity 7/7 and PDF layout 9/9 on SQLite; on Docker PostgreSQL the
+  hearing-matching races 24/24, access reviews 18/18 and identity 7/7. A first
+  link recheck that was stricter than search broke 16 PostgreSQL races and was
+  removed before merge. Web typecheck, e2e typecheck, case-tracking and admin
+  page tests, 12/12 contract validators, OpenAPI client regenerated and matching.
+- Playwright against the Docker stack: the BUG-032/033/034 journeys pass; the
+  layout sweep passes at 1280/1440/1920 px and, on the pre-fix image, flags only
+  the portal invite form at 390 px. Full Docker acceptance on `f10faba8`: the
+  PostgreSQL suite passed 403/403; desktop shard 1 failed one 2026-05-30
+  case-tracking journey whose search mock omits the new optional
+  `existing_matters` field and crashed the page. The row now tolerates the
+  omission; the run is repeated on the corrected commit.
+- Pending: full Docker acceptance on the final commit, a pass signed in as the
+  tester-supplied account recreated in local Docker, CI, merge, exact-image
+  deploy, production tester verification, and maintenance re-certification.
+
+Verdict for all three rows until the dated spec passes on the deployed release:
+**Inconclusive**. The production run proves the no-paid gate for BUG-032; the
+live paid search is human use and is proven end-to-end in Docker on the same
+image.

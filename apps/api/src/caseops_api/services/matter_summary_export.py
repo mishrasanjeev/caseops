@@ -116,9 +116,11 @@ def render_summary_pdf(
     Prefers the grounded Q8 timeline over the LLM-guessed one in the
     summary payload, matching the DOCX path.
     """
-    from fpdf import FPDF  # type: ignore[import-not-found]
+    from caseops_api.services.pdf_layout import safe_pdf_class
 
-    pdf = FPDF(format="A4", unit="mm")
+    pdf_class = safe_pdf_class()
+
+    pdf = pdf_class(format="A4", unit="mm")
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
 

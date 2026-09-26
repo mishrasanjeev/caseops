@@ -195,7 +195,7 @@ export default function MatterTasksPage() {
           <CardTitle>Tasks</CardTitle>
           <CardDescription>Open work and source-backed action items.</CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col gap-5">
+        <CardContent className="@container flex flex-col gap-5">
           {isDisposed ? (
             <p
               className="rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] px-3 py-2 text-sm text-[var(--color-mute)]"
@@ -205,8 +205,8 @@ export default function MatterTasksPage() {
               created, changed, or reopened.
             </p>
           ) : (
-          <form className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_10rem_9rem_auto]" onSubmit={submitTask}>
-            <Field label="Task">
+          <form className="grid min-w-0 gap-3 @md:grid-cols-2 @2xl:grid-cols-[minmax(12rem,1fr)_10rem_9rem_auto]" onSubmit={submitTask}>
+            <Field label="Task" className="@md:col-span-2 @2xl:col-span-1">
               <Input
                 value={taskForm.title}
                 onChange={(event) =>
@@ -249,7 +249,7 @@ export default function MatterTasksPage() {
             >
               <Plus className="h-4 w-4" aria-hidden /> Add
             </Button>
-            <Field label="Owner" className="md:col-span-3">
+            <Field label="Owner" className="@2xl:col-span-3">
               <select
                 className="h-10 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
                 value={taskForm.owner_membership_id}
@@ -304,7 +304,7 @@ export default function MatterTasksPage() {
           <CardTitle>Deadlines</CardTitle>
           <CardDescription>Manual and source-backed matter deadlines.</CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col gap-5">
+        <CardContent className="@container flex flex-col gap-5">
           {isDisposed ? (
             <p
               className="rounded-md border border-[var(--color-line)] bg-[var(--color-bg-2)] px-3 py-2 text-sm text-[var(--color-mute)]"
@@ -315,10 +315,10 @@ export default function MatterTasksPage() {
             </p>
           ) : (
           <form
-            className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_10rem_9rem_auto]"
+            className="grid min-w-0 gap-3 @md:grid-cols-2 @2xl:grid-cols-[minmax(12rem,1fr)_10rem_9rem_auto]"
             onSubmit={submitDeadline}
           >
-            <Field label="Deadline">
+            <Field label="Deadline" className="@md:col-span-2 @2xl:col-span-1">
               <Input
                 value={deadlineForm.title}
                 onChange={(event) =>
@@ -362,7 +362,7 @@ export default function MatterTasksPage() {
             >
               <Plus className="h-4 w-4" aria-hidden /> Add
             </Button>
-            <Field label="Assignee" className="md:col-span-3">
+            <Field label="Assignee" className="@2xl:col-span-3">
               <select
                 className="h-10 rounded-md border border-[var(--color-line)] bg-white px-3 text-sm"
                 value={deadlineForm.assignee_membership_id}

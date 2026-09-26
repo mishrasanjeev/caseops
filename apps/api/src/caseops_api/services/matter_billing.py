@@ -669,10 +669,16 @@ def render_invoice_pdf(
     context: SessionContext,
     invoice: MatterInvoice,
 ) -> tuple[bytes, str, str]:
-    from fpdf import FPDF  # type: ignore[import-not-found]
+    from caseops_api.services.pdf_layout import (
+        safe_pdf_class,
+        write_wrapped_pairs,
+        write_wrapped_table,
+    )
+
+    pdf_class = safe_pdf_class()
 
     matter = invoice.matter or session.get(Matter, invoice.matter_id)
-    pdf = FPDF(format="A4", unit="mm")
+    pdf = pdf_class(format="A4", unit="mm")
     pdf.set_auto_page_break(auto=True, margin=16)
     pdf.set_title(f"CaseOps matter invoice {invoice.invoice_number}")
     pdf.set_author(invoice.firm_legal_name or "CaseOps")
@@ -683,97 +689,78 @@ def render_invoice_pdf(
     pdf.cell(0, 9, "Tax Invoice / Receipt", fill=True, new_x="LMARGIN", new_y="NEXT")
     pdf.set_text_color(17, 24, 39)
     pdf.ln(3)
+    # User-entered text wraps inside the printable width and every line returns
+    # to the left margin. multi_cell() otherwise leaves the cursor at the right
+    # edge, which drew the following Matter line off the page (BUG-033 audit).
+    lines = {"new_x": "LMARGIN", "new_y": "NEXT"}
     pdf.set_font("Helvetica", "B", 15)
-    pdf.cell(0, 8, invoice.firm_legal_name or "Invoice", new_x="LMARGIN", new_y="NEXT")
+    pdf.multi_cell(0, 8, invoice.firm_legal_name or "Invoice", **lines)
     pdf.set_font("Helvetica", "", 9)
     for line in (invoice.firm_address or "").splitlines()[:4]:
-        pdf.cell(0, 5, line[:110], new_x="LMARGIN", new_y="NEXT")
+        pdf.multi_cell(0, 5, line, **lines)
     if invoice.firm_gstin:
-        pdf.cell(0, 5, f"GSTIN: {invoice.firm_gstin}", new_x="LMARGIN", new_y="NEXT")
+        pdf.multi_cell(0, 5, f"GSTIN: {invoice.firm_gstin}", **lines)
     if invoice.firm_pan:
-        pdf.cell(0, 5, f"PAN: {invoice.firm_pan}", new_x="LMARGIN", new_y="NEXT")
+        pdf.multi_cell(0, 5, f"PAN: {invoice.firm_pan}", **lines)
     pdf.ln(4)
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 8, "Matter billing receipt", new_x="LMARGIN", new_y="NEXT")
-    pdf.set_font("Helvetica", "", 9)
-    pdf.cell(95, 5, f"Invoice No: {invoice.invoice_number}")
-    pdf.cell(
-        0,
-        5,
-        f"Invoice Date: {invoice.issued_on.isoformat()}",
-        new_x="LMARGIN",
-        new_y="NEXT",
-    )
+    pdf.cell(0, 8, "Matter billing receipt", **lines)
     due_label = invoice.due_on.isoformat() if invoice.due_on else "Not available"
-    pdf.cell(95, 5, f"Due Date: {due_label}")
-    pdf.cell(
-        0,
-        5,
-        f"Place of Supply: {invoice.place_of_supply or 'Not available'}",
-        new_x="LMARGIN",
-        new_y="NEXT",
-    )
     receipt_status = "Paid" if invoice.balance_due_minor <= 0 else "Balance due"
-    pdf.cell(95, 5, f"Receipt Status: {receipt_status}")
-    pdf.cell(
-        0,
-        5,
-        f"Outstanding: {_format_minor(invoice.balance_due_minor, invoice.currency)}",
-        new_x="LMARGIN",
-        new_y="NEXT",
-    )
     client_label = invoice.client_billing_name or invoice.client_name or "Not available"
-    pdf.cell(95, 5, f"Client: {client_label}")
-    pdf.cell(
-        0,
-        5,
-        f"Client GSTIN: {invoice.client_gstin or 'Not available'}",
-        new_x="LMARGIN",
-        new_y="NEXT",
+    write_wrapped_pairs(
+        pdf,
+        [
+            (
+                f"Invoice No: {invoice.invoice_number}",
+                f"Invoice Date: {invoice.issued_on.isoformat()}",
+            ),
+            (
+                f"Due Date: {due_label}",
+                f"Place of Supply: {invoice.place_of_supply or 'Not available'}",
+            ),
+            (
+                f"Receipt Status: {receipt_status}",
+                f"Outstanding: {_format_minor(invoice.balance_due_minor, invoice.currency)}",
+            ),
+            (
+                f"Client: {client_label}",
+                f"Client GSTIN: {invoice.client_gstin or 'Not available'}",
+            ),
+        ],
     )
+    pdf.set_font("Helvetica", "", 9)
     if invoice.client_billing_address:
-        pdf.multi_cell(0, 5, f"Client Address: {invoice.client_billing_address[:500]}")
+        pdf.multi_cell(0, 5, f"Client Address: {invoice.client_billing_address[:500]}", **lines)
     if matter is not None:
-        pdf.cell(
-            0,
-            5,
-            f"Matter: {matter.matter_code} - {matter.title[:80]}",
-            new_x="LMARGIN",
-            new_y="NEXT",
-        )
+        pdf.multi_cell(0, 5, f"Matter: {matter.matter_code} - {matter.title}", **lines)
     pdf.ln(4)
 
-    headers = ["Description", "Qty/Time", "Rate", "SAC/HSN", "Amount"]
-    widths = [82, 25, 25, 25, 28]
-    pdf.set_font("Helvetica", "B", 8)
-    for label, width in zip(headers, widths, strict=True):
-        pdf.cell(width, 7, label, border=1)
-    pdf.ln()
-    pdf.set_font("Helvetica", "", 8)
-    for line in invoice.line_items:
-        y_before = pdf.get_y()
-        pdf.multi_cell(widths[0], 6, line.description[:220], border=1)
-        y_after = pdf.get_y()
-        row_h = max(6, y_after - y_before)
-        pdf.set_xy(pdf.l_margin + widths[0], y_before)
-        qty = (
-            f"{line.duration_minutes} min"
-            if line.duration_minutes is not None
-            else line.category or "Item"
-        )
-        rate = (
-            _format_minor(line.unit_rate_amount_minor, invoice.currency)
-            if line.unit_rate_amount_minor is not None
-            else ""
-        )
-        for value, width in [
-            (qty, widths[1]),
-            (rate, widths[2]),
-            (line.sac_hsn or invoice.sac_hsn or "Not available", widths[3]),
-            (_format_minor(line.line_total_amount_minor, invoice.currency), widths[4]),
-        ]:
-            pdf.cell(width, row_h, str(value)[:28], border=1)
-        pdf.ln(row_h)
+    # Every column wraps inside its own cell and rows grow; a long description
+    # cannot push the other columns onto the wrong page (BUG-033 audit).
+    write_wrapped_table(
+        pdf,
+        headings=("Description", "Qty/Time", "Rate", "SAC/HSN", "Amount"),
+        weights=(82, 25, 25, 25, 28),
+        rows=[
+            (
+                line.description,
+                (
+                    f"{line.duration_minutes} min"
+                    if line.duration_minutes is not None
+                    else line.category or "Item"
+                ),
+                (
+                    _format_minor(line.unit_rate_amount_minor, invoice.currency)
+                    if line.unit_rate_amount_minor is not None
+                    else ""
+                ),
+                line.sac_hsn or invoice.sac_hsn or "Not available",
+                _format_minor(line.line_total_amount_minor, invoice.currency),
+            )
+            for line in invoice.line_items
+        ],
+    )
 
     pdf.ln(4)
     pdf.set_font("Helvetica", "", 9)
@@ -800,7 +787,7 @@ def render_invoice_pdf(
         )
     if invoice.notes:
         pdf.ln(3)
-        pdf.multi_cell(0, 5, f"Notes: {invoice.notes[:1000]}")
+        pdf.multi_cell(0, 5, f"Notes: {invoice.notes[:1000]}", **lines)
     pdf.set_y(-14)
     pdf.set_font("Helvetica", "", 8)
     pdf.cell(0, 5, f"Page {pdf.page_no()}", align="C")

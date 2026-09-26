@@ -26,7 +26,6 @@ available.
 """
 from __future__ import annotations
 
-import logging
 from datetime import UTC, datetime, time, timedelta
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -49,8 +48,6 @@ from caseops_api.db.models import (
     User,
 )
 from caseops_api.services.session_context import SessionContext
-
-logger = logging.getLogger(__name__)
 
 
 def _hearing_start_at(hearing: MatterHearing) -> datetime:

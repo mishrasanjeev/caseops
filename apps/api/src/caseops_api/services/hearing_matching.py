@@ -10,6 +10,10 @@ IDENTITY_REQUIRED = (
     "Add the court and a case or filing number with year, "
     "or correct the CNR before syncing hearings."
 )
+CASE_TYPE_REQUIRED = (
+    "Add the case type to the case number (for example WP(C) 6209/2019), "
+    "or record the CNR, before linking this Matter to a court case."
+)
 
 
 def normalized(value: str | None) -> str:
@@ -39,6 +43,13 @@ def public_number(value: str | None) -> tuple[str, str, str] | None:
         return None
     kind, number, year = match.groups()
     return normalized(kind), str(int(number)), year
+
+
+def untyped_case_number(identity: HearingIdentity) -> bool:
+    """A bare number/year cannot name one case: registries reuse numbers across case types."""
+
+    parsed = public_number(identity.case_number)
+    return bool(parsed) and not parsed[0]
 
 
 def search_number(identity: HearingIdentity) -> str | None:
