@@ -31,10 +31,20 @@ export async function collectFormLayoutOffenders(page: Page): Promise<string[]> 
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   });
   return page.locator("main").evaluate((main) => {
+    const captionText = (label: Element | null) => {
+      if (!label) return "";
+      // The label's own caption, not the option text of a select it wraps.
+      const caption = label.querySelector(":scope > span, :scope > div:first-child");
+      const own = Array.from(label.childNodes)
+        .filter((node) => node.nodeType === Node.TEXT_NODE)
+        .map((node) => node.textContent ?? "")
+        .join(" ");
+      return (caption?.textContent || own).trim();
+    };
     const describe = (element: Element) => {
       const input = element as HTMLInputElement;
       const label =
-        element.closest("label")?.textContent?.trim() ||
+        captionText(element.closest("label")) ||
         (element.id && main.querySelector(`label[for="${CSS.escape(element.id)}"]`)?.textContent?.trim()) ||
         element.getAttribute("aria-label") ||
         input.placeholder ||
@@ -69,18 +79,21 @@ export async function collectFormLayoutOffenders(page: Page): Promise<string[]> 
       }
       return false;
     };
-    const canvas = document.createElement("canvas").getContext("2d");
-    const selectMinimumWidth = (select: HTMLSelectElement) => {
+    // A native select sizes itself to its longest option unless a parent
+    // constrains it. Compare against that intrinsic width, measured by the
+    // browser on an unconstrained clone, rather than against an estimate.
+    const selectIntrinsicWidth = (select: HTMLSelectElement) => {
+      const clone = select.cloneNode(true) as HTMLSelectElement;
       const style = getComputedStyle(select);
-      const text = select.options[select.selectedIndex]?.text ?? "";
-      let textWidth = 0;
-      if (canvas) {
-        canvas.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
-        textWidth = canvas.measureText(text).width;
+      clone.style.cssText =
+        "position:absolute;visibility:hidden;left:-10000px;top:0;width:auto;min-width:0;max-width:none;flex:none;";
+      for (const property of ["font", "padding", "border", "boxSizing", "letterSpacing"] as const) {
+        clone.style[property] = style[property];
       }
-      const padding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
-      // Selected option, padding and the native disclosure arrow must all fit.
-      return Math.max(48, textWidth + padding + 24);
+      document.body.appendChild(clone);
+      const width = clone.getBoundingClientRect().width;
+      clone.remove();
+      return width;
     };
     const offenders: string[] = [];
     const controls = Array.from(
@@ -91,8 +104,10 @@ export async function collectFormLayoutOffenders(page: Page): Promise<string[]> 
     for (const control of controls) {
       const box = control.getBoundingClientRect();
       if (control.tagName === "SELECT") {
-        const minimum = selectMinimumWidth(control as HTMLSelectElement);
-        if (box.width < minimum - 1) offenders.push(`select narrower than its option (${Math.round(box.width)} < ${Math.round(minimum)}px): ${describe(control)}`);
+        const intrinsic = selectIntrinsicWidth(control as HTMLSelectElement);
+        if (box.width < Math.min(intrinsic, 96) - 1) {
+          offenders.push(`squeezed select (${Math.round(box.width)} < ${Math.round(intrinsic)}px intrinsic): ${describe(control)}`);
+        }
       } else if (box.width < 96) {
         offenders.push(`narrow control ${Math.round(box.width)}px: ${describe(control)}`);
       }

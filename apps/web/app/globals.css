@@ -220,3 +220,13 @@
   mask-image: radial-gradient(ellipse at top, black 40%, transparent 75%);
   -webkit-mask-image: radial-gradient(ellipse at top, black 40%, transparent 75%);
 }
+
+@layer base {
+  /* A native select sizes itself to its longest option. Data-driven options
+     (matter titles, member names) must never widen a form past its container;
+     the 2026-09-26 layout sweep found the portal invite form 397px wide on a
+     390px phone. */
+  select {
+    max-width: 100%;
+  }
+}

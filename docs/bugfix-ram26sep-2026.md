@@ -161,6 +161,24 @@ the Due date field covered their labels ("TaDue").
 - The sweep inventory comes from the rendered navigation, so new pages are
   included automatically.
 
+**Sweep findings on the 2026-09-26 candidate (58 pages per width).**
+
+- `/app/admin` at 390 px: the portal invite form was 397 px wide. Its
+  `Matter grant` select had no width constraint, and a native select never
+  shrinks below its longest option, so one ordinary matter title widened the
+  form past the phone. Fixed on the form, and product-wide with a base rule
+  `select { max-width: 100% }` so no data-driven option can widen a form past
+  its container again. It did not reproduce in a tenant without matters, which
+  is exactly why the sweep runs with product data.
+- `/app/research`: two 1 px `aria-hidden` native selects that a custom dropdown
+  keeps for form submission. Guard refined to skip hidden fallbacks.
+- `/app/admin/billing` and `/app/ip/recordals`: native selects auto-sized to
+  their options, 1 px under a formula. Guard refined to compare a select with
+  its browser-measured intrinsic width instead of an estimate.
+- Guard defect found and fixed on the way: awaiting every animation's
+  `finished` promise hung on pages with a perpetual spinner; the wait is now
+  bounded to finite animations.
+
 ## Why fixes keep reopening
 
 The three rows share one failure mode: each earlier proof measured a proxy that

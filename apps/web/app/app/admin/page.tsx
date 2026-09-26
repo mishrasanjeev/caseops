@@ -706,7 +706,7 @@ export default function AdminPage() {
                 <Label htmlFor="portal-invite-role">Portal role</Label>
                 <select
                   id="portal-invite-role"
-                  className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm"
+                  className="w-full min-w-0 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm"
                   value={portalRole}
                   onChange={(e) => {
                     const next = e.target.value as PortalUserRole;
@@ -725,7 +725,8 @@ export default function AdminPage() {
                 <Label htmlFor="portal-invite-matter">Matter grant</Label>
                 <select
                   id="portal-invite-matter"
-                  className="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm"
+                  // A matter title can be long; the select must not widen the form.
+                  className="w-full min-w-0 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm"
                   value={portalMatterId}
                   onChange={(e) => setPortalMatterId(e.target.value)}
                   disabled={portalMattersQuery.isPending}
