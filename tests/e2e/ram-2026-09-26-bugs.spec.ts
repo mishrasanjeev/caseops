@@ -296,12 +296,17 @@ test.describe("Product-wide form layout sweep (2026-09-26)", () => {
       await page.setViewportSize({ width: 1440, height: 900 });
       await page.goto(`${web}/app`);
       // The inventory is the product's own navigation, so new pages join automatically.
-      const appRoutes = await page
-        .locator('aside[aria-label="Primary navigation"] a[href^="/app"]')
+      // Both landmarks render client-side; read them only once they are visible.
+      const sidebar = page.locator('aside[aria-label="Primary navigation"]');
+      await expect(sidebar).toBeVisible();
+      const appRoutes = await sidebar
+        .locator('a[href^="/app"]')
         .evaluateAll((links) => [...new Set(links.map((link) => link.getAttribute("href") ?? ""))]);
       await page.goto(`${web}/app/matters/${matter.id}`);
-      const matterRoutes = await page
-        .locator('nav[aria-label="Matter cockpit tabs"] a[href]')
+      const cockpit = page.locator('nav[aria-label="Matter cockpit tabs"]');
+      await expect(cockpit).toBeVisible();
+      const matterRoutes = await cockpit
+        .locator("a[href]")
         .evaluateAll((links) => links.map((link) => link.getAttribute("href") ?? ""));
       const routes = [...appRoutes, ...matterRoutes].filter(Boolean);
       expect(appRoutes.length, "sidebar inventory").toBeGreaterThan(10);
