@@ -429,7 +429,7 @@ export default function CaseTrackingPage() {
                     matterContext={Boolean(matterId)}
                     scopeMatterId={matterId ?? null}
                     linked={
-                      result.linked_to_matter ||
+                      Boolean(result.linked_to_matter) ||
                       Boolean(result.link_token && linkedCandidateToken === result.link_token)
                     }
                     onLink={result.link_token && matterId
@@ -586,7 +586,8 @@ function SearchResultRow({
 }) {
   // Server-owned: visible Matters that already record this case's CNR. The
   // scoped Matter itself is represented by the linked / link states above.
-  const existing = result.existing_matters.filter((matter) => matter.matter_id !== scopeMatterId);
+  // Optional on the wire: a result from an older response carries no context.
+  const existing = (result.existing_matters ?? []).filter((matter) => matter.matter_id !== scopeMatterId);
   return (
     <div className="flex flex-col gap-3 p-3 md:flex-row md:items-center md:justify-between">
       <div className="min-w-0">

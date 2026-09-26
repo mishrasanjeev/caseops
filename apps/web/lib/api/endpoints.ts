@@ -4295,10 +4295,10 @@ export type CaseTrackingSearchResult = {
   next_hearing_on: string | null;
   source_url: string | null;
   provenance_label: string;
-  /** Visible Matters that already record this case's CNR (server-owned). */
-  existing_matters: CaseTrackingExistingMatter[];
-  /** Whether the scoped Matter already tracks this case. */
-  linked_to_matter: boolean;
+  /** Visible Matters that already record this case's CNR (server-owned; optional on the wire). */
+  existing_matters?: CaseTrackingExistingMatter[];
+  /** Whether the scoped Matter already tracks this case (optional on the wire). */
+  linked_to_matter?: boolean;
 };
 
 export type CaseTrackingSearchResponse = {

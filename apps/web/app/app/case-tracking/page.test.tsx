@@ -520,6 +520,25 @@ describe("CaseTrackingPage", () => {
     expect(screen.queryByTestId("matter-search-unmatched")).not.toBeInTheDocument();
   });
 
+  it("BUG-032: renders a search result that predates existing-matter context", async () => {
+    // Older responses and dated browser mocks omit the optional fields; the
+    // row must still render instead of crashing the workspace.
+    searchMatterCasesMock.mockResolvedValue({
+      provider: "ecourtsindia",
+      results: [{ provider: "ecourtsindia", cnr_number: "DLHC010099992026",
+        case_number: "WP(C) 99/2026", court_code: "DLHC", court_name: "Delhi High Court",
+        case_title: "Older payload", party_names: [], current_status: null,
+        current_stage: null, next_hearing_on: null, source_url: null,
+        provenance_label: "Provider-normalized case status", link_token: null }],
+    });
+    render(withClient(<CaseTrackingPage />));
+    await userEvent.type(await screen.findByTestId("case-tracking-query"), "Older");
+    await userEvent.click(screen.getByTestId("case-tracking-search-submit"));
+    expect(await screen.findByText("Older payload")).toBeInTheDocument();
+    expect(screen.getByTestId("matter-search-unmatched")).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Existing matters for this case" })).not.toBeInTheDocument();
+  });
+
   it("BUG-042: shows an explicit empty-results message instead of nothing", async () => {
     const user = userEvent.setup();
     searchMatterCasesMock.mockResolvedValue({ provider: "ecourtsindia", results: [] });
