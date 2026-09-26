@@ -1710,7 +1710,32 @@ public API before the browser journey, in every environment. The spec then
 follows the exact `operation_id` from the apply response, asserting that row's
 two results, that the retained row stays collapsed, and the per-operation
 download filename. Action labels include the operation ID, so two same-name
-uploads in one displayed second stay distinguishable. `page.test.tsx` adds the production-shape unit case. No
-assertion was relaxed; filename- and position-based selection was replaced by
-identity. Verdict until the prod-verify tester suite passes this spec on the
-deployed release: **Inconclusive**.
+uploads in one displayed second stay distinguishable. `page.test.tsx` adds the
+production-shape unit case. No assertion was relaxed; filename- and
+position-based selection was replaced by identity.
+
+Evidence, 2026-09-26:
+
+- PR #479 (head `6d93d993`) was merged to `main` as `61de35a4`. Full Docker
+  acceptance on `6d93d993` returned `PASS`: 396 PostgreSQL tests passed, and
+  Playwright passed 202 + 196 desktop (1 + 7 skipped) and 4 mobile.
+  `ram-2026-09-21-bugfixes.spec.ts:129` passed in `app-chromium`. The skips are
+  one provider-gated payment link and seven assertions that apply only to the
+  exact production release.
+- Two earlier Docker attempts are retained as incomplete. Attempt 1 failed
+  before any test when PostgreSQL missed its healthcheck while another
+  acceptance stack was loading the host. Attempt 2 was stopped during the image
+  build.
+- A Docker replay of the pre-fix spec against the unfixed revision was not run.
+  The original defect is evidenced by the production snapshot of run
+  `36112912771` and by the unit probe against the unfixed page.
+- Release `b1ffd1c7` (API `caseops-api-00467-dw6`, web `caseops-web-00444-dxr`)
+  contains `61de35a4`. Exact-release prod-verify dispatch `36175978724`, job
+  "Prod Playwright (tester)", passed
+  `tests/e2e/ram-2026-09-21-bugfixes.spec.ts:129` in `tester-prod-chromium` on
+  its first attempt (27.3 s, no retry). The job totalled 94 passed and 5
+  skipped; the skips are the standing BUG-012 and 2026-09-24 production items.
+
+Verdict: **Properly fixed**, proven by
+`tests/e2e/ram-2026-09-21-bugfixes.spec.ts:129` passing on release `b1ffd1c7`
+in prod-verify run `36175978724`.
