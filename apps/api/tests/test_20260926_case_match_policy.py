@@ -16,7 +16,7 @@ from dataclasses import replace
 from datetime import date
 
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from caseops_api.db.models import Matter, TrackedCaseBookmark
 from caseops_api.db.session import get_session_factory
@@ -106,6 +106,15 @@ def _use(monkeypatch, provider: FakeCaseTrackingProvider) -> None:
     monkeypatch.setattr(
         "caseops_api.services.case_tracking.get_case_tracking_provider", lambda: provider
     )
+
+
+def _bookmark_count(matter_id: str) -> int:
+    with get_session_factory()() as session:
+        return session.scalar(
+            select(func.count())
+            .select_from(TrackedCaseBookmark)
+            .where(TrackedCaseBookmark.matter_id == matter_id)
+        )
 
 
 def _matter_search(client: TestClient, token: str, matter_id: str) -> dict:
@@ -280,6 +289,9 @@ def test_global_search_reports_only_visible_existing_matters(
         client, token, cnr=CNR.lower(), code="BUG032-HIDDEN", case_number="WP(CIVIL)/6210/2019"
     )
     _, member_token = _invite_member(client, token, "bug032-member@example.com")
+    # The invite helper signs in as the member, and cookie-first authentication
+    # outranks a bearer token; clear the shared cookie before each identity.
+    client.cookies.clear()
     with get_session_factory()() as session:
         restricted = session.get(Matter, hidden)
         assert restricted is not None
@@ -296,6 +308,7 @@ def test_global_search_reports_only_visible_existing_matters(
     assert owner_result["link_token"] is None
     assert owner_result["linked_to_matter"] is False
 
+    client.cookies.clear()
     member = client.post(
         "/api/case-tracking/search",
         headers=auth_headers(member_token),
@@ -323,6 +336,9 @@ def test_link_rejects_a_selection_without_signed_provider_identity(
     matter_id = _create_matter(client, token, cnr=CNR)
     _use(monkeypatch, _ScriptedProvider([_provider_snapshot()]))
     [result] = _matter_search(client, token, matter_id)["results"]
+    # With case tracking enabled, creating a CNR Matter already auto-links it;
+    # the rejected legacy selection must add nothing to whatever exists.
+    before = _bookmark_count(matter_id)
     encoded, _ = result["link_token"].split(".", 1)
     claims = json.loads(base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)))
     claims.pop("candidate")
@@ -339,10 +355,4 @@ def test_link_rejects_a_selection_without_signed_provider_identity(
         json={"link_token": legacy},
     )
     assert rejected.status_code == 409, rejected.text
-    with get_session_factory()() as session:
-        assert (
-            session.scalar(
-                select(TrackedCaseBookmark.id).where(TrackedCaseBookmark.matter_id == matter_id)
-            )
-            is None
-        )
+    assert _bookmark_count(matter_id) == before
