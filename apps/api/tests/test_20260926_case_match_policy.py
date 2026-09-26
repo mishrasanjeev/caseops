@@ -284,9 +284,17 @@ def test_global_search_reports_only_visible_existing_matters(
     token = _bootstrap(client)
     visible = _create_matter(client, token, cnr=CNR, code="BUG032-VISIBLE")
     # Case numbers are unique per company; CNRs are not. The hidden Matter
-    # records the same CNR in a different case (lower case, as typed).
+    # records the same CNR in a different case (lower case, as typed), and a
+    # third Matter stores it with punctuation the SQL key must also drop.
     hidden = _create_matter(
         client, token, cnr=CNR.lower(), code="BUG032-HIDDEN", case_number="WP(CIVIL)/6210/2019"
+    )
+    punctuated = _create_matter(
+        client,
+        token,
+        cnr="DLHC_0103-1728.2019",
+        code="BUG032-PUNCT",
+        case_number="WP(CIVIL)/6211/2019",
     )
     _, member_token = _invite_member(client, token, "bug032-member@example.com")
     # The invite helper signs in as the member, and cookie-first authentication
@@ -304,7 +312,11 @@ def test_global_search_reports_only_visible_existing_matters(
     )
     assert owner.status_code == 200, owner.text
     [owner_result] = owner.json()["results"]
-    assert {row["matter_id"] for row in owner_result["existing_matters"]} == {visible, hidden}
+    assert {row["matter_id"] for row in owner_result["existing_matters"]} == {
+        visible,
+        hidden,
+        punctuated,
+    }
     assert owner_result["link_token"] is None
     assert owner_result["linked_to_matter"] is False
 
@@ -316,7 +328,7 @@ def test_global_search_reports_only_visible_existing_matters(
     )
     assert member.status_code == 200, member.text
     [member_result] = member.json()["results"]
-    assert [row["matter_id"] for row in member_result["existing_matters"]] == [visible]
+    assert {row["matter_id"] for row in member_result["existing_matters"]} == {visible, punctuated}
 
 
 def test_link_rejects_a_selection_without_signed_provider_identity(
@@ -356,3 +368,34 @@ def test_link_rejects_a_selection_without_signed_provider_identity(
     )
     assert rejected.status_code == 409, rejected.text
     assert _bookmark_count(matter_id) == before
+
+
+def test_manual_linking_requires_a_typed_case_number_without_a_cnr(
+    client: TestClient, monkeypatch
+) -> None:
+    """WP(C) 6209/2019 and CRL.A. 6209/2019 share a number and a court."""
+
+    from caseops_api.services.hearing_matching import CASE_TYPE_REQUIRED
+
+    token = _bootstrap(client)
+    untyped = _create_matter(client, token, cnr=None, case_number="6209/2019", code="BUG032-BARE")
+    _use(monkeypatch, _ScriptedProvider([_provider_snapshot()]))
+    searched = client.post(
+        "/api/case-tracking/search",
+        headers=auth_headers(token),
+        json={"case_number": "6209/2019", "court_name": "Delhi High Court", "matter_id": untyped},
+    )
+    assert searched.status_code == 409, searched.text
+    assert searched.json()["detail"] == CASE_TYPE_REQUIRED
+    resolved = client.post(
+        f"/api/case-tracking/matters/{untyped}/resolve", headers=auth_headers(token)
+    )
+    assert resolved.status_code == 200, resolved.text
+    assert resolved.json()["status"] == "insufficient_identifiers"
+
+    # A CNR settles identity even when the recorded number is untyped.
+    with_cnr = _create_matter(
+        client, token, cnr=CNR, case_number="6212/2019", code="BUG032-BARE-CNR"
+    )
+    [result] = _matter_search(client, token, with_cnr)["results"]
+    assert result["link_token"]

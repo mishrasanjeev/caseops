@@ -56,6 +56,15 @@ divergent rule: same CNR plus a different court label must give `no_match`.
 - Results list visible Matters that record the same CNR, and say whether the
   scoped Matter already tracks the case. The page shows "Linked to this Matter"
   and an "Open matter" link.
+- Review finding (P1), fixed: manual search, resolve and link require a CNR or a
+  case number that carries its case type. A bare `6209/2019` returns an
+  actionable 409 (`CASE_TYPE_REQUIRED`) or `insufficient_identifiers`, because
+  registries reuse numbers across case types (WP(C) 6209/2019 and CRL.A.
+  6209/2019 share a court). Scheduled refresh of an already-linked bookmark
+  keeps its exactly-one rule.
+- Review finding (P2), fixed: the SQL key that finds existing Matters by CNR
+  drops every non-alphanumeric character (`regexp_replace` on PostgreSQL),
+  matching `normalize_cnr`; a stored `DLHC_0103-1728.2019` is found.
 
 **Contract change, recorded.** A result with the Matter's CNR but a different
 free-text court label is now a match. A different CNR is still never a match.
@@ -103,6 +112,9 @@ layout.
   from `safe_pdf_class`.
 - **Guards:** tests fail if any module constructs a bare `FPDF`, or calls
   `multi_cell` without an explicit `new_x`.
+- **Review finding (P2), fixed:** the new footer's `{nb}` alias was not
+  registered, so the first version printed `Page 1 of {nb}`. The tests now read
+  the footer on a single-page list and on a 90-row multi-page list.
 
 **Residual (not claimed).** Devanagari and other non-Latin scripts render as `?`
 in PDFs, because the core fonts are Latin-1; DOCX exports remain lossless.

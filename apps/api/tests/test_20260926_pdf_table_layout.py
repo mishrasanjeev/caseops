@@ -147,7 +147,10 @@ def test_cause_list_pdf_wraps_long_values_inside_their_columns(client: TestClien
     text = _compact(extract_text(io.BytesIO(body)))
     for heading in CAUSE_LIST_PDF_HEADINGS:
         assert _compact(heading) in text
-    assert "2026-09-25" in extract_text(io.BytesIO(body))
+    plain = extract_text(io.BytesIO(body))
+    assert "2026-09-25" in plain
+    assert "Page 1 of 1" in plain
+    assert "{nb}" not in plain
 
 
 def test_cause_list_pdf_with_non_latin_text_downloads(client: TestClient) -> None:
@@ -324,3 +327,51 @@ def test_every_multi_cell_returns_the_cursor_explicitly() -> None:
                 if "new_x" not in keywords and None not in keywords:
                     offenders.append(f"{path.relative_to(root)}:{node.lineno}")
     assert offenders == []
+
+
+def test_cause_list_pdf_numbers_every_page_with_the_total(client: TestClient, monkeypatch) -> None:
+    """The footer alias must resolve on every page of a multi-page list."""
+
+    from datetime import UTC, date, datetime
+
+    from caseops_api.schemas.cause_lists import CauseListPreviewResponse, CauseListRow
+    from caseops_api.services import cause_lists
+
+    boot = _bootstrap(client, slug_seed="bug033-pages")
+    token = str(boot["access_token"])
+    rows = [
+        CauseListRow(
+            serial_number=index,
+            file_number=f"FILE-{index}",
+            court_name="Delhi High Court",
+            case_number=f"WP(C) {index}/2026",
+            case_title=f"Petitioner {index} v Respondent {index}",
+            judge_name="Hon'ble Justice",
+            court_number="1",
+            item_number=str(index),
+            lawyers_appearing="Counsel",
+            hearing_date=date(2026, 9, 25),
+            source="hearings",
+        )
+        for index in range(1, 91)
+    ]
+    monkeypatch.setattr(
+        cause_lists,
+        "preview_cause_list",
+        lambda session, *, context, payload: CauseListPreviewResponse(
+            generated_at=datetime.now(UTC), filters={}, rows=rows
+        ),
+    )
+    response = client.post(
+        "/api/cause-lists/download",
+        headers=auth_headers(token),
+        json={"date_from": "2026-09-25", "date_to": "2026-09-25", "source": "hearings"},
+    )
+    assert response.status_code == 200, response.text
+    pages = list(extract_pages(io.BytesIO(response.content)))
+    assert len(pages) > 1
+    plain = extract_text(io.BytesIO(response.content))
+    assert "{nb}" not in plain
+    for number in range(1, len(pages) + 1):
+        assert f"Page {number} of {len(pages)}" in plain
+    assert "Petitioner 90 v Respondent 90" in plain

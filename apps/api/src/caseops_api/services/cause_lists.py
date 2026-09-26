@@ -248,6 +248,7 @@ def render_cause_list_pdf(
     # own column and rows grow (BUG-033, 2026-09-26).
     pdf = _CauseListPdf(orientation="L", format="A4", unit="mm")
     pdf.set_auto_page_break(auto=True, margin=14)
+    pdf.alias_nb_pages()  # resolves {nb} in the footer to the total page count
     pdf.add_page()
     pdf.set_font("Helvetica", "B", 12)
     pdf.cell(0, 8, "Cause List", new_x="LMARGIN", new_y="NEXT")

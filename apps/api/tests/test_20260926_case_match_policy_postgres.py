@@ -56,3 +56,11 @@ def test_link_rejects_a_selection_without_signed_provider_identity(
     journeys.test_link_rejects_a_selection_without_signed_provider_identity(
         isolated_postgres_client, monkeypatch
     )
+
+
+def test_manual_linking_requires_a_typed_case_number_without_a_cnr(
+    isolated_postgres_client, monkeypatch
+):
+    journeys.test_manual_linking_requires_a_typed_case_number_without_a_cnr(
+        isolated_postgres_client, monkeypatch
+    )

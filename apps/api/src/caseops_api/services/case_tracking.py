@@ -8,6 +8,7 @@ from base64 import b64decode, urlsafe_b64encode
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from datetime import time as datetime_time
+from typing import Any
 from urllib.parse import unquote, urljoin, urlparse
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -72,12 +73,14 @@ from caseops_api.services.case_tracking_providers import (
     provider_status,
 )
 from caseops_api.services.hearing_matching import (
+    CASE_TYPE_REQUIRED,
     IDENTITY_REQUIRED,
     MAX_MATCH_CANDIDATES,
     HearingIdentity,
     identity_matches,
     reliable_identity,
     search_number,
+    untyped_case_number,
 )
 from caseops_api.services.hearing_matching_scopes import (
     HearingScope,
@@ -1624,6 +1627,10 @@ def search_cases(
         identity = matter_identity(matter)
         if not reliable_identity(identity):
             raise HTTPException(409, IDENTITY_REQUIRED)
+        # Linking establishes identity, so a CNR-less Matter must name its case
+        # type: WP(C) 6209/2019 and CRL.A. 6209/2019 share a number and a court.
+        if not identity.cnr and untyped_case_number(identity):
+            raise HTTPException(409, CASE_TYPE_REQUIRED)
         complete_results_for_matter = not identity.cnr
         frozen_matter = (
             matter.lifecycle_version,
@@ -1821,13 +1828,16 @@ def _identity_from_claims(raw: object) -> HearingIdentity:
     return HearingIdentity(**values)  # type: ignore[arg-type]
 
 
-_MATTER_CNR_KEY = func.upper(
-    func.replace(
-        func.replace(func.replace(func.replace(Matter.cnr_number, "-", ""), " ", ""), "/", ""),
-        ".",
-        "",
-    )
-)
+def _matter_cnr_key(session: Session) -> Any:
+    """SQL counterpart of normalize_cnr: every non-alphanumeric character is dropped."""
+
+    if session.get_bind().dialect.name == "postgresql":
+        return func.upper(func.regexp_replace(Matter.cnr_number, "[^A-Za-z0-9]", "", "g"))
+    # SQLite (tests only) has no regexp_replace; strip the separators a CNR field carries.
+    key: Any = Matter.cnr_number
+    for separator in ("-", "_", "/", ".", ":", "\\", "(", ")", "[", "]", ",", " ", "	"):
+        key = func.replace(key, separator, "")
+    return func.upper(key)
 
 
 def _annotate_existing_matters(
@@ -1851,7 +1861,7 @@ def _annotate_existing_matters(
         .where(
             Matter.company_id == context.company.id,
             Matter.cnr_number.is_not(None),
-            _MATTER_CNR_KEY.in_(cnrs),
+            _matter_cnr_key(session).in_(cnrs),
             visible_matters_filter(session, context=context),
         )
         .order_by(Matter.created_at.desc(), Matter.id)
@@ -1958,7 +1968,11 @@ def resolve_matter_case(
     if not matter_is_operational(matter):
         raise HTTPException(status_code=409, detail="Disposed matters cannot resolve court cases.")
     identity = matter_identity(matter)
-    if not reliable_identity(identity) or (not identity.cnr and not identity.case_number):
+    if (
+        not reliable_identity(identity)
+        or (not identity.cnr and not identity.case_number)
+        or (not identity.cnr and untyped_case_number(identity))
+    ):
         return MatterCaseResolutionResponse(status="insufficient_identifiers")
     # Search input is server-owned. A case number is searched using its public
     # number/year; the provider must certify completeness before we pick one.
@@ -2039,6 +2053,8 @@ def link_matter_case(
         or _hash_value(asdict(identity)) != claims.get("identity_hash")
     ):
         raise HTTPException(409, "Matter identity or access changed. Find the case again.")
+    if not identity.cnr and untyped_case_number(identity):
+        raise HTTPException(409, CASE_TYPE_REQUIRED)
     try:
         result = CaseTrackingSearchResultRecord.model_validate(claims["result"])
     except (KeyError, ValueError) as exc:
