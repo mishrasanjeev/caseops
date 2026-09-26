@@ -73,14 +73,14 @@ from caseops_api.services.case_tracking_providers import (
     provider_status,
 )
 from caseops_api.services.hearing_matching import (
-    CASE_TYPE_REQUIRED,
+    IDENTITY_GAP_MESSAGES,
     IDENTITY_REQUIRED,
     MAX_MATCH_CANDIDATES,
     HearingIdentity,
+    identity_gap,
     identity_matches,
     reliable_identity,
     search_number,
-    untyped_case_number,
 )
 from caseops_api.services.hearing_matching_scopes import (
     HearingScope,
@@ -1625,12 +1625,11 @@ def search_cases(
     if matter is not None:
         require_operational_matter(session, matter=matter, operation="search case tracking")
         identity = matter_identity(matter)
-        if not reliable_identity(identity):
-            raise HTTPException(409, IDENTITY_REQUIRED)
-        # Linking establishes identity, so a CNR-less Matter must name its case
-        # type: WP(C) 6209/2019 and CRL.A. 6209/2019 share a number and a court.
-        if not identity.cnr and untyped_case_number(identity):
-            raise HTTPException(409, CASE_TYPE_REQUIRED)
+        # Linking establishes identity, so the Matter must name one readable
+        # case: WP(C) 6209/2019 and CRL.A. 6209/2019 share a number and a court.
+        gap = identity_gap(identity)
+        if gap is not None:
+            raise HTTPException(409, IDENTITY_GAP_MESSAGES[gap])
         complete_results_for_matter = not identity.cnr
         frozen_matter = (
             matter.lifecycle_version,
@@ -1978,12 +1977,14 @@ def resolve_matter_case(
     if not matter_is_operational(matter):
         raise HTTPException(status_code=409, detail="Disposed matters cannot resolve court cases.")
     identity = matter_identity(matter)
-    if (
-        not reliable_identity(identity)
-        or (not identity.cnr and not identity.case_number)
-        or (not identity.cnr and untyped_case_number(identity))
-    ):
-        return MatterCaseResolutionResponse(status="insufficient_identifiers")
+    gap = identity_gap(identity)
+    if gap is not None:
+        return MatterCaseResolutionResponse(
+            status="insufficient_identifiers",
+            reason=gap,
+            case_number=identity.case_number,
+            cnr_number=identity.cnr,
+        )
     # Search input is server-owned. A case number is searched using its public
     # number/year; the provider must certify completeness before we pick one.
     query = CaseTrackingSearchRequest(
@@ -2063,8 +2064,9 @@ def link_matter_case(
         or _hash_value(asdict(identity)) != claims.get("identity_hash")
     ):
         raise HTTPException(409, "Matter identity or access changed. Find the case again.")
-    if not identity.cnr and untyped_case_number(identity):
-        raise HTTPException(409, CASE_TYPE_REQUIRED)
+    gap = identity_gap(identity)
+    if gap is not None:
+        raise HTTPException(409, IDENTITY_GAP_MESSAGES[gap])
     try:
         result = CaseTrackingSearchResultRecord.model_validate(claims["result"])
     except (KeyError, ValueError) as exc:

@@ -213,6 +213,45 @@ could pass while the user-visible invariant was broken.
 
 Permanent rules added to `AGENTS.md` on 2026-09-26 cover each of these.
 
+## Production run 1 (2026-09-27, release `2febd211`): two tester failures
+
+Production verification run 36276564868 ran the tester project against the
+deployed release and failed two tests. Neither was a product regression; both
+were defects in how the proof was written, and both are recorded here because
+they are exactly the kind of proxy proof this report is about.
+
+1. **`ram-2026-09-26-bugs.spec.ts` BUG-032, production branch.** The branch
+   asserted the blocked-provider body as `detail.code`; the API emits RFC 7807
+   bodies with `code` at the top level, which every sibling spec reads. The
+   branch is production-only and had never executed before release. It now uses
+   a shared `expectPaidProviderBlocked` helper, and a pytest sends the identical
+   CNR-only request against the real provider host with the automation marker
+   to pin that exact shape before any browser run.
+2. **`ram-2026-09-24-prod.spec.ts` QA-owned matter journey.** Its fixture case
+   number was `WP(C) <six random hex characters>/2026`. The public-number
+   parser reads digits, so the fixture parsed only when the hex slice ended in
+   a digit: the journey passed on 62.5% of runs (it passed twice before, by
+   chance) and drew `6d661b` here. `public_number` was byte-identical between
+   the two releases; the failure was latent flakiness, not the unified policy.
+   The fixture is now registry-shaped.
+
+The run also exposed a real usability gap: for `WP(C) 6d661b/2026` the page
+said "Insufficient case identifiers" although the entry visibly carried a type,
+a year and a court. Fixed product-wide:
+
+- `hearing_matching.identity_gap` names the one reason a Matter cannot be
+  matched: `invalid_cnr`, `missing_identifiers`, `unreadable_case_number` or
+  `case_type_required`. Search, resolve and link all use it; the resolve
+  response carries the reason and the recorded values, and the page renders
+  reason-specific copy with the recorded case number.
+- The parser now reads the common spellings of one case identity
+  (`W.P.(C) No. 6209 of 2019`, `CWP-1234-2020`, `WP(C) No.6209/2019`) and
+  rejects a compound entry that names two records (`FIR 145/2025 + Crl. M.C.
+  412/2026`) instead of matching on the last number with a garbage type.
+- A new dated journey creates an unreadable, an untyped and a readable Matter
+  and asserts the exact message for each; it runs locally, in Docker and in
+  production.
+
 ## Verification
 
 Evidence to date is recorded in `docs/STRICT_BUG_TASKLIST_2026-04-22.md`

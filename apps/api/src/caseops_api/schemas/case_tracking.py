@@ -148,6 +148,16 @@ class MatterCaseResolutionResponse(BaseModel):
     status: Literal["matched", "multiple_matches", "no_match", "insufficient_identifiers"]
     provider: str = "ecourtsindia"
     results: list[MatterCaseCandidateRecord] = Field(default_factory=list)
+    # Why the Matter cannot be matched yet, with the recorded values the user
+    # has to correct. Present only with status "insufficient_identifiers".
+    reason: (
+        Literal[
+            "invalid_cnr", "missing_identifiers", "unreadable_case_number", "case_type_required"
+        ]
+        | None
+    ) = None
+    case_number: str | None = None
+    cnr_number: str | None = None
 
 
 class CaseTrackingBookmarkCreateRequest(BaseModel):

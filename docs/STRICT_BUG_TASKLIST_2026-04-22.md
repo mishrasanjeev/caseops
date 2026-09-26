@@ -1791,9 +1791,30 @@ Evidence to date (PR #487):
   case-tracking journey whose search mock omits the new optional
   `existing_matters` field and crashed the page. The row now tolerates the
   omission; the run is repeated on the corrected commit.
-- Pending: full Docker acceptance on the final commit, a pass signed in as the
-  tester-supplied account recreated in local Docker, CI, merge, exact-image
-  deploy, production tester verification, and maintenance re-certification.
+- Full Docker acceptance on the final commit `1a5ab9d4`: PostgreSQL 403/403;
+  app-chromium 208 passed/1 skipped and 197 passed/7 skipped (standing
+  provider-gated and exact-production-release skips); app-mobile 4/4; the dated
+  spec 7/7, repeated signed in as the tester-supplied account recreated in local
+  Docker with its password supplied only through the process environment.
+- PR #487 merged to `main` as `2febd211`; CodeQL reports 0 open alerts on
+  `main`. Deployed 2026-09-27: API `caseops-api-00470-msx`, web
+  `caseops-web-00447-8sw`, both reporting `2febd211`.
+
+Production run 1, 2026-09-27 (run 36276564868 on `2febd211`): **failed**, two
+tester tests. Analysis in `docs/bugfix-ram26sep-2026.md` ("Production run 1").
+Neither was a product regression: the BUG-032 production branch asserted the
+blocked-provider body as `detail.code` (the API puts `code` at the top level;
+the branch had never executed before release), and the 2026-09-24 QA journey's
+fixture `WP(C) <hex>/2026` parsed only when its hex slice ended in a digit
+(62.5% of runs; `public_number` was identical on both releases). Fixes: shared
+`expectPaidProviderBlocked` helper plus a pytest pinning the exact request and
+body; registry-shaped fixture; and, product-wide, `identity_gap` so search,
+resolve and link tell the user which of invalid CNR, missing identifiers,
+unreadable case number or missing case type to correct, with the recorded value,
+and a parser that reads `No.`/`of`/hyphen spellings of one case identity while
+rejecting compound entries. New tests: `test_20260927_case_identity_readability.py`
+(42 cases) and the dated journey "a Matter that cannot be matched is told
+exactly what to record". Maintenance cadence remains paused until a green run.
 
 Verdict for all three rows until the dated spec passes on the deployed release:
 **Inconclusive**. The production run proves the no-paid gate for BUG-032; the

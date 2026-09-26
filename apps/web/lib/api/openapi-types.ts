@@ -36329,11 +36329,17 @@ export interface components {
         };
         /** MatterCaseResolutionResponse */
         MatterCaseResolutionResponse: {
+            /** Case Number */
+            case_number?: string | null;
+            /** Cnr Number */
+            cnr_number?: string | null;
             /**
              * Provider
              * @default ecourtsindia
              */
             provider: string;
+            /** Reason */
+            reason?: ("invalid_cnr" | "missing_identifiers" | "unreadable_case_number" | "case_type_required") | null;
             /** Results */
             results?: components["schemas"]["MatterCaseCandidateRecord"][];
             /**

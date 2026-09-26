@@ -297,6 +297,32 @@ describe("CaseTrackingPage", () => {
     expect(screen.queryByTestId("matter-case-candidate")).not.toBeInTheDocument();
   });
 
+  it.each([
+    [
+      { reason: "unreadable_case_number", case_number: "WP(C) 6d661b/2026" },
+      "could not read the case number “WP(C) 6d661b/2026”",
+    ],
+    [
+      { reason: "case_type_required", case_number: "6209/2019" },
+      "Add the case type to the case number “6209/2019”",
+    ],
+    [
+      { reason: "invalid_cnr", cnr_number: "DLHC0103" },
+      "The recorded CNR “DLHC0103” is not a valid 16-character CNR",
+    ],
+    [{ reason: "missing_identifiers" }, "Insufficient case identifiers."],
+  ])("names the identity gap %j with the recorded value", async (gap, message) => {
+    resolveMatterCaseMock.mockResolvedValue({
+      provider: "ecourtsindia", status: "insufficient_identifiers", results: [], ...gap,
+    });
+    render(withClient(<CaseTrackingPage />));
+    await userEvent.click(await screen.findByTestId("matter-case-resolve-submit"));
+    const status = await screen.findByTestId("matter-case-identity-gap");
+    expect(status).toHaveTextContent(message);
+    expect(status).toHaveAttribute("data-reason", gap.reason);
+    expect(screen.queryByTestId("matter-case-candidate")).not.toBeInTheDocument();
+  });
+
   it("searches with Matter context, links signed result, and shows bookmark updates", async () => {
     const user = userEvent.setup();
     searchMatterCasesMock.mockResolvedValue({
