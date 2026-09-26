@@ -1905,8 +1905,18 @@ def _matter_selection_token(
     context: SessionContext,
     matter: Matter,
     result: CaseTrackingSearchResultRecord,
-    candidate: HearingIdentity,
+    candidate: HearingIdentity | None = None,
 ) -> str:
+    # Search passes the provider's published matching identity. A selection
+    # minted from the displayed result alone carries that result's identity.
+    if candidate is None:
+        candidate = HearingIdentity(
+            cnr=result.cnr_number,
+            case_number=result.case_number,
+            court_code=result.court_code,
+            court_name=result.court_name,
+            parties=tuple(result.party_names),
+        )
     result_data = result.model_dump(
         mode="json",
         exclude={"source_url", "link_token", "existing_matters", "linked_to_matter"},

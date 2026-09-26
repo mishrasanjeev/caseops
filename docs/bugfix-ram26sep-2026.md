@@ -67,6 +67,9 @@ divergent rule: same CNR plus a different court label must give `no_match`.
   page into the workspace error boundary. The row treats a missing list as
   empty, the client type matches the generated contract, and a page test
   renders the older payload shape.
+- Docker acceptance finding, fixed: the 2026-09-24 local court-link journey
+  mints a selection through the private token helper with only the displayed
+  result; the new candidate argument defaults to that result's identity.
 - Review finding (P2), fixed: the SQL key that finds existing Matters by CNR
   drops every non-alphanumeric character (`regexp_replace` on PostgreSQL),
   matching `normalize_cnr`; a stored `DLHC_0103-1728.2019` is found.
