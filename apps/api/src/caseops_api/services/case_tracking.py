@@ -2043,11 +2043,11 @@ def link_matter_case(
         result = CaseTrackingSearchResultRecord.model_validate(claims["result"])
     except (KeyError, ValueError) as exc:
         raise HTTPException(409, "This case selection is invalid. Find the case again.") from exc
+    # The signed selection binds the displayed result to the provider identity
+    # that search judged; link repeats exactly that decision and no other.
     candidate = _identity_from_claims(claims.get("candidate"))
-    if (
-        result.provider != "ecourtsindia"
-        or normalize_cnr(candidate.cnr) != normalize_cnr(result.cnr_number)
-        or not _matter_case_candidate_matches(identity, candidate)
+    if result.provider != "ecourtsindia" or not _matter_case_candidate_matches(
+        identity, candidate
     ):
         raise HTTPException(409, "The selected case no longer matches this Matter.")
 
