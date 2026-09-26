@@ -39,6 +39,14 @@ function withClient(children: ReactNode) {
 describe("IntakePage", () => {
   beforeEach(() => {
     checkMatterCodeAvailableMock.mockReset();
+    // A debounced check can fire for a partially typed value on a loaded
+    // runner; it must resolve like the real client instead of crashing.
+    checkMatterCodeAvailableMock.mockImplementation(async (code: string) => ({
+      available: true,
+      normalised: code,
+      suggestion: null,
+      reason: null,
+    }));
     listIntakeMock.mockReset();
     promoteIntakeMock.mockReset();
     useCapabilityMock.mockReset();
@@ -141,7 +149,11 @@ describe("IntakePage", () => {
     render(withClient(<IntakePage />));
     await user.click(await screen.findByRole("button", { name: /Cheque bounce request/i }));
     await user.click(await screen.findByRole("button", { name: /Promote to matter/i }));
-    await user.type(screen.getByTestId("intake-promote-code"), "BAD CODE/1");
+    // Enter the invalid code in one input event: typed keystroke by keystroke,
+    // "BAD" is a valid prefix whose availability check is legitimate if the
+    // debounce elapses mid-typing, which made this assertion timing-dependent.
+    await user.click(screen.getByTestId("intake-promote-code"));
+    await user.paste("BAD CODE/1");
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       /letters, numbers, and hyphens only/i,
