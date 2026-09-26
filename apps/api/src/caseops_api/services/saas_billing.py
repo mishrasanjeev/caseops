@@ -1949,9 +1949,11 @@ def _ascii_pdf_text(value: object) -> str:
 
 
 def _pdf_bytes(title: str, rows: Iterable[tuple[str, object]]) -> bytes:
-    from fpdf import FPDF  # type: ignore[import-not-found]
+    from caseops_api.services.pdf_layout import safe_pdf_class
 
-    pdf = FPDF(format="A4", unit="mm")
+    pdf_class = safe_pdf_class()
+
+    pdf = pdf_class(format="A4", unit="mm")
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
     pdf.set_font("Helvetica", style="B", size=16)
