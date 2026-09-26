@@ -237,6 +237,13 @@ test.describe("Ram 2026-09-26 workbook (IV)", () => {
       expect((await blocked.json()).detail?.code).toBe("paid_provider_blocked_for_test");
       return;
     }
+    // The provider emulator exists only in the Docker acceptance stack; the host
+    // and CI app suites have no eCourts provider to answer a real search, and a
+    // mocked response would bypass the server-side identity policy under test.
+    test.skip(
+      !process.env.CASEOPS_E2E_DOCKER_PROJECT,
+      "Requires the isolated exact-image Docker stack with the provider emulator; the production variant proves the no-paid gate.",
+    );
     // The Docker provider emulator publishes "Delhi High Court" with parties
     // "Local Docker Petitioner" / "Local Docker Respondent". The Matter records
     // the same CNR with different court and party wording, as in the report.
