@@ -893,7 +893,7 @@ def test_outlook_machine_controls_fail_closed_when_policy_checks_fail(
     monkeypatch.setattr(
         calendar_sync_service,
         "redact_provider_error",
-        lambda value: str(value),
+        str,
     )
 
     status_response = client.get(

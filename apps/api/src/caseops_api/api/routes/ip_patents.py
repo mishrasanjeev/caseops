@@ -34,8 +34,10 @@ from caseops_api.schemas.ip_patents import (
     PatentPriorityListResponse,
     PatentPriorityRecord,
 )
-from caseops_api.services.ip_patent_applications import (
+from caseops_api.services.ip_patent_application_corrections import (
     correct_patent_application,
+)
+from caseops_api.services.ip_patent_applications import (
     create_patent_application,
     get_patent_application,
     list_patent_application_lifecycle_history,

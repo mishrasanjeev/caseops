@@ -8,10 +8,13 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from threading import Lock
 from time import perf_counter
+from typing import get_args
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, literal_column, or_, select, text
 from sqlalchemy.orm import Session, defer, raiseload
+
+from caseops_api.core.redaction import redact_provider_error
 
 # NOTE for reviewers: the task spec asked for this wiring to land in
 # ``services/retrieval.py``, but ``search_authority_catalog`` (the
@@ -41,6 +44,7 @@ from caseops_api.schemas.authorities import (
     AuthorityIngestionRequest,
     AuthorityIngestionRunRecord,
     AuthoritySearchCoverage,
+    AuthoritySearchModeLiteral,
     AuthoritySearchRequest,
     AuthoritySearchResponse,
     AuthoritySearchResult,
@@ -60,7 +64,6 @@ from caseops_api.services.court_sync_sources import (
 )
 from caseops_api.services.document_processing import _chunk_text
 from caseops_api.services.embeddings import EmbeddingProviderError, build_provider
-from caseops_api.services.notification_delivery import redact_provider_error
 from caseops_api.services.retrieval import (
     RetrievalCandidate,
     is_low_quality_ocr_text,
@@ -70,6 +73,12 @@ from caseops_api.services.retrieval_normalisers import build_query_variants
 from caseops_api.services.session_context import SessionContext
 
 logger = logging.getLogger(__name__)
+
+# Request-supplied values are never interpolated into logs; the search mode
+# is logged through this fixed label table built from its declared literal.
+_SEARCH_MODE_LOG_LABELS: dict[str, str] = {
+    mode: mode for mode in get_args(AuthoritySearchModeLiteral)
+}
 
 # Search is an interactive request, not a corpus-export endpoint. The old
 # implementation could union 300 documents per query variant and then lazily
@@ -110,7 +119,8 @@ class _PostgresCorpusEstimates:
 
 
 _CORPUS_METRICS_CACHE_LOCK = Lock()
-_CORPUS_METRICS_CACHE: tuple[float, _CorpusMetrics] | None = None
+# Mutated in place under the lock; holds at most one (cached_at, metrics) entry.
+_CORPUS_METRICS_CACHE: dict[str, tuple[float, _CorpusMetrics]] = {}
 
 # P4 (Sprint P, 2026-04-25). Forum-aware precedent boost. Indian
 # court hierarchy (highest precedential weight first):
@@ -786,9 +796,8 @@ def list_recent_authority_documents(
 
 
 def _invalidate_corpus_metrics_cache() -> None:
-    global _CORPUS_METRICS_CACHE
     with _CORPUS_METRICS_CACHE_LOCK:
-        _CORPUS_METRICS_CACHE = None
+        _CORPUS_METRICS_CACHE.clear()
 
 
 def _parse_postgres_array_literal(raw: object) -> list[str]:
@@ -875,7 +884,6 @@ def _corpus_metrics(session: Session) -> _CorpusMetrics:
     SQLite's small, isolated test databases, where immediate seed visibility is
     more valuable than planner parity.
     """
-    global _CORPUS_METRICS_CACHE
     try:
         cache_enabled = (
             session.bind is not None and session.bind.dialect.name == "postgresql"
@@ -885,8 +893,9 @@ def _corpus_metrics(session: Session) -> _CorpusMetrics:
 
     with _CORPUS_METRICS_CACHE_LOCK:
         now = perf_counter()
-        if cache_enabled and _CORPUS_METRICS_CACHE is not None:
-            cached_at, metrics = _CORPUS_METRICS_CACHE
+        cached = _CORPUS_METRICS_CACHE.get("metrics") if cache_enabled else None
+        if cached is not None:
+            cached_at, metrics = cached
             if now - cached_at <= _AUTHORITY_COVERAGE_CACHE_TTL_SECONDS:
                 return metrics
 
@@ -960,7 +969,7 @@ def _corpus_metrics(session: Session) -> _CorpusMetrics:
             forum_counts=forum_counts,
         )
         if cache_enabled:
-            _CORPUS_METRICS_CACHE = (now, metrics)
+            _CORPUS_METRICS_CACHE["metrics"] = (now, metrics)
         return metrics
 
 
@@ -1531,7 +1540,7 @@ def search_authorities(
     logger.info(
         "authority_search_timing mode=%s coverage_ms=%d retrieval_ms=%d total_ms=%d "
         "raw_candidates=%d returned=%d outcome=%s",
-        payload.mode,
+        _SEARCH_MODE_LOG_LABELS.get(payload.mode, "unknown"),
         coverage_ms,
         retrieval_ms,
         max(0, round((perf_counter() - started_at) * 1000)),

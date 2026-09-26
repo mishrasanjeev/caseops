@@ -809,7 +809,9 @@ def inspect_live(
             "desired_state": job["desired_state"],
             "schedule": str(scheduler.get("schedule", "")),
             "time_zone": str(scheduler.get("timeZone", "")),
-            "identity": str(actual_member or ""),
+            # Report the reviewed inventory identity, never a value read from the
+            # scheduler's OAuth token configuration.
+            "identity": invoker if checks["identity"] else "mismatch",
             "image": str(actual_image),
             "task_timeout_seconds": str(actual_timeout or ""),
             "configuration": "pass" if all(checks.values()) else "fail",

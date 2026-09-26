@@ -14,6 +14,7 @@ from pathlib import Path
 from pdfminer.high_level import extract_text as pdf_extract_text
 from sqlalchemy.orm import Session
 
+from caseops_api.core.redaction import redact_provider_error
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     ContractAttachment,
@@ -25,7 +26,6 @@ from caseops_api.db.models import (
     utcnow,
 )
 from caseops_api.services.document_storage import resolve_storage_path
-from caseops_api.services.notification_delivery import redact_provider_error
 from caseops_api.services.text_chunking import chunk_text as _chunk_text
 
 logger = logging.getLogger(__name__)

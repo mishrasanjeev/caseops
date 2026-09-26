@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-import hmac
 import json
-import re
 from datetime import UTC, date, datetime
 from urllib.parse import urlparse
 
@@ -69,6 +67,17 @@ from caseops_api.schemas.production_safety import (
     TenantEnterpriseReadinessResponse,
 )
 from caseops_api.services.csv_security import csv_bytes
+from caseops_api.services.ip_domain_catalog import (
+    DOMAIN_BY_ID,
+    DOMAIN_EVIDENCE_PRODUCERS,
+    evaluate_domain,
+)
+from caseops_api.services.machine_readiness_evidence import (
+    MACHINE_READINESS_EVIDENCE_SCHEMA,
+    MACHINE_READINESS_PRODUCERS,
+    _exact_release_sha,
+    _machine_evidence,
+)
 from caseops_api.services.pine_labs import redact_provider_payload
 from caseops_api.services.platform_audit import record_platform_audit
 from caseops_api.services.provider_costs import estimate_payment_gateway_cost_minor
@@ -152,21 +161,11 @@ PLATFORM_OPERATIONAL_GATES: tuple[dict[str, str], ...] = (
     },
 )
 
-MACHINE_READINESS_EVIDENCE_SCHEMA = "caseops.machine-readiness/v1"
-MACHINE_READINESS_PRODUCERS = frozenset(
-    {
-        "caseops/config-probe",
-        "caseops/production-probe",
-        "github-actions/prod-verify",
-    }
-)
 MACHINE_READINESS_BILLING_PRODUCERS = frozenset(
     {"caseops/production-probe", "github-actions/prod-verify"}
 )
 MACHINE_READINESS_OPERATIONAL_PRODUCERS = MACHINE_READINESS_PRODUCERS
 MACHINE_READINESS_PINE_PRODUCERS = frozenset({"caseops/production-probe"})
-_FULL_RELEASE_SHA = re.compile(r"[0-9a-f]{40}")
-_MACHINE_RUN_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{2,199}")
 
 SECRET_VALUE_MARKERS = (
     "-----BEGIN",
@@ -363,56 +362,6 @@ def record_secret_rotation_evidence(
     return list_secret_rotation_evidence(session)
 
 
-def _exact_release_sha() -> str | None:
-    release_sha = (get_settings().release_sha or "").strip().lower()
-    return release_sha if _FULL_RELEASE_SHA.fullmatch(release_sha) else None
-
-
-def _machine_evidence(
-    *,
-    evidence: dict | None,
-    recorded_by_platform_admin_id: str | None,
-    recorded_status: str,
-    subject: str,
-    evidence_ref: str | None,
-    allowed_producers: frozenset[str] = MACHINE_READINESS_PRODUCERS,
-) -> dict[str, object] | None:
-    """Accept only automation evidence bound to the exact serving release.
-
-    Historical readiness tables are retained for migration compatibility.  A
-    platform-admin row is human attestation and is deliberately non-authoritative.
-    Machine writers have no public mutation route and must persist the documented
-    envelope with a null platform-admin recorder.
-    """
-
-    settings = get_settings()
-    release_sha = _exact_release_sha()
-    secret = settings.machine_readiness_evidence_secret
-    if release_sha is None or not secret or recorded_by_platform_admin_id is not None:
-        return None
-    if recorded_status not in {"pass", "fail", "blocked"} or not isinstance(evidence, dict):
-        return None
-    producer = evidence.get("producer")
-    run_id = evidence.get("run_id")
-    if (
-        evidence.get("schema") != MACHINE_READINESS_EVIDENCE_SCHEMA
-        or not isinstance(producer, str)
-        or producer not in allowed_producers
-        or evidence.get("release_sha") != release_sha
-        or evidence.get("subject") != subject
-        or evidence.get("conclusion") != recorded_status
-        or evidence.get("evidence_ref") != evidence_ref
-        or not isinstance(run_id, str)
-        or _MACHINE_RUN_ID.fullmatch(run_id) is None
-    ):
-        return None
-    proof = evidence.get("proof")
-    expected_proof = machine_readiness_evidence_proof(secret=secret, evidence=evidence)
-    if not isinstance(proof, str) or not hmac.compare_digest(proof, expected_proof):
-        return None
-    return evidence
-
-
 def _lock_machine_readiness_writer(session: Session) -> None:
     if session.get_bind().dialect.name == "sqlite":
         serialize_sqlite_writer(session)
@@ -483,11 +432,6 @@ def record_machine_readiness_evidence(
 
     billing_codes = set(PRODUCTION_BILLING_CHECK_CODES)
     operational_gates = {gate["gate_code"]: gate for gate in PLATFORM_OPERATIONAL_GATES}
-    from caseops_api.services.ip_domain_catalog import (
-        DOMAIN_BY_ID,
-        DOMAIN_EVIDENCE_PRODUCERS,
-        evaluate_domain,
-    )
     pine_codes = set(PINE_LABS_UAT_SCENARIO_CODES)
     producer_kinds = {
         "billing_check": MACHINE_READINESS_BILLING_PRODUCERS,

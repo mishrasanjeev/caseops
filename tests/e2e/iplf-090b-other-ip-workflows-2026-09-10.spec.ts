@@ -60,13 +60,12 @@ for (const width of [393, 768, 1280]) {
       const set = await save({ kind: "source_set", purpose: domain === "design" ? "representations" : domain === "copyright" ? "deposit" : "instrument",
         title: `Source set ${run}`, members: [{ role: "Primary", source: pin }] });
       const common = { title: `Workflow ${domain} ${run}`, source_set: { id: set.id, version: set.version }, occurred_on: "2026-09-10", account: "Retained source account" };
-      let workflow;
       if (domain === "licensing") {
         const facts = { ...common, kind: "licence", grantor: "Owner", grantee: "Licensee", transaction: "licence", exclusivity: "nonexclusive", rights: "Reproduction", territory: "As supplied",
           field_of_use: "Clause 1", sublicensing: "Clause 2", quality_control: "Clause 3", prosecution_control: "Clause 4", enforcement_control: "Clause 5", renewal_terms: "Clause 6", termination_terms: "Clause 7", notice_terms: "Clause 8", effective_from: "2026-01-01" };
         const draft = await save(facts);
-        workflow = await save({ ...facts, status: "active", interpretation: "reviewed", review_reason: "Source clauses reviewed" }, draft);
-      } else workflow = await save({ ...common, kind: domain === "design" ? "design_application" : "copyright_registration", registry: "Source registry", jurisdiction: "Source jurisdiction" });
+        await save({ ...facts, status: "active", interpretation: "reviewed", review_reason: "Source clauses reviewed" }, draft);
+      } else await save({ ...common, kind: domain === "design" ? "design_application" : "copyright_registration", registry: "Source registry", jurisdiction: "Source jurisdiction" });
       await page.goto(`/app/ip/specialist/${record.id}`);
       await page.getByRole("tab", { name: "workflows", exact: true }).click();
       await page.getByRole("list", { name: "Saved domain workflows" }).getByRole("listitem").filter({ hasText: common.title }).getByRole("button", { name: "Open", exact: true }).click();

@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
+from caseops_api.core.redaction import redact_provider_error
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     Company,
@@ -59,10 +60,7 @@ from caseops_api.services.matter_operational_guard import (
     assert_operational_matter,
     require_operational_matter,
 )
-from caseops_api.services.notification_delivery import (
-    enqueue_notification_delivery_intent,
-    redact_provider_error,
-)
+from caseops_api.services.notification_delivery import enqueue_notification_delivery_intent
 from caseops_api.services.proceeding_intelligence import (
     extract_imported_order_proceeding_intelligence,
     extract_order_signals_from_text,

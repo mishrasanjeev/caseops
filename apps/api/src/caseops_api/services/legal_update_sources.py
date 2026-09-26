@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
+from caseops_api.core.redaction import redact_provider_error
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     Company,
@@ -45,7 +46,6 @@ from caseops_api.services.llm import (
     build_provider,
     generate_structured,
 )
-from caseops_api.services.notification_delivery import redact_provider_error
 from caseops_api.services.session_context import SessionContext
 
 logger = logging.getLogger(__name__)

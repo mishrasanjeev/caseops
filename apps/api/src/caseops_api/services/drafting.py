@@ -65,6 +65,7 @@ from caseops_api.services.citations import (
     VerificationReport,
     verify_citations,
 )
+from caseops_api.services.draft_compare import DraftCompareResult, compare_versions
 from caseops_api.services.draft_validators import (
     DraftFinding,
     check_adverse_treatment,
@@ -183,6 +184,49 @@ def _load_draft(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Draft not found.")
     _assert_private_draft_sources_current(session, context=context, draft=draft)
     return draft
+
+
+def compare_versions_in_db(
+    session: Session,
+    *,
+    context: SessionContext,
+    matter_id: str,
+    draft_id: str,
+    prev_revision: int,
+    next_revision: int,
+    context_lines: int = 3,
+) -> DraftCompareResult:
+    """Tenant-scoped wrapper. Loads both versions of the same draft +
+    delegates to the pure ``compare_versions`` helper."""
+    if prev_revision == next_revision:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="prev_revision and next_revision must differ.",
+        )
+
+    matter = _load_matter(session, context, matter_id)
+    draft = _load_draft(session, matter, draft_id, context=context)
+
+    by_revision: dict[int, DraftVersion] = {v.revision: v for v in draft.versions}
+    prev_version = by_revision.get(prev_revision)
+    next_version = by_revision.get(next_revision)
+    if prev_version is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Draft has no revision {prev_revision}.",
+        )
+    if next_version is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Draft has no revision {next_revision}.",
+        )
+
+    return compare_versions(
+        draft_id=draft.id,
+        prev_version=prev_version,
+        next_version=next_version,
+        context_lines=context_lines,
+    )
 
 
 def _assert_private_draft_sources_current(
@@ -2158,8 +2202,6 @@ def compare_ip_draft_versions(
     next_revision: int,
     context_lines: int = 3,
 ):
-    from caseops_api.services.draft_compare import compare_versions
-
     if prev_revision == next_revision:
         raise HTTPException(status_code=400, detail="Draft revisions must differ.")
     docket, proceeding = _load_ip_docket_and_proceeding(

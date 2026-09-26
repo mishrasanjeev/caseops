@@ -207,6 +207,8 @@ def test_real_loopback_transport_cancels_stalled_response_without_starvation(pha
                 self.wfile.flush()
                 release.wait(3)
             except (BrokenPipeError, ConnectionResetError):
+                # The client under test abandons this stalled body at its
+                # deadline; a closed socket here is the expected outcome.
                 pass
             self.close_connection = True
 

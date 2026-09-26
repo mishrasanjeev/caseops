@@ -63,9 +63,6 @@ def build() -> Path:
     source_values = next(source.iter_rows(min_row=2, max_row=2, values_only=True))
     source_id = str(source_values[0])
     source_summary = str(source_values[6]).replace("\n", " ")
-    source_steps = str(source_values[7]).replace("\n", " ")
-    source_expected = str(source_values[8]).replace("\n", " ")
-    source_actual = str(source_values[9]).replace("\n", " ")
 
     rows = [
         [

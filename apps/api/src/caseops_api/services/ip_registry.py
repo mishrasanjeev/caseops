@@ -12,6 +12,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from caseops_api.core.redaction import redact_provider_error
 from caseops_api.db.models import (
     IpDocketRecord,
     IpIdentifier,
@@ -48,7 +49,6 @@ from caseops_api.services.ip_identifier_rules import normalize_ip_identifier
 from caseops_api.services.ip_lifecycle import append_ip_docket_event
 from caseops_api.services.ip_operations import _docket_or_404, _lock_ip_writer_context
 from caseops_api.services.matter_access import visible_ip_dockets_filter
-from caseops_api.services.notification_delivery import redact_provider_error
 from caseops_api.services.provider_adapter_catalog import provider_adapter_definition
 from caseops_api.services.session_context import SessionContext
 

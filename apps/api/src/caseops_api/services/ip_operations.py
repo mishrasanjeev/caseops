@@ -5274,12 +5274,6 @@ def ip_daily_docket(
     )
 
 
-def _aware_utc(value):
-    """Normalize a possibly-naive timestamp for comparison."""
-
-    return value if value.tzinfo else value.replace(tzinfo=UTC)
-
-
 def _coverage_roles(
     row: IpDeadlineCoverage,
     *,
@@ -6529,20 +6523,14 @@ def propose_ip_coverage_reassignment(
                 ),
             },
         )
-    if emergency_until is not None and payload.emergency_escalation_membership_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Emergency coverage requires an escalation owner.",
-        )
     candidate_rows = _coverages_for_member(
         session,
         context=context,
         membership_id=payload.from_membership_id,
     )
-    assignment_ids = {
+    assignment_ids: set[str | None] = {
         payload.from_membership_id,
         payload.to_membership_id,
-        payload.emergency_escalation_membership_id if emergency_until is not None else None,
     }
     assignment_ids.update(
         membership_id
@@ -6568,11 +6556,6 @@ def propose_ip_coverage_reassignment(
     source = memberships[payload.from_membership_id]
     _assert_source_can_propose(source, transfer_mode="proposed")
     replacement = memberships[payload.to_membership_id]
-    escalation = (
-        memberships[payload.emergency_escalation_membership_id]
-        if emergency_until is not None and payload.emergency_escalation_membership_id is not None
-        else None
-    )
 
     rows, dockets = _lock_operational_coverages_for_member(
         session,
@@ -6630,30 +6613,6 @@ def propose_ip_coverage_reassignment(
             responsible_membership_id=row.responsible_membership_id,
             backup_membership_id=row.backup_membership_id,
         )
-    if emergency_until is not None:
-        if _aware_utc(emergency_until) <= _now():
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Emergency coverage must expire in the future.",
-            )
-    if escalation is not None:
-        responsible_docket_ids = {
-            row.docket_id
-            for row in rows
-            if row.responsible_membership_id == payload.from_membership_id
-        }
-        _assert_replacement_can_cover(
-            session,
-            context=context,
-            replacement=escalation,
-            dockets=[docket for docket in dockets if docket.id in responsible_docket_ids],
-        )
-        _assert_distinct_escalation_backups(
-            rows,
-            source_membership_id=payload.from_membership_id,
-            escalation_membership_id=escalation.id,
-            replacement_membership_id=replacement.id,
-        )
 
     affected_roles = _coverage_preview_roles(rows, membership_id=payload.from_membership_id)
     now = _now()
@@ -6669,21 +6628,11 @@ def propose_ip_coverage_reassignment(
         if "responsible" in roles:
             row.pending_replacement_membership_id = replacement.id
             row.replacement_decision_reason = payload.reason
-            if emergency_until is not None:
-                # UJ-57-EXC-05: emergency cover moves ownership now, but only until
-                # it expires, and it always names who it escalates to.
-                row.responsible_membership_id = replacement.id
-                row.replacement_decision = "accepted"
-                row.replacement_decided_at = now
-                row.emergency_until = emergency_until
-                row.emergency_escalation_membership_id = escalation.id if escalation else None
-                row.coverage_status = "emergency"
-            else:
-                row.replacement_decision = "pending"
-                row.replacement_decided_at = None
-                row.emergency_until = None
-                row.emergency_escalation_membership_id = None
-                row.coverage_status = "transfer_pending"
+            row.replacement_decision = "pending"
+            row.replacement_decided_at = None
+            row.emergency_until = None
+            row.emergency_escalation_membership_id = None
+            row.coverage_status = "transfer_pending"
 
         row.reassignment_version += 1
         row.updated_at = now
@@ -6698,7 +6647,7 @@ def propose_ip_coverage_reassignment(
             "to_membership_id": replacement.id,
             "coverage_ids": [row.id for row in rows],
             "coverage_roles": affected_roles,
-            "emergency": emergency_until is not None,
+            "emergency": False,
             "reason": payload.reason,
         },
     )

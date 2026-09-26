@@ -215,7 +215,7 @@ def test_initial_processing_provider_phase_does_not_lock_matter_or_attachment_ro
                 assert matter is not None
                 matter.description = "Concurrent upload-like parent write completed."
                 concurrent_session.commit()
-        except BaseException as exc:  # noqa: BLE001 - surface thread failures in test
+        except Exception as exc:  # noqa: BLE001 - surface thread failures in test
             concurrent_errors.append(exc)
         finally:
             concurrent_finished.set()

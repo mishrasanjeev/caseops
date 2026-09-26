@@ -23,6 +23,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
+from caseops_api.core.redaction import redact_provider_error
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     Communication,
@@ -75,7 +76,6 @@ from caseops_api.services.google_workspace import google_workspace_oauth_config
 from caseops_api.services.http_retries import request_with_retries
 from caseops_api.services.matter_access import assert_access, visible_matters_filter
 from caseops_api.services.matter_operational_guard import require_operational_matter
-from caseops_api.services.notification_delivery import redact_provider_error
 from caseops_api.services.session_context import SessionContext
 
 GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
