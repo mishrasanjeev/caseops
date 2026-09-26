@@ -17539,6 +17539,20 @@ export interface components {
             /** Notification Enabled */
             notification_enabled?: boolean | null;
         };
+        /**
+         * CaseTrackingExistingMatter
+         * @description A visible CaseOps Matter whose recorded CNR identifies this provider case.
+         */
+        CaseTrackingExistingMatter: {
+            /** Matter Code */
+            matter_code?: string | null;
+            /** Matter Id */
+            matter_id: string;
+            /** Status */
+            status: string;
+            /** Title */
+            title: string;
+        };
         /** CaseTrackingProviderStatusResponse */
         CaseTrackingProviderStatusResponse: {
             /** Configured */
@@ -17698,8 +17712,15 @@ export interface components {
             current_stage: string | null;
             /** Current Status */
             current_status: string | null;
+            /** Existing Matters */
+            existing_matters?: components["schemas"]["CaseTrackingExistingMatter"][];
             /** Link Token */
             link_token?: string | null;
+            /**
+             * Linked To Matter
+             * @default false
+             */
+            linked_to_matter: boolean;
             /** Next Hearing On */
             next_hearing_on: string | null;
             /** Party Names */
@@ -36278,8 +36299,15 @@ export interface components {
             current_stage: string | null;
             /** Current Status */
             current_status: string | null;
+            /** Existing Matters */
+            existing_matters?: components["schemas"]["CaseTrackingExistingMatter"][];
             /** Link Token */
             link_token: string;
+            /**
+             * Linked To Matter
+             * @default false
+             */
+            linked_to_matter: boolean;
             /** Next Hearing On */
             next_hearing_on: string | null;
             /** Party Names */

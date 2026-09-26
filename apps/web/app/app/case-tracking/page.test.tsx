@@ -247,6 +247,8 @@ describe("CaseTrackingPage", () => {
         source_url: null,
         provenance_label: "Provider-normalized case status",
         link_token: "signed-selection-1",
+        existing_matters: [],
+        linked_to_matter: false,
       }],
     });
     render(withClient(<CaseTrackingPage />));
@@ -273,7 +275,7 @@ describe("CaseTrackingPage", () => {
       results: [{ provider: "ecourtsindia", cnr_number: "DLHC010012342026", case_number: "WP(C) 1/2026",
         court_code: "DLHC", court_name: "Delhi High Court", case_title: "Example case",
         party_names: [], current_status: "Pending", current_stage: null, next_hearing_on: null,
-        source_url: null, link_token: "signed-selection-2" }],
+        source_url: null, link_token: "signed-selection-2", existing_matters: [], linked_to_matter: false }],
     });
     linkMatterCaseMock.mockRejectedValue(new ApiError(409, "Matter identity changed. Find the case again.", null));
     render(withClient(<CaseTrackingPage />));
@@ -314,6 +316,8 @@ describe("CaseTrackingPage", () => {
           source_url: null,
           provenance_label: "Provider-normalized case status",
           link_token: "manual-search-selection",
+          existing_matters: [],
+          linked_to_matter: false,
         },
       ],
     });
@@ -396,7 +400,8 @@ describe("CaseTrackingPage", () => {
         case_number: "WP(C) 99/2026", court_code: "DLHC", court_name: "Delhi High Court",
         case_title: "Different case", party_names: [], current_status: null,
         current_stage: null, next_hearing_on: null, source_url: null,
-        provenance_label: "Provider-normalized case status", link_token: null }],
+        provenance_label: "Provider-normalized case status", link_token: null,
+        existing_matters: [], linked_to_matter: false }],
     });
     render(withClient(<CaseTrackingPage />));
     await userEvent.type(await screen.findByTestId("case-tracking-query"), "Different case");
@@ -468,6 +473,51 @@ describe("CaseTrackingPage", () => {
       expect(screen.getByRole("button", { name: /^Refresh$/ })).toBeDisabled(),
     );
     expect(screen.getByText("provider_error")).toBeInTheDocument();
+  });
+
+  it("BUG-032: a case the Matter already tracks is shown as linked, never as unmatched", async () => {
+    searchMatterCasesMock.mockResolvedValue({
+      provider: "ecourtsindia",
+      results: [{ provider: "ecourtsindia", cnr_number: "DLHC010317282019",
+        case_number: "6209/2019", court_code: "DLHC01", court_name: "High Court of Delhi",
+        case_title: "Satish Kumar Mehani v Punjab National Bank & ORS.",
+        party_names: ["Satish Kumar Mehani", "Punjab National Bank & ORS."],
+        current_status: "Pending", current_stage: null, next_hearing_on: null,
+        source_url: null, provenance_label: "Provider-normalized case status",
+        link_token: "signed-selection", linked_to_matter: true,
+        existing_matters: [{ matter_id: "matter-1", matter_code: "M-1", title: "This matter", status: "active" }] }],
+    });
+    render(withClient(<CaseTrackingPage />));
+    await userEvent.type(await screen.findByTestId("case-tracking-query"), "Mehani");
+    await userEvent.click(screen.getByTestId("case-tracking-search-submit"));
+    expect(await screen.findByTestId("matter-search-linked")).toHaveTextContent("Linked to this Matter");
+    expect(screen.queryByTestId("matter-search-unmatched")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("matter-search-link-submit")).not.toBeInTheDocument();
+    // The scoped Matter is represented by the linked state, not listed again.
+    expect(screen.queryByTestId("existing-matter-open-matter-1")).not.toBeInTheDocument();
+  });
+
+  it("BUG-032: lists other visible Matters that record the same case with an open link", async () => {
+    searchMatterCasesMock.mockResolvedValue({
+      provider: "ecourtsindia",
+      results: [{ provider: "ecourtsindia", cnr_number: "DLHC010317282019",
+        case_number: "6209/2019", court_code: "DLHC01", court_name: "High Court of Delhi",
+        case_title: "Satish Kumar Mehani v Punjab National Bank & ORS.", party_names: [],
+        current_status: "Pending", current_stage: null, next_hearing_on: null,
+        source_url: null, provenance_label: "Provider-normalized case status",
+        link_token: "signed-selection", linked_to_matter: false,
+        existing_matters: [{ matter_id: "matter-2", matter_code: "WP-6209", title: "Mehani appeal", status: "active" }] }],
+    });
+    render(withClient(<CaseTrackingPage />));
+    await userEvent.type(await screen.findByTestId("case-tracking-query"), "Mehani");
+    await userEvent.click(screen.getByTestId("case-tracking-search-submit"));
+    const open = await screen.findByTestId("existing-matter-open-matter-2");
+    expect(open).toHaveAttribute("href", "/app/matters/matter-2");
+    expect(screen.getByRole("list", { name: "Existing matters for this case" })).toHaveTextContent(
+      "WP-6209 - Mehani appeal",
+    );
+    expect(screen.getByTestId("matter-search-link-submit")).toBeInTheDocument();
+    expect(screen.queryByTestId("matter-search-unmatched")).not.toBeInTheDocument();
   });
 
   it("BUG-042: shows an explicit empty-results message instead of nothing", async () => {

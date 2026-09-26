@@ -101,10 +101,14 @@ def test_http_clone_cleanup_preserves_template_after_failure(pg_engine, migrated
             {"name": migrated_http_template.database},
         ) is False
     blocked_template = create_engine(migrated_http_template, poolclass=NullPool)
+
+    def connect_to_template() -> None:
+        with blocked_template.connect():
+            pytest.fail("The immutable template accepted a connection")
+
     try:
         with pytest.raises(OperationalError, match="not currently accepting connections"):
-            with blocked_template.connect():
-                raise AssertionError("The immutable template accepted a connection")
+            connect_to_template()
     finally:
         blocked_template.dispose()
     with temporary_http_database(source_url, template=migrated_http_template) as recovered:

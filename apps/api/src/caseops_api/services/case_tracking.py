@@ -43,6 +43,7 @@ from caseops_api.schemas.case_tracking import (
     CaseTrackingBookmarkListResponse,
     CaseTrackingBookmarkRecord,
     CaseTrackingBookmarkUpdateRequest,
+    CaseTrackingExistingMatter,
     CaseTrackingPollRunRecord,
     CaseTrackingProviderStatusResponse,
     CaseTrackingRefreshResponse,
@@ -75,8 +76,6 @@ from caseops_api.services.hearing_matching import (
     MAX_MATCH_CANDIDATES,
     HearingIdentity,
     identity_matches,
-    normalized,
-    public_number,
     reliable_identity,
     search_number,
 )
@@ -1755,11 +1754,15 @@ def search_cases(
     session.commit()
     records = [_search_record(snapshot) for snapshot in snapshots]
     if current_matter is not None:
-        for result in records:
-            if _matter_case_candidate_matches(current_identity, result):
+        for result, snapshot in zip(records, snapshots, strict=True):
+            candidate = _snapshot_matching_identity(snapshot)
+            if _matter_case_candidate_matches(current_identity, candidate):
                 result.link_token = _matter_selection_token(
-                    context=context, matter=current_matter, result=result
+                    context=context, matter=current_matter, result=result, candidate=candidate
                 )
+    _annotate_existing_matters(
+        session, context=context, records=records, scope_matter=current_matter
+    )
     return CaseTrackingSearchResponse(
         provider=active_provider.provider_key,
         results=records,
@@ -1768,42 +1771,136 @@ def search_cases(
 
 def _matter_case_candidate_matches(
     identity: HearingIdentity,
-    result: CaseTrackingSearchResultRecord,
+    candidate: HearingIdentity,
 ) -> bool:
-    expected_cnr = normalize_cnr(identity.cnr)
-    if expected_cnr:
-        if normalize_cnr(result.cnr_number) != expected_cnr:
-            return False
-    else:
-        wanted = public_number(identity.case_number)
-        found = public_number(result.case_number)
-        if not wanted or not found or wanted[1:] != found[1:]:
-            return False
-        if wanted[0] and found[0] and wanted[0] != found[0]:
-            return False
-    if identity.case_number and result.case_number:
-        wanted = public_number(identity.case_number)
-        found = public_number(result.case_number)
-        if wanted and found and wanted[1:] != found[1:]:
-            return False
-    if identity.court_name and result.court_name:
-        if normalized(identity.court_name) != normalized(result.court_name):
-            return False
-    elif not expected_cnr:
-        return False
-    expected_parties = {normalized(value) for value in identity.parties if value.strip()}
-    actual_parties = {normalized(value) for value in result.party_names if value.strip()}
-    if expected_parties and actual_parties and not expected_parties.issubset(actual_parties):
-        return False
-    if not expected_cnr and expected_parties and not actual_parties:
-        return False
-    return True
+    """Decide Matter/provider identity with the one policy every path shares.
+
+    Search, resolve and link previously used a stricter private matcher that
+    rejected a CNR-identical case whenever the free-text court or party wording
+    differed, while refresh, polling and next-hearing sync accepted the same case
+    on its CNR. A normalized CNR identifies an eCourts case on its own; without a
+    CNR, ``identity_matches`` requires the exact case number plus court and fails
+    closed on conflicting corroboration.
+    """
+
+    return identity_matches(identity, candidate)
+
+
+_IDENTITY_TEXT_FIELDS = (
+    "cnr",
+    "case_number",
+    "filing_number",
+    "case_type",
+    "court_code",
+    "court_name",
+    "court_complex",
+    "state",
+    "district",
+    "city",
+)
+_IDENTITY_NAME_FIELDS = ("parties", "advocates")
+
+
+def _identity_from_claims(raw: object) -> HearingIdentity:
+    if not isinstance(raw, dict) or set(raw) != {
+        *_IDENTITY_TEXT_FIELDS,
+        *_IDENTITY_NAME_FIELDS,
+    }:
+        raise HTTPException(409, "This case selection is invalid. Find the case again.")
+    values: dict[str, object] = {}
+    for field in _IDENTITY_TEXT_FIELDS:
+        value = raw[field]
+        if value is not None and not isinstance(value, str):
+            raise HTTPException(409, "This case selection is invalid. Find the case again.")
+        values[field] = value
+    for field in _IDENTITY_NAME_FIELDS:
+        names = raw[field]
+        if not isinstance(names, list) or not all(isinstance(name, str) for name in names):
+            raise HTTPException(409, "This case selection is invalid. Find the case again.")
+        values[field] = tuple(names)
+    return HearingIdentity(**values)  # type: ignore[arg-type]
+
+
+_MATTER_CNR_KEY = func.upper(
+    func.replace(
+        func.replace(func.replace(func.replace(Matter.cnr_number, "-", ""), " ", ""), "/", ""),
+        ".",
+        "",
+    )
+)
+
+
+def _annotate_existing_matters(
+    session: Session,
+    *,
+    context: SessionContext,
+    records: list[CaseTrackingSearchResultRecord],
+    scope_matter: Matter | None,
+) -> None:
+    """Attach visible Matters that already record each result's CNR.
+
+    Bounded to the provider candidate list (at most MAX_MATCH_CANDIDATES CNRs)
+    and to the signed-in user's visible Matters in this tenant.
+    """
+
+    cnrs = sorted({record.cnr_number for record in records if record.cnr_number})
+    if not cnrs:
+        return
+    rows = session.execute(
+        select(Matter.id, Matter.matter_code, Matter.title, Matter.status, Matter.cnr_number)
+        .where(
+            Matter.company_id == context.company.id,
+            Matter.cnr_number.is_not(None),
+            _MATTER_CNR_KEY.in_(cnrs),
+            visible_matters_filter(session, context=context),
+        )
+        .order_by(Matter.created_at.desc(), Matter.id)
+        .limit(MAX_MATCH_CANDIDATES * 3)
+    ).all()
+    by_cnr: dict[str, list[CaseTrackingExistingMatter]] = {}
+    for row in rows:
+        key = normalize_cnr(row.cnr_number)
+        if key in cnrs:
+            by_cnr.setdefault(key, []).append(
+                CaseTrackingExistingMatter(
+                    matter_id=row.id,
+                    matter_code=row.matter_code,
+                    title=row.title,
+                    status=str(getattr(row.status, "value", row.status)),
+                )
+            )
+    linked: set[str] = set()
+    if scope_matter is not None:
+        linked = set(
+            session.scalars(
+                select(TrackedCase.normalized_cnr_number)
+                .join(TrackedCaseBookmark, TrackedCaseBookmark.tracked_case_id == TrackedCase.id)
+                .where(
+                    TrackedCaseBookmark.company_id == context.company.id,
+                    TrackedCaseBookmark.matter_id == scope_matter.id,
+                    TrackedCaseBookmark.is_archived.is_(False),
+                    TrackedCase.normalized_cnr_number.in_(cnrs),
+                )
+            )
+        )
+    for record in records:
+        if not record.cnr_number:
+            continue
+        record.existing_matters = by_cnr.get(record.cnr_number, [])[:3]
+        record.linked_to_matter = record.cnr_number in linked
 
 
 def _matter_selection_token(
-    *, context: SessionContext, matter: Matter, result: CaseTrackingSearchResultRecord
+    *,
+    context: SessionContext,
+    matter: Matter,
+    result: CaseTrackingSearchResultRecord,
+    candidate: HearingIdentity,
 ) -> str:
-    result_data = result.model_dump(mode="json", exclude={"source_url", "link_token"})
+    result_data = result.model_dump(
+        mode="json",
+        exclude={"source_url", "link_token", "existing_matters", "linked_to_matter"},
+    )
     claims = {
         "company_id": context.company.id,
         "membership_id": context.membership.id,
@@ -1813,6 +1910,8 @@ def _matter_selection_token(
         "identity_hash": _hash_value(asdict(matter_identity(matter))),
         "expires_at": int((_now() + _MATTER_SELECTION_TTL).timestamp()),
         "result": result_data,
+        # The link-time recheck must judge the same provider evidence as search.
+        "candidate": asdict(candidate),
     }
     body = json.dumps(claims, sort_keys=True, separators=(",", ":")).encode("utf-8")
     if len(body) > 5_800:
@@ -1864,6 +1963,7 @@ def resolve_matter_case(
     # Search input is server-owned. A case number is searched using its public
     # number/year; the provider must certify completeness before we pick one.
     query = CaseTrackingSearchRequest(
+        matter_id=matter_id,
         cnr_number=identity.cnr,
         case_number=None if identity.cnr else search_number(identity),
         court_name=identity.court_name,
@@ -1891,9 +1991,7 @@ def resolve_matter_case(
         raise HTTPException(
             status_code=409, detail="Provider candidate list exceeded the match limit."
         )
-    verified = [
-        result for result in response.results if _matter_case_candidate_matches(identity, result)
-    ]
+    verified = [result for result in response.results if result.link_token]
     return MatterCaseResolutionResponse(
         provider=response.provider,
         status=(
@@ -1904,10 +2002,7 @@ def resolve_matter_case(
             else "multiple_matches"
         ),
         results=[
-            MatterCaseCandidateRecord(
-                **result.model_dump(exclude={"link_token"}),
-                link_token=_matter_selection_token(context=context, matter=current, result=result),
-            )
+            MatterCaseCandidateRecord(**result.model_dump())
             for result in verified
         ],
     )
@@ -1948,7 +2043,12 @@ def link_matter_case(
         result = CaseTrackingSearchResultRecord.model_validate(claims["result"])
     except (KeyError, ValueError) as exc:
         raise HTTPException(409, "This case selection is invalid. Find the case again.") from exc
-    if result.provider != "ecourtsindia" or not _matter_case_candidate_matches(identity, result):
+    # The signed selection binds the displayed result to the provider identity
+    # that search judged; link repeats exactly that decision and no other.
+    candidate = _identity_from_claims(claims.get("candidate"))
+    if result.provider != "ecourtsindia" or not _matter_case_candidate_matches(
+        identity, candidate
+    ):
         raise HTTPException(409, "The selected case no longer matches this Matter.")
 
     from caseops_api.services.production_safety import assert_case_tracking_supported

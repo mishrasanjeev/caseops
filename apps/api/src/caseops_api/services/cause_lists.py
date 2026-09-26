@@ -21,9 +21,23 @@ from caseops_api.schemas.cause_lists import (
 )
 from caseops_api.services.audit import record_from_context
 from caseops_api.services.matter_access import visible_matters_filter
+from caseops_api.services.pdf_layout import pdf_text, write_wrapped_table
 from caseops_api.services.session_context import SessionContext
 
-PDF_TEMPLATE_VERSION = "caseops-cause-list-v1"
+PDF_TEMPLATE_VERSION = "caseops-cause-list-v2"
+# Column order and relative widths for the landscape PDF table (BUG-033).
+CAUSE_LIST_PDF_HEADINGS = (
+    "Sr",
+    "Date",
+    "File",
+    "Court",
+    "Case No",
+    "Title",
+    "Judge",
+    "Court/Item",
+    "Lawyer",
+)
+CAUSE_LIST_PDF_WEIGHTS = (7, 18, 24, 36, 30, 58, 32, 20, 40)
 _MISSING = "Not available"
 
 
@@ -218,74 +232,69 @@ def render_cause_list_pdf(
     context: SessionContext,
     payload: CauseListPreviewRequest,
 ) -> tuple[bytes, str, str, int]:
-    from fpdf import FPDF  # type: ignore[import-not-found]
+    from caseops_api.services.pdf_layout import safe_pdf_class
+
+    pdf_class = safe_pdf_class()
 
     preview = preview_cause_list(session, context=context, payload=payload)
-    pdf = FPDF(format="A4", unit="mm")
+
+    class _CauseListPdf(pdf_class):  # type: ignore[misc]
+        def footer(self) -> None:
+            self.set_y(-10)
+            self.set_font("Helvetica", "", 8)
+            self.cell(0, 5, f"Page {self.page_no()} of {{nb}}", align="C")
+
+    # Landscape A4 gives the nine columns 277 mm; every cell wraps inside its
+    # own column and rows grow (BUG-033, 2026-09-26).
+    pdf = _CauseListPdf(orientation="L", format="A4", unit="mm")
     pdf.set_auto_page_break(auto=True, margin=14)
-
-    def header() -> None:
-        pdf.set_font("Helvetica", "B", 12)
-        pdf.cell(0, 8, "Cause List", new_x="LMARGIN", new_y="NEXT")
-        pdf.set_font("Helvetica", "", 8)
-        pdf.cell(
-            0,
-            5,
-            f"Dates: {payload.date_from.isoformat()} to {payload.date_to.isoformat()} | "
-            f"Generated: {preview.generated_at.isoformat()}",
-            new_x="LMARGIN",
-            new_y="NEXT",
-        )
-        filter_bits = [
-            f"source={payload.source}",
-            f"court={payload.court or 'all'}",
-            f"practice={payload.practice_area or 'all'}",
-            f"status={payload.matter_status or 'all'}",
-            f"include_disposed={payload.include_disposed}",
-        ]
-        pdf.cell(0, 5, "Filters: " + ", ".join(filter_bits), new_x="LMARGIN", new_y="NEXT")
-        pdf.set_font("Helvetica", "B", 6)
-        for label, width in [
-            ("Sr", 8),
-            ("File", 22),
-            ("Court", 31),
-            ("Case No", 28),
-            ("Title", 39),
-            ("Judge", 25),
-            ("Court/Item", 18),
-            ("Lawyer", 28),
-        ]:
-            pdf.cell(width, 6, label, border=1)
-        pdf.ln()
-
     pdf.add_page()
-    header()
-    pdf.set_font("Helvetica", "", 6)
-    for row in preview.rows:
-        if pdf.get_y() > 270:
-            pdf.cell(0, 4, f"Page {pdf.page_no()}", align="C", new_x="LMARGIN", new_y="NEXT")
-            pdf.add_page()
-            header()
-            pdf.set_font("Helvetica", "", 6)
-        values = [
-            str(row.serial_number),
-            row.file_number,
-            row.court_name,
-            row.case_number,
-            row.case_title,
-            row.judge_name,
-            f"{row.court_number}/{row.item_number}",
-            row.lawyers_appearing,
-        ]
-        widths = [8, 22, 31, 28, 39, 25, 18, 28]
-        for value, width in zip(values, widths, strict=True):
-            pdf.cell(width, 6, str(value)[:32], border=1)
-        pdf.ln()
-    if not preview.rows:
-        pdf.cell(0, 8, "No matters found for the selected filters.", new_x="LMARGIN", new_y="NEXT")
-    pdf.set_y(-12)
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 8, "Cause List", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", "", 8)
-    pdf.cell(0, 5, f"Page {pdf.page_no()}", align="C")
+    pdf.multi_cell(
+        0,
+        5,
+        pdf_text(
+            f"Dates: {payload.date_from.isoformat()} to {payload.date_to.isoformat()} | "
+            f"Generated: {preview.generated_at.isoformat()}"
+        ),
+        new_x="LMARGIN",
+        new_y="NEXT",
+    )
+    filter_bits = [
+        f"source={payload.source}",
+        f"court={payload.court or 'all'}",
+        f"practice={payload.practice_area or 'all'}",
+        f"status={payload.matter_status or 'all'}",
+        f"include_disposed={payload.include_disposed}",
+    ]
+    pdf.multi_cell(
+        0, 5, pdf_text("Filters: " + ", ".join(filter_bits)), new_x="LMARGIN", new_y="NEXT"
+    )
+    pdf.ln(2)
+    if preview.rows:
+        write_wrapped_table(
+            pdf,
+            headings=CAUSE_LIST_PDF_HEADINGS,
+            weights=CAUSE_LIST_PDF_WEIGHTS,
+            rows=[
+                (
+                    row.serial_number,
+                    row.hearing_date.isoformat(),
+                    row.file_number,
+                    row.court_name,
+                    row.case_number,
+                    row.case_title,
+                    row.judge_name,
+                    f"{row.court_number}/{row.item_number}",
+                    row.lawyers_appearing,
+                )
+                for row in preview.rows
+            ],
+        )
+    else:
+        pdf.cell(0, 8, "No matters found for the selected filters.", new_x="LMARGIN", new_y="NEXT")
     body = bytes(pdf.output())
     checksum = hashlib.sha256(body).hexdigest()
     filename = (

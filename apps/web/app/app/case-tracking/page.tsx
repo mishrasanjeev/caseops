@@ -427,7 +427,11 @@ export default function CaseTrackingPage() {
                     result={result}
                     busy={bookmarkMutation.isPending || matterLink.isPending}
                     matterContext={Boolean(matterId)}
-                    linked={Boolean(result.link_token && linkedCandidateToken === result.link_token)}
+                    scopeMatterId={matterId ?? null}
+                    linked={
+                      result.linked_to_matter ||
+                      Boolean(result.link_token && linkedCandidateToken === result.link_token)
+                    }
                     onLink={result.link_token && matterId
                       ? () => matterLink.mutate({ matterId, linkToken: result.link_token as string })
                       : undefined}
@@ -567,6 +571,7 @@ function SearchResultRow({
   result,
   busy,
   matterContext,
+  scopeMatterId,
   linked,
   onLink,
   onBookmark,
@@ -574,10 +579,14 @@ function SearchResultRow({
   result: MatterAwareSearchResult;
   busy: boolean;
   matterContext: boolean;
+  scopeMatterId: string | null;
   linked: boolean;
   onLink?: () => void;
   onBookmark: () => void;
 }) {
+  // Server-owned: visible Matters that already record this case's CNR. The
+  // scoped Matter itself is represented by the linked / link states above.
+  const existing = result.existing_matters.filter((matter) => matter.matter_id !== scopeMatterId);
   return (
     <div className="flex flex-col gap-3 p-3 md:flex-row md:items-center md:justify-between">
       <div className="min-w-0">
@@ -589,16 +598,33 @@ function SearchResultRow({
           nextHearing={result.next_hearing_on}
         />
         <p className="mt-1 text-xs text-[var(--color-mute)]">{result.cnr_number ?? result.case_number}</p>
+        {existing.length ? (
+          <ul aria-label="Existing matters for this case" className="mt-2 flex flex-col gap-1 text-xs">
+            {existing.map((matter) => (
+              <li key={matter.matter_id} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="text-[var(--color-mute)]">Existing matter:</span>
+                <span className="font-medium">{matter.matter_code ? `${matter.matter_code} - ` : ""}{matter.title}</span>
+                <Link
+                  href={`/app/matters/${matter.matter_id}`}
+                  className="font-medium text-[var(--color-brand-600)] hover:underline"
+                  data-testid={`existing-matter-open-${matter.matter_id}`}
+                >
+                  Open matter
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </div>
       {linked ? (
-        <p role="status" className="text-sm font-medium" data-testid="matter-search-linked">Linked to Matter</p>
+        <p role="status" className="text-sm font-medium" data-testid="matter-search-linked">Linked to this Matter</p>
       ) : onLink ? (
         <Button type="button" variant="secondary" onClick={onLink} disabled={busy} data-testid="matter-search-link-submit">
           <Link2 className="h-4 w-4" aria-hidden />
           Link to Matter
         </Button>
       ) : matterContext ? (
-        <p className="text-xs text-[var(--color-mute)]">Does not match this Matter</p>
+        <p className="text-xs text-[var(--color-mute)]" data-testid="matter-search-unmatched">Does not match this Matter</p>
       ) : (
         <Button type="button" variant="secondary" onClick={onBookmark} disabled={busy}>
           <Bookmark className="h-4 w-4" aria-hidden />
