@@ -31,9 +31,9 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from caseops_api.core.automated_test_context import paid_providers_blocked_for_request
+from caseops_api.core.redaction import redact_provider_error
 from caseops_api.core.settings import get_settings
 from caseops_api.services import voyage_usage as _voyage_usage
-from caseops_api.services.notification_delivery import redact_provider_error
 
 
 class EmbeddingProviderError(RuntimeError):

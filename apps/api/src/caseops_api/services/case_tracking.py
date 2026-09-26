@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, or_, select, text, tuple_
 from sqlalchemy.orm import Session, joinedload, selectinload
 
+from caseops_api.core.redaction import redact_provider_error
 from caseops_api.core.settings import get_settings, is_non_local_env
 from caseops_api.db.models import (
     AuthorityDocument,
@@ -96,10 +97,7 @@ from caseops_api.services.next_hearing import (
     backfill_legacy_next_hearings,
     clear_next_hearing,
 )
-from caseops_api.services.notification_delivery import (
-    enqueue_notification_delivery_intent,
-    redact_provider_error,
-)
+from caseops_api.services.notification_delivery import enqueue_notification_delivery_intent
 from caseops_api.services.paid_provider_safety import (
     assert_paid_provider_call_allowed,
     paid_provider_block_reason,

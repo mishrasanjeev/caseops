@@ -17,8 +17,9 @@ is out of v1 scope — line-level is enough for partner review of a
 isolation.
 
 This module is pure-function over the two version bodies + their
-citation arrays. All authorisation / matter-scoping happens at the
-route layer via ``services.drafting._load_matter`` + ``_load_draft``.
+citation arrays. The tenant-scoped loader, ``compare_versions_in_db``,
+lives in ``services.drafting`` beside the matter and draft access checks,
+so this module never imports the drafting service.
 """
 from __future__ import annotations
 
@@ -27,12 +28,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Literal
 
-from fastapi import HTTPException, status
-from sqlalchemy.orm import Session
-
 from caseops_api.db.models import DraftVersion
-from caseops_api.services.drafting import _load_draft, _load_matter
-from caseops_api.services.session_context import SessionContext
 
 DiffLineKind = Literal["equal", "insert", "delete", "replace"]
 
@@ -79,49 +75,6 @@ class DraftCompareResult:
     lines_added: int
     lines_removed: int
     summary: str  # human-readable one-liner
-
-
-def compare_versions_in_db(
-    session: Session,
-    *,
-    context: SessionContext,
-    matter_id: str,
-    draft_id: str,
-    prev_revision: int,
-    next_revision: int,
-    context_lines: int = 3,
-) -> DraftCompareResult:
-    """Tenant-scoped wrapper. Loads both versions of the same draft +
-    delegates to the pure ``compare_versions`` helper."""
-    if prev_revision == next_revision:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="prev_revision and next_revision must differ.",
-        )
-
-    matter = _load_matter(session, context, matter_id)
-    draft = _load_draft(session, matter, draft_id, context=context)
-
-    by_revision: dict[int, DraftVersion] = {v.revision: v for v in draft.versions}
-    prev_version = by_revision.get(prev_revision)
-    next_version = by_revision.get(next_revision)
-    if prev_version is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Draft has no revision {prev_revision}.",
-        )
-    if next_version is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Draft has no revision {next_revision}.",
-        )
-
-    return compare_versions(
-        draft_id=draft.id,
-        prev_version=prev_version,
-        next_version=next_version,
-        context_lines=context_lines,
-    )
 
 
 def compare_versions(
@@ -340,5 +293,4 @@ __all__ = [
     "DiffLine",
     "DraftCompareResult",
     "compare_versions",
-    "compare_versions_in_db",
 ]

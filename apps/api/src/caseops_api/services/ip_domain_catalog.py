@@ -30,6 +30,7 @@ from caseops_api.services.ip_specialist_contracts import (
     contract_path,
     contract_version,
 )
+from caseops_api.services.machine_readiness_evidence import _machine_evidence
 
 CATALOGUE_VERSION = "2026-09-06.1"
 BASE_CHECKS = frozenset(
@@ -220,7 +221,6 @@ def evaluate_domain(
 
 def _domain_evidence(session: Session) -> dict[str, IpDomainReleaseEvidence]:
     from caseops_api.db.models import PlatformOperationalReadinessEvidence
-    from caseops_api.services.production_safety import _machine_evidence
 
     # Reuse the HMAC-authenticated release evidence owner. One bounded query,
     # no tenant lookups, no independent approvals table or new control plane.

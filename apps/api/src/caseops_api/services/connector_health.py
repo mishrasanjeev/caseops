@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from caseops_api.core.redaction import redact_provider_error
 from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     CalendarConnectionStatus,
@@ -45,7 +46,6 @@ from caseops_api.services.google_workspace import (
     google_workspace_connector_configured,
     google_workspace_connector_missing_config_names,
 )
-from caseops_api.services.notification_delivery import redact_provider_error
 from caseops_api.services.session_context import SessionContext
 
 _TENANT_ACCOUNT = "tenant"
