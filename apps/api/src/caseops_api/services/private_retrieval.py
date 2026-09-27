@@ -1751,13 +1751,45 @@ def capture_private_saved_source_manifest(
     )
 
 
+def _saved_entry_matches_projection(
+    item: dict,
+    row: PrivateIndexProjection | None,
+    *,
+    generation_id: str,
+) -> bool:
+    return not (
+        row is None
+        or row.generation_id != generation_id
+        or row.is_tombstoned
+        or item.get("source_type") != row.source_type
+        or item.get("source_id") != row.source_id
+        or item.get("source_version") != row.source_version
+        or item.get("source_sha256") != row.content_sha256
+    )
+
+
 def private_saved_source_manifest_is_current(
     session: Session,
     *,
     context: SessionContext,
     manifest: Iterable[object],
 ) -> bool:
-    """Reauthorize a saved-output manifest without exposing failed entries.
+    """Reauthorize one saved-output manifest; see the batch decision below."""
+
+    return private_saved_source_manifests_are_current(
+        session,
+        context=context,
+        manifests=(manifest,),
+    )[0]
+
+
+def private_saved_source_manifests_are_current(
+    session: Session,
+    *,
+    context: SessionContext,
+    manifests: Sequence[Iterable[object]],
+) -> tuple[bool, ...]:
+    """Reauthorize saved-output manifests without exposing failed entries.
 
     A shadow rebuild gives every equivalent projection a new generation and
     projection ID.  That generation change alone is not an access or source
@@ -1770,123 +1802,178 @@ def private_saved_source_manifest_is_current(
     events tombstone affected rows across generations, so a source, parent
     scope, tenant access, or tombstone event keeps this path fail-closed even
     if a later rebuild happens to contain equivalent text.
+
+    Each manifest keeps its own decision; only the lookups are shared.  Every
+    shared lookup is a per-row predicate over a union of identifiers, so one
+    manifest's rows cannot satisfy another manifest's proof, and a list page
+    costs the same bounded query set whether it carries one manifest or a
+    hundred.  A per-row loop over this decision was the 2026-09-27 review
+    history N+1.
     """
 
-    entries = [
-        item
-        for item in manifest
-        if isinstance(item, dict) and item.get("schema") == PRIVATE_SAVED_SOURCE_SCHEMA
+    entry_sets = [
+        [
+            item
+            for item in manifest
+            if isinstance(item, dict) and item.get("schema") == PRIVATE_SAVED_SOURCE_SCHEMA
+        ]
+        for manifest in manifests
     ]
-    if not entries:
-        return True
+    decisions: list[bool | None] = [None if entries else True for entries in entry_sets]
+    if all(decision is not None for decision in decisions):
+        return tuple(decision is True for decision in decisions)
     generation = session.scalar(_active_generation_statement(context.company.id))
     if generation is None:
-        return False
-    projection_ids = {
-        str(item.get("projection_id")) for item in entries if item.get("projection_id")
-    }
-    if len(projection_ids) != len(entries):
-        return False
-    saved_rows = list(
-        session.scalars(
-            select(PrivateIndexProjection).where(
-                PrivateIndexProjection.company_id == context.company.id,
-                PrivateIndexProjection.id.in_(projection_ids),
-            )
-        ).all()
-    )
-    if len(saved_rows) != len(entries):
-        return False
-    saved_by_id = {row.id: row for row in saved_rows}
-    saved_generation_ids = {str(item.get("generation_id")) for item in entries}
-    if len(saved_generation_ids) != 1 or "None" in saved_generation_ids:
-        return False
-    saved_generation_id = next(iter(saved_generation_ids))
-    saved_generation = session.scalar(
-        select(PrivateIndexGeneration).where(
-            PrivateIndexGeneration.id == saved_generation_id,
-            PrivateIndexGeneration.company_id == context.company.id,
-        )
-    )
-    if saved_generation is None:
-        return False
-    for item in entries:
-        row = saved_by_id.get(str(item["projection_id"]))
-        if (
-            row is None
-            or row.generation_id != saved_generation_id
-            or row.is_tombstoned
-            or item.get("source_type") != row.source_type
-            or item.get("source_id") != row.source_id
-            or item.get("source_version") != row.source_version
-            or item.get("source_sha256") != row.content_sha256
-        ):
-            return False
+        return tuple(decision is True for decision in decisions)
 
-    if saved_generation_id == generation.id:
-        if any(
-            item.get("access_policy_generation") != generation.access_policy_generation
-            or item.get("tombstone_generation") != generation.tombstone_generation
-            for item in entries
-        ):
-            return False
-        current_rows = saved_rows
-    else:
-        source_pairs = {
-            (str(item.get("source_type")), str(item.get("source_id"))) for item in entries
+    saved_generation_by_index: dict[int, str] = {}
+    projection_ids_by_index: dict[int, set[str]] = {}
+    for index, entries in enumerate(entry_sets):
+        if decisions[index] is not None:
+            continue
+        projection_ids = {
+            str(item.get("projection_id")) for item in entries if item.get("projection_id")
         }
-        current_rows = list(
-            session.scalars(
+        saved_generation_ids = {str(item.get("generation_id")) for item in entries}
+        if (
+            len(projection_ids) != len(entries)
+            or len(saved_generation_ids) != 1
+            or "None" in saved_generation_ids
+        ):
+            decisions[index] = False
+            continue
+        projection_ids_by_index[index] = projection_ids
+        saved_generation_by_index[index] = next(iter(saved_generation_ids))
+
+    saved_by_id: dict[str, PrivateIndexProjection] = {}
+    known_generation_ids: set[str] = set()
+    if projection_ids_by_index:
+        saved_by_id = {
+            row.id: row
+            for row in session.scalars(
                 select(PrivateIndexProjection).where(
                     PrivateIndexProjection.company_id == context.company.id,
-                    PrivateIndexProjection.generation_id == generation.id,
-                    PrivateIndexProjection.is_tombstoned.is_(False),
-                    or_(
-                        *(
-                            and_(
-                                PrivateIndexProjection.source_type == source_type,
-                                PrivateIndexProjection.source_id == source_id,
-                            )
-                            for source_type, source_id in sorted(source_pairs)
-                        )
-                    ),
+                    PrivateIndexProjection.id.in_(set().union(*projection_ids_by_index.values())),
+                )
+            ).all()
+        }
+        known_generation_ids = set(
+            session.scalars(
+                select(PrivateIndexGeneration.id).where(
+                    PrivateIndexGeneration.id.in_(set(saved_generation_by_index.values())),
+                    PrivateIndexGeneration.company_id == context.company.id,
                 )
             ).all()
         )
-        saved_keys = Counter(
-            (
-                str(item.get("source_type")),
-                str(item.get("source_id")),
-                str(item.get("source_version")),
-                str(item.get("source_sha256")),
+
+    current_rows_by_index: dict[int, list[PrivateIndexProjection]] = {}
+    retired_pairs_by_index: dict[int, set[tuple[str, str]]] = {}
+    for index, projection_ids in projection_ids_by_index.items():
+        entries = entry_sets[index]
+        saved_generation_id = saved_generation_by_index[index]
+        saved_rows = [
+            saved_by_id[projection_id]
+            for projection_id in projection_ids
+            if projection_id in saved_by_id
+        ]
+        if len(saved_rows) != len(entries) or saved_generation_id not in known_generation_ids:
+            decisions[index] = False
+            continue
+        if not all(
+            _saved_entry_matches_projection(
+                item,
+                saved_by_id.get(str(item["projection_id"])),
+                generation_id=saved_generation_id,
             )
             for item in entries
-        )
-        current_keys = Counter(
-            (row.source_type, row.source_id, row.source_version, row.content_sha256)
-            for row in current_rows
-        )
-        if saved_keys != current_keys:
-            return False
+        ):
+            decisions[index] = False
+            continue
+        if saved_generation_id == generation.id:
+            if any(
+                item.get("access_policy_generation") != generation.access_policy_generation
+                or item.get("tombstone_generation") != generation.tombstone_generation
+                for item in entries
+            ):
+                decisions[index] = False
+                continue
+            current_rows_by_index[index] = saved_rows
+        else:
+            retired_pairs_by_index[index] = {
+                (str(item.get("source_type")), str(item.get("source_id"))) for item in entries
+            }
 
-    current_projection_ids = {row.id for row in current_rows}
-    if len(current_projection_ids) != len(entries):
-        return False
-    authorized_ids = set(
-        session.scalars(
-            _authorized_projection_ids_statement(
-                session,
-                context=context,
-                generation=generation,
-            ).where(PrivateIndexProjection.id.in_(current_projection_ids))
-        ).all()
-    )
-    current_ids = _source_versions_still_current(
-        session,
-        context=context,
-        projections=current_rows,
-    )
-    return current_projection_ids <= authorized_ids and current_projection_ids <= current_ids
+    if retired_pairs_by_index:
+        active_rows_by_pair: dict[tuple[str, str], list[PrivateIndexProjection]] = {}
+        for row in session.scalars(
+            select(PrivateIndexProjection).where(
+                PrivateIndexProjection.company_id == context.company.id,
+                PrivateIndexProjection.generation_id == generation.id,
+                PrivateIndexProjection.is_tombstoned.is_(False),
+                or_(
+                    *(
+                        and_(
+                            PrivateIndexProjection.source_type == source_type,
+                            PrivateIndexProjection.source_id == source_id,
+                        )
+                        for source_type, source_id in sorted(
+                            set().union(*retired_pairs_by_index.values())
+                        )
+                    )
+                ),
+            )
+        ).all():
+            active_rows_by_pair.setdefault((row.source_type, row.source_id), []).append(row)
+        for index, source_pairs in retired_pairs_by_index.items():
+            current_rows = [
+                row for pair in source_pairs for row in active_rows_by_pair.get(pair, [])
+            ]
+            saved_keys = Counter(
+                (
+                    str(item.get("source_type")),
+                    str(item.get("source_id")),
+                    str(item.get("source_version")),
+                    str(item.get("source_sha256")),
+                )
+                for item in entry_sets[index]
+            )
+            current_keys = Counter(
+                (row.source_type, row.source_id, row.source_version, row.content_sha256)
+                for row in current_rows
+            )
+            if saved_keys != current_keys:
+                decisions[index] = False
+                continue
+            current_rows_by_index[index] = current_rows
+
+    for index, current_rows in list(current_rows_by_index.items()):
+        if len({row.id for row in current_rows}) != len(entry_sets[index]):
+            decisions[index] = False
+            del current_rows_by_index[index]
+    if current_rows_by_index:
+        rows_by_id = {
+            row.id: row for current_rows in current_rows_by_index.values() for row in current_rows
+        }
+        authorized_ids = set(
+            session.scalars(
+                _authorized_projection_ids_statement(
+                    session,
+                    context=context,
+                    generation=generation,
+                ).where(PrivateIndexProjection.id.in_(set(rows_by_id)))
+            ).all()
+        )
+        current_ids = _source_versions_still_current(
+            session,
+            context=context,
+            projections=list(rows_by_id.values()),
+        )
+        for index, current_rows in current_rows_by_index.items():
+            current_projection_ids = {row.id for row in current_rows}
+            decisions[index] = (
+                current_projection_ids <= authorized_ids and current_projection_ids <= current_ids
+            )
+    return tuple(decision is True for decision in decisions)
 
 
 def enqueue_private_projection_event(
@@ -2314,6 +2401,7 @@ __all__ = [
     "private_retrieval_activation",
     "private_retrieval_cache_key",
     "private_saved_source_manifest_is_current",
+    "private_saved_source_manifests_are_current",
     "private_source_version",
     "propagate_private_source_creation",
     "propagate_private_projection_change",

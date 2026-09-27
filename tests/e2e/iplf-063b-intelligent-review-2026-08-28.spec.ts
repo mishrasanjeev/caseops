@@ -10,6 +10,7 @@ import {
 } from "./support/iplf063b";
 import { apiBaseUrl } from "./support/env";
 import { expectStatus } from "./support/iplf058b";
+import { expectBoundedReviewPageLoad } from "./support/review-page-reads";
 
 test("IPLF-063B completes UJ-18 normal and exception paths", async ({ page }) => {
   test.setTimeout(360_000);
@@ -235,7 +236,11 @@ test("IPLF-063B completes UJ-18 normal and exception paths", async ({ page }) =>
 
   await test.step("The review, guide, and law-firm surfaces remain usable at 360px", async () => {
     await page.setViewportSize({ width: 360, height: 800 });
-    await page.reload();
+    // The newest, terminal review is selected from the bounded history.
+    await expectBoundedReviewPageLoad(page, {
+      apiOrigin: apiBaseUrl,
+      navigate: () => page.reload(),
+    });
     for (const name of ["Frozen research report", "Matter target", "Issue for review"]) {
       await expect(page.getByLabel(name)).toBeVisible();
     }

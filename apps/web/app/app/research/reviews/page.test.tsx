@@ -420,8 +420,8 @@ describe("IntelligentReviewsPage", () => {
     expect(mocks.getReview).toHaveBeenCalledWith("review-linked");
   });
 
-  it("loads a deep-linked review without waiting for bounded history", async () => {
-    const linked = reviewFixture({ id: "review-linked", issue: "Fast deep link review" });
+  it("reads a deep-linked review outside bounded history only after that history settles", async () => {
+    const linked = reviewFixture({ id: "review-linked", issue: "Linked outside history" });
     let releaseHistory!: (value: { reviews: typeof linked[] }) => void;
     mocks.searchParams = "report=report-1&review=review-linked";
     mocks.listReviews.mockReturnValue(new Promise((resolve) => { releaseHistory = resolve; }));
@@ -429,9 +429,90 @@ describe("IntelligentReviewsPage", () => {
 
     renderPage();
 
-    expect(await screen.findByRole("heading", { name: "Fast deep link review" })).toBeInTheDocument();
+    await screen.findByText("Opposition authorities");
+    expect(mocks.getReview).not.toHaveBeenCalled();
+    releaseHistory({ reviews: [reviewFixture({ id: "review-newer" })] });
+    await screen.findByText("Linked outside history");
+    expect(screen.getByRole("heading", { name: "Linked outside history" })).toBeVisible();
+    expect(mocks.getReview).toHaveBeenCalledTimes(1);
     expect(mocks.getReview).toHaveBeenCalledWith("review-linked");
-    releaseHistory({ reviews: [linked] });
+  });
+
+  it("opens with only the history and frozen reports, then loads targets on demand", async () => {
+    // The API serves one request per instance with four kept warm. The page
+    // used to open with five concurrent reads and one waited for a cold start.
+    const user = userEvent.setup();
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const settle = <T,>(value: T) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      return new Promise<T>((resolve) => {
+        setTimeout(() => {
+          inFlight -= 1;
+          resolve(value);
+        }, 20);
+      });
+    };
+    mocks.searchParams = "report=report-1&review=review-1";
+    mocks.listReviews.mockImplementation(() => settle({ reviews: [reviewFixture()] }));
+    mocks.fetchReports.mockImplementation(() => settle({ reports: [report] }));
+    mocks.listMatters.mockImplementation(() =>
+      settle({
+        matters: [{ id: "matter-1", matter_code: "IP-101", title: "Aster opposition", status: "active" }],
+        next_cursor: null,
+      }),
+    );
+    mocks.fetchPortfolio.mockImplementation(() =>
+      settle({ rows: [], counts: {}, filters: {}, limit: 100, next_cursor: null }),
+    );
+    mocks.getReview.mockImplementation(() => settle(reviewFixture()));
+
+    renderPage();
+
+    expect(await screen.findByText("Supporting and contrary authorities")).toBeInTheDocument();
+    expect(mocks.listReviews).toHaveBeenCalledTimes(1);
+    expect(mocks.fetchReports).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(mocks.listMatters).toHaveBeenCalledTimes(1));
+    expect(mocks.getReview).not.toHaveBeenCalled();
+    expect(mocks.fetchPortfolio).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("tab", { name: "IP docket" }));
+    await waitFor(() => expect(mocks.fetchPortfolio).toHaveBeenCalledTimes(1));
+    expect(mocks.getReview).not.toHaveBeenCalled();
+    expect(maxInFlight).toBeLessThanOrEqual(2);
+  });
+
+  it("keeps two reads in flight while cached reports refresh after in-app navigation", async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const settle = <T,>(value: T) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      return new Promise<T>((resolve) => {
+        setTimeout(() => {
+          inFlight -= 1;
+          resolve(value);
+        }, 20);
+      });
+    };
+    mocks.listReviews.mockImplementation(() => settle({ reviews: [reviewFixture()] }));
+    mocks.fetchReports.mockImplementation(() => settle({ reports: [report] }));
+    mocks.listMatters.mockImplementation(() =>
+      settle({
+        matters: [{ id: "matter-1", matter_code: "IP-101", title: "Aster opposition", status: "active" }],
+        next_cursor: null,
+      }),
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    // Saved research left the frozen reports cached; this page refreshes them.
+    client.setQueryData(["authorities", "research-reports"], { reports: [report] });
+
+    render(<QueryClientProvider client={client}><IntelligentReviewsPage /></QueryClientProvider>);
+
+    expect(await screen.findByText("Supporting and contrary authorities")).toBeInTheDocument();
+    await waitFor(() => expect(mocks.listMatters).toHaveBeenCalledTimes(1));
+    expect(mocks.fetchReports).toHaveBeenCalledTimes(1);
+    expect(maxInFlight).toBeLessThanOrEqual(2);
   });
 
   it("shows typed abstention without presenting invented analysis", async () => {

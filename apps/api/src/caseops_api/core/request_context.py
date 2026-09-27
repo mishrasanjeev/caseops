@@ -18,8 +18,11 @@ from starlette.responses import Response
 
 from caseops_api.core.automated_test_context import (
     NO_PAID_PROVIDERS_HEADER,
+    PROVIDER_REPLAY_HEADER,
     reset_automated_test_request,
+    reset_provider_replay_request,
     set_automated_test_request,
+    set_provider_replay_request,
 )
 from caseops_api.core.observability import (
     clear_context,
@@ -43,12 +46,14 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         paid_provider_token = set_automated_test_request(
             request.headers.get(NO_PAID_PROVIDERS_HEADER)
         )
+        replay_token = set_provider_replay_request(request.headers.get(PROVIDER_REPLAY_HEADER))
         try:
             response = await call_next(request)
         finally:
             # Even if the handler raises, drop the identifiers so the
             # next request starts clean. FastAPI reuses threads across
             # requests under uvicorn workers.
+            reset_provider_replay_request(replay_token)
             reset_automated_test_request(paid_provider_token)
             clear_context()
         response.headers[REQUEST_ID_HEADER] = rid
