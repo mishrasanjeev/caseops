@@ -302,10 +302,14 @@ and failed two tests, neither of them a reported row.
    held `6209/2019`, and the journey's own `WP(C) 6d661b/2026` would have collided
    on the next run. This repeats a rule already in `AGENTS.md` (a fresh identity
    per run on persistent tenants). BUG-033's journey drew from only 9,000 values
-   and would collide as runs accumulate. Both now use clock-plus-serial registry
-   numbers, and the unreadable entry ends in a letter so no reading can find a
-   number/year. Proof: the pre-fix journey fails with the production 409 on its
-   second pass in one retained local tenant; the fixed journeys pass twice there.
+   and would collide as runs accumulate; the Docker-only BUG-032 journey, which
+   must use the emulator's fixed CNR, also reused one case number and failed its
+   second pass as the tester-supplied account. All three now use clock-plus-serial
+   registry numbers (the CNR still decides the BUG-032 case), and the unreadable
+   entry ends in a letter so no reading can find a number/year. Proof: the
+   pre-fix journey fails with the production 409 on its second pass in one
+   retained local tenant; the fixed journeys pass twice there, and twice more as
+   the tester-supplied account in a Docker tenant holding every earlier run.
 2. **An Intelligent Review list request queued behind a cold start.** The list
    took 32.4 s; Cloud Run logs show a new instance starting at that moment, with
    the ClamAV sidecar ready only after 8 startup-probe attempts. The API serves

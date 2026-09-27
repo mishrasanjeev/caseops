@@ -255,17 +255,20 @@ test.describe("Ram 2026-09-26 workbook (IV)", () => {
     // The Docker provider emulator publishes "Delhi High Court" with parties
     // "Local Docker Petitioner" / "Local Docker Respondent". The Matter records
     // the same CNR with different court and party wording, as in the report.
+    // The CNR decides the case; the typed case number is corroboration only, so
+    // it is unique per run and the journey can repeat in one retained tenant.
+    const caseNumber = `WP(CIVIL)/${uniqueRegistryNumber()}/2026`;
     const matter = await createMatter(request, auth.headers, {
       title: "Local Docker Petitioner v Local Docker Respondent",
       court_name: "High Court of Delhi",
       client_name: "Local Docker Petitioner & Anr.",
       opposing_party: "Local Docker Respondent and Others",
-      case_number: "WP(CIVIL)/9123/2026",
+      case_number: caseNumber,
       cnr_number: cnr,
     });
     await signIn(page, auth);
     await page.goto(
-      `${web}/app/case-tracking?matterId=${matter.id}&cnr=${cnr}&caseNumber=${encodeURIComponent("WP(CIVIL)/9123/2026")}`,
+      `${web}/app/case-tracking?matterId=${matter.id}&cnr=${cnr}&caseNumber=${encodeURIComponent(caseNumber)}`,
     );
     await page.getByTestId("case-tracking-query").fill(cnr);
     await page.getByTestId("case-tracking-search-submit").click();

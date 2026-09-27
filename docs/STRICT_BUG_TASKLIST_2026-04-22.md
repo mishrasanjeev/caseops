@@ -1839,10 +1839,14 @@ BUG-032 (`:225`), and the 2026-09-24 QA journey passed with its corrected fixtur
   Matter with the fixed number `6209/2019`, the production tenant already held
   that number, and the duplicate-case rule counts disposed Matters, so cleanup
   never frees a number. BUG-033's journey drew from 9,000 values and would
-  collide the same way as runs accumulate. Both now use clock-plus-serial
-  registry numbers; the unreadable entry is unreadable by construction. The
-  pre-fix journey was reproduced failing with the same 409 on its second pass in
-  one retained local tenant; the fixed journeys pass twice in that tenant.
+  collide the same way as runs accumulate, and the Docker-only BUG-032 journey
+  (fixed emulator CNR) reused one case number, which failed its second pass as
+  the tester-supplied account. All three now use clock-plus-serial registry
+  numbers (a CNR still decides the BUG-032 case); the unreadable entry is
+  unreadable by construction. The pre-fix journey was reproduced failing with
+  the same 409 on its second pass in one retained local tenant; the fixed
+  journeys pass twice there and twice more as the tester-supplied account in a
+  Docker tenant already holding every earlier run's Matters.
 - `iplf-063b-intelligent-review-2026-08-28-prod.spec.ts:140` failed because
   `GET /api/research/reviews?limit=50` took 32.4 s. Cloud Run logs show a new API
   instance starting at that moment (ClamAV sidecar ready after 8 startup-probe
