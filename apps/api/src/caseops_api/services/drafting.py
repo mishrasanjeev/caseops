@@ -36,6 +36,7 @@ import io
 import json
 import logging
 import re
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -99,7 +100,7 @@ from caseops_api.services.llm_http import provider_failure_http_exception
 from caseops_api.services.matter_access import assert_access, assert_ip_docket_access
 from caseops_api.services.matter_operational_guard import require_operational_matter
 from caseops_api.services.private_retrieval import (
-    private_saved_source_manifest_is_current,
+    private_saved_source_manifests_are_current,
 )
 from caseops_api.services.session_context import SessionContext
 
@@ -229,29 +230,71 @@ def compare_versions_in_db(
     )
 
 
+def _version_source_manifest(version: DraftVersion) -> list | None:
+    """Return a version's saved source manifest, or ``None`` if it is not a list.
+
+    Undecodable text carries no saved private source. Any other JSON value
+    cannot be reauthorized, so the draft that holds it fails closed.
+    """
+
+    try:
+        manifest = json.loads(version.source_manifest_json or "[]")
+    except json.JSONDecodeError:
+        return []
+    return manifest if isinstance(manifest, list) else None
+
+
+def _private_draft_sources_current(
+    session: Session,
+    *,
+    context: SessionContext,
+    drafts: Sequence[Draft],
+) -> list[bool]:
+    """Reauthorize every version of every draft with one bounded statement set.
+
+    A draft stays readable only while each of its versions' manifests is
+    current on its own. Versions are never merged into one manifest: edits
+    copy the same projections and older versions keep older generations, so
+    a merged manifest would fail a readable draft. The lists and single-draft
+    reads share this decision, so a list never returns a draft whose read is
+    refused. A per-version loop issued about seven statements per version.
+    """
+
+    current = [True] * len(drafts)
+    owners: list[int] = []
+    manifests: list[list] = []
+    for index, draft in enumerate(drafts):
+        for version in draft.versions:
+            manifest = _version_source_manifest(version)
+            if manifest is None:
+                current[index] = False
+            else:
+                owners.append(index)
+                manifests.append(manifest)
+    decisions = private_saved_source_manifests_are_current(
+        session,
+        context=context,
+        manifests=manifests,
+    )
+    for index, is_current in zip(owners, decisions, strict=True):
+        current[index] = current[index] and is_current
+    return current
+
+
 def _assert_private_draft_sources_current(
     session: Session,
     *,
     context: SessionContext,
     draft: Draft,
 ) -> None:
-    for version in draft.versions:
-        try:
-            manifest = json.loads(version.source_manifest_json or "[]")
-        except json.JSONDecodeError:
-            manifest = []
-        if not isinstance(manifest, list) or not private_saved_source_manifest_is_current(
-            session,
-            context=context,
-            manifest=manifest,
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=(
-                    "Private source access or generation changed. "
-                    "Regenerate the report before reading or exporting it."
-                ),
-            )
+    if not _private_draft_sources_current(session, context=context, drafts=(draft,))[0]:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Private source access or generation changed. "
+                "Regenerate the report before reading or exporting it."
+            ),
+        )
 
 
 def create_draft(
@@ -333,18 +376,8 @@ def list_drafts(
             .order_by(Draft.updated_at.desc(), Draft.id.desc())
         )
     )
-    return [
-        draft
-        for draft in rows
-        if all(
-            private_saved_source_manifest_is_current(
-                session,
-                context=context,
-                manifest=_load_manifest(version.source_manifest_json, []),
-            )
-            for version in draft.versions
-        )
-    ]
+    current = _private_draft_sources_current(session, context=context, drafts=rows)
+    return [draft for draft, is_current in zip(rows, current, strict=True) if is_current]
 
 
 def get_draft(
@@ -529,18 +562,8 @@ def list_ip_drafts(
             .order_by(Draft.updated_at.desc(), Draft.id.desc())
         )
     )
-    return [
-        draft
-        for draft in rows
-        if all(
-            private_saved_source_manifest_is_current(
-                session,
-                context=context,
-                manifest=_load_manifest(version.source_manifest_json, []),
-            )
-            for version in draft.versions
-        )
-    ]
+    current = _private_draft_sources_current(session, context=context, drafts=rows)
+    return [draft for draft, is_current in zip(rows, current, strict=True) if is_current]
 
 
 def get_ip_draft(
