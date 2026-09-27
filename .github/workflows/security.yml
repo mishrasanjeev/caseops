@@ -207,9 +207,10 @@ jobs:
           version: "latest"
       - name: Reject literal secrets in infra/cloudrun
         # Parse YAML env entries structurally so a secret-like name is
-        # associated with its sibling value/valueFrom. The old grep
-        # inspected only the value line and could never see the name
-        # on the preceding line.
+        # associated with its sibling value/valueFrom, and check every
+        # scheduler-inventory bootstrap contract, whose environment the
+        # reconciler applies verbatim. The old grep inspected only the
+        # value line and could never see the name on the preceding line.
         run: >-
           uv run --no-project --with PyYAML==6.0.3
           python scripts/check_cloudrun_manifest_secrets.py infra/cloudrun
