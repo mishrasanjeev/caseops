@@ -71,9 +71,9 @@ ALERT_NOTIFICATION_EMAIL="${CASEOPS_ALERT_NOTIFICATION_EMAIL:-mishra.sanjeev@gma
 # concurrency at 1 so one stuck request cannot take the whole API
 # surface down.
 API_CONCURRENCY=1
-# The post-deploy readback compares Cloud Run's timeoutSeconds with this value.
+# Whole seconds: the deploy passes "${API_TIMEOUT_SECONDS}s" and the post-deploy
+# readback compares Cloud Run's timeoutSeconds with this value.
 API_TIMEOUT_SECONDS=120
-API_TIMEOUT="${API_TIMEOUT_SECONDS}s"
 # Keep a headroom ceiling above the historical ten single-request containers.
 # A production browser page can issue several ordinary API reads in parallel;
 # when all ten single-concurrency instances were busy, Cloud Run returned 429
@@ -772,7 +772,7 @@ gcloud run deploy caseops-api \
   --concurrency "${API_CONCURRENCY}" \
   --max "${API_MAX_INSTANCES}" \
   --max-instances "${API_MAX_INSTANCES}" \
-  --timeout "${API_TIMEOUT}" \
+  --timeout "${API_TIMEOUT_SECONDS}s" \
   --min "${API_MIN_INSTANCES}" \
   --min-instances default \
   --cpu-throttling \
