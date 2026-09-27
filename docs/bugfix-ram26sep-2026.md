@@ -291,6 +291,31 @@ only a bare `number/year` and no CNR stops refreshing, with "Add the case type t
 the case number ... or record the CNR" on the bookmark, until the type or CNR is
 recorded. Dates already written are retained; nothing is cleared.
 
+## Production run 2 (2026-09-27, release `1c617a31`): two tester failures
+
+Run 36291638337 passed BUG-034, BUG-033 and BUG-032 against the serving release,
+and failed two tests, neither of them a reported row.
+
+1. **The new identity-gap journey used fixed case numbers.** Production tenants
+   keep every earlier run's Matters, and the duplicate-case rule counts disposed
+   Matters, so disposing a fixture does not free its number. The tenant already
+   held `6209/2019`, and the journey's own `WP(C) 6d661b/2026` would have collided
+   on the next run. This repeats a rule already in `AGENTS.md` (a fresh identity
+   per run on persistent tenants). BUG-033's journey drew from only 9,000 values
+   and would collide as runs accumulate. Both now use clock-plus-serial registry
+   numbers, and the unreadable entry ends in a letter so no reading can find a
+   number/year. Proof: the pre-fix journey fails with the production 409 on its
+   second pass in one retained local tenant; the fixed journeys pass twice there.
+2. **An Intelligent Review list request queued behind a cold start.** The list
+   took 32.4 s; Cloud Run logs show a new instance starting at that moment, with
+   the ClamAV sidecar ready only after 8 startup-probe attempts. The API serves
+   one request per instance with four warm instances, and the review page's
+   concurrent requests plus CORS preflights exceeded that. The endpoint normally
+   takes 1.5-4 s because it re-verifies each review's saved-source manifest with
+   several queries (N+1), and it took 39 s on 2026-09-25 in the same way. This is
+   a separate, pre-existing capacity defect: recorded and handed off, not hidden
+   behind a retry or a longer timeout.
+
 ## Verification
 
 Evidence to date is recorded in `docs/STRICT_BUG_TASKLIST_2026-04-22.md`
