@@ -14,6 +14,11 @@ beside manifests whose private source was revoked in either generation and
 malformed manifests. A draft must be listed exactly when each of its versions
 is current on its own, its single-draft read must agree with the list, and
 neither may cost more statements for more drafts or more versions.
+
+The revocation tombstones only the generation active when it applies. The
+second test lists and reads the same drafts after a later rebuild has retired
+every saved generation: a draft citing the revoked source must stay hidden
+whichever generation its proof was saved in.
 """
 
 from __future__ import annotations
@@ -48,9 +53,10 @@ from tests.test_workspace_assistant_qa import _matter
 # Statements for one list, whatever its draft and version counts, for a
 # non-owner member. Matter list: the Matter, then the team-scoping flag and the
 # visibility-filtered Matter for its access check; drafts, their versions and
-# their reviews; the active generation, saved projections, saved generations,
-# active rows for retired manifests, the team-scoping flag with ACL-authorized
-# projection IDs, and the team-scoping flag with current Matter versions.
+# their reviews; the active generation, saved projections with their
+# later-event ledger check, saved generations, active rows for retired
+# manifests, the team-scoping flag with ACL-authorized projection IDs, and the
+# team-scoping flag with current Matter versions.
 MATTER_DRAFT_LIST_STATEMENT_BOUND = 14
 # IP list: the docket and the visibility-filtered docket for its access check,
 # and the opposition proceeding; drafts, versions and reviews; the same
@@ -77,11 +83,13 @@ def build_draft_targets(
     client: TestClient,
     *,
     after_rebuild: Callable[[Session, str], None] | None = None,
+    later_rebuild: bool = False,
 ) -> dict:
     """Capture a Matter's and an IP docket's manifests as saved outputs freeze them.
 
     Each target gets one manifest in each state: retired and active
     generation, each with and without a private source that is later revoked.
+    ``later_rebuild`` then retires the active generation as well.
     """
 
     bootstrap, _docket_matter, docket, proceeding = opposition_fixture(client)
@@ -141,6 +149,12 @@ def build_draft_targets(
         context = owner(session)
         for kind, target in targets.items():
             manifests[kind]["active"] = _capture(session, context, target)
+    if later_rebuild:
+        # The revocation never reached the first generation's rows, and this
+        # rebuild recreates the revoked Matter unchanged. Drafts that cite the
+        # first generation's proof of it must still stay hidden.
+        _matter(client, owner_token, "DRAFT-LIST-LATER")
+        rebuild()
 
     generations = {
         kind: {state: {item["generation_id"] for item in rows} for state, rows in states.items()}
@@ -485,4 +499,11 @@ def test_draft_lists_and_reads_reauthorize_every_version_in_one_bounded_query_se
     client: TestClient,
 ) -> None:
     targets = build_draft_targets(client)
+    assert_bounded_draft_lists(client, targets)
+
+
+def test_draft_lists_and_reads_keep_revoked_sources_hidden_after_a_later_rebuild(
+    client: TestClient,
+) -> None:
+    targets = build_draft_targets(client, later_rebuild=True)
     assert_bounded_draft_lists(client, targets)

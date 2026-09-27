@@ -4,7 +4,9 @@ Production keeps every retained generation of the private index; its eligible
 projection baseline was 9,820 on 2026-09-01. The review history must stay one
 bounded statement set against tables of that size, without a manual ANALYZE,
 inside a short per-statement budget and with hash and merge joins disabled so
-an adverse nested-loop plan cannot hide behind the planner's choice.
+an adverse nested-loop plan cannot hide behind the planner's choice. Every
+saved projection is also checked against the tenant's event ledger, so each
+generation retains unrelated ledger events beside its projections.
 """
 
 from __future__ import annotations
@@ -19,9 +21,11 @@ from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
     Client,
+    CompanyMembership,
     PrivateIndexGeneration,
     PrivateIndexProjection,
     PrivateIndexProjectionScope,
+    PrivateProjectionEvent,
 )
 from caseops_api.db.session import get_session_factory
 from tests import test_20260927_review_history_bounded as journeys
@@ -30,6 +34,10 @@ from tests.test_postgres_validation import _ensure_migrations  # noqa: F401
 pytestmark = pytest.mark.postgres
 
 RETAINED_PROJECTIONS_PER_GENERATION = 10_000
+# Unrelated access and source events: the ledger check must reach a saved
+# projection's own targets through the event target index, not scan these.
+RETAINED_EVENTS_PER_GENERATION = 10_000
+UNRELATED_EVENT_TARGET_TYPES = ("matter", "ip_docket", "client", "matter_document", "ip_document")
 
 
 def test_review_history_reauthorizes_every_private_manifest_in_one_bounded_query_set(
@@ -40,8 +48,16 @@ def test_review_history_reauthorizes_every_private_manifest_in_one_bounded_query
     )
 
 
+def test_review_history_keeps_revoked_sources_hidden_after_a_later_rebuild(
+    isolated_postgres_client,
+):
+    journeys.test_review_history_keeps_revoked_sources_hidden_after_a_later_rebuild(
+        isolated_postgres_client
+    )
+
+
 def _retain_production_volume(session: Session, company_id: str) -> None:
-    """Add unrelated tenant projections to the generation just activated."""
+    """Add unrelated projections and ledger events to the generation just activated."""
 
     generation = session.scalar(
         select(PrivateIndexGeneration).where(
@@ -103,10 +119,39 @@ def _retain_production_volume(session: Session, company_id: str) -> None:
                 "created_at": now,
             }
         )
+    actor_membership_id = session.scalar(
+        select(CompanyMembership.id).where(CompanyMembership.company_id == company_id).limit(1)
+    )
+    assert actor_membership_id is not None
+    events = [
+        {
+            "id": str(uuid4()),
+            "company_id": company_id,
+            "generation_id": generation.id,
+            "idempotency_key": f"retained-volume:{uuid4()}",
+            "event_type": ("access_changed", "source_changed")[index % 2],
+            "target_type": UNRELATED_EVENT_TARGET_TYPES[index % len(UNRELATED_EVENT_TARGET_TYPES)],
+            "target_id": str(uuid4()),
+            "target_version": None,
+            "access_policy_generation": generation.access_policy_generation,
+            "tombstone_generation": generation.tombstone_generation,
+            "status": "applied",
+            "reason_code": "retained_volume",
+            "actor_membership_id": actor_membership_id,
+            "affected_projection_count": 0,
+            "affected_saved_output_count": 0,
+            "attempt_count": 1,
+            "created_at": now,
+            "applied_at": now,
+        }
+        for index in range(RETAINED_EVENTS_PER_GENERATION)
+    ]
     for start in range(0, len(projections), 2_000):
         stop = start + 2_000
         session.execute(insert(PrivateIndexProjection.__table__), projections[start:stop])
         session.execute(insert(PrivateIndexProjectionScope.__table__), scopes[start:stop])
+    for start in range(0, len(events), 2_000):
+        session.execute(insert(PrivateProjectionEvent.__table__), events[start : start + 2_000])
     session.commit()
 
 
@@ -138,8 +183,13 @@ def test_review_history_page_of_100_is_bounded_at_production_private_index_volum
             text("SELECT count(*) FROM private_index_generations WHERE company_id = :company_id"),
             {"company_id": history["company_id"]},
         )
+        ledger = session.scalar(
+            text("SELECT count(*) FROM private_projection_events WHERE company_id = :company_id"),
+            {"company_id": history["company_id"]},
+        )
     assert retained >= 2 * RETAINED_PROJECTIONS_PER_GENERATION
     assert generations >= 2
+    assert ledger >= 2 * RETAINED_EVENTS_PER_GENERATION
     journeys.assert_bounded_history(
         isolated_postgres_client,
         history,
