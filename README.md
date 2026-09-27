@@ -916,7 +916,8 @@ deploys both services and verifies exact release identity:
 scripts/deploy-prod.sh <full-main-sha>
 ```
 
-[`docs/GCP_DEPLOY.md`](./docs/GCP_DEPLOY.md) covers bootstrapping a new project, and
+[`docs/GCP_DEPLOY.md`](./docs/GCP_DEPLOY.md) bootstraps a new project, including the
+two-container API service (API plus ClamAV sidecar) that every release carries forward, and
 [`infra/cloudrun/README.md`](./infra/cloudrun/README.md) records which Cloud Run asset owns
 what. Never replace a Cloud Run service from a checked-in manifest.
 

@@ -2111,12 +2111,15 @@ job or scheduler was changed.
   the execution-environment and secrets annotations, and `CASEOPS_API_PORT`,
   `CASEOPS_API_DOCS_ENABLED`, `CASEOPS_TESSERACT_COMMAND` and
   `CASEOPS_DOCUMENT_STORAGE_CACHE_PATH`. `deploy.ps1` stopped applying the
-  manifest in PR #94 (2026-05-31). Its job loop, whose first step created
-  `caseops-document-worker`, never ran against production: the audit logs hold
-  no entry for that job or its trigger, while the same query finds the
-  2026-05-31 creation of `caseops-legal-update-sync`. IPLF-001B made
-  `infra/cloudrun/scheduler-inventory.json` the only scheduler and job owner on
-  2026-08-01.
+  manifest in PR #94 (2026-05-31). Its job and scheduler sections, each of
+  which began with the document worker, never ran against production: the audit
+  logs hold no entry for `caseops-document-worker` or its trigger. The same
+  query shows `caseops-legal-update-sync` and `caseops-case-tracking-poll`
+  created on 2026-05-31 by a manual `gcloud run jobs replace` of their job
+  YAMLs; the first attempts at 17:33 UTC failed with `INVALID_ARGUMENT` (the
+  manifest defects PR #94 fixed) and the 17:39 attempts succeeded. IPLF-001B
+  made `infra/cloudrun/scheduler-inventory.json` the only scheduler and job
+  owner on 2026-08-01.
 - **Control:** both files were retired rather than aligned: a second full
   specification would need every live-only value copied into a file that
   nothing applies. `scripts/deploy-prod.sh` is the only writer of
@@ -2130,9 +2133,18 @@ job or scheduler was changed.
   service before routing and withholds certification when the sidecar
   disappears after routing. `test_scheduler_inventory.py` proves each job's
   invoker grant precedes its trigger and that a failed grant stops before any
-  scheduler write. Each new test failed against a deliberately broken source
-  before it was accepted. The data-governance map, the program manifest and
-  their generated views now cite the real owners.
+  scheduler write. The fresh-project bootstrap in `docs/GCP_DEPLOY.md`
+  section 6 previously created a single-container service that could not
+  start: production settings reject it without `CASEOPS_AUTO_MIGRATE=false`,
+  and with no scanner host the readiness fence refuses to serve. It also put
+  the password-bearing database URL in a plain environment variable. It now
+  creates the same two-container contract, declares
+  request-based billing and startup CPU boost, and binds the database URL as a
+  secret; the same test module compares it with the release command and loads
+  its environment through the production validators. Each new test failed
+  against a deliberately broken source before it was accepted. The
+  data-governance map, the program manifest, its generated views and the
+  retained Phase 0 reconciler now cite the real owners.
 - **Severity:** control gap, not stop-ship. Only a manual replace could have
   used the manifest, and the canonical release never did.
 

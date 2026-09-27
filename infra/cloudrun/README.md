@@ -36,6 +36,12 @@ every value the release does not set. Every release sets this contract, and
   and maximum of 20 instances, a revision maximum of 20 and no revision-level
   minimum.
 
+A new project gets the same contract from section 6 of `docs/GCP_DEPLOY.md`,
+which also declares request-based billing (`--cpu-throttling`) and startup CPU
+boost (`--cpu-boost`); `apps/api/tests/test_cloudrun_service_ownership.py`
+compares that command with the release and loads its environment through the
+production settings validators.
+
 After routing, the release reads back the sidecar, the API startup probe, the
 ClamAV probe delay and period, the scanner requirement, startup independence
 and the service minimum, and withholds certification on any drift. It refuses

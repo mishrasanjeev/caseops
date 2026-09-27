@@ -2771,6 +2771,7 @@
         "Current main and production scheduler/job state"
       ],
       "implementation_refs": [
+        "infra/cloudrun/scheduler-inventory.json",
         "scripts/scheduler_inventory.py"
       ],
       "test_refs": [
