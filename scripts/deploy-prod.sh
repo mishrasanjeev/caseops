@@ -71,7 +71,9 @@ ALERT_NOTIFICATION_EMAIL="${CASEOPS_ALERT_NOTIFICATION_EMAIL:-mishra.sanjeev@gma
 # concurrency at 1 so one stuck request cannot take the whole API
 # surface down.
 API_CONCURRENCY=1
-API_TIMEOUT=120s
+# The post-deploy readback compares Cloud Run's timeoutSeconds with this value.
+API_TIMEOUT_SECONDS=120
+API_TIMEOUT="${API_TIMEOUT_SECONDS}s"
 # Keep a headroom ceiling above the historical ten single-request containers.
 # A production browser page can issue several ordinary API reads in parallel;
 # when all ten single-concurrency instances were busy, Cloud Run returned 429
@@ -758,6 +760,11 @@ API_HAS_STARTUP_DEPENDENCY=$(python -c 'import json,sys; data=json.loads(sys.arg
 if [[ "${API_HAS_STARTUP_DEPENDENCY}" == "yes" ]]; then
   API_DEPENDENCY_FLAGS=(--depends-on '')
 fi
+# The release declares request-based billing (--cpu-throttling: CPU only while
+# a request is in flight) and startup CPU boost rather than inheriting them
+# from live service state. Both are revision-template flags, so they precede
+# the first --container: gcloud parses everything after it per container and
+# rejects them there.
 gcloud run deploy caseops-api \
   --region "${REGION}" \
   --project "${PROJECT}" \
@@ -768,6 +775,8 @@ gcloud run deploy caseops-api \
   --timeout "${API_TIMEOUT}" \
   --min "${API_MIN_INSTANCES}" \
   --min-instances default \
+  --cpu-throttling \
+  --cpu-boost \
   --container api \
   --port 8080 \
   --image "${API_IMAGE}" \
@@ -831,6 +840,9 @@ if ! LIVE_API_REVISION=$(python - \
   "${INDIAN_KANOON_RETENTION_DAYS}" \
   "${INDIAN_KANOON_MAX_SEARCH_PAGE}" \
   "${INDIAN_KANOON_MAX_RESULTS}" \
+  "${API_CONCURRENCY}" \
+  "${API_TIMEOUT_SECONDS}" \
+  "${API_MAX_INSTANCES}" \
   "${LIVE_API_SERVICE_JSON}" <<'PY'
 import json
 import sys
@@ -859,7 +871,10 @@ expected_indian_kanoon_env = {
     "CASEOPS_INDIAN_KANOON_MAX_SEARCH_PAGE": sys.argv[13],
     "CASEOPS_INDIAN_KANOON_MAX_RESULTS": sys.argv[14],
 }
-service = json.loads(sys.argv[15])
+expected_concurrency = sys.argv[15]
+expected_timeout_seconds = sys.argv[16]
+expected_max = sys.argv[17]
+service = json.loads(sys.argv[18])
 metadata = service.get("metadata") or {}
 spec = service.get("spec") or {}
 status = service.get("status") or {}
@@ -868,6 +883,8 @@ errors = []
 annotations = metadata.get("annotations") or {}
 if str(annotations.get("run.googleapis.com/minScale")) != expected_min:
     errors.append("service-level minimum capacity does not match API_MIN_INSTANCES")
+if str(annotations.get("run.googleapis.com/maxScale")) != expected_max:
+    errors.append("service-level maximum capacity does not match API_MAX_INSTANCES")
 
 if str(metadata.get("generation")) != str(status.get("observedGeneration")):
     errors.append("metadata.generation does not match status.observedGeneration")
@@ -909,8 +926,25 @@ else:
     if row.get("tag"):
         errors.append("status.traffic still has a tag")
 
-containers = ((spec.get("template") or {}).get("spec") or {}).get("containers") or []
-template_annotations = ((spec.get("template") or {}).get("metadata") or {}).get("annotations") or {}
+template = spec.get("template") or {}
+template_spec = template.get("spec") or {}
+containers = template_spec.get("containers") or []
+template_annotations = (template.get("metadata") or {}).get("annotations") or {}
+if str(template_annotations.get("autoscaling.knative.dev/maxScale")) != expected_max:
+    errors.append("revision-level maximum capacity does not match API_MAX_INSTANCES")
+if str(template_spec.get("containerConcurrency")) != expected_concurrency:
+    errors.append("containerConcurrency does not match API_CONCURRENCY")
+if str(template_spec.get("timeoutSeconds")) != expected_timeout_seconds:
+    errors.append("request timeout does not match API_TIMEOUT_SECONDS")
+# gcloud writes both declared flags as "True"; the live service reports
+# "true". Request-based billing is also Cloud Run's default, which the service
+# reported as no cpu-throttling annotation before the release declared it.
+# "false" is instance-based billing, or a disabled boost.
+cpu_throttling = template_annotations.get("run.googleapis.com/cpu-throttling")
+if cpu_throttling is not None and str(cpu_throttling).lower() != "true":
+    errors.append("request-based billing is not in effect (cpu-throttling is not true)")
+if str(template_annotations.get("run.googleapis.com/startup-cpu-boost")).lower() != "true":
+    errors.append("startup CPU boost is not enabled")
 try:
     dependencies = json.loads(template_annotations.get("run.googleapis.com/container-dependencies") or "{}")
 except (TypeError, ValueError):
@@ -921,6 +955,9 @@ api = next((row for row in containers if row.get("name") == "api"), None)
 if api is None:
     errors.append("api container is missing")
 else:
+    # The image CMD is the only API entrypoint; an override bypasses it.
+    if api.get("command") or api.get("args"):
+        errors.append("API container overrides the image command or arguments")
     env = {str(row.get("name")): row for row in api.get("env") or []}
     if str((env.get("CASEOPS_CLAMAV_REQUIRED") or {}).get("value")) != "true":
         errors.append("required scanner lifespan readiness is not enabled")
@@ -994,7 +1031,7 @@ if errors:
 print(latest_ready)
 PY
 ); then
-  echo "TRAFFIC/REVISION DRIFT: caseops-api did not converge to exact service capacity and one untagged exact-HEAD latest revision at 100%."
+  echo "TRAFFIC/REVISION DRIFT: caseops-api did not converge to the declared runtime contract, exact service capacity and one untagged exact-HEAD latest revision at 100%."
   exit 1
 fi
 LIVE_API_REVISION_IMAGE=$(gcloud run revisions describe "${LIVE_API_REVISION}" \
@@ -1031,14 +1068,17 @@ if [[ "${SIDECAR_PRESENT}" != "1" ]]; then
 fi
 CLAMAV_PROBE_DELAY=$(gcloud run services describe caseops-api --region "${REGION}" --format='value(spec.template.spec.containers[1].startupProbe.initialDelaySeconds)')
 CLAMAV_PROBE_PERIOD=$(gcloud run services describe caseops-api --region "${REGION}" --format='value(spec.template.spec.containers[1].startupProbe.periodSeconds)')
+CLAMAV_PROBE_TIMEOUT=$(gcloud run services describe caseops-api --region "${REGION}" --format='value(spec.template.spec.containers[1].startupProbe.timeoutSeconds)')
+CLAMAV_PROBE_FAILURES=$(gcloud run services describe caseops-api --region "${REGION}" --format='value(spec.template.spec.containers[1].startupProbe.failureThreshold)')
 # Cloud Run omits zero-valued protobuf fields when serializing a service, so
 # an empty initialDelaySeconds is the canonical representation of zero.
 CLAMAV_PROBE_DELAY=${CLAMAV_PROBE_DELAY:-0}
-if [[ "${CLAMAV_PROBE_DELAY}" != "0" || "${CLAMAV_PROBE_PERIOD}" != "2" ]]; then
-  echo "EG-003 REGRESSION: clamav startup probe delay=${CLAMAV_PROBE_DELAY} period=${CLAMAV_PROBE_PERIOD}; expected 0/2 seconds."
+if [[ "${CLAMAV_PROBE_DELAY}" != "0" || "${CLAMAV_PROBE_PERIOD}" != "2" || \
+  "${CLAMAV_PROBE_TIMEOUT}" != "1" || "${CLAMAV_PROBE_FAILURES}" != "120" ]]; then
+  echo "EG-003 REGRESSION: clamav startup probe delay=${CLAMAV_PROBE_DELAY} period=${CLAMAV_PROBE_PERIOD} timeout=${CLAMAV_PROBE_TIMEOUT} failureThreshold=${CLAMAV_PROBE_FAILURES}; expected 0/2/1/120."
   exit 1
 fi
-echo "  EG-003 clamav sidecar present with immediate two-second startup probing."
+echo "  EG-003 clamav sidecar present with immediate two-second startup probing (1 s timeout, 120 attempts)."
 
 # If main advanced during the two service deployments, keep the healthy exact
 # revision serving but withhold release-owned mutations and certification. The
