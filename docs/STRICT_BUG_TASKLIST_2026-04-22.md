@@ -1909,6 +1909,14 @@ Verdicts:
   - The API request log records both searches: `POST /api/case-tracking/search`
     200 at 13:30:53 and 13:31:44 UTC on `caseops-api-00472-5p5`. The Matter was
     not linked during the check, so no tester data changed.
+  - How the proof is split, deliberately: `AGENTS.md` forbids automated suites
+    from making credit-bearing provider calls and establishes provider-paid
+    operation through authenticated human use, so no committed production test
+    can repeat this paid search. Repeatable regression coverage runs on every
+    release instead: the identity suite on SQLite and PostgreSQL with the
+    reported wording, the Docker browser journey on the exact image, and the
+    production no-paid gate. This recorded human-use observation is the
+    deployed-release confirmation of the paid path.
 - **BUG-033: Properly fixed.** Glyph-position assertions and the pdf.js browser
   check show every value inside its own column on the deployed release.
 - **BUG-034: Properly fixed.** Container-query sizing verified at seven widths
