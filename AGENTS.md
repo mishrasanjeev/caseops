@@ -1246,3 +1246,10 @@ requirements when using the fallback.
   within 0.5 s. Start only the primary reads, load pickers on demand, and never
   add a duplicate read to hide a slow primary: bound the primary. The API's own
   startup, not the ClamAV sidecar, was the critical path in 332 of 343 starts.
+- A list must never return a record that its single-record read refuses. The
+  Draft lists read a source manifest that was not a JSON list as "no private
+  source" and returned the draft's body, while the read answered 409. Give
+  lists and reads one parse and one batched decision, decide each version on
+  its own (a merged manifest spans generations and repeats projections), and
+  prove list, read and HTTP agreement for malformed shapes beside the statement
+  bound, as `test_20260927_draft_lists_bounded.py` does.
