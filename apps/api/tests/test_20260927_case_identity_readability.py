@@ -90,12 +90,20 @@ def test_public_number_rejects_what_is_not_one_registry_number(value):
     [
         (HearingIdentity(cnr="DLHC010317282019"), None),
         (HearingIdentity(cnr="DLHC_0103-1728.2019"), None),
-        (HearingIdentity(cnr="DLHC0103", case_number="WP(C) 1/2026", court_name=COURT), "invalid_cnr"),
+        (
+            HearingIdentity(cnr="DLHC0103", case_number="WP(C) 1/2026", court_name=COURT),
+            "invalid_cnr",
+        ),
         (HearingIdentity(case_number="WP(C) 1/2026"), "missing_identifiers"),
         (HearingIdentity(court_name=COURT), "missing_identifiers"),
-        (HearingIdentity(case_number="WP(C) 6d661b/2026", court_name=COURT), "unreadable_case_number"),
         (
-            HearingIdentity(case_number="WP(C) 6d661b/2026", filing_number="321/2026", court_name=COURT),
+            HearingIdentity(case_number="WP(C) 6d661b/2026", court_name=COURT),
+            "unreadable_case_number",
+        ),
+        (
+            HearingIdentity(
+                case_number="WP(C) 6d661b/2026", filing_number="321/2026", court_name=COURT
+            ),
             "unreadable_case_number",
         ),
         (HearingIdentity(filing_number="F-321", court_name=COURT), "unreadable_case_number"),
