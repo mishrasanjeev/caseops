@@ -208,8 +208,8 @@ def _flag_sections(tokens: list[str]) -> dict[str, dict[str, str]]:
     return sections
 
 
-def _release_sections() -> dict[str, dict[str, str]]:
-    script = (REPO_ROOT / "scripts" / "deploy-prod.sh").read_text(encoding="utf-8")
+def _shell_constants(script: str) -> dict[str, str]:
+    """Top-level `NAME=value` assignments, taking a `${NAME:-default}` default."""
     constants: dict[str, str] = {}
     for line in script.splitlines():
         match = re.fullmatch(r"([A-Z][A-Z0-9_]*)=(.+)", line)
@@ -217,16 +217,43 @@ def _release_sections() -> dict[str, dict[str, str]]:
             name, value = match.group(1), match.group(2).strip('"')
             default = re.fullmatch(rf"\$\{{{name}:-(.+)\}}", value)
             constants.setdefault(name, default.group(1) if default else value)
+    return constants
 
-    def resolve(value: str) -> str:
-        return re.sub(
+
+def _expand(value: str, constants: dict[str, str]) -> str:
+    """Expand `${NAME}` to a fixpoint, so a constant defined through another resolves."""
+    for _ in range(10):
+        expanded = re.sub(
             r"\$\{([A-Z][A-Z0-9_]*)\}", lambda match: constants.get(match[1], match[0]), value
         )
+        if expanded == value:
+            return value
+        value = expanded
+    raise AssertionError(f"shell constant expansion does not terminate: {value}")
 
+
+def _release_sections() -> dict[str, dict[str, str]]:
+    script = (REPO_ROOT / "scripts" / "deploy-prod.sh").read_text(encoding="utf-8")
+    constants = _shell_constants(script)
     return {
-        section: {flag: resolve(value) for flag, value in flags.items()}
+        section: {flag: _expand(value, constants) for flag, value in flags.items()}
         for section, flags in _flag_sections(_shell_command(script)).items()
     }
+
+
+def test_release_constants_expand_through_indirection() -> None:
+    # Equivalent refactors of the release script must not break the comparison.
+    constants = _shell_constants(
+        'API_TIMEOUT_SECONDS="${API_TIMEOUT_SECONDS:-120}"\n'
+        'API_TIMEOUT="${API_TIMEOUT_SECONDS}s"\n'
+        'LOOP_A="${LOOP_B}"\n'
+        'LOOP_B="${LOOP_A}"\n'
+    )
+
+    assert _expand("--timeout ${API_TIMEOUT}", constants) == "--timeout 120s"
+    assert _expand("${UNDEFINED}", constants) == "${UNDEFINED}"
+    with pytest.raises(AssertionError, match="does not terminate"):
+        _expand("${LOOP_A}", constants)
 
 
 def _assignments(value: str) -> dict[str, str]:
