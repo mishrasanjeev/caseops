@@ -142,6 +142,13 @@ acceptance.
   batched page takes 12 statements and 0.21-0.29 s.
 - Two new page tests fail against the previous page: a deep link waits for
   the bounded history, and first load keeps at most two reads in flight.
+- In a real browser, `tests/e2e/support/review-page-reads.ts` records the
+  page's API reads from navigation until it settles. The Docker review
+  journey and the exact-release production journey both require: at most two
+  reads in flight, no single-review read for a review the history returned,
+  and no IP portfolio read before the IP tab opens. Against the previous page,
+  the same Docker journey failed with four reads in flight (reports, Matters,
+  IP portfolio, history); a deep link adds the detail read as a fifth.
 - Docker acceptance and exact-release production verification are recorded
   on the pull request.
 
