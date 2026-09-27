@@ -482,6 +482,39 @@ describe("IntelligentReviewsPage", () => {
     expect(maxInFlight).toBeLessThanOrEqual(2);
   });
 
+  it("keeps two reads in flight while cached reports refresh after in-app navigation", async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const settle = <T,>(value: T) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      return new Promise<T>((resolve) => {
+        setTimeout(() => {
+          inFlight -= 1;
+          resolve(value);
+        }, 20);
+      });
+    };
+    mocks.listReviews.mockImplementation(() => settle({ reviews: [reviewFixture()] }));
+    mocks.fetchReports.mockImplementation(() => settle({ reports: [report] }));
+    mocks.listMatters.mockImplementation(() =>
+      settle({
+        matters: [{ id: "matter-1", matter_code: "IP-101", title: "Aster opposition", status: "active" }],
+        next_cursor: null,
+      }),
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    // Saved research left the frozen reports cached; this page refreshes them.
+    client.setQueryData(["authorities", "research-reports"], { reports: [report] });
+
+    render(<QueryClientProvider client={client}><IntelligentReviewsPage /></QueryClientProvider>);
+
+    expect(await screen.findByText("Supporting and contrary authorities")).toBeInTheDocument();
+    await waitFor(() => expect(mocks.listMatters).toHaveBeenCalledTimes(1));
+    expect(mocks.fetchReports).toHaveBeenCalledTimes(1);
+    expect(maxInFlight).toBeLessThanOrEqual(2);
+  });
+
   it("shows typed abstention without presenting invented analysis", async () => {
     const abstained = reviewFixture({
       state: "abstained",

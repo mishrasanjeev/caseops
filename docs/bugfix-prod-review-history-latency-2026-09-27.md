@@ -115,8 +115,9 @@ acceptance.
 - `list_intelligent_reviews` reauthorizes the whole page in one statement
   set: 12 statements for a non-owner member, whatever the page size.
 - On first load the review page starts only the history and the frozen
-  reports. Matters load after the reports and IP dockets when the IP tab
-  opens. The page reads a single review only when it is outside the bounded
+  reports. Matters load after the reports have settled, including a
+  background refresh of reports cached by another page, and IP dockets load
+  when the IP tab opens. The page reads a single review only when it is outside the bounded
   history or still generating.
 - CORS preflights may be cached for 7,200 s, Chromium's maximum. Starlette's
   default is 600 s. Browser `GET`s from the web client send only `Accept` and

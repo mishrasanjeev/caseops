@@ -110,7 +110,9 @@ export default function IntelligentReviewsPage() {
   const mattersQuery = useQuery({
     queryKey: ["matters", "intelligent-review-targets"],
     queryFn: () => listMatters({ limit: 100 }),
-    enabled: reportsQuery.isFetched,
+    // Also wait out a background refresh of cached reports after in-app
+    // navigation, which would otherwise make this a third concurrent read.
+    enabled: reportsQuery.isFetched && !reportsQuery.isFetching,
   });
   const ipQuery = useQuery({
     queryKey: ["ip", "intelligent-review-targets"],
