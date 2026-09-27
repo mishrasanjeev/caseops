@@ -850,7 +850,6 @@ def test_deploy_prod_uses_service_minimums_and_clears_stale_revision_tags() -> N
 
 def test_migration_job_binds_and_verifies_dedicated_database_timeouts() -> None:
     script = _read_repo_text("scripts/deploy-prod.sh")
-    manifest = _read_repo_text("infra/cloudrun/migrate-job.yaml")
     expected = {
         "CASEOPS_MIGRATION_DB_CONNECT_TIMEOUT_SECONDS": "10",
         "CASEOPS_MIGRATION_DB_STATEMENT_TIMEOUT_MS": "900000",
@@ -858,19 +857,18 @@ def test_migration_job_binds_and_verifies_dedicated_database_timeouts() -> None:
         "CASEOPS_MIGRATION_DB_IDLE_TRANSACTION_TIMEOUT_MS": "60000",
     }
 
-    assert "timeoutSeconds: 1800" in manifest
+    assert "MIGRATION_TASK_TIMEOUT=30m" in script
+    assert "MIGRATION_JOB=caseops-migrate-job" in script
     for name, value in expected.items():
-        assert f'- name: {name}\n                  value: "{value}"' in manifest
         shell_name = name.removeprefix("CASEOPS_")
         assert f"{shell_name}={value}" in script
         assert f"{name}=${{{shell_name}}}" in script
 
-    update_index = script.index("gcloud run jobs update caseops-migrate-job")
-    verify_index = script.index("MIGRATION_JOB_JSON=$(gcloud run jobs describe")
-    execute_index = script.index("gcloud run jobs execute caseops-migrate-job")
-    assert update_index < verify_index < execute_index
-    assert "caseops-migrate-job database timeout drift" in script
-    assert "actual != expected" in script
+    converge_index = script.index('gcloud run jobs "${MIGRATION_JOB_ACTION}" "${MIGRATION_JOB}"')
+    verify_index = script.index('MIGRATION_JOB_JSON=$(gcloud run jobs describe "${MIGRATION_JOB}"')
+    execute_index = script.index('gcloud run jobs execute "${MIGRATION_JOB}"')
+    assert converge_index < verify_index < execute_index
+    assert "caseops-migrate-job contract drift" in script
 
 
 def test_deploy_prod_fences_rule_governance_and_verifies_exact_traffic() -> None:
@@ -1360,6 +1358,131 @@ def _a0_pending_execution_json(image: str) -> str:
     return json.dumps(value, separators=(",", ":"))
 
 
+FAKE_IMMUTABLE_API_IMAGE = (
+    "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api@sha256:"
+    + "a" * 64
+)
+
+
+def _migration_job_payload(image: str, *, drift: str | None = None) -> dict[str, object]:
+    """Return caseops-migrate-job as `jobs describe` reads it back, with one drift.
+
+    The unmodified payload is the live job's contract as read on 2026-09-27.
+    """
+
+    environment = {
+        "CASEOPS_ENV": "cloud",
+        "CASEOPS_AUTO_MIGRATE": "false",
+        "CASEOPS_MIGRATION_DB_CONNECT_TIMEOUT_SECONDS": "10",
+        "CASEOPS_MIGRATION_DB_STATEMENT_TIMEOUT_MS": "900000",
+        "CASEOPS_MIGRATION_DB_LOCK_TIMEOUT_MS": "5000",
+        "CASEOPS_MIGRATION_DB_IDLE_TRANSACTION_TIMEOUT_MS": "60000",
+    }
+    secrets = {
+        "CASEOPS_DATABASE_URL": ("caseops-database-url", "latest"),
+        "CASEOPS_AUTH_SECRET": ("caseops-auth-secret", "latest"),
+    }
+    container: dict[str, object] = {
+        "image": image,
+        "command": ["python"],
+        "args": ["-m", "alembic", "upgrade", "head"],
+        "resources": {"limits": {"cpu": "1000m", "memory": "512Mi"}},
+    }
+    containers = [container]
+    task: dict[str, object] = {
+        "serviceAccountName": "caseops-runtime@perfect-period-305406.iam.gserviceaccount.com",
+        "maxRetries": 1,
+        "timeoutSeconds": "1800",
+    }
+    annotations = {
+        "run.googleapis.com/cloudsql-instances": "perfect-period-305406:asia-south1:caseops-db"
+    }
+    if drift == "whole-cpu":
+        # Not drift: `--cpu 1` reads back as "1", the live job as "1000m".
+        container["resources"] = {"limits": {"cpu": "1", "memory": "512Mi"}}
+    elif drift == "lock-timeout":
+        environment["CASEOPS_MIGRATION_DB_LOCK_TIMEOUT_MS"] = "424242"
+    elif drift == "auto-migrate-unset":
+        del environment["CASEOPS_AUTO_MIGRATE"]
+    elif drift == "extra-variable":
+        environment["CASEOPS_EXTRA_TOKEN"] = "canary-extra-value"
+    elif drift == "retired-manifest-command":
+        container["command"] = ["python", "-m", "alembic", "upgrade", "head"]
+        del container["args"]
+    elif drift == "pinned-secret":
+        secrets["CASEOPS_AUTH_SECRET"] = ("caseops-auth-secret", "7")
+    elif drift == "cloud-sql-unset":
+        annotations.clear()
+    elif drift == "service-account":
+        task["serviceAccountName"] = "default-compute@developer.gserviceaccount.com"
+    elif drift == "stale-image":
+        container["image"] = image.replace("a" * 64, "b" * 64)
+    elif drift == "task-timeout":
+        task["timeoutSeconds"] = "600"
+    elif drift == "retries":
+        task["maxRetries"] = 3
+    elif drift == "memory":
+        container["resources"] = {"limits": {"cpu": "1000m", "memory": "2Gi"}}
+    elif drift == "second-container":
+        containers.append({"image": "clamav/clamav:1.4"})
+    elif drift is not None:
+        raise AssertionError(f"unknown migration job drift {drift!r}")
+    container["env"] = [{"name": name, "value": value} for name, value in environment.items()] + [
+        {"name": name, "valueFrom": {"secretKeyRef": {"name": secret, "key": version}}}
+        for name, (secret, version) in secrets.items()
+    ]
+    task["containers"] = containers
+    return {
+        "spec": {
+            "template": {
+                "metadata": {"annotations": annotations},
+                "spec": {"template": {"spec": task}},
+            }
+        }
+    }
+
+
+def _deploy_constants(*names: str) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for line in _read_repo_text("scripts/deploy-prod.sh").splitlines():
+        name, separator, value = line.partition("=")
+        if separator and name in names:
+            values.setdefault(name, value.strip('"'))
+    assert set(values) == set(names), names
+    return values
+
+
+def _run_migration_readback(payload: dict[str, object]) -> subprocess.CompletedProcess[str]:
+    """Execute deploy-prod.sh's own migrate-job readback against one payload."""
+
+    script = _read_repo_text("scripts/deploy-prod.sh").replace("\r\n", "\n")
+    describe = script.index('MIGRATION_JOB_JSON=$(gcloud run jobs describe "${MIGRATION_JOB}"')
+    start = script.index("python - <<'PY'\n", describe) + len("python - <<'PY'\n")
+    readback = script[start : script.index("\nPY\n", start)]
+    env = {
+        **os.environ,
+        **_deploy_constants(
+            "PROJECT",
+            "REGION",
+            "MIGRATION_TASK_TIMEOUT",
+            "MIGRATION_DB_CONNECT_TIMEOUT_SECONDS",
+            "MIGRATION_DB_STATEMENT_TIMEOUT_MS",
+            "MIGRATION_DB_LOCK_TIMEOUT_MS",
+            "MIGRATION_DB_IDLE_TRANSACTION_TIMEOUT_MS",
+        ),
+        "API_IMMUTABLE_IMAGE": FAKE_IMMUTABLE_API_IMAGE,
+        "MIGRATION_JOB_JSON": json.dumps(payload),
+    }
+    return subprocess.run(
+        [sys.executable, "-c", readback],
+        env=env,
+        capture_output=True,
+        check=False,
+        text=True,
+        timeout=30,
+    )
+
+
 def _run_deploy_with_fakes(
     tmp_path: Path,
     *arguments: str,
@@ -1373,7 +1496,8 @@ def _run_deploy_with_fakes(
     qa_execution_drift: bool = False,
     qa_already_completed: bool = False,
     qa_already_failed: bool = False,
-    migration_timeout_drift: bool = False,
+    migration_job_drift: str | None = None,
+    migration_job_missing: bool = False,
     python_crlf: bool = False,
     main_drift_after_fetches: int | None = None,
     private_projection_scheduler_hold: str | None = None,
@@ -1457,6 +1581,12 @@ elif [[ "$*" == *"artifacts docker images describe"* ]]; then
     exit 57
   fi
   printf '%s\n' 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+elif [[ "$*" == *"run jobs describe caseops-migrate-job"* && "$*" != *"--format=json"* && \
+  "${FAKE_MIGRATION_JOB_MISSING}" == "true" && ! -f "${FAKE_MIGRATION_JOB_CREATED}" ]]; then
+  printf '%s\n' 'ERROR: (gcloud.run.jobs.describe) Cannot find job [caseops-migrate-job].' >&2
+  exit 1
+elif [[ "$*" == *"run jobs create caseops-migrate-job"* ]]; then
+  touch "${FAKE_MIGRATION_JOB_CREATED}"
 elif [[ "$*" == *"run jobs describe caseops-migrate-job"* && "$*" == *"--format=json"* ]]; then
   printf '%s\n' "${FAKE_MIGRATION_JOB_JSON}"
 elif [[ "$*" == *"run jobs update caseops-ip-qa-bootstrap"* ]]; then
@@ -1726,49 +1856,7 @@ exec "${FAKE_REAL_PYTHON}" "$@"
         separators=(",", ":"),
     )
     migration_job_json = json.dumps(
-        {
-            "spec": {
-                "template": {
-                    "spec": {
-                        "template": {
-                            "spec": {
-                                "containers": [
-                                    {
-                                        "env": [
-                                            {
-                                                "name": (
-                                                    "CASEOPS_MIGRATION_DB_CONNECT_TIMEOUT_SECONDS"
-                                                ),
-                                                "value": "10",
-                                            },
-                                            {
-                                                "name": (
-                                                    "CASEOPS_MIGRATION_DB_STATEMENT_TIMEOUT_MS"
-                                                ),
-                                                "value": "900000",
-                                            },
-                                            {
-                                                "name": ("CASEOPS_MIGRATION_DB_LOCK_TIMEOUT_MS"),
-                                                "value": (
-                                                    "0" if migration_timeout_drift else "5000"
-                                                ),
-                                            },
-                                            {
-                                                "name": (
-                                                    "CASEOPS_MIGRATION_DB_IDLE_"
-                                                    "TRANSACTION_TIMEOUT_MS"
-                                                ),
-                                                "value": "60000",
-                                            },
-                                        ]
-                                    }
-                                ]
-                            }
-                        }
-                    }
-                }
-            }
-        },
+        _migration_job_payload(immutable_image, drift=migration_job_drift),
         separators=(",", ":"),
     )
     env.update(
@@ -1807,6 +1895,8 @@ exec "${FAKE_REAL_PYTHON}" "$@"
             "FAKE_FINGERPRINT_JOB_JSON": _a0_fingerprint_job_json(immutable_image),
             "FAKE_FINGERPRINT_LOG_JSON": fingerprint_log_json,
             "FAKE_MIGRATION_JOB_JSON": migration_job_json,
+            "FAKE_MIGRATION_JOB_MISSING": "true" if migration_job_missing else "false",
+            "FAKE_MIGRATION_JOB_CREATED": _bash_path(tmp_path / "migration-job-created"),
             "FAKE_FINGERPRINT_REST_JSON": json.dumps(
                 {"entries": [{"jsonPayload": json.loads(fingerprint_json)}]},
                 separators=(",", ":"),
@@ -2328,17 +2418,134 @@ def test_deploy_prod_refuses_to_retry_a_failed_current_generation_qa_bootstrap(
     assert "refusing an automatic retry" in result.stdout
 
 
-def test_deploy_prod_refuses_migration_timeout_drift_before_execution(
-    tmp_path: Path,
-) -> None:
-    result = _run_deploy_with_fakes(tmp_path, migration_timeout_drift=True)
+@pytest.mark.parametrize("variant", [None, "whole-cpu"])
+def test_migration_readback_accepts_the_declared_contract(variant: str | None) -> None:
+    result = _run_migration_readback(
+        _migration_job_payload(FAKE_IMMUTABLE_API_IMAGE, drift=variant)
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "migrate-job contract verified." in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("drift", "expected"),
+    [
+        ("lock-timeout", "environment (variables: CASEOPS_MIGRATION_DB_LOCK_TIMEOUT_MS)"),
+        # The retired migrate-job.yaml omitted this variable, and Settings then
+        # rejects CASEOPS_ENV=cloud before alembic can start.
+        ("auto-migrate-unset", "environment (variables: CASEOPS_AUTO_MIGRATE)"),
+        ("extra-variable", "environment (variables: CASEOPS_EXTRA_TOKEN)"),
+        ("retired-manifest-command", "args, command"),
+        ("pinned-secret", "secrets (variables: CASEOPS_AUTH_SECRET)"),
+        ("cloud-sql-unset", "cloud_sql"),
+        ("service-account", "service_account"),
+        ("stale-image", "image"),
+        ("task-timeout", "task_timeout"),
+        ("retries", "max_retries"),
+        ("memory", "memory"),
+        (
+            "second-container",
+            "args, command, cpu, environment, image, memory, secrets, single_container",
+        ),
+    ],
+)
+def test_migration_readback_names_each_drifted_field(drift: str, expected: str) -> None:
+    result = _run_migration_readback(
+        _migration_job_payload(FAKE_IMMUTABLE_API_IMAGE, drift=drift)
+    )
 
     assert result.returncode != 0
-    assert "caseops-migrate-job database timeout drift" in result.stderr
+    assert f"caseops-migrate-job contract drift: {expected}" in result.stderr
+    output = result.stdout + result.stderr
+    assert "migrate-job contract verified." not in output
+    # Drifted values stay out of release logs; only field and variable names print.
+    for value in ("424242", "canary-extra-value", "default-compute@"):
+        assert value not in output
+
+
+def test_deploy_prod_refuses_migration_job_drift_before_execution(
+    tmp_path: Path,
+) -> None:
+    result = _run_deploy_with_fakes(tmp_path, migration_job_drift="lock-timeout")
+
+    assert result.returncode != 0
+    assert (
+        "caseops-migrate-job contract drift: environment "
+        "(variables: CASEOPS_MIGRATION_DB_LOCK_TIMEOUT_MS)"
+    ) in result.stderr
     calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8")
     assert "run jobs update caseops-migrate-job" in calls
     assert "run jobs describe caseops-migrate-job" in calls
     assert "run jobs execute caseops-migrate-job" not in calls
+
+
+MIGRATION_JOB_CONTRACT_FLAGS = (
+    "--command python",
+    "--args ^|^-m|alembic|upgrade|head",
+    "--service-account caseops-runtime@perfect-period-305406.iam.gserviceaccount.com",
+    "--set-env-vars CASEOPS_ENV=cloud,CASEOPS_AUTO_MIGRATE=false,"
+    "CASEOPS_MIGRATION_DB_CONNECT_TIMEOUT_SECONDS=10,"
+    "CASEOPS_MIGRATION_DB_STATEMENT_TIMEOUT_MS=900000,"
+    "CASEOPS_MIGRATION_DB_LOCK_TIMEOUT_MS=5000,"
+    "CASEOPS_MIGRATION_DB_IDLE_TRANSACTION_TIMEOUT_MS=60000 ",
+    "--set-secrets CASEOPS_DATABASE_URL=caseops-database-url:latest,"
+    "CASEOPS_AUTH_SECRET=caseops-auth-secret:latest ",
+    "--set-cloudsql-instances perfect-period-305406:asia-south1:caseops-db",
+    "--cpu 1 ",
+    "--memory 512Mi",
+    "--task-timeout 30m",
+    "--max-retries 1 ",
+    f"--image {FAKE_IMMUTABLE_API_IMAGE}",
+)
+
+
+def _migration_calls(tmp_path: Path) -> list[str]:
+    return [
+        call
+        for call in (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+        if "caseops-migrate-job" in call
+    ]
+
+
+def test_deploy_prod_converges_the_complete_migration_job_contract(tmp_path: Path) -> None:
+    result = _run_deploy_with_fakes(tmp_path, "abcdef1")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "migrate-job contract verified." in result.stdout
+    calls = _migration_calls(tmp_path)
+    kinds = [call.split(" caseops-migrate-job", 1)[0] for call in calls]
+    assert kinds == [
+        "run jobs describe",
+        "run jobs update",
+        "run jobs describe",
+        "run jobs execute",
+    ], calls
+    update = calls[1]
+    for flag in MIGRATION_JOB_CONTRACT_FLAGS:
+        assert flag in update, flag
+    # A partial --update-env-vars would keep whatever else the live job carries.
+    assert "--update-env-vars" not in update
+    assert "--update-secrets" not in update
+    assert "--format=json" in calls[2]
+
+
+def test_deploy_prod_creates_a_missing_migration_job_with_the_complete_contract(
+    tmp_path: Path,
+) -> None:
+    result = _run_deploy_with_fakes(tmp_path, "abcdef1", migration_job_missing=True)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = _migration_calls(tmp_path)
+    kinds = [call.split(" caseops-migrate-job", 1)[0] for call in calls]
+    assert kinds == [
+        "run jobs describe",
+        "run jobs create",
+        "run jobs describe",
+        "run jobs execute",
+    ], calls
+    for flag in MIGRATION_JOB_CONTRACT_FLAGS:
+        assert flag in calls[1], flag
 
 
 def test_deploy_prod_fails_before_routing_if_qa_repin_executes_the_job(
