@@ -17672,6 +17672,41 @@ export interface components {
             source_text_sha256?: string | null;
             source_update: components["schemas"]["CaseTrackingUpdateRecord"];
         };
+        /**
+         * CaseTrackingSearchReplay
+         * @description How an automated verification search was answered without a provider call.
+         *
+         *     Present only when a request carrying both the no-paid-provider automation
+         *     marker and the replay opt-in was answered from a server-owned verification
+         *     fixture's stored, integrity-verified provider lookup retrieved at most
+         *     ``max_age_seconds`` ago. Human requests never receive replayed results.
+         */
+        CaseTrackingSearchReplay: {
+            /** Evidence Age Seconds */
+            evidence_age_seconds: number;
+            /**
+             * Evidence Captured At
+             * Format: date-time
+             */
+            evidence_captured_at: string;
+            /** Fixture Key */
+            fixture_key: string;
+            /** Max Age Seconds */
+            max_age_seconds: number;
+            /**
+             * Provider Call Performed
+             * @default false
+             * @constant
+             */
+            provider_call_performed: false;
+            /** Snapshot Sha256 */
+            snapshot_sha256: string;
+            /**
+             * Status
+             * @constant
+             */
+            status: "served";
+        };
         /** CaseTrackingSearchRequest */
         CaseTrackingSearchRequest: {
             /** Case Number */
@@ -17693,6 +17728,7 @@ export interface components {
         CaseTrackingSearchResponse: {
             /** Provider */
             provider: string;
+            replay?: components["schemas"]["CaseTrackingSearchReplay"] | null;
             /** Results */
             results: components["schemas"]["CaseTrackingSearchResultRecord"][];
         };
