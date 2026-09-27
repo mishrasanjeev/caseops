@@ -120,7 +120,8 @@ def test_no_checked_in_manifest_declares_a_cloud_run_job() -> None:
         for document in _documents(path)
         if isinstance(document, dict)
         and document.get("kind") == "Job"
-        and str(document.get("apiVersion", "")).startswith("run.googleapis.com/")
+        # apiVersion is "<group>/<version>"; compare the whole group.
+        and str(document.get("apiVersion", "")).partition("/")[0] == "run.googleapis.com"
     ]
 
     assert jobs == [], (
