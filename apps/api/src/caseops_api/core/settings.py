@@ -525,7 +525,7 @@ class Settings(BaseSettings):
                 "CASEOPS_AUTO_MIGRATE=true is rejected when "
                 f"CASEOPS_ENV={self.env!r}. Set CASEOPS_AUTO_MIGRATE=false "
                 "and run alembic via the caseops-migrate-job Cloud Run Job "
-                "as a deploy step (see infra/cloudrun/migrate-job.yaml).",
+                "as a deploy step (step 2 of scripts/deploy-prod.sh).",
             )
         return self
 

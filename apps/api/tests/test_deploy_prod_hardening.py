@@ -220,17 +220,14 @@ def test_production_definitions_block_paid_providers_for_test_tenants() -> None:
     poll_job = next(
         job for job in inventory["jobs"] if job["run_job_name"] == "caseops-case-tracking-poll"
     )
-    poll_manifest = _read_repo_text("infra/cloudrun/case-tracking-poll-job.yaml")
     deploy = _read_repo_text("scripts/deploy-prod.sh")
 
-    # The inventory bootstrap contract is the verified definition of the live
-    # poll job; the reference manifest must not drift on this boundary either.
+    # The inventory bootstrap contract is the only definition of the poll job,
+    # and scheduler_inventory.py verifies it against the live job every release.
     assert (
         poll_job["bootstrap"]["environment"]["CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS"]
         == blocked_slugs
     )
-    assert "CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS" in poll_manifest
-    assert f'"{blocked_slugs}"' in poll_manifest
     assert f'PAID_PROVIDER_BLOCKED_COMPANY_SLUGS="{blocked_slugs}"' in deploy
     assert (
         "CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS="
@@ -857,6 +854,11 @@ def test_migration_job_binds_and_verifies_dedicated_database_timeouts() -> None:
         "CASEOPS_MIGRATION_DB_IDLE_TRANSACTION_TIMEOUT_MS": "60000",
     }
 
+    # The release is the job's only checked-in definition. The retired
+    # migrate-job.yaml was never applied: the live job was created with
+    # `gcloud run jobs create` on 2026-04-23, and the YAML's environment lacked
+    # CASEOPS_AUTO_MIGRATE=false, which the cloud settings validator requires.
+    assert not (REPO_ROOT / "infra" / "cloudrun" / "migrate-job.yaml").exists()
     assert "MIGRATION_TASK_TIMEOUT=30m" in script
     assert "MIGRATION_JOB=caseops-migrate-job" in script
     for name, value in expected.items():

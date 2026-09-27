@@ -83,7 +83,6 @@ RISKY_PATHS = {
     "apps/api/src/caseops_api/services/domain_outbox.py",
     "apps/api/src/caseops_api/services/embeddings.py",
     "apps/api/src/caseops_api/services/llm.py",
-    "infra/cloudrun/document-worker-job.yaml",
 }
 RISKY_SOURCE_ROOTS = (
     "apps/api/src/",
@@ -621,7 +620,7 @@ def _non_sql_data_classes() -> list[dict[str, object]]:
             "source_licence_limits": "Inherits source object and tenant access restrictions.",
             "implementation_refs": [
                 "apps/api/src/caseops_api/services/document_storage.py",
-                "infra/cloudrun/document-worker-job.yaml",
+                "apps/api/src/caseops_api/core/settings.py",
             ],
         },
         {

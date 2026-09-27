@@ -356,7 +356,7 @@
       "source_licence_limits": "Inherits source object and tenant access restrictions.",
       "implementation_refs": [
         "apps/api/src/caseops_api/services/document_storage.py",
-        "infra/cloudrun/document-worker-job.yaml"
+        "apps/api/src/caseops_api/core/settings.py"
       ]
     },
     {
@@ -563,7 +563,6 @@
         "apps/api/src/caseops_api/scripts/seed_indian_kanoon_costs.py",
         "apps/api/src/caseops_api/services/pine_labs.py",
         "scripts/deploy-prod.sh",
-        "infra/cloudrun/case-tracking-poll-job.yaml",
         "infra/cloudrun/scheduler-inventory.json"
       ]
     },

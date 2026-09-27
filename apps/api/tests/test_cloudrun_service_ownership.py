@@ -8,6 +8,10 @@ infra/cloudrun/api-service.yaml, retired on 2026-09-27, disagreed with the live
 service on command, billing mode, sidecar, probes, CPU boost and CASEOPS_ENV.
 A full-spec `gcloud run services replace` from it would have dropped the
 scanner and produced a revision unable to pass its required-scanner fence.
+The six job YAMLs retired the same day disagreed with the live jobs as well:
+`uv run` commands the inventory forbids, a migration job whose declared
+environment fails the cloud settings validator, and a document worker that
+was never provisioned and could not start without its auth secret.
 """
 
 from __future__ import annotations
@@ -78,15 +82,19 @@ def _operator_lines(path: Path) -> Iterator[tuple[int, str]]:
             yield number, line
 
 
-def test_no_checked_in_manifest_declares_a_cloud_run_service() -> None:
+def _manifests() -> list[Path]:
     manifests = [path for path in _governed_files() if path.suffix in MANIFEST_SUFFIXES]
     # A snapshot without these roots would otherwise pass having scanned nothing.
     assert {
         "infra/cloudrun/scheduler-inventory.json",
-        "infra/cloudrun/migrate-job.yaml",
         ".github/workflows/ci.yml",
         "apps/api/cloudbuild.yaml",
     } <= {_relative(path) for path in manifests}
+    return manifests
+
+
+def test_no_checked_in_manifest_declares_a_cloud_run_service() -> None:
+    manifests = _manifests()
 
     services = [
         _relative(path)
@@ -102,6 +110,23 @@ def test_no_checked_in_manifest_declares_a_cloud_run_service() -> None:
     assert services == [], (
         "Cloud Run services are deployed only by scripts/deploy-prod.sh; a full-spec "
         f"service manifest can drop the ClamAV sidecar and live-only settings: {services}"
+    )
+
+
+def test_no_checked_in_manifest_declares_a_cloud_run_job() -> None:
+    jobs = [
+        _relative(path)
+        for path in _manifests()
+        for document in _documents(path)
+        if isinstance(document, dict)
+        and document.get("kind") == "Job"
+        and str(document.get("apiVersion", "")).startswith("run.googleapis.com/")
+    ]
+
+    assert jobs == [], (
+        "Recurring jobs are defined by infra/cloudrun/scheduler-inventory.json and the "
+        "migration and release jobs by scripts/deploy-prod.sh, which converge and read "
+        f"them back on every release; a second job specification only drifts: {jobs}"
     )
 
 
