@@ -4301,9 +4301,26 @@ export type CaseTrackingSearchResult = {
   linked_to_matter?: boolean;
 };
 
+/**
+ * Present only when an automated verification request that opted in was
+ * answered from a verification fixture's stored provider lookup retrieved at
+ * most `max_age_seconds` ago. Human requests never receive replayed results.
+ */
+export type CaseTrackingSearchReplay = {
+  status: "served";
+  fixture_key: string;
+  provider_call_performed: false;
+  evidence_captured_at: string;
+  evidence_age_seconds: number;
+  max_age_seconds: number;
+  snapshot_sha256: string;
+};
+
 export type CaseTrackingSearchResponse = {
   provider: string;
   results: CaseTrackingSearchResult[];
+  /** Optional on the wire; null for every live lookup. */
+  replay?: CaseTrackingSearchReplay | null;
 };
 
 export type TrackedCaseRecord = {
