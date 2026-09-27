@@ -1,5 +1,26 @@
 # Paid provider test-cost audit — 2026-09-03
 
+> **Amended 2026-09-27 (owner decision): one capped verification lookup a day.**
+> Automated production runs could only assert the no-paid rejection, so a fix to
+> a provider search (BUG-032) could never be observed by them. The owner approved
+> exactly one automated paid call: the window-enforcing 18:00 IST case-tracking
+> job refreshes each checked-in verification fixture
+> (`case_tracking_verification.py`; today one CNR in `caseops-qa`) with the same
+> CNR lookup a live search makes, at most once per Asia/Kolkata day including
+> failures. That is at most ₹1.50 a day, about ₹46.50 a month, reserved against
+> the workspace budget before transport. It is not a release canary: a deploy,
+> a forced or unwindowed poll, a request or a test process can never trigger it,
+> lease recovery never retries it, and its evidence is never published to the
+> tracked case. Automated verification may then replay that stored lookup, but
+> only when the request carries both `X-CaseOps-Automated-Test:
+> no-paid-providers` and `X-CaseOps-Provider-Replay: verified-fresh`, searches
+> the fixture's CNR in the fixture's own workspace, and the evidence was
+> retrieved at most 24 hours earlier, verifies its hashes and was not superseded
+> by a later not-found or unreadable answer. Otherwise the request is refused
+> with a typed `replay.status` (`missing`, `stale`, `superseded`,
+> `integrity_failed`, `not_a_verification_fixture` or `unsupported_query`) and no
+> provider call. Every other rule below is unchanged.
+
 > **Superseded 2026-09-04:** the one-credit-bearing automated canary described
 > below has been retired. Automated verification may read CaseOps provider
 > readiness and the tenant's CaseOps-recorded budget balance, and it must retain
