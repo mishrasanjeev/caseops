@@ -13,7 +13,7 @@ IDENTITY_REQUIRED = (
 )
 CASE_TYPE_REQUIRED = (
     "Add the case type to the case number (for example WP(C) 6209/2019), "
-    "or record the CNR, before linking this Matter to a court case."
+    "or record the CNR, before this Matter can be matched to a court case."
 )
 CASE_NUMBER_UNREADABLE = (
     "CaseOps could not read the recorded case number. Record one case as its "
@@ -22,7 +22,7 @@ CASE_NUMBER_UNREADABLE = (
 )
 CNR_INVALID = (
     "The recorded CNR is not a valid 16-character CNR (four letters and twelve "
-    "digits). Correct it before linking this Matter to a court case."
+    "digits). Correct it before this Matter can be matched to a court case."
 )
 
 IdentityGap = Literal[
@@ -88,8 +88,10 @@ def untyped_case_number(identity: HearingIdentity) -> bool:
 def identity_gap(identity: HearingIdentity) -> IdentityGap | None:
     """Name the one reason a Matter cannot yet be matched to a court case.
 
-    Manual search, resolve and link share this with the refresh policy so the
-    user is told what to record instead of a generic "insufficient identifiers":
+    Manual search, resolve and link, automatic linking and backfill, and the
+    refresh and polling of automatic links all apply this one decision to a
+    Matter's recorded identity, and tell the user what to record instead of a
+    generic "insufficient identifiers":
     a malformed CNR, no court or number at all, a case number CaseOps cannot
     read as one type/number/year, or a number without its case type.
     """

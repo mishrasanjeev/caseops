@@ -1212,6 +1212,13 @@ requirements when using the fallback.
 - "Insufficient identifiers" is not an explanation. When a legal record cannot
   be matched, return the one machine-readable gap (`identity_gap`: invalid CNR,
   missing identifiers, unreadable case number, case type required) with the
-  recorded value, on the same policy for search, resolve, link and refresh, and
-  render that reason. A compound entry naming two records is unreadable; never
-  guess which number is the case.
+  recorded value, on the same policy for manual search, resolve and link,
+  automatic linking and backfill, and the refresh and polling of automatic
+  links, and render that reason. A compound entry naming two records is
+  unreadable; never guess which number is the case.
+- A unified identity policy has no path-specific exceptions. Requiring a typed
+  case number for manual linking while automatic linking and refresh kept the
+  weaker check let a provider's only `CRL.A. 6209/2019` result, and its hearing
+  date, attach to a `WP(C) 6209/2019` Matter. Inventory every caller of the old
+  predicate before narrowing it, and regress each path with a provider that
+  publishes exactly one case of another type: zero searches, zero writes.

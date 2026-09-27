@@ -60,8 +60,9 @@ divergent rule: same CNR plus a different court label must give `no_match`.
   case number that carries its case type. A bare `6209/2019` returns an
   actionable 409 (`CASE_TYPE_REQUIRED`) or `insufficient_identifiers`, because
   registries reuse numbers across case types (WP(C) 6209/2019 and CRL.A.
-  6209/2019 share a court). Scheduled refresh of an already-linked bookmark
-  keeps its exactly-one rule.
+  6209/2019 share a court). This first version kept the weaker check for
+  automatic linking and the refresh of automatic links; review on 2026-09-27
+  found that exception and it is removed (see "Production run 1").
 - Docker acceptance finding, fixed: a search result without the optional
   `existing_matters` context (older responses, dated browser mocks) crashed the
   page into the workspace error boundary. The row treats a missing list as
@@ -202,7 +203,11 @@ could pass while the user-visible invariant was broken.
    prove a file exists, not that anyone can read it. The same blind spot hid the
    invoice's off-page Matter line.
 4. **Duplicated policy (BUG-032).** Two functions made the same identity
-   decision, and a strictness change landed in one of them.
+   decision, and a strictness change landed in one of them. The first
+   unification then repeated the mistake as an exception: manual paths required
+   a typed case number while automatic linking and its refresh did not. A
+   reproduction on that commit re-pointed a bare `6209/2019` Matter to the
+   provider's only `CRL.A. 6209/2019` result and wrote that case's hearing date.
 5. **Reproductions that silently tested the fix.** On 2026-09-26, the first
    attempt to rerun the new tests against the old commit passed. pytest's
    `pythonpath = ["src"]` had imported the candidate's source. A real
@@ -251,6 +256,38 @@ a year and a court. Fixed product-wide:
 - A new dated journey creates an unreadable, an untyped and a readable Matter
   and asserts the exact message for each; it runs locally, in Docker and in
   production.
+
+**Review finding (P1) on this follow-up, fixed.** Manual search, resolve and link
+required a typed case number, but automatic linking at Matter creation, the
+scheduled existing-Matter backfill and the refresh and polling of automatic links
+still used the weaker `reliable_identity` check. `_number_matches` accepts any
+case type for a bare number, so a provider that publishes exactly one case under
+that number and court decided the Matter's case. Reproduced on `452ae52d` in a
+separate checkout: the refresh returned 200, re-pointed the tracked case to
+`CRL.A. 6209/2019` and wrote its hearing date on a Matter that was
+`WP(C) 6209/2019`; the backfill searched the bare number.
+
+- Every path that establishes or keeps a case from a Matter's recorded identity
+  now calls `identity_gap`: auto-link at creation (skipped with the reason),
+  backfill (skipped), the automatic source refresh and provider dispatch (409
+  with the reason, before any spend or transport), and the tracked case's
+  readiness (`manual_refresh_disabled_reason` names the gap). Publication already
+  requires the dispatch-time scopes unchanged, so the same decision holds when
+  results are persisted.
+- A CNR still decides; a bare secondary number beside a CNR is corroboration.
+  Bookmarks without a Matter keep the coarse check, because an automatic link
+  stores a filing number in the tracked case's `case_number`.
+- Regressions (all fail on `452ae52d`): auto-link for bare, unreadable, typed,
+  filing-only and CNR Matters; a backfill where the provider publishes exactly
+  one case of another type (zero searches for the bare number, no date); an
+  existing automatic link whose Matter loses its type (409, readiness reason,
+  zero provider calls, no date), then restored (the type selects `WP(C)` from
+  two published cases).
+
+**Contract change, recorded.** An existing automatic link whose Matter records
+only a bare `number/year` and no CNR stops refreshing, with "Add the case type to
+the case number ... or record the CNR" on the bookmark, until the type or CNR is
+recorded. Dates already written are retained; nothing is cleared.
 
 ## Verification
 

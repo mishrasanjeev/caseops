@@ -616,6 +616,28 @@ def _lock_provider_company(session: Session, company_id: str) -> None:
         raise HTTPException(status_code=404, detail="Company not found.")
 
 
+def _scope_identity_gap(scopes: tuple[HearingScope, ...]) -> str | None:
+    """The first reason a hearing scope cannot establish its case, if any.
+
+    A Matter scope is the user's recorded identity and gets exactly the
+    identity_gap decision that manual search, resolve and link apply, so a bare
+    number/year cannot find a case automatically either. A bookmark without a
+    Matter carries the tracked case's stored fields, where an automatic link keeps
+    a filing number in case_number, so it keeps the coarse reliability check.
+    """
+
+    for scope in scopes:
+        if scope.matter_id is not None:
+            gap = identity_gap(scope.identity)
+        elif not reliable_identity(scope.identity):
+            gap = "missing_identifiers"
+        else:
+            gap = None
+        if gap is not None:
+            return gap
+    return None
+
+
 def _capture_provider_attempt(
     session: Session,
     *,
@@ -625,17 +647,15 @@ def _capture_provider_attempt(
     reservation_id: str | None,
 ) -> _ProviderAttempt:
     hearing_scopes = capture_hearing_scopes(session, context=context, tracked_case=tracked_case)
-    if (
-        tracked_case.cnr_number
-        and not reliable_identity(HearingIdentity(cnr=tracked_case.cnr_number))
-    ) or (
-        not tracked_case.cnr_number
-        and (
-            not hearing_scopes
-            or any(not reliable_identity(scope.identity) for scope in hearing_scopes)
-        )
-    ):
-        raise HTTPException(409, IDENTITY_REQUIRED)
+    if tracked_case.cnr_number:
+        if not reliable_identity(HearingIdentity(cnr=tracked_case.cnr_number)):
+            raise HTTPException(409, IDENTITY_REQUIRED)
+    else:
+        # Without a CNR the provider search establishes the case, so every scope
+        # must name one case under the same decision as manual linking.
+        gap = _scope_identity_gap(hearing_scopes) if hearing_scopes else "missing_identifiers"
+        if gap is not None:
+            raise HTTPException(409, IDENTITY_GAP_MESSAGES[gap])
     operation.spend_reservation_id = reservation_id
     operation.metadata_json = {
         **(operation.metadata_json or {}),
@@ -678,8 +698,13 @@ def _refresh_automatic_source_identity(
         return
     scopes = capture_hearing_scopes(session, context=context, tracked_case=tracked_case)
     identities = tuple(scope.identity for scope in scopes)
-    if not identities or any(not reliable_identity(identity) for identity in identities):
+    if not identities:
         raise HTTPException(409, IDENTITY_REQUIRED)
+    # An automatic link's case, and any CNR later learned for it, is only as good
+    # as the Matter identity that found it: apply the manual link decision.
+    gap = _scope_identity_gap(scopes)
+    if gap is not None:
+        raise HTTPException(409, IDENTITY_GAP_MESSAGES[gap])
     first = identities[0]
     if any(
         (item.cnr, item.case_number, item.filing_number, item.court_name)
@@ -2165,16 +2190,24 @@ def _tracked_case_record(
     provider_health_red = (
         case.last_response_class in _RED_PROVIDER_RESPONSE_CLASSES and not transient_failure
     )
-    identity_ready = reliable_identity(
-        matter_identity(matching_matter)
-        if matching_matter is not None and automatic_matter_link(case)
-        else HearingIdentity(
-            cnr=case.cnr_number,
-            case_number=case.case_number,
-            court_code=case.court_code,
-            court_name=case.court_name,
+    # Automatic links identify the case from the Matter's recorded identifiers,
+    # so readiness uses the same identity_gap decision as refresh and linking.
+    if matching_matter is not None and automatic_matter_link(case):
+        identity_problem = identity_gap(matter_identity(matching_matter))
+    else:
+        identity_problem = (
+            None
+            if reliable_identity(
+                HearingIdentity(
+                    cnr=case.cnr_number,
+                    case_number=case.case_number,
+                    court_code=case.court_code,
+                    court_name=case.court_name,
+                )
+            )
+            else "missing_identifiers"
         )
-    )
+    identity_ready = identity_problem is None
     manual_allowed = bool(
         enabled
         and identity_ready
@@ -2201,8 +2234,8 @@ def _tracked_case_record(
         )
     elif not enabled or not configured:
         disabled_reason = provider_reason or "Case tracking provider health is red."
-    elif not identity_ready:
-        disabled_reason = IDENTITY_REQUIRED
+    elif identity_problem is not None:
+        disabled_reason = IDENTITY_GAP_MESSAGES[identity_problem]
     return TrackedCaseRecord(
         id=case.id,
         provider=case.provider,
@@ -2514,10 +2547,12 @@ def auto_link_matter_case_tracking(
     normalized_cnr = normalize_cnr(matter.cnr_number)
     cnr_number = matter.cnr_number if normalized_cnr and len(normalized_cnr) >= 8 else None
     case_number = matter.case_number or matter.filing_number
-    if not reliable_identity(matter_identity(matter)):
+    # Linking establishes identity: the same decision as manual search and link.
+    gap = identity_gap(matter_identity(matter))
+    if gap is not None:
         return MatterCaseTrackingAutoLinkResult(
             status="skipped",
-            reason=IDENTITY_REQUIRED,
+            reason=IDENTITY_GAP_MESSAGES[gap],
         )
 
     party_names = [
@@ -4509,7 +4544,7 @@ def backfill_existing_matter_case_tracking(
         normalized_cnr = normalize_cnr(matter.cnr_number)
         cnr = matter.cnr_number if normalized_cnr and len(normalized_cnr) >= 8 else None
         case_number = matter.case_number or matter.filing_number
-        if not reliable_identity(matter_identity(matter)):
+        if identity_gap(matter_identity(matter)) is not None:
             skipped += 1
             continue
         support_row = _support_row_for_matter(support_rows, court_name=matter.court_name)

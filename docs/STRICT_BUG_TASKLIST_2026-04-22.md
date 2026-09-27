@@ -1812,9 +1812,17 @@ body; registry-shaped fixture; and, product-wide, `identity_gap` so search,
 resolve and link tell the user which of invalid CNR, missing identifiers,
 unreadable case number or missing case type to correct, with the recorded value,
 and a parser that reads `No.`/`of`/hyphen spellings of one case identity while
-rejecting compound entries. New tests: `test_20260927_case_identity_readability.py`
-(42 cases) and the dated journey "a Matter that cannot be matched is told
-exactly what to record". Maintenance cadence remains paused until a green run.
+rejecting compound entries. Review of that change (P1) found automatic linking,
+the scheduled backfill and the refresh/polling of automatic links still accepted
+a bare number; a reproduction on `452ae52d` re-pointed a `WP(C) 6209/2019`
+Matter to the provider's only `CRL.A. 6209/2019` result and wrote its hearing
+date. Every path that establishes or keeps a case from a Matter's identity now
+calls `identity_gap` before any provider spend; existing bare-number automatic
+links stop refreshing with the case-type reason (recorded contract change). New
+tests: `test_20260927_case_identity_readability.py` (49 cases; the automatic-path
+regressions fail on the pre-fix commit) and the dated journey "a Matter that
+cannot be matched is told exactly what to record". Maintenance cadence remains
+paused until a green run.
 
 Verdict for all three rows until the dated spec passes on the deployed release:
 **Inconclusive**. The production run proves the no-paid gate for BUG-032; the
