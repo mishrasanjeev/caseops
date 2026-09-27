@@ -282,7 +282,9 @@ separate checkout: the refresh returned 200, re-pointed the tracked case to
   one case of another type (zero searches for the bare number, no date); an
   existing automatic link whose Matter loses its type (409, readiness reason,
   zero provider calls, no date), then restored (the type selects `WP(C)` from
-  two published cases).
+  two published cases). `test_20260927_case_identity_readability_postgres.py`
+  repeats them on PostgreSQL, where the scheduled poll gates each tracked case
+  inside a savepoint.
 
 **Contract change, recorded.** An existing automatic link whose Matter records
 only a bare `number/year` and no CNR stops refreshing, with "Add the case type to

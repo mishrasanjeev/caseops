@@ -1820,7 +1820,7 @@ date. Every path that establishes or keeps a case from a Matter's identity now
 calls `identity_gap` before any provider spend; existing bare-number automatic
 links stop refreshing with the case-type reason (recorded contract change). New
 tests: `test_20260927_case_identity_readability.py` (49 cases; the automatic-path
-regressions fail on the pre-fix commit) and the dated journey "a Matter that
+regressions fail on the pre-fix commit), its PostgreSQL wrapper (9 cases) and the dated journey "a Matter that
 cannot be matched is told exactly what to record". Maintenance cadence remains
 paused until a green run.
 

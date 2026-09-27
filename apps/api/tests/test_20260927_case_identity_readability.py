@@ -324,29 +324,29 @@ def _auto_link_metadata(matter_id: str) -> dict:
         return json.loads(created.metadata_json or "{}")["case_tracking_auto_link"]
 
 
-@pytest.mark.parametrize(
-    ("code", "fields", "expected"),
-    [
-        (
-            "AUTO-BARE",
-            {"case_number": "6209/2019"},
-            {"status": "skipped", "reason": CASE_TYPE_REQUIRED},
-        ),
-        (
-            "AUTO-HEX",
-            {"case_number": "WP(C) 6d661b/2026"},
-            {"status": "skipped", "reason": CASE_NUMBER_UNREADABLE},
-        ),
-        ("AUTO-TYPED", {"case_number": "WP(C) 6209/2019"}, {"status": "linked"}),
-        ("AUTO-FILING", {"filing_number": "421/2026"}, {"status": "linked"}),
-        # A CNR decides; its bare secondary number is only corroboration.
-        (
-            "AUTO-CNR",
-            {"case_number": "6209/2019", "cnr_number": _WPC_CNR},
-            {"status": "linked"},
-        ),
-    ],
-)
+AUTO_LINK_CASES = [
+    (
+        "AUTO-BARE",
+        {"case_number": "6209/2019"},
+        {"status": "skipped", "reason": CASE_TYPE_REQUIRED},
+    ),
+    (
+        "AUTO-HEX",
+        {"case_number": "WP(C) 6d661b/2026"},
+        {"status": "skipped", "reason": CASE_NUMBER_UNREADABLE},
+    ),
+    ("AUTO-TYPED", {"case_number": "WP(C) 6209/2019"}, {"status": "linked"}),
+    ("AUTO-FILING", {"filing_number": "421/2026"}, {"status": "linked"}),
+    # A CNR decides; its bare secondary number is only corroboration.
+    (
+        "AUTO-CNR",
+        {"case_number": "6209/2019", "cnr_number": _WPC_CNR},
+        {"status": "linked"},
+    ),
+]
+
+
+@pytest.mark.parametrize(("code", "fields", "expected"), AUTO_LINK_CASES)
 def test_automatic_link_at_matter_creation_uses_the_manual_identity_decision(
     client: TestClient, monkeypatch, code, fields, expected
 ) -> None:
