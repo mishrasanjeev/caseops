@@ -18,7 +18,7 @@ the workbook are intentionally not reproduced here.
 
 | ID | Classification | Verdict | Proof |
 | --- | --- | --- | --- |
-| BUG-032 | Valid bug (product-level policy contradiction) | Properly fixed | `test_20260926_case_match_policy.py`, `test_20260927_case_identity_readability.py`, `ram-2026-09-26-bugs.spec.ts` BUG-032 |
+| BUG-032 | Valid bug (product-level policy contradiction) | Inconclusive: fix deployed, production search not yet observed | `test_20260926_case_match_policy.py`, `test_20260927_case_identity_readability.py`, `ram-2026-09-26-bugs.spec.ts` BUG-032 |
 | BUG-033 | Valid bug (layout and latent crash) | Properly fixed | `test_20260926_pdf_table_layout.py`, `ram-2026-09-26-bugs.spec.ts` BUG-033 |
 | BUG-034 | Valid bug, **reopened** regression of the 2026-09-24 change | Properly fixed | `ram-2026-09-26-bugs.spec.ts` BUG-034 and layout sweep |
 
@@ -337,4 +337,12 @@ running BUG-032/033/034 and the identity-gap journey against the serving
 release; private projection maintenance re-certified (executions `caseops-private-projection-maintenance-pvwnm`,
 `caseops-private-projection-maintenance-wsksk`).
 
-All three rows: **Properly fixed**.
+BUG-033 and BUG-034: **Properly fixed**; their dated journeys exercise the fix
+itself in production (the downloaded PDF is parsed against its column borders;
+the Tasks forms are measured at seven widths and saved).
+
+BUG-032: **Inconclusive** until one human search on the deployed release. The
+fix is proven by the identity tests on SQLite and PostgreSQL and end to end in
+Docker on the same image, but automated production runs may not spend provider
+credits, so the production branch only proves the no-paid gate. The
+confirmation step is recorded in the ledger.

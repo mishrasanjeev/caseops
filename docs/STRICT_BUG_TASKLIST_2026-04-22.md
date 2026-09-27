@@ -1887,14 +1887,26 @@ Production run 3, 2026-09-27 (run 36301223622 on `328761c54ffc9d48522aae2fe3e286
 
 Verdicts:
 
-- **BUG-032: Properly fixed.** Search, resolve, link, automatic linking and
-  backfill, refresh, polling and next-hearing sync share one identity decision,
-  proven on SQLite and PostgreSQL, including the automatic-path regressions that
-  fail on the pre-fix commit; the browser journey (search, link, reload, global
-  search, "Open matter") passed in Docker on the exact image and repeatedly as
-  the tester-supplied account; production proves the same release serves the
-  route, the no-paid gate and the reason-specific identity messages. The live
-  paid search remains human use under readiness and budget gates.
+- **BUG-032: Inconclusive (fix deployed; production search not yet observed).**
+  Search, resolve, link, automatic linking and backfill, refresh, polling and
+  next-hearing sync share one identity decision, proven on SQLite and
+  PostgreSQL, including the automatic-path regressions that fail on the pre-fix
+  commit, and the browser journey (search, link, reload, global search, "Open
+  matter") passed in Docker on the exact image and repeatedly as the
+  tester-supplied account. Production, however, cannot exercise the fix
+  automatically: automated runs must not spend provider credits, so the
+  production branch asserts the no-paid 409 and returns before any Matter,
+  provider result or matcher decision exists. The reported search has
+  therefore not been re-run on the deployed release (review of this entry,
+  and `AGENTS.md`: test the exact reported search inputs through the browser).
+  To close it, a person (the tester or the owner) repeats the reported search
+  once on the deployed release, which is ordinary human use of the funded
+  provider: open the reported Matter (CNR `DLHC010317282019`), choose Case
+  tracking, search that CNR, and confirm the result shows "Linked to this
+  Matter" or a Link action and never "Does not match this Matter"; then search
+  the same CNR outside the Matter and confirm "Open matter" opens it. Record the
+  time and the release shown by `/api/release-identity`; that observation
+  changes the verdict to Properly fixed.
 - **BUG-033: Properly fixed.** Glyph-position assertions and the pdf.js browser
   check show every value inside its own column on the deployed release.
 - **BUG-034: Properly fixed.** Container-query sizing verified at seven widths
