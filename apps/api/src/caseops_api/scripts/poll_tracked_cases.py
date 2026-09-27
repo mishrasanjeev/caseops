@@ -64,6 +64,16 @@ def main(argv: list[str] | None = None) -> int:
                 run.backlog_remaining_count,
                 run.error_count,
             )
+            for outcome in run.metadata.get("verification_fixture_refresh") or []:
+                logger.info(
+                    "case tracking verification fixture company=%s fixture=%s outcome=%s "
+                    "response_class=%s reason=%s",
+                    run.company_id,
+                    outcome.get("fixture_key"),
+                    outcome.get("outcome"),
+                    outcome.get("response_class"),
+                    outcome.get("reason"),
+                )
     return 0
 
 

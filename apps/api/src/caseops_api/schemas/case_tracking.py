@@ -131,9 +131,28 @@ class CaseTrackingSearchResultRecord(BaseModel):
     linked_to_matter: bool = False
 
 
+class CaseTrackingSearchReplay(BaseModel):
+    """How an automated verification search was answered without a provider call.
+
+    Present only when a request carrying both the no-paid-provider automation
+    marker and the replay opt-in was answered from a server-owned verification
+    fixture's stored, integrity-verified provider lookup retrieved at most
+    ``max_age_seconds`` ago. Human requests never receive replayed results.
+    """
+
+    status: Literal["served"]
+    fixture_key: str
+    provider_call_performed: Literal[False] = False
+    evidence_captured_at: datetime
+    evidence_age_seconds: int = Field(ge=0)
+    max_age_seconds: int = Field(gt=0)
+    snapshot_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class CaseTrackingSearchResponse(BaseModel):
     provider: str
     results: list[CaseTrackingSearchResultRecord]
+    replay: CaseTrackingSearchReplay | None = None
 
 
 class MatterCaseCandidateRecord(CaseTrackingSearchResultRecord):

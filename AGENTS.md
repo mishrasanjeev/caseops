@@ -428,7 +428,9 @@ requirements when using the fallback.
   verification may read CaseOps readiness and recorded budget balances, but it
   must not omit the marker or execute search, detail, refresh, retrieval, PDF,
   or other credit-bearing calls. Normal authenticated human use remains
-  available for funded live tenants under readiness and budget gates.
+  available for funded live tenants under readiness and budget gates. The one
+  owner-approved exception (2026-09-27) is the capped scheduled
+  verification-fixture lookup described in the last learning of this file.
 - The explicit no-paid-provider request marker is authoritative in every
   runtime, including production and real tenants. Do not make it depend on a
   test-looking tenant slug. Keep funded production tenants out of the static
@@ -1247,6 +1249,20 @@ requirements when using the fallback.
   within 0.5 s. Start only the primary reads, load pickers on demand, and never
   add a duplicate read to hide a slow primary: bound the primary. The API's own
   startup, not the ClamAV sidecar, was the critical path in 332 of 343 starts.
+- Automated production runs that may only assert the no-paid rejection cannot
+  observe a provider-search fix. Replay stored evidence instead of spending: a
+  checked-in verification fixture is refreshed only by the window-enforcing
+  18:00 IST scheduled job, with the exact live CNR lookup, at most once per
+  Asia/Kolkata day including failures, budget-reserved and claimed before
+  transport, never published to its tracked case and never retried. Replay
+  answers only requests carrying both the no-paid marker and
+  `X-CaseOps-Provider-Replay: verified-fresh`, for the fixture's CNR in its own
+  workspace, from evidence retrieved within 24 hours, hash-verified and not
+  superseded by a later not-found or unreadable answer, through the live
+  presentation code. Anything else fails closed with a typed `replay.status`
+  and no provider call. Never widen the registry, relax the 24-hour bound, fall
+  back to older evidence, or add a deploy-time paid warm-up to make a replayed
+  check pass.
 - A list must never return a record that its single-record read refuses. The
   Draft lists read a source manifest that was not a JSON list as "no private
   source" and returned the draft's body, while the read answered 409. Give

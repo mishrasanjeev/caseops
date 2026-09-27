@@ -17,11 +17,14 @@ import httpx
 from fastapi import HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, or_, select, text, tuple_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, selectinload
 
+from caseops_api.core.automated_test_context import provider_replay_requested
 from caseops_api.core.redaction import redact_provider_error
 from caseops_api.core.settings import get_settings, is_non_local_env
 from caseops_api.db.models import (
+    AuditActorType,
     AuthorityDocument,
     BillingSubscription,
     CaseTrackingSupportMatrix,
@@ -49,6 +52,7 @@ from caseops_api.schemas.case_tracking import (
     CaseTrackingProviderStatusResponse,
     CaseTrackingRefreshResponse,
     CaseTrackingReleaseSmokeResponse,
+    CaseTrackingSearchReplay,
     CaseTrackingSearchRequest,
     CaseTrackingSearchResponse,
     CaseTrackingSearchResultRecord,
@@ -59,7 +63,7 @@ from caseops_api.schemas.case_tracking import (
     MatterCaseResolutionResponse,
     TrackedCaseRecord,
 )
-from caseops_api.services.audit import record_from_context
+from caseops_api.services.audit import record_audit, record_from_context
 from caseops_api.services.case_tracking_providers import (
     CaseSearchQuery,
     CaseTrackingProvider,
@@ -71,6 +75,21 @@ from caseops_api.services.case_tracking_providers import (
     download_provider_source,
     get_case_tracking_provider,
     provider_status,
+)
+from caseops_api.services.case_tracking_verification import (
+    PROVIDER_EVIDENCE_MAX_AGE,
+    REPLAY_HISTORY_LIMIT,
+    REPLAY_SERVED,
+    REPLAY_SUPERSEDING_RESPONSE_CLASSES,
+    VERIFICATION_FIXTURE_DAILY_CALL_CAP,
+    VERIFICATION_FIXTURE_OPERATION_TYPE,
+    ProviderVerificationFixture,
+    evidence_age,
+    evidence_is_fresh,
+    fixtures_for_company,
+    local_day_start_utc,
+    snapshot_from_evidence,
+    verification_fixture_for,
 )
 from caseops_api.services.hearing_matching import (
     IDENTITY_GAP_MESSAGES,
@@ -739,15 +758,15 @@ def _refresh_automatic_source_identity(
     }
 
 
-def _lock_provider_attempt(
-    session: Session, attempt: _ProviderAttempt
+def _lock_operation_lease(
+    session: Session, *, company_id: str, operation_id: str, lease_token: str
 ) -> TrackedCaseProviderOperation:
-    _lock_provider_company(session, attempt.company_id)
+    _lock_provider_company(session, company_id)
     operation = session.scalar(
         select(TrackedCaseProviderOperation)
         .where(
-            TrackedCaseProviderOperation.id == attempt.operation_id,
-            TrackedCaseProviderOperation.company_id == attempt.company_id,
+            TrackedCaseProviderOperation.id == operation_id,
+            TrackedCaseProviderOperation.company_id == company_id,
         )
         .with_for_update()
         .execution_options(populate_existing=True)
@@ -756,7 +775,7 @@ def _lock_provider_attempt(
     if (
         operation is None
         or operation.status != "running"
-        or operation.lease_token != attempt.lease_token
+        or operation.lease_token != lease_token
         or expires is None
         or expires <= _now()
     ):
@@ -765,6 +784,17 @@ def _lock_provider_attempt(
             response_class="concurrent_refresh",
         )
     return operation
+
+
+def _lock_provider_attempt(
+    session: Session, attempt: _ProviderAttempt
+) -> TrackedCaseProviderOperation:
+    return _lock_operation_lease(
+        session,
+        company_id=attempt.company_id,
+        operation_id=attempt.operation_id,
+        lease_token=attempt.lease_token,
+    )
 
 
 def _resume_provider_attempt(
@@ -958,6 +988,14 @@ def _recover_expired_provider_attempts(session: Session, *, company_id: str) -> 
         )
         operation.error_redacted = "Provider worker lease expired; automatic recovery is scheduled."
         operation.metadata_json = {**dict(operation.metadata_json or {}), "lease_expired": True}
+        if operation.operation_type == VERIFICATION_FIXTURE_OPERATION_TYPE:
+            # Verification evidence never publishes to a tracked case, and a
+            # fixture attempt is never retried: it already used today's call.
+            operation.next_attempt_at = None
+            operation.error_redacted = (
+                "Provider worker lease expired; the verification lookup is not retried today."
+            )
+            continue
         tracked_case = session.get(TrackedCase, operation.tracked_case_id)
         if tracked_case is not None and tracked_case.company_id == company_id:
             tracked_case.next_provider_refresh_at = operation.next_attempt_at
@@ -1670,6 +1708,17 @@ def search_cases(
         court_name=payload.court_name,
         require_complete_results=require_complete_results or complete_results_for_matter,
     )
+    if provider_replay_requested():
+        replayed = _replay_fixture_search(
+            session,
+            context=context,
+            payload=payload,
+            query=query,
+            provider=provider,
+            matter=matter,
+        )
+        if replayed is not None:
+            return replayed
     reservation_id: str | None = None
     company_id, membership_id, token_issued_at = (
         context.company.id,
@@ -1783,20 +1832,288 @@ def search_cases(
         },
     )
     session.commit()
-    records = [_search_record(snapshot) for snapshot in snapshots]
-    if current_matter is not None:
-        for result, snapshot in zip(records, snapshots, strict=True):
-            candidate = _snapshot_matching_identity(snapshot)
-            if _matter_case_candidate_matches(current_identity, candidate):
-                result.link_token = _matter_selection_token(
-                    context=context, matter=current_matter, result=result, candidate=candidate
-                )
-    _annotate_existing_matters(
-        session, context=context, records=records, scope_matter=current_matter
-    )
     return CaseTrackingSearchResponse(
         provider=active_provider.provider_key,
-        results=records,
+        results=_search_response_records(
+            session, context=context, snapshots=snapshots, matter=current_matter
+        ),
+    )
+
+
+def _search_response_records(
+    session: Session,
+    *,
+    context: SessionContext,
+    snapshots: list[ProviderCaseSnapshot],
+    matter: Matter | None,
+) -> list[CaseTrackingSearchResultRecord]:
+    """Present provider snapshots identically for live and replayed lookups."""
+
+    records = [_search_record(snapshot) for snapshot in snapshots]
+    if matter is not None:
+        identity = matter_identity(matter)
+        for result, snapshot in zip(records, snapshots, strict=True):
+            candidate = _snapshot_matching_identity(snapshot)
+            if _matter_case_candidate_matches(identity, candidate):
+                result.link_token = _matter_selection_token(
+                    context=context, matter=matter, result=result, candidate=candidate
+                )
+    _annotate_existing_matters(session, context=context, records=records, scope_matter=matter)
+    return records
+
+
+def _fixture_identity_key(fixture: ProviderVerificationFixture) -> str:
+    return _tracked_case_identity_key(cnr_number=fixture.cnr, case_number=None, court_code=None)
+
+
+@dataclass(frozen=True, slots=True)
+class _FixtureReplayDecision:
+    status: str
+    now: datetime
+    fixture: ProviderVerificationFixture | None = None
+    operation: TrackedCaseProviderOperation | None = None
+    snapshot_row: TrackedCaseProviderSnapshot | None = None
+    snapshot: ProviderCaseSnapshot | None = None
+    latest_response_class: str | None = None
+
+    @property
+    def captured_at(self) -> datetime | None:
+        return _aware_utc(self.operation.started_at) if self.operation is not None else None
+
+    @property
+    def age_seconds(self) -> int | None:
+        captured_at = self.captured_at
+        if captured_at is None:
+            return None
+        return max(0, int(evidence_age(captured_at=captured_at, now=self.now).total_seconds()))
+
+    def public(self) -> dict[str, object]:
+        body: dict[str, object] = {
+            "status": self.status,
+            "max_age_seconds": int(PROVIDER_EVIDENCE_MAX_AGE.total_seconds()),
+        }
+        if self.fixture is not None:
+            body["fixture_key"] = self.fixture.key
+        if self.status in {REPLAY_SERVED, "stale"} and self.captured_at is not None:
+            body["evidence_captured_at"] = self.captured_at.isoformat()
+            body["evidence_age_seconds"] = self.age_seconds
+        if self.latest_response_class:
+            body["latest_response_class"] = self.latest_response_class
+        return body
+
+
+def _fixture_replay_decision(
+    session: Session,
+    *,
+    context: SessionContext,
+    provider_key: str,
+    cnr: str | None,
+    now: datetime,
+) -> _FixtureReplayDecision:
+    """Choose stored evidence that may stand in for a live CNR lookup, or say why not.
+
+    The live adapter answers every search that carries a CNR with one detail
+    lookup of that CNR, which is exactly what the scheduled fixture refresh
+    stores. Only the newest provider answer counts: a later "not found" or
+    unreadable answer supersedes an older success, while availability failures
+    (timeouts, rate limits, billing, outages) say nothing about the case.
+    """
+
+    wanted = normalize_cnr(cnr)
+    if not wanted:
+        return _FixtureReplayDecision(status="unsupported_query", now=now)
+    fixture = verification_fixture_for(
+        company_slug=context.company.slug, provider=provider_key, cnr=wanted
+    )
+    if fixture is None:
+        return _FixtureReplayDecision(status="not_a_verification_fixture", now=now)
+    tracked_case_id = session.scalar(
+        select(TrackedCase.id).where(
+            TrackedCase.company_id == context.company.id,
+            TrackedCase.provider == provider_key,
+            TrackedCase.identity_key == _fixture_identity_key(fixture),
+        )
+    )
+    if tracked_case_id is None:
+        return _FixtureReplayDecision(status="missing", now=now, fixture=fixture)
+    operations = list(
+        session.scalars(
+            select(TrackedCaseProviderOperation)
+            .where(
+                TrackedCaseProviderOperation.company_id == context.company.id,
+                TrackedCaseProviderOperation.tracked_case_id == tracked_case_id,
+                TrackedCaseProviderOperation.provider == provider_key,
+                TrackedCaseProviderOperation.operation_type == VERIFICATION_FIXTURE_OPERATION_TYPE,
+                TrackedCaseProviderOperation.started_at.is_not(None),
+                TrackedCaseProviderOperation.completed_at.is_not(None),
+            )
+            .order_by(
+                TrackedCaseProviderOperation.started_at.desc(),
+                TrackedCaseProviderOperation.id.desc(),
+            )
+            .limit(REPLAY_HISTORY_LIMIT)
+        )
+    )
+    latest_response_class = operations[0].response_class if operations else None
+    for operation in operations:
+        if operation.status == "succeeded" and operation.response_class == "success":
+            return _fixture_evidence_decision(
+                session,
+                context=context,
+                provider_key=provider_key,
+                fixture=fixture,
+                operation=operation,
+                now=now,
+            )
+        if operation.response_class in REPLAY_SUPERSEDING_RESPONSE_CLASSES:
+            return _FixtureReplayDecision(
+                status="superseded",
+                now=now,
+                fixture=fixture,
+                latest_response_class=operation.response_class,
+            )
+    return _FixtureReplayDecision(
+        status="missing", now=now, fixture=fixture, latest_response_class=latest_response_class
+    )
+
+
+def _fixture_evidence_decision(
+    session: Session,
+    *,
+    context: SessionContext,
+    provider_key: str,
+    fixture: ProviderVerificationFixture,
+    operation: TrackedCaseProviderOperation,
+    now: datetime,
+) -> _FixtureReplayDecision:
+    snapshot_row = session.scalar(
+        select(TrackedCaseProviderSnapshot).where(
+            TrackedCaseProviderSnapshot.operation_id == operation.id,
+            TrackedCaseProviderSnapshot.company_id == context.company.id,
+            TrackedCaseProviderSnapshot.tracked_case_id == operation.tracked_case_id,
+        )
+    )
+    integrity_failed = _FixtureReplayDecision(
+        status="integrity_failed", now=now, fixture=fixture, operation=operation
+    )
+    if snapshot_row is None or not _snapshot_hashes_verified(snapshot_row):
+        return integrity_failed
+    try:
+        snapshot = snapshot_from_evidence(dict(snapshot_row.raw_json))
+    except (KeyError, TypeError, ValueError):
+        return integrity_failed
+    if snapshot.provider != provider_key or normalize_cnr(snapshot.cnr_number) != normalize_cnr(
+        fixture.cnr
+    ):
+        return integrity_failed
+    captured_at = _aware_utc(operation.started_at)
+    assert captured_at is not None
+    if not evidence_is_fresh(captured_at=captured_at, now=now):
+        return _FixtureReplayDecision(status="stale", now=now, fixture=fixture, operation=operation)
+    return _FixtureReplayDecision(
+        status=REPLAY_SERVED,
+        now=now,
+        fixture=fixture,
+        operation=operation,
+        snapshot_row=snapshot_row,
+        snapshot=snapshot,
+    )
+
+
+def _replay_fixture_search(
+    session: Session,
+    *,
+    context: SessionContext,
+    payload: CaseTrackingSearchRequest,
+    query: CaseSearchQuery,
+    provider: CaseTrackingProvider | None,
+    matter: Matter | None,
+) -> CaseTrackingSearchResponse | None:
+    """Answer an opted-in automated search from fresh fixture evidence, or refuse it.
+
+    Returns None when this runtime's provider would not be refused anyway (an
+    emulator or injected transport), so the ordinary lookup runs unchanged.
+    """
+
+    try:
+        active_provider = provider or get_case_tracking_provider()
+    except CaseTrackingProviderUnavailable as exc:
+        raise _safe_provider_error(exc) from exc
+    from caseops_api.services.production_safety import assert_case_tracking_supported
+
+    assert_case_tracking_supported(
+        session,
+        provider=active_provider.provider_key,
+        court_code=payload.court_code,
+        court_name=payload.court_name,
+    )
+    block_reason = paid_provider_block_reason(
+        context=context,
+        provider=active_provider.provider_key,
+        base_url=getattr(active_provider, "base_url", None),
+        transport_is_mocked=getattr(active_provider, "transport", None) is not None,
+    )
+    if block_reason is None:
+        return None
+    decision = _fixture_replay_decision(
+        session,
+        context=context,
+        provider_key=active_provider.provider_key,
+        cnr=query.cnr_number,
+        now=_now(),
+    )
+    if decision.status != REPLAY_SERVED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "paid_provider_blocked_for_test",
+                "message": (
+                    "Automated verification may replay only a server-owned verification "
+                    "fixture's stored provider lookup retrieved within the last 24 hours. "
+                    "None is available for this search, so nothing was replayed; no "
+                    "external request was made."
+                ),
+                "provider": active_provider.provider_key,
+                "reason": block_reason,
+                "replay": decision.public(),
+            },
+        )
+    assert decision.fixture is not None and decision.operation is not None
+    assert decision.snapshot_row is not None and decision.snapshot is not None
+    records = _search_response_records(
+        session, context=context, snapshots=[decision.snapshot], matter=matter
+    )
+    replay = CaseTrackingSearchReplay(
+        status="served",
+        fixture_key=decision.fixture.key,
+        evidence_captured_at=decision.captured_at,
+        evidence_age_seconds=decision.age_seconds or 0,
+        max_age_seconds=int(PROVIDER_EVIDENCE_MAX_AGE.total_seconds()),
+        snapshot_sha256=decision.snapshot_row.raw_hash,
+    )
+    record_from_context(
+        session,
+        context,
+        action="case_tracking.search_replay",
+        target_type="tracked_case_provider_operation",
+        target_id=decision.operation.id,
+        metadata={
+            "provider": active_provider.provider_key,
+            "fixture_key": decision.fixture.key,
+            "provider_call_performed": False,
+            "evidence_operation_id": decision.operation.id,
+            "evidence_snapshot_id": decision.snapshot_row.id,
+            "snapshot_raw_sha256": decision.snapshot_row.raw_hash,
+            "evidence_captured_at": replay.evidence_captured_at.isoformat(),
+            "evidence_age_seconds": replay.evidence_age_seconds,
+            "max_age_seconds": replay.max_age_seconds,
+            "matter_scoped": matter is not None,
+            "result_count": len(records),
+        },
+    )
+    session.commit()
+    return CaseTrackingSearchResponse(
+        provider=active_provider.provider_key, results=records, replay=replay
     )
 
 
@@ -3473,6 +3790,15 @@ def _release_smoke_source_update(
     return source_update
 
 
+def _snapshot_hashes_verified(snapshot: TrackedCaseProviderSnapshot) -> bool:
+    return bool(
+        re.fullmatch(r"[0-9a-f]{64}", snapshot.raw_hash or "")
+        and re.fullmatch(r"[0-9a-f]{64}", snapshot.normalized_hash or "")
+        and _hash_value(snapshot.raw_json) == snapshot.raw_hash
+        and _hash_value(snapshot.normalized_json) == snapshot.normalized_hash
+    )
+
+
 def _verified_provider_snapshot(
     session: Session,
     *,
@@ -3509,12 +3835,7 @@ def _verified_provider_snapshot(
     )
     if snapshot is None:  # pragma: no cover - protected by the join
         return None
-    if (
-        not re.fullmatch(r"[0-9a-f]{64}", snapshot.raw_hash)
-        or not re.fullmatch(r"[0-9a-f]{64}", snapshot.normalized_hash)
-        or _hash_value(snapshot.raw_json) != snapshot.raw_hash
-        or _hash_value(snapshot.normalized_json) != snapshot.normalized_hash
-    ):
+    if not _snapshot_hashes_verified(snapshot):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Stored provider snapshot failed integrity verification.",
@@ -4731,6 +5052,7 @@ def _record_safe_poll_run(
     provider_key: str,
     force: bool,
     extra_metadata: dict[str, object] | None = None,
+    provider_call_count: int = 0,
 ) -> CaseTrackingPollRunRecord:
     eligible_count = _eligible_tracked_case_count(session, company_id=context.company.id)
     run = TrackedCasePollRun(
@@ -4740,6 +5062,7 @@ def _record_safe_poll_run(
         completed_at=_now(),
         skipped_count=eligible_count,
         blocked_count=eligible_count if status_value == "blocked" else 0,
+        provider_call_count=provider_call_count,
         backlog_remaining_count=eligible_count,
         metadata_json={
             "provider": provider_key,
@@ -4764,6 +5087,358 @@ def _record_safe_poll_run(
     )
     session.commit()
     return _poll_run_record(run)
+
+
+@dataclass(frozen=True, slots=True)
+class _FixtureClaim:
+    fixture: ProviderVerificationFixture
+    company_id: str
+    provider_key: str
+    tracked_case_id: str
+    operation_id: str
+    lease_token: str
+    reservation_id: str | None
+    cost_minor: int
+
+
+def _advisory_xact_lock(session: Session, key: str) -> None:
+    if session.get_bind().dialect.name == "postgresql":
+        session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))"),
+            {"lock_key": key},
+        )
+
+
+def _claim_verification_fixture(
+    session: Session,
+    *,
+    context: SessionContext,
+    provider_key: str,
+    fixture: ProviderVerificationFixture,
+) -> tuple[_FixtureClaim | None, dict[str, object]]:
+    """Durably claim today's single paid lookup for one fixture, or report why not."""
+
+    company_id = context.company.id
+    from caseops_api.services.production_safety import assert_case_tracking_supported
+
+    # A court or provider whose tracked-case support is disabled stops the
+    # fixture exactly as it stops a live search, before any claim or spend.
+    assert_case_tracking_supported(
+        session, provider=provider_key, court_code=None, court_name=fixture.court_name
+    )
+    # Serializes concurrent scheduler executions for this fixture, including
+    # creation of its tracked case, until the claim commits.
+    _advisory_xact_lock(session, f"case-tracking-fixture:{company_id}:{fixture.key}")
+    identity_key = _fixture_identity_key(fixture)
+    tracked_case = session.scalar(
+        select(TrackedCase).where(
+            TrackedCase.company_id == company_id,
+            TrackedCase.provider == provider_key,
+            TrackedCase.identity_key == identity_key,
+        )
+    )
+    if tracked_case is None:
+        cnr = normalize_cnr(fixture.cnr)
+        # Server-owned and bookmark-free: it is never polled, listed or
+        # published to; it only anchors the stored verification evidence.
+        tracked_case = TrackedCase(
+            company_id=company_id,
+            provider=provider_key,
+            identity_key=identity_key,
+            cnr_number=cnr,
+            normalized_cnr_number=cnr,
+            court_name=fixture.court_name,
+            case_title=f"eCourts case {cnr}",
+            provider_freshness_status="never_succeeded",
+            metadata_json={"verification_fixture": fixture.key},
+        )
+        session.add(tracked_case)
+        session.flush()
+    # The same per-case lock as every other provider operation on this case.
+    _advisory_xact_lock(session, f"case-tracking:{tracked_case.id}")
+    if (
+        session.scalar(
+            select(TrackedCaseProviderOperation.id).where(
+                TrackedCaseProviderOperation.tracked_case_id == tracked_case.id,
+                TrackedCaseProviderOperation.status == "running",
+            )
+        )
+        is not None
+    ):
+        return None, {"outcome": "concurrent_refresh"}
+    day_start = local_day_start_utc(case_tracking_window_state().local_now)
+    calls_today = int(
+        session.scalar(
+            select(func.count(TrackedCaseProviderOperation.id)).where(
+                TrackedCaseProviderOperation.company_id == company_id,
+                TrackedCaseProviderOperation.tracked_case_id == tracked_case.id,
+                TrackedCaseProviderOperation.operation_type == VERIFICATION_FIXTURE_OPERATION_TYPE,
+                TrackedCaseProviderOperation.started_at >= day_start,
+            )
+        )
+        or 0
+    )
+    if calls_today >= VERIFICATION_FIXTURE_DAILY_CALL_CAP:
+        return None, {"outcome": "daily_cap_reached", "calls_today": calls_today}
+    cost_minor, currency = _case_tracking_call_cost(
+        session,
+        provider=provider_key,
+        court_code=None,
+        court_name=fixture.court_name,
+        operation="detail",
+    )
+    reservation_id = reserve_provider_spend_in_session(
+        session,
+        company_id=company_id,
+        actor_membership_id=None,
+        provider_key=provider_key,
+        operation_key="case_tracking_verification_fixture",
+        amount_minor=cost_minor,
+    )
+    started_at = _now()
+    operation = TrackedCaseProviderOperation(
+        company_id=company_id,
+        tracked_case_id=tracked_case.id,
+        provider=provider_key,
+        operation_type=VERIFICATION_FIXTURE_OPERATION_TYPE,
+        correlation_id=uuid4().hex,
+        status="running",
+        attempts=1,
+        max_attempts=1,
+        cost_minor=cost_minor,
+        currency=currency,
+        started_at=started_at,
+        lease_token=str(uuid4()),
+        lease_expires_at=started_at + _PROVIDER_LEASE,
+        spend_reservation_id=reservation_id,
+        metadata_json={
+            "scope": "verification_fixture",
+            "fixture_key": fixture.key,
+            "cost_disclosed": True,
+            "daily_call_cap": VERIFICATION_FIXTURE_DAILY_CALL_CAP,
+            "provider_request": "cnr_lookup",
+            "publishes_to_tracked_case": False,
+        },
+    )
+    session.add(operation)
+    session.flush()
+    dispatch_provider_spend(session, reservation_id=reservation_id, company_id=company_id)
+    assert operation.lease_token is not None
+    return (
+        _FixtureClaim(
+            fixture=fixture,
+            company_id=company_id,
+            provider_key=provider_key,
+            tracked_case_id=tracked_case.id,
+            operation_id=operation.id,
+            lease_token=operation.lease_token,
+            reservation_id=reservation_id,
+            cost_minor=cost_minor,
+        ),
+        {"outcome": "claimed"},
+    )
+
+
+def _settle_verification_fixture(
+    session: Session,
+    *,
+    context: SessionContext,
+    claim: _FixtureClaim,
+    snapshots: list[ProviderCaseSnapshot],
+    error: BaseException | None,
+) -> dict[str, object]:
+    outcome: dict[str, object] = {
+        "fixture_key": claim.fixture.key,
+        "operation_id": claim.operation_id,
+    }
+    try:
+        operation = _lock_operation_lease(
+            session,
+            company_id=claim.company_id,
+            operation_id=claim.operation_id,
+            lease_token=claim.lease_token,
+        )
+    except CaseTrackingProviderError:
+        # Lease recovery already failed the attempt; its budget hold stays
+        # pending confirmation and the daily cap still counts it.
+        session.rollback()
+        return {**outcome, "outcome": "lease_lost"}
+    tracked_case = session.get(TrackedCase, claim.tracked_case_id)
+    snapshot: ProviderCaseSnapshot | None = None
+    if error is None:
+        wanted = normalize_cnr(claim.fixture.cnr)
+        matching = [item for item in snapshots if normalize_cnr(item.cnr_number) == wanted]
+        if len(snapshots) == 1 and len(matching) == 1:
+            snapshot = matching[0]
+            response_class, error_text = "success", None
+        else:
+            response_class = "case_not_found" if not snapshots else "parse_error"
+            error_text = "The provider did not return exactly the verification case."
+        # The provider answered, so the lookup was billed whatever it said.
+        paid_minor = claim.cost_minor
+    else:
+        response_class = _response_class(error)
+        error_text = redact_provider_error(error)
+        paid_minor = 0
+    if snapshot is not None and tracked_case is not None:
+        _record_operation_snapshot(
+            session, tracked_case=tracked_case, operation=operation, snapshot=snapshot
+        )
+    if paid_minor:
+        _record_case_tracking_provider_usage(
+            session,
+            context=context,
+            provider_key=claim.provider_key,
+            usage_type="case_tracking_verification_fixture",
+            feature_key="case_tracking_verification_fixture",
+            display_label="Verification case refresh",
+            cost_minor=paid_minor,
+            tracked_case_id=claim.tracked_case_id,
+            source_type="tracked_case_provider_operation",
+            source_id=claim.operation_id,
+        )
+        settle_provider_spend(session, reservation_id=claim.reservation_id, amount_minor=paid_minor)
+        spend_outcome = "confirmed_estimate"
+    else:
+        confirmed_no_charge = (
+            isinstance(error, CaseTrackingProviderError)
+            and error.http_status_code is not None
+            and error.http_status_code >= 400
+        )
+        release_provider_spend_in_session(
+            session,
+            reservation_id=claim.reservation_id,
+            confirmed_no_charge=confirmed_no_charge,
+        )
+        spend_outcome = "not_charged" if confirmed_no_charge else "pending_confirmation"
+    operation.status = "succeeded" if snapshot is not None else "failed"
+    operation.response_class = response_class
+    operation.error_redacted = error_text
+    operation.completed_at = _now()
+    operation.next_attempt_at = None
+    operation.metadata_json = {
+        **dict(operation.metadata_json or {}),
+        "spend_finalized": True,
+        "spend_outcome": spend_outcome,
+        "confirmed_cost_minor": paid_minor,
+    }
+    record_audit(
+        session,
+        company_id=claim.company_id,
+        actor_type=AuditActorType.SYSTEM,
+        actor_label="Case tracking scheduler",
+        action="case_tracking.verification_fixture_refresh",
+        target_type="tracked_case_provider_operation",
+        target_id=claim.operation_id,
+        metadata={
+            "provider": claim.provider_key,
+            "fixture_key": claim.fixture.key,
+            "response_class": response_class,
+            "cost_minor": paid_minor,
+            "spend_outcome": spend_outcome,
+            "publishes_to_tracked_case": False,
+        },
+    )
+    session.commit()
+    return {
+        **outcome,
+        "outcome": "refreshed" if snapshot is not None else "failed",
+        "response_class": response_class,
+    }
+
+
+def _refresh_verification_fixture(
+    session: Session,
+    *,
+    context: SessionContext,
+    active_provider: CaseTrackingProvider,
+    fixture: ProviderVerificationFixture,
+) -> dict[str, object]:
+    try:
+        with session.begin_nested():
+            claim, outcome = _claim_verification_fixture(
+                session,
+                context=context,
+                provider_key=active_provider.provider_key,
+                fixture=fixture,
+            )
+    except HTTPException as exc:
+        # Court support, cost policy or budget refused the call before any
+        # provider request.
+        session.commit()
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        reason = detail.get("code") or (
+            "court_not_enabled"
+            if exc.status_code == status.HTTP_402_PAYMENT_REQUIRED
+            else f"http_{exc.status_code}"
+        )
+        return {"fixture_key": fixture.key, "outcome": "blocked", "reason": str(reason)}
+    except IntegrityError:
+        session.commit()
+        return {"fixture_key": fixture.key, "outcome": "concurrent_refresh"}
+    # The claim, its lease and the budget hold are durable before transport,
+    # and no transaction is open while the provider is called.
+    session.commit()
+    if claim is None:
+        return {"fixture_key": fixture.key, **outcome}
+    snapshots: list[ProviderCaseSnapshot] = []
+    error: BaseException | None = None
+    try:
+        with case_tracking_transport_budget():
+            # The exact provider request a live search carrying this CNR makes.
+            snapshots = active_provider.search_cases(query=CaseSearchQuery(cnr_number=fixture.cnr))
+    except Exception as exc:
+        error = exc
+    settled = _settle_verification_fixture(
+        session, context=context, claim=claim, snapshots=snapshots, error=error
+    )
+    # Transport was attempted, whatever the outcome; poll runs count it.
+    return {**settled, "provider_call_performed": True}
+
+
+def _refresh_verification_fixtures(
+    session: Session,
+    *,
+    context: SessionContext,
+    active_provider: CaseTrackingProvider,
+    scheduled_window_open: bool,
+) -> list[dict[str, object]]:
+    """Refresh this tenant's registry-listed verification fixtures, once a day at most.
+
+    Only the scheduled run that enforces the daily refresh window may do this;
+    a forced or unwindowed run never does. It deliberately skips the unattended
+    test-tenant filter for the listed fixture alone, because the fixture exists
+    so automated verification can replay fresh evidence instead of calling the
+    provider. Every request and process boundary still applies.
+    """
+
+    fixtures = fixtures_for_company(
+        company_slug=context.company.slug, provider=active_provider.provider_key
+    )
+    if not fixtures:
+        return []
+    if not scheduled_window_open or not case_tracking_window_state().inside_window:
+        return [
+            {"fixture_key": fixture.key, "outcome": "outside_scheduled_window"}
+            for fixture in fixtures
+        ]
+    block_reason = paid_provider_block_reason(
+        context=context,
+        provider=active_provider.provider_key,
+        base_url=getattr(active_provider, "base_url", None),
+        transport_is_mocked=getattr(active_provider, "transport", None) is not None,
+    )
+    if block_reason is not None:
+        return [
+            {"fixture_key": fixture.key, "outcome": "blocked", "reason": block_reason}
+            for fixture in fixtures
+        ]
+    return [
+        _refresh_verification_fixture(
+            session, context=context, active_provider=active_provider, fixture=fixture
+        )
+        for fixture in fixtures
+    ]
 
 
 def poll_tracked_cases(
@@ -4854,6 +5529,17 @@ def poll_tracked_cases(
                     "error": redact_provider_error(exc),
                 }
             }
+        fixture_refresh = _refresh_verification_fixtures(
+            session,
+            context=context,
+            active_provider=active_provider,
+            scheduled_window_open=enforce_window and not force and window.inside_window,
+        )
+        if fixture_refresh:
+            backfill_metadata["verification_fixture_refresh"] = fixture_refresh
+        fixture_call_count = sum(
+            1 for outcome in fixture_refresh if outcome.get("provider_call_performed")
+        )
         provider_block = paid_provider_block_reason(
             context=context,
             provider=active_provider.provider_key,
@@ -4872,6 +5558,7 @@ def poll_tracked_cases(
                     provider_key=active_provider.provider_key,
                     force=force,
                     extra_metadata=backfill_metadata,
+                    provider_call_count=fixture_call_count,
                 )
             )
             continue
@@ -4982,7 +5669,8 @@ def poll_tracked_cases(
         bulk_errors: dict[str, str] = {}
         bulk_costs: dict[str, int] = {}
         bulk_uncertain: set[str] = set()
-        provider_call_count = 0
+        # The verification-fixture lookup above also contacted the provider.
+        provider_call_count = fixture_call_count
         cnrs = list(dict.fromkeys(attempt.cnr_number for attempt in attempts if attempt.cnr_number))
         results_by_id: dict[str, list[ProviderCaseSnapshot]] = {}
         failures: dict[str, Exception] = {}
