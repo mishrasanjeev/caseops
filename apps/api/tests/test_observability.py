@@ -190,6 +190,32 @@ class TestRequestContextMiddleware:
             "http://localhost:3000"
         )
 
+    def test_browser_caches_a_cleared_preflight_for_chromium_maximum(
+        self, client: TestClient
+    ) -> None:
+        # Each OPTIONS request holds a concurrency-one API instance, and the
+        # 600-second default made browsers repeat preflights for polled URLs.
+        allowed = client.options(
+            "/api/research/reviews?limit=50",
+            headers={
+                "Origin": "http://localhost:3000",
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "x-caseops-automated-test",
+            },
+        )
+        assert allowed.status_code == 200
+        assert allowed.headers["Access-Control-Max-Age"] == "7200"
+        assert allowed.headers["Access-Control-Allow-Origin"] == "http://localhost:3000"
+        refused = client.options(
+            "/api/research/reviews?limit=50",
+            headers={
+                "Origin": "https://attacker.example",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+        assert refused.status_code == 400
+        assert "Access-Control-Allow-Origin" not in refused.headers
+
 
 class TestTenantContextAfterAuth:
     def test_authenticated_request_populates_tenant_context(
