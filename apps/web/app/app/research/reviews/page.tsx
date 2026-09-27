@@ -83,18 +83,16 @@ export default function IntelligentReviewsPage() {
       ? resolvedCapabilities.includes(capability)
       : can(role, capability);
 
-  const reportsQuery = useQuery({
-    queryKey: ["authorities", "research-reports"],
-    queryFn: fetchAuthorityResearchReports,
-  });
-  const mattersQuery = useQuery({
-    queryKey: ["matters", "intelligent-review-targets"],
-    queryFn: () => listMatters({ limit: 100 }),
-  });
-  const ipQuery = useQuery({
-    queryKey: ["ip", "intelligent-review-targets"],
-    queryFn: () => fetchIpPortfolio({}, { limit: 100 }),
-  });
+  const [selectedReviewId, setSelectedReviewId] = useState<string | null>(
+    linkedReviewId || null,
+  );
+  const [reportId, setReportId] = useState(linkedReportId);
+  const [targetKind, setTargetKind] = useState<TargetKind>("matter");
+
+  // Each Cloud Run API instance serves one request, and four stay warm. This
+  // page once opened with five concurrent reads, so one waited 32 seconds for
+  // a new instance to start (2026-09-27). First load now starts only the
+  // review history and the frozen reports; target lists follow on demand.
   const reviewsQuery = useQuery({
     queryKey: ["research", "intelligent-reviews"],
     queryFn: () => listIntelligentReviews({ limit: 50 }),
@@ -105,12 +103,20 @@ export default function IntelligentReviewsPage() {
         ? 2_000
         : false,
   });
-
-  const [selectedReviewId, setSelectedReviewId] = useState<string | null>(
-    linkedReviewId || null,
-  );
-  const [reportId, setReportId] = useState(linkedReportId);
-  const [targetKind, setTargetKind] = useState<TargetKind>("matter");
+  const reportsQuery = useQuery({
+    queryKey: ["authorities", "research-reports"],
+    queryFn: fetchAuthorityResearchReports,
+  });
+  const mattersQuery = useQuery({
+    queryKey: ["matters", "intelligent-review-targets"],
+    queryFn: () => listMatters({ limit: 100 }),
+    enabled: reportsQuery.isFetched,
+  });
+  const ipQuery = useQuery({
+    queryKey: ["ip", "intelligent-review-targets"],
+    queryFn: () => fetchIpPortfolio({}, { limit: 100 }),
+    enabled: targetKind === "ip_docket",
+  });
   const [targetId, setTargetId] = useState("");
   const [proceedingId, setProceedingId] = useState("");
   const [issue, setIssue] = useState("");
@@ -563,12 +569,14 @@ function ReviewDetail({
   const reviewQuery = useQuery({
     queryKey: ["research", "intelligent-review", reviewId],
     queryFn: () => getIntelligentReview(reviewId ?? ""),
-    // Reuse bounded history when it is ready, but do not make a deep link wait
-    // for that list. The exact review endpoint is the authoritative fallback
-    // and keeps a busy history query from leaving the requested detail stuck.
+    // The bounded history already carries the complete record. Read the single
+    // review only when it is outside that history or still generating. Reading
+    // it beside the history on first load was a duplicate request; it was
+    // added when the history itself was slow, and the history is now bounded.
     enabled:
       Boolean(reviewId) &&
-      (!reviewHistoryReady || !historyReview || ["queued", "running"].includes(historyReview.state)),
+      reviewHistoryReady &&
+      (!historyReview || ["queued", "running"].includes(historyReview.state)),
     initialData: historyReview,
     refetchInterval: (query) =>
       ["queued", "running"].includes(query.state.data?.state ?? "") ? 1_500 : false,
