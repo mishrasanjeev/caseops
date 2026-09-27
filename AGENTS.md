@@ -1235,6 +1235,19 @@ requirements when using the fallback.
   date, attach to a `WP(C) 6209/2019` Matter. Inventory every caller of the old
   predicate before narrowing it, and regress each path with a provider that
   publishes exactly one case of another type: zero searches, zero writes.
+- A list query-count test must use production-shaped rows. Reviews without a
+  private source manifest let each row's reauthorization return before any
+  query, so a three-statement test hid about seven statements per production
+  review. Reauthorize a page in one batched decision whose one-manifest form is
+  the same function, prove each row's decision including revoked and malformed
+  manifests, reproduce the old count on the unfixed commit, and bound the page
+  on PostgreSQL at retained-generation volume.
+- On the concurrency-one API a page's first load must fit warm capacity. Cloud
+  Run kept the fifth concurrent read of a four-instance service on a new
+  instance for its whole 30.8-second start, although warm instances were free
+  within 0.5 s. Start only the primary reads, load pickers on demand, and never
+  add a duplicate read to hide a slow primary: bound the primary. The API's own
+  startup, not the ClamAV sidecar, was the critical path in 332 of 343 starts.
 - Automated production runs that may only assert the no-paid rejection cannot
   observe a provider-search fix. Replay stored evidence instead of spending: a
   checked-in verification fixture is refreshed only by the window-enforcing

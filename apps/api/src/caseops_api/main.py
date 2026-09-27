@@ -19,6 +19,12 @@ from caseops_api.core.startup import wait_for_readiness, warm_database_mappers
 from caseops_api.db.migrations import run_migrations
 from caseops_api.services.reranker import warm_reranker
 
+# Chromium's ceiling. Starlette's 600-second default made a browser repeat the
+# preflight for a URL it had already cleared, and on the concurrency-one API an
+# OPTIONS request occupies an instance like any read. Every actual response is
+# still origin-checked, and mutations still need their CSRF token.
+CORS_PREFLIGHT_MAX_AGE_SECONDS = 7_200
+
 
 def warm_runtime() -> object:
     warm_database_mappers()
@@ -78,6 +84,7 @@ def create_application() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
         expose_headers=["Content-Disposition", "X-CaseOps-Checksum", "X-Request-ID"],
+        max_age=CORS_PREFLIGHT_MAX_AGE_SECONDS,
     )
     application.add_middleware(RequestContextMiddleware)
 

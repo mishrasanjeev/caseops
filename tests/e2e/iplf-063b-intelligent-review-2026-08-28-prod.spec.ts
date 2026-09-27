@@ -4,6 +4,7 @@ import { expect, test, type APIResponse, type Page } from "@playwright/test";
 import type { IntelligentReview } from "../../apps/web/lib/api/intelligent-reviews";
 
 import { expectStatus } from "./support/iplf058b";
+import { expectBoundedReviewPageLoad } from "./support/review-page-reads";
 
 const WEB = (process.env.PROD_BASE_URL ?? "https://caseops.ai").trim();
 const API = (process.env.PROD_API_BASE_URL ?? "https://api.caseops.ai").trim();
@@ -503,9 +504,14 @@ test("IPLF-063B production proves the exact UJ-18 release", async ({
   });
 
   await page.setViewportSize({ width: 360, height: 800 });
-  await page.goto(
-    `${WEB}/app/research/reviews?review=${encodeURIComponent(ipQueued.id)}`,
-  );
+  // The published IP review is terminal and inside the bounded history.
+  await expectBoundedReviewPageLoad(page, {
+    apiOrigin: API,
+    navigate: () =>
+      page.goto(
+        `${WEB}/app/research/reviews?review=${encodeURIComponent(ipQueued.id)}`,
+      ),
+  });
   const detail = page.getByTestId("intelligent-review-detail");
   await expect(
     detail.getByRole("heading", {
