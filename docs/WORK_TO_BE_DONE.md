@@ -1035,7 +1035,7 @@ Beyond what Section 4 and Section 5 add.
 ### 8.5 Secret management
 
 - **Done when:**
-  - Cloud Run manifest references Secret Manager for `auth_secret`, `pine_labs_*`, LLM keys.
+  - The live `caseops-api` service references Secret Manager for `auth_secret`, `pine_labs_*`, LLM keys. There is no checked-in service manifest: `scripts/deploy-prod.sh` owns the service, and the never-applied `infra/cloudrun/api-service.yaml` was retired on 2026-09-27 (`EH-DEPLOY-02` in `docs/STRICT_ENTERPRISE_GAP_TASKLIST.md`).
   - Rotation runbook in `docs/runbooks/secret-rotation.md` (to be authored when Section 11.3 is done).
   - Local `.env.example` lists every CASEOPS_ env var (sync with `settings.py`).
 

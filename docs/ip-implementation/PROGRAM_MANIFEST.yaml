@@ -2760,7 +2760,7 @@
         {
           "classification": "EXTEND",
           "component": "Cloud Scheduler and Cloud Run Job deployment control",
-          "canonical_writer": "infra/cloudrun/deploy.ps1 for scheduler/IAM intent; scripts/deploy-prod.sh for production image release",
+          "canonical_writer": "infra/cloudrun/scheduler-inventory.json through scripts/scheduler_inventory.py for scheduler/IAM intent (IPLF-001B; the ad-hoc infra/cloudrun/deploy.ps1 writer was retired on 2026-09-27); scripts/deploy-prod.sh for production image release",
           "compatibility_path": "Existing live schedulers/jobs remain unchanged during IPLF-001A.",
           "retirement_gate": "IPLF-001B must establish one version-controlled inventory and retire ad-hoc drift only after canary and rollback observation."
         }
@@ -2771,11 +2771,9 @@
         "Current main and production scheduler/job state"
       ],
       "implementation_refs": [
-        "infra/cloudrun/deploy.ps1",
         "scripts/scheduler_inventory.py"
       ],
       "test_refs": [
-        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
         "apps/api/tests/test_deploy_image_pinning.py",
         "apps/api/tests/test_ip_prd_slices.py",
         "planned:IPLF-UJ-25-EXC-01",
@@ -6401,7 +6399,6 @@
         "apps/api/src/caseops_api/services/domain_outbox.py",
         "apps/api/src/caseops_api/core/settings.py",
         ".github/workflows/prod-verify.yml",
-        "infra/cloudrun/api-service.yaml",
         "scripts/deploy-prod.sh",
         "apps/web/lib/api/canonical-json.ts",
         "docs/ip-implementation/SHARED_RELIABILITY_FOUNDATION.md"
@@ -12714,7 +12711,6 @@
         "apps/web/components/app/Sidebar.tsx",
         "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
-        "infra/cloudrun/deploy.ps1",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
       ],
@@ -12722,7 +12718,6 @@
         "apps/api/tests/test_ip_journal_watch.py",
         "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
         "apps/api/tests/test_scheduler_inventory.py",
-        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
         "apps/api/tests/test_shared_reliability.py",
         "apps/web/app/app/ip/watch/page.test.tsx",
         "apps/web/components/app/Sidebar.test.tsx",
@@ -12830,7 +12825,6 @@
         "apps/web/components/app/Sidebar.tsx",
         "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
-        "infra/cloudrun/deploy.ps1",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
       ],
@@ -12838,7 +12832,6 @@
         "apps/api/tests/test_ip_journal_watch.py",
         "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
         "apps/api/tests/test_scheduler_inventory.py",
-        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
         "apps/api/tests/test_shared_reliability.py",
         "apps/web/app/app/ip/watch/page.test.tsx",
         "apps/web/components/app/Sidebar.test.tsx",
@@ -12921,7 +12914,6 @@
         "apps/web/components/app/Sidebar.tsx",
         "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
-        "infra/cloudrun/deploy.ps1",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
       ],
@@ -12929,7 +12921,6 @@
         "apps/api/tests/test_ip_journal_watch.py",
         "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
         "apps/api/tests/test_scheduler_inventory.py",
-        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
         "apps/api/tests/test_shared_reliability.py",
         "apps/web/app/app/ip/watch/page.test.tsx",
         "apps/web/components/app/Sidebar.test.tsx",
@@ -13037,7 +13028,6 @@
         "apps/web/components/app/Sidebar.tsx",
         "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
-        "infra/cloudrun/deploy.ps1",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
       ],
@@ -13045,7 +13035,6 @@
         "apps/api/tests/test_ip_journal_watch.py",
         "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
         "apps/api/tests/test_scheduler_inventory.py",
-        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
         "apps/api/tests/test_shared_reliability.py",
         "apps/web/app/app/ip/watch/page.test.tsx",
         "apps/web/components/app/Sidebar.test.tsx",
@@ -13122,7 +13111,7 @@
         "apps/api/src/caseops_api/services/source_actions.py",
         "apps/api/src/caseops_api/services/statute_enrichment.py",
         "apps/api/alembic/versions/20260825_0001_indian_kanoon_lineage.py",
-        "infra/cloudrun/api-service.yaml",
+        "scripts/deploy-prod.sh",
         "docs/runbooks/indian-kanoon-licensed-adapter.md"
       ],
       "test_refs": [
@@ -19992,12 +19981,10 @@
         "UJ-68"
       ],
       "implementation_refs": [
-        "infra/cloudrun/deploy.ps1",
         "infra/cloudrun/scheduler-inventory.json",
         "scripts/scheduler_inventory.py"
       ],
       "test_refs": [
-        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
         "apps/api/tests/test_deploy_image_pinning.py",
         "apps/api/tests/test_deploy_prod_hardening.py",
         "apps/api/tests/test_ip_prd_slices.py",
@@ -20044,12 +20031,10 @@
         "UJ-68"
       ],
       "implementation_refs": [
-        "infra/cloudrun/deploy.ps1",
         "infra/cloudrun/scheduler-inventory.json",
         "scripts/scheduler_inventory.py"
       ],
       "test_refs": [
-        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
         "apps/api/tests/test_deploy_image_pinning.py",
         "apps/api/tests/test_deploy_prod_hardening.py",
         "apps/api/tests/test_ip_prd_slices.py",
@@ -20170,12 +20155,10 @@
         "UJ-68"
       ],
       "implementation_refs": [
-        "infra/cloudrun/deploy.ps1",
         "infra/cloudrun/scheduler-inventory.json",
         "scripts/scheduler_inventory.py"
       ],
       "test_refs": [
-        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
         "apps/api/tests/test_deploy_image_pinning.py",
         "apps/api/tests/test_deploy_prod_hardening.py",
         "apps/api/tests/test_ip_prd_slices.py",
@@ -23763,7 +23746,6 @@
         "apps/web/components/app/Sidebar.tsx",
         "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
-        "infra/cloudrun/deploy.ps1",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
       ],
@@ -23771,7 +23753,6 @@
         "apps/api/tests/test_ip_journal_watch.py",
         "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
         "apps/api/tests/test_scheduler_inventory.py",
-        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
         "apps/api/tests/test_shared_reliability.py",
         "apps/web/app/app/ip/watch/page.test.tsx",
         "apps/web/components/app/Sidebar.test.tsx",
@@ -23813,7 +23794,6 @@
         "apps/web/components/app/Sidebar.tsx",
         "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
-        "infra/cloudrun/deploy.ps1",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
       ],
@@ -23821,7 +23801,6 @@
         "apps/api/tests/test_ip_journal_watch.py",
         "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
         "apps/api/tests/test_scheduler_inventory.py",
-        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
         "apps/api/tests/test_shared_reliability.py",
         "apps/web/app/app/ip/watch/page.test.tsx",
         "apps/web/components/app/Sidebar.test.tsx",
@@ -23863,7 +23842,6 @@
         "apps/web/components/app/Sidebar.tsx",
         "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
-        "infra/cloudrun/deploy.ps1",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
       ],
@@ -23871,7 +23849,6 @@
         "apps/api/tests/test_ip_journal_watch.py",
         "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
         "apps/api/tests/test_scheduler_inventory.py",
-        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
         "apps/api/tests/test_shared_reliability.py",
         "apps/web/app/app/ip/watch/page.test.tsx",
         "apps/web/components/app/Sidebar.test.tsx",
@@ -23913,7 +23890,6 @@
         "apps/web/components/app/Sidebar.tsx",
         "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
-        "infra/cloudrun/deploy.ps1",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
       ],
@@ -23921,7 +23897,6 @@
         "apps/api/tests/test_ip_journal_watch.py",
         "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
         "apps/api/tests/test_scheduler_inventory.py",
-        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
         "apps/api/tests/test_shared_reliability.py",
         "apps/web/app/app/ip/watch/page.test.tsx",
         "apps/web/components/app/Sidebar.test.tsx",
@@ -23963,7 +23938,6 @@
         "apps/web/components/app/Sidebar.tsx",
         "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
-        "infra/cloudrun/deploy.ps1",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
       ],
@@ -23971,7 +23945,6 @@
         "apps/api/tests/test_ip_journal_watch.py",
         "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
         "apps/api/tests/test_scheduler_inventory.py",
-        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
         "apps/api/tests/test_shared_reliability.py",
         "apps/web/app/app/ip/watch/page.test.tsx",
         "apps/web/components/app/Sidebar.test.tsx",
@@ -42774,7 +42747,6 @@
         "IPLF-UJ-21-EXC-03",
         "IPLF-UJ-21-NORMAL",
         "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
-        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
         "apps/api/tests/test_ip_journal_watch.py",
         "apps/api/tests/test_scheduler_inventory.py",
         "apps/api/tests/test_shared_reliability.py",
@@ -42806,7 +42778,6 @@
         "apps/web/components/app/Sidebar.tsx",
         "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
-        "infra/cloudrun/deploy.ps1",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
       ],
@@ -43524,7 +43495,6 @@
         "IPLF-UJ-33-EXC-04",
         "IPLF-UJ-33-NORMAL",
         "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
-        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
         "apps/api/tests/test_ip_journal_watch.py",
         "apps/api/tests/test_scheduler_inventory.py",
         "apps/api/tests/test_shared_reliability.py",
@@ -43556,7 +43526,6 @@
         "apps/web/components/app/Sidebar.tsx",
         "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
-        "infra/cloudrun/deploy.ps1",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
       ],
@@ -49777,7 +49746,6 @@
       "test_refs": [
         "IPLF-UJ-21-NORMAL",
         "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
-        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
         "apps/api/tests/test_ip_journal_watch.py",
         "apps/api/tests/test_scheduler_inventory.py",
         "apps/api/tests/test_shared_reliability.py",
@@ -49810,7 +49778,6 @@
         "apps/web/components/app/Sidebar.tsx",
         "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
-        "infra/cloudrun/deploy.ps1",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
       ],
@@ -49833,7 +49800,6 @@
       "test_refs": [
         "IPLF-UJ-21-EXC-01",
         "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
-        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
         "apps/api/tests/test_ip_journal_watch.py",
         "apps/api/tests/test_scheduler_inventory.py",
         "apps/api/tests/test_shared_reliability.py",
@@ -49866,7 +49832,6 @@
         "apps/web/components/app/Sidebar.tsx",
         "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
-        "infra/cloudrun/deploy.ps1",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
       ],
@@ -49889,7 +49854,6 @@
       "test_refs": [
         "IPLF-UJ-21-EXC-02",
         "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
-        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
         "apps/api/tests/test_ip_journal_watch.py",
         "apps/api/tests/test_scheduler_inventory.py",
         "apps/api/tests/test_shared_reliability.py",
@@ -49922,7 +49886,6 @@
         "apps/web/components/app/Sidebar.tsx",
         "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
-        "infra/cloudrun/deploy.ps1",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
       ],
@@ -49945,7 +49908,6 @@
       "test_refs": [
         "IPLF-UJ-21-EXC-03",
         "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
-        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
         "apps/api/tests/test_ip_journal_watch.py",
         "apps/api/tests/test_scheduler_inventory.py",
         "apps/api/tests/test_shared_reliability.py",
@@ -49978,7 +49940,6 @@
         "apps/web/components/app/Sidebar.tsx",
         "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
-        "infra/cloudrun/deploy.ps1",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
       ],
@@ -52414,7 +52375,6 @@
       "test_refs": [
         "IPLF-UJ-33-NORMAL",
         "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
-        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
         "apps/api/tests/test_ip_journal_watch.py",
         "apps/api/tests/test_scheduler_inventory.py",
         "apps/api/tests/test_shared_reliability.py",
@@ -52447,7 +52407,6 @@
         "apps/web/components/app/Sidebar.tsx",
         "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
-        "infra/cloudrun/deploy.ps1",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
       ],
@@ -52470,7 +52429,6 @@
       "test_refs": [
         "IPLF-UJ-33-EXC-01",
         "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
-        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
         "apps/api/tests/test_ip_journal_watch.py",
         "apps/api/tests/test_scheduler_inventory.py",
         "apps/api/tests/test_shared_reliability.py",
@@ -52503,7 +52461,6 @@
         "apps/web/components/app/Sidebar.tsx",
         "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
-        "infra/cloudrun/deploy.ps1",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
       ],
@@ -52526,7 +52483,6 @@
       "test_refs": [
         "IPLF-UJ-33-EXC-02",
         "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
-        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
         "apps/api/tests/test_ip_journal_watch.py",
         "apps/api/tests/test_scheduler_inventory.py",
         "apps/api/tests/test_shared_reliability.py",
@@ -52559,7 +52515,6 @@
         "apps/web/components/app/Sidebar.tsx",
         "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
-        "infra/cloudrun/deploy.ps1",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
       ],
@@ -52582,7 +52537,6 @@
       "test_refs": [
         "IPLF-UJ-33-EXC-03",
         "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
-        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
         "apps/api/tests/test_ip_journal_watch.py",
         "apps/api/tests/test_scheduler_inventory.py",
         "apps/api/tests/test_shared_reliability.py",
@@ -52615,7 +52569,6 @@
         "apps/web/components/app/Sidebar.tsx",
         "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
-        "infra/cloudrun/deploy.ps1",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
       ],
@@ -52638,7 +52591,6 @@
       "test_refs": [
         "IPLF-UJ-33-EXC-04",
         "apps/api/tests/test_20260824_ip_journal_watch_migration.py",
-        "apps/api/tests/test_cloudrun_scheduler_deploy.py",
         "apps/api/tests/test_ip_journal_watch.py",
         "apps/api/tests/test_scheduler_inventory.py",
         "apps/api/tests/test_shared_reliability.py",
@@ -52671,7 +52623,6 @@
         "apps/web/components/app/Sidebar.tsx",
         "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
-        "infra/cloudrun/deploy.ps1",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
       ],

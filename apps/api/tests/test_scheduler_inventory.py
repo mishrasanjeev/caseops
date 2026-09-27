@@ -536,6 +536,109 @@ def test_reconcile_fails_closed_when_a_missing_job_has_no_bootstrap(monkeypatch)
     assert calls == []
 
 
+class _GcloudResult:
+    def __init__(self, returncode: int = 0, stdout: str = "", stderr: str = "") -> None:
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+def _reconcile_through_exit_codes(
+    monkeypatch,
+    inventory: dict,
+    calls: list[list[str]],
+    *,
+    failing_invoker_job: str | None = None,
+) -> None:
+    """Drive reconcile through run_gcloud's real exit-code handling."""
+    desired_state = {job["scheduler_name"]: job["desired_state"] for job in inventory["jobs"]}
+
+    def fake_invoke(arguments: list[str], *, timeout: float = 60) -> _GcloudResult:
+        calls.append(arguments)
+        if arguments[:4] == ["run", "jobs", "add-iam-policy-binding", failing_invoker_job]:
+            return _GcloudResult(1, stderr="PERMISSION_DENIED: invoker grant refused")
+        if arguments[:3] == ["scheduler", "jobs", "describe"]:
+            return _GcloudResult(stdout=json.dumps({"state": desired_state[arguments[3]]}))
+        return _GcloudResult()
+
+    monkeypatch.setattr(scheduler_inventory, "_invoke_gcloud", fake_invoke)
+    monkeypatch.setattr(scheduler_inventory, "run_job_exists", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(scheduler_inventory, "scheduler_exists", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        scheduler_inventory,
+        "inspect_live",
+        lambda *_args, **_kwargs: ([], {"result": "pass"}),
+    )
+    scheduler_inventory.reconcile(
+        inventory,
+        project=inventory["production_project"],
+        region=inventory["location"],
+        image="registry.example/caseops-api@sha256:" + "9" * 64,
+    )
+
+
+def test_reconcile_grants_each_job_invoker_before_its_scheduler(monkeypatch) -> None:
+    # The inventory reconciler is the only scheduler/IAM writer; the retired
+    # infra/cloudrun/deploy.ps1 path used to carry this ordering as well.
+    inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
+    inventory["legacy_schedulers_to_pause"] = []
+    member = f"serviceAccount:{inventory['invoker_service_account']}"
+    calls: list[list[str]] = []
+
+    _reconcile_through_exit_codes(monkeypatch, inventory, calls)
+
+    assert len(inventory["jobs"]) == 9
+    for job in inventory["jobs"]:
+        run_job = job["run_job_name"]
+        job_write = next(
+            index
+            for index, call in enumerate(calls)
+            if call[:2] == ["run", "jobs"] and call[2] in {"create", "update"}
+            and call[3] == run_job
+        )
+        grant = calls.index(
+            [
+                "run", "jobs", "add-iam-policy-binding", run_job,
+                "--member", member, "--role", "roles/run.invoker",
+                "--region", inventory["location"],
+                "--project", inventory["production_project"],
+                "--quiet",
+            ]
+        )
+        scheduler_write = next(
+            index
+            for index, call in enumerate(calls)
+            if call[:2] == ["scheduler", "jobs"] and call[2] in {"create", "update"}
+            and call[3:5] == ["http", job["scheduler_name"]]
+        )
+        assert job_write < grant < scheduler_write, run_job
+
+
+def test_reconcile_stops_before_any_scheduler_write_when_an_invoker_grant_fails(
+    monkeypatch,
+) -> None:
+    inventory = scheduler_inventory.load_inventory(INVENTORY_PATH)
+    inventory["legacy_schedulers_to_pause"] = []
+    first_job = inventory["jobs"][0]["run_job_name"]
+    calls: list[list[str]] = []
+
+    with pytest.raises(scheduler_inventory.InventoryError, match="PERMISSION_DENIED"):
+        _reconcile_through_exit_codes(
+            monkeypatch, inventory, calls, failing_invoker_job=first_job
+        )
+
+    assert calls[-1][:4] == ["run", "jobs", "add-iam-policy-binding", first_job]
+    assert [
+        call[3]
+        for call in calls
+        if call[:2] == ["run", "jobs"] and call[2] in {"create", "update"}
+    ] == [first_job]
+    assert not any(
+        call[:2] == ["scheduler", "jobs"] and call[2] in {"create", "update", "pause", "resume"}
+        for call in calls
+    )
+
+
 @pytest.mark.skipif(os.name != "nt", reason="Windows gcloud uses a .CMD shim")
 def test_gcloud_runner_resolves_windows_command_shim(monkeypatch) -> None:
     calls: list[list[str]] = []
