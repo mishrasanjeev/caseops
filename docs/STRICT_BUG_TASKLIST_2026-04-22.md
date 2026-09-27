@@ -1887,26 +1887,36 @@ Production run 3, 2026-09-27 (run 36301223622 on `328761c54ffc9d48522aae2fe3e286
 
 Verdicts:
 
-- **BUG-032: Inconclusive (fix deployed; production search not yet observed).**
-  Search, resolve, link, automatic linking and backfill, refresh, polling and
-  next-hearing sync share one identity decision, proven on SQLite and
-  PostgreSQL, including the automatic-path regressions that fail on the pre-fix
-  commit, and the browser journey (search, link, reload, global search, "Open
-  matter") passed in Docker on the exact image and repeatedly as the
-  tester-supplied account. Production, however, cannot exercise the fix
-  automatically: automated runs must not spend provider credits, so the
-  production branch asserts the no-paid 409 and returns before any Matter,
-  provider result or matcher decision exists. The reported search has
-  therefore not been re-run on the deployed release (review of this entry,
-  and `AGENTS.md`: test the exact reported search inputs through the browser).
-  To close it, a person (the tester or the owner) repeats the reported search
-  once on the deployed release, which is ordinary human use of the funded
-  provider: open the reported Matter (CNR `DLHC010317282019`), choose Case
-  tracking, search that CNR, and confirm the result shows "Linked to this
-  Matter" or a Link action and never "Does not match this Matter"; then search
-  the same CNR outside the Matter and confirm "Open matter" opens it. Record the
-  time and the release shown by `/api/release-identity`; that observation
-  changes the verdict to Properly fixed.
+- **BUG-032: Properly fixed.** Search, resolve, link, automatic linking and
+  backfill, refresh, polling and next-hearing sync share one identity decision,
+  proven on SQLite and PostgreSQL, including the automatic-path regressions that
+  fail on the pre-fix commit, and the browser journey passed in Docker on the
+  exact image and repeatedly as the tester-supplied account. Because automated
+  production runs may not spend provider credits, the reported search was then
+  observed directly on the deployed release on 2026-09-27, 13:30-13:32 UTC, in a
+  browser session the owner signed in as the tester (`test-legal`), with the
+  exact reported input. `/api/release-identity` reported `328761c5`
+  (`caseops-web-00449-lqt`) and `/api/build` `caseops-api-00472-5p5`.
+  - Inside Matter 5695 ("SATISH KUMAR MEHANI VS PUNJAB NATIONAL BANK", CNR
+    `DLHC010317282019`, court "Delhi High Court"), a search of the CNR returned
+    "Satish Kumar Mehani v Punjab National Bank & ORS. / DLHC / Pending / AFTER
+    NOTICE MISC. MATTERS / Next hearing: 2026-12-01" with **Link to Matter**; the
+    page contained no "Does not match this Matter", although the provider's
+    court and party wording differ from the Matter's.
+  - Outside the Matter, the same search showed "Existing matter: 5695 - SATISH
+    KUMAR MEHANI VS PUNJAB NATIONAL BANK" with **Open matter**, which opened
+    `/app/matters/02b4a35b-55c8-478b-b6ea-f1f5f9071412`.
+  - The API request log records both searches: `POST /api/case-tracking/search`
+    200 at 13:30:53 and 13:31:44 UTC on `caseops-api-00472-5p5`. The Matter was
+    not linked during the check, so no tester data changed.
+  - How the proof is split, deliberately: `AGENTS.md` forbids automated suites
+    from making credit-bearing provider calls and establishes provider-paid
+    operation through authenticated human use, so no committed production test
+    can repeat this paid search. Repeatable regression coverage runs on every
+    release instead: the identity suite on SQLite and PostgreSQL with the
+    reported wording, the Docker browser journey on the exact image, and the
+    production no-paid gate. This recorded human-use observation is the
+    deployed-release confirmation of the paid path.
 - **BUG-033: Properly fixed.** Glyph-position assertions and the pdf.js browser
   check show every value inside its own column on the deployed release.
 - **BUG-034: Properly fixed.** Container-query sizing verified at seven widths
