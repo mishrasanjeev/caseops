@@ -1824,6 +1824,39 @@ regressions fail on the pre-fix commit), its PostgreSQL wrapper (9 cases) and th
 cannot be matched is told exactly what to record". Maintenance cadence remains
 paused until a green run.
 
+PR #488 merged to `main` as `1c617a31` after full Docker acceptance on
+`6f04de37` (PostgreSQL 412/412 including 9 new PostgreSQL proofs; app-chromium
+208 passed/1 skipped and 198 passed/7 skipped; app-mobile 4/4) and the dated spec
+8/8 as the tester-supplied account. Deployed 2026-09-27: API
+`caseops-api-00471-n4q`, web `caseops-web-00448-rbl`, both reporting `1c617a31`.
+
+Production run 2, 2026-09-27 (run 36291638337 on `1c617a31`): **failed**, two
+tester tests; legacy and supporting shards passed. With `--retries=0` against the
+serving release, the reported rows passed: BUG-034 (`:125`), BUG-033 (`:161`) and
+BUG-032 (`:225`), and the 2026-09-24 QA journey passed with its corrected fixture.
+
+- The new identity-gap journey (`:286`) failed on its own fixture: it created a
+  Matter with the fixed number `6209/2019`, the production tenant already held
+  that number, and the duplicate-case rule counts disposed Matters, so cleanup
+  never frees a number. BUG-033's journey drew from 9,000 values and would
+  collide the same way as runs accumulate, and the Docker-only BUG-032 journey
+  (fixed emulator CNR) reused one case number, which failed its second pass as
+  the tester-supplied account. All three now use clock-plus-serial registry
+  numbers (a CNR still decides the BUG-032 case); the unreadable entry is
+  unreadable by construction. The pre-fix journey was reproduced failing with
+  the same 409 on its second pass in one retained local tenant; the fixed
+  journeys pass twice there and twice more as the tester-supplied account in a
+  Docker tenant already holding every earlier run's Matters.
+- `iplf-063b-intelligent-review-2026-08-28-prod.spec.ts:140` failed because
+  `GET /api/research/reviews?limit=50` took 32.4 s. Cloud Run logs show a new API
+  instance starting at that moment (ClamAV sidecar ready after 8 startup-probe
+  attempts, application ready about 26 s after the request): on the
+  concurrency-one service with four warm instances, the page's concurrent
+  requests and CORS preflights exceeded warm capacity and the list request
+  waited for the cold instance. The same endpoint took 39 s on 2026-09-25 and
+  normally takes 1.5-4 s (an N+1 manifest check per review). Unrelated to the
+  three reported rows; recorded as a separate capacity finding, not retried away.
+
 Verdict for all three rows until the dated spec passes on the deployed release:
 **Inconclusive**. The production run proves the no-paid gate for BUG-032; the
 live paid search is human use and is proven end-to-end in Docker on the same

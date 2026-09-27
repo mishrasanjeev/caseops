@@ -24,6 +24,15 @@ const isProduction = Boolean(process.env.PROD_BASE_URL || process.env.CASEOPS_PR
 const LONG_TITLE =
   "Satish Kumar Mehani and Another versus Punjab National Bank and Others through its Chief Manager Recovery";
 const LONG_JUDGE = "Hon'ble Mr. Justice Subramonium Prasad and Hon'ble Mr. Justice Harish Vaidyanathan";
+// Production tenants keep every earlier run's Matters, and the duplicate-case
+// rule counts disposed Matters too, so a fixed or small-range random case
+// number eventually collides (production run 36291638337 failed on a fixed
+// "6209/2019"). Digits come from the clock plus a per-run serial.
+let registrySerial = 0;
+function uniqueRegistryNumber(): string {
+  registrySerial += 1;
+  return `${Date.now() % 100_000_000}${registrySerial}${Math.floor(Math.random() * 10)}`;
+}
 const LAYOUT_WIDTHS = [
   { width: 390, height: 844 },
   { width: 768, height: 1024 },
@@ -166,7 +175,7 @@ test.describe("Ram 2026-09-26 workbook (IV)", () => {
       title: LONG_TITLE,
       judge_name: LONG_JUDGE,
       court_name: "High Court of Delhi at New Delhi, Principal Bench",
-      case_number: `W.P.(C) ${Math.floor(Math.random() * 9000) + 1000}/2026 with CM APPL. 12345/2026`,
+      case_number: `W.P.(C) ${uniqueRegistryNumber()}/2026 with CM APPL. 12345/2026`,
     });
     const hearing = await request.post(`${api}/api/matters/${matter.id}/hearings`, {
       headers: auth.headers,
@@ -246,17 +255,20 @@ test.describe("Ram 2026-09-26 workbook (IV)", () => {
     // The Docker provider emulator publishes "Delhi High Court" with parties
     // "Local Docker Petitioner" / "Local Docker Respondent". The Matter records
     // the same CNR with different court and party wording, as in the report.
+    // The CNR decides the case; the typed case number is corroboration only, so
+    // it is unique per run and the journey can repeat in one retained tenant.
+    const caseNumber = `WP(CIVIL)/${uniqueRegistryNumber()}/2026`;
     const matter = await createMatter(request, auth.headers, {
       title: "Local Docker Petitioner v Local Docker Respondent",
       court_name: "High Court of Delhi",
       client_name: "Local Docker Petitioner & Anr.",
       opposing_party: "Local Docker Respondent and Others",
-      case_number: "WP(CIVIL)/9123/2026",
+      case_number: caseNumber,
       cnr_number: cnr,
     });
     await signIn(page, auth);
     await page.goto(
-      `${web}/app/case-tracking?matterId=${matter.id}&cnr=${cnr}&caseNumber=${encodeURIComponent("WP(CIVIL)/9123/2026")}`,
+      `${web}/app/case-tracking?matterId=${matter.id}&cnr=${cnr}&caseNumber=${encodeURIComponent(caseNumber)}`,
     );
     await page.getByTestId("case-tracking-query").fill(cnr);
     await page.getByTestId("case-tracking-search-submit").click();
@@ -297,9 +309,14 @@ test.describe("Ram 2026-09-26 workbook (IV)", () => {
       return matter;
     };
     try {
-      const unreadable = await matterWith({ case_number: "WP(C) 6d661b/2026" });
-      const untyped = await matterWith({ case_number: "6209/2019" });
-      const readable = await matterWith({ case_number: "W.P.(C) No. 654321 of 2026" });
+      // Letters inside the number, ending in a letter, so no reading of the
+      // entry can find a number/year: unreadable by construction, not by chance.
+      const unreadableNumber = `WP(C) ${uniqueRegistryNumber()}d${uniqueRegistryNumber()}b/2026`;
+      const untypedNumber = `${uniqueRegistryNumber()}/2019`;
+      const readableNumber = `W.P.(C) No. ${uniqueRegistryNumber()} of 2026`;
+      const unreadable = await matterWith({ case_number: unreadableNumber });
+      const untyped = await matterWith({ case_number: untypedNumber });
+      const readable = await matterWith({ case_number: readableNumber });
       await signIn(page, auth);
 
       const resolve = async (matterId: string) => {
@@ -313,12 +330,12 @@ test.describe("Ram 2026-09-26 workbook (IV)", () => {
       let panel = await resolve(unreadable.id);
       const gap = panel.getByTestId("matter-case-identity-gap");
       await expect(gap).toHaveAttribute("data-reason", "unreadable_case_number");
-      await expect(gap).toContainText("could not read the case number “WP(C) 6d661b/2026”");
+      await expect(gap).toContainText(`could not read the case number “${unreadableNumber}”`);
       await expect(gap).toContainText("WP(C) 6209/2019");
 
       panel = await resolve(untyped.id);
       await expect(panel.getByTestId("matter-case-identity-gap")).toHaveAttribute("data-reason", "case_type_required");
-      await expect(panel.getByTestId("matter-case-identity-gap")).toContainText("Add the case type to the case number “6209/2019”");
+      await expect(panel.getByTestId("matter-case-identity-gap")).toContainText(`Add the case type to the case number “${untypedNumber}”`);
 
       // A readable typed number is not a gap: the lookup proceeds to the provider
       // step, which in automated runs is the no-paid rejection (production) or the

@@ -1209,6 +1209,17 @@ requirements when using the fallback.
   passed 62.5% of runs and was mistaken for a regression when it finally drew a
   letter. Generate identifiers in the format the product validates, and treat
   any fixture that can pass by chance as a defect in the test.
+- Disposing a fixture does not free its identity: duplicate rules count
+  disposed rows, and production tenants keep every earlier run. A journey that
+  runs in production creates identifiers no run has used (clock plus serial),
+  never a fixed or small-range random value. Prove it by running the journey
+  twice against one retained local tenant, and reproduce the old version's
+  collision there before trusting the fix.
+- A 30-second API response in production verification can be a Cloud Run cold
+  start on the concurrency-one service rather than the endpoint. Correlate the
+  instance startup logs (sidecar readiness, application startup) with the
+  request before blaming the endpoint or the test, and record capacity defects
+  instead of retrying them away.
 - "Insufficient identifiers" is not an explanation. When a legal record cannot
   be matched, return the one machine-readable gap (`identity_gap`: invalid CNR,
   missing identifiers, unreadable case number, case type required) with the
