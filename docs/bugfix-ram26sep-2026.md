@@ -18,7 +18,7 @@ the workbook are intentionally not reproduced here.
 
 | ID | Classification | Verdict | Proof |
 | --- | --- | --- | --- |
-| BUG-032 | Valid bug (product-level policy contradiction) | Inconclusive: fix deployed, production search not yet observed | `test_20260926_case_match_policy.py`, `test_20260927_case_identity_readability.py`, `ram-2026-09-26-bugs.spec.ts` BUG-032 |
+| BUG-032 | Valid bug (product-level policy contradiction) | Properly fixed | `test_20260926_case_match_policy.py`, `test_20260927_case_identity_readability.py`, `ram-2026-09-26-bugs.spec.ts` BUG-032 |
 | BUG-033 | Valid bug (layout and latent crash) | Properly fixed | `test_20260926_pdf_table_layout.py`, `ram-2026-09-26-bugs.spec.ts` BUG-033 |
 | BUG-034 | Valid bug, **reopened** regression of the 2026-09-24 change | Properly fixed | `ram-2026-09-26-bugs.spec.ts` BUG-034 and layout sweep |
 
@@ -341,8 +341,11 @@ BUG-033 and BUG-034: **Properly fixed**; their dated journeys exercise the fix
 itself in production (the downloaded PDF is parsed against its column borders;
 the Tasks forms are measured at seven widths and saved).
 
-BUG-032: **Inconclusive** until one human search on the deployed release. The
-fix is proven by the identity tests on SQLite and PostgreSQL and end to end in
-Docker on the same image, but automated production runs may not spend provider
-credits, so the production branch only proves the no-paid gate. The
-confirmation step is recorded in the ledger.
+BUG-032: **Properly fixed.** Automated production runs may not spend provider
+credits, so their BUG-032 branch only proves the no-paid gate; the reported
+search was therefore observed directly on the deployed release (2026-09-27,
+13:30-13:32 UTC) in a session the owner signed in as the tester. Inside Matter
+5695 the CNR `DLHC010317282019` search offered "Link to Matter" with no "Does not
+match this Matter", and outside the Matter it showed the existing Matter with
+"Open matter", which opened it. The ledger records the exact result text, the
+release identity and the API request log entries.
