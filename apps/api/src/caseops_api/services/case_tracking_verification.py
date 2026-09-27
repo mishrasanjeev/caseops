@@ -45,6 +45,9 @@ class ProviderVerificationFixture:
     company_slug: str
     provider: str
     cnr: str
+    # The court the provider publishes the case under. The refresh applies the
+    # same court support gate and reviewed price as a live search of it.
+    court_name: str
 
 
 PROVIDER_VERIFICATION_FIXTURES: tuple[ProviderVerificationFixture, ...] = (
@@ -56,6 +59,7 @@ PROVIDER_VERIFICATION_FIXTURES: tuple[ProviderVerificationFixture, ...] = (
         company_slug="caseops-qa",
         provider="ecourtsindia",
         cnr="DLHC010317282019",
+        court_name="Delhi High Court",
     ),
 )
 

@@ -50,6 +50,7 @@ from caseops_api.core.settings import get_settings
 from caseops_api.db.models import (
     AuditEvent,
     BillingUsageEvent,
+    CaseTrackingSupportMatrix,
     CompanyProviderSpendPolicy,
     ProviderSpendReservation,
     TrackedCase,
@@ -88,7 +89,11 @@ TENANT = "aster-legal"
 REFRESHED_AT = datetime(2026, 9, 28, 12, 45, tzinfo=UTC)
 DAY = timedelta(days=1)
 FIXTURE = ProviderVerificationFixture(
-    key="test-bug-032", company_slug=TENANT, provider="ecourtsindia", cnr=FIXTURE_CNR
+    key="test-bug-032",
+    company_slug=TENANT,
+    provider="ecourtsindia",
+    cnr=FIXTURE_CNR,
+    court_name="Delhi High Court",
 )
 REPLAY_HEADERS = {
     NO_PAID_PROVIDERS_HEADER: NO_PAID_PROVIDERS_VALUE,
@@ -285,6 +290,7 @@ def test_production_registry_holds_only_the_reported_case_in_a_blocked_qa_worksp
             company_slug="caseops-qa",
             provider="ecourtsindia",
             cnr="DLHC010317282019",
+            court_name="Delhi High Court",
         ),
     )
     inventory = json.loads(
@@ -364,6 +370,11 @@ def test_scheduled_refresh_stores_one_daily_lookup_as_evidence_only(
     assert provider.search_calls == [CaseSearchQuery(cnr_number=FIXTURE_CNR)]
     [outcome] = _fixture_outcomes(runs, company_id)
     assert outcome["outcome"] == "refreshed" and outcome["response_class"] == "success"
+    assert outcome["provider_call_performed"] is True
+    # The poll run reports the provider call it made.
+    run = next(run for run in runs if run.company_id == company_id)
+    assert run.provider_call_count == 1
+    assert run.metadata["provider_call_count"] == 1
     [operation] = _fixture_operations(company_id)
     assert (operation.status, operation.response_class) == ("succeeded", "success")
     assert (operation.attempts, operation.max_attempts, operation.next_attempt_at) == (1, 1, None)
@@ -824,7 +835,11 @@ def test_replay_is_confined_to_registered_fixtures_in_their_own_workspace(
     client: TestClient, monkeypatch
 ):
     other = ProviderVerificationFixture(
-        key="test-other", company_slug="second-legal", provider="ecourtsindia", cnr=FIXTURE_CNR
+        key="test-other",
+        company_slug="second-legal",
+        provider="ecourtsindia",
+        cnr=FIXTURE_CNR,
+        court_name="Delhi High Court",
     )
     _enable(monkeypatch, fixtures=(FIXTURE, other))
     token = str(bootstrap_company(client)["access_token"])
@@ -906,3 +921,64 @@ def test_a_free_provider_is_called_normally_even_when_replay_is_requested(
     assert provider.search_calls == [
         CaseSearchQuery(cnr_number=FIXTURE_CNR, query=None, case_number=None)
     ]
+
+
+def test_a_workspace_excluded_from_polling_still_counts_the_fixture_call(
+    client: TestClient, monkeypatch
+):
+    """Production shape: the QA workspace's ordinary poll is skipped, the lookup is not."""
+
+    _enable(monkeypatch)
+    company_id = str(bootstrap_company(client)["company"]["id"])
+    clock = Clock(monkeypatch, REFRESHED_AT)
+    provider = FixtureProvider()
+    monkeypatch.setattr(
+        case_tracking,
+        "paid_provider_block_reason",
+        lambda **kwargs: "configured_test_tenant"
+        if kwargs.get("scheduled_tenant_filter")
+        else None,
+    )
+
+    runs = _scheduled_poll(provider, at=REFRESHED_AT, clock=clock)
+
+    run = next(run for run in runs if run.company_id == company_id)
+    assert (run.status, run.metadata["reason"]) == ("skipped", "configured_test_tenant")
+    assert _fixture_outcomes(runs, company_id)[0]["outcome"] == "refreshed"
+    assert run.provider_call_count == 1 and len(provider.search_calls) == 1
+
+
+def test_disabled_court_support_stops_the_fixture_lookup_before_any_claim(
+    client: TestClient, monkeypatch
+):
+    _enable(monkeypatch)
+    company_id = str(bootstrap_company(client)["company"]["id"])
+    with get_session_factory()() as session:
+        support = session.scalar(
+            select(CaseTrackingSupportMatrix).where(
+                CaseTrackingSupportMatrix.provider == "ecourtsindia",
+                CaseTrackingSupportMatrix.court == "*",
+            )
+        ) or CaseTrackingSupportMatrix(
+            provider="ecourtsindia",
+            court="*",
+            bench_jurisdiction="All provider-published courts",
+            lookup_method="cnr_or_case_number",
+        )
+        support.enabled = False
+        support.tenant_visible = True
+        session.add(support)
+        session.commit()
+    clock = Clock(monkeypatch, REFRESHED_AT)
+    provider = FixtureProvider()
+
+    runs = _scheduled_poll(provider, at=REFRESHED_AT, clock=clock)
+
+    assert _fixture_outcomes(runs, company_id) == [
+        {"fixture_key": "test-bug-032", "outcome": "blocked", "reason": "court_not_enabled"}
+    ]
+    assert provider.search_calls == [] and _fixture_operations(company_id) == []
+    run = next(run for run in runs if run.company_id == company_id)
+    assert run.provider_call_count == 0
+    with get_session_factory()() as session:
+        assert session.scalar(select(func.count(ProviderSpendReservation.id))) == 0

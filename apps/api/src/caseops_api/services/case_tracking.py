@@ -5052,6 +5052,7 @@ def _record_safe_poll_run(
     provider_key: str,
     force: bool,
     extra_metadata: dict[str, object] | None = None,
+    provider_call_count: int = 0,
 ) -> CaseTrackingPollRunRecord:
     eligible_count = _eligible_tracked_case_count(session, company_id=context.company.id)
     run = TrackedCasePollRun(
@@ -5061,6 +5062,7 @@ def _record_safe_poll_run(
         completed_at=_now(),
         skipped_count=eligible_count,
         blocked_count=eligible_count if status_value == "blocked" else 0,
+        provider_call_count=provider_call_count,
         backlog_remaining_count=eligible_count,
         metadata_json={
             "provider": provider_key,
@@ -5117,6 +5119,13 @@ def _claim_verification_fixture(
     """Durably claim today's single paid lookup for one fixture, or report why not."""
 
     company_id = context.company.id
+    from caseops_api.services.production_safety import assert_case_tracking_supported
+
+    # A court or provider whose tracked-case support is disabled stops the
+    # fixture exactly as it stops a live search, before any claim or spend.
+    assert_case_tracking_supported(
+        session, provider=provider_key, court_code=None, court_name=fixture.court_name
+    )
     # Serializes concurrent scheduler executions for this fixture, including
     # creation of its tracked case, until the claim commits.
     _advisory_xact_lock(session, f"case-tracking-fixture:{company_id}:{fixture.key}")
@@ -5138,6 +5147,7 @@ def _claim_verification_fixture(
             identity_key=identity_key,
             cnr_number=cnr,
             normalized_cnr_number=cnr,
+            court_name=fixture.court_name,
             case_title=f"eCourts case {cnr}",
             provider_freshness_status="never_succeeded",
             metadata_json={"verification_fixture": fixture.key},
@@ -5171,7 +5181,11 @@ def _claim_verification_fixture(
     if calls_today >= VERIFICATION_FIXTURE_DAILY_CALL_CAP:
         return None, {"outcome": "daily_cap_reached", "calls_today": calls_today}
     cost_minor, currency = _case_tracking_call_cost(
-        session, provider=provider_key, court_code=None, court_name=None, operation="detail"
+        session,
+        provider=provider_key,
+        court_code=None,
+        court_name=fixture.court_name,
+        operation="detail",
     )
     reservation_id = reserve_provider_spend_in_session(
         session,
@@ -5349,14 +5363,16 @@ def _refresh_verification_fixture(
                 fixture=fixture,
             )
     except HTTPException as exc:
-        # Cost policy or budget refused the call before any provider request.
+        # Court support, cost policy or budget refused the call before any
+        # provider request.
         session.commit()
         detail = exc.detail if isinstance(exc.detail, dict) else {}
-        return {
-            "fixture_key": fixture.key,
-            "outcome": "blocked",
-            "reason": str(detail.get("code") or exc.status_code),
-        }
+        reason = detail.get("code") or (
+            "court_not_enabled"
+            if exc.status_code == status.HTTP_402_PAYMENT_REQUIRED
+            else f"http_{exc.status_code}"
+        )
+        return {"fixture_key": fixture.key, "outcome": "blocked", "reason": str(reason)}
     except IntegrityError:
         session.commit()
         return {"fixture_key": fixture.key, "outcome": "concurrent_refresh"}
@@ -5373,9 +5389,11 @@ def _refresh_verification_fixture(
             snapshots = active_provider.search_cases(query=CaseSearchQuery(cnr_number=fixture.cnr))
     except Exception as exc:
         error = exc
-    return _settle_verification_fixture(
+    settled = _settle_verification_fixture(
         session, context=context, claim=claim, snapshots=snapshots, error=error
     )
+    # Transport was attempted, whatever the outcome; poll runs count it.
+    return {**settled, "provider_call_performed": True}
 
 
 def _refresh_verification_fixtures(
@@ -5519,6 +5537,9 @@ def poll_tracked_cases(
         )
         if fixture_refresh:
             backfill_metadata["verification_fixture_refresh"] = fixture_refresh
+        fixture_call_count = sum(
+            1 for outcome in fixture_refresh if outcome.get("provider_call_performed")
+        )
         provider_block = paid_provider_block_reason(
             context=context,
             provider=active_provider.provider_key,
@@ -5537,6 +5558,7 @@ def poll_tracked_cases(
                     provider_key=active_provider.provider_key,
                     force=force,
                     extra_metadata=backfill_metadata,
+                    provider_call_count=fixture_call_count,
                 )
             )
             continue
@@ -5647,7 +5669,8 @@ def poll_tracked_cases(
         bulk_errors: dict[str, str] = {}
         bulk_costs: dict[str, int] = {}
         bulk_uncertain: set[str] = set()
-        provider_call_count = 0
+        # The verification-fixture lookup above also contacted the provider.
+        provider_call_count = fixture_call_count
         cnrs = list(dict.fromkeys(attempt.cnr_number for attempt in attempts if attempt.cnr_number))
         results_by_id: dict[str, list[ProviderCaseSnapshot]] = {}
         failures: dict[str, Exception] = {}
