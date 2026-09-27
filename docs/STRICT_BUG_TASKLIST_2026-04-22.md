@@ -1821,8 +1821,8 @@ calls `identity_gap` before any provider spend; existing bare-number automatic
 links stop refreshing with the case-type reason (recorded contract change). New
 tests: `test_20260927_case_identity_readability.py` (49 cases; the automatic-path
 regressions fail on the pre-fix commit), its PostgreSQL wrapper (9 cases) and the dated journey "a Matter that
-cannot be matched is told exactly what to record". Maintenance cadence remains
-paused until a green run.
+cannot be matched is told exactly what to record". Maintenance cadence remained
+paused until the green production run 3 recorded below.
 
 PR #488 merged to `main` as `1c617a31` after full Docker acceptance on
 `6f04de37` (PostgreSQL 412/412 including 9 new PostgreSQL proofs; app-chromium
@@ -1857,7 +1857,49 @@ BUG-032 (`:225`), and the 2026-09-24 QA journey passed with its corrected fixtur
   normally takes 1.5-4 s (an N+1 manifest check per review). Unrelated to the
   three reported rows; recorded as a separate capacity finding, not retried away.
 
-Verdict for all three rows until the dated spec passes on the deployed release:
-**Inconclusive**. The production run proves the no-paid gate for BUG-032; the
-live paid search is human use and is proven end-to-end in Docker on the same
-image.
+PR #489 merged to `main` as `328761c5` after full Docker acceptance on
+`3ca13371` (PostgreSQL 412/412; app-chromium 208 passed/1 skipped and 198
+passed/7 skipped; app-mobile 4/4; the dated spec in full) and the four bug
+journeys passed twice as the tester-supplied account in a Docker tenant already
+holding every earlier run's Matters.
+
+Production run 3, 2026-09-27 (run 36301223622 on `328761c54ffc9d48522aae2fe3e2865086e5ed57`): **passed**.
+
+- `scripts/deploy-prod.sh 328761c5` from a detached worktree of `origin/main`
+  (preflight: head = merge commit, no local changes, no ongoing builds, no
+  active production verification): images built, migrations applied,
+  exact-image legacy hearing materialization and catalog seeds executed,
+  latest-only traffic routed to API revision `caseops-api-00472-5p5` and web revision
+  `caseops-web-00449-lqt`. `/api/build` and `/api/release-identity` report `328761c54ffc9d48522aae2fe3e2865086e5ed57`.
+- `prod-verify.yml` with `expected_release_sha` = the release succeeded in every
+  shard (tester, legacy, supporting, patent-statute). The tester project ran
+  with `--retries=0` against the serving release (98 passed, 9
+  skipped by design): `ram-2026-09-26-bugs.spec.ts` BUG-034 (`:134`), BUG-033
+  (`:170`), BUG-032 (`:234`) and the identity-gap journey (`:298`) passed; the
+  layout sweep is a local Docker acceptance test and is skipped in production by
+  design. The 2026-09-24 QA-owned matter journey passed. The QA tenant sends the
+  no-paid-provider marker, so the BUG-032 production journey asserts the 409
+  `paid_provider_blocked_for_test` rejection, not a provider search.
+- Private-projection maintenance re-certified after the release-owned QA
+  mutations: execution `caseops-private-projection-maintenance-pvwnm` converged and execution `caseops-private-projection-maintenance-wsksk` was a clean
+  no-rebuild cadence; the maintenance scheduler was resumed on the exact API
+  image for release `328761c5` (`--qa-run-id 36301223622`).
+
+Verdicts:
+
+- **BUG-032: Properly fixed.** Search, resolve, link, automatic linking and
+  backfill, refresh, polling and next-hearing sync share one identity decision,
+  proven on SQLite and PostgreSQL, including the automatic-path regressions that
+  fail on the pre-fix commit; the browser journey (search, link, reload, global
+  search, "Open matter") passed in Docker on the exact image and repeatedly as
+  the tester-supplied account; production proves the same release serves the
+  route, the no-paid gate and the reason-specific identity messages. The live
+  paid search remains human use under readiness and budget gates.
+- **BUG-033: Properly fixed.** Glyph-position assertions and the pdf.js browser
+  check show every value inside its own column on the deployed release.
+- **BUG-034: Properly fixed.** Container-query sizing verified at seven widths
+  from 390 to 1920 px, including the xl split layout where the 2026-09-24 fix
+  had collapsed; the product-wide form-layout sweep is retained in Docker
+  acceptance.
+- Not claimed: the Intelligent Review cold-start latency recorded under
+  production run 2 is a separate capacity defect with its own task.
