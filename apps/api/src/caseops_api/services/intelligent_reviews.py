@@ -64,6 +64,7 @@ from caseops_api.services.private_retrieval import (
     PrivateRetrievalInvariantError,
     capture_private_saved_source_manifest,
     private_saved_source_manifest_is_current,
+    private_saved_source_manifests_are_current,
 )
 from caseops_api.services.session_context import SessionContext
 from caseops_api.services.source_actions import (
@@ -1378,15 +1379,14 @@ def list_intelligent_reviews(
             statement.order_by(Recommendation.created_at.desc()).limit(max(1, min(limit, 100)))
         )
     )
-    rows = [
-        row
-        for row in rows
-        if private_saved_source_manifest_is_current(
-            session,
-            context=context,
-            manifest=_json_load(row.source_manifest_json, []),
-        )
-    ]
+    # One bounded reauthorization for the whole page: a per-row manifest check
+    # issued about seven statements for each of up to 100 reviews.
+    current = private_saved_source_manifests_are_current(
+        session,
+        context=context,
+        manifests=[_json_load(row.source_manifest_json, []) for row in rows],
+    )
+    rows = [row for row, is_current in zip(rows, current, strict=True) if is_current]
     draft_ids = {
         str(review_id): str(draft_id)
         for review_id, draft_id in session.execute(
