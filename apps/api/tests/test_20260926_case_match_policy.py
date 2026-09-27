@@ -192,7 +192,14 @@ def test_a_different_cnr_never_matches_even_with_identical_wording(
     resolved = client.post(
         f"/api/case-tracking/matters/{matter_id}/resolve", headers=auth_headers(token)
     )
-    assert resolved.json() == {"status": "no_match", "provider": "ecourtsindia", "results": []}
+    assert resolved.json() == {
+        "status": "no_match",
+        "provider": "ecourtsindia",
+        "results": [],
+        "reason": None,
+        "case_number": None,
+        "cnr_number": None,
+    }
 
 
 def test_without_a_cnr_the_case_number_needs_the_provider_case_type_and_court(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import Literal
 
 MAX_MATCH_CANDIDATES = 20
 IDENTITY_REQUIRED = (
@@ -12,7 +13,37 @@ IDENTITY_REQUIRED = (
 )
 CASE_TYPE_REQUIRED = (
     "Add the case type to the case number (for example WP(C) 6209/2019), "
-    "or record the CNR, before linking this Matter to a court case."
+    "or record the CNR, before this Matter can be matched to a court case."
+)
+CASE_NUMBER_UNREADABLE = (
+    "CaseOps could not read the recorded case number. Record one case as its "
+    "case type, number and year (for example WP(C) 6209/2019 or "
+    "W.P.(C) No. 6209 of 2019), or record the CNR."
+)
+CNR_INVALID = (
+    "The recorded CNR is not a valid 16-character CNR (four letters and twelve "
+    "digits). Correct it before this Matter can be matched to a court case."
+)
+
+IdentityGap = Literal[
+    "invalid_cnr", "missing_identifiers", "unreadable_case_number", "case_type_required"
+]
+IDENTITY_GAP_MESSAGES: dict[str, str] = {
+    "invalid_cnr": CNR_INVALID,
+    "missing_identifiers": IDENTITY_REQUIRED,
+    "unreadable_case_number": CASE_NUMBER_UNREADABLE,
+    "case_type_required": CASE_TYPE_REQUIRED,
+}
+
+# One public case identity: [case type] [No.] number (/ | of | -) year. The
+# type is optional so a bare number/year is recognised and then reported as
+# untyped. Registration numbers are digits and a case type never carries a
+# digit, so a digit inside the type marks a compound entry (a lead case plus an
+# application, or an FIR plus a petition) that names more than one record.
+_PUBLIC_NUMBER = re.compile(
+    r"\s*(?P<kind>.*?)\s*(?:\b(?:no|number)\.?\s*)?[/ .-]?\s*"
+    r"(?P<number>\d+)\s*(?:/|-|\s+of\s+)\s*(?P<year>(?:19|20)\d{2})\s*",
+    re.IGNORECASE,
 )
 
 
@@ -38,10 +69,12 @@ class HearingIdentity:
 
 def public_number(value: str | None) -> tuple[str, str, str] | None:
     # Do not infer a year from a packed internal provider identifier or a title.
-    match = re.fullmatch(r"\s*(.*?)\s*[/ -]?\s*(\d+)\s*/\s*((?:19|20)\d{2})\s*", value or "")
+    match = _PUBLIC_NUMBER.fullmatch(value or "")
     if not match:
         return None
-    kind, number, year = match.groups()
+    kind, number, year = match.group("kind", "number", "year")
+    if any(char.isdigit() for char in kind):
+        return None
     return normalized(kind), str(int(number)), year
 
 
@@ -50,6 +83,32 @@ def untyped_case_number(identity: HearingIdentity) -> bool:
 
     parsed = public_number(identity.case_number)
     return bool(parsed) and not parsed[0]
+
+
+def identity_gap(identity: HearingIdentity) -> IdentityGap | None:
+    """Name the one reason a Matter cannot yet be matched to a court case.
+
+    Manual search, resolve and link, automatic linking and backfill, and the
+    refresh and polling of automatic links all apply this one decision to a
+    Matter's recorded identity, and tell the user what to record instead of a
+    generic "insufficient identifiers":
+    a malformed CNR, no court or number at all, a case number CaseOps cannot
+    read as one type/number/year, or a number without its case type.
+    """
+
+    if identity.cnr:
+        return None if reliable_identity(identity) else "invalid_cnr"
+    if not (identity.court_code or identity.court_name):
+        return "missing_identifiers"
+    if not (identity.case_number or identity.filing_number):
+        return "missing_identifiers"
+    if identity.case_number and not public_number(identity.case_number):
+        return "unreadable_case_number"
+    if not search_number(identity):
+        return "unreadable_case_number"
+    if untyped_case_number(identity):
+        return "case_type_required"
+    return None
 
 
 def search_number(identity: HearingIdentity) -> str | None:

@@ -959,7 +959,8 @@ def test_matter_case_resolution_uses_server_owned_cnr_and_rejects_conflicts(
     )
     assert mismatch.status_code == 200, mismatch.text
     assert mismatch.json() == {
-        "status": "no_match", "provider": "ecourtsindia", "results": []
+        "status": "no_match", "provider": "ecourtsindia", "results": [],
+        "reason": None, "case_number": None, "cnr_number": None,
     }
 
 

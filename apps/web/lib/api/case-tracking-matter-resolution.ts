@@ -12,10 +12,20 @@ export type MatterAwareSearchResponse = {
   results: MatterAwareSearchResult[];
 };
 
+export type MatterCaseIdentityGap =
+  | "invalid_cnr"
+  | "missing_identifiers"
+  | "unreadable_case_number"
+  | "case_type_required";
+
 export type MatterCaseResolutionResponse = {
   provider: string;
   status: "matched" | "multiple_matches" | "no_match" | "insufficient_identifiers";
   results: MatterCaseCandidate[];
+  // Present with "insufficient_identifiers": why, and the recorded values to correct.
+  reason?: MatterCaseIdentityGap | null;
+  case_number?: string | null;
+  cnr_number?: string | null;
 };
 
 export async function resolveMatterCase(matterId: string): Promise<MatterCaseResolutionResponse> {

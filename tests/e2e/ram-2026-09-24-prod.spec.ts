@@ -224,7 +224,9 @@ test("QA-owned matter has a canonical hearing and automated eCourts lookup canno
       practice_area: "litigation",
       forum_level: "high_court",
       court_name: "Delhi High Court",
-      case_number: `WP(C) ${randomUUID().slice(0, 6)}/2026`,
+      // Registry-shaped: case type, digits, year. A hex slice here parsed only
+      // when it happened to end in a digit, so this journey passed 62.5% of runs.
+      case_number: `WP(C) ${100000 + Math.floor(Math.random() * 900000)}/2026`,
       next_hearing_on: hearingDate,
       status: "active",
     },

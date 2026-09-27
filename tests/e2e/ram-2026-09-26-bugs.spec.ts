@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
-import { noPaidProviderHeaders } from "./support/cost-controls";
+import { expectPaidProviderBlocked, noPaidProviderHeaders } from "./support/cost-controls";
 import { apiBaseUrl, webBaseUrl } from "./support/env";
 import { collectFormLayoutOffenders } from "./support/form-layout";
 import { plusDays } from "./support/helpers";
@@ -233,8 +233,7 @@ test.describe("Ram 2026-09-26 workbook (IV)", () => {
         headers: auth.headers,
         data: { cnr_number: cnr },
       });
-      expect(blocked.status(), await blocked.text()).toBe(409);
-      expect((await blocked.json()).detail?.code).toBe("paid_provider_blocked_for_test");
+      await expectPaidProviderBlocked(blocked, "BUG-032 production search");
       return;
     }
     // The provider emulator exists only in the Docker acceptance stack; the host
@@ -282,6 +281,70 @@ test.describe("Ram 2026-09-26 workbook (IV)", () => {
     await open.click();
     await expect(page).toHaveURL(new RegExp(`/app/matters/${matter.id}$`));
     await expect(page.getByRole("heading", { name: "Local Docker Petitioner v Local Docker Respondent" }).first()).toBeVisible();
+  });
+
+  test("BUG-032 follow-up: a Matter that cannot be matched is told exactly what to record", async ({ page, request }) => {
+    // Production run 36276564868 (2026-09-27): the 2026-09-24 QA fixture
+    // `WP(C) <hex>/2026` read as "Insufficient case identifiers" although it
+    // showed a type, a year and a court. The page must name the gap and the
+    // recorded value; a readable typed number must reach the provider step.
+    test.setTimeout(120_000);
+    const auth = await authenticate(request);
+    const created: string[] = [];
+    const matterWith = async (overrides: Record<string, unknown>) => {
+      const matter = await createMatter(request, auth.headers, overrides);
+      created.push(matter.id);
+      return matter;
+    };
+    try {
+      const unreadable = await matterWith({ case_number: "WP(C) 6d661b/2026" });
+      const untyped = await matterWith({ case_number: "6209/2019" });
+      const readable = await matterWith({ case_number: "W.P.(C) No. 654321 of 2026" });
+      await signIn(page, auth);
+
+      const resolve = async (matterId: string) => {
+        await page.goto(`${web}/app/case-tracking?matterId=${matterId}`);
+        await page.getByTestId("matter-case-resolve-submit").click();
+        const panel = page.getByTestId("matter-case-resolution");
+        await expect(panel.locator('[role="status"], [role="alert"]').first()).toBeVisible();
+        return panel;
+      };
+
+      let panel = await resolve(unreadable.id);
+      const gap = panel.getByTestId("matter-case-identity-gap");
+      await expect(gap).toHaveAttribute("data-reason", "unreadable_case_number");
+      await expect(gap).toContainText("could not read the case number “WP(C) 6d661b/2026”");
+      await expect(gap).toContainText("WP(C) 6209/2019");
+
+      panel = await resolve(untyped.id);
+      await expect(panel.getByTestId("matter-case-identity-gap")).toHaveAttribute("data-reason", "case_type_required");
+      await expect(panel.getByTestId("matter-case-identity-gap")).toContainText("Add the case type to the case number “6209/2019”");
+
+      // A readable typed number is not a gap: the lookup proceeds to the provider
+      // step, which in automated runs is the no-paid rejection (production) or the
+      // configured local provider outcome; either way no identity message shows.
+      panel = await resolve(readable.id);
+      await expect(panel.getByTestId("matter-case-identity-gap")).toHaveCount(0);
+      if (isProduction) {
+        await expect(panel.getByRole("alert")).toContainText(/no external request was made/i);
+      }
+    } finally {
+      for (const matterId of created) {
+        const current = await request.get(`${api}/api/matters/${matterId}`, { headers: auth.headers });
+        if (current.status() !== 200) continue;
+        const matter = (await current.json()) as { status: string; updated_at: string };
+        if (matter.status === "disposed") continue;
+        await request.patch(`${api}/api/matters/${matterId}/lifecycle/status`, {
+          headers: auth.headers,
+          data: {
+            to_status: "disposed",
+            expected_from_status: matter.status,
+            expected_updated_at: matter.updated_at,
+            reason: "Dispose the synthetic identity-gap regression Matter.",
+          },
+        });
+      }
+    }
   });
 });
 

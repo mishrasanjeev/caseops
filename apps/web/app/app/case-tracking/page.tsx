@@ -50,6 +50,7 @@ import {
   type MatterAwareSearchResponse,
   type MatterAwareSearchResult,
 } from "@/lib/api/case-tracking-matter-resolution";
+import { matterCaseIdentityGapMessage } from "@/lib/case-tracking-identity-gap";
 
 export default function CaseTrackingPage() {
   const queryClient = useQueryClient();
@@ -225,7 +226,9 @@ export default function CaseTrackingPage() {
                 </p>
               ) : null}
               {matterResolution.data?.status === "insufficient_identifiers" ? (
-                <p role="status">Insufficient case identifiers. Add a valid CNR, or a case number with its case type, year and court, to the Matter.</p>
+                <p role="status" data-testid="matter-case-identity-gap" data-reason={matterResolution.data.reason ?? "missing_identifiers"}>
+                  {matterCaseIdentityGapMessage(matterResolution.data)}
+                </p>
               ) : null}
               {matterResolution.data?.status === "no_match" ? (
                 <p role="status">No matching eCourts case found. Check the Matter identifiers or use the search below.</p>

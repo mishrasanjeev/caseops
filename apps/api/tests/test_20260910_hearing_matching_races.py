@@ -27,6 +27,7 @@ from caseops_api.services.case_tracking import (
     refresh_bookmark,
 )
 from caseops_api.services.case_tracking_providers import ProviderCaseEvent
+from caseops_api.services.hearing_matching import CNR_INVALID, IDENTITY_REQUIRED
 from tests.test_20260904_auto_next_hearing_sync import DatedSyncProvider, _enable_tracking
 from tests.test_20260910_hearing_matching import snapshot
 from tests.test_auth_company import auth_headers, bootstrap_company
@@ -327,12 +328,15 @@ def test_legacy_bookmark_requires_court_and_recovers_from_current_matter(
     before = client.get("/api/case-tracking/bookmarks", headers=headers)
     assert before.status_code == 200, before.text
     old = before.json()["bookmarks"][0]
+    # The reason names the defect the user must correct (2026-09-27 identity_gap).
+    reason = IDENTITY_REQUIRED if defect == "missing_court" else CNR_INVALID
     assert old["tracked_case"]["manual_refresh_allowed"] is False
-    assert "Add the court" in old["tracked_case"]["manual_refresh_disabled_reason"]
+    assert old["tracked_case"]["manual_refresh_disabled_reason"] == reason
     rejected = client.post(
         f"/api/case-tracking/bookmarks/{bookmark['id']}/refresh", headers=headers
     )
     assert rejected.status_code == 409, rejected.text
+    assert rejected.json()["detail"] == reason
     with get_session_factory()() as session:
         poll_tracked_cases(session, provider=provider, force=True)
         assert session.scalar(select(func.count(TrackedCaseProviderOperation.id))) == 0

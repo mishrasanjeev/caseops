@@ -1197,3 +1197,28 @@ requirements when using the fallback.
   why that test could not fail. Reproduce on the unfixed commit inside a checkout
   of that commit: pytest's `pythonpath = ["src"]` otherwise imports the
   candidate's source and a "reproduction" silently tests the fix.
+- A production-only spec branch must execute before release, not first in
+  production. Prove its exact request and response shape in pytest against the
+  real provider host with the automation marker (the gate raises before any
+  transport), assert blocked-provider bodies only through the shared
+  `expectPaidProviderBlocked` helper (RFC 7807 puts `code` at the top level,
+  never under `detail`), and read every failure's error-context before deciding
+  whether the product or the test changed.
+- Test fixtures must be registry-shaped. A random hex slice in a numeric case
+  number parsed only when it ended in a digit, so a dated production journey
+  passed 62.5% of runs and was mistaken for a regression when it finally drew a
+  letter. Generate identifiers in the format the product validates, and treat
+  any fixture that can pass by chance as a defect in the test.
+- "Insufficient identifiers" is not an explanation. When a legal record cannot
+  be matched, return the one machine-readable gap (`identity_gap`: invalid CNR,
+  missing identifiers, unreadable case number, case type required) with the
+  recorded value, on the same policy for manual search, resolve and link,
+  automatic linking and backfill, and the refresh and polling of automatic
+  links, and render that reason. A compound entry naming two records is
+  unreadable; never guess which number is the case.
+- A unified identity policy has no path-specific exceptions. Requiring a typed
+  case number for manual linking while automatic linking and refresh kept the
+  weaker check let a provider's only `CRL.A. 6209/2019` result, and its hearing
+  date, attach to a `WP(C) 6209/2019` Matter. Inventory every caller of the old
+  predicate before narrowing it, and regress each path with a provider that
+  publishes exactly one case of another type: zero searches, zero writes.

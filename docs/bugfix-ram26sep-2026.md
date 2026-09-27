@@ -60,8 +60,9 @@ divergent rule: same CNR plus a different court label must give `no_match`.
   case number that carries its case type. A bare `6209/2019` returns an
   actionable 409 (`CASE_TYPE_REQUIRED`) or `insufficient_identifiers`, because
   registries reuse numbers across case types (WP(C) 6209/2019 and CRL.A.
-  6209/2019 share a court). Scheduled refresh of an already-linked bookmark
-  keeps its exactly-one rule.
+  6209/2019 share a court). This first version kept the weaker check for
+  automatic linking and the refresh of automatic links; review on 2026-09-27
+  found that exception and it is removed (see "Production run 1").
 - Docker acceptance finding, fixed: a search result without the optional
   `existing_matters` context (older responses, dated browser mocks) crashed the
   page into the workspace error boundary. The row treats a missing list as
@@ -202,7 +203,11 @@ could pass while the user-visible invariant was broken.
    prove a file exists, not that anyone can read it. The same blind spot hid the
    invoice's off-page Matter line.
 4. **Duplicated policy (BUG-032).** Two functions made the same identity
-   decision, and a strictness change landed in one of them.
+   decision, and a strictness change landed in one of them. The first
+   unification then repeated the mistake as an exception: manual paths required
+   a typed case number while automatic linking and its refresh did not. A
+   reproduction on that commit re-pointed a bare `6209/2019` Matter to the
+   provider's only `CRL.A. 6209/2019` result and wrote that case's hearing date.
 5. **Reproductions that silently tested the fix.** On 2026-09-26, the first
    attempt to rerun the new tests against the old commit passed. pytest's
    `pythonpath = ["src"]` had imported the candidate's source. A real
@@ -212,6 +217,79 @@ could pass while the user-visible invariant was broken.
    column borders, and `UnicodeEncodeError`.
 
 Permanent rules added to `AGENTS.md` on 2026-09-26 cover each of these.
+
+## Production run 1 (2026-09-27, release `2febd211`): two tester failures
+
+Production verification run 36276564868 ran the tester project against the
+deployed release and failed two tests. Neither was a product regression; both
+were defects in how the proof was written, and both are recorded here because
+they are exactly the kind of proxy proof this report is about.
+
+1. **`ram-2026-09-26-bugs.spec.ts` BUG-032, production branch.** The branch
+   asserted the blocked-provider body as `detail.code`; the API emits RFC 7807
+   bodies with `code` at the top level, which every sibling spec reads. The
+   branch is production-only and had never executed before release. It now uses
+   a shared `expectPaidProviderBlocked` helper, and a pytest sends the identical
+   CNR-only request against the real provider host with the automation marker
+   to pin that exact shape before any browser run.
+2. **`ram-2026-09-24-prod.spec.ts` QA-owned matter journey.** Its fixture case
+   number was `WP(C) <six random hex characters>/2026`. The public-number
+   parser reads digits, so the fixture parsed only when the hex slice ended in
+   a digit: the journey passed on 62.5% of runs (it passed twice before, by
+   chance) and drew `6d661b` here. `public_number` was byte-identical between
+   the two releases; the failure was latent flakiness, not the unified policy.
+   The fixture is now registry-shaped.
+
+The run also exposed a real usability gap: for `WP(C) 6d661b/2026` the page
+said "Insufficient case identifiers" although the entry visibly carried a type,
+a year and a court. Fixed product-wide:
+
+- `hearing_matching.identity_gap` names the one reason a Matter cannot be
+  matched: `invalid_cnr`, `missing_identifiers`, `unreadable_case_number` or
+  `case_type_required`. Search, resolve and link all use it; the resolve
+  response carries the reason and the recorded values, and the page renders
+  reason-specific copy with the recorded case number.
+- The parser now reads the common spellings of one case identity
+  (`W.P.(C) No. 6209 of 2019`, `CWP-1234-2020`, `WP(C) No.6209/2019`) and
+  rejects a compound entry that names two records (`FIR 145/2025 + Crl. M.C.
+  412/2026`) instead of matching on the last number with a garbage type.
+- A new dated journey creates an unreadable, an untyped and a readable Matter
+  and asserts the exact message for each; it runs locally, in Docker and in
+  production.
+
+**Review finding (P1) on this follow-up, fixed.** Manual search, resolve and link
+required a typed case number, but automatic linking at Matter creation, the
+scheduled existing-Matter backfill and the refresh and polling of automatic links
+still used the weaker `reliable_identity` check. `_number_matches` accepts any
+case type for a bare number, so a provider that publishes exactly one case under
+that number and court decided the Matter's case. Reproduced on `452ae52d` in a
+separate checkout: the refresh returned 200, re-pointed the tracked case to
+`CRL.A. 6209/2019` and wrote its hearing date on a Matter that was
+`WP(C) 6209/2019`; the backfill searched the bare number.
+
+- Every path that establishes or keeps a case from a Matter's recorded identity
+  now calls `identity_gap`: auto-link at creation (skipped with the reason),
+  backfill (skipped), the automatic source refresh and provider dispatch (409
+  with the reason, before any spend or transport), and the tracked case's
+  readiness (`manual_refresh_disabled_reason` names the gap). Publication already
+  requires the dispatch-time scopes unchanged, so the same decision holds when
+  results are persisted.
+- A CNR still decides; a bare secondary number beside a CNR is corroboration.
+  Bookmarks without a Matter keep the coarse check, because an automatic link
+  stores a filing number in the tracked case's `case_number`.
+- Regressions (all fail on `452ae52d`): auto-link for bare, unreadable, typed,
+  filing-only and CNR Matters; a backfill where the provider publishes exactly
+  one case of another type (zero searches for the bare number, no date); an
+  existing automatic link whose Matter loses its type (409, readiness reason,
+  zero provider calls, no date), then restored (the type selects `WP(C)` from
+  two published cases). `test_20260927_case_identity_readability_postgres.py`
+  repeats them on PostgreSQL, where the scheduled poll gates each tracked case
+  inside a savepoint.
+
+**Contract change, recorded.** An existing automatic link whose Matter records
+only a bare `number/year` and no CNR stops refreshing, with "Add the case type to
+the case number ... or record the CNR" on the bookmark, until the type or CNR is
+recorded. Dates already written are retained; nothing is cleared.
 
 ## Verification
 
