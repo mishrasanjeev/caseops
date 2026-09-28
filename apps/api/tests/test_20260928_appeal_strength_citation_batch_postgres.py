@@ -20,3 +20,9 @@ def test_appeal_strength_resolves_every_citation_in_one_statement_on_postgres(
     isolated_postgres_client,
 ):
     journeys.analyze_small_and_large(isolated_postgres_client)
+
+
+def test_largest_accepted_draft_stays_below_the_parameter_ceiling_on_postgres(
+    isolated_postgres_client,
+):
+    journeys.analyze_largest_accepted_draft(isolated_postgres_client)

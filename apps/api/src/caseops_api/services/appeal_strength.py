@@ -463,10 +463,20 @@ class _CorpusMatch:
     forum_level: str | None
 
 
+# Each distinct citation is bound twice (neutral_citation and case_reference).
+# An edited draft may hold 524,288 characters, enough for about 47,000 distinct
+# citations, so resolve them 1,000 at a time: 2,000 parameters per statement,
+# far below SQLite's 32,766 and PostgreSQL's 65,535.
+_CORPUS_LOOKUP_BATCH = 1_000
+
+
 def _resolve_corpus_citations(
     session: Session, citations: Iterable[str],
 ) -> dict[str, _CorpusMatch]:
-    """Resolve citations the bench context does not hold, in one statement.
+    """Resolve citations the bench context does not hold.
+
+    One statement per 1,000 distinct citations, so any realistic draft takes a
+    single statement and the largest accepted draft stays bounded.
 
     A citation matches a document whose ``neutral_citation`` or
     ``case_reference`` equals it exactly, as the former per-citation lookup
@@ -479,8 +489,17 @@ def _resolve_corpus_citations(
     then ``id``. At most one row comes back per distinct citation.
     """
     unique = sorted(set(citations))
-    if not unique:
-        return {}
+    resolved: dict[str, _CorpusMatch] = {}
+    for start in range(0, len(unique), _CORPUS_LOOKUP_BATCH):
+        resolved.update(
+            _resolve_corpus_batch(session, unique[start:start + _CORPUS_LOOKUP_BATCH])
+        )
+    return resolved
+
+
+def _resolve_corpus_batch(
+    session: Session, unique: list[str],
+) -> dict[str, _CorpusMatch]:
     matches = union_all(
         select(
             AuthorityDocument.neutral_citation.label("citation"),

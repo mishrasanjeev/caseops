@@ -27,7 +27,8 @@ from sqlalchemy import case, event, or_, select
 
 from caseops_api.db.models import AuthorityDocument, AuthorityDocumentType, MatterForumLevel
 from caseops_api.db.session import get_engine, get_session_factory
-from caseops_api.services.appeal_strength import analyze_appeal_strength
+from caseops_api.schemas.drafts import DraftEditRequest
+from caseops_api.services.appeal_strength import _CORPUS_LOOKUP_BATCH, analyze_appeal_strength
 from tests.test_appeal_strength import _seed_appeal_draft
 from tests.test_bench_strategy_context import (
     _ctx_for,
@@ -387,3 +388,97 @@ def analyze_small_and_large(client: TestClient) -> None:
 
 def test_appeal_strength_resolves_every_citation_in_one_statement(client: TestClient) -> None:
     analyze_small_and_large(client)
+
+
+def largest_accepted_body() -> tuple[str, list[str]]:
+    """Fill an edited draft to its accepted maximum with distinct short citations."""
+
+    limit = next(
+        rule.max_length
+        for rule in DraftEditRequest.model_fields["body"].metadata
+        if hasattr(rule, "max_length")
+    )
+    head = "GROUNDS OF APPEAL\n1. The impugned order is contrary to "
+    tail = ".\n"
+    parts = [head]
+    length = len(head) + len(tail)
+    citations: list[str] = []
+    number = 1
+    while True:
+        piece = f"[A{number}/2024]"
+        if length + len(piece) > limit:
+            break
+        parts.append(piece)
+        citations.append(f"A{number}/2024")
+        length += len(piece)
+        number += 1
+    body = "".join(parts) + tail
+    DraftEditRequest(body=body)
+    assert limit - len(body) < len(f"[A{number}/2024]")
+    return body, citations
+
+
+def analyze_largest_accepted_draft(client: TestClient) -> None:
+    boot = bootstrap_company(client, slug_seed=f"asl-{uuid4().hex[:8]}")
+    body, citations = largest_accepted_body()
+    ordered = sorted(citations)
+    # Matches on both sides of the first batch boundary and at the very end.
+    expected_forums = {
+        ordered[0]: MatterForumLevel.SUPREME_COURT,
+        ordered[_CORPUS_LOOKUP_BATCH - 1]: MatterForumLevel.HIGH_COURT,
+        ordered[_CORPUS_LOOKUP_BATCH]: MatterForumLevel.TRIBUNAL,
+        ordered[-1]: MatterForumLevel.HIGH_COURT,
+    }
+    session_factory = get_session_factory()
+    with session_factory() as session:
+        matter = _bench_seed_matter(
+            session, company_id=boot["company"]["id"], code=f"ASL-{uuid4().hex[:6]}"
+        )
+        expected_ids = {}
+        for index, (citation, forum_level) in enumerate(expected_forums.items()):
+            row = _authority(
+                session,
+                title=f"Boundary authority {index}",
+                forum_level=forum_level,
+                court_name="Boundary Court",
+                stored_minutes=index,
+                case_reference=citation,
+            )
+            expected_ids[citation] = row.id
+        session.commit()
+        draft_id = _seed_appeal_draft(session, matter_id=matter.id, body=body)
+
+    def analyze():
+        with session_factory() as session:
+            return analyze_appeal_strength(
+                session=session,
+                context=_ctx_for(boot),
+                matter_id=matter.id,
+                draft_id=draft_id,
+            )
+
+    report, statements = captured(analyze)
+
+    lookups = [
+        parameters
+        for statement, parameters in statements
+        if "FROM authority_documents" in statement and "neutral_citation IN" in statement
+    ]
+    batches = -(-len(citations) // _CORPUS_LOOKUP_BATCH)
+    assert len(citations) > 32_767, len(citations)
+    assert len(lookups) == batches
+    # Two citation lists per batch, plus the rank filter.
+    largest = max(len(_flatten(parameters)) for parameters in lookups)
+    assert largest == 2 * _CORPUS_LOOKUP_BATCH + 1 < 32_766
+    refs = report.ground_assessments[0].supporting_authorities
+    assert [ref.citation for ref in refs] == citations
+    for ref in refs:
+        if ref.citation in expected_ids:
+            assert ref.resolved_authority_id == expected_ids[ref.citation]
+            assert ref.strength_label == FORUM_LABEL[expected_forums[ref.citation]]
+        else:
+            assert (ref.resolved_authority_id, ref.strength_label) == (None, "unknown")
+
+
+def test_largest_accepted_draft_stays_below_the_parameter_ceiling(client: TestClient) -> None:
+    analyze_largest_accepted_draft(client)
