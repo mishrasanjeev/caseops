@@ -230,6 +230,11 @@ def compare_versions_in_db(
     )
 
 
+# Distinct saved manifests reauthorized by one statement set: the page size the
+# batched decision was proven at on PostgreSQL for the review history (#490).
+PRIVATE_MANIFEST_BATCH_SIZE = 100
+
+
 def _version_source_manifest(version: DraftVersion) -> list | None:
     """Return a version's saved source manifest, or ``None`` if it is not a list.
 
@@ -250,7 +255,7 @@ def _private_draft_sources_current(
     context: SessionContext,
     drafts: Sequence[Draft],
 ) -> list[bool]:
-    """Reauthorize every version of every draft with one bounded statement set.
+    """Reauthorize every version of every draft in bounded statement sets.
 
     A draft stays readable only while each of its versions' manifests is
     current on its own. Versions are never merged into one manifest: edits
@@ -258,26 +263,37 @@ def _private_draft_sources_current(
     a merged manifest would fail a readable draft. The lists and single-draft
     reads share this decision, so a list never returns a draft whose read is
     refused. A per-version loop issued about seven statements per version.
+
+    The lists are unpaginated. Identical manifests, which every edit copies,
+    share one decision, and one statement set reauthorizes at most
+    ``PRIVATE_MANIFEST_BATCH_SIZE`` distinct manifests, so a long history of
+    distinct manifests cannot build an unbounded identifier predicate.
     """
 
     current = [True] * len(drafts)
-    owners: list[int] = []
-    manifests: list[list] = []
+    owners: dict[str, list[int]] = {}
+    manifests: dict[str, list] = {}
     for index, draft in enumerate(drafts):
         for version in draft.versions:
             manifest = _version_source_manifest(version)
             if manifest is None:
                 current[index] = False
-            else:
-                owners.append(index)
-                manifests.append(manifest)
-    decisions = private_saved_source_manifests_are_current(
-        session,
-        context=context,
-        manifests=manifests,
-    )
-    for index, is_current in zip(owners, decisions, strict=True):
-        current[index] = current[index] and is_current
+                continue
+            key = json.dumps(manifest, sort_keys=True)
+            manifests.setdefault(key, manifest)
+            owners.setdefault(key, []).append(index)
+    keys = list(manifests)
+    for start in range(0, len(keys), PRIVATE_MANIFEST_BATCH_SIZE):
+        batch = keys[start : start + PRIVATE_MANIFEST_BATCH_SIZE]
+        decisions = private_saved_source_manifests_are_current(
+            session,
+            context=context,
+            manifests=[manifests[key] for key in batch],
+        )
+        for key, is_current in zip(batch, decisions, strict=True):
+            if not is_current:
+                for index in owners[key]:
+                    current[index] = False
     return current
 
 

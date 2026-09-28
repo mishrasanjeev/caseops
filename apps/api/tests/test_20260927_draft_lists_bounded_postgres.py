@@ -60,3 +60,12 @@ def test_draft_lists_and_reads_are_bounded_at_production_private_index_volume(
         repeat=4,
         prepare_session=_adverse_statement_budget,
     )
+
+
+def test_draft_list_reauthorizes_a_long_distinct_history_in_capped_batches(
+    isolated_postgres_client,
+    monkeypatch,
+):
+    journeys.test_draft_list_reauthorizes_a_long_distinct_history_in_capped_batches(
+        isolated_postgres_client, monkeypatch
+    )

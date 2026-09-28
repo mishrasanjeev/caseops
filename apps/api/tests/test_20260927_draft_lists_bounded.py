@@ -19,11 +19,13 @@ neither may cost more statements for more drafts or more versions.
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import event
@@ -31,6 +33,7 @@ from sqlalchemy.orm import Session
 
 from caseops_api.db.models import Draft, DraftVersion, Matter
 from caseops_api.db.session import get_session_factory
+from caseops_api.services import drafting
 from caseops_api.services.drafting import get_draft, get_ip_draft, list_drafts, list_ip_drafts
 from caseops_api.services.private_retrieval import (
     capture_private_saved_source_manifest,
@@ -58,6 +61,14 @@ MATTER_DRAFT_LIST_STATEMENT_BOUND = 14
 IP_DRAFT_LIST_STATEMENT_BOUND = 13
 # A single-draft read issues the same statements for one draft.
 DRAFT_READ_STATEMENT_BOUND = 14
+# Statements each further batch of distinct Matter manifests may add: the
+# active generation, saved projections, saved generations, active rows for
+# retired manifests, the team-scoping flag with ACL-authorized projection IDs,
+# and the team-scoping flag with current Matter versions.
+MANIFEST_BATCH_STATEMENT_BOUND = 8
+# Rebuilds after the fixture's two generations, each saving one more distinct
+# manifest for the same Matter.
+DISTINCT_HISTORY_REBUILDS = 5
 
 # Draft handoff keeps the review's selected authorities beside its private
 # entries; they are not private sources and never need reauthorization.
@@ -165,75 +176,87 @@ def build_draft_targets(
     }
 
 
+def saved_manifest(*entries: dict) -> str:
+    """A version's saved manifest text: private entries, then the authority."""
+
+    return json.dumps([*entries, AUTHORITY_ENTRY], sort_keys=True)
+
+
+def draft_spec(label: str, versions: list[str], *, visible: bool) -> dict:
+    return {"label": label, "versions": versions, "visible": visible}
+
+
 def draft_specs(manifests: dict[str, list[dict]]) -> list[dict]:
     """Each draft's versions as saved manifest text, oldest first."""
 
     active = manifests["active"]
     retired = manifests["retired"]
 
-    def saved(*entries: dict) -> str:
-        return json.dumps([*entries, AUTHORITY_ENTRY], sort_keys=True)
-
-    def spec(label: str, versions: list[str], *, visible: bool) -> dict:
-        return {"label": label, "versions": versions, "visible": visible}
-
     return [
-        spec("active generation", [saved(*active)], visible=True),
-        spec("retired generation", [saved(*retired)], visible=True),
-        spec(
+        draft_spec("active generation", [saved_manifest(*active)], visible=True),
+        draft_spec("retired generation", [saved_manifest(*retired)], visible=True),
+        draft_spec(
             "retired version, then an active version",
-            [saved(*retired), saved(*active)],
+            [saved_manifest(*retired), saved_manifest(*active)],
             visible=True,
         ),
-        spec("edits copy one manifest", [saved(*active)] * 3, visible=True),
-        spec("authority sources only", [saved()], visible=True),
-        spec("no version yet", [], visible=True),
-        spec("undecodable text carries no saved private source", ['[{"schema": '], visible=True),
-        spec(
+        draft_spec("edits copy one manifest", [saved_manifest(*active)] * 3, visible=True),
+        draft_spec("authority sources only", [saved_manifest()], visible=True),
+        draft_spec("no version yet", [], visible=True),
+        draft_spec(
+            "undecodable text carries no saved private source", ['[{"schema": '], visible=True
+        ),
+        draft_spec(
             "retired generation, source later revoked",
-            [saved(*manifests["retired, revoked"])],
+            [saved_manifest(*manifests["retired, revoked"])],
             visible=False,
         ),
-        spec(
+        draft_spec(
             "active generation, source later revoked",
-            [saved(*manifests["active, revoked"])],
+            [saved_manifest(*manifests["active, revoked"])],
             visible=False,
         ),
-        spec(
+        draft_spec(
             "revoked version between current versions",
-            [saved(*retired), saved(*manifests["active, revoked"]), saved(*active)],
+            [
+                saved_manifest(*retired),
+                saved_manifest(*manifests["active, revoked"]),
+                saved_manifest(*active),
+            ],
             visible=False,
         ),
-        spec(
+        draft_spec(
             "retired and active entries merged into one manifest",
-            [saved(*retired, *active)],
+            [saved_manifest(*retired, *active)],
             visible=False,
         ),
-        spec(
+        draft_spec(
             "manifest saved as a JSON object",
             [json.dumps(active[0], sort_keys=True)],
             visible=False,
         ),
-        spec("manifest saved as JSON null", ["null"], visible=False),
-        spec(
+        draft_spec("manifest saved as JSON null", ["null"], visible=False),
+        draft_spec(
             "current version after a JSON object",
-            [json.dumps(active[0], sort_keys=True), saved(*active)],
+            [json.dumps(active[0], sort_keys=True), saved_manifest(*active)],
             visible=False,
         ),
-        spec(
+        draft_spec(
             "private entry without a projection ID",
-            [saved({**active[0], "projection_id": None})],
+            [saved_manifest({**active[0], "projection_id": None})],
             visible=False,
         ),
-        spec("one projection claimed twice", [saved(*active, *active)], visible=False),
-        spec(
+        draft_spec(
+            "one projection claimed twice", [saved_manifest(*active, *active)], visible=False
+        ),
+        draft_spec(
             "unknown saved generation",
-            [saved({**active[0], "generation_id": str(uuid4())})],
+            [saved_manifest({**active[0], "generation_id": str(uuid4())})],
             visible=False,
         ),
-        spec(
+        draft_spec(
             "saved hash no longer matches",
-            [saved({**active[0], "source_sha256": "0" * 64})],
+            [saved_manifest({**active[0], "source_sha256": "0" * 64})],
             visible=False,
         ),
     ]
@@ -479,6 +502,86 @@ def assert_bounded_draft_lists(
         for row in small:
             read = client.get(f"{base}/{row['id']}", headers=headers)
             assert read.status_code == (200 if row["visible"] else 409), (row["label"], read.text)
+
+
+def test_draft_list_reauthorizes_a_long_distinct_history_in_capped_batches(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A Matter whose drafts were saved across many generations of the index.
+
+    Every manifest names other projections and another saved generation, so
+    identical-manifest sharing cannot shrink the batch. No call may carry more
+    than the batch size, and splitting the batch must not change any draft's
+    decision; each draft's two identical versions still share one decision.
+    """
+
+    targets = build_draft_targets(client)
+    matter_manifests = targets["manifests"]["matter"]
+    history = [matter_manifests["retired"], matter_manifests["active"]]
+    factory = get_session_factory()
+    for _rebuild in range(DISTINCT_HISTORY_REBUILDS):
+        with factory() as session:
+            rebuild_private_index(session, company_id=targets["company_id"], activate=True)
+        with factory() as session:
+            owner = _context(
+                session,
+                company_id=targets["company_id"],
+                membership_id=targets["owner_membership_id"],
+            )
+            history.append(_capture(session, owner, ("matter", targets["matter_id"])))
+    assert len({manifest[0]["generation_id"] for manifest in history}) == len(history)
+    specs = [
+        draft_spec(f"saved in generation {number}", [saved_manifest(*manifest)] * 2, visible=True)
+        for number, manifest in enumerate(history, start=1)
+    ]
+    specs += [
+        draft_spec(
+            "active generation, source later revoked",
+            [saved_manifest(*matter_manifests["active, revoked"])],
+            visible=False,
+        ),
+        draft_spec(
+            "saved hash no longer matches",
+            [saved_manifest({**history[-1][0], "source_sha256": "0" * 64})],
+            visible=False,
+        ),
+    ]
+    session, member = _member_session(targets, None)
+    with session:
+        one_at_a_time = [
+            all(version_decision(session, member, text) for text in row["versions"])
+            for row in specs
+        ]
+    assert one_at_a_time == [row["visible"] for row in specs]
+    rows = add_drafts(targets, "matter", specs, copies=1, repeat=1)
+    expected = [row["id"] for row in rows if row["visible"]]
+    distinct = len({text for row in specs for text in row["versions"]})
+
+    default_ids, default_statements = listed_drafts(targets, "matter")
+    batches: list[int] = []
+    decide = drafting.private_saved_source_manifests_are_current
+
+    def recorded(session: Session, *, context: SessionContext, manifests: list) -> tuple:
+        batches.append(len(manifests))
+        return decide(session, context=context, manifests=manifests)
+
+    monkeypatch.setattr(drafting, "private_saved_source_manifests_are_current", recorded)
+    monkeypatch.setattr(drafting, "PRIVATE_MANIFEST_BATCH_SIZE", 3)
+    split_ids, split_statements = listed_drafts(targets, "matter")
+
+    assert not membership_problems("unsplit Matter list", rows, default_ids)
+    assert not membership_problems("split Matter list", rows, split_ids)
+    assert default_ids == split_ids == expected
+    assert sum(batches) == distinct
+    assert distinct < sum(len(row["versions"]) for row in specs)
+    assert max(batches) == 3 and len(batches) == math.ceil(distinct / 3)
+    assert len(default_statements) <= MATTER_DRAFT_LIST_STATEMENT_BOUND
+    assert (
+        len(default_statements)
+        < len(split_statements)
+        <= (len(default_statements) + (len(batches) - 1) * MANIFEST_BATCH_STATEMENT_BOUND)
+    )
 
 
 def test_draft_lists_and_reads_reauthorize_every_version_in_one_bounded_query_set(

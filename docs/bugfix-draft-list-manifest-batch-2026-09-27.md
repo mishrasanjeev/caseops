@@ -49,18 +49,25 @@ paths, as before.
 ## Fix
 
 - `_version_source_manifest` parses a version's manifest once, with the read's
-  rules. `_private_draft_sources_current` sends every version of every draft
-  to `private_saved_source_manifests_are_current` in one call. Each version
+  rules. `_private_draft_sources_current` sends the manifests of every version
+  of every draft to `private_saved_source_manifests_are_current`. Each version
   keeps its own decision, and a draft is current only when all of its versions
   are.
+- Identical manifests, which every edit copies, share one decision. One call
+  reauthorizes at most `PRIVATE_MANIFEST_BATCH_SIZE` (100) distinct manifests,
+  the review-history page size #490 proved on PostgreSQL. The lists are
+  unpaginated, so without this cap a long history of distinct manifests would
+  put every saved projection ID into one `IN` predicate and every retired
+  source pair into one `OR`. A pull-request review raised this.
 - Versions are never merged into one manifest. Edits copy the same projections
   and older versions keep older generations, so a merged manifest would fail a
   readable draft.
 - `list_drafts`, `list_ip_drafts` and `_assert_private_draft_sources_current`
   all use it, so a list and a read make the same decision.
 - For a non-owner member the Matter list takes 14 statements and the IP list
-  13, however many drafts and versions they hold. A single-draft read takes at
-  most 14, whatever its version count.
+  13, however many drafts and versions they hold, up to 100 distinct manifests.
+  Each further 100 add one statement set of at most 8. A single-draft read
+  takes at most 14, whatever its version count.
 
 ## Verification
 
@@ -84,6 +91,15 @@ paths, as before.
   count at 18 drafts / 23 versions and at 54 drafts / 161 versions. Every
   single-draft read agrees with the list at a constant cost from 1 to 9
   versions. The HTTP list and detail routes agree too (200 or 409).
+- `test_draft_list_reauthorizes_a_long_distinct_history_in_capped_batches`
+  saves one Matter's manifest in seven generations. Every manifest names other
+  projections and another saved generation. Each draft has two identical
+  versions, and the list also holds a revoked draft and one with a changed
+  hash. With the batch size set to 3, the list makes three calls of three
+  distinct manifests, for 16 versions. It returns exactly the drafts the
+  unsplit list and the one-manifest decisions return. Each extra batch adds at
+  most 8 statements. On the previous commit, the same list sent all 16 version
+  manifests in one call, and this test fails there.
 - `apps/api/tests/test_20260927_draft_lists_bounded_postgres.py` runs the same
   journey on PostgreSQL, then again at the retained volume above with 72 drafts
   and 299 versions per list: 14 and 13 statements, 0.22-0.48 s and
