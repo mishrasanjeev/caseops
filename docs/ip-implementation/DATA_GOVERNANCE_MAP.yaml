@@ -335,7 +335,7 @@
       "implementation_refs": [
         "apps/api/src/caseops_api/services/document_storage.py",
         "apps/api/src/caseops_api/core/settings.py",
-        "infra/cloudrun/api-service.yaml"
+        "docs/GCP_DEPLOY.md"
       ]
     },
     {
@@ -531,7 +531,7 @@
         "apps/api/src/caseops_api/services/statute_enrichment.py",
         "apps/api/src/caseops_api/core/settings.py",
         "apps/api/src/caseops_api/services/citations.py",
-        "infra/cloudrun/api-service.yaml"
+        "scripts/deploy-prod.sh"
       ]
     },
     {
@@ -562,7 +562,7 @@
         "apps/api/src/caseops_api/services/indian_kanoon.py",
         "apps/api/src/caseops_api/scripts/seed_indian_kanoon_costs.py",
         "apps/api/src/caseops_api/services/pine_labs.py",
-        "infra/cloudrun/api-service.yaml",
+        "scripts/deploy-prod.sh",
         "infra/cloudrun/case-tracking-poll-job.yaml",
         "infra/cloudrun/scheduler-inventory.json"
       ]

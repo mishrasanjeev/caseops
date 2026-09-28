@@ -12,6 +12,7 @@ import sys
 import time
 import tomllib
 from functools import cache
+from itertools import pairwise
 from pathlib import Path
 
 import pytest
@@ -176,7 +177,6 @@ def test_production_deploy_materializes_legacy_hearings_before_qa() -> None:
 
 def test_production_deploy_owns_indian_kanoon_activation_without_manual_data_entry() -> None:
     deploy = _read_repo_text("scripts/deploy-prod.sh")
-    manifest = _read_repo_text("infra/cloudrun/api-service.yaml")
 
     seed_update = (
         'gcloud run jobs "${INDIAN_KANOON_COST_SEED_ACTION}" "${INDIAN_KANOON_COST_SEED_JOB}"'
@@ -192,14 +192,16 @@ def test_production_deploy_owns_indian_kanoon_activation_without_manual_data_ent
     assert "|CASEOPS_INDIAN_KANOON_PERMITTED_USES=${INDIAN_KANOON_PERMITTED_USES}|" in deploy
     assert 'env.get("CASEOPS_INDIAN_KANOON_API_TOKEN")' in deploy
     assert "expected_indian_kanoon_env" in deploy
-    assert 'value: "Orchestrum Technologies LLP"' in manifest
-    assert 'name: "caseops-indian-kanoon-api-token"' in manifest
+    assert 'INDIAN_KANOON_TERMS_OWNER="Orchestrum Technologies LLP"' in deploy
+    assert "INDIAN_KANOON_API_TOKEN_SECRET=caseops-indian-kanoon-api-token" in deploy
 
 
 def test_production_deploy_pins_openai_and_verifies_runtime_readback() -> None:
     deploy = _read_repo_text("scripts/deploy-prod.sh")
-    manifest = _read_repo_text("infra/cloudrun/api-service.yaml")
 
+    assert "LLM_PROVIDER=openai" in deploy
+    assert "LLM_MODEL=gpt-5.1" in deploy
+    assert "LLM_RECOMMENDATIONS_MODEL=gpt-5-mini" in deploy
     assert "LLM_API_KEY_SECRET=caseops-openai-api-key" in deploy
     assert "CASEOPS_LLM_API_KEY=${LLM_API_KEY_SECRET}:latest" in deploy
     assert "CASEOPS_LLM_PROVIDER=${LLM_PROVIDER}" in deploy
@@ -209,22 +211,26 @@ def test_production_deploy_pins_openai_and_verifies_runtime_readback() -> None:
     assert '"CASEOPS_LLM_PROVIDER": "openai"' in deploy
     assert '"CASEOPS_LLM_MODEL": "gpt-5.1"' in deploy
     assert '"CASEOPS_LLM_MODEL_RECOMMENDATIONS": "gpt-5-mini"' in deploy
-    assert 'name: CASEOPS_LLM_PROVIDER\n              value: "openai"' in manifest
-    assert "name: CASEOPS_LLM_API_KEY" in manifest
-    assert 'name: "caseops-openai-api-key"' in manifest
-    assert "CASEOPS_OPENAI_API_KEY" not in manifest
+    assert "CASEOPS_OPENAI_API_KEY" not in deploy
 
 
-def test_production_manifests_block_paid_providers_for_test_tenants() -> None:
+def test_production_definitions_block_paid_providers_for_test_tenants() -> None:
     blocked_slugs = "caseops-qa;caseops-ip-qa;test-legal"
-    expected = f'"{blocked_slugs}"'
-    api_manifest = _read_repo_text("infra/cloudrun/api-service.yaml")
+    inventory = json.loads(_read_repo_text("infra/cloudrun/scheduler-inventory.json"))
+    poll_job = next(
+        job for job in inventory["jobs"] if job["run_job_name"] == "caseops-case-tracking-poll"
+    )
     poll_manifest = _read_repo_text("infra/cloudrun/case-tracking-poll-job.yaml")
     deploy = _read_repo_text("scripts/deploy-prod.sh")
 
-    for manifest in (api_manifest, poll_manifest):
-        assert "CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS" in manifest
-        assert expected in manifest
+    # The inventory bootstrap contract is the verified definition of the live
+    # poll job; the reference manifest must not drift on this boundary either.
+    assert (
+        poll_job["bootstrap"]["environment"]["CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS"]
+        == blocked_slugs
+    )
+    assert "CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS" in poll_manifest
+    assert f'"{blocked_slugs}"' in poll_manifest
     assert f'PAID_PROVIDER_BLOCKED_COMPANY_SLUGS="{blocked_slugs}"' in deploy
     assert (
         "CASEOPS_PAID_PROVIDER_BLOCKED_COMPANY_SLUGS="
@@ -892,16 +898,17 @@ def test_deploy_prod_preserves_single_request_instances_with_scale_headroom() ->
     """A stalled request must leave a warm slot while handlers stay sync."""
 
     script = _read_repo_text("scripts/deploy-prod.sh")
-    manifest = _read_repo_text("infra/cloudrun/api-service.yaml")
     runbook = _read_repo_text("docs/GCP_DEPLOY.md")
 
     assert "API_CONCURRENCY=1" in script
     assert 'API_MAX_INSTANCES="${API_MAX_INSTANCES:-20}"' in script
     assert '--max "${API_MAX_INSTANCES}"' in script
     assert '--max-instances "${API_MAX_INSTANCES}"' in script
-    assert 'run.googleapis.com/minScale: "4"' in manifest
-    assert "autoscaling.knative.dev/minScale" not in manifest
-    assert 'autoscaling.knative.dev/maxScale: "20"' in manifest
+    # Warm capacity is service-level only; a revision-level minimum kept
+    # obsolete tagged revisions alive, so every release clears it.
+    assert "API_MIN_INSTANCES=4" in script
+    assert '--min "${API_MIN_INSTANCES}" \\\n  --min-instances default' in script
+    assert 'str(annotations.get("run.googleapis.com/minScale")) != expected_min' in script
     assert "--min=4" in runbook
     assert "--min-instances=default" in runbook
     assert "--min-instances=0" not in runbook
@@ -1602,11 +1609,18 @@ elif [[ "$*" == *"run revisions describe"* ]]; then
 elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"containers[0].image"* ]]; then
   printf 'registry.invalid/caseops-api:%s\n' "${FAKE_TAG}"
 elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"containers[1].image"* ]]; then
-  printf 'clamav/clamav:1.4\n'
+  if [[ "${FAKE_TRAFFIC_MODE}" != "sidecar-missing" ]]; then
+    printf 'clamav/clamav:1.4\n'
+  fi
 elif [[ "$*" == *"services describe caseops-web"* ]]; then
   printf 'registry.invalid/caseops-web:%s\n' "${FAKE_TAG}"
 elif [[ "$*" == *"services describe caseops-api"* && "$*" == *"containers[].name"* ]]; then
-  printf 'api;clamav\n'
+  if [[ "${FAKE_TRAFFIC_MODE}" == "sidecar-missing" || \
+    "${FAKE_TRAFFIC_MODE}" == "sidecar-dropped" ]]; then
+    printf 'api\n'
+  else
+    printf 'api;clamav\n'
+  fi
 elif [[ "$*" == *"services describe caseops-api"* && \
   "$*" == *"startupProbe.initialDelaySeconds"* ]]; then
   printf ''
@@ -2041,6 +2055,89 @@ def test_deploy_prod_accepts_clean_head_and_healthy_api(tmp_path: Path) -> None:
         "gh workflow run prod-verify.yml --repo mishrasanjeev/caseops --ref main "
         "-f expected_release_sha=abcdef1234567890abcdef1234567890abcdef12"
     ) in "\n".join(calls)
+
+
+def test_deploy_prod_executes_the_complete_two_container_api_contract(tmp_path: Path) -> None:
+    """scripts/deploy-prod.sh is the only writer of the caseops-api service.
+
+    The retired infra/cloudrun/api-service.yaml disagreed with production on
+    command, billing mode, sidecar, probes and CPU boost. Every release must
+    redeploy both containers with their probes and capacity, and must leave
+    the image command, request-based billing, startup CPU boost and every
+    environment value it does not own exactly as the live service has them.
+    """
+    result = _run_deploy_with_fakes(tmp_path, "abcdef1")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+    api_deploys = [call for call in calls if call.startswith("run deploy caseops-api ")]
+    assert len(api_deploys) == 1
+    service, api, clamav = api_deploys[0].split(" --container ")
+    assert {
+        "--concurrency 1",
+        "--max 20",
+        "--max-instances 20",
+        "--min 4",
+        "--min-instances default",
+        "--timeout 120s",
+    } <= {" ".join(pair) for pair in pairwise(service.split())}
+    assert api.startswith(
+        "api --port 8080 --image "
+        "asia-south1-docker.pkg.dev/perfect-period-305406/caseops-images/caseops-api:abcdef1 "
+    )
+    assert (
+        " --startup-probe tcpSocket.port=8080,initialDelaySeconds=0,periodSeconds=2,"
+        "timeoutSeconds=1,failureThreshold=120 "
+    ) in api
+    assert "|CASEOPS_CLAMAV_REQUIRED=true|" in api
+    assert api.endswith(" --cpu 2 --memory 4Gi")
+    assert clamav == (
+        "clamav --image clamav/clamav:1.4 --startup-probe tcpSocket.port=3310,"
+        "initialDelaySeconds=0,periodSeconds=2,timeoutSeconds=1,failureThreshold=120"
+    )
+    arguments = set(api_deploys[0].split())
+    for replacing_flag in (
+        "--command",
+        "--args",
+        "--no-cpu-throttling",
+        "--no-cpu-boost",
+        "--set-env-vars",
+        "--clear-env-vars",
+        "--env-vars-file",
+        "--set-secrets",
+        "--clear-secrets",
+        "--remove-containers",
+    ):
+        assert replacing_flag not in arguments
+    assert (
+        'CMD ["sh", "-c", "uvicorn caseops_api.main:app --host 0.0.0.0 '
+        '--port ${PORT} --app-dir src"]'
+    ) in _read_repo_text("apps/api/Dockerfile")
+
+
+def test_deploy_prod_refuses_a_single_container_api_before_routing(tmp_path: Path) -> None:
+    # A full-spec replace from a stale manifest leaves no ClamAV container to
+    # carry forward; the release must stop rather than deploy the API alone.
+    result = _run_deploy_with_fakes(tmp_path, "abcdef1", traffic_mode="sidecar-missing")
+
+    assert result.returncode != 0
+    assert "cannot resolve the deployed ClamAV image" in result.stdout
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+    assert not any(call.startswith("run deploy caseops-") for call in calls)
+    assert not any("services update-traffic" in call for call in calls)
+
+
+def test_deploy_prod_withholds_certification_when_the_sidecar_disappears(
+    tmp_path: Path,
+) -> None:
+    result = _run_deploy_with_fakes(tmp_path, "abcdef1", traffic_mode="sidecar-dropped")
+
+    assert result.returncode != 0
+    assert "EG-003 REGRESSION: clamav sidecar missing from caseops-api" in result.stdout
+    calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8").splitlines()
+    assert any(call.startswith("run deploy caseops-api ") for call in calls)
+    assert not any("run jobs execute caseops-ip-qa-bootstrap" in call for call in calls)
+    assert not any("gh workflow run prod-verify.yml" in call for call in calls)
 
 
 def test_deploy_prod_drains_active_prod_verification_before_build(tmp_path: Path) -> None:

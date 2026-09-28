@@ -745,9 +745,11 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
 - `EG-002` `Implemented` Deploy-time migration safety
   (closed 2026-04-24).
   Evidence: live `caseops-api` service has `CASEOPS_AUTO_MIGRATE=false`
-  (verified via `gcloud run services describe`); manifest
+  (verified via `gcloud run services describe`; re-verified 2026-09-27); manifest
   `infra/cloudrun/api-service.yaml:48-55` declares the policy with the
-  EG-002 anchor comment; separate `caseops-migrate-job` Cloud Run Job
+  EG-002 anchor comment (that manifest was never applied to production and was
+  retired on 2026-09-27, see EH-DEPLOY-02; the live readback is the evidence);
+  separate `caseops-migrate-job` Cloud Run Job
   runs `python -m alembic upgrade head` on the same image as the API;
   `scripts/deploy-prod.sh` (added 2026-04-24) is the canonical deploy
   path and enforces order: build -> migrate-job -> api -> web ->
@@ -1003,8 +1005,13 @@ Evidence: `docs/AUTOMATED_QA_COVERAGE_AUDIT_2026-04-25.md`.
   Evidence: `docs/WORK_TO_BE_DONE.md` section 8.4 (CI/CD).
 
 - `WTD-8.5` `Partially implemented` Secret-management completion.
-  Evidence: `docs/WORK_TO_BE_DONE.md` section 8.5 (Secret management),
-  `infra/cloudrun/api-service.yaml:14-66`.
+  Evidence: `docs/WORK_TO_BE_DONE.md` section 8.5 (Secret management) and a
+  2026-09-27 read-only readback of the live `caseops-api`: every sensitive
+  environment value (auth secret, database URL, OpenAI, Voyage, SendGrid API and
+  webhook keys, eCourts, machine readiness, Indian Kanoon) is a Secret Manager
+  `secretKeyRef`, and `scripts/deploy-prod.sh` binds and reads back three of
+  them. The former `infra/cloudrun/api-service.yaml:14-66` evidence was a
+  never-applied template, retired on 2026-09-27 (EH-DEPLOY-02).
 
 - `WTD-9.1` `Partially implemented` Broader parsing stack.
   Evidence: `docs/WORK_TO_BE_DONE.md` section 9.1 (Broader parsers).
@@ -1393,6 +1400,11 @@ Two methodology rules established by this pass and binding on future audits:
    `gcloud run deploy --update-env-vars` and never applies it, and
    `infra/cloudrun/deploy.ps1:234` warns against replacing it. Cloud Run *job*
    manifests are applied and may be relied on.
+   **Amended 2026-09-27 (EH-DEPLOY-02):** both files were retired, and the
+   job-manifest half of this rule does not hold. No tool applies the job YAMLs;
+   the recurring jobs are defined by the `bootstrap` contracts in
+   `infra/cloudrun/scheduler-inventory.json`, which every release verifies
+   against the live jobs.
 
 **Scope of severity:** "stop-ship" in `EH-SGR-*` blocks activation, a release
 claim, or pilot use of the named surface until that control passes. It does not
@@ -2066,3 +2078,95 @@ is which.
     startup; narrowing it would hang readiness.
   - Two awaited-task statements inside `pytest.raises`: false positives,
     because awaiting the task re-raises its exception and is the assertion.
+
+## 2026-09-27 Cloud Run service ownership
+
+Recorded 2026-09-27 by the release-engineering session; the Codex-owned queue
+and the ownership ledger are unchanged. The programme release verdict remains
+**NO-GO**, unchanged from the September 14 checkpoint. Evidence came from
+read-only `gcloud` describe, list and audit-log queries; no production service,
+job or scheduler was changed.
+
+### EH-DEPLOY-02 - A never-applied API manifest could replace the live two-container service
+
+- **Status:** Partially implemented. The control is written and falsified on
+  `fix/cloudrun-api-manifest-20260927` and is **not yet merged**. It becomes
+  `Implemented` once it is on `main` with CI green; production needs no change
+  because it never used the retired path.
+- **Gap found:** `infra/cloudrun/api-service.yaml` disagreed with the live
+  `caseops-api` on the command (`uv run uvicorn` against the image `CMD`),
+  billing mode (`cpu-throttling: "false"` against request-based billing), the
+  `clamav` sidecar, both TCP startup probes, startup CPU boost, the timeout
+  (300 s against 120 s), `CASEOPS_ENV` (`cloud` against `production`) and every
+  live-only environment value, including CORS, the embedding provider and the
+  scanner host. `infra/cloudrun/deploy.ps1` still rendered it "for reference /
+  manual inspection" and printed the directory. A `gcloud run services replace`
+  of that output drops ClamAV; the replacement revision could not pass the
+  required-scanner fence, and the next `scripts/deploy-prod.sh` would stop on
+  the missing ClamAV container until EG-003 was repaired by hand.
+- **Evidence that neither file was a live path:** all 472 `caseops-api`
+  revisions (configuration generations 1-472, 2026-04-19 to 2026-09-27,
+  contiguous, with no `DeleteRevision` in 400 days of admin audit logs) lack
+  every manifest fingerprint: the `uv run` command, `cpu-throttling: "false"`,
+  the execution-environment and secrets annotations, and `CASEOPS_API_PORT`,
+  `CASEOPS_API_DOCS_ENABLED`, `CASEOPS_TESSERACT_COMMAND` and
+  `CASEOPS_DOCUMENT_STORAGE_CACHE_PATH`. `deploy.ps1` stopped applying the
+  manifest in PR #94 (2026-05-31). Its job and scheduler sections, each of
+  which began with the document worker, never ran against production: the audit
+  logs hold no entry for `caseops-document-worker` or its trigger. The same
+  query shows `caseops-legal-update-sync` and `caseops-case-tracking-poll`
+  created on 2026-05-31 by a manual `gcloud run jobs replace` of their job
+  YAMLs; the first attempts at 17:33 UTC failed with `INVALID_ARGUMENT` (the
+  manifest defects PR #94 fixed) and the 17:39 attempts succeeded. IPLF-001B
+  made `infra/cloudrun/scheduler-inventory.json` the only scheduler and job
+  owner on 2026-08-01.
+- **Control:** both files were retired rather than aligned: a second full
+  specification would need every live-only value copied into a file that
+  nothing applies. `scripts/deploy-prod.sh` is the only writer of
+  `caseops-api`. `apps/api/tests/test_cloudrun_service_ownership.py` fails on
+  any checked-in Cloud Run `Service` manifest and on any `services replace` or
+  `jobs replace` other than the live-export repair in
+  `scripts/eg003-apply-clamav.sh`. `test_deploy_prod_hardening.py` pins the
+  executed two-container command (image `CMD`, no billing, CPU-boost or
+  environment-replacing flags, both probes, concurrency 1, minimum 4, maximum
+  20, timeout 120 s) and proves that the release refuses a single-container
+  service before routing and withholds certification when the sidecar
+  disappears after routing. `test_scheduler_inventory.py` proves each job's
+  invoker grant precedes its trigger and that a failed grant stops before any
+  scheduler write. The fresh-project bootstrap in `docs/GCP_DEPLOY.md`
+  section 6 previously created a single-container service that could not
+  start: production settings reject it without `CASEOPS_AUTO_MIGRATE=false`,
+  and with no scanner host the readiness fence refuses to serve. It also put
+  the password-bearing database URL in a plain environment variable. It now
+  creates the same two-container contract, declares
+  request-based billing and startup CPU boost, and binds the database URL as a
+  secret; the same test module compares it with the release command and loads
+  its environment through the production validators. Each new test failed
+  against a deliberately broken source before it was accepted. The
+  data-governance map, the program manifest, its generated views and the
+  retained Phase 0 reconciler now cite the real owners.
+- **Severity:** control gap, not stop-ship. Only a manual replace could have
+  used the manifest, and the canonical release never did.
+
+### EH-DEPLOY-03 - The canonical API deploy inherits billing, CPU boost and most environment
+
+- **Status:** Partially implemented.
+- **Gap:** `scripts/deploy-prod.sh` sets the containers, probes, capacity and
+  the environment and secrets it owns, but carries forward request-based
+  billing, startup CPU boost, the ClamAV resources and every other environment
+  value from the live service. Its readback checks the sidecar, the API probe,
+  the ClamAV probe delay and period, the scanner requirement, startup
+  independence and the service minimum. It does not check billing mode, CPU
+  boost, concurrency, timeout or maximum instances, so drift made outside a
+  release would persist unnoticed.
+- **Missing layer:** declare startup CPU boost and request-based billing in the
+  release and read them back with concurrency, timeout and maximum instances.
+  Give the live-only environment a checked-in owner, or record why it has none.
+  The data-governance change gate never watched the release script's
+  environment declarations; it watched the unapplied manifest instead.
+- **Stale references:** no tool applies
+  `infra/cloudrun/activity-report-job.yaml`, `case-tracking-poll-job.yaml`,
+  `ip-journal-watch-job.yaml`, `legal-update-sync-job.yaml` or
+  `migrate-job.yaml`. The first four still use `uv run` commands that differ
+  from the verified inventory contracts. Retire or regenerate them together
+  with their data-governance and program-manifest references.
