@@ -1701,13 +1701,13 @@ def _serialize_turns(
         require_ip_document_ai_retrieval=True,
     )
     from caseops_api.services.private_retrieval import (
-        reauthorize_private_saved_outputs,
+        private_saved_output_turns_to_hide,
     )
 
-    blocked_saved_turn_ids = reauthorize_private_saved_outputs(
-        session,
-        company_id=context.company.id,
-        assistant_turn_ids={turn.id for turn in turns},
+    # Reads never write a saved output's state: every read path decides the
+    # same way, and only projection events lock an answer.
+    blocked_saved_turn_ids = private_saved_output_turns_to_hide(
+        saved_output_rows,
         accessible_sources={
             (source_type, source_id, source_version)
             for (source_type, source_id), source_version in current.items()
