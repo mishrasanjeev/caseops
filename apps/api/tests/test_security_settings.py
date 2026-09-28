@@ -20,9 +20,9 @@ def test_placeholder_auth_secret_allowed_in_local(monkeypatch: pytest.MonkeyPatc
         "production",
         "prod",
         # Codex's 2026-04-19 cybersecurity review (finding #3):
-        # `cloud` is the value Cloud Run sets via
-        # infra/cloudrun/api-service.yaml; the previous allow-list
-        # treated it as local and skipped the placeholder-secret guard.
+        # `cloud` is the CASEOPS_ENV most recurring Cloud Run jobs in
+        # infra/cloudrun/scheduler-inventory.json run with; the previous
+        # allow-list treated it as local and skipped the placeholder-secret guard.
         "cloud",
         "gke",
         # Strict allow-list: any unknown env defaults to non-local so

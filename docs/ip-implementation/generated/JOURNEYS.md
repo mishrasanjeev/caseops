@@ -24,7 +24,7 @@ Generated; do not edit.
 | UJ-18 | Run intelligent review | 4 | IPLF-063B, IPLF-065B | 8 | 3 | implemented | passed | true |
 | UJ-19 | Track eCourts/provider case | 5 | IPLF-050B, IPLF-051B | 7 | 2 | implemented | passed | false |
 | UJ-20 | Browse judge and mapped judgments | 4 | IPLF-003B, IPLF-060B | 11 | 3 | implemented | passed | true |
-| UJ-21 | Review watch hit and open action | 4 | IPLF-052B, IPLF-053B | 12 | 2 | implemented | passed | true |
+| UJ-21 | Review watch hit and open action | 4 | IPLF-052B, IPLF-053B | 11 | 2 | implemented | passed | true |
 | UJ-22 | Use CaseOps Guide | 3 | IPLF-061B, IPLF-065B, IPLF-066B | 10 | 2 | implemented | passed | false |
 | UJ-23 | Ask this Workspace | 4 | IPLF-062B, IPLF-064B, IPLF-065B, IPLF-066B | 13 | 2 | implemented | passed | false |
 | UJ-24 | Generate and approve IP pleading | 4 | IPLF-045B, IPLF-046B, IPLF-047B | 5 | 5 | implemented | passed | true |
@@ -36,7 +36,7 @@ Generated; do not edit.
 | UJ-30 | Manage design, copyright, or licence | 3 | IPLF-090B | 3 | 0 | not_started | not_run | false |
 | UJ-31 | Conduct clearance search and obtain filing instruction | 5 | IPLF-039H | 5 | 0 | not_started | not_run | false |
 | UJ-32 | Prepare, submit, and reconcile trademark filing | 5 | IPLF-039H, IPLF-039I | 5 | 0 | in_progress | not_run | false |
-| UJ-33 | Monitor journal publication and opposition window | 5 | IPLF-052B, IPLF-053B | 13 | 2 | implemented | passed | true |
+| UJ-33 | Monitor journal publication and opposition window | 5 | IPLF-052B, IPLF-053B | 12 | 2 | implemented | passed | true |
 | UJ-34 | Manage multi-class or partial opposition | 4 | IPLF-048B | 4 | 1 | implemented | passed | true |
 | UJ-35 | Manage Madrid international registration or designation | 5 | IPLF-057B | 7 | 1 | implemented | passed | true |
 | UJ-36 | Complete post-registration recordal | 5 | IPLF-058B | 10 | 2 | implemented | passed | true |

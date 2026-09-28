@@ -112,13 +112,11 @@ gcloud secrets versions add caseops-sendgrid-webhook-public-key \
 
 ## Step 3 — Confirm the Cloud Run wire
 
-`infra/cloudrun/api-service.yaml` already references
-`caseops-sendgrid-webhook-public-key` in two places:
-
-- The top-level `run.googleapis.com/secrets` annotation, so Cloud Run
-  mounts the secret into the pod.
-- The `CASEOPS_SENDGRID_WEBHOOK_PUBLIC_KEY` env var with `secretKeyRef`
-  pointing at version `latest`.
+The live `caseops-api` service binds the `CASEOPS_SENDGRID_WEBHOOK_PUBLIC_KEY`
+env var to `caseops-sendgrid-webhook-public-key` through a Secret Manager
+`secretKeyRef` at version `latest` (re-verified on 2026-09-27). No checked-in
+manifest declares the service: `scripts/deploy-prod.sh` owns it and carries
+this binding forward on every release.
 
 Redeploy via `scripts/deploy-prod.sh` (the canonical path; never
 `gcloud run deploy` ad-hoc — it skips the migrate-job and version

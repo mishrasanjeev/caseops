@@ -208,11 +208,10 @@ This keeps the local topology close enough to the cloud architecture without int
 
 ## Cloud Worker Shape
 
-- `infra/cloudrun/api-service.yaml` deploys the HTTP API on `Cloud Run`
-- `infra/cloudrun/document-worker-job.yaml` deploys the document processor as a `Cloud Run Job`
-- the worker job runs `caseops-document-worker --once`
-- `Cloud Scheduler` can invoke that job on a short cadence so queued OCR and reindex work drains without needing a permanently running non-HTTP service
-- both API and worker use the same API image and the same `GCS` document backend
+- `scripts/deploy-prod.sh` deploys the HTTP API on `Cloud Run` as two containers: the API and a `ClamAV` sidecar; the API refuses to serve until the scanner answers
+- recurring `Cloud Run Jobs` and their `Cloud Scheduler` triggers are defined in `infra/cloudrun/scheduler-inventory.json` and converged by `scripts/scheduler_inventory.py` on every release
+- `infra/cloudrun/document-worker-job.yaml` describes an optional document processor job (`caseops-document-worker --once`) that `Cloud Scheduler` could run on a short cadence; it is not provisioned in production
+- the API and every job use the same API image and the same `GCS` document backend
 
 ## Next Build Priorities
 

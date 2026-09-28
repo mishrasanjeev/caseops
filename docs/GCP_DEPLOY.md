@@ -62,7 +62,8 @@ gcloud services enable \
 export DB_INSTANCE=caseops-db
 export DB_NAME=caseops
 export DB_USER=caseops
-export DB_PASSWORD=$(openssl rand -base64 32)
+# Hex keeps the password URL-safe inside the database URL secret (section 6).
+export DB_PASSWORD=$(openssl rand -hex 32)
 
 # db-custom-2-7680: 2 vCPU, 7.68 GB RAM. ~$80/mo committed-use, ~$110/mo on-demand.
 gcloud sql instances create $DB_INSTANCE \
@@ -173,25 +174,43 @@ gcloud storage buckets add-iam-policy-binding gs://$DOC_BUCKET \
   --role=roles/storage.objectAdmin
 
 # Deploy. --add-cloudsql-instances enables the Cloud SQL proxy
-# socket, which the DATABASE_URL reaches via /cloudsql/<conn-name>.
+# socket, which the database URL reaches via host=/cloudsql/<conn-name>.
 export SQL_CONN=$GCP_PROJECT:$GCP_REGION:$DB_INSTANCE
 
+# Like every credential, the database URL reaches the service only as a
+# Secret Manager reference.
+echo -n "postgresql+psycopg://$DB_USER:$DB_PASSWORD@/$DB_NAME?host=/cloudsql/$SQL_CONN" \
+  | gcloud secrets create caseops-database-url --data-file=-
+
+# Two containers from the first revision: the API and its ClamAV sidecar. The
+# API refuses to serve until clamd answers, so the service is never up without
+# malware scanning. Production settings also reject startup migration, so
+# CASEOPS_AUTO_MIGRATE=false is required.
 gcloud run deploy caseops-api \
-  --image=$GCP_REGION-docker.pkg.dev/$GCP_PROJECT/$REPO/caseops-api:v1 \
   --service-account=$RUNTIME_SA@$GCP_PROJECT.iam.gserviceaccount.com \
   --add-cloudsql-instances=$SQL_CONN \
   --allow-unauthenticated \
-  --memory=4Gi \
-  --cpu=2 \
   --concurrency=1 \
   --max=20 \
   --max-instances=20 \
   --min=4 \
   --min-instances=default \
   --timeout=120 \
+  --cpu-throttling \
+  --cpu-boost \
+  --container api \
+  --image=$GCP_REGION-docker.pkg.dev/$GCP_PROJECT/$REPO/caseops-api:v1 \
+  --port=8080 \
+  --cpu=2 \
+  --memory=4Gi \
+  --startup-probe=tcpSocket.port=8080,initialDelaySeconds=0,periodSeconds=2,timeoutSeconds=1,failureThreshold=120 \
   --set-env-vars=\
 "CASEOPS_ENV=production,\
-CASEOPS_DATABASE_URL=postgresql+psycopg://$DB_USER:$DB_PASSWORD@/cloudsql/$SQL_CONN/$DB_NAME,\
+CASEOPS_AUTO_MIGRATE=false,\
+CASEOPS_CLAMAV_HOST=127.0.0.1,\
+CASEOPS_CLAMAV_PORT=3310,\
+CASEOPS_CLAMAV_TIMEOUT_S=60,\
+CASEOPS_CLAMAV_REQUIRED=true,\
 CASEOPS_DOCUMENT_STORAGE_BACKEND=gcs,\
 CASEOPS_DOCUMENT_STORAGE_GCS_BUCKET=$DOC_BUCKET,\
 CASEOPS_LLM_PROVIDER=openai,\
@@ -205,11 +224,26 @@ CASEOPS_EMBEDDING_DIMENSIONS=1024,\
 CASEOPS_PUBLIC_APP_URL=https://app.your-domain.example,\
 CASEOPS_CORS_ORIGINS=[\"https://app.your-domain.example\"]" \
   --set-secrets=\
-"CASEOPS_AUTH_SECRET=caseops-auth-secret:latest,\
+"CASEOPS_DATABASE_URL=caseops-database-url:latest,\
+CASEOPS_AUTH_SECRET=caseops-auth-secret:latest,\
 CASEOPS_MACHINE_READINESS_EVIDENCE_SECRET=caseops-machine-readiness-evidence-secret:latest,\
 CASEOPS_LLM_API_KEY=caseops-openai-api-key:latest,\
-CASEOPS_EMBEDDING_API_KEY=caseops-voyage-api-key:latest"
+CASEOPS_EMBEDDING_API_KEY=caseops-voyage-api-key:latest" \
+  --container clamav \
+  --image=clamav/clamav:1.4 \
+  --cpu=1 \
+  --memory=1500Mi \
+  --startup-probe=tcpSocket.port=3310,initialDelaySeconds=0,periodSeconds=2,timeoutSeconds=1,failureThreshold=120
 ```
+
+This creates the same service contract that `scripts/deploy-prod.sh` redeploys
+on every release: request-based billing, startup CPU boost, both TCP startup
+probes, concurrency 1 and the service-level capacity below.
+`apps/api/tests/test_cloudrun_service_ownership.py` compares this command with
+the release script and loads its environment through the production settings
+validators. The release script, the scheduler inventory and
+`scripts/eg003-apply-clamav.sh` are pinned to the production project; point
+their project constants at a new project before using them there.
 
 **Note on `--allow-unauthenticated`**: this is ingress-public + app-level auth (Option B from the design call). CaseOps' own login layer protects every route past `/api/auth/*`.
 

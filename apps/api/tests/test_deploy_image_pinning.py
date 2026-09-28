@@ -6,16 +6,6 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
-def test_cloudrun_manifest_deploy_resolves_api_image_to_digest() -> None:
-    script = (REPO_ROOT / "infra" / "cloudrun" / "deploy.ps1").read_text(encoding="utf-8")
-
-    assert "function Resolve-ImmutableImage" in script
-    assert "value(image_summary.digest)" in script
-    assert 'return "$imageName@$digest"' in script
-    assert "$ApiImage = Resolve-ImmutableImage" in script
-    assert "Failed to replace Cloud Run job" in script
-
-
 def test_production_deploy_refreshes_recurring_jobs_with_immutable_image() -> None:
     script = (REPO_ROOT / "scripts" / "deploy-prod.sh").read_text(encoding="utf-8")
 
