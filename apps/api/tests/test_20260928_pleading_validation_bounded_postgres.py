@@ -189,6 +189,79 @@ def test_citation_index_migration_recovers_an_interrupted_concurrent_build(pg_en
             connection.commit()
 
 
+# Valid indexes that carry the migration's name but cannot serve an exact
+# neutral-citation lookup. CREATE INDEX IF NOT EXISTS would keep each of them.
+WRONG_SHAPES = {
+    "other-column": "CREATE INDEX {name} ON authority_documents (case_reference)",
+    "other-table": "CREATE INDEX {name} ON other_citations (neutral_citation)",
+    "unique": "CREATE UNIQUE INDEX {name} ON authority_documents (neutral_citation)",
+    "expression": "CREATE INDEX {name} ON authority_documents (lower(neutral_citation))",
+    "partial": (
+        "CREATE INDEX {name} ON authority_documents (neutral_citation) "
+        "WHERE neutral_citation IS NOT NULL"
+    ),
+    "hash": "CREATE INDEX {name} ON authority_documents USING hash (neutral_citation)",
+    "operator-class": (
+        "CREATE INDEX {name} ON authority_documents (neutral_citation varchar_pattern_ops)"
+    ),
+    "collation": 'CREATE INDEX {name} ON authority_documents (neutral_citation COLLATE "C")',
+    "covering": (
+        "CREATE INDEX {name} ON authority_documents (neutral_citation) INCLUDE (case_reference)"
+    ),
+}
+
+
+@pytest.mark.parametrize("definition", WRONG_SHAPES.values(), ids=WRONG_SHAPES.keys())
+def test_citation_index_migration_refuses_a_same_named_index_of_another_shape(
+    pg_engine, definition
+):
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    migration = _migration()
+    name = migration._INDEX_NAME
+    schema = f"citation_shape_{uuid4().hex}"
+    index_definition = text(
+        "SELECT indexdef FROM pg_indexes WHERE schemaname = :schema AND indexname = :name"
+    )
+    with pg_engine.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
+        try:
+            connection.execute(text(f"CREATE SCHEMA {schema}"))
+            connection.execute(text(f"SET search_path TO {schema}, public"))
+            connection.execute(
+                text(
+                    "CREATE TABLE authority_documents (id varchar(36), "
+                    "neutral_citation varchar(255), case_reference varchar(255))"
+                )
+            )
+            connection.execute(text("CREATE TABLE other_citations (neutral_citation varchar(255))"))
+            connection.execute(
+                text(
+                    "INSERT INTO authority_documents VALUES "
+                    "('a', '2026 ONE 1', 'CA 1/2026'), ('b', '2026 TWO 2', 'CA 2/2026')"
+                )
+            )
+            connection.execute(text(definition.format(name=name)))
+            assert connection.scalar(migration._INDEX_HEALTH, {"name": name}) is True
+            before = connection.scalar(index_definition, {"schema": schema, "name": name})
+            connection.commit()
+
+            context = MigrationContext.configure(connection)
+            with pytest.raises(RuntimeError, match="unexpected definition"):
+                with context.begin_transaction(), Operations.context(context):
+                    migration.upgrade()
+            connection.rollback()
+            connection.execution_options(isolation_level="AUTOCOMMIT")
+            # The foreign index is reported, never dropped or replaced.
+            assert connection.scalar(index_definition, {"schema": schema, "name": name}) == before
+            assert connection.scalar(migration._INDEX_HEALTH, {"name": name}) is True
+        finally:
+            connection.rollback()
+            connection.execute(text("RESET search_path"))
+            connection.execute(text(f"DROP SCHEMA IF EXISTS {schema} CASCADE"))
+            connection.commit()
+
+
 def _index_inventory(engine) -> list[tuple]:
     with engine.connect() as connection:
         return connection.execute(
@@ -251,8 +324,7 @@ def test_refused_downgrade_keeps_every_index_including_the_citation_index(
         with engine.connect() as connection:
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == head
             assert (
-                connection.scalar(text("SELECT count(*) FROM matter_bulk_update_operations"))
-                == 1
+                connection.scalar(text("SELECT count(*) FROM matter_bulk_update_operations")) == 1
             )
         assert _index_inventory(engine) == before
 

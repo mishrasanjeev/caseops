@@ -61,6 +61,15 @@ as well:
 - An interrupted build leaves an invalid index. The upgrade drops only that
   artifact (`DROP INDEX CONCURRENTLY`) and rebuilds it, then refuses to
   continue unless `pg_index.indisvalid` is true.
+- `IF NOT EXISTS` would keep any index that already has this name. After the
+  build the upgrade requires the exact shape it creates: a plain, non-unique
+  B-tree on `authority_documents (neutral_citation)` with the default operator
+  class and collation. A same-named index of another shape stops the upgrade
+  with an error and is left in place, because the migration does not drop an
+  index it did not build.
+- The DDL spells out the index name, so the governance migration-index
+  inventory records it (747 declarations). With the name built by an f-string,
+  the inventory's scanner captured the keyword `IF` instead.
 - The downgrade drops the index inside Alembic's transaction, so a later
   restore-forward refusal rolls it back.
 
@@ -119,7 +128,13 @@ budget, the same exposure as `20260912_0001` on this table.
     identical inventory. A deliberately unsafe downgrade (a concurrent drop
     in an autocommit block) fails this test because the refusal can no
     longer restore the index;
+  - nine valid same-named indexes of another shape (another column or table,
+    unique, expression, partial, hash, another operator class or collation,
+    and a covering index) stop the upgrade and survive unchanged. Without the
+    shape check all nine upgrades succeed silently;
   - the index is valid at head.
+- The SQLite file also runs the governance scanner and requires the migration's
+  index in its inventory.
 - Reproduction on the unfixed commit `da0b28aa`, in a separate checkout whose
   imported `caseops_api` module path was verified: the SQLite plan scans
   `authority_documents`, and PostgreSQL shows a sequential scan. The new tests

@@ -15,6 +15,7 @@ citations, and look those citations up through indexes.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -32,6 +33,23 @@ from tests.test_ip_opposition_opponent_workflow import _fixture
 from tests.test_ip_pleading_drafting import _base, _generate_grounded_notice
 
 LOST_CITATIONS = ("1999 LOST INSC 1", "LOST/APPEAL/1999")
+MIGRATION_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "alembic"
+    / "versions"
+    / "20260928_0001_authority_neutral_citation_index.py"
+)
+GOVERNANCE_MAP_SCRIPT = (
+    Path(__file__).resolve().parents[3] / "scripts" / "ip_data_governance_map.py"
+)
+
+
+def _load_module(path: Path, name: str):
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def seed_unrelated_authorities(rows: int, *, run: str) -> list[AuthorityDocument]:
@@ -171,13 +189,7 @@ def test_pleading_validation_is_one_bounded_index_driven_statement_set(
 
 
 def test_citation_index_migration_is_concurrent_and_recovers_invalid_build() -> None:
-    path = (
-        Path(__file__).resolve().parents[1]
-        / "alembic"
-        / "versions"
-        / "20260928_0001_authority_neutral_citation_index.py"
-    )
-    source = path.read_text(encoding="utf-8")
+    source = MIGRATION_PATH.read_text(encoding="utf-8")
     assert 'down_revision = "20260925_0001"' in source
     upgrade_source, downgrade_source = source.split("def downgrade()", 1)
     assert "autocommit_block" in upgrade_source
@@ -185,12 +197,31 @@ def test_citation_index_migration_is_concurrent_and_recovers_invalid_build() -> 
     assert "ON authority_documents (neutral_citation)" in upgrade_source
     assert "indisvalid" in upgrade_source
     assert "DROP INDEX CONCURRENTLY IF EXISTS" in upgrade_source
+    # IF NOT EXISTS keeps a same-named index of any shape, so the upgrade
+    # checks the shape of whatever index it ends with.
+    upgrade_body = upgrade_source.split("def upgrade()", 1)[1]
+    assert upgrade_body.index("_require_expected_shape(bind)") > upgrade_body.index(
+        "op.execute(_INDEX_DDL)"
+    )
     assert "DROP INDEX IF EXISTS" in downgrade_source
     assert "autocommit_block" not in downgrade_source
     assert "CONCURRENTLY" not in downgrade_source
     # The ORM declaration names the same index, so create_all and Alembic agree.
     declared = {index.name for index in AuthorityDocument.__table__.indexes}
     assert "ix_authority_documents_neutral_citation" in declared
+
+
+def test_citation_index_is_in_the_governance_migration_inventory() -> None:
+    migration = _load_module(MIGRATION_PATH, "authority_neutral_citation_index")
+    # The DDL spells the name out so the governance scanner can read it.
+    assert migration._INDEX_DDL.startswith(
+        f"CREATE INDEX CONCURRENTLY IF NOT EXISTS {migration._INDEX_NAME} "
+    )
+    assert migration._SQLITE_INDEX_DDL.startswith(
+        f"CREATE INDEX IF NOT EXISTS {migration._INDEX_NAME} "
+    )
+    governance = _load_module(GOVERNANCE_MAP_SCRIPT, "ip_data_governance_map")
+    assert migration._INDEX_NAME in governance._migration_index_names()
 
 
 def test_neutral_citation_index_exists_on_the_migrated_sqlite_schema(
