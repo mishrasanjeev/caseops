@@ -103,6 +103,24 @@ The owner decided on 2026-09-28:
   change, 6 of the 7 fail on SQLite and on PostgreSQL. The dispose-and-reopen
   test passes there as well, because that behaviour did not change.
 - **Fix commit.** On `d47f588b` all 7 pass on SQLite and on PostgreSQL.
+- **Browser journey.** `tests/e2e/iplf-066b-assistant-access-lock-2026-09-28.spec.ts`
+  runs in the app Playwright suite; its dated name is in the resolved app
+  inventory. The owner asks about an indexed document in the browser and sees
+  the answer and its citation. The owner then adds an ethical wall on the
+  Matter, excluding a colleague, and removes it through the real endpoints,
+  while still able to read the Matter. The saved answer stays hidden after
+  reload, at 360 px, in two turn-list reads, in the export and for a citation
+  open (409).
+  - On the fix it passes locally with the three existing IPLF-066B journeys,
+    on a Next build made as CI makes it.
+  - Against the unfixed API, with the imported module checked through
+    uvicorn's `--app-dir` path, the page served the saved answer again, with
+    its text and citation, instead of the hidden notice.
+  - The production journey has not yet been extended. It depends on one
+    exact-release fixture that the release pipeline seeds and then disposes.
+    Running an access change in production needs a separately seeded
+    fixture, so it is left as a release follow-up. Until the exact release
+    passes production verification, this is not a deployed fix.
 - **Broad SQLite run.** The 42 test files that exercise private retrieval,
   the Workspace Assistant, Intelligent Reviews, Drafts and disposition hold 823
   tests. On the fix, three workers gave 688 passed and 135 skipped, 134 for
