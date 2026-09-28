@@ -35,7 +35,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import Integer, func, literal_column, select, union_all
 from sqlalchemy.orm import Session
 
 from caseops_api.db.models import (
@@ -286,6 +286,17 @@ def analyze_appeal_strength(
     bench_recurring_phrases = {
         rt.phrase.lower(): rt for rt in bench_ctx.recurring_tests
     }
+    # Citations outside the bench context resolve against the whole
+    # corpus in one statement for the draft, not one lookup per citation.
+    corpus_index = _resolve_corpus_citations(
+        session,
+        (
+            cite
+            for _, ground in grounds_text
+            for cite in _inline_citations(ground)
+            if _normalize_citation(cite) not in bench_authority_index
+        ),
+    )
 
     assessments: list[GroundAssessment] = []
     for ordinal, ground in grounds_text:
@@ -294,9 +305,9 @@ def analyze_appeal_strength(
                 ordinal=ordinal,
                 ground_text=ground,
                 bench_index=bench_authority_index,
+                corpus_index=corpus_index,
                 bench_recurring=bench_recurring_phrases,
                 bench_ctx=bench_ctx,
-                session=session,
             )
         )
 
@@ -441,23 +452,92 @@ def _normalize_citation(s: str) -> str:
     return re.sub(r"\s+", " ", s).strip().lower()
 
 
+def _inline_citations(ground_text: str) -> list[str]:
+    return [m.group("cite").strip() for m in _CITATION_BRACKET_RE.finditer(ground_text)]
+
+
+@dataclass(frozen=True)
+class _CorpusMatch:
+    authority_id: str
+    title: str
+    forum_level: str | None
+
+
+def _resolve_corpus_citations(
+    session: Session, citations: Iterable[str],
+) -> dict[str, _CorpusMatch]:
+    """Resolve citations the bench context does not hold, in one statement.
+
+    A citation matches a document whose ``neutral_citation`` or
+    ``case_reference`` equals it exactly, as the former per-citation lookup
+    did. That lookup took ``LIMIT 1`` with no order, so when several
+    documents matched it returned whichever row the database reached first.
+    The choice is now deterministic: a neutral-citation match before a
+    case-reference match (a neutral citation names one judgment, while case
+    references repeat across courts), then the document stored first
+    (``created_at``; re-ingestion rewrites ``ingested_at`` but never this),
+    then ``id``. At most one row comes back per distinct citation.
+    """
+    unique = sorted(set(citations))
+    if not unique:
+        return {}
+    matches = union_all(
+        select(
+            AuthorityDocument.neutral_citation.label("citation"),
+            literal_column("0", Integer).label("match_order"),
+            AuthorityDocument.id.label("authority_id"),
+            AuthorityDocument.created_at.label("created_at"),
+        ).where(AuthorityDocument.neutral_citation.in_(unique)),
+        select(
+            AuthorityDocument.case_reference.label("citation"),
+            literal_column("1", Integer).label("match_order"),
+            AuthorityDocument.id.label("authority_id"),
+            AuthorityDocument.created_at.label("created_at"),
+        ).where(AuthorityDocument.case_reference.in_(unique)),
+    ).subquery("citation_matches")
+    ranked = select(
+        matches.c.citation,
+        matches.c.authority_id,
+        func.row_number()
+        .over(
+            partition_by=matches.c.citation,
+            order_by=(matches.c.match_order, matches.c.created_at, matches.c.authority_id),
+        )
+        .label("position"),
+    ).subquery("ranked_citation_matches")
+    rows = session.execute(
+        select(
+            ranked.c.citation,
+            AuthorityDocument.id,
+            AuthorityDocument.title,
+            AuthorityDocument.forum_level,
+        )
+        .join(AuthorityDocument, AuthorityDocument.id == ranked.c.authority_id)
+        .where(ranked.c.position == 1)
+    )
+    return {
+        row.citation: _CorpusMatch(
+            authority_id=row.id, title=row.title, forum_level=row.forum_level,
+        )
+        for row in rows
+    }
+
+
 def _assess_ground(
     *,
     ordinal: int,
     ground_text: str,
     bench_index: dict[str, AuthorityDocument],
+    corpus_index: dict[str, _CorpusMatch],
     bench_recurring: dict[str, object],
     bench_ctx: BenchStrategyContext,
-    session: Session,
 ) -> GroundAssessment:
     """Score a single numbered ground."""
     # Find inline citations.
     refs: list[AuthorityRef] = []
-    citation_matches = list(_CITATION_BRACKET_RE.finditer(ground_text))
     gap_matches = list(_GAP_MARKER_RE.finditer(ground_text))
 
-    for m in citation_matches:
-        cite = m.group("cite").strip()
+    for cite in _inline_citations(ground_text):
         norm = _normalize_citation(cite)
         match = bench_index.get(norm)
         if match is not None:
@@ -472,22 +552,17 @@ def _assess_ground(
                 strength_label=label,
             ))
         else:
-            # Citation not found in the bench-context authorities. Try
-            # a wider DB lookup so we still tag SC vs HC vs lower if
-            # the cite resolves to ANY known authority.
-            wider = session.scalar(
-                select(AuthorityDocument).where(
-                    (AuthorityDocument.neutral_citation == cite)
-                    | (AuthorityDocument.case_reference == cite)
-                ).limit(1)
-            )
+            # Citation not found in the bench-context authorities. The
+            # wider corpus lookup still tags SC vs HC vs lower if the
+            # cite resolves to ANY known authority.
+            wider = corpus_index.get(cite)
             if wider is not None:
                 label = _FORUM_STRENGTH_LABEL.get(
                     (wider.forum_level or "").lower(), "persuasive"
                 )
                 refs.append(AuthorityRef(
                     citation=cite,
-                    resolved_authority_id=wider.id,
+                    resolved_authority_id=wider.authority_id,
                     title=wider.title,
                     forum_level=wider.forum_level,
                     strength_label=label,
