@@ -1248,6 +1248,20 @@ requirements when using the fallback.
   within 0.5 s. Start only the primary reads, load pickers on demand, and never
   add a duplicate read to hide a slow primary: bound the primary. The API's own
   startup, not the ClamAV sidecar, was the critical path in 332 of 343 starts.
+- An `OR` of equality lookups is index-driven only when every branch has an
+  equality index. `neutral_citation` had only a trigram GIN expression index,
+  so `id IN ... OR neutral_citation IN ... OR case_reference IN ...` read the
+  whole 800K-document authority corpus on every pleading validate: 4.6 s on
+  the 1-vCPU production database. Prove such a fix with `EXPLAIN (ANALYZE,
+  BUFFERS)` of the exact captured statement on a table large enough that a
+  scan costs thousands of blocks, with no manual `ANALYZE`, and bound the
+  blocks read rather than the time.
+- Alembic's `autocommit_block` restores the isolation level it reads back, and
+  psycopg reports READ COMMITTED for an AUTOCOMMIT connection. A migration
+  probe that keeps using that connection holds locks in an implicit
+  transaction, so a later `DROP INDEX` waits on the test itself, and its
+  cleanup is rolled back on close. Re-enable AUTOCOMMIT after the block, bound
+  lock waits, and commit the cleanup.
 - A list must never return a record that its single-record read refuses. The
   Draft lists read a source manifest that was not a JSON list as "no private
   source" and returned the draft's body, while the read answered 409. Give
