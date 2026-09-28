@@ -19,9 +19,8 @@ Cloud Run request logs, 2026-08-29 to 2026-09-27: 160 validate `GET`s (158
 | 2026-09-21 | 27 | 4.66 s | 7.28 s |
 
 Since 2026-09-14 the fastest request took 4.18 s. Without the seven requests
-above 6 s (cold starts and queueing), p50 is 4.65 s and p90 4.77 s. The cost
-did not depend on the draft: it was the same for every revision the dated
-journeys validate.
+above 6 s (cold starts and queueing), p50 is 4.65 s and p90 4.77 s. The time
+was flat across drafts and revisions: a fixed cost per request.
 
 ## Root cause
 
@@ -75,11 +74,17 @@ Local PostgreSQL 17, 800,000 authority rows (1,250 MB heap), one validate of
 a grounded notice, three runs per phase. All phases issue 12 statements and
 return the same findings.
 
-| Phase | Request | Citation lookup | Blocks read by the lookup |
-| --- | --- | --- | --- |
-| Index present | 33-41 ms | 1.6-1.9 ms | 25 |
-| Index dropped (the old schema) | 342-369 ms | 305-330 ms | 160,000 |
-| Index rebuilt concurrently | 36-37 ms | 1.5-1.8 ms | 25 |
+| Phase | Request | Citation lookup |
+| --- | --- | --- |
+| Index present | 33-41 ms | 1.6-1.9 ms |
+| Index dropped (the old schema) | 342-369 ms | 305-330 ms |
+| Index rebuilt concurrently | 36-37 ms | 1.5-1.8 ms |
+
+A separate `EXPLAIN (ANALYZE, BUFFERS)` of the validation lookup and of the
+draft citation verifier, on the same 800,000-row shape, read 160,000 blocks
+through a sequential scan without the index. With it, each read 25 blocks
+through a `BitmapOr` of the primary key, `ix_authority_documents_case_reference`
+and the new index.
 
 The concurrent build over those 800,000 rows took 2.8 s and produced a valid
 25 MB index. Production migrations run with a 900 s statement budget and a
@@ -126,11 +131,18 @@ budget, the same exposure as `20260912_0001` on this table.
   `CASEOPS_TEST_POSTGRES_URL` but not `CASEOPS_DATABASE_URL`, which
   `alembic/env.py` reads and CI sets to the same database. That was a setup
   error, not a result; the replay with CI's pairing passed.
-- 16 related SQLite suites (pleading drafting and fixtures, drafting studio,
-  citations, authorities, hearing packs, appeal strength, draft validators,
-  index health, migration safety and preflight, data-class projection, bulk
-  updates): 214 collected, 213 passed, and one PostgreSQL-only test skipped by
-  its marker.
+- 16 related SQLite files: the new regression, pleading drafting and its
+  legal fixture pack, drafting studio, authority search indexes, hearing packs,
+  appeal strength, citations, draft validators, index health, migration safety,
+  migration preflight, data-class projection and its gate, authorities, and
+  bulk updates. The JUnit record has 214 unique cases from all 16 files: 213
+  passed, and one PostgreSQL-only test was skipped by its marker.
+- Governance: the map's schema and ORM index fingerprints, its rendered view
+  and the runtime data-class projection were regenerated. `generate` also
+  replaced the reviewed purpose of `matter_bulk_update_operations` with its
+  generic text; the reviewed text was restored. All 13 CI validators pass,
+  including both `check-change` gates. Legal-hold and data-class suites,
+  including the PostgreSQL legal-hold regressions: 52 passed.
 - Docker acceptance, including the dated pleading-validation journey whose
   workspace must settle `aria-busy`, and exact-release production
   verification are recorded on the pull request.
