@@ -7,6 +7,8 @@ the OR of those three predicates read the whole authority corpus (>800K
 documents) on every IP pleading validate request: about 4.6 seconds in
 production.
 
+DATA-GOVERNANCE-MAP: updated
+
 Revision ID: 20260928_0001
 Revises: 20260925_0001
 Create Date: 2026-09-28
