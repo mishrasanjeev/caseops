@@ -10191,7 +10191,11 @@ class AuthorityDocument(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     case_reference: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     bench_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    neutral_citation: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Exact citation lookups OR this with id and case_reference; without its own
+    # index that OR read the whole corpus on every pleading validation.
+    neutral_citation: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, index=True
+    )
     # Nullable as of the corpus-quality fix: when the PDF text has no
     # parseable date we store NULL rather than synthesising Jan 1 of
     # the S3-prefix year (which produced 73% fake dates before).
