@@ -1997,5 +1997,11 @@ Verification:
   `test_deploy_prod_hardening.py` now pins the new launcher structure
   (103 passed, 1 pre-existing POSIX-only skip).
 
-Not yet claimed: a complete harness run of this change launched from a
-foreign directory is pending until the host is free.
+The complete harness at `f0ecd4b9`, which includes main `c6def4b4`, was
+deliberately launched from the older checkout (`328761c5`, which holds its own
+`playwright.docker.config.ts`). The preflight reported 418 specs from the
+candidate's `tests/e2e`, and the run printed
+`[docker-acceptance] PASS f0ecd4b9ab3aa8c52ab3f8f6707ae67e9d7cf5e6`:
+PostgreSQL 440 passed; browser 208 + 198 + 4 passed, with the 8 by-design
+production-only or provider-gated skips. The foreign checkout stayed clean,
+with no `test-results` and an unchanged `node_modules`.
