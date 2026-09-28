@@ -1248,6 +1248,14 @@ requirements when using the fallback.
   within 0.5 s. Start only the primary reads, load pickers on demand, and never
   add a duplicate read to hide a slow primary: bound the primary. The API's own
   startup, not the ClamAV sidecar, was the critical path in 332 of 343 starts.
+- A Workspace Assistant answer is a saved output too: every projection event,
+  access included, locks its saved sources for good, and a read never writes.
+  Reach the event's target and the records under it from the canonical tables
+  (a Matter's documents; an IP docket's asset, application and proceeding
+  records and the documents linked to it or its children) in one set-based
+  update, not only through the projections the event's generation holds. When
+  reads committed their decision, a temporary access loss locked an answer only
+  if its author happened to export during it.
 - Automated production runs that may only assert the no-paid rejection cannot
   observe a provider-search fix. Replay stored evidence instead of spending: a
   checked-in verification fixture is refreshed only by the window-enforcing
