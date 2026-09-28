@@ -6,7 +6,8 @@ and the keyword ``IF`` was recorded as a name (15 captures), a comment
 contributed the word ``leaves``, and every such index was missing, so its
 removal or drift could not change the fingerprint. The inventory now parses
 each migration, resolves names from literals and constants, and fails closed
-on any declaration it cannot name.
+on any declaration it cannot name. Two reviewed migrations derive names from
+the live database; only their exact reviewed declarations are exempt.
 """
 
 from __future__ import annotations
@@ -279,6 +280,128 @@ def test_undeterminable_declarations_fail_closed(
     with pytest.raises(governance.MigrationIndexInventoryError) as refusal:
         governance._migration_index_names()
     assert f"0009_dynamic.py:{line}:" in str(refusal.value)
+
+
+# The reviewed database-derived migrations, read before any test redirects
+# MIGRATION_DIR.
+REAL_MIGRATIONS = governance.MIGRATION_DIR
+FOREIGN_KEY_GAPS = "20260827_0001_complete_foreign_key_indexes.py"
+PATENT_EVIDENCE = "20260909_0004_patent_prosecution_evidence.py"
+PATENT_DECLARATION = "            op.create_index(name, table, columns)\n"
+HOT_INDEX = 'HOT_INDEX = "ix_ip_docket_records_company_active_updated"'
+
+
+def _real(name: str) -> str:
+    return (REAL_MIGRATIONS / name).read_text(encoding="utf-8")
+
+
+def _append(source: str, addition: str) -> str:
+    return source.rstrip("\n") + "\n\n\n" + addition
+
+
+def test_reviewed_migrations_resolve_with_their_reviewed_declarations(
+    tmp_path: Path, monkeypatch
+) -> None:
+    _migrations(
+        tmp_path, monkeypatch, {name: _real(name) for name in (FOREIGN_KEY_GAPS, PATENT_EVIDENCE)}
+    )
+    assert {
+        "ix_ip_docket_records_company_active_updated",
+        "ix_ip_matter_links_docket_id",
+        "ix_patent_evidence_history",
+        "ix_patent_prosecution_date",
+    } <= set(governance._migration_index_names())
+
+
+@pytest.mark.parametrize(
+    ("name", "edit", "marker", "detail"),
+    [
+        # A later correction adds an unresolved create_index to a reviewed migration.
+        (
+            FOREIGN_KEY_GAPS,
+            lambda source: _append(
+                source,
+                "def _correction(name):\n"
+                '    op.create_index(name, "ip_docket_records", ["company_id"])\n',
+            ),
+            '    op.create_index(name, "ip_docket_records", ["company_id"])',
+            None,
+        ),
+        # The reviewed declaration's own text, but in another function.
+        (
+            FOREIGN_KEY_GAPS,
+            lambda source: _append(
+                source,
+                "def _correction(name, table_name, columns):\n"
+                "    op.create_index(name, table_name, list(columns))\n",
+            ),
+            "    op.create_index(name, table_name, list(columns))",
+            None,
+        ),
+        # An unresolved raw CREATE INDEX added to a reviewed migration.
+        (
+            PATENT_EVIDENCE,
+            lambda source: _append(
+                source,
+                "def _repair(name):\n"
+                '    op.execute(f"CREATE INDEX IF NOT EXISTS {name} ON t (a)")\n',
+            ),
+            '    op.execute(f"CREATE INDEX IF NOT EXISTS {name} ON t (a)")',
+            None,
+        ),
+        # A second copy of the reviewed declaration in the same function.
+        (
+            PATENT_EVIDENCE,
+            lambda source: source.replace(PATENT_DECLARATION, PATENT_DECLARATION * 2),
+            PATENT_DECLARATION.rstrip("\n"),
+            "(2 identical declarations in _support_indexes, 1 reviewed)",
+        ),
+        # An edited declaration is no longer the reviewed one.
+        (
+            PATENT_EVIDENCE,
+            lambda source: source.replace(
+                PATENT_DECLARATION, PATENT_DECLARATION.replace("columns)", "columns, unique=False)")
+            ),
+            "            op.create_index(name, table, columns, unique=False)",
+            "reviewed database-derived declaration in _support_indexes is no longer present",
+        ),
+    ],
+)
+def test_reviewed_migrations_exempt_only_their_reviewed_declarations(
+    tmp_path: Path, monkeypatch, name: str, edit, marker: str, detail: str | None
+) -> None:
+    source = edit(_real(name))
+    assert source != _real(name)
+    lines = [number for number, text in enumerate(source.splitlines(), start=1) if text == marker]
+    assert lines
+    _migrations(tmp_path, monkeypatch, {name: source})
+    with pytest.raises(governance.MigrationIndexInventoryError) as refusal:
+        governance._migration_index_names()
+    for line in lines:
+        assert f"{name}:{line}: " in str(refusal.value)
+    if detail is not None:
+        assert detail in str(refusal.value)
+
+
+@pytest.mark.parametrize(
+    ("replacement", "message"),
+    [
+        ('HOT_INDEX = "IF"', "reviewed module-constant index name 'IF' is not an identifier"),
+        (
+            'HOT_INDEX_NAME = "ix_ip_docket_records_company_active_updated"',
+            "reviewed module-constant index names cannot be resolved",
+        ),
+    ],
+)
+def test_reviewed_constant_names_fail_closed(
+    tmp_path: Path, monkeypatch, replacement: str, message: str
+) -> None:
+    source = _real(FOREIGN_KEY_GAPS)
+    assert source.count(HOT_INDEX) == 1
+    _migrations(tmp_path, monkeypatch, {FOREIGN_KEY_GAPS: source.replace(HOT_INDEX, replacement)})
+    with pytest.raises(governance.MigrationIndexInventoryError) as refusal:
+        governance._migration_index_names()
+    assert f"{FOREIGN_KEY_GAPS}: {message}" in str(refusal.value)
 
 
 def test_validate_reports_an_unnamed_declaration_instead_of_crashing(

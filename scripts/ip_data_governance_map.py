@@ -22,9 +22,10 @@ import os
 import re
 import subprocess
 import sys
+from collections import Counter
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple, TypeGuard
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MAP_PATH = REPO_ROOT / "docs" / "ip-implementation" / "DATA_GOVERNANCE_MAP.yaml"
@@ -234,21 +235,45 @@ _MAX_DEPTH = 8
 _MAX_BINDINGS = 10_000
 _STR_METHODS = frozenset({"join", "lower", "lstrip", "replace", "rstrip", "strip", "upper"})
 _SEQUENCE_BUILTINS = frozenset({"list", "reversed", "sorted", "tuple"})
+_UNDETERMINABLE_DDL = "CREATE INDEX name is not determinable statically"
+_UNDETERMINABLE_CALL = "create_index name is not determinable statically"
+
+
+class _ReviewedDatabaseDerivedIndexes(NamedTuple):
+    # (enclosing function, whitespace-normalized source) of each reviewed
+    # declaration, listed once per occurrence.
+    declarations: tuple[tuple[str, str], ...]
+    # Names the migration also declares through module constants.
+    names: Callable[[Mapping[str, object]], list[object]]
+
 
 # Migrations that read index names from the live database while they run:
 # they index foreign keys found without a covering index. Those names cannot be
-# known statically. Each entry was reviewed; the names it declares through
-# module constants are still inventoried, and the release index-health gate
-# proves complete foreign-key coverage. Any other undeterminable declaration
-# fails closed.
-_REVIEWED_DATABASE_DERIVED_INDEXES: dict[
-    str, Callable[[Mapping[str, object]], list[str]]
-] = {
-    "20260827_0001_complete_foreign_key_indexes.py": lambda env: [
-        str(env["HOT_INDEX"]),
-        *(str(spec[0]) for spec in env["IMPLICIT_INDEX_REQUIREMENTS"]),  # type: ignore[attr-defined]
-    ],
-    "20260909_0004_patent_prosecution_evidence.py": lambda env: [],
+# known statically. Only the listed declarations are exempt, and only from an
+# undeterminable name: an added, duplicated or edited declaration in the same
+# migration fails closed like one anywhere else, and so does a reviewed
+# declaration that is no longer present. The names the migration declares
+# through module constants are still inventoried, and the release index-health
+# gate proves complete foreign-key coverage.
+_REVIEWED_DATABASE_DERIVED_INDEXES: dict[str, _ReviewedDatabaseDerivedIndexes] = {
+    "20260827_0001_complete_foreign_key_indexes.py": _ReviewedDatabaseDerivedIndexes(
+        declarations=(
+            (
+                "_postgres_create_indexes",
+                'f"CREATE INDEX CONCURRENTLY IF NOT EXISTS {_quote(connection, name)} " '
+                'f"ON {_quote(connection, table_name)} ({quoted_columns})"',
+            ),
+            ("upgrade", "op.create_index(name, table_name, list(columns))"),
+        ),
+        names=lambda env: [
+            env["HOT_INDEX"],
+            *(spec[0] for spec in env["IMPLICIT_INDEX_REQUIREMENTS"]),  # type: ignore[attr-defined]
+        ],
+    ),
+    "20260909_0004_patent_prosecution_evidence.py": _ReviewedDatabaseDerivedIndexes(
+        declarations=(("_support_indexes", "op.create_index(name, table, columns)"),),
+        names=lambda env: [],
+    ),
 }
 
 
@@ -300,6 +325,30 @@ def _parameters(function: ast.FunctionDef | ast.AsyncFunctionDef) -> list[ast.ar
         *([arguments.vararg] if arguments.vararg else []),
         *([arguments.kwarg] if arguments.kwarg else []),
     ]
+
+
+def _is_index_name(name: object) -> TypeGuard[str]:
+    return (
+        isinstance(name, str)
+        and _INDEX_NAME.fullmatch(name) is not None
+        and name.upper() not in _SQL_KEYWORDS
+    )
+
+
+def _enclosing_functions(tree: ast.Module) -> dict[int, str]:
+    """Name the function or class that lexically contains each node."""
+
+    owners: dict[int, str] = {}
+    pending: list[tuple[ast.AST, str]] = [(tree, "<module>")]
+    while pending:
+        node, owner = pending.pop()
+        for child in ast.iter_child_nodes(node):
+            scope = owner
+            if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+                scope = child.name if owner == "<module>" else f"{owner}.{child.name}"
+            owners[id(child)] = scope
+            pending.append((child, scope))
+    return owners
 
 
 class _Evaluator:
@@ -574,7 +623,8 @@ class _MigrationIndexScanner:
         self.path = path
         self.tree = tree
         self.names: set[str] = set()
-        self.problems: set[tuple[int, str]] = set()
+        # One entry per declaration and reason, however many bindings reach it.
+        self.problems: dict[tuple[int, int, str], ast.AST] = {}
         self.functions = {
             statement.name: statement
             for statement in tree.body
@@ -591,7 +641,8 @@ class _MigrationIndexScanner:
         self.reached: set[str] = set()
 
     def problem(self, node: ast.AST, reason: str) -> None:
-        self.problems.add((getattr(node, "lineno", 0), reason))
+        key = (getattr(node, "lineno", 0), getattr(node, "col_offset", 0), reason)
+        self.problems.setdefault(key, node)
 
     def scan(self) -> None:
         top_level = [
@@ -756,7 +807,7 @@ class _MigrationIndexScanner:
             try:
                 name = self.evaluator.value(argument, env, depth)
             except _Unresolvable:
-                self.problem(call, "create_index name is not determinable statically")
+                self.problem(call, _UNDETERMINABLE_CALL)
                 continue
             self.record(call, name)
 
@@ -769,16 +820,12 @@ class _MigrationIndexScanner:
                     continue
                 name = match.group("name")
                 if name == _UNRESOLVED:
-                    self.problem(node, "CREATE INDEX name is not determinable statically")
+                    self.problem(node, _UNDETERMINABLE_DDL)
                     continue
                 self.record(node, name.strip('"'))
 
     def record(self, node: ast.AST, name: object) -> None:
-        if (
-            not isinstance(name, str)
-            or not _INDEX_NAME.fullmatch(name)
-            or name.upper() in _SQL_KEYWORDS
-        ):
+        if not _is_index_name(name):
             self.problem(node, f"index name {name!r} is not an identifier")
             return
         self.names.add(name)
@@ -796,30 +843,81 @@ def _migration_index_names() -> list[str]:
     comments and docstrings are not read, adjacent string literals are joined,
     and names built from literals, module constants, loops over constant
     sequences and the migration's own helper functions are resolved. A
-    declaration whose name cannot be determined fails closed unless its
-    migration is a reviewed database-derived entry.
+    declaration whose name cannot be determined fails closed unless it is
+    one of the reviewed database-derived declarations.
     """
 
     names: set[str] = set()
     problems: list[str] = []
     for path in sorted(MIGRATION_DIR.glob("*.py")):
-        scanner = _MigrationIndexScanner(
-            path, ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        )
+        source = path.read_text(encoding="utf-8")
+        scanner = _MigrationIndexScanner(path, ast.parse(source, filename=str(path)))
         scanner.scan()
-        names.update(scanner.names)
         reviewed = _REVIEWED_DATABASE_DERIVED_INDEXES.get(path.name)
-        if reviewed is not None:
-            names.update(reviewed(scanner.module_env))
-            continue
-        problems.extend(
-            f"{path.name}:{line}: {reason}" for line, reason in sorted(scanner.problems)
-        )
+        if reviewed is None:
+            problems.extend(
+                f"{path.name}:{line}: {reason}"
+                for line, _column, reason in sorted(scanner.problems)
+            )
+        else:
+            problems.extend(_reviewed_problems(path, source, scanner, reviewed))
+        names.update(scanner.names)
     if problems:
         raise MigrationIndexInventoryError(
-            "migration index inventory cannot name every declaration: " + "; ".join(problems)
+            "migration index inventory cannot name every declaration: "
+            + "; ".join(dict.fromkeys(problems))
         )
     return sorted(names)
+
+
+def _reviewed_problems(
+    path: Path,
+    source: str,
+    scanner: _MigrationIndexScanner,
+    reviewed: _ReviewedDatabaseDerivedIndexes,
+) -> list[str]:
+    """Exempt exactly the reviewed database-derived declarations; report the rest."""
+
+    problems: list[str] = []
+    try:
+        declared = reviewed.names(scanner.module_env)
+    except (IndexError, KeyError, TypeError):
+        problems.append(f"{path.name}: reviewed module-constant index names cannot be resolved")
+        declared = []
+    for name in declared:
+        if not _is_index_name(name):
+            problems.append(
+                f"{path.name}: reviewed module-constant index name {name!r} is not an identifier"
+            )
+            continue
+        scanner.names.add(name)
+    owners = _enclosing_functions(scanner.tree)
+    found: dict[tuple[str, str], list[tuple[int, str]]] = {}
+    for (line, _column, reason), node in sorted(scanner.problems.items()):
+        if reason not in (_UNDETERMINABLE_DDL, _UNDETERMINABLE_CALL):
+            problems.append(f"{path.name}:{line}: {reason}")
+            continue
+        segment = ast.get_source_segment(source, node) or ""
+        identity = (owners.get(id(node), "<module>"), " ".join(segment.split()))
+        found.setdefault(identity, []).append((line, reason))
+    expected = Counter(reviewed.declarations)
+    for identity, occurrences in found.items():
+        if len(occurrences) == expected[identity]:
+            continue
+        note = (
+            f" ({len(occurrences)} identical declarations in {identity[0]}, "
+            f"{expected[identity]} reviewed)"
+            if expected[identity]
+            else ""
+        )
+        problems.extend(f"{path.name}:{line}: {reason}{note}" for line, reason in occurrences)
+    problems.extend(
+        f"{path.name}: reviewed database-derived declaration in {function} "
+        f"is no longer present: {text}"
+        for function, text in expected
+        if (function, text) not in found
+    )
+    return problems
 
 
 def _policy_profiles() -> dict[str, dict[str, object]]:
