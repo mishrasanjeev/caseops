@@ -37,7 +37,7 @@ def _required_tool(*names: str) -> str:
     wanted = " or ".join(names)
     if os.environ.get("CI"):
         pytest.fail(f"CI must provide {wanted} to execute the Docker acceptance guards")
-    pytest.skip(f"{wanted} is not installed")
+    return pytest.skip(f"{wanted} is not installed")
 
 
 @pytest.mark.parametrize("guard", sorted(GUARDS))
