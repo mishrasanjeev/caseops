@@ -14,6 +14,7 @@ Records/Privacy/Legal/Security policy approvals remain outstanding.
 from __future__ import annotations
 
 import argparse
+import ast
 import copy
 import hashlib
 import json
@@ -21,7 +22,7 @@ import os
 import re
 import subprocess
 import sys
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -207,6 +208,582 @@ def current_orm_indexes() -> list[dict[str, object]]:
     )
 
 
+class MigrationIndexInventoryError(ValueError):
+    """A migration declares an index whose name cannot be determined."""
+
+
+class _Unresolvable(Exception):
+    """A value that cannot be known without running the migration."""
+
+
+# The name must be followed by ON, so a keyword such as IF can never be taken
+# for a name when the real name is not literal text.
+_CREATE_INDEX_START = re.compile(r"\bCREATE\s+(?:UNIQUE\s+)?INDEX\b", re.IGNORECASE)
+_CREATE_INDEX = re.compile(
+    r"CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:CONCURRENTLY\s+)?(?:IF\s+NOT\s+EXISTS\s+)?"
+    r"(?P<name>\"[^\"\x00]+\"|[A-Za-z_][A-Za-z0-9_]*|\x00)\s+ON\b",
+    re.IGNORECASE,
+)
+_INDEX_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+_SQL_KEYWORDS = frozenset(
+    {"CONCURRENTLY", "EXISTS", "IF", "INDEX", "NOT", "ON", "ONLY", "UNIQUE", "USING"}
+)
+_UNRESOLVED = "\x00"
+_UNKNOWN = object()
+_MAX_DEPTH = 8
+_MAX_BINDINGS = 10_000
+_STR_METHODS = frozenset({"join", "lower", "lstrip", "replace", "rstrip", "strip", "upper"})
+_SEQUENCE_BUILTINS = frozenset({"list", "reversed", "sorted", "tuple"})
+
+# Migrations that read index names from the live database while they run:
+# they index foreign keys found without a covering index. Those names cannot be
+# known statically. Each entry was reviewed; the names it declares through
+# module constants are still inventoried, and the release index-health gate
+# proves complete foreign-key coverage. Any other undeterminable declaration
+# fails closed.
+_REVIEWED_DATABASE_DERIVED_INDEXES: dict[
+    str, Callable[[Mapping[str, object]], list[str]]
+] = {
+    "20260827_0001_complete_foreign_key_indexes.py": lambda env: [
+        str(env["HOT_INDEX"]),
+        *(str(spec[0]) for spec in env["IMPLICIT_INDEX_REQUIREMENTS"]),  # type: ignore[attr-defined]
+    ],
+    "20260909_0004_patent_prosecution_evidence.py": lambda env: [],
+}
+
+
+def _target_names(target: ast.AST) -> set[str]:
+    return {
+        node.id
+        for node in ast.walk(target)
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store)
+    }
+
+
+def _bind(target: ast.AST, value: object, env: dict[str, object]) -> None:
+    if isinstance(target, ast.Name):
+        env[target.id] = value
+        return
+    if isinstance(target, ast.Tuple | ast.List):
+        if not isinstance(value, tuple) or len(value) != len(target.elts):
+            raise _Unresolvable
+        for element, item in zip(target.elts, value, strict=True):
+            _bind(element, item, env)
+        return
+    raise _Unresolvable
+
+
+def _without(env: Mapping[str, object], names: set[str]) -> dict[str, object]:
+    return {name: value for name, value in env.items() if name not in names}
+
+
+def _is_prose(statement: ast.stmt) -> bool:
+    """Docstrings and bare string statements are prose, never executed DDL."""
+
+    return (
+        isinstance(statement, ast.Expr)
+        and isinstance(statement.value, ast.Constant)
+        and isinstance(statement.value.value, str)
+    )
+
+
+def _body(function: ast.FunctionDef | ast.AsyncFunctionDef) -> list[ast.stmt]:
+    return [statement for statement in function.body if not _is_prose(statement)]
+
+
+def _parameters(function: ast.FunctionDef | ast.AsyncFunctionDef) -> list[ast.arg]:
+    arguments = function.args
+    return [
+        *arguments.posonlyargs,
+        *arguments.args,
+        *arguments.kwonlyargs,
+        *([arguments.vararg] if arguments.vararg else []),
+        *([arguments.kwarg] if arguments.kwarg else []),
+    ]
+
+
+class _Evaluator:
+    """Evaluate migration expressions without executing any migration code."""
+
+    def __init__(
+        self,
+        functions: Mapping[str, ast.FunctionDef | ast.AsyncFunctionDef],
+        module_env: Mapping[str, object],
+    ) -> None:
+        self.functions = functions
+        self.module_env = module_env
+
+    def partial(self, node: ast.AST, env: Mapping[str, object], depth: int) -> object:
+        try:
+            return self.value(node, env, depth)
+        except _Unresolvable:
+            return _UNKNOWN
+
+    def truth(self, node: ast.AST, env: Mapping[str, object], depth: int) -> bool:
+        return bool(self.value(node, env, depth))
+
+    def value(self, node: ast.AST, env: Mapping[str, object], depth: int = 0) -> object:
+        if depth > _MAX_DEPTH:
+            raise _Unresolvable
+        if isinstance(node, ast.Constant):
+            return node.value
+        if isinstance(node, ast.Name):
+            found = env.get(node.id, _UNKNOWN)
+            if found is _UNKNOWN:
+                raise _Unresolvable
+            return found
+        if isinstance(node, ast.Tuple | ast.List | ast.Set):
+            if any(isinstance(element, ast.Starred) for element in node.elts):
+                raise _Unresolvable
+            return tuple(self.partial(element, env, depth) for element in node.elts)
+        if isinstance(node, ast.Dict):
+            if any(key is None for key in node.keys):
+                raise _Unresolvable
+            return {
+                self.value(key, env, depth): self.partial(item, env, depth)
+                for key, item in zip(node.keys, node.values, strict=True)
+                if key is not None
+            }
+        if isinstance(node, ast.JoinedStr):
+            return self.render(node, env, depth, strict=True)
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+            left = self.value(node.left, env, depth)
+            right = self.value(node.right, env, depth)
+            if isinstance(left, str) and isinstance(right, str):
+                return left + right
+            if isinstance(left, tuple) and isinstance(right, tuple):
+                return left + right
+            raise _Unresolvable
+        if isinstance(node, ast.IfExp):
+            chosen = node.body if self.truth(node.test, env, depth) else node.orelse
+            return self.value(chosen, env, depth)
+        if isinstance(node, ast.BoolOp):
+            results = [self.truth(item, env, depth) for item in node.values]
+            return all(results) if isinstance(node.op, ast.And) else any(results)
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+            return not self.truth(node.operand, env, depth)
+        if isinstance(node, ast.Compare) and len(node.ops) == 1:
+            return self.compare(node, env, depth)
+        if isinstance(node, ast.Subscript):
+            container = self.value(node.value, env, depth)
+            index = self.value(node.slice, env, depth)
+            if not isinstance(container, str | tuple | dict):
+                raise _Unresolvable
+            try:
+                item = container[index]  # type: ignore[index]
+            except (IndexError, KeyError, TypeError) as exc:
+                raise _Unresolvable from exc
+            if item is _UNKNOWN:
+                raise _Unresolvable
+            return item
+        if isinstance(node, ast.Slice):
+            parts = [
+                None if part is None else self.value(part, env, depth)
+                for part in (node.lower, node.upper, node.step)
+            ]
+            if not all(part is None or isinstance(part, int) for part in parts):
+                raise _Unresolvable
+            return slice(*parts)
+        if isinstance(node, ast.GeneratorExp | ast.ListComp | ast.SetComp):
+            return self.comprehension(node, env, depth)
+        if isinstance(node, ast.Call):
+            return self.call(node, env, depth)
+        raise _Unresolvable
+
+    def compare(self, node: ast.Compare, env: Mapping[str, object], depth: int) -> bool:
+        left = self.value(node.left, env, depth)
+        right = self.value(node.comparators[0], env, depth)
+        operator = node.ops[0]
+        if isinstance(operator, ast.Eq):
+            return left == right
+        if isinstance(operator, ast.NotEq):
+            return left != right
+        if isinstance(operator, ast.In | ast.NotIn):
+            if not isinstance(right, str | tuple | dict):
+                raise _Unresolvable
+            contained = left in right  # type: ignore[operator]
+            return contained if isinstance(operator, ast.In) else not contained
+        if isinstance(operator, ast.Is | ast.IsNot) and right is None:
+            return (left is None) == isinstance(operator, ast.Is)
+        raise _Unresolvable
+
+    def comprehension(
+        self,
+        node: ast.GeneratorExp | ast.ListComp | ast.SetComp,
+        env: Mapping[str, object],
+        depth: int,
+    ) -> tuple[object, ...]:
+        if len(node.generators) != 1 or node.generators[0].is_async:
+            raise _Unresolvable
+        generator = node.generators[0]
+        iterable = self.value(generator.iter, env, depth)
+        if not isinstance(iterable, tuple):
+            raise _Unresolvable
+        results: list[object] = []
+        for item in iterable:
+            scope = dict(env)
+            _bind(generator.target, item, scope)
+            if all(self.truth(condition, scope, depth) for condition in generator.ifs):
+                results.append(self.partial(node.elt, scope, depth))
+        return tuple(results)
+
+    def call(self, node: ast.Call, env: Mapping[str, object], depth: int) -> object:
+        function = node.func
+        if isinstance(function, ast.Name) and function.id in _SEQUENCE_BUILTINS:
+            if len(node.args) != 1 or node.keywords:
+                raise _Unresolvable
+            sequence = self.value(node.args[0], env, depth)
+            if isinstance(sequence, dict):
+                sequence = tuple(sequence)
+            if not isinstance(sequence, tuple):
+                raise _Unresolvable
+            if function.id == "reversed":
+                return tuple(reversed(sequence))
+            if function.id == "sorted":
+                try:
+                    return tuple(sorted(sequence))  # type: ignore[type-var]
+                except TypeError as exc:
+                    raise _Unresolvable from exc
+            return sequence
+        if isinstance(function, ast.Name) and function.id in self.functions:
+            helper = self.functions[function.id]
+            body = _body(helper)
+            if len(body) != 1 or not isinstance(body[0], ast.Return) or body[0].value is None:
+                raise _Unresolvable
+            return self.value(body[0].value, self.arguments(helper, node, env, depth), depth + 1)
+        if isinstance(function, ast.Attribute):
+            if function.attr == "f" and len(node.args) == 1 and not node.keywords:
+                return self.value(node.args[0], env, depth)
+            owner = self.value(function.value, env, depth)
+            if isinstance(owner, dict) and function.attr in {"items", "keys", "values"}:
+                if node.args or node.keywords:
+                    raise _Unresolvable
+                return tuple(getattr(owner, function.attr)())
+            if isinstance(owner, str) and function.attr in _STR_METHODS and not node.keywords:
+                arguments = [self.value(argument, env, depth) for argument in node.args]
+                if function.attr == "join" and not (
+                    len(arguments) == 1
+                    and isinstance(arguments[0], tuple)
+                    and all(isinstance(part, str) for part in arguments[0])
+                ):
+                    raise _Unresolvable
+                if function.attr != "join" and not all(
+                    isinstance(argument, str) for argument in arguments
+                ):
+                    raise _Unresolvable
+                try:
+                    return getattr(owner, function.attr)(*arguments)
+                except (TypeError, ValueError) as exc:
+                    raise _Unresolvable from exc
+        raise _Unresolvable
+
+    def arguments(
+        self,
+        helper: ast.FunctionDef | ast.AsyncFunctionDef,
+        call: ast.Call,
+        env: Mapping[str, object],
+        depth: int,
+    ) -> dict[str, object]:
+        """Bind a helper's parameters from one call site; unknown stays unknown."""
+
+        parameters = _parameters(helper)
+        scope = _without(self.module_env, {parameter.arg for parameter in parameters})
+        arguments = helper.args
+        positional = [*arguments.posonlyargs, *arguments.args]
+        defaulted = positional[len(positional) - len(arguments.defaults):]
+        defaults = dict(
+            zip(
+                [parameter.arg for parameter in defaulted],
+                arguments.defaults,
+                strict=True,
+            )
+        )
+        defaults.update(
+            {
+                parameter.arg: default
+                for parameter, default in zip(
+                    arguments.kwonlyargs, arguments.kw_defaults, strict=True
+                )
+                if default is not None
+            }
+        )
+        for parameter, default in defaults.items():
+            scope[parameter] = self.partial(default, self.module_env, depth)
+        unpacked = False
+        for index, argument in enumerate(call.args):
+            if isinstance(argument, ast.Starred):
+                # Positions after an unpacked argument are unknown.
+                unpacked = True
+                for parameter in positional[index:]:
+                    scope.pop(parameter.arg, None)
+                break
+            if index < len(positional):
+                scope[positional[index].arg] = self.partial(argument, env, depth)
+            elif arguments.vararg is None:
+                raise _Unresolvable
+        if arguments.vararg is not None:
+            extra = call.args[len(positional):]
+            scope[arguments.vararg.arg] = (
+                _UNKNOWN
+                if unpacked
+                else tuple(self.partial(argument, env, depth) for argument in extra)
+            )
+        names = {parameter.arg for parameter in [*positional, *arguments.kwonlyargs]}
+        explicit: set[str] = set()
+        for keyword in call.keywords:
+            if keyword.arg is None:
+                continue
+            if keyword.arg not in names:
+                if arguments.kwarg is None:
+                    raise _Unresolvable
+                continue
+            explicit.add(keyword.arg)
+            scope[keyword.arg] = self.partial(keyword.value, env, depth)
+        if any(keyword.arg is None for keyword in call.keywords):
+            # A **mapping may supply any parameter not passed explicitly.
+            for name in names - explicit:
+                scope.pop(name, None)
+        return {name: value for name, value in scope.items() if value is not _UNKNOWN}
+
+    def render(
+        self, node: ast.JoinedStr, env: Mapping[str, object], depth: int, *, strict: bool
+    ) -> str:
+        parts: list[str] = []
+        for part in node.values:
+            if isinstance(part, ast.Constant):
+                parts.append(str(part.value))
+                continue
+            try:
+                if not isinstance(part, ast.FormattedValue) or part.format_spec is not None:
+                    raise _Unresolvable
+                if part.conversion not in (-1, ord("s")):
+                    raise _Unresolvable
+                value = self.value(part.value, env, depth)
+                if not isinstance(value, str | int) or isinstance(value, bool):
+                    raise _Unresolvable
+                parts.append(str(value))
+            except _Unresolvable:
+                if strict:
+                    raise
+                parts.append(_UNRESOLVED)
+        return "".join(parts)
+
+
+class _MigrationIndexScanner:
+    def __init__(self, path: Path, tree: ast.Module) -> None:
+        self.path = path
+        self.tree = tree
+        self.names: set[str] = set()
+        self.problems: set[tuple[int, str]] = set()
+        self.functions = {
+            statement.name: statement
+            for statement in tree.body
+            if isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef)
+        }
+        self.module_env: dict[str, object] = {}
+        self.evaluator = _Evaluator(self.functions, self.module_env)
+        for statement in tree.body:
+            # Replace in place: the evaluator holds this mapping, and a name
+            # reassigned to an unknown value must be forgotten.
+            updated = self.assign(statement, [dict(self.module_env)], 0)[0]
+            self.module_env.clear()
+            self.module_env.update(updated)
+        self.reached: set[str] = set()
+
+    def problem(self, node: ast.AST, reason: str) -> None:
+        self.problems.add((getattr(node, "lineno", 0), reason))
+
+    def scan(self) -> None:
+        top_level = [
+            statement
+            for statement in self.tree.body
+            if not isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef)
+        ]
+        self.block(top_level, [dict(self.module_env)], 0)
+        for entry in ("upgrade", "downgrade"):
+            if entry in self.functions:
+                self.reached.add(entry)
+                self.block(_body(self.functions[entry]), [dict(self.module_env)], 0)
+        # A helper never reached from a known call site keeps unknown parameters.
+        for name, function in self.functions.items():
+            if name not in self.reached:
+                self.reached.add(name)
+                parameters = {parameter.arg for parameter in _parameters(function)}
+                self.block(_body(function), [_without(self.module_env, parameters)], 0)
+
+    def block(self, statements: list[ast.stmt], envs: list[dict[str, object]], depth: int) -> None:
+        if len(envs) > _MAX_BINDINGS:
+            if statements:
+                self.problem(statements[0], "too many loop bindings to resolve")
+            return
+        for statement in statements:
+            if _is_prose(statement):
+                continue
+            if isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef):
+                parameters = {parameter.arg for parameter in _parameters(statement)}
+                self.block(_body(statement), [_without(env, parameters) for env in envs], depth)
+                envs = [_without(env, {statement.name}) for env in envs]
+                continue
+            if isinstance(statement, ast.ClassDef):
+                self.block(statement.body, envs, depth)
+                continue
+            if isinstance(statement, ast.For | ast.AsyncFor):
+                self.expressions(statement.iter, envs, depth)
+                names = _target_names(statement.target)
+                expanded: list[dict[str, object]] = []
+                for env in envs:
+                    try:
+                        items = self.evaluator.value(statement.iter, env, depth)
+                        if isinstance(items, dict):
+                            items = tuple(items)
+                        if not isinstance(items, tuple):
+                            raise _Unresolvable
+                        for item in items:
+                            bound = dict(env)
+                            _bind(statement.target, item, bound)
+                            expanded.append(
+                                {
+                                    key: value
+                                    for key, value in bound.items()
+                                    if value is not _UNKNOWN
+                                }
+                            )
+                    except _Unresolvable:
+                        expanded.append(_without(env, names))
+                self.block(statement.body, expanded, depth)
+                self.block(statement.orelse, envs, depth)
+            elif isinstance(statement, ast.If | ast.While):
+                self.expressions(statement.test, envs, depth)
+                self.block(statement.body, envs, depth)
+                self.block(statement.orelse, envs, depth)
+            elif isinstance(statement, ast.With | ast.AsyncWith):
+                for item in statement.items:
+                    self.expressions(item.context_expr, envs, depth)
+                self.block(statement.body, envs, depth)
+            elif isinstance(statement, ast.Try | ast.TryStar):
+                self.block(statement.body, envs, depth)
+                for handler in statement.handlers:
+                    self.block(handler.body, envs, depth)
+                self.block(statement.orelse, envs, depth)
+                self.block(statement.finalbody, envs, depth)
+            else:
+                self.expressions(statement, envs, depth)
+                envs = self.assign(statement, envs, depth)
+                continue
+            # A compound statement may rebind names; forget them afterwards.
+            assigned = {
+                node.id
+                for node in ast.walk(statement)
+                if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store)
+            }
+            envs = [_without(env, assigned) for env in envs]
+
+    def assign(
+        self, statement: ast.stmt, envs: list[dict[str, object]], depth: int
+    ) -> list[dict[str, object]]:
+        targets: list[ast.expr] = []
+        value: ast.expr | None = None
+        if isinstance(statement, ast.Assign):
+            targets, value = statement.targets, statement.value
+        elif isinstance(statement, ast.AnnAssign):
+            targets, value = [statement.target], statement.value
+        elif isinstance(statement, ast.AugAssign):
+            targets = [statement.target]
+        if not targets:
+            return envs
+        updated: list[dict[str, object]] = []
+        for env in envs:
+            current = dict(env)
+            for target in targets:
+                try:
+                    if value is None:
+                        raise _Unresolvable
+                    _bind(target, self.evaluator.value(value, env, depth), current)
+                except _Unresolvable:
+                    current = _without(current, _target_names(target))
+            updated.append({key: item for key, item in current.items() if item is not _UNKNOWN})
+        return updated
+
+    def expressions(self, node: ast.AST, envs: list[dict[str, object]], depth: int) -> None:
+        fragments = {
+            id(part)
+            for joined in ast.walk(node)
+            if isinstance(joined, ast.JoinedStr)
+            for part in joined.values
+        }
+        for child in ast.walk(node):
+            if isinstance(child, ast.Call):
+                if isinstance(child.func, ast.Attribute) and child.func.attr == "create_index":
+                    self.create_index(child, envs, depth)
+                if isinstance(child.func, ast.Name) and child.func.id in self.functions:
+                    self.inline(child, envs, depth)
+            if isinstance(child, ast.Constant) and isinstance(child.value, str):
+                if id(child) not in fragments:
+                    self.ddl(child, [child.value])
+            elif isinstance(child, ast.JoinedStr):
+                self.ddl(
+                    child,
+                    [self.evaluator.render(child, env, depth, strict=False) for env in envs],
+                )
+
+    def inline(self, call: ast.Call, envs: list[dict[str, object]], depth: int) -> None:
+        """Scan a helper's body once per call-site binding of its parameters."""
+
+        assert isinstance(call.func, ast.Name)
+        helper = self.functions[call.func.id]
+        self.reached.add(call.func.id)
+        if depth >= _MAX_DEPTH:
+            self.problem(call, "helper calls nest too deeply to resolve")
+            return
+        scopes: list[dict[str, object]] = []
+        for env in envs:
+            try:
+                scopes.append(self.evaluator.arguments(helper, call, env, depth))
+            except _Unresolvable:
+                parameters = {parameter.arg for parameter in _parameters(helper)}
+                scopes.append(_without(self.module_env, parameters))
+        self.block(_body(helper), scopes, depth + 1)
+
+    def create_index(self, call: ast.Call, envs: list[dict[str, object]], depth: int) -> None:
+        argument: ast.expr | None = call.args[0] if call.args else None
+        for keyword in call.keywords:
+            if keyword.arg == "index_name":
+                argument = keyword.value
+        if argument is None:
+            self.problem(call, "create_index without an index name")
+            return
+        for env in envs:
+            try:
+                name = self.evaluator.value(argument, env, depth)
+            except _Unresolvable:
+                self.problem(call, "create_index name is not determinable statically")
+                continue
+            self.record(call, name)
+
+    def ddl(self, node: ast.AST, texts: list[str]) -> None:
+        for text in texts:
+            for start in _CREATE_INDEX_START.finditer(text):
+                match = _CREATE_INDEX.match(text, start.start())
+                if match is None:
+                    self.problem(node, "CREATE INDEX statement without a parseable name")
+                    continue
+                name = match.group("name")
+                if name == _UNRESOLVED:
+                    self.problem(node, "CREATE INDEX name is not determinable statically")
+                    continue
+                self.record(node, name.strip('"'))
+
+    def record(self, node: ast.AST, name: object) -> None:
+        if (
+            not isinstance(name, str)
+            or not _INDEX_NAME.fullmatch(name)
+            or name.upper() in _SQL_KEYWORDS
+        ):
+            self.problem(node, f"index name {name!r} is not an identifier")
+            return
+        self.names.add(name)
+
+
 def _migration_index_names() -> list[str]:
     """Inventory index declarations that are not always represented by the ORM.
 
@@ -214,22 +791,34 @@ def _migration_index_names() -> list[str]:
     raw PostgreSQL search/vector DDL.  It is a release guard, not an inference
     that every index has a different retention rule: indexes inherit the source
     table/column class and the explicit derived-index classes below.
+
+    Each migration is parsed, never executed or pattern-matched as raw text:
+    comments and docstrings are not read, adjacent string literals are joined,
+    and names built from literals, module constants, loops over constant
+    sequences and the migration's own helper functions are resolved. A
+    declaration whose name cannot be determined fails closed unless its
+    migration is a reviewed database-derived entry.
     """
 
     names: set[str] = set()
-    direct = re.compile(
-        r"(?:op|batch_op)\.create_index\(\s*(?:op\.f\()?['\"]([^'\"]+)['\"]",
-        re.MULTILINE,
-    )
-    raw = re.compile(
-        r"CREATE\s+(?:UNIQUE\s+)?INDEX(?:\s+CONCURRENTLY)?"
-        r"(?:\s+IF\s+NOT\s+EXISTS)?\s+([A-Za-z0-9_]+)",
-        re.IGNORECASE,
-    )
+    problems: list[str] = []
     for path in sorted(MIGRATION_DIR.glob("*.py")):
-        source = path.read_text(encoding="utf-8")
-        names.update(direct.findall(source))
-        names.update(raw.findall(source))
+        scanner = _MigrationIndexScanner(
+            path, ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        )
+        scanner.scan()
+        names.update(scanner.names)
+        reviewed = _REVIEWED_DATABASE_DERIVED_INDEXES.get(path.name)
+        if reviewed is not None:
+            names.update(reviewed(scanner.module_env))
+            continue
+        problems.extend(
+            f"{path.name}:{line}: {reason}" for line, reason in sorted(scanner.problems)
+        )
+    if problems:
+        raise MigrationIndexInventoryError(
+            "migration index inventory cannot name every declaration: " + "; ".join(problems)
+        )
     return sorted(names)
 
 
@@ -1081,9 +1670,12 @@ def validate(
     actual_orm_indexes = (
         orm_indexes if orm_indexes is not None else current_orm_indexes()
     )
-    actual_migration_indexes = (
-        migration_indexes if migration_indexes is not None else _migration_index_names()
-    )
+    actual_migration_indexes: list[str] | None = migration_indexes
+    if actual_migration_indexes is None:
+        try:
+            actual_migration_indexes = _migration_index_names()
+        except MigrationIndexInventoryError as exc:
+            errors.append(str(exc))
     rows = data.get("sql_tables")
     if not isinstance(rows, list) or not rows:
         errors.append("data-governance map must enumerate every sql_tables row")
@@ -1207,12 +1799,19 @@ def validate(
                         f"column category override uses unknown category {category_id!r}"
                     )
 
-    expected_schema_fingerprint = _fingerprint(
-        _schema_fingerprint_payload(
-            actual_schema, actual_orm_indexes, actual_migration_indexes
+    expected_schema_fingerprint = (
+        None
+        if actual_migration_indexes is None
+        else _fingerprint(
+            _schema_fingerprint_payload(
+                actual_schema, actual_orm_indexes, actual_migration_indexes
+            )
         )
     )
-    if data.get("schema_fingerprint") != expected_schema_fingerprint:
+    if (
+        expected_schema_fingerprint is not None
+        and data.get("schema_fingerprint") != expected_schema_fingerprint
+    ):
         errors.append(
             "SQL schema/index fingerprint drift requires `generate` and review"
         )
@@ -1220,12 +1819,15 @@ def validate(
     if not isinstance(index_inventory, Mapping):
         errors.append("data-governance map must define index_inventory")
     else:
-        expected_index_values = {
+        expected_index_values: dict[str, object] = {
             "orm_index_count": len(actual_orm_indexes),
             "orm_index_fingerprint": _fingerprint(actual_orm_indexes),
-            "migration_index_count": len(actual_migration_indexes),
-            "migration_index_fingerprint": _fingerprint(actual_migration_indexes),
         }
+        if actual_migration_indexes is not None:
+            expected_index_values["migration_index_count"] = len(actual_migration_indexes)
+            expected_index_values["migration_index_fingerprint"] = _fingerprint(
+                actual_migration_indexes
+            )
         for key, expected in expected_index_values.items():
             if index_inventory.get(key) != expected:
                 errors.append(f"index_inventory/{key}: drift requires map update")
