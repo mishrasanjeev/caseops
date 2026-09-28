@@ -144,7 +144,7 @@ DELIVERED_JOURNEYS: dict[str, tuple[str, ...]] = {
 
 
 IMPLEMENTATION_REFS = {
-    "IPLF-001A": ["infra/cloudrun/deploy.ps1", "scripts/scheduler_inventory.py"],
+    "IPLF-001A": ["infra/cloudrun/scheduler-inventory.json", "scripts/scheduler_inventory.py"],
     "IPLF-001B": ["infra/cloudrun/scheduler-inventory.json", "scripts/scheduler_inventory.py"],
     "IPLF-003A": ["apps/api/src/caseops_api/services/source_actions.py", "apps/api/src/caseops_api/schemas/source_actions.py"],
     "IPLF-003B": ["apps/web/components/app/SourceAction.tsx", "apps/api/src/caseops_api/api/routes/source_actions.py"],

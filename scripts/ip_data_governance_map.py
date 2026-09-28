@@ -83,7 +83,6 @@ RISKY_PATHS = {
     "apps/api/src/caseops_api/services/domain_outbox.py",
     "apps/api/src/caseops_api/services/embeddings.py",
     "apps/api/src/caseops_api/services/llm.py",
-    "infra/cloudrun/api-service.yaml",
     "infra/cloudrun/document-worker-job.yaml",
 }
 RISKY_SOURCE_ROOTS = (
@@ -607,7 +606,7 @@ def _non_sql_data_classes() -> list[dict[str, object]]:
             "implementation_refs": [
                 "apps/api/src/caseops_api/services/document_storage.py",
                 "apps/api/src/caseops_api/core/settings.py",
-                "infra/cloudrun/api-service.yaml",
+                "docs/GCP_DEPLOY.md",
             ],
         },
         {
@@ -778,7 +777,7 @@ def _non_sql_data_classes() -> list[dict[str, object]]:
                 "apps/api/src/caseops_api/services/indian_kanoon.py",
                 "apps/api/src/caseops_api/scripts/seed_indian_kanoon_costs.py",
                 "apps/api/src/caseops_api/services/pine_labs.py",
-                "infra/cloudrun/api-service.yaml",
+                "scripts/deploy-prod.sh",
             ],
         },
         {
