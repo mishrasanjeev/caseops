@@ -80,9 +80,11 @@ themselves as scope.
   read showed the tenant-scoped answer, whose only saved source was the
   document, with its citation. The Matter-scoped answer, which also saved the
   Matter, stayed hidden because both wall changes moved the Matter's
-  version. No test covers `reauthorization_required`. This change leaves the
-  assistant path alone; whether assistant answers should follow the same
-  fail-closed rule is an open product decision.
+  version. No test covered `reauthorization_required`. This change leaves the
+  assistant path alone. On 2026-09-28 the owner decided that assistant
+  answers lock for good too and that reads never save a decision; PR #500
+  implements it and records the evidence in
+  `docs/bugfix-assistant-saved-answers-2026-09-28.md`.
 
 ## Decision
 
