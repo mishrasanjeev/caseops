@@ -1,8 +1,16 @@
 /** IPLF-066B exact-release production acceptance for private revocation. */
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
+import { randomBytes } from "node:crypto";
 
+import { noPaidProviderHeaders } from "./support/cost-controls";
 import { expectStatus } from "./support/iplf058b";
+import {
+  assertPrivateAccessQaIdentity,
+  PRIVATE_ACCESS_HIDDEN_NOTICE,
+  selectPrivateAccessAnswer,
+  verifyPrivateAccessAnswerHidden,
+} from "./support/private-access-lock-proof";
 import {
   selectPrivateReleaseFixture,
   verifyRetainedPrivateRevocation,
@@ -31,10 +39,12 @@ type TenantPolicy = {
 };
 
 type CleanupState = {
-  headers: { Authorization: string };
+  headers: Record<string, string>;
   matter: MatterRecord;
   originalPolicy: TenantPolicy;
   enabledPolicy: TenantPolicy;
+  colleague?: { membership_id: string; email: string };
+  wallId?: string;
 };
 
 let cleanupState: CleanupState | undefined;
@@ -123,6 +133,31 @@ async function restorePolicy(
   await expectStatus(restored, 200, "restore private retrieval tenant policy");
 }
 
+async function removeAccessWall(api: APIRequestContext, state: CleanupState): Promise<void> {
+  if (!state.wallId) return;
+  const response = await api.delete(
+    `${API}/api/matters/${state.matter.id}/access/walls/${state.wallId}`,
+    { headers: state.headers, timeout: 10_000 },
+  );
+  await expectStatus(response, 204, "remove only this canary's ethical wall");
+  state.wallId = undefined;
+}
+
+async function deactivateAccessColleague(api: APIRequestContext, state: CleanupState): Promise<void> {
+  if (!state.colleague) return;
+  const response = await api.patch(
+    `${API}/api/companies/current/users/${state.colleague.membership_id}`,
+    { headers: state.headers, timeout: 10_000, data: { is_active: false } },
+  );
+  await expectStatus(response, 200, "deactivate only this synthetic QA colleague");
+  const colleague = await response.json();
+  expect(colleague.membership_id).toBe(state.colleague.membership_id);
+  expect(colleague.email).toBe(state.colleague.email);
+  expect(colleague.membership_active).toBe(false);
+  expect(colleague.user_active).toBe(false);
+  state.colleague = undefined;
+}
+
 test.afterEach(async ({ request }, testInfo) => {
   const state = cleanupState;
   cleanupState = undefined;
@@ -130,8 +165,10 @@ test.afterEach(async ({ request }, testInfo) => {
   testInfo.setTimeout(90_000);
   const failures: string[] = [];
   for (const [name, cleanup] of [
+    ["ethical_wall", removeAccessWall],
     ["matter", disposeFixture],
     ["tenant_policy", restorePolicy],
+    ["synthetic_colleague", deactivateAccessColleague],
   ] as const) {
     try {
       await cleanup(request, state);
@@ -147,7 +184,7 @@ test.afterEach(async ({ request }, testInfo) => {
   }
 });
 
-test("IPLF-066B production revokes private answers, citations and retrieval", async ({
+test("IPLF-066B production locks answers after access restore and revokes private retrieval", async ({
   page,
 }) => {
   test.setTimeout(300_000);
@@ -164,6 +201,7 @@ test("IPLF-066B production revokes private answers, citations and retrieval", as
   expect((await webIdentity.json()).release_sha).toBe(expectedSha);
 
   const login = await page.request.post(`${API}/api/auth/login`, {
+    headers: noPaidProviderHeaders,
     data: {
       company_slug: SLUG,
       email: EMAIL,
@@ -172,7 +210,8 @@ test("IPLF-066B production revokes private answers, citations and retrieval", as
   });
   await expectStatus(login, 200, "IP QA sign-in");
   const identity = await login.json();
-  const headers = { Authorization: `Bearer ${identity.access_token}` };
+  assertPrivateAccessQaIdentity(identity);
+  const headers = { ...noPaidProviderHeaders, Authorization: `Bearer ${identity.access_token}` };
 
   const mattersResponse = await page.request.get(`${API}/api/matters/`, {
     headers,
@@ -279,15 +318,119 @@ test("IPLF-066B production revokes private answers, citations and retrieval", as
   await page.getByRole("button", { name: "Start conversation" }).click();
   await page
     .getByRole("textbox", { name: "Ask this workspace" })
-    .fill(`What does the evidence say about ${evidenceToken}?`);
+    .fill(`Show what the evidence says about ${evidenceToken}.`);
+  const answerResponse = page.waitForResponse((response) =>
+    response.url().startsWith(`${API}/api/workspace-assistant/sessions/`) &&
+    response.url().endsWith("/ask") && response.request().method() === "POST",
+  );
   await page.getByRole("button", { name: "Ask", exact: true }).click();
+  const answeredResponse = await answerResponse;
+  expect(await answeredResponse.request().headerValue("X-CaseOps-Automated-Test")).toBe("no-paid-providers");
+  expect(answeredResponse.status()).toBe(200);
+  const answered = await answeredResponse.json();
+  const sessionId = String(answered.session.id);
+  const answer = selectPrivateAccessAnswer(
+    [answered.assistant_turn], evidenceToken, beforeItems[0].source_id,
+  );
+  expect(answer.proposed_actions).toEqual([expect.objectContaining({
+    action_type: "navigation", label: `Open ${filename}`,
+    target_type: "matter_document", target_id: beforeItems[0].source_id,
+    target_label: filename,
+  })]);
   await expect(page.getByTestId("assistant-turns")).toContainText(
     evidenceToken,
   );
-  await expect(page.getByRole("link", { name: filename })).toBeVisible();
+  await expect(page.getByRole("link", { name: filename, exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: `Open ${filename}`, exact: true })).toBeVisible();
   await expect(page.getByTestId("assistant-turns")).not.toContainText(
     "Ignore previous instructions",
   );
+
+  const turnsResponse = await page.request.get(
+    `${API}/api/workspace-assistant/sessions/${sessionId}/turns`, { headers },
+  );
+  await expectStatus(turnsResponse, 200, "capture the visible private answer and citation");
+  const turns = await turnsResponse.json();
+  expect(turns.has_more).toBe(false);
+  expect(selectPrivateAccessAnswer(turns.items, evidenceToken, beforeItems[0].source_id).id).toBe(answer.id);
+  const visibleCitation = await page.request.post(
+    `${API}/api/workspace-assistant/sessions/${sessionId}/citations/${answer.citations[0].id}/open`,
+    { headers },
+  );
+  await expectStatus(visibleCitation, 200, "the answer's citation opens before the access event");
+
+  // The canonical seed has no colleague. A unique member belongs only to this
+  // QA canary and is deactivated after disposal, never before the lock proof.
+  const runId = `${Date.now()}-${randomBytes(8).toString("hex")}`;
+  const colleagueEmail = `ip-qa-access-${runId}@caseops.ai`;
+  const colleagueResponse = await page.request.post(`${API}/api/companies/current/users`, {
+    headers,
+    data: {
+      full_name: `IPLF-066B Synthetic Access Colleague ${runId}`,
+      email: colleagueEmail,
+      password: `Qa1!${randomBytes(24).toString("hex")}`,
+      role: "member",
+    },
+  });
+  await expectStatus(colleagueResponse, 200, "create one dedicated synthetic QA colleague");
+  const colleague = await colleagueResponse.json();
+  cleanupState.colleague = { membership_id: String(colleague.membership_id), email: colleagueEmail };
+  expect(colleague.email).toBe(colleagueEmail);
+  expect(colleague.role).toBe("member");
+  expect(colleague.membership_active).toBe(true);
+  expect(colleague.user_active).toBe(true);
+  expect(colleague.membership_id).not.toBe(identity.membership.id);
+  const wallResponse = await page.request.post(`${API}/api/matters/${matter.id}/access/walls`, {
+    headers,
+    data: {
+      excluded_membership_id: colleague.membership_id,
+      reason: "Exact-release IPLF-066B synthetic access-lock canary.",
+    },
+  });
+  await expectStatus(wallResponse, 200, "change access without excluding the answer's author");
+  cleanupState.wallId = String((await wallResponse.json()).id);
+  const proof = {
+    apiBase: API, headers, sessionId, answerId: answer.id,
+    citationId: answer.citations[0].id, evidenceToken,
+  };
+  const assertAuthorStillReadsMatter = async () => {
+    const response = await page.request.get(`${API}/api/matters/${matter.id}`, { headers });
+    await expectStatus(response, 200, "the answer's author still reads the active Matter");
+    const current = await response.json();
+    expect(current.id).toBe(matter.id);
+    expect(current.matter_code).toBe(matter.matter_code);
+    expect(current.status).toBe("active");
+  };
+  await assertAuthorStillReadsMatter();
+  await verifyPrivateAccessAnswerHidden(page.request, proof);
+  await removeAccessWall(page.request, cleanupState);
+  await assertAuthorStillReadsMatter();
+  await verifyPrivateAccessAnswerHidden(page.request, proof);
+
+  for (const width of [1280, 360]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.reload();
+    await page.getByRole("button", { name: `Ask \u00b7 ${filename}`, exact: true }).click();
+    const savedAnswer = page.locator('[data-turn-role="assistant"]').last();
+    await expect(savedAnswer).toContainText(PRIVATE_ACCESS_HIDDEN_NOTICE);
+    await expect(savedAnswer).not.toContainText(evidenceToken);
+    await expect(page.getByRole("link", { name: filename })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: `Open ${filename}`, exact: true })).toHaveCount(0);
+    await expect(page.getByRole("textbox", { name: "Ask this workspace" })).toBeVisible();
+    expect(await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+    )).toBe(false);
+    await verifyPrivateAccessAnswerHidden(page.request, proof);
+  }
+
+  const [currentApiIdentity, currentWebIdentity] = await Promise.all([
+    page.request.get(`${API}/api/build`, { headers }),
+    page.request.get(`${WEB}/api/release-identity`, { headers: noPaidProviderHeaders }),
+  ]);
+  await expectStatus(currentApiIdentity, 200, "API release identity before disposal");
+  await expectStatus(currentWebIdentity, 200, "web release identity before disposal");
+  expect((await currentApiIdentity.json()).release_sha).toBe(expectedSha);
+  expect((await currentWebIdentity.json()).release_sha).toBe(expectedSha);
 
   await disposeFixture(page.request, cleanupState);
   await page.reload();
