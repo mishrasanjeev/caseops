@@ -1262,6 +1262,13 @@ requirements when using the fallback.
   transaction, so a later `DROP INDEX` waits on the test itself, and its
   cleanup is rolled back on close. Re-enable AUTOCOMMIT after the block, bound
   lock waits, and commit the cleanup.
+- A list must never return a record that its single-record read refuses. The
+  Draft lists read a source manifest that was not a JSON list as "no private
+  source" and returned the draft's body, while the read answered 409. Give
+  lists and reads one parse and one batched decision, decide each version on
+  its own (a merged manifest spans generations and repeats projections), and
+  prove list, read and HTTP agreement for malformed shapes beside the statement
+  bound, as `test_20260927_draft_lists_bounded.py` does.
 - Automated production runs that may only assert the no-paid rejection cannot
   observe a provider-search fix. Replay stored evidence instead of spending: a
   checked-in verification fixture is refreshed only by the window-enforcing
