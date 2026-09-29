@@ -22,6 +22,7 @@ import { noPaidProviderHeaders } from "./tests/e2e/support/cost-controls";
 process.env.PROD_BASE_URL ||= "https://caseops.ai";
 process.env.PROD_API_BASE_URL ||= "https://api.caseops.ai";
 const PATENT_PROD_SPECS = /iplf-(?:079b-domain-availability|080[ab]-patent-(?:family|application|parties|priorities|source-scope))-2026-09-0[67]\.spec\.ts$/;
+const SAVED_MANIFEST_PROD_SPEC = /iplf-066c-saved-manifest-later-events-2026-09-29\.spec\.ts$/;
 
 const candidates = [
   "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
@@ -47,6 +48,7 @@ export default defineConfig({
     /ram-2026-09-24-bugs\.spec\.ts$/,
     /ram-2026-09-07-statute-source-data\.spec\.ts$/,
     PATENT_PROD_SPECS,
+    SAVED_MANIFEST_PROD_SPEC,
   ],
   timeout: 120_000,
   expect: { timeout: 10_000 },
@@ -87,7 +89,7 @@ export default defineConfig({
     },
     {
       name: "tester-prod-chromium",
-      testMatch: [TESTER_AUTH_PROD_SPECS, /ram-2026-09-05-bugs\.spec\.ts$/, /ram-2026-09-08-bugs\.spec\.ts$/, /ram-2026-09-21-bugfixes\.spec\.ts$/, /ram-2026-09-24-bugs\.spec\.ts$/, /ram-2026-09-26-bugs\.spec\.ts$/],
+      testMatch: [TESTER_AUTH_PROD_SPECS, SAVED_MANIFEST_PROD_SPEC, /ram-2026-09-05-bugs\.spec\.ts$/, /ram-2026-09-08-bugs\.spec\.ts$/, /ram-2026-09-21-bugfixes\.spec\.ts$/, /ram-2026-09-24-bugs\.spec\.ts$/, /ram-2026-09-26-bugs\.spec\.ts$/],
       use: {
         ...devices["Desktop Chrome"],
         storageState: { cookies: [], origins: [] },

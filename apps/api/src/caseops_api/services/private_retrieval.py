@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
-from sqlalchemy import and_, delete, exists, func, not_, or_, select, update
+from sqlalchemy import and_, delete, exists, func, not_, or_, select, true, update
 from sqlalchemy.orm import Session
 
 from caseops_api.core.settings import Settings, get_settings
@@ -28,8 +28,11 @@ from caseops_api.db.models import (
     Client,
     Company,
     CompanyMembership,
+    IpAsset,
     IpDocketRecord,
     IpDocument,
+    IpDocumentLink,
+    IpProceeding,
     Matter,
     MatterAttachment,
     PrivateIndexGeneration,
@@ -37,6 +40,7 @@ from caseops_api.db.models import (
     PrivateIndexProjectionScope,
     PrivateProjectionEvent,
     PrivateSavedOutputAccess,
+    TrademarkApplication,
     User,
 )
 from caseops_api.services.capabilities import (
@@ -48,7 +52,10 @@ from caseops_api.services.ip_capability_catalog import (
     evaluate_ip_feature,
 )
 from caseops_api.services.ip_document_workflow import get_ip_document_policies
-from caseops_api.services.ip_domain_policy import general_ip_disclosure_filter
+from caseops_api.services.ip_domain_policy import (
+    IP_DOCUMENT_CHILD_TARGET_MODELS,
+    general_ip_disclosure_filter,
+)
 from caseops_api.services.matter_access import (
     visible_ip_dockets_filter,
     visible_matters_filter,
@@ -73,6 +80,17 @@ _CACHE_MAX_ENTRIES = 256
 _CACHE_LOCK = threading.Lock()
 _CANDIDATE_CACHE: OrderedDict[str, tuple[datetime, tuple[str, ...]]] = OrderedDict()
 _TERM_RE = re.compile(r"[\w-]+", re.UNICODE)
+# Workspace Assistant sources whose visibility follows their IP docket's ACL.
+_DOCKET_RECORD_SOURCE_MODELS = (
+    ("ip_asset", IpAsset),
+    ("trademark_application", TrademarkApplication),
+    ("ip_proceeding", IpProceeding),
+)
+# Each child target an IP document can link to has its own typed link column.
+_DOCUMENT_LINK_CHILD_COLUMNS = {
+    target_type: getattr(IpDocumentLink, f"{target_type}_id")
+    for target_type in IP_DOCUMENT_CHILD_TARGET_MODELS
+}
 
 
 class PrivateRetrievalInvariantError(RuntimeError):
@@ -2141,6 +2159,86 @@ def _affected_projection_statement(event: PrivateProjectionEvent):
     )
 
 
+def _saved_outputs_reached_by_event(
+    event: PrivateProjectionEvent,
+    *,
+    affected_sources: set[tuple[str, str]],
+):
+    """Saved outputs of the event's target and of every record under it.
+
+    A saved Workspace Assistant answer keeps the exact version of each source,
+    and a document's version (its SHA-256 or document version) and a typed IP
+    record's version never move when its parent's access or lifecycle does.
+    So an event reaches the target itself, a Matter's documents, and an IP
+    docket's typed records and the IP documents linked to the docket or to one
+    of its children, found from the canonical tables rather than from the
+    projections the event's generation happens to hold. The projections the
+    event tombstoned still count.
+    """
+
+    if event.target_type == "tenant":
+        return true()
+
+    def saved(source_type: str, source_ids):
+        return and_(
+            PrivateSavedOutputAccess.source_type == source_type,
+            PrivateSavedOutputAccess.source_id.in_(source_ids),
+        )
+
+    reached = [
+        and_(
+            PrivateSavedOutputAccess.source_type == event.target_type,
+            PrivateSavedOutputAccess.source_id == event.target_id,
+        )
+    ]
+    if event.target_type == "matter":
+        reached.append(
+            saved(
+                "matter_document",
+                select(MatterAttachment.id).where(MatterAttachment.matter_id == event.target_id),
+            )
+        )
+    elif event.target_type == "ip_docket":
+        for source_type, model in _DOCKET_RECORD_SOURCE_MODELS:
+            reached.append(
+                saved(
+                    source_type,
+                    select(model.id).where(
+                        model.company_id == event.company_id,
+                        model.docket_id == event.target_id,
+                    ),
+                )
+            )
+        linked = [IpDocumentLink.docket_id == event.target_id]
+        for target_type, column in _DOCUMENT_LINK_CHILD_COLUMNS.items():
+            model = IP_DOCUMENT_CHILD_TARGET_MODELS[target_type]
+            linked.append(
+                column.in_(
+                    select(model.id).where(
+                        model.company_id == event.company_id,
+                        model.docket_id == event.target_id,
+                    )
+                )
+            )
+        reached.append(
+            saved(
+                "ip_document",
+                select(IpDocumentLink.document_id).where(
+                    IpDocumentLink.company_id == event.company_id,
+                    or_(*linked),
+                ),
+            )
+        )
+    reached.extend(
+        and_(
+            PrivateSavedOutputAccess.source_type == source_type,
+            PrivateSavedOutputAccess.source_id == source_id,
+        )
+        for source_type, source_id in sorted(affected_sources)
+    )
+    return or_(*reached)
+
+
 def apply_private_projection_event(session: Session, *, event_id: str) -> PrivateProjectionEvent:
     event = session.scalar(
         select(PrivateProjectionEvent)
@@ -2218,40 +2316,26 @@ def apply_private_projection_event(session: Session, *, event_id: str) -> Privat
         active_generation.verification_sha256 = None
         active_generation.verified_at = None
 
-    output_filter = (
-        True
-        if event.target_type == "tenant"
-        else or_(
-            and_(
-                PrivateSavedOutputAccess.source_type == event.target_type,
-                PrivateSavedOutputAccess.source_id == event.target_id,
-            ),
-            *(
-                and_(
-                    PrivateSavedOutputAccess.source_type == source_type,
-                    PrivateSavedOutputAccess.source_id == source_id,
-                )
-                for source_type, source_id in sorted(affected_sources)
-            ),
+    # Every event, access changes included, locks a saved output for good, as
+    # Reviews and Drafts stay locked. One set-based update, bounded by the
+    # tenant's saved outputs for the reached sources, replaces a per-row load.
+    locked_outputs = session.execute(
+        update(PrivateSavedOutputAccess)
+        .where(
+            PrivateSavedOutputAccess.company_id == event.company_id,
+            PrivateSavedOutputAccess.state.not_in(("locked", "redacted")),
+            _saved_outputs_reached_by_event(event, affected_sources=affected_sources),
         )
+        .values(
+            state="locked",
+            locked_reason=event.reason_code,
+            locked_at=now,
+            access_policy_generation=event.access_policy_generation,
+            tombstone_generation=event.tombstone_generation,
+            updated_at=now,
+        )
+        .execution_options(synchronize_session="fetch")
     )
-    outputs = list(
-        session.scalars(
-            select(PrivateSavedOutputAccess).where(
-                PrivateSavedOutputAccess.company_id == event.company_id,
-                output_filter,
-                PrivateSavedOutputAccess.state.not_in(("locked", "redacted")),
-            )
-        ).all()
-    )
-    output_state = "reauthorization_required" if event.event_type == "access_changed" else "locked"
-    for row in outputs:
-        row.state = output_state
-        row.locked_reason = event.reason_code
-        row.locked_at = now
-        row.access_policy_generation = event.access_policy_generation
-        row.tombstone_generation = event.tombstone_generation
-        row.updated_at = now
     shadow_generations = list(
         session.scalars(
             select(PrivateIndexGeneration)
@@ -2279,7 +2363,7 @@ def apply_private_projection_event(session: Session, *, event_id: str) -> Privat
             generation.verification_sha256 = None
             generation.verified_at = None
     event.affected_projection_count = affected_projection_count
-    event.affected_saved_output_count = len(outputs)
+    event.affected_saved_output_count = max(int(locked_outputs.rowcount or 0), 0)
     event.status = "applied"
     event.applied_at = now
     event.error_code = None
@@ -2409,42 +2493,27 @@ def register_private_saved_output(
     return tuple(rows)
 
 
-def reauthorize_private_saved_outputs(
-    session: Session,
+def private_saved_output_turns_to_hide(
+    rows: Iterable[PrivateSavedOutputAccess],
     *,
-    company_id: str,
-    assistant_turn_ids: set[str],
     accessible_sources: set[tuple[str, str, str]],
 ) -> set[str]:
-    """Refresh manifests and return turn IDs that must render locked/redacted."""
+    """Return the assistant turns whose saved output must stay hidden.
 
-    if not assistant_turn_ids:
-        return set()
-    rows = list(
-        session.scalars(
-            select(PrivateSavedOutputAccess).where(
-                PrivateSavedOutputAccess.company_id == company_id,
-                PrivateSavedOutputAccess.assistant_turn_id.in_(assistant_turn_ids),
-            )
-        ).all()
-    )
-    now = datetime.now(UTC)
-    blocked: set[str] = set()
-    for row in rows:
-        key = (row.source_type, row.source_id, row.source_version)
-        if row.state in {"locked", "redacted"} or key not in accessible_sources:
-            row.state = "locked"
-            row.locked_reason = row.locked_reason or "source_access_or_version_changed"
-            row.locked_at = row.locked_at or now
-            blocked.add(row.assistant_turn_id)
-        else:
-            row.state = "accessible"
-            row.locked_reason = None
-            row.locked_at = None
-            row.last_reauthorized_at = now
-        row.updated_at = now
-    session.flush()
-    return blocked
+    Only projection events change a saved output's state, and every event
+    locks it for good. A read decides and writes nothing: an answer is served
+    only while each saved source is still ``accessible`` and still resolves for
+    the reader at its saved version. A ``reauthorization_required`` row from
+    before 2026-09-28 therefore stays hidden, and the turn list, the export
+    and a citation open always reach the same decision.
+    """
+
+    return {
+        row.assistant_turn_id
+        for row in rows
+        if row.state != "accessible"
+        or (row.source_type, row.source_id, row.source_version) not in accessible_sources
+    }
 
 
 __all__ = [
@@ -2475,12 +2544,12 @@ __all__ = [
     "prefilter_private_projection_ids",
     "private_retrieval_activation",
     "private_retrieval_cache_key",
+    "private_saved_output_turns_to_hide",
     "private_saved_source_manifest_is_current",
     "private_saved_source_manifests_are_current",
     "private_source_version",
     "propagate_private_source_creation",
     "propagate_private_projection_change",
-    "reauthorize_private_saved_outputs",
     "register_private_saved_output",
     "retrieve_private_content",
     "stream_private_content",

@@ -1279,6 +1279,14 @@ requirements when using the fallback.
   reopen, return at the next rebuild, while the same proof saved one
   generation later stayed locked. Regress both saved generations with bare
   and real events, before and after a later rebuild.
+- A Workspace Assistant answer is a saved output too: every projection event,
+  access included, locks its saved sources for good, and a read never writes.
+  Reach the event's target and the records under it from the canonical tables
+  (a Matter's documents; an IP docket's asset, application and proceeding
+  records and the documents linked to it or its children) in one set-based
+  update, not only through the projections the event's generation holds. When
+  reads committed their decision, a temporary access loss locked an answer only
+  if its author happened to export during it.
 - Migration-job safety includes execution topology. Declare and verify one
   task and parallelism one before Alembic execution; inherited job defaults or
   a correct image, command and environment cannot certify serial migration.
@@ -1286,6 +1294,31 @@ requirements when using the fallback.
   Inspect the exact-head check rollup and repository enforcement before using
   it, keep pending rewritten-head evidence pending, and require completed CI
   on the combined current main before any production deployment.
+- A hidden assistant answer must redact every source-derived response field,
+  not only content and citations. Suggested searches and proposed actions can
+  retain private record labels and links. Enforce redaction on server-owned
+  read and export DTOs, reject hidden-answer action preview and execution, and
+  preserve immutable stored evidence. Prove both hidden and visible controls,
+  access restoration, citation rejection and responsive browser reloads.
+- A release regression cannot wait for a scheduler the release deliberately
+  holds paused. Keep production seed, QA mutations and maintenance serialized;
+  use canonical producer audit evidence for retained production reads and a
+  fresh loopback event/rebuild journey for Docker. Never resume overlapping
+  cadence, fabricate output evidence or weaken a readiness fence to make a
+  new test pass. Preserve the separate two-clean-run resume guard after QA.
+- Release-owned browser journeys must receive the same exact source identity
+  in every standard API/web harness, not only Docker. Propagate a valid explicit
+  image SHA or resolve the candidate checkout, reject malformed identity rather
+  than substituting one, and prove the normal suite discovers and runs the
+  journey. Preserve a failed harness baseline separately from acceptance.
+- A stronger security rejection can legitimately precede an older stale-target
+  error. Audit dated browser expectations after changing that ordering; assert
+  the exact typed response and user-visible copy plus unchanged persisted
+  fields and child identities, never accept several errors or weaken the fence.
+- A multi-record browser journey must establish its visible list/detail context
+  on every iteration. Preserve failed partially edited fixtures, prove the
+  replacement journey on a fresh fixture and rerun its retained terminal state;
+  resetting saved evidence is not idempotence or revocation proof.
 - Automated production runs that may only assert the no-paid rejection cannot
   observe a provider-search fix. Replay stored evidence instead of spending: a
   checked-in verification fixture is refreshed only by the window-enforcing

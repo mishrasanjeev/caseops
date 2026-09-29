@@ -16,17 +16,21 @@ import re
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime, timedelta
 
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from caseops_api.core.password_policy import enforce_password_policy
-from caseops_api.core.security import hash_password
+from caseops_api.core.security import hash_password, verify_password
 from caseops_api.db.models import (
+    AuditEvent,
     AuthorityDocument,
     BillingSubscription,
     Company,
     CompanyMembership,
     Court,
+    Draft,
+    DraftVersion,
     IpDocketRecord,
     IpProceeding,
     Judge,
@@ -41,21 +45,31 @@ from caseops_api.db.models import (
     User,
 )
 from caseops_api.db.session import get_session_factory
-from caseops_api.schemas.companies import BootstrapCompanyRequest
+from caseops_api.schemas.companies import BootstrapCompanyRequest, CompanyUserCreateRequest
 from caseops_api.schemas.ip_operations import (
     IpDocketCreateRequest,
     ManualTrademarkApplicationCreateRequest,
 )
 from caseops_api.schemas.ip_records import IpProceedingCreateRequest
-from caseops_api.schemas.matters import MatterCreateRequest
-from caseops_api.services.identity import register_company_owner
+from caseops_api.schemas.matters import MatterCreateRequest, MatterLifecycleStatusRequest
+from caseops_api.services.drafting import create_draft
+from caseops_api.services.identity import create_company_user, register_company_owner
 from caseops_api.services.ip_operations import create_ip_docket, get_ip_docket
 from caseops_api.services.ip_records import (
     create_ip_proceeding,
     create_manual_trademark_application,
 )
-from caseops_api.services.matters import create_matter
-from caseops_api.services.private_retrieval import private_source_version
+from caseops_api.services.matter_access import add_ethical_wall, remove_ethical_wall
+from caseops_api.services.matters import (
+    create_matter,
+    get_matter,
+    transition_matter_lifecycle_status,
+)
+from caseops_api.services.private_retrieval import (
+    capture_private_saved_source_manifest,
+    private_saved_source_manifest_is_current,
+    private_source_version,
+)
 from caseops_api.services.private_retrieval_jobs import rebuild_private_index
 from caseops_api.services.session_context import SessionContext
 
@@ -1066,6 +1080,451 @@ def ensure_ip_production_qa_private_retrieval_fixture(
     )
 
 
+def ensure_ip_production_qa_saved_manifest_fixture(
+    session: Session,
+    *,
+    company_id: str,
+    membership_id: str,
+    release_sha: str,
+    member_password: str,
+    prepare_later_event_evidence: bool = False,
+) -> dict:
+    """Freeze document-backed Draft sister proofs, never simulated Reviews.
+
+    Review's production producers capture only version-changing Matter/docket
+    sources. These explicitly synthetic, manually authored Draft versions use
+    real indexed document captures to exercise the shared saved-source boundary.
+    Replay must preserve stale versions and any intervening lifecycle events.
+    """
+    if not _RELEASE_SHA.fullmatch(release_sha):
+        raise ValueError("Saved-manifest QA requires the exact lowercase release SHA.")
+    company = session.get(Company, company_id)
+    owner = session.get(CompanyMembership, membership_id)
+    user = session.get(User, owner.user_id) if owner else None
+    if (
+        company is None
+        or not company.slug.startswith("caseops-ip-qa")
+        or "qa" not in company.name.lower()
+        or owner is None
+        or owner.company_id != company_id
+        or owner.role != MembershipRole.OWNER
+        or not owner.is_active
+        or user is None
+        or not user.is_active
+    ):
+        raise ValueError("Saved-manifest fixture requires the dedicated QA tenant owner.")
+    context = SessionContext(company=company, user=user, membership=owner)
+    code = f"SAVED-MANIFEST-{release_sha[:12].upper()}"
+    anchor = session.scalar(
+        select(Matter).where(Matter.company_id == company_id, Matter.matter_code == code)
+    )
+    if anchor is not None:
+        control = session.scalar(
+            select(Draft).where(
+                Draft.matter_id == anchor.id, Draft.title == f"{code} unchanged control"
+            )
+        )
+        version = session.get(DraftVersion, control.current_version_id) if control else None
+        if version is None:
+            raise ValueError(
+                "Retained saved-manifest fixture is incomplete; never replace its evidence."
+            )
+        fixture = json.loads(version.context_manifest_json).get("qa_saved_manifest_fixture")
+        if (
+            not isinstance(fixture, dict)
+            or fixture.get("schema") != "caseops.saved-manifest-document-sister-qa.v1"
+            or fixture.get("release_sha") != release_sha
+            or fixture.get("anchor_id") != anchor.id
+            or set(fixture.get("cases", {})) != {"access", "tombstone", "control"}
+        ):
+            raise ValueError("Retained saved-manifest fixture identity drifted.")
+        member = session.get(CompanyMembership, fixture["membership_id"])
+        member_user = session.get(User, member.user_id) if member else None
+        if (
+            member is None
+            or member.company_id != company_id
+            or not member.is_active
+            or member.role != MembershipRole.MEMBER
+            or member_user is None
+            or not member_user.is_active
+            or member_user.email != fixture["member_email"]
+            or not verify_password(member_password, member_user.password_hash)
+        ):
+            raise ValueError("Retained saved-manifest member identity/credential drifted.")
+        for case in fixture["cases"].values():
+            source = session.get(Matter, case["matter_id"])
+            document = session.get(MatterAttachment, case["attachment_id"])
+            draft = session.get(Draft, case["draft_id"])
+            frozen = session.get(DraftVersion, case["version_id"])
+            if (
+                source is None
+                or source.company_id != company_id
+                or document is None
+                or document.matter_id != source.id
+                or document.sha256_hex != case["source_version"]
+                or hashlib.sha256((document.extracted_text or "").encode()).hexdigest()
+                != case["source_version"]
+                or draft is None
+                or draft.matter_id != anchor.id
+                or frozen is None
+                or frozen.draft_id != draft.id
+                or hashlib.sha256(frozen.source_manifest_json.encode()).hexdigest()
+                != case["manifest_sha256"]
+                or hashlib.sha256(frozen.body.encode()).hexdigest() != case["body_sha256"]
+            ):
+                raise ValueError("Retained saved-manifest source/output drifted; refuse reseeding.")
+        result = {**fixture, "created_fixture": False}
+        return (
+            _complete_saved_manifest_later_event_evidence(session, context=context, fixture=result)
+            if prepare_later_event_evidence
+            else result
+        )
+
+    member_email = f"{company.slug}-saved-manifest@caseops.ai"
+    member_user = session.scalar(select(User).where(User.email == member_email))
+    if member_user is None:
+        record = create_company_user(
+            session,
+            context=context,
+            payload=CompanyUserCreateRequest(
+                full_name="CaseOps saved-manifest QA member",
+                email=member_email,
+                password=member_password,
+                role="member",
+            ),
+        )
+        member = session.get(CompanyMembership, record.membership_id)
+    else:
+        member = session.scalar(
+            select(CompanyMembership).where(
+                CompanyMembership.company_id == company_id,
+                CompanyMembership.user_id == member_user.id,
+            )
+        )
+        if (
+            member is None
+            or member.role != MembershipRole.MEMBER
+            or not member.is_active
+            or not member_user.is_active
+            or not verify_password(member_password, member_user.password_hash)
+        ):
+            raise ValueError(
+                "Saved-manifest QA member collision; refuse identity/credential changes."
+            )
+    assert member is not None
+    anchor = create_matter(
+        session,
+        context=context,
+        payload=MatterCreateRequest(
+            matter_code=code,
+            title=f"{code} synthetic Draft/document sister proof",
+            practice_area="Intellectual Property",
+            forum_level="high_court",
+        ),
+    )
+    sources: dict[str, MatterAttachment] = {}
+    for name in ("access", "tombstone", "control"):
+        source = create_matter(
+            session,
+            context=context,
+            payload=MatterCreateRequest(
+                matter_code=f"{code}-{name.upper()}",
+                title=f"{code} {name} synthetic source",
+                status="intake",
+                practice_area="Intellectual Property",
+                forum_level="high_court",
+            ),
+        )
+        text = (
+            f"Synthetic QA document for {release_sha}, {name}. "
+            "No legal authority or model-generated content."
+        )
+        document = MatterAttachment(
+            matter_id=source.id,
+            uploaded_by_membership_id=owner.id,
+            original_filename=f"{code.lower()}-{name}.txt",
+            storage_key=f"synthetic-qa/{company.id}/saved-manifest/{release_sha}/{name}.txt",
+            content_type="text/plain",
+            size_bytes=len(text.encode()),
+            sha256_hex=hashlib.sha256(text.encode()).hexdigest(),
+            processing_status="indexed",
+            extracted_text=text,
+            extracted_char_count=len(text),
+        )
+        session.add(document)
+        session.flush()
+        session.add(
+            MatterAttachmentChunk(
+                attachment_id=document.id, chunk_index=0, content=text, token_count=32
+            )
+        )
+        sources[name] = document
+    session.commit()
+    rebuild_private_index(session, company_id=company_id, activate=True)
+    session.commit()
+    fixture = {
+        "schema": "caseops.saved-manifest-document-sister-qa.v1",
+        "release_sha": release_sha,
+        "anchor_id": anchor.id,
+        "matter_code": code,
+        "membership_id": member.id,
+        "member_email": member_email,
+        "owner_membership_id": owner.id,
+        "cases": {},
+    }
+    versions: dict[str, DraftVersion] = {}
+    for name, document in sources.items():
+        manifest = list(
+            capture_private_saved_source_manifest(
+                session,
+                context=context,
+                sources=(("matter_document", document.id),),
+            )
+        )
+        if not manifest:
+            raise ValueError("Saved-manifest fixture did not capture its real indexed document.")
+        body = f"Synthetic frozen Draft QA evidence: {code} {name}. Not a legal opinion."
+        draft = create_draft(
+            session,
+            context=context,
+            matter_id=anchor.id,
+            title=f"{code} {'unchanged control' if name == 'control' else name + ' later event'}",
+            draft_type="memo",
+            commit=False,
+        )
+        version = DraftVersion(
+            draft_id=draft.id,
+            generated_by_membership_id=owner.id,
+            model_run_id=None,
+            revision=1,
+            body=body,
+            citations_json="[]",
+            verified_citation_count=0,
+            template_manifest_json=json.dumps(
+                {"schema": "caseops.drafting-template.v1", "key": None, "target_type": "matter"}
+            ),
+            context_manifest_json=json.dumps(
+                {
+                    "schema": "caseops.matter-drafting-context.v1",
+                    "captured_at": datetime.now(UTC).isoformat(),
+                    "matter_id": anchor.id,
+                    "title": anchor.title,
+                    "practice_area": anchor.practice_area,
+                    "court": None,
+                }
+            ),
+            source_manifest_json=json.dumps(manifest, sort_keys=True),
+            summary=(
+                "Release-owned synthetic manual Draft/document sister fixture; "
+                "no Review or paid provider run."
+            ),
+        )
+        session.add(version)
+        session.flush()
+        draft.current_version_id = version.id
+        versions[name] = version
+        fixture["cases"][name] = {
+            "matter_id": document.matter_id,
+            "attachment_id": document.id,
+            "source_version": document.sha256_hex,
+            "draft_id": draft.id,
+            "version_id": version.id,
+            "body_sha256": hashlib.sha256(body.encode()).hexdigest(),
+            "manifest_sha256": hashlib.sha256(version.source_manifest_json.encode()).hexdigest(),
+        }
+    session.commit()
+    # Retire the captured generation WITHOUT an event on any captured source.
+    rebuild_private_index(session, company_id=company_id, activate=True)
+    session.commit()
+    captured_id = json.loads(versions["control"].source_manifest_json)[0]["generation_id"]
+    retired = session.get(PrivateIndexGeneration, captured_id)
+    active = session.scalar(
+        select(PrivateIndexGeneration).where(
+            PrivateIndexGeneration.company_id == company_id,
+            PrivateIndexGeneration.state == "active",
+        )
+    )
+    if (
+        retired is None
+        or retired.state != "retired"
+        or retired.retired_at is None
+        or active is None
+        or active.id == captured_id
+    ):
+        raise ValueError("Saved-manifest fixture did not benignly retire its captured generation.")
+    member_user = session.get(User, member.user_id)
+    member_context = SessionContext(company=company, user=member_user, membership=member)
+    if not all(
+        private_saved_source_manifest_is_current(
+            session, context=member_context, manifest=json.loads(version.source_manifest_json)
+        )
+        for version in versions.values()
+    ):
+        raise ValueError("Benign retirement did not reauthorize every unchanged document.")
+    fixture.update(
+        captured_generation_id=captured_id,
+        benign_generation_id=active.id,
+        retired_at=retired.retired_at.replace(tzinfo=UTC).isoformat(),
+    )
+    control_context = json.loads(versions["control"].context_manifest_json)
+    control_context["qa_saved_manifest_fixture"] = fixture
+    versions["control"].context_manifest_json = json.dumps(control_context, sort_keys=True)
+    session.commit()
+    result = {**fixture, "created_fixture": True}
+    return (
+        _complete_saved_manifest_later_event_evidence(session, context=context, fixture=result)
+        if prepare_later_event_evidence
+        else result
+    )
+
+
+def _complete_saved_manifest_later_event_evidence(
+    session: Session,
+    *,
+    context: SessionContext,
+    fixture: dict,
+) -> dict:
+    """Run the canonical API producers during serialized release seeding.
+
+    Production cadence is paused throughout browser QA. Persist the completed
+    post-event rebuild here; the production journey only validates retained
+    proof. Docker separately exercises actual HTTP mutations and local rebuild.
+    """
+    member = session.get(CompanyMembership, fixture["membership_id"])
+    member_context = SessionContext(
+        company=context.company,
+        user=session.get(User, member.user_id),
+        membership=member,
+    )
+
+    def decisions() -> dict[str, bool]:
+        return {
+            name: private_saved_source_manifest_is_current(
+                session,
+                context=member_context,
+                manifest=json.loads(
+                    session.get(DraftVersion, case["version_id"]).source_manifest_json
+                ),
+            )
+            for name, case in fixture["cases"].items()
+        }
+
+    if "post_event_generation_id" in fixture:
+        generation = session.get(PrivateIndexGeneration, fixture["post_event_generation_id"])
+        if (
+            generation is None
+            or generation.company_id != context.company.id
+            or generation.activated_at is None
+            or decisions() != {"access": False, "tombstone": False, "control": True}
+        ):
+            raise ValueError(
+                "Retained post-event rebuild proof drifted; never repair it by recapture."
+            )
+        for ids in fixture["later_event_audit_ids"].values():
+            for event_id in ids:
+                event = session.get(AuditEvent, event_id)
+                if (
+                    event is None
+                    or event.company_id != context.company.id
+                    or event.result != "success"
+                ):
+                    raise ValueError("Retained later-event audit proof is missing.")
+        return fixture
+    if decisions() != {"access": True, "tombstone": True, "control": True}:
+        raise ValueError(
+            "Incomplete later-event seed must remain failed; refuse replay or recapture."
+        )
+    source_id = fixture["cases"]["access"]["matter_id"]
+    wall = add_ethical_wall(
+        session,
+        context=context,
+        matter_id=source_id,
+        excluded_membership_id=member.id,
+        reason="Release-owned saved-manifest later-event QA seed.",
+    )
+    try:
+        try:
+            get_matter(session, context=member_context, matter_id=source_id)
+        except HTTPException as exc:
+            if exc.status_code != 404:
+                raise
+        else:
+            raise ValueError("Seeded ethical wall did not actually revoke QA member access.")
+    finally:
+        remove_ethical_wall(session, context=context, matter_id=source_id, wall_id=wall.id)
+    source_id = fixture["cases"]["tombstone"]["matter_id"]
+    for target, expected in (("disposed", "intake"), ("intake", "disposed")):
+        current = get_matter(session, context=context, matter_id=source_id)
+        if current.status != expected:
+            raise ValueError(
+                "Later-event seed refuses unexpected or retained terminal lifecycle state."
+            )
+        transition_matter_lifecycle_status(
+            session,
+            context=context,
+            matter_id=source_id,
+            payload=MatterLifecycleStatusRequest(
+                to_status=target,
+                expected_from_status=expected,
+                expected_updated_at=current.updated_at,
+                reason=(
+                    "Release-owned synthetic later-event seed; restore source, never saved output."
+                ),
+            ),
+        )
+    session.commit()
+    rebuild_private_index(session, company_id=context.company.id, activate=True)
+    session.commit()
+    if decisions() != {"access": False, "tombstone": False, "control": True}:
+        raise ValueError("Post-event rebuild revived saved output or lost the unchanged control.")
+    generation = session.scalar(
+        select(PrivateIndexGeneration).where(
+            PrivateIndexGeneration.company_id == context.company.id,
+            PrivateIndexGeneration.state == "active",
+        )
+    )
+    retired_at = datetime.fromisoformat(fixture["retired_at"])
+    audit_ids = {}
+    for name, actions in {
+        "access": ("matter.ethical_wall_added", "matter.ethical_wall_removed"),
+        "tombstone": ("matter.lifecycle.disposed", "matter.lifecycle.reopened"),
+    }.items():
+        audit_ids[name] = []
+        for action in actions:
+            event = session.scalar(
+                select(AuditEvent)
+                .where(
+                    AuditEvent.company_id == context.company.id,
+                    AuditEvent.matter_id == fixture["cases"][name]["matter_id"],
+                    AuditEvent.action == action,
+                    AuditEvent.actor_membership_id == context.membership.id,
+                    AuditEvent.result == "success",
+                    AuditEvent.created_at >= retired_at,
+                )
+                .order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc())
+                .limit(1)
+            )
+            if event is None or event.created_at.replace(
+                tzinfo=UTC
+            ) > generation.activated_at.replace(tzinfo=UTC):
+                raise ValueError("Canonical later event did not precede the persisted rebuild.")
+            audit_ids[name].append(event.id)
+    result = {
+        **fixture,
+        "post_event_generation_id": generation.id,
+        "post_event_activated_at": generation.activated_at.replace(tzinfo=UTC).isoformat(),
+        "later_event_audit_ids": audit_ids,
+    }
+    control = session.get(DraftVersion, fixture["cases"]["control"]["version_id"])
+    annotation = json.loads(control.context_manifest_json)
+    annotation["qa_saved_manifest_fixture"] = {
+        key: value for key, value in result.items() if key != "created_fixture"
+    }
+    control.context_manifest_json = json.dumps(annotation, sort_keys=True)
+    session.commit()
+    return result
+
+
 def _required_env(name: str) -> str:
     value = os.environ.get(name, "").strip()
     if not value:
@@ -1105,10 +1564,19 @@ def main() -> None:
                 ("ip_docket", review_fixture.docket_id),
             ),
         )
+        saved_manifest_fixture = ensure_ip_production_qa_saved_manifest_fixture(
+            session,
+            company_id=result.company_id,
+            membership_id=result.membership_id,
+            release_sha=_required_env("CASEOPS_QA_RELEASE_SHA"),
+            member_password=_required_env("CASEOPS_IP_QA_PASSWORD"),
+            prepare_later_event_evidence=True,
+        )
     payload = asdict(result)
     payload["judge_workflow_fixture"] = asdict(judge_fixture)
     payload["intelligent_review_fixture"] = asdict(review_fixture)
     payload["private_retrieval_fixture"] = asdict(private_retrieval_fixture)
+    payload["saved_manifest_document_sister_fixture"] = saved_manifest_fixture
     print(json.dumps(payload, sort_keys=True))
 
 

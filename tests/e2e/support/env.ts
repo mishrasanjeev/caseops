@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 
 export const repoRoot = path.resolve(__dirname, "..", "..", "..");
@@ -15,6 +16,23 @@ export const webBaseUrl =
   process.env.CASEOPS_WEB_BASE_URL ?? "http://127.0.0.1:3000";
 export const apiBaseUrl = `http://127.0.0.1:${apiPort}`;
 
+export function resolveE2EReleaseSha(
+  supplied: string | undefined,
+  readHead: () => string,
+): string {
+  const sha = (supplied === undefined ? readHead() : supplied).trim().toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(sha)) {
+    throw new Error("E2E release identity must be an exact 40-character Git SHA.");
+  }
+  return sha;
+}
+
+const releaseSha = resolveE2EReleaseSha(process.env.CASEOPS_RELEASE_SHA, () =>
+  execFileSync("git", ["rev-parse", "HEAD"], {
+    cwd: repoRoot, encoding: "utf8", timeout: 5_000,
+  }),
+);
+
 function toPosixPath(targetPath: string): string {
   return targetPath.replace(/\\/g, "/");
 }
@@ -26,6 +44,7 @@ const databaseUrl =
 
 export const e2eEnv: Record<string, string> = {
   CASEOPS_ENV: "e2e",
+  CASEOPS_RELEASE_SHA: releaseSha,
   CASEOPS_API_HOST: "127.0.0.1",
   CASEOPS_API_PORT: apiPort,
   CASEOPS_AUTO_MIGRATE: "false",

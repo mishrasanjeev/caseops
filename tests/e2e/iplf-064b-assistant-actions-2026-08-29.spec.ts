@@ -132,6 +132,7 @@ test("IPLF-UJ-23-NORMAL and IPLF-UJ-23-EXC-03 enforce preview before writes", as
   });
   await expectStatus(currentMatterResponse, 200, "read current Matter version");
   const currentMatter = await currentMatterResponse.json();
+  expect(currentMatter.client_name).toBeNull();
   const changedMatter = await page.request.patch(`${apiBaseUrl}/api/matters/${matter.id}`, {
     headers,
     data: {
@@ -140,11 +141,34 @@ test("IPLF-UJ-23-NORMAL and IPLF-UJ-23-EXC-03 enforce preview before writes", as
     },
   });
   await expectStatus(changedMatter, 200, "create stale target exception");
+  const hiddenAnswerDetail =
+    "This answer is hidden. Ask again before reviewing or confirming an action.";
+  const rejectedConfirmation = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      /^\/api\/workspace-assistant\/sessions\/[^/]+\/actions\/[^/]+\/confirm$/.test(
+        new URL(response.url()).pathname,
+      ),
+  );
   await page.getByRole("button", { name: "Confirm action" }).click();
-  await expect(page.getByRole("alert")).toContainText("target changed");
+  const rejection = await rejectedConfirmation;
+  await expectStatus(rejection, 409, "hidden answer rejects the cached field-change preview");
+  expect(await rejection.json()).toMatchObject({
+    type: "assistant_action_answer_hidden",
+    status: 409,
+    detail: hiddenAnswerDetail,
+  });
+  await expect(page.getByRole("alert")).toHaveText(hiddenAnswerDetail);
   const unchangedClient = await page.request.get(`${apiBaseUrl}/api/matters/${matter.id}`, {
     headers,
   });
   await expectStatus(unchangedClient, 200, "read rejected field update");
   expect((await unchangedClient.json()).client_name).toBeNull();
+  tasksResponse = await page.request.get(`${apiBaseUrl}/api/matters/${matter.id}/tasks`, {
+    headers,
+  });
+  await expectStatus(tasksResponse, 200, "tasks remain unchanged after hidden-answer rejection");
+  const unchangedTasks = (await tasksResponse.json()).tasks;
+  expect(unchangedTasks).toHaveLength(1);
+  expect(unchangedTasks).toEqual(tasks);
 });
