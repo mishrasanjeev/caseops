@@ -2,7 +2,7 @@
 import { expect, request, test, type APIRequestContext } from "@playwright/test";
 
 import { noPaidProviderHeaders } from "./support/cost-controls";
-import { apiBaseUrl } from "./support/env";
+import { apiBaseUrl, e2eEnv } from "./support/env";
 import { expectStatus } from "./support/iplf058b";
 import {
   assertLaterAudit, frozenQaBody, isLoopback, runLoopbackSavedManifestFixture, settledGeneration,
@@ -21,7 +21,7 @@ test("IPLF-UJ-66C Draft/document sister: benignly retired outputs stay revoked a
   const local = isLoopback(web);
   const api = (local ? process.env.CASEOPS_API_BASE_URL || apiBaseUrl : required("PROD_API_BASE_URL")).replace(/\/$/, "");
   expect(isLoopback(api), "browser/API must agree on local versus production runtime").toBe(local);
-  const sha = required(local ? "CASEOPS_RELEASE_SHA" : "CASEOPS_EXPECTED_RELEASE_SHA");
+  const sha = local ? e2eEnv.CASEOPS_RELEASE_SHA : required("CASEOPS_EXPECTED_RELEASE_SHA");
   expect(sha).toMatch(/^[0-9a-f]{40}$/);
   const slug = process.env.CASEOPS_IP_QA_SLUG || "caseops-ip-qa";
   const email = process.env.CASEOPS_IP_QA_EMAIL || "ip-qa-bot@caseops.ai";

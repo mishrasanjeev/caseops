@@ -1306,6 +1306,11 @@ requirements when using the fallback.
   fresh loopback event/rebuild journey for Docker. Never resume overlapping
   cadence, fabricate output evidence or weaken a readiness fence to make a
   new test pass. Preserve the separate two-clean-run resume guard after QA.
+- Release-owned browser journeys must receive the same exact source identity
+  in every standard API/web harness, not only Docker. Propagate a valid explicit
+  image SHA or resolve the candidate checkout, reject malformed identity rather
+  than substituting one, and prove the normal suite discovers and runs the
+  journey. Preserve a failed harness baseline separately from acceptance.
 - Automated production runs that may only assert the no-paid rejection cannot
   observe a provider-search fix. Replay stored evidence instead of spending: a
   checked-in verification fixture is refreshed only by the window-enforcing
