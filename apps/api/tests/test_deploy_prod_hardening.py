@@ -599,10 +599,22 @@ def test_workstation_docker_gate_is_migration_first_and_exact_release() -> None:
     assert "$ActualNodeVersion -ne $PinnedNodeVersion" in docker_script
     assert "Activate the pinned runtime before retrying" in docker_script
     assert "& $NpmPath ci --no-audit --no-fund" in docker_script
-    assert docker_script.count("& $NpxPath playwright test") == 4
-    assert "--project=app-chromium --shard=1/2" in docker_script
-    assert "--project=app-chromium --shard=2/2" in docker_script
-    assert "--project=app-mobile" in docker_script
+    # Browser acceptance runs the candidate's own Playwright with an absolute
+    # config (the listing preflight and the launcher), never a CWD lookup.
+    assert docker_script.count("& $NodePath $PlaywrightCli test --config $PlaywrightConfig") == 2
+    assert "--config playwright.docker.config.ts" not in docker_script
+    assert docker_script.count("Invoke-CandidatePlaywright -Arguments") == 4
+    assert (
+        'Invoke-CandidatePlaywright -Arguments @("--project=app-chromium", "--shard=1/2")'
+        in docker_script
+    )
+    assert (
+        'Invoke-CandidatePlaywright -Arguments @("--project=app-chromium", "--shard=2/2")'
+        in docker_script
+    )
+    assert 'Invoke-CandidatePlaywright -Arguments @("--project=app-mobile")' in docker_script
+    assert "Invoke-CandidatePlaywright -Arguments $PlaywrightArgs" in docker_script
+    assert "Assert-CandidatePlaywrightSuite -Arguments $PlaywrightArgs" in docker_script
     assert "Docker Playwright focused acceptance failed" in docker_script
     assert "--retries" not in docker_script
     assert "git -C $RepoRoot status" in docker_script
