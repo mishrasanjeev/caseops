@@ -1,10 +1,14 @@
 #Requires -Version 5.1
 [CmdletBinding()]
-param(
-    [string]$ScriptPath = (Join-Path $PSScriptRoot "..\scripts\verify-docker.ps1")
-)
+param([string]$ScriptPath)
 
 $ErrorActionPreference = "Stop"
+# Windows PowerShell leaves $PSScriptRoot empty in param defaults under -File.
+if (-not $ScriptPath) {
+    $ScriptPath = [IO.Path]::Combine(
+        (Split-Path -Parent $MyInvocation.MyCommand.Path), "..", "scripts", "verify-docker.ps1"
+    )
+}
 $Tokens = $null
 $ParseErrors = $null
 $Ast = [Management.Automation.Language.Parser]::ParseFile(

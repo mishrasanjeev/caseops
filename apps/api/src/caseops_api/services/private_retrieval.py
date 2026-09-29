@@ -1769,6 +1769,67 @@ def capture_private_saved_source_manifest(
     )
 
 
+def _later_event_reaches_projection():
+    """Whether an event recorded after a projection was built reaches it.
+
+    An event tombstones rows only in the generation active when it applies,
+    so a generation retired earlier never records it; the event ledger does.
+    An event stores the tenant epochs it advanced and a projection stores the
+    epochs of the generation that built it. Epochs only grow, and an event
+    that overlaps a rebuild fences that shadow out of activation, so a higher
+    access or tombstone epoch marks an event after the build. The targets are
+    the ones ``_affected_projection_statement`` tombstones: the tenant, the
+    projection's own source, and each of its parent scopes. Pending and failed
+    events count, and every lookup uses the event target index.
+    """
+
+    after_build = or_(
+        PrivateProjectionEvent.access_policy_generation
+        > PrivateIndexProjection.access_policy_generation,
+        PrivateProjectionEvent.tombstone_generation > PrivateIndexProjection.tombstone_generation,
+    )
+    tenant_event = (
+        select(PrivateProjectionEvent.id)
+        .where(
+            PrivateProjectionEvent.company_id == PrivateIndexProjection.company_id,
+            PrivateProjectionEvent.target_type == "tenant",
+            after_build,
+        )
+        .correlate(PrivateIndexProjection)
+        .exists()
+    )
+    source_event = (
+        select(PrivateProjectionEvent.id)
+        .where(
+            PrivateProjectionEvent.company_id == PrivateIndexProjection.company_id,
+            PrivateProjectionEvent.target_type == PrivateIndexProjection.source_type,
+            PrivateProjectionEvent.target_id == PrivateIndexProjection.source_id,
+            after_build,
+        )
+        .correlate(PrivateIndexProjection)
+        .exists()
+    )
+    scope_event = (
+        select(PrivateIndexProjectionScope.id)
+        .where(
+            PrivateIndexProjectionScope.company_id == PrivateIndexProjection.company_id,
+            PrivateIndexProjectionScope.projection_id == PrivateIndexProjection.id,
+            select(PrivateProjectionEvent.id)
+            .where(
+                PrivateProjectionEvent.company_id == PrivateIndexProjectionScope.company_id,
+                PrivateProjectionEvent.target_type == PrivateIndexProjectionScope.scope_type,
+                PrivateProjectionEvent.target_id == PrivateIndexProjectionScope.scope_id,
+                after_build,
+            )
+            .correlate(PrivateIndexProjectionScope, PrivateIndexProjection)
+            .exists(),
+        )
+        .correlate(PrivateIndexProjection)
+        .exists()
+    )
+    return or_(tenant_event, source_event, scope_event)
+
+
 def _saved_entry_matches_projection(
     item: dict,
     row: PrivateIndexProjection | None,
@@ -1816,10 +1877,17 @@ def private_saved_source_manifests_are_current(
     the complete source/version/hash multiset with the active generation and
     re-run current-source plus ACL authorization there.
 
-    The retired projection is still part of the security proof.  Projection
-    events tombstone affected rows across generations, so a source, parent
-    scope, tenant access, or tombstone event keeps this path fail-closed even
-    if a later rebuild happens to contain equivalent text.
+    The saved projection is still part of the security proof, in whichever
+    generation it was saved.  An event tombstones affected rows only in the
+    generation active when it applies; a generation retired earlier keeps its
+    rows.  Each saved row is therefore also checked against the event ledger:
+    any event recorded after the row was built for the tenant, the row's
+    source or one of its parent scopes keeps the manifest fail-closed for
+    good, even if a later rebuild happens to contain equivalent text.  An
+    unrelated event or rebuild does not.  Checking only the tombstone
+    let a manifest saved one generation before such an event come back after
+    the next rebuild, while the same manifest saved one generation later
+    stayed locked.
 
     Each manifest keeps its own decision; only the lookups are shared.  Every
     shared lookup is a per-row predicate over a union of identifiers, so one
@@ -1864,17 +1932,21 @@ def private_saved_source_manifests_are_current(
         saved_generation_by_index[index] = next(iter(saved_generation_ids))
 
     saved_by_id: dict[str, PrivateIndexProjection] = {}
+    reached_by_later_event: set[str] = set()
     known_generation_ids: set[str] = set()
     if projection_ids_by_index:
-        saved_by_id = {
-            row.id: row
-            for row in session.scalars(
-                select(PrivateIndexProjection).where(
-                    PrivateIndexProjection.company_id == context.company.id,
-                    PrivateIndexProjection.id.in_(set().union(*projection_ids_by_index.values())),
-                )
-            ).all()
-        }
+        for row, reached in session.execute(
+            select(
+                PrivateIndexProjection,
+                _later_event_reaches_projection().label("reached_by_later_event"),
+            ).where(
+                PrivateIndexProjection.company_id == context.company.id,
+                PrivateIndexProjection.id.in_(set().union(*projection_ids_by_index.values())),
+            )
+        ).all():
+            saved_by_id[row.id] = row
+            if reached:
+                reached_by_later_event.add(row.id)
         known_generation_ids = set(
             session.scalars(
                 select(PrivateIndexGeneration.id).where(
@@ -1897,7 +1969,7 @@ def private_saved_source_manifests_are_current(
         if len(saved_rows) != len(entries) or saved_generation_id not in known_generation_ids:
             decisions[index] = False
             continue
-        if not all(
+        if projection_ids & reached_by_later_event or not all(
             _saved_entry_matches_projection(
                 item,
                 saved_by_id.get(str(item["projection_id"])),
@@ -2060,6 +2132,9 @@ def enqueue_private_projection_event(
 
 
 def _affected_projection_statement(event: PrivateProjectionEvent):
+    # Only the event's own generation is tombstoned; retired generations keep
+    # their rows. Saved-output proofs from a retired generation read this
+    # event from the ledger instead (``_later_event_reaches_projection``).
     direct = and_(
         PrivateIndexProjection.source_type == event.target_type,
         PrivateIndexProjection.source_id == event.target_id,
