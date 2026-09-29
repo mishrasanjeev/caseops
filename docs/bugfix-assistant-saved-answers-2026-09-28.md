@@ -1,6 +1,6 @@
 # Workspace Assistant saved answers after access changes, 2026-09-28
 
-Follow-up to draft PR #496, which keeps Intelligent Review and Draft manifests
+Follow-up to PR #496, which keeps Intelligent Review and Draft manifests
 fail-closed after any later relevant event. This change applies the owner's
 2026-09-28 decision to the other saved-output path, Workspace Assistant
 answers.
