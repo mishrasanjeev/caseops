@@ -215,3 +215,54 @@ change/restore, reload and mobile while retaining terminal reruns. It needs no
 new release seed or production company bootstrap. Neither that journey nor
 the combined Docker/PostgreSQL gate has been executed by this follow-up.
 Deployed verification remains **Inconclusive**, not a deployed-fix claim.
+
+## Scoped IPLF-064B browser contract correction, 2026-09-29
+
+This test-only follow-up starts directly on exact candidate
+`32cea75b3200beacd8d58ba066be7f97c0afce78` in the independent
+`assistant-access-prod-proof` checkout. It maps to M6/UJ-23,
+IPLF-064B and IPLF-UJ-23-EXC-03. Runtime guards and production fixtures are
+unchanged.
+
+The retained Docker trace and #500 CI trace both prove the cached field-change
+confirmation returned HTTP 409, `assistant_action_answer_hidden`, with detail
+`This answer is hidden. Ask again before reviewing or confirming an action.`
+after the concurrent Matter description edit. The alert rendered that exact
+detail; the old dated assertion required `target changed`. Normal task preview,
+confirmation and task read had already succeeded. The source-change answer
+guard runs before the older target-version guard, so this is assertion drift,
+not evidence of a runtime defect. Read-only Docker snapshot checks also found
+the client still null and exactly the original one task.
+
+Baseline evidence remains in the parent's candidate checkout:
+`test-results/iplf-064b-assistant-action-53315-force-preview-before-writes-app-chromium/`
+(`error-context.md` and `trace.zip`). The independently inspected CI failure is
+retained in [run 36564565186, app job 109402901589](https://github.com/mishrasanjeev/caseops/actions/runs/36564565186/job/109402901589)
+and [artifact 11033986177](https://github.com/mishrasanjeev/caseops/actions/runs/36564565186/artifacts/11033986177).
+No failed or incomplete evidence was overwritten. The parent's Docker first
+shard ended with 213 passed, one skipped and two failures out of 216; the second
+desktop shard and mobile were unrun, so this is partial acceptance, not a green
+replacement gate. The separate IPLF-066C navigation failure is independently
+owned and is not classified from the 064B trace.
+
+The corrected local journey captures the POST confirmation response, requires
+the exact 409 problem type and detail, asserts the same exact alert, then reads
+the Matter and tasks to prove the client remains null and the full one-task
+list is unchanged. It does not accept an alternative error or weaken the guard.
+A repository-wide audit of local/production E2E, API tests and web source found
+no other `target changed` or `assistant_action_target_changed` assertion.
+Production 064B covers the normal preview/confirmation path only; no production
+bootstrap, paid-provider policy or fixture change is introduced here.
+
+Static verification passed: `npm run typecheck:e2e` and `git diff --check`.
+The app-config `--list` selection reconciled exactly one test in one file,
+`app-chromium`, at line 8 with title
+`IPLF-UJ-23-NORMAL and IPLF-UJ-23-EXC-03 enforce preview before writes`.
+The complete list report is retained outside the checkout at
+`C:/Users/mishr/.codex/worktrees/assistant-access-prod-proof/access-proof-evidence/064b-browser-list-20260929-183104.json`.
+Collection does not certify browser execution; no API/browser or Docker database
+mutation was performed for this correction.
+
+Actual serial Docker browser replay belongs to the parent after both scoped
+test corrections are integrated. It has not run for this patch; production
+verification and full replacement acceptance remain pending.
