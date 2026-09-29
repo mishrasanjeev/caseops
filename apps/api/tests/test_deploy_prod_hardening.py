@@ -1403,6 +1403,7 @@ def _migration_job_payload(image: str, *, drift: str | None = None) -> dict[str,
         "resources": {"limits": {"cpu": "1000m", "memory": "512Mi"}},
     }
     containers = [container]
+    execution: dict[str, object] = {"taskCount": 1, "parallelism": 1}
     task: dict[str, object] = {
         "serviceAccountName": "caseops-runtime@perfect-period-305406.iam.gserviceaccount.com",
         "maxRetries": 1,
@@ -1439,6 +1440,16 @@ def _migration_job_payload(image: str, *, drift: str | None = None) -> dict[str,
         container["resources"] = {"limits": {"cpu": "1000m", "memory": "2Gi"}}
     elif drift == "second-container":
         containers.append({"image": "clamav/clamav:1.4"})
+    elif drift == "task-count":
+        execution["taskCount"] = 8
+    elif drift == "task-count-unset":
+        del execution["taskCount"]
+    elif drift == "parallelism":
+        execution["parallelism"] = 0
+    elif drift == "parallelism-unset":
+        del execution["parallelism"]
+    elif drift == "parallel-migrations":
+        execution.update(taskCount=8, parallelism=8)
     elif drift is not None:
         raise AssertionError(f"unknown migration job drift {drift!r}")
     container["env"] = [{"name": name, "value": value} for name, value in environment.items()] + [
@@ -1446,11 +1457,12 @@ def _migration_job_payload(image: str, *, drift: str | None = None) -> dict[str,
         for name, (secret, version) in secrets.items()
     ]
     task["containers"] = containers
+    execution["template"] = {"spec": task}
     return {
         "spec": {
             "template": {
                 "metadata": {"annotations": annotations},
-                "spec": {"template": {"spec": task}},
+                "spec": execution,
             }
         }
     }
@@ -2590,6 +2602,11 @@ def test_migration_readback_accepts_the_declared_contract(variant: str | None) -
         ("task-timeout", "task_timeout"),
         ("retries", "max_retries"),
         ("memory", "memory"),
+        ("task-count", "task_count"),
+        ("task-count-unset", "task_count"),
+        ("parallelism", "parallelism"),
+        ("parallelism-unset", "parallelism"),
+        ("parallel-migrations", "parallelism, task_count"),
         (
             "second-container",
             "args, command, cpu, environment, image, memory, secrets, single_container",
@@ -2610,20 +2627,37 @@ def test_migration_readback_names_each_drifted_field(drift: str, expected: str) 
         assert value not in output
 
 
+@pytest.mark.parametrize("migration_job_missing", [False, True], ids=["update", "create"])
+@pytest.mark.parametrize(
+    ("drift", "expected"),
+    [
+        ("lock-timeout", "environment (variables: CASEOPS_MIGRATION_DB_LOCK_TIMEOUT_MS)"),
+        ("task-count", "task_count"),
+        ("task-count-unset", "task_count"),
+        ("parallelism", "parallelism"),
+        ("parallelism-unset", "parallelism"),
+        ("parallel-migrations", "parallelism, task_count"),
+    ],
+)
 def test_deploy_prod_refuses_migration_job_drift_before_execution(
     tmp_path: Path,
+    drift: str,
+    expected: str,
+    migration_job_missing: bool,
 ) -> None:
-    result = _run_deploy_with_fakes(tmp_path, migration_job_drift="lock-timeout")
+    result = _run_deploy_with_fakes(
+        tmp_path, migration_job_drift=drift, migration_job_missing=migration_job_missing
+    )
 
     assert result.returncode != 0
-    assert (
-        "caseops-migrate-job contract drift: environment "
-        "(variables: CASEOPS_MIGRATION_DB_LOCK_TIMEOUT_MS)"
-    ) in result.stderr
+    assert result.stderr.strip() == f"caseops-migrate-job contract drift: {expected}"
     calls = (tmp_path / "gcloud.log").read_text(encoding="utf-8")
-    assert "run jobs update caseops-migrate-job" in calls
+    action = "create" if migration_job_missing else "update"
+    assert f"run jobs {action} caseops-migrate-job" in calls
     assert "run jobs describe caseops-migrate-job" in calls
     assert "run jobs execute caseops-migrate-job" not in calls
+    assert "run deploy caseops-api" not in calls
+    assert "gh workflow run prod-verify.yml" not in calls
 
 
 MIGRATION_JOB_CONTRACT_FLAGS = (
@@ -2642,6 +2676,8 @@ MIGRATION_JOB_CONTRACT_FLAGS = (
     "--memory 512Mi",
     "--task-timeout 30m",
     "--max-retries 1 ",
+    "--tasks 1 ",
+    "--parallelism 1 ",
     f"--image {FAKE_IMMUTABLE_API_IMAGE}",
 )
 

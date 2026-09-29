@@ -2280,6 +2280,16 @@ job or scheduler was changed.
     program manifest, the settings error text, `docs/architecture.md` and
     `infra/cloudrun/README.md` cite the real owners. Each new test failed
     against a deliberately broken source before it was accepted.
+- **2026-09-29 migration execution-bound correction:** the original readback
+  accepted an execution template with `taskCount=8` and `parallelism=8`.
+  Step 2 now declares `--tasks 1 --parallelism 1` on both create and update
+  and checks both execution-template fields before `jobs execute`. Missing
+  fields, changed task count, unset parallelism and concurrent migration tasks
+  fail closed. The live-shaped fake includes these fields at the execution
+  level, separately from the nested task specification; direct readback and
+  fake-release tests cover each drift and both create/update rejection paths.
+  Production verification remains pending; this correction changes no cloud
+  resources and does not close the other EH-DEPLOY-04 items.
 - **Open, not decided here:** production has never run the document worker,
   so its queue drains have no production consumer: stale document-job
   recovery, scheduled reprocessing, queued inbound-email attachments, stale

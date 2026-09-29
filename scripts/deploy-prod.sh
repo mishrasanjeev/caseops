@@ -366,6 +366,8 @@ gcloud run jobs "${MIGRATION_JOB_ACTION}" "${MIGRATION_JOB}" \
   --cpu 1 \
   --memory 512Mi \
   --task-timeout "${MIGRATION_TASK_TIMEOUT}" \
+  --tasks 1 \
+  --parallelism 1 \
   --max-retries 1 \
   --region "${REGION}" --project "${PROJECT}" --quiet
 MIGRATION_JOB_JSON=$(gcloud run jobs describe "${MIGRATION_JOB}" \
@@ -420,7 +422,8 @@ def cpu_millicores(value):
 
 payload = json.loads(os.environ["MIGRATION_JOB_JSON"])
 template = payload.get("spec", {}).get("template", {})
-task = template.get("spec", {}).get("template", {}).get("spec", {})
+execution = template.get("spec", {})
+task = execution.get("template", {}).get("spec", {})
 containers = task.get("containers") or []
 container = containers[0] if len(containers) == 1 else {}
 environment = {}
@@ -435,6 +438,8 @@ for entry in container.get("env") or []:
 limits = (container.get("resources") or {}).get("limits") or {}
 annotations = (template.get("metadata") or {}).get("annotations") or {}
 checks = {
+    "task_count": execution.get("taskCount") == 1,
+    "parallelism": execution.get("parallelism") == 1,
     "single_container": len(containers) == 1,
     "image": container.get("image") == os.environ["API_IMMUTABLE_IMAGE"],
     "command": container.get("command") == ["python"],
