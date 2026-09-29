@@ -1300,6 +1300,12 @@ requirements when using the fallback.
   read and export DTOs, reject hidden-answer action preview and execution, and
   preserve immutable stored evidence. Prove both hidden and visible controls,
   access restoration, citation rejection and responsive browser reloads.
+- A release regression cannot wait for a scheduler the release deliberately
+  holds paused. Keep production seed, QA mutations and maintenance serialized;
+  use canonical producer audit evidence for retained production reads and a
+  fresh loopback event/rebuild journey for Docker. Never resume overlapping
+  cadence, fabricate output evidence or weaken a readiness fence to make a
+  new test pass. Preserve the separate two-clean-run resume guard after QA.
 - Automated production runs that may only assert the no-paid rejection cannot
   observe a provider-search fix. Replay stored evidence instead of spending: a
   checked-in verification fixture is refreshed only by the window-enforcing
