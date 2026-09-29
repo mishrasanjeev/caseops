@@ -6578,7 +6578,6 @@
         "apps/api/src/caseops_api/db/session.py",
         "apps/api/src/caseops_api/scripts/ip_rule_governance_fingerprint.py",
         "apps/api/src/caseops_api/services/ip_deadline_workflow.py",
-        "infra/cloudrun/migrate-job.yaml",
         "playwright.app.config.ts",
         "playwright.config.ts",
         "playwright.ip-a0-prod.config.ts",
@@ -12710,7 +12709,6 @@
         "apps/web/app/app/ip/watch/page.tsx",
         "apps/web/lib/api/endpoints.ts",
         "apps/web/components/app/Sidebar.tsx",
-        "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
@@ -12824,7 +12822,6 @@
         "apps/web/app/app/ip/watch/page.tsx",
         "apps/web/lib/api/endpoints.ts",
         "apps/web/components/app/Sidebar.tsx",
-        "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
@@ -12913,7 +12910,6 @@
         "apps/web/app/app/ip/watch/page.tsx",
         "apps/web/lib/api/endpoints.ts",
         "apps/web/components/app/Sidebar.tsx",
-        "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
@@ -13027,7 +13023,6 @@
         "apps/web/app/app/ip/watch/page.tsx",
         "apps/web/lib/api/endpoints.ts",
         "apps/web/components/app/Sidebar.tsx",
-        "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
@@ -23745,7 +23740,6 @@
         "apps/web/app/app/ip/watch/page.tsx",
         "apps/web/lib/api/endpoints.ts",
         "apps/web/components/app/Sidebar.tsx",
-        "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
@@ -23793,7 +23787,6 @@
         "apps/web/app/app/ip/watch/page.tsx",
         "apps/web/lib/api/endpoints.ts",
         "apps/web/components/app/Sidebar.tsx",
-        "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
@@ -23841,7 +23834,6 @@
         "apps/web/app/app/ip/watch/page.tsx",
         "apps/web/lib/api/endpoints.ts",
         "apps/web/components/app/Sidebar.tsx",
-        "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
@@ -23889,7 +23881,6 @@
         "apps/web/app/app/ip/watch/page.tsx",
         "apps/web/lib/api/endpoints.ts",
         "apps/web/components/app/Sidebar.tsx",
-        "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
@@ -23937,7 +23928,6 @@
         "apps/web/app/app/ip/watch/page.tsx",
         "apps/web/lib/api/endpoints.ts",
         "apps/web/components/app/Sidebar.tsx",
-        "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
@@ -42777,7 +42767,6 @@
         "apps/web/app/app/ip/watch/page.tsx",
         "apps/web/lib/api/endpoints.ts",
         "apps/web/components/app/Sidebar.tsx",
-        "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
@@ -43525,7 +43514,6 @@
         "apps/web/app/app/ip/watch/page.tsx",
         "apps/web/lib/api/endpoints.ts",
         "apps/web/components/app/Sidebar.tsx",
-        "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
@@ -49777,7 +49765,6 @@
         "apps/web/app/app/ip/watch/page.tsx",
         "apps/web/lib/api/endpoints.ts",
         "apps/web/components/app/Sidebar.tsx",
-        "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
@@ -49831,7 +49818,6 @@
         "apps/web/app/app/ip/watch/page.tsx",
         "apps/web/lib/api/endpoints.ts",
         "apps/web/components/app/Sidebar.tsx",
-        "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
@@ -49885,7 +49871,6 @@
         "apps/web/app/app/ip/watch/page.tsx",
         "apps/web/lib/api/endpoints.ts",
         "apps/web/components/app/Sidebar.tsx",
-        "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
@@ -49939,7 +49924,6 @@
         "apps/web/app/app/ip/watch/page.tsx",
         "apps/web/lib/api/endpoints.ts",
         "apps/web/components/app/Sidebar.tsx",
-        "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
@@ -52406,7 +52390,6 @@
         "apps/web/app/app/ip/watch/page.tsx",
         "apps/web/lib/api/endpoints.ts",
         "apps/web/components/app/Sidebar.tsx",
-        "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
@@ -52460,7 +52443,6 @@
         "apps/web/app/app/ip/watch/page.tsx",
         "apps/web/lib/api/endpoints.ts",
         "apps/web/components/app/Sidebar.tsx",
-        "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
@@ -52514,7 +52496,6 @@
         "apps/web/app/app/ip/watch/page.tsx",
         "apps/web/lib/api/endpoints.ts",
         "apps/web/components/app/Sidebar.tsx",
-        "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
@@ -52568,7 +52549,6 @@
         "apps/web/app/app/ip/watch/page.tsx",
         "apps/web/lib/api/endpoints.ts",
         "apps/web/components/app/Sidebar.tsx",
-        "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"
@@ -52622,7 +52602,6 @@
         "apps/web/app/app/ip/watch/page.tsx",
         "apps/web/lib/api/endpoints.ts",
         "apps/web/components/app/Sidebar.tsx",
-        "infra/cloudrun/ip-journal-watch-job.yaml",
         "infra/cloudrun/scheduler-inventory.json",
         "docs/ip-implementation/IP_EVENT_CATALOG.yaml",
         "docs/ip-implementation/DATA_GOVERNANCE_MAP.yaml"

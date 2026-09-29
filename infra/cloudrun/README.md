@@ -4,9 +4,12 @@ Production (`perfect-period-305406`, `asia-south1`) has exactly two checked-in
 writers:
 
 - `scripts/deploy-prod.sh` releases the `caseops-api` and `caseops-web`
-  services, the migration job and the release-owned seed and backfill jobs.
-  It is the only writer of `caseops-api`. Run it as described in
-  `docs/GCP_DEPLOY.md`.
+  services and the release-owned seed and backfill jobs. It is the only writer
+  of `caseops-api` and the only definition of `caseops-migrate-job`: step 2
+  creates or updates that job with its complete contract (command, arguments,
+  environment, secrets, identity, Cloud SQL, resources, retries and task
+  timeout) and reads every field back before alembic runs. Run it as described
+  in `docs/GCP_DEPLOY.md`.
 - `scheduler-inventory.json` is the only definition of the recurring Cloud Run
   jobs and their Cloud Scheduler triggers. `scripts/scheduler_inventory.py`
   converges it on every release (called by `deploy-prod.sh`), grants each job's
@@ -14,9 +17,10 @@ writers:
   contract (command, arguments, environment, secrets, identity and resources)
   with the live job.
 
-Never recreate or replace a service or job from a checked-in manifest
-(`gcloud run services replace`, `gcloud run jobs replace`).
-`apps/api/tests/test_cloudrun_service_ownership.py` fails if one is added.
+No checked-in Cloud Run service or job manifest exists. Never recreate or
+replace a service or job from one (`gcloud run services replace`,
+`gcloud run jobs replace`); `apps/api/tests/test_cloudrun_service_ownership.py`
+fails on a service or job manifest and on a replace invocation.
 
 ## The caseops-api service
 
@@ -84,18 +88,25 @@ deploy path:
   script created first. IPLF-001B made the inventory the only scheduler and
   job owner on 1 August 2026.
 
-## Reference manifests (not applied)
+The six job manifests were removed on the same day (EH-DEPLOY-04 in
+`docs/STRICT_ENTERPRISE_GAP_TASKLIST.md`). No tool applied any of them:
 
 - `activity-report-job.yaml`, `case-tracking-poll-job.yaml`,
-  `ip-journal-watch-job.yaml` and `legal-update-sync-job.yaml` are historical
-  bootstrap references. No tool applies them, and their `uv run` commands
-  differ from the inventory bootstrap contracts that every release verifies
-  against the live jobs; those contracts are authoritative.
-- `document-worker-job.yaml` describes the optional document worker
-  (`caseops-document-worker --once`). It is not provisioned in production and
-  is not in the inventory.
-- `migrate-job.yaml` describes `caseops-migrate-job`. `deploy-prod.sh` updates
-  the existing job's image, task timeout and database timeouts in place.
+  `ip-journal-watch-job.yaml` and `legal-update-sync-job.yaml` ran `uv run`
+  commands, which the inventory forbids, with an unrendered auth-secret
+  version. The live jobs equal their inventory `bootstrap` contracts. Audit
+  logs show that only `caseops-legal-update-sync` and
+  `caseops-case-tracking-poll` were ever created from these files, by a manual
+  `gcloud run jobs replace` on 31 May 2026; the inventory has converged them
+  since 1 August 2026.
+- `migrate-job.yaml` was never applied: the job was created with
+  `gcloud run jobs create` on 23 April 2026. Its environment omitted
+  `CASEOPS_AUTO_MIGRATE=false`, so the cloud settings validator would have
+  stopped alembic before it started.
+- `document-worker-job.yaml` described a worker that was never provisioned and
+  could not start in cloud: it set no `CASEOPS_AUTH_SECRET`. The worker runs
+  only in the local Compose stack and Docker acceptance. A production worker
+  would be a new inventory entry.
 
 ## Notes
 
@@ -112,6 +123,11 @@ deploy path:
 - The hearing reminders job runs `caseops-send-hearing-reminders` on the
   `caseops-reminders-cadence` scheduler, as documented in
   `docs/runbooks/hearing-reminder-channels.md`.
+- The QG-OPS-006 gate (`scripts/check_cloudrun_manifest_secrets.py
+  infra/cloudrun` in `.github/workflows/security.yml`) reads every inventory
+  `bootstrap` contract. A secret-like name in `environment` or a `secrets`
+  value other than a Secret Manager `<secret>:<version>` reference fails, and
+  a directory with no definitions fails closed.
 - OCR uses the `tesseract` installed in the API image.
 - The live service does not override `CASEOPS_DOCUMENT_STORAGE_CACHE_PATH`, so
   the settings default (`./storage/document-cache` under the image's `/app`

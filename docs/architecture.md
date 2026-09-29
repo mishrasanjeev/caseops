@@ -210,7 +210,8 @@ This keeps the local topology close enough to the cloud architecture without int
 
 - `scripts/deploy-prod.sh` deploys the HTTP API on `Cloud Run` as two containers: the API and a `ClamAV` sidecar; the API refuses to serve until the scanner answers
 - recurring `Cloud Run Jobs` and their `Cloud Scheduler` triggers are defined in `infra/cloudrun/scheduler-inventory.json` and converged by `scripts/scheduler_inventory.py` on every release
-- `infra/cloudrun/document-worker-job.yaml` describes an optional document processor job (`caseops-document-worker --once`) that `Cloud Scheduler` could run on a short cadence; it is not provisioned in production
+- `scripts/deploy-prod.sh` also declares, reads back and executes the `caseops-migrate-job` Alembic job before any rollout, and the one-shot seed and backfill jobs
+- the document worker (`caseops-document-worker`) runs only in the local Compose stack and Docker acceptance; production has never had a document-worker job. Matter, contract and IP uploads are processed by the API's background tasks, but the worker's queue drains (stale-job recovery, scheduled reprocessing, queued inbound-email attachments, tracked-case update summaries) have no production consumer (EH-DEPLOY-04). A production worker would be a new `scheduler-inventory.json` entry, not a checked-in job manifest
 - the API and every job use the same API image and the same `GCS` document backend
 
 ## Next Build Priorities

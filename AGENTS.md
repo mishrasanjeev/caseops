@@ -1287,6 +1287,19 @@ requirements when using the fallback.
   update, not only through the projections the event's generation holds. When
   reads committed their decision, a temporary access loss locked an answer only
   if its author happened to export during it.
+- Migration-job safety includes execution topology. Declare and verify one
+  task and parallelism one before Alembic execution; inherited job defaults or
+  a correct image, command and environment cannot certify serial migration.
+- GitHub auto-merge is not a CI gate when the branch has no required checks.
+  Inspect the exact-head check rollup and repository enforcement before using
+  it, keep pending rewritten-head evidence pending, and require completed CI
+  on the combined current main before any production deployment.
+- A hidden assistant answer must redact every source-derived response field,
+  not only content and citations. Suggested searches and proposed actions can
+  retain private record labels and links. Enforce redaction on server-owned
+  read and export DTOs, reject hidden-answer action preview and execution, and
+  preserve immutable stored evidence. Prove both hidden and visible controls,
+  access restoration, citation rejection and responsive browser reloads.
 - Automated production runs that may only assert the no-paid rejection cannot
   observe a provider-search fix. Replay stored evidence instead of spending: a
   checked-in verification fixture is refreshed only by the window-enforcing
